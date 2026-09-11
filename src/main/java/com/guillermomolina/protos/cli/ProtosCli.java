@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.execution.*;
+import com.guillermomolina.protos.lsp.ProtosLanguageServerMain;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.*;
 import com.oracle.truffle.api.source.Source;
@@ -43,6 +44,7 @@ public final class ProtosCli {
             Set.of("protos.toml", "protos.lock", ".protos.toml.stage", ".protos.lock.stage");
 
     private final ProtosValueRenderer renderer = new ProtosValueRenderer();
+    private final ProtosDiagnosticInspector diagnosticInspector = new ProtosDiagnosticInspector();
 
     public static void main(String[] args) {
         int code = new ProtosCli().run(args, System.in, System.out, System.err);
@@ -60,6 +62,24 @@ public final class ProtosCli {
                 String v = getClass().getPackage().getImplementationVersion();
                 out.println("Protos " + (v == null ? "development" : v));
                 return 0;
+            }
+            if (args[0].equals("language-server")) {
+                if (args.length != 1) {
+                    return usage(err, "language-server accepts no arguments");
+                }
+                ProtosLanguageServerMain.run(in, out);
+                return 0;
+            }
+            if (args[0].equals("debug")) {
+                if (args.length < 2) {
+                    return usage(err, "debug requires a source file");
+                }
+                return debugFile(
+                        args[1],
+                        applicationArguments(args, 2),
+                        in,
+                        out,
+                        err);
             }
             if (args[0].equals("run")) {
                 if (args.length < 2) {
@@ -92,7 +112,7 @@ public final class ProtosCli {
                 return usage(err, "unknown option: " + args[0]);
             }
 
-            Path sourcePath = Path.of(args[0]);
+            Path sourcePath = Path.of(args[0]).toAbsolutePath().normalize();
             String src;
             try {
                 src = Files.readString(sourcePath, StandardCharsets.UTF_8);
@@ -104,8 +124,9 @@ public final class ProtosCli {
                                 + e.getMessage());
                 return 1;
             }
-            return evalOneShot(
-                    sourceFromPath(sourcePath, src),
+            return evalFileOneShot(
+                    sourcePath,
+                    src,
                     applicationArguments(args, 1),
                     in,
                     out,
@@ -115,6 +136,59 @@ public final class ProtosCli {
             e.printStackTrace(err);
             return 70;
         }
+    }
+
+    private int debugFile(
+            String sourceArgument,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
+        Path sourcePath = Path.of(sourceArgument).toAbsolutePath().normalize();
+        String sourceText;
+        try {
+            sourceText = Files.readString(sourcePath, StandardCharsets.UTF_8);
+        } catch (IOException failure) {
+            err.println(
+                    "protos debug: cannot read "
+                            + sourceArgument
+                            + ": "
+                            + failure.getMessage());
+            return 1;
+        }
+
+        try (Session session =
+                debugSession(applicationArguments, in, out, err)) {
+            return evalFile(
+                    sourcePath,
+                    sourceText,
+                    session,
+                    err);
+        } catch (IOException | RuntimeException failure) {
+            err.println("protos debug: " + failure.getMessage());
+            return 1;
+        }
+    }
+
+    private Session debugSession(
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
+        Path core = core();
+        Session session =
+                createDebugSession(
+                        core,
+                        new ProtosStandardLibraryModuleResolver(core.getParent()),
+                        applicationArguments,
+                        in,
+                        out,
+                        err);
+        ProtosCliPrintFacility.install(
+                session.activation(), session.process(), renderer);
+        return session;
     }
 
     int runWorkspaceApplication(
@@ -148,7 +222,7 @@ public final class ProtosCli {
             return switch (outcome.state()) {
                 case COMPLETED -> 0;
                 case FAILED -> {
-                    err.println("Error: " + renderer.render(outcome.error()));
+                    err.println("Error: " + diagnosticInspector.render(outcome.error()));
                     yield 1;
                 }
                 case CANCELLED -> {
@@ -229,45 +303,32 @@ public final class ProtosCli {
                     out,
                     err,
                     session -> {
-                        ProtosExactExecutionFacility.install(
-                                session.activation, session.runtimeHost);
-                        ProtosExactExecutionFacility.installInspection(
-                                session.activation, session.runtimeHost);
-                        ProtosExactExecutionFacility.install(
-                                session.activation,
-                                "actorExecution",
-                                actorPrelude,
-                                session.runtimeHost);
-                        ProtosExactExecutionFacility.installInspection(
-                                session.activation,
-                                "actorExecutionInspect",
-                                actorPrelude,
-                                session.runtimeHost);
-                        ProtosExactExecutionFacility.install(
-                                session.activation,
-                                "groupExecution",
-                                groupPrelude,
-                                session.runtimeHost);
-                        ProtosExactExecutionFacility.installInspection(
-                                session.activation,
-                                "groupExecutionInspect",
-                                groupPrelude,
-                                session.runtimeHost);
-                        ProtosExactExecutionFacility.install(
-                                session.activation,
-                                "packageExecution",
-                                packagePrelude,
-                                session.runtimeHost);
-                        installBundledToolFilesystem(
-                                session, "filesystem", filesystemBackend);
-                        installBundledToolFilesystem(
-                                session, "actorFilesystem", actorFilesystemBackend);
-                        installBundledToolFilesystem(
-                                session, "groupFilesystem", groupFilesystemBackend);
-                        installBundledToolFilesystem(
-                                session,
-                                "packageTomlFilesystem",
-                                packageTomlFilesystemBackend);
+                        ProtosTestToolAsyncExecutionScope executionScope =
+                                ProtosTestToolAsyncExecutionScope.install(
+                                        session.activation,
+                                        session.runtimeHost,
+                                        actorPrelude,
+                                        groupPrelude,
+                                        packagePrelude);
+                        boolean provisioned = false;
+                        try {
+                            installBundledToolFilesystem(
+                                    session, "filesystem", filesystemBackend);
+                            installBundledToolFilesystem(
+                                    session, "actorFilesystem", actorFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session, "groupFilesystem", groupFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageTomlFilesystem",
+                                    packageTomlFilesystemBackend);
+                            provisioned = true;
+                            return executionScope::close;
+                        } finally {
+                            if (!provisioned) {
+                                executionScope.close();
+                            }
+                        }
                     });
         }
     }
@@ -296,9 +357,11 @@ public final class ProtosCli {
                     in,
                     out,
                     err,
-                    session ->
-                            installBundledToolFilesystem(
-                                    session, "filesystem", filesystemBackend));
+                    session -> {
+                        installBundledToolFilesystem(
+                                session, "filesystem", filesystemBackend);
+                        return NOOP_BUNDLED_TOOL_CLEANUP;
+                    });
         }
     }
 
@@ -311,7 +374,7 @@ public final class ProtosCli {
             PrintStream err)
             throws Exception {
         return runBundledTool(
-                toolName, diagnosticName, args, in, out, err, session -> {});
+                toolName, diagnosticName, args, in, out, err, session -> NOOP_BUNDLED_TOOL_CLEANUP);
     }
 
     private int runBundledTool(
@@ -359,23 +422,31 @@ public final class ProtosCli {
                         in,
                         out,
                         err);
+        BundledToolSessionCleanup cleanup = NOOP_BUNDLED_TOOL_CLEANUP;
         try {
-            provisioner.provision(session);
+            cleanup =
+                    Objects.requireNonNull(
+                            provisioner.provision(session),
+                            "bundled tool provisioner returned null cleanup");
             ProtosModuleKey entryModule = resolver.entryModule(entryModuleName);
             ProtosModuleSource source = resolver.loadSource(entryModule).requireKey(entryModule);
-            executeStandaloneRootTask(session.execute(source.source()));
+            executeStandaloneRootTask(session.executeModuleSource(source));
             return 0;
         } catch (ParseError e) {
             err.println(diagnosticName + " tool syntax error: " + e.getMessage());
             return 1;
         } catch (ProtosSignalException e) {
-            err.println(diagnosticName + " tool error: " + renderer.render(e.error()));
+            err.println(diagnosticName + " tool error: " + diagnosticInspector.render(e.error()));
             return 1;
         } catch (RuntimeException e) {
             err.println(diagnosticName + " tool runtime error: " + e.getMessage());
             return 1;
         } finally {
-            session.terminate();
+            try {
+                cleanup.close();
+            } finally {
+                session.terminate();
+            }
         }
     }
 
@@ -403,8 +474,15 @@ public final class ProtosCli {
     }
 
     @FunctionalInterface
+    private interface BundledToolSessionCleanup {
+        void close();
+    }
+
+    private static final BundledToolSessionCleanup NOOP_BUNDLED_TOOL_CLEANUP = () -> {};
+
+    @FunctionalInterface
     private interface BundledToolSessionProvisioner {
-        void provision(Session session);
+        BundledToolSessionCleanup provision(Session session);
     }
 
     private static List<String> applicationArguments(String[] args, int start) {
@@ -421,6 +499,19 @@ public final class ProtosCli {
             throws IOException {
         try (Session session = session(applicationArguments, in, out, err)) {
             return eval(source, session, err);
+        }
+    }
+
+    private int evalFileOneShot(
+            Path sourcePath,
+            String characters,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
+        try (Session session = session(applicationArguments, in, out, err)) {
+            return evalFile(sourcePath, characters, session, err);
         }
     }
 
@@ -531,7 +622,7 @@ public final class ProtosCli {
         }
         try {
             out.println(
-                    renderer.render(
+                    diagnosticInspector.render(
                             s.evaluatePersistent(sourceFromCharacters(input, "<repl>"))));
             return ReplInputResult.COMPLETE;
         } catch (ParseError e) {
@@ -541,7 +632,7 @@ public final class ProtosCli {
             err.println("Syntax error: " + e.getMessage());
             return ReplInputResult.COMPLETE;
         } catch (ProtosSignalException e) {
-            err.println("Error: " + renderer.render(e.error()));
+            err.println("Error: " + diagnosticInspector.render(e.error()));
             return ReplInputResult.COMPLETE;
         } catch (RuntimeException e) {
             err.println("Runtime error: " + e.getMessage());
@@ -611,25 +702,91 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws IOException {
+        ProtosStandaloneProcessBootstrap.Result bootstrap =
+                bootstrapStandaloneProcess(
+                        core,
+                        moduleResolver,
+                        applicationArguments,
+                        readableBackend(in),
+                        writableBackend(out),
+                        writableBackend(err));
+        return bindStandaloneProcess(
+                bootstrap,
+                ProtosPolyglotRuntimeHost.open(),
+                in,
+                out,
+                err);
+    }
+
+    private Session createDebugSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream controlOut,
+            PrintStream diagnostics)
+            throws IOException {
+        ProtosStandaloneProcessBootstrap.Result bootstrap =
+                bootstrapStandaloneProcess(
+                        core,
+                        moduleResolver,
+                        applicationArguments,
+                        readableBackend(in),
+                        ProtosPolyglotStandardStreamRouting.stdoutBackend(),
+                        ProtosPolyglotStandardStreamRouting.stderrBackend());
+
+        ProtosPolyglotRuntimeHost runtimeHost =
+                ProtosPolyglotRuntimeHost.openDebug(diagnostics);
+        boolean handedToBinding = false;
+        try {
+            publishDebugReadiness(controlOut, runtimeHost.debugEndpoint());
+            handedToBinding = true;
+            return bindStandaloneProcess(
+                    bootstrap,
+                    runtimeHost,
+                    in,
+                    OutputStream.nullOutputStream(),
+                    OutputStream.nullOutputStream());
+        } finally {
+            if (!handedToBinding) {
+                bootstrap.process().requestTerminationForRuntime();
+                runtimeHost.close();
+            }
+        }
+    }
+
+    private static ProtosStandaloneProcessBootstrap.Result
+            bootstrapStandaloneProcess(
+                    Path core,
+                    ProtosModuleResolver moduleResolver,
+                    List<String> applicationArguments,
+                    ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+                    ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+                    ProtosProcessStandardStreamBinding.WritableBackend stderrBackend)
+                    throws IOException {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(core, moduleResolver);
         ProtosEncodingValue utf8 = utf8(prelude);
+        return ProtosStandaloneProcessBootstrap.create(
+                prelude,
+                applicationArguments,
+                HOST_ENVIRONMENT_NAME_DOMAIN,
+                hostEnvironmentEntries(),
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                utf8,
+                utf8,
+                utf8,
+                null);
+    }
 
-        ProtosStandaloneProcessBootstrap.Result bootstrap =
-                ProtosStandaloneProcessBootstrap.create(
-                        prelude,
-                        applicationArguments,
-                        HOST_ENVIRONMENT_NAME_DOMAIN,
-                        hostEnvironmentEntries(),
-                        readableBackend(in),
-                        writableBackend(out),
-                        writableBackend(err),
-                        utf8,
-                        utf8,
-                        utf8,
-                        null);
-
-        ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+    private static Session bindStandaloneProcess(
+            ProtosStandaloneProcessBootstrap.Result bootstrap,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            InputStream in,
+            OutputStream out,
+            OutputStream err) {
         boolean bound = false;
         try {
             ProtosPolyglotProcessContext processContext =
@@ -645,6 +802,29 @@ public final class ProtosCli {
                 bootstrap.process().requestTerminationForRuntime();
                 runtimeHost.close();
             }
+        }
+    }
+
+    private static void publishDebugReadiness(
+            PrintStream out,
+            ProtosPolyglotRuntimeHost.DebugEndpoint endpoint)
+            throws IOException {
+        String record =
+                "PROTOS_DEBUG_READY "
+                        + "{\"version\":1,"
+                        + "\"protocol\":\"dap\","
+                        + "\"transport\":\"tcp\","
+                        + "\"host\":\""
+                        + endpoint.host()
+                        + "\","
+                        + "\"port\":"
+                        + endpoint.port()
+                        + "}";
+        out.println(record);
+        out.flush();
+        if (out.checkError()) {
+            throw new IOException(
+                    "cannot publish debugger readiness on stdout");
         }
     }
 
@@ -809,7 +989,27 @@ public final class ProtosCli {
             err.println("Syntax error: " + e.getMessage());
             return 1;
         } catch (ProtosSignalException e) {
-            err.println("Error: " + renderer.render(e.error()));
+            err.println("Error: " + diagnosticInspector.render(e.error()));
+            return 1;
+        } catch (RuntimeException e) {
+            err.println("Runtime error: " + e.getMessage());
+            return 1;
+        }
+    }
+
+    private int evalFile(
+            Path sourcePath,
+            String characters,
+            Session s,
+            PrintStream err) {
+        try {
+            executeStandaloneRootTask(s.executeFile(sourcePath, characters));
+            return 0;
+        } catch (ParseError e) {
+            err.println("Syntax error: " + e.getMessage());
+            return 1;
+        } catch (ProtosSignalException e) {
+            err.println("Error: " + diagnosticInspector.render(e.error()));
             return 1;
         } catch (RuntimeException e) {
             err.println("Runtime error: " + e.getMessage());
@@ -842,18 +1042,6 @@ public final class ProtosCli {
                 .build();
     }
 
-    private static Source sourceFromPath(Path path, String characters) {
-        Path exact = Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
-        Objects.requireNonNull(characters, "characters");
-        return Source.newBuilder(
-                        ProtosLanguage.ID,
-                        characters,
-                        exact.getFileName().toString())
-                .uri(exact.toUri())
-                .mimeType(ProtosLanguage.MIME_TYPE)
-                .build();
-    }
-
     private static Path core() throws IOException {
         String home = System.getenv("PROTOS_HOME");
         Path base =
@@ -878,9 +1066,11 @@ public final class ProtosCli {
                 "Usage:\n"
                         + "  protos <file> [args...]\n"
                         + "  protos -e <source> [args...]\n"
+                        + "  protos debug <file> [args...]\n"
+                        + "  protos language-server\n"
                         + "  protos run <entry> [args...]\n"
                         + "  protos package [args...]\n"
-                        + "  protos test [args...]\n"
+                        + "  protos test [--jobs N] [args...]\n"
                         + "  protos\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"
@@ -889,6 +1079,13 @@ public final class ProtosCli {
                         + "Workspace run executes the explicit root-package logical <entry> "
                         + "from the current directory; neither 'run' nor <entry> is included "
                         + "in process.args().\n"
+                        + "Debug executes one explicit file through the standard DAP debugger; "
+                        + "its one PROTOS_DEBUG_READY JSON record is emitted on stdout before "
+                        + "guest execution and guest output then travels through DAP.\n"
+                        + "Language-server starts the toolchain-matched static service using "
+                        + "standard LSP over stdin/stdout; stdout is protocol-only while active.\n"
+                        + "Test Tool --jobs N selects positive logical execution capacity; "
+                        + "without --jobs the Test Tool uses jobs = 1.\n"
                         + "Application arguments are available through process.args(); "
                         + "the file/source launcher identity is excluded.\n"
                         + "The CLI provisions stdin/stdout/stderr as byte streams with "
@@ -924,6 +1121,26 @@ public final class ProtosCli {
                         "session is not bound to a Polyglot Process Context");
             }
             return processContext.execute(
+                    Objects.requireNonNull(source, "source"), activation);
+        }
+
+        ProtosExecutionOutcome executeFile(Path path, CharSequence characters) {
+            if (processContext == null) {
+                throw new IllegalStateException(
+                        "session is not bound to a Polyglot Process Context");
+            }
+            return processContext.executeFile(
+                    Objects.requireNonNull(path, "path"),
+                    Objects.requireNonNull(characters, "characters"),
+                    activation);
+        }
+
+        ProtosExecutionOutcome executeModuleSource(ProtosModuleSource source) {
+            if (processContext == null) {
+                throw new IllegalStateException(
+                        "session is not bound to a Polyglot Process Context");
+            }
+            return processContext.executeModuleSource(
                     Objects.requireNonNull(source, "source"), activation);
         }
 

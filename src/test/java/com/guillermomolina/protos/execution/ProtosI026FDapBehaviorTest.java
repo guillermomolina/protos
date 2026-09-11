@@ -25,7 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
-import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedInputStream;
@@ -75,46 +75,61 @@ final class ProtosI026FDapBehaviorTest {
         int port = reserveEphemeralPort();
         ExecutorService guestExecutor = Executors.newSingleThreadExecutor();
         Future<ProtosExecutionOutcome> guestFuture = null;
-        Context context = null;
+        Engine engine = null;
+        ProtosPolyglotExecutionContext context = null;
         DapClient client = null;
         boolean disconnected = false;
         Set<Thread> dapClientConnectionThreadsBefore = dapClientConnectionThreads();
         Thread dapClientConnectionThread = null;
 
         try {
-            context =
-                    Context.newBuilder(ProtosLanguage.ID)
+            engine =
+                    Engine.newBuilder(ProtosLanguage.ID)
                             .option("dap", "127.0.0.1:" + port)
                             .option("dap.Suspend", "false")
                             .option("dap.WaitAttached", "false")
                             .build();
-            context.initialize(ProtosLanguage.ID);
+            context =
+                    ProtosPolyglotExecutionContext.open(
+                            engine,
+                            java.io.InputStream.nullInputStream(),
+                            java.io.OutputStream.nullOutputStream(),
+                            java.io.OutputStream.nullOutputStream(),
+                            () -> {});
 
             client = DapClient.connect(port, TIMEOUT);
             initializeAndAttach(client);
             dapClientConnectionThread =
                     newDapClientConnectionThread(dapClientConnectionThreadsBefore);
 
-            Source source =
-                    Source.newBuilder(
-                                    ProtosLanguage.ID,
-                                    SOURCE_TEXT,
-                                    sourceFile.getFileName().toString())
-                            .uri(sourceFile.toUri())
-                            .mimeType(ProtosLanguage.MIME_TYPE)
-                            .build();
+            final Source[] sourceHolder = new Source[1];
+            final CallTarget target =
+                    context.callEntered(
+                            () -> {
+                                ProtosLanguageContext languageContext =
+                                        ProtosLanguageContext.current();
+                                Source source =
+                                        languageContext.materializeFileSource(
+                                                sourceFile, SOURCE_TEXT);
+                                sourceHolder[0] = source;
+                                return languageContext.parsePublic(source);
+                            });
+            Source source = sourceHolder[0];
 
-            final CallTarget target;
-            context.enter();
-            try {
-                target = ProtosLanguageContext.current().parsePublic(source);
-            } finally {
-                context.leave();
-            }
+            Path exactSourcePath = sourceFile.toAbsolutePath().normalize();
+            assertEquals(exactSourcePath.toString(), source.getPath());
+            assertEquals(exactSourcePath.toUri(), source.getURI());
 
             String loadedSource = loadedSource(client, sourceFile.getFileName().toString());
             String loadedPath = stringField(loadedSource, "path");
-            assertFalse(loadedPath.isEmpty(), "readable Protos source must have a DAP path");
+            assertEquals(
+                    exactSourcePath.toString(),
+                    loadedPath,
+                    "readable physical Protos source must keep the selected D065 path");
+            assertEquals(
+                    Integer.MIN_VALUE,
+                    optionalIntegerField(loadedSource, "sourceReference"),
+                    "readable physical source must not require a virtual DAP sourceReference");
 
             String dapSource =
                     "{\"name\":"
@@ -147,17 +162,14 @@ final class ProtosI026FDapBehaviorTest {
                     "configurationDone");
 
             ProtosActivation activation = activationWithRepresentativeValues();
-            Context guestContext = context;
+            ProtosPolyglotExecutionContext guestContext = context;
             guestFuture =
                     guestExecutor.submit(
-                            () -> {
-                                guestContext.enter();
-                                try {
-                                    return ProtosRootTaskExecution.execute(target, activation);
-                                } finally {
-                                    guestContext.leave();
-                                }
-                            });
+                            () ->
+                                    guestContext.callEntered(
+                                            () ->
+                                                    ProtosRootTaskExecution.execute(
+                                                            target, activation)));
 
             if (!immediatelyVerified) {
                 String resolvedEvent = client.awaitEvent("breakpoint", TIMEOUT);
@@ -301,6 +313,9 @@ final class ProtosI026FDapBehaviorTest {
             }
             if (context != null) {
                 context.close();
+            }
+            if (engine != null) {
+                engine.close();
             }
             guestExecutor.shutdownNow();
             assertTrue(

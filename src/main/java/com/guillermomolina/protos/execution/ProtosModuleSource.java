@@ -24,35 +24,36 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
- * Canonical source payload returned by the host module-resolution boundary.
+ * Immutable source facts returned by the host module-resolution boundary.
  *
- * <p>The {@link ProtosModuleKey} remains the semantic module identity used by Core caching. The
- * Truffle {@link Source} is implementation/tooling identity for the exact source unit resolved for
- * that key; it does not redefine Protos module identity.
+ * <p>The {@link ProtosModuleKey} remains the semantic module identity used by Core caching.
+ * Characters and an optional physical path are backend-neutral source facts. A Context-owned
+ * Truffle {@link Source} is materialized only after the owning Protos Context has been entered,
+ * as required by PLAT020.
  */
-public record ProtosModuleSource(ProtosModuleKey key, Source source) {
+public record ProtosModuleSource(
+        ProtosModuleKey key,
+        String characters,
+        Optional<Path> physicalPath) {
     public ProtosModuleSource {
         Objects.requireNonNull(key, "key");
-        Objects.requireNonNull(source, "source");
-        if (!ProtosLanguage.ID.equals(source.getLanguage())) {
-            throw new IllegalArgumentException("module Source belongs to another language");
-        }
-        if (!source.hasCharacters()) {
-            throw new IllegalArgumentException("Protos module Source must provide characters");
-        }
+        characters = Objects.requireNonNull(characters, "characters");
+        physicalPath =
+                Objects.requireNonNull(physicalPath, "physicalPath")
+                        .map(path -> path.toAbsolutePath().normalize());
     }
 
     public static ProtosModuleSource fromCharacters(
             ProtosModuleKey key, CharSequence characters) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(characters, "characters");
-        Source source =
-                Source.newBuilder(ProtosLanguage.ID, characters, key.canonicalId())
-                        .mimeType(ProtosLanguage.MIME_TYPE)
-                        .build();
-        return new ProtosModuleSource(key, source);
+        return new ProtosModuleSource(
+                key,
+                characters.toString(),
+                Optional.empty());
     }
 
     public static ProtosModuleSource fromPath(ProtosModuleKey key, Path path)
@@ -60,12 +61,26 @@ public record ProtosModuleSource(ProtosModuleKey key, Source source) {
         Objects.requireNonNull(key, "key");
         Path exact = Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
         String characters = Files.readString(exact, StandardCharsets.UTF_8);
-        Source source =
-                Source.newBuilder(ProtosLanguage.ID, characters, exact.getFileName().toString())
-                        .uri(exact.toUri())
-                        .mimeType(ProtosLanguage.MIME_TYPE)
-                        .build();
-        return new ProtosModuleSource(key, source);
+        return new ProtosModuleSource(key, characters, Optional.of(exact));
+    }
+
+    String sourceName() {
+        return physicalPath
+                .map(path -> path.getFileName().toString())
+                .orElseGet(key::canonicalId);
+    }
+
+    /**
+     * Literal representation used only for genuine virtual sources or deliberately unhosted Java
+     * semantic/compiler harnesses. Hosted physical execution must use PLAT020 Context
+     * materialization instead.
+     */
+    Source literalSource() {
+        Source.LiteralBuilder builder =
+                Source.newBuilder(ProtosLanguage.ID, characters, sourceName())
+                        .mimeType(ProtosLanguage.MIME_TYPE);
+        physicalPath.ifPresent(path -> builder.uri(path.toUri()));
+        return builder.build();
     }
 
     /** Fail closed if a resolver returns source for a different canonical module identity. */
@@ -75,9 +90,5 @@ public record ProtosModuleSource(ProtosModuleKey key, Source source) {
             throw new IllegalArgumentException("module resolver returned source for a different ModuleKey");
         }
         return this;
-    }
-
-    public String characters() {
-        return source.getCharacters().toString();
     }
 }

@@ -1,0 +1,120 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Uri: import("std:uri")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+validBase: () => {
+    {
+        scheme: null
+        userInfo: null
+        host: null
+        port: null
+        path: "a/b"
+        query: null
+        fragment: null
+    }
+}
+
+require(reject(() => { Uri.format() }))
+require(reject(() => { Uri.format(validBase(), validBase()) }))
+require(reject(() => { Uri.format("a/b") }))
+require(reject(() => { Uri.format(null) }))
+
+missingFragment: {
+    scheme: null
+    userInfo: null
+    host: null
+    port: null
+    path: "a/b"
+    query: null
+}
+require(reject(() => { Uri.format(missingFragment) }))
+
+badSchemeFamily: validBase()
+badSchemeFamily.scheme = 1
+require(reject(() => { Uri.format(badSchemeFamily) }))
+
+badPathFamily: validBase()
+badPathFamily.path = 1
+require(reject(() => { Uri.format(badPathFamily) }))
+
+orphanUserInfo: validBase()
+orphanUserInfo.userInfo = ""
+require(reject(() => { Uri.format(orphanUserInfo) }))
+
+orphanPort: validBase()
+orphanPort.port = ""
+require(reject(() => { Uri.format(orphanPort) }))
+
+badScheme: validBase()
+badScheme.scheme = "1bad"
+require(reject(() => { Uri.format(badScheme) }))
+
+relativeColon: validBase()
+relativeColon.path = "a:b"
+require(reject(() => { Uri.format(relativeColon) }))
+
+badHost: validBase()
+badHost.host = "exa mple"
+require(reject(() => { Uri.format(badHost) }))
+
+badLiteral: validBase()
+badLiteral.host = "[v1.]"
+require(reject(() => { Uri.format(badLiteral) }))
+
+badPort: validBase()
+badPort.host = "host"
+badPort.port = "80x"
+require(reject(() => { Uri.format(badPort) }))
+
+badPercent: validBase()
+badPercent.path = "/a%GG"
+require(reject(() => { Uri.format(badPercent) }))
+
+rawUnicode: validBase()
+rawUnicode.path = "/café"
+require(reject(() => { Uri.format(rawUnicode) }))
+
+rawBackslash: validBase()
+rawBackslash.path = "/a\\b"
+require(reject(() => { Uri.format(rawBackslash) }))
+
+queryDelimiter: validBase()
+queryDelimiter.query = "a#b"
+require(reject(() => { Uri.format(queryDelimiter) }))
+
+pathDelimiter: validBase()
+pathDelimiter.path = "/a?b"
+require(reject(() => { Uri.format(pathDelimiter) }))
+
+true

@@ -116,7 +116,7 @@ caseSpec: (fields) => {
         fail()
     })
 
-    frozenTuple(path, path, expectation, expected)
+    frozenTuple(path, path, expectation, expected, frozenTuple())
 }
 
 packageTomlCaseSpec: (fields) => {
@@ -143,7 +143,7 @@ packageTomlCaseSpec: (fields) => {
     })
 
     caseId: "package-tool/toml-syntax/" + path
-    frozenTuple(caseId, path, expectation, expected)
+    frozenTuple(caseId, path, expectation, expected, frozenTuple())
 }
 
 caseId: (spec) => {
@@ -160,6 +160,119 @@ caseExpectation: (spec) => {
 
 caseExpected: (spec) => {
     spec[3]
+}
+
+caseRequirements: (spec) => {
+    spec[4]
+}
+
+isResourceKeyStartOctet: (octet) => {
+    ((octet >= 97) && (octet <= 122)) ||
+        ((octet >= 48) && (octet <= 57))
+}
+
+isResourceKeyTailOctet: (octet) => {
+    isResourceKeyStartOctet(octet) ||
+        (octet == 46) ||
+        (octet == 95) ||
+        (octet == 45)
+}
+
+// D077 canonical resource key: segment[/segment...]. Each segment begins with
+// lower-case ASCII letter/digit and continues with lower-case ASCII, digit,
+// '.', '_' or '-'. Slash is namespace structure only; empty segments fail.
+resourceKeyValue: (key) => {
+    source: Encoding.UTF8.encode(key)
+    size: source.size()
+    (size == 0).ifTrue(() => {
+        fail()
+    })
+
+    segmentStart: true
+    index: 0
+    (() => index < size).while() {
+        octet: source[index]
+
+        (octet == 47).ifTrue(() => {
+            segmentStart.ifTrue(() => {
+                fail()
+            })
+            segmentStart = true
+        })
+
+        (octet == 47).ifFalse(() => {
+            allowed: false
+            segmentStart.ifTrue(() => {
+                allowed = isResourceKeyStartOctet(octet)
+            })
+            segmentStart.ifFalse(() => {
+                allowed = isResourceKeyTailOctet(octet)
+            })
+            allowed.ifFalse(() => {
+                fail()
+            })
+            segmentStart = false
+        })
+
+        index = index + 1
+    }
+
+    segmentStart.ifTrue(() => {
+        fail()
+    })
+    key
+}
+
+validateRequirementModeUnits: (mode, units) => {
+    // Exercise the strict semantic String receiver domain without converting
+    // the mode value. Unknown canonical String modes still fail below.
+    ignoredModeStringValidation: mode + ""
+    known: false
+
+    (mode == "shared").ifTrue(() => {
+        // Core Integer.div has the strict ordinary-unbounded-Integer receiver
+        // domain already used by the Standard Library for family validation.
+        // It rejects Float, fixed-width values and delegated lookalikes without
+        // converting the supplied units.
+        units.div(1)
+        (units <= 0).ifTrue(() => {
+            fail()
+        })
+        known = true
+    })
+
+    (mode == "exclusive").ifTrue(() => {
+        (units === null).ifFalse(() => {
+            fail()
+        })
+        known = true
+    })
+
+    known.ifFalse(() => {
+        fail()
+    })
+    true
+}
+
+// Private inert Requirement tuple selected by D077. I3 validates the canonical
+// resource key and I4 validates only the already-ratified mode/units shape.
+// CaseSpec attachment and persistent materialization remain later I slices.
+requirement: (key, mode, units) => {
+    validatedKey: resourceKeyValue(key)
+    validateRequirementModeUnits(mode, units)
+    frozenTuple(validatedKey, mode, units)
+}
+
+requirementKey: (requirement) => {
+    requirement[0]
+}
+
+requirementMode: (requirement) => {
+    requirement[1]
+}
+
+requirementUnits: (requirement) => {
+    requirement[2]
 }
 
 parseLine: (line) => {

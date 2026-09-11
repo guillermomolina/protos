@@ -26,3 +26,6 @@ Thumbs.db
 
 # Archives
 **/*.zip
+
+# Node / editor tooling
+**/node_modules/

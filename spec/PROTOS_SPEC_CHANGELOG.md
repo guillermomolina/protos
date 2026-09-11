@@ -9,6 +9,113 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.399] - 2026-09-11
+
+### D083 — Standard composite capture composition
+- Ratifies one-level D072 carrier concatenation for standard composites: each immediate child remains opaque and is consumed only through `child.match(childSubject)`; canonical `false` stops the composite as mismatch, canonical `true` contributes zero captures, and a non-empty child capture Array contributes exactly its top-level elements in carrier order.
+- Captured values are never recursively flattened. An Array-valued capture remains one ordinary capture (`[[1, 2]]` is one captured `[1, 2]` value), preserving D072's existing `[[]]` distinction.
+- Ordered standard children execute in deterministic semantic order, left-to-right for ordered child lists, exactly once until mismatch. Valid child carriers are shallowly consumed before the next child; invalid outcomes signal ordinary `Error`; Error/control/cancellation/explicit suspension propagate and prior effects are not rolled back.
+- All-success with zero total captures returns canonical `true`; all-success with captures returns one standard non-empty Array containing the concatenated shallow capture sequence.
+- Rest/repetition/whole-subject and similar aggregation remain explicit pattern-family behavior: a pattern that wants an aggregate to be one capture publishes that ordinary aggregate value as one D072 capture.
+- No capture-tree reflection, fixed `captureArity`, capture-name Map, `CaptureFrame`, mutable sink/CPS path, second matcher authority, or mandatory signature protocol is introduced.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D083 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075, D078, D080 and D081 matching semantics remain unchanged.
+- Concrete match/arm grammar, source binding spelling and duplicate-name policy, alternative/or binding-interface mechanics, guards, exhaustivity, sequence/Map remainder semantics, repetition/optional/rest semantics, whole-subject alias syntax, identity-pattern syntax, and recognition-only fast paths remain unresolved.
+- No parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D082 is unrelated concurrent work and is excluded; D084 and later matching-design checkpoints are excluded.
+
+## [0.1.398] - 2026-09-11
+
+### D081 — Default ordinary value-pattern matching
+- Ratifies standard inherited value-pattern behavior through the existing D073 authority: `Object.match(subject)` performs exactly one ordinary pattern-side `this == subject` and returns that canonical Boolean result unchanged.
+- Canonical `false` is D072 no-match and canonical `true` is zero-capture success. The default root behavior creates no capture Array.
+- No `===` pre-check, `subject == this` fallback, hashing, truthiness, coercion, retry, implicit await/Future adoption, hidden `ValuePattern`, second matching operator, matcher registry, or literal-family exception table is introduced.
+- Objects needing richer recognition/capture semantics override or shadow ordinary `match(subject)`; they need not redefine `==` as pattern recognition.
+- Standard Number/String/Boolean/null cases require no matching-specific semantic exception; implementations may specialize only when observationally equivalent to the ordinary exactly-once matcher/equality path.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D081 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075, D078 and D080 matching semantics remain unchanged.
+- D079-owned nested-capture composition is not changed or resolved by this publication slice.
+- Concrete match/arm grammar, which source expressions denote ordinary value patterns, named bindings, guards, exhaustivity, sequence/Map patterns, identity-pattern syntax, future Float/NaN-specific pattern semantics, and recognition-only fast paths remain unresolved.
+- No parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D082 and later matching-design checkpoints are excluded.
+
+## [0.1.397] - 2026-09-11
+
+### D080 — No generic positional subject-deconstruction protocol
+- Ratifies that Core v0.1 does not require arbitrary objects to expose a universal positional logical view or generic subject-side positional deconstruction protocol.
+- D075 `deconstructFields(...names)` remains the generic subject-side object structural protocol; domain-specific positional extraction remains pattern-owned through ordinary `pattern.match(subject)` and D072 captures.
+- Intrinsically ordered values remain under their own collection/indexing or future sequence/tuple-like semantics; no positional order is inferred from slots, delegation, declaration order, D075 name order, indexed state, prototype ancestry, or host representation.
+- No required `deconstruct()`, `deconstructPositions`, `componentN`, ordered positional-schema metadata, dedicated positional-view object, or request-polymorphic deconstruction selector is introduced.
+- A future opt-in positional subject protocol remains possible only through a separate explicit decision backed by ecosystem evidence.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D080 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075 and D078 matcher/named structural semantics remain unchanged.
+- D079 nested-capture composition is neither changed nor resolved by this publication slice.
+- Concrete match grammar, named bindings, literal/equality patterns, guards, exhaustivity, Map/sequence remainder semantics, future sequence/tuple pattern syntax, and recognition-only fast paths remain unresolved.
+- No grammar, parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D081 and later matching-design checkpoints are excluded.
+
+## [0.1.396] - 2026-09-11
+
+### D078 — Open/subset named-object structural matching
+- Ratifies generic named object structural matching as open/subset: only logical field names explicitly requested through D075 `deconstructFields(...names)` participate; additional logical fields do not cause mismatch, are not enumerated/materialized by matching, and are not implicitly captured.
+- Core v0.1 does not standardize generic named-object `**rest` / remainder capture or complete logical-field enumeration. D075 remains the single generic named-projection authority and gains no full-view mode or sentinel.
+- No required `deconstructAllFields`, `deconstructFieldNames`, `deconstructFieldsAndRest`, `DeconstructionView`, slot/delegation enumeration, indexed-state reinterpretation, or host-reflection fallback is introduced.
+- A future whole-subject alias may be considered separately without implying enumeration; collection-specific Map/sequence remainder semantics also remain separate. A future complete-view protocol requires another explicit decision backed by concrete use evidence.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D078 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075 matcher and selective-projection semantics remain unchanged.
+- Concrete match grammar, named/whole-subject binding syntax, Map/sequence remainder semantics, positional subject deconstruction, nested capture flattening, literal/equality patterns, guards, exhaustivity, and recognition-only fast paths remain unresolved.
+- No grammar, parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D079 and later matching-design checkpoints are excluded.
+
+## [0.1.395] - 2026-09-11
+
+### D075 — Named projection request/result/failure contract
+- Ratifies `deconstructFields(...names)` as one ordinary variadic named-projection call over zero or more pairwise-distinct semantic String names; ordinary argument order defines response correspondence and call spread handles dynamic name lists without a request object.
+- Exact normal results are canonical `false` for no named structural view, canonical `null` when projection exists but at least one requested name is unavailable, canonical `true` for successful zero-name projection, and a non-empty standard Array of exactly N values for N requested names in request order. Invalid requests/results signal ordinary `Error` at the violated protocol boundary.
+- Standardizes `Object.deconstructFields(...names) -> false` for valid requests, making participation an ordinary override/shadow rather than registry/reflection/type membership.
+- Requires exactly one projection call per structural attempt and an immediate shallow ordered snapshot of successful projected references before nested subpatterns. Error/control/cancellation/explicit suspension propagate normally; no implicit await, retry, transaction, deep copy, or atomicity is introduced.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D075 decision record under `docs/project/decisions/language/`.
+- Complete-view/remainder (`**rest`-like) projection, universal positional subject deconstruction, concrete match grammar, named bindings, nested capture flattening, guards, exhaustivity, literal/equality patterns, and recognition-only fast paths remain unresolved.
+- No grammar, parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+
+## [0.1.394] - 2026-09-11
+
+### D071-D074 — Extensible matching protocol architecture
+- Publishes the project-owner-ratified matching architecture after exhaustive comparative review:
+  pattern-owned recognition, explicit subject-owned structural projection, source-order / first-success
+  matching, ordinary selected-branch invocation, no truthiness and no implicit await.
+- Standardizes the single required public matcher authority as `pattern.match(subject)` and the exact
+  matcher outcome carrier: canonical `false` for no match, canonical `true` for zero-capture success,
+  and a non-empty standard Array for positional captures. Every other normal outcome is invalid at the
+  standard matcher-consuming boundary; Error and non-normal control propagate normally.
+- Standardizes the subject-side architecture for generic object structural matching as a named,
+  selective logical projection. Structural matching does not implicitly enumerate slots, delegated
+  members, prototype ancestry, indexed contents, or host representation, and ordinary objects acquire
+  no universal positional product layout.
+- Leaves syntax, arms/defaults, literal/equality patterns, guards, exhaustivity, built-in pattern
+  taxonomy, nested capture flattening, named bindings, exact structural-projection selector/request/
+  result/failure carrier, full-view/remainder semantics, positional subject deconstruction, and any
+  recognition-only optimization protocol explicitly unresolved.
+
+### Compatibility and implementation state
+- New primary normative owner: `semantics/MATCHING.md`; `PROTOS_LANGUAGE_SPEC.md` and root `AGENTS.md`
+  register that modular owner for navigation and future-agent authority.
+- Adds durable non-normative decision records D071-D074 under
+  `docs/project/decisions/language/` and indexes them from that decision domain.
+- No grammar, parser, production implementation, Maven implementation version, native boundary,
+  license term, or standard-library source is changed by this publication slice.
+- D075 and all later matching-design checkpoints are excluded.
+
 ## [0.1.393] - 2026-09-09
 
 ### D052 — TCP live-resource object topology

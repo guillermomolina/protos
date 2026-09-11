@@ -1247,6 +1247,352 @@ runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor = null) =>
     )
 }
 
+
+// TOOL002-H2B1 bounded simple-case scheduling kernel.
+//
+// Admission is owned directly by the current Test Tool runner task. No
+// Future.then continuation task and no per-case Closure.future worker is created
+// by this scheduler. Each wave admits at most maxInFlight exact executions, then
+// performs one deterministic Future.all(...).value() wait before projecting
+// already-rematerialized observations in TestPlan order. The standard while
+// protocol owns suspension/replay of the wave loops; D055 keeps jobs defaults,
+// host carriers, resources, timeout/kill, retry and remote policy deferred.
+runBoundedSimpleWithLoader: (
+    plan,
+    sourceLoader,
+    executorAsync,
+    maxInFlight
+) => {
+    maxInFlight.div(1)
+    (maxInFlight > 0).ifFalse(() => {
+        policyError()
+    })
+
+    cases: Manifest.planCases(plan)
+    selectedCases: Array()
+    cases.each((spec) => {
+        isSimpleExpectation(spec).ifTrue(() => {
+            selectedCases = Array(...selectedCases, spec)
+        })
+    })
+
+    resultChunks: Map()
+    maxChunkLevel: -1
+
+    carryChunk: null
+    carryChunk = (chunk, level) => {
+        present: resultChunks.containsKey(level)
+        present.ifTrue(() => {
+            left: resultChunks[level]
+            resultChunks.remove(level)
+            carryChunk(Array(...left, ...chunk), level + 1)
+        })
+        present.ifFalse(() => {
+            resultChunks[level] = chunk
+            (level > maxChunkLevel).ifTrue(() => {
+                maxChunkLevel = level
+            })
+        })
+    }
+
+    collectChunks: null
+    collectChunks = (level, result) => {
+        finalResult: result
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            resultChunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...resultChunks[level])
+            })
+            finalResult = collectChunks(level - 1, nextResult)
+        })
+        finalResult
+    }
+
+    nextIndex: 0
+    (() => nextIndex < selectedCases.size()).while(() => {
+        waveSpecs: Array()
+        waveSources: Array()
+        pending: Array()
+        admitted: 0
+
+        (() =>
+            (admitted < maxInFlight) &&
+            (nextIndex < selectedCases.size())
+        ).while(() => {
+            spec: selectedCases[nextIndex]
+            source: sourceLoader(spec)
+
+            waveSpecs = Array(...waveSpecs, spec)
+            waveSources = Array(...waveSources, source)
+            pending = Array(...pending, executorAsync(source))
+
+            admitted = admitted + 1
+            nextIndex = nextIndex + 1
+        })
+
+        observations: Future.all(...pending).value()
+
+        resultIndex: 0
+        (() => resultIndex < observations.size()).while(() => {
+            spec: waveSpecs[resultIndex]
+            source: waveSources[resultIndex]
+            observation: observations[resultIndex]
+            evaluation: evaluateSimple(
+                spec,
+                source,
+                (ignoredSource) => { observation }
+            )
+            carryChunk(Array(caseRunTuple(spec, evaluation)), 0)
+            resultIndex = resultIndex + 1
+        })
+    })
+
+    caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
+    passedCount: 0
+    caseResults.each((caseRun) => {
+        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+            passedCount = passedCount + 1
+        })
+    })
+
+    runTuple(
+        caseResults,
+        caseResults.size(),
+        passedCount,
+        cases.size() - selectedCases.size()
+    )
+}
+
+runBoundedSimple: (
+    plan,
+    filesystem,
+    executorAsync,
+    maxInFlight
+) => {
+    runBoundedSimpleWithLoader(
+        plan,
+        (spec) => { readSource(spec, filesystem) },
+        executorAsync,
+        maxInFlight
+    )
+}
+
+
+// TOOL002-H2B2 complete bounded D-case scheduling over D055 async exact execution.
+//
+// This layer owns admission only. Existing Runner policy continues to decide which
+// cases require ordinary exact execution, closure-preserving source wrapping or
+// live-result inspection. A mixed wave shares one maxInFlight bound across both
+// executionAsync and executionInspectAsync. The scheduler creates no Future.then
+// coordination Task and no per-case Closure.future worker.
+scheduleDCaseAsync: (
+    spec,
+    source,
+    executorAsync,
+    inspectorExecutorAsync
+) => {
+    pending: null
+
+    isFutureResolvedExpectation(spec).ifTrue(() => {
+        (inspectorExecutorAsync === null).ifTrue(() => { policyError() })
+        pending = inspectorExecutorAsync(
+            source,
+            futureResolvedInspectorSource(
+                Manifest.caseExpectation(spec),
+                Manifest.caseExpected(spec)
+            )
+        )
+    })
+
+    (pending === null).ifTrue(() => {
+        isFutureTerminalExpectation(spec).ifTrue(() => {
+            (inspectorExecutorAsync === null).ifTrue(() => { policyError() })
+            pending = inspectorExecutorAsync(
+                source,
+                futureTerminalInspectorSource(
+                    Manifest.caseExpectation(spec),
+                    Manifest.caseExpected(spec)
+                )
+            )
+        })
+    })
+
+    (pending === null).ifTrue(() => {
+        (Manifest.caseExpectation(spec) === "future-observation-error-identity").ifTrue(() => {
+            (inspectorExecutorAsync === null).ifTrue(() => { policyError() })
+            policy: parseFutureObservationPolicy(Manifest.caseExpected(spec))
+            inspectorSource: null
+
+            (futureObservationPolicyMode(policy) === "stored").ifTrue(() => {
+                inspectorSource = futureStoredObservationInspectorSource()
+            })
+            (futureObservationPolicyMode(policy) === "fresh").ifTrue(() => {
+                inspectorSource = futureFreshObservationInspectorSource(
+                    futureObservationPolicyParentName(policy)
+                )
+            })
+            (inspectorSource === null).ifTrue(() => { policyError() })
+            pending = inspectorExecutorAsync(source, inspectorSource)
+        })
+    })
+
+    (pending === null).ifTrue(() => {
+        isClosureErrorParentFreshExpectation(spec).ifTrue(() => {
+            pending = executorAsync(
+                closureErrorParentFreshWrapperSource(
+                    source,
+                    Manifest.caseExpected(spec)
+                )
+            )
+        })
+    })
+
+    (pending === null).ifTrue(() => {
+        isSimpleExpectation(spec).ifTrue(() => {
+            pending = executorAsync(source)
+        })
+    })
+
+    (pending === null).ifTrue(() => { policyError() })
+    pending
+}
+
+evaluateDObservation: (spec, source, observation) => {
+    evaluateDCase(
+        spec,
+        source,
+        (ignoredSource) => { observation },
+        (ignoredSource, ignoredInspector) => { observation }
+    )
+}
+
+runBoundedWithLoader: (
+    plan,
+    sourceLoader,
+    executorAsync,
+    inspectorExecutorAsync,
+    maxInFlight
+) => {
+    maxInFlight.div(1)
+    (maxInFlight > 0).ifFalse(() => {
+        policyError()
+    })
+
+    cases: Manifest.planCases(plan)
+    selectedCases: Array()
+    cases.each((spec) => {
+        isDExpectation(spec).ifTrue(() => {
+            selectedCases = Array(...selectedCases, spec)
+        })
+    })
+
+    resultChunks: Map()
+    maxChunkLevel: -1
+
+    carryChunk: null
+    carryChunk = (chunk, level) => {
+        present: resultChunks.containsKey(level)
+        present.ifTrue(() => {
+            left: resultChunks[level]
+            resultChunks.remove(level)
+            carryChunk(Array(...left, ...chunk), level + 1)
+        })
+        present.ifFalse(() => {
+            resultChunks[level] = chunk
+            (level > maxChunkLevel).ifTrue(() => {
+                maxChunkLevel = level
+            })
+        })
+    }
+
+    collectChunks: null
+    collectChunks = (level, result) => {
+        finalResult: result
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            resultChunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...resultChunks[level])
+            })
+            finalResult = collectChunks(level - 1, nextResult)
+        })
+        finalResult
+    }
+
+    nextIndex: 0
+    (() => nextIndex < selectedCases.size()).while(() => {
+        waveSpecs: Array()
+        waveSources: Array()
+        pending: Array()
+        admitted: 0
+
+        (() =>
+            (admitted < maxInFlight) &&
+            (nextIndex < selectedCases.size())
+        ).while(() => {
+            spec: selectedCases[nextIndex]
+            source: sourceLoader(spec)
+
+            waveSpecs = Array(...waveSpecs, spec)
+            waveSources = Array(...waveSources, source)
+            pending = Array(
+                ...pending,
+                scheduleDCaseAsync(
+                    spec,
+                    source,
+                    executorAsync,
+                    inspectorExecutorAsync
+                )
+            )
+
+            admitted = admitted + 1
+            nextIndex = nextIndex + 1
+        })
+
+        observations: Future.all(...pending).value()
+
+        resultIndex: 0
+        (() => resultIndex < observations.size()).while(() => {
+            spec: waveSpecs[resultIndex]
+            source: waveSources[resultIndex]
+            observation: observations[resultIndex]
+            evaluation: evaluateDObservation(spec, source, observation)
+            carryChunk(Array(caseRunTuple(spec, evaluation)), 0)
+            resultIndex = resultIndex + 1
+        })
+    })
+
+    caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
+    passedCount: 0
+    caseResults.each((caseRun) => {
+        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+            passedCount = passedCount + 1
+        })
+    })
+
+    runTuple(
+        caseResults,
+        caseResults.size(),
+        passedCount,
+        cases.size() - selectedCases.size()
+    )
+}
+
+runBounded: (
+    plan,
+    filesystem,
+    executorAsync,
+    inspectorExecutorAsync,
+    maxInFlight
+) => {
+    runBoundedWithLoader(
+        plan,
+        (spec) => { readSource(spec, filesystem) },
+        executorAsync,
+        inspectorExecutorAsync,
+        maxInFlight
+    )
+}
+
 runSimple: (plan, filesystem, executor, inspectorExecutor = null) => {
     runSimpleWithLoader(
         plan,

@@ -221,6 +221,34 @@ final class ProtosReplTest {
         assertTrue(r.e.isBlank(), r.e);
     }
 
+
+    @Test
+    void diagnosticInspectionIsSeparatedFromPrintAndShowsLocalObjectState() {
+        R r =
+                repl(
+                        "\"hello\"\n"
+                                + "print(\"hello\")\n"
+                                + "holder: {\n"
+                                + "    name: \"Alice\"\n"
+                                + "    age: 42\n"
+                                + "}\n"
+                                + "holder\n"
+                                + "print(holder)\n"
+                                + ":quit\n");
+
+        assertEquals(0, r.c);
+        assertTrue(r.o.contains("protos> \"hello\"\nprotos> hello\nnull\n"), r.o);
+        assertTrue(r.o.contains("Object {name: \"Alice\", age: 42}"), r.o);
+        assertTrue(r.o.contains("protos> <object>\nnull\nprotos> "), r.o);
+        assertTrue(r.e.isBlank(), r.e);
+    }    @Test
+    void processArgumentsUseBoundedContentDiagnosticProjection() {
+        R r = repl("process.args()\n:quit\n");
+        assertEquals(0, r.c);
+        assertTrue(r.o.contains("protos> ProcessArguments[]\nprotos> "), r.o);
+        assertTrue(r.e.isBlank(), r.e);
+    }
+
     private static void terminateSession(Object session) throws Exception {
         Method terminate = session.getClass().getDeclaredMethod("terminate");
         terminate.setAccessible(true);

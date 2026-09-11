@@ -1,0 +1,67 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+CSV: import("std:csv/CSV")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+sink: ""
+writes: 0
+writer: null
+writer = {
+    writeText: (text) => {
+        (() => {
+            sink = sink + text
+            writes = writes + 1
+            writer
+        }).future()
+    }
+}
+
+stream: CSV.writeRows(writer)
+first: stream.feed(Array("a", "b"))
+second: first.then((resolvedStream) => {
+    require(resolvedStream === stream)
+    stream.feed(Array("x,y", "q\"z"))
+})
+finished: second.then((resolvedStream) => {
+    require(resolvedStream === stream)
+    stream.finish()
+})
+
+finished.then((resolvedStream) => {
+    require(resolvedStream === stream)
+    require(sink == "a,b\r\n\"x,y\",\"q\"\"z\"\r\n")
+    require(writes == 3)
+    require(reject(() => { stream.feed(Array("late")) }))
+    require(reject(() => { stream.finish() }))
+    true
+})

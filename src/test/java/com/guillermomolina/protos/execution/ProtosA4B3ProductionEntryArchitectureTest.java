@@ -71,10 +71,12 @@ final class ProtosA4B3ProductionEntryArchitectureTest {
                                 "com/guillermomolina/protos/execution/ProtosCanonicalInitialModuleExecution.java"));
 
         assertTrue(moduleRuntime.contains("process.callInExecutionHostForRuntime("));
-        assertTrue(moduleRuntime.contains(".parsePublic(source.source())"));
+        assertTrue(moduleRuntime.contains("materializeModuleSource(source)"));
+        assertFalse(moduleRuntime.contains(".parsePublic(source.source())"));
         assertTrue(moduleRuntime.contains("is not a production Process"));
         assertTrue(initialModule.contains("process.callInExecutionHostForRuntime("));
-        assertTrue(initialModule.contains("parsePublic(source.source())"));
+        assertTrue(initialModule.contains("materializeModuleSource(source)"));
+        assertFalse(initialModule.contains("parsePublic(source.source())"));
         assertTrue(initialModule.contains("not reachable from a production driver"));
     }
 }

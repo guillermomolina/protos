@@ -1,12 +1,16 @@
 name: Bug report
 description: Report a reproducible problem in Protos or its bundled tools
 title: "[Bug] "
+labels: ["status:inbox"]
 body:
   - type: markdown
     attributes:
       value: |
         Thanks for reporting a problem. For open-ended questions or design ideas,
         please use GitHub Discussions instead.
+
+        A bug report is community intake. It does not allocate a formal `BUGxxx`
+        identifier or `family:BUG`; maintainers may promote confirmed work later.
 
   - type: textarea
     id: summary

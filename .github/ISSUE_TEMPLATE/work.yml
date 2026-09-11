@@ -1,10 +1,11 @@
 name: Tracked project work
-description: Create an already-actionable formal Protos work item; exploratory ideas and unresolved design belong in Discussions first.
+description: Maintainer-only intake for an already-allocated formal Protos work item; exploratory ideas and unresolved design belong in Discussions first.
+labels: ["status:inbox"]
 body:
   - type: markdown
     attributes:
       value: |
-        Use this form only for actionable tracked work.
+        Maintainer use only: use this form only when the formal identifier has already been allocated under `AGENTS.md`. If you do not already have an allocated identifier, use Community request or Discussions instead.
 
         `spec/`, ratified `Dxxx` / `PLATxxx`, and repository blocker records remain
         authoritative where applicable. This Issue coordinates work; it cannot approve
@@ -18,8 +19,17 @@ body:
     id: work-item
     attributes:
       label: Work item
-      description: Maintainer-allocated formal identifier and short name.
+      description: Maintainer-allocated formal identifier and short name; the Issue title must begin with the same identifier.
       placeholder: "I031 — Short descriptive name"
+    validations:
+      required: true
+
+  - type: input
+    id: parent-issue
+    attributes:
+      label: Parent issue
+      description: For a formal child, enter its parent as #N. For a top-level work item, enter none.
+      placeholder: "#47 or none"
     validations:
       required: true
 

@@ -1,0 +1,495 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+rowParser: (emit) => {
+    failed: false
+    finished: false
+    parser: null
+
+    fail: () => {
+        failed = true
+        Error().signal()
+    }
+
+    fieldBuffer: Encoding.UTF8.encode("")
+    fieldChunks: Map()
+    fieldMaxLevel: -1
+
+    carryFieldChunk: null
+    carryFieldChunk = (chunk, level) => {
+        present: fieldChunks.containsKey(level)
+
+        present.ifTrue(() => {
+            left: fieldChunks[level]
+            fieldChunks.remove(level)
+            carryFieldChunk(Array(...left, ...chunk), level + 1)
+        })
+
+        present.ifFalse(() => {
+            fieldChunks[level] = chunk
+            (level > fieldMaxLevel).ifTrue(() => {
+                fieldMaxLevel = level
+            })
+        })
+    }
+
+    collectFieldChunks: null
+    collectFieldChunks = (level, result) => {
+        finalResult: result
+
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            fieldChunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...fieldChunks[level])
+            })
+            finalResult = collectFieldChunks(level - 1, nextResult)
+        })
+
+        finalResult
+    }
+
+    publishRow: (row) => {
+        // Mirror the established incremental JSON lifecycle: callbacks are
+        // non-reentrant and any consumer failure leaves this parser terminal.
+        failed = true
+        emit(row)
+        failed = false
+    }
+
+    finishField: () => {
+        field: Encoding.UTF8.decode(fieldBuffer)
+        carryFieldChunk(Array(field), 0)
+        fieldBuffer = Encoding.UTF8.encode("")
+    }
+
+    finishRow: () => {
+        row: collectFieldChunks(fieldMaxLevel, Array())
+
+        fieldChunks = Map()
+        fieldMaxLevel = -1
+
+        publishRow(row)
+    }
+
+    mode: "fieldStart"
+    rowActive: false
+    skipLfAfterCr: false
+
+    consumeOctet: (octet) => {
+        skipped: false
+
+        skipLfAfterCr.ifTrue(() => {
+            skipLfAfterCr = false
+            (octet == 10).ifTrue(() => {
+                skipped = true
+            })
+        })
+
+        skipped.ifFalse(() => {
+            previousMode: mode
+
+            (previousMode == "fieldStart").ifTrue(() => {
+                handled: false
+
+                (octet == 44).ifTrue(() => {
+                    finishField()
+                    rowActive = true
+                    handled = true
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 34).ifTrue(() => {
+                        mode = "quoted"
+                        rowActive = true
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 13).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        rowActive = false
+                        skipLfAfterCr = true
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 10).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        rowActive = false
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    fieldBuffer.add(octet)
+                    mode = "unquoted"
+                    rowActive = true
+                })
+            })
+
+            (previousMode == "unquoted").ifTrue(() => {
+                handled: false
+
+                (octet == 44).ifTrue(() => {
+                    finishField()
+                    mode = "fieldStart"
+                    handled = true
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 34).ifTrue(() => {
+                        fail()
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 13).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        mode = "fieldStart"
+                        rowActive = false
+                        skipLfAfterCr = true
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 10).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        mode = "fieldStart"
+                        rowActive = false
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    fieldBuffer.add(octet)
+                })
+            })
+
+            (previousMode == "quoted").ifTrue(() => {
+                (octet == 34).ifTrue(() => {
+                    mode = "afterQuote"
+                })
+                (octet == 34).ifFalse(() => {
+                    fieldBuffer.add(octet)
+                })
+            })
+
+            (previousMode == "afterQuote").ifTrue(() => {
+                handled: false
+
+                (octet == 34).ifTrue(() => {
+                    fieldBuffer.add(34)
+                    mode = "quoted"
+                    handled = true
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 44).ifTrue(() => {
+                        finishField()
+                        mode = "fieldStart"
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 13).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        mode = "fieldStart"
+                        rowActive = false
+                        skipLfAfterCr = true
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 10).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        mode = "fieldStart"
+                        rowActive = false
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    fail()
+                })
+            })
+        })
+    }
+
+    parser = {
+        feed: (text) => {
+            failed.ifTrue(() => {
+                Error().signal()
+            })
+            finished.ifTrue(() => {
+                fail()
+            })
+
+            Encoding.UTF8.encode(text).each((octet) => {
+                consumeOctet(octet)
+            })
+
+            parser
+        }
+
+        finish: () => {
+            failed.ifTrue(() => {
+                Error().signal()
+            })
+            finished.ifTrue(() => {
+                fail()
+            })
+
+            (mode == "quoted").ifTrue(() => {
+                fail()
+            })
+
+            (mode == "afterQuote").ifTrue(() => {
+                finishField()
+                finishRow()
+                rowActive = false
+            })
+
+            (mode == "unquoted").ifTrue(() => {
+                finishField()
+                finishRow()
+                rowActive = false
+            })
+
+            (mode == "fieldStart").ifTrue(() => {
+                rowActive.ifTrue(() => {
+                    finishField()
+                    finishRow()
+                    rowActive = false
+                })
+            })
+
+            finished = true
+            parser
+        }
+    }
+
+    parser
+}
+
+parse: (text) => {
+    tableChunks: Map()
+    tableMaxLevel: -1
+
+    carryTableChunk: null
+    carryTableChunk = (chunk, level) => {
+        present: tableChunks.containsKey(level)
+
+        present.ifTrue(() => {
+            left: tableChunks[level]
+            tableChunks.remove(level)
+            carryTableChunk(Array(...left, ...chunk), level + 1)
+        })
+
+        present.ifFalse(() => {
+            tableChunks[level] = chunk
+            (level > tableMaxLevel).ifTrue(() => {
+                tableMaxLevel = level
+            })
+        })
+    }
+
+    collectTableChunks: null
+    collectTableChunks = (level, result) => {
+        finalResult: result
+
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            tableChunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...tableChunks[level])
+            })
+            finalResult = collectTableChunks(level - 1, nextResult)
+        })
+
+        finalResult
+    }
+
+    parser: rowParser((row) => {
+        carryTableChunk(Array(row), 0)
+    })
+    parser.feed(text)
+    parser.finish()
+
+    collectTableChunks(tableMaxLevel, Array())
+}
+
+encode: (rows) => {
+    table: Array(...rows)
+    output: Encoding.UTF8.encode("")
+
+    appendByte: (octet) => {
+        output.add(octet)
+    }
+
+    table.each((row) => {
+        fields: Array(...row)
+
+        (fields.size() == 0).ifTrue(() => {
+            Error().signal()
+        })
+
+        index: 0
+
+        fields.each((field) => {
+            (index > 0).ifTrue(() => {
+                appendByte(44)
+            })
+
+            bytes: Encoding.UTF8.encode(field)
+            quoteNeeded: false
+
+            bytes.each((octet) => {
+                ((octet == 44) || (octet == 34) || (octet == 13) || (octet == 10)).ifTrue(() => {
+                    quoteNeeded = true
+                })
+            })
+
+            quoteNeeded.ifTrue(() => {
+                appendByte(34)
+            })
+
+            bytes.each((octet) => {
+                (quoteNeeded && (octet == 34)).ifTrue(() => {
+                    appendByte(34)
+                })
+                appendByte(octet)
+            })
+
+            quoteNeeded.ifTrue(() => {
+                appendByte(34)
+            })
+
+            index = index + 1
+        })
+
+        appendByte(13)
+        appendByte(10)
+    })
+
+    Encoding.UTF8.decode(output)
+}
+
+readRows: (textReader, emit) => {
+    parser: rowParser(emit)
+    busy: false
+    finished: false
+    adapter: null
+
+    ensureReady: () => {
+        busy.ifTrue(() => {
+            Error().signal()
+        })
+        finished.ifTrue(() => {
+            Error().signal()
+        })
+    }
+
+    adapter = {
+        read: () => {
+            ensureReady()
+
+            // Enter the operation before crossing the supplied capability
+            // boundary so synchronous reader failure is terminal as well.
+            busy = true
+            readFuture: textReader.readText()
+            completion: readFuture.then((chunk) => {
+                more: true
+
+                (chunk === null).ifTrue(() => {
+                    parser.finish()
+                    finished = true
+                    more = false
+                })
+
+                (chunk === null).ifFalse(() => {
+                    parser.feed(chunk)
+                })
+
+                busy = false
+                more
+            })
+
+            completion
+        }
+    }
+
+    adapter
+}
+
+writeRows: (textWriter) => {
+    busy: false
+    finished: false
+    adapter: null
+
+    ensureReady: () => {
+        busy.ifTrue(() => {
+            Error().signal()
+        })
+        finished.ifTrue(() => {
+            Error().signal()
+        })
+    }
+
+    adapter = {
+        feed: (row) => {
+            ensureReady()
+
+            // Keep validation/encoding and downstream writing in one terminal
+            // operation, mirroring JSON.writeEvents.
+            busy = true
+            chunk: encode(Array(row))
+            writeFuture: textWriter.writeText(chunk)
+            completion: writeFuture.then((ignored) => {
+                busy = false
+                adapter
+            })
+
+            completion
+        }
+
+        finish: () => {
+            ensureReady()
+
+            // Ordered zero-output Future barrier. It adds no CSV bytes and does
+            // not flush, close, or take ownership of the supplied writer.
+            busy = true
+            barrier: textWriter.writeText("")
+            completion: barrier.then((ignored) => {
+                finished = true
+                busy = false
+                adapter
+            })
+
+            completion
+        }
+    }
+
+    adapter
+}

@@ -1,0 +1,89 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Uri: import("std:uri")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+require(Uri.parse("mailto:John.Doe@example.com").scheme == "mailto")
+require(Uri.parse("urn:oasis:names:specification:docbook:dtd:xml:4.1.2").path ==
+    "oasis:names:specification:docbook:dtd:xml:4.1.2")
+
+relative: Uri.parse("../a/b?c/d?e#f/g?h")
+require(relative.scheme === null)
+require(relative.userInfo === null)
+require(relative.host === null)
+require(relative.port === null)
+require(relative.path == "../a/b")
+require(relative.query == "c/d?e")
+require(relative.fragment == "f/g?h")
+
+require(Uri.parse("/a/b:c").path == "/a/b:c")
+require(Uri.parse("a/b:c").path == "a/b:c")
+require(Uri.parse("./a:b").path == "./a:b")
+require(Uri.parse("a:b").scheme == "a")
+require(Uri.parse("a:b").path == "b")
+
+authority: Uri.parse("//user:pass@example.com:443/a")
+require(authority.userInfo == "user:pass")
+require(authority.host == "example.com")
+require(authority.port == "443")
+require(authority.path == "/a")
+
+reserved: Uri.parse("scheme:/AZaz09-._~!$&'()*+,;=:@/%41")
+require(reserved.path == "/AZaz09-._~!$&'()*+,;=:@/%41")
+
+require(Uri.parse("file:///path").host == "")
+require(Uri.parse("http://example.com:").port == "")
+require(Uri.parse("http://@example.com").userInfo == "")
+require(Uri.parse("http://999.999.999.999/").host == "999.999.999.999")
+
+ipv6: Uri.parse("//[2001:db8::1]:443/path")
+require(ipv6.host == "[2001:db8::1]")
+require(ipv6.port == "443")
+require(Uri.parse("//[::ffff:192.0.2.1]/").host == "[::ffff:192.0.2.1]")
+require(Uri.parse("//[1:2:3:4:5:6:192.0.2.1]/").host ==
+    "[1:2:3:4:5:6:192.0.2.1]")
+require(Uri.parse("//[1:2:3:4:5::192.0.2.1]/").host ==
+    "[1:2:3:4:5::192.0.2.1]")
+require(Uri.parse("//[::]/").host == "[::]")
+
+ipvFuture: Uri.parse("//[v1.fe80::abcd]/")
+require(ipvFuture.host == "[v1.fe80::abcd]")
+require(Uri.parse("//[VF.a:b]/").host == "[VF.a:b]")
+
+percentCase: Uri.parse("X:/a%2fb%2F?q=%3a#%4A")
+require(percentCase.scheme == "X")
+require(percentCase.path == "/a%2fb%2F")
+require(percentCase.query == "q=%3a")
+require(percentCase.fragment == "%4A")
+
+true

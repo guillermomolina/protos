@@ -20,12 +20,42 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.List;
 
 final class ProtosStandardErrorProtocol {
+    private static final ProtosNativeClosureBody STANDARD_SIGNAL_BODY =
+            ProtosStandardErrorProtocol::signal;
+    private static final ProtosNativeClosureBody STANDARD_HANDLE_BODY =
+            ProtosStandardErrorProtocol::handle;
+
     private ProtosStandardErrorProtocol() {}
+
+    static boolean isStandardSignalImplementation(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_SIGNAL_BODY;
+    }
+
+    static boolean isStandardHandleImplementation(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_HANDLE_BODY;
+    }
+
+    static boolean isCanonicalStandardSignalSelection(
+            ProtosClosureValue closure,
+            ProtosObjectValue home,
+            ProtosActivation caller) {
+        return isStandardSignalImplementation(closure)
+                && caller.prelude().map(prelude -> prelude.errorPrototype()).orElse(null) == home;
+    }
+
+    static boolean isCanonicalStandardHandleSelection(
+            ProtosClosureValue closure,
+            ProtosObjectValue home,
+            ProtosActivation caller) {
+        return isStandardHandleImplementation(closure)
+                && caller.prelude().map(prelude -> prelude.errorPrototype()).orElse(null) == home;
+    }
 
     static void install(ProtosObjectValue errorPrototype) {
         if (errorPrototype.hasLocalSlot("signal") || errorPrototype.hasLocalSlot("handle")) {
@@ -33,21 +63,22 @@ final class ProtosStandardErrorProtocol {
         }
         errorPrototype.createLocalSlot(
                 "signal",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            if (!supplied.isEmpty()) {
-                                throw invalid(activation);
-                            }
-                            Object receiver = activation.receiver();
-                            if (!(receiver instanceof ProtosObjectValue error)
-                                    || !ProtosCoreErrors.isError(activation, error)) {
-                                throw invalid(activation);
-                            }
-                            throw ProtosCoreErrors.signal(activation, error);
-                        }));
+                ProtosClosureValue.nativeClosure(STANDARD_SIGNAL_BODY));
         errorPrototype.createLocalSlot(
                 "handle",
-                ProtosClosureValue.nativeClosure(ProtosStandardErrorProtocol::handle));
+                ProtosClosureValue.nativeClosure(STANDARD_HANDLE_BODY));
+    }
+
+    private static Object signal(ProtosActivation activation, List<?> supplied) {
+        if (!supplied.isEmpty()) {
+            throw invalid(activation);
+        }
+        Object receiver = activation.receiver();
+        if (!(receiver instanceof ProtosObjectValue error)
+                || !ProtosCoreErrors.isError(activation, error)) {
+            throw invalid(activation);
+        }
+        throw ProtosCoreErrors.signal(activation, error);
     }
 
     private static Object handle(ProtosActivation activation, List<?> supplied) {

@@ -152,6 +152,100 @@ No website bootstrap, dependency pin, production-host implementation, DNS
 change, logo publication, or playground implementation is included in the
 WEB001-B ratification.
 
+<!-- D066-DOCUMENTATION-AUTHORITY-WIKI-WEBSITE-TOPOLOGY -->
+## D066 — documentation authority, project Wiki, and public website topology
+
+GitHub Issue [#325](https://github.com/guillermomolina/protos/issues/325) owns the
+durable topology refinement triggered while re-auditing WEB001-J7B / TOOL003.
+
+The project owner explicitly approved Candidate D on 2026-09-11. D066 keeps the
+WEB001-B independent companion-repository model and separates three roles:
+
+```text
+protos repository  -> canonical/version-sensitive authority
+Protos Wiki        -> non-authoritative contributor/project knowledge
+protos-website     -> public user-facing presentation and deployment
+```
+
+The Wiki may host onboarding, build/development guidance, project orientation,
+FAQ, troubleshooting, glossary and workflow explanations, but it is not a
+specification, API authority, decision registry or release-versioned reference.
+GitHub stores the Wiki as its own Git repository, so version-sensitive material
+continues to live with the exact `protos` revision it describes.
+
+`protos-source.lock.json` remains a valid reproducibility mechanism for the
+independent website. D066 instead corrects an implementation inference: the
+cross-repository boundary does not require Protos to pre-build a universal
+documentation platform for hypothetical CLI/IDE/package consumers. D061, D062
+and D064 remain ratified; TOOL003-A remains published; the unpublished pre-D066
+TOOL003-B candidate is abandoned; and WEB001-J7B must re-derive the smallest
+Protos-owned deterministic Standard Library extraction mechanism that its real
+consumer currently requires.
+
+D066 is **RATIFIED / CLOSED** at the decision level. No implementation,
+specification, Maven implementation-version, deployment or runtime change is
+included in this governance publication.
+
+<!-- D068-EXACT-SHA-DOC-EXTRACTOR-EXECUTION-BOUNDARY -->
+## D068 — Exact-SHA documentation extractor execution boundary
+
+GitHub Issue [#330](https://github.com/guillermomolina/protos/issues/330)
+ratifies Candidate **A-prime** after explicit project-owner approval.
+
+WEB001-J7B must execute the Protos-owned documentation producer from the same
+exact Protos revision selected by `protos-source.lock.json`. The durable
+cross-repository contract is D064 JSON, not the current Java/Maven producer
+implementation.
+
+The website therefore remains a renderer:
+
+```text
+exact Protos revision
+    -> Protos-owned producer from that revision
+    -> D064 JSON
+    -> protos-website
+```
+
+The current producer may require JDK21/Maven during build/development, but those
+are producer implementation details and MUST NOT enter the production NGINX
+runtime image. An ephemeral exact-SHA cache is permitted only as a
+non-authoritative optimization.
+
+Producer-side immutable D064 publication remains the explicit future scaling
+path if multiple consumers or build frequency justify it. No second website
+parser, independently versioned extractor release line, committed
+self-referential JSON artifact, mandatory Docker ABI, specification change,
+Protos semantic change, Standard Library semantic change or deployment-runtime
+change is authorized.
+
+D068 releases WEB001-J7B for implementation.
+
+<!-- D067-STDLIB-DOCUMENTATION-COVERAGE-POLICY -->
+## D067 — Standard Library documentation coverage and API-reference publication policy
+
+GitHub Issue [#326](https://github.com/guillermomolina/protos/issues/326) owns
+the remaining coverage/publication checkpoint exposed while re-deriving the
+minimum WEB001-J7B extraction path after D066.
+
+The project owner explicitly approved Candidate D on 2026-09-11. The neutral
+Standard Library documentation artifact must retain the complete mechanically
+observable importable `std:` module/top-level-slot inventory. D062 `//!` / `///`
+documentation is an independent optional fact: missing prose does not hide an
+observable slot or imply private/unsupported/unstable semantics.
+
+WEB001-J7B must visibly distinguish documented entries from undocumented
+observable entries. Missing documentation is initially reported as deterministic
+coverage rather than a build failure. No hide marker, publication manifest,
+visibility system, stability vocabulary or website-owned API authority is added.
+
+D067 therefore releases the bounded Protos-owned minimum extractor required by
+WEB001-J7B; the website remains downstream until that deterministic artifact path
+is published.
+
+D067 is **RATIFIED / CLOSED** at the decision level. No implementation,
+specification, Maven implementation-version, Standard Library semantic,
+deployment or runtime change is included in this governance publication.
+
 <!-- WEB001-F-PRODUCTION-HOSTING-ARCHITECTURE -->
 ## WEB001-F — production hosting architecture
 

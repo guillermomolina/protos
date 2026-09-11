@@ -28,7 +28,20 @@ public final class ProtosStandardFutureProtocol {
     public static void install(ProtosObjectValue futurePrototype) {
         Objects.requireNonNull(futurePrototype, "futurePrototype");
         installObjectFuture();
-        slot(futurePrototype, "value", (a,x)->{ arity(a,x,0); return future(a).observeValue(a); });
+        suspensionSlot(
+                futurePrototype,
+                "value",
+                (a,x)->{ arity(a,x,0); return future(a).observeValue(a); },
+                (a,x)->{
+                    arity(a,x,0);
+                    ProtosFutureValue observed=future(a);
+                    return observed.observeValueForContinuationForRuntime(
+                            a,
+                            (dependency,resumer) ->
+                                    ProtosNativeSuspension.pending(
+                                            dependency,
+                                            resumer));
+                });
         slot(futurePrototype, "cancel", (a,x)->{ arity(a,x,0); ProtosFutureValue f=future(a); f.cancelRequest(); return f; });
         slot(futurePrototype, "detach", (a,x)->{ arity(a,x,0); return future(a).detach(); });
         slot(futurePrototype, "then", (a,x)->then(a,x,futurePrototype));
@@ -134,5 +147,17 @@ public final class ProtosStandardFutureProtocol {
     }
     private static void arity(ProtosActivation a,List<?>x,int n){if(x.size()!=n)throw error(a);}
     private static ProtosSignalException error(ProtosActivation a){return new ProtosSignalException(ProtosCoreErrors.newError(a));}
+    private static void suspensionSlot(
+            ProtosObjectValue p,
+            String name,
+            ProtosNativeClosureBody ordinaryBody,
+            ProtosNativeClosureBody continuationBody) {
+        if(p.hasLocalSlot(name))throw new IllegalStateException("Core Future already defines "+name);
+        p.createLocalSlot(
+                name,
+                ProtosClosureValue.suspensionCapableNativeClosure(
+                        ordinaryBody,
+                        continuationBody));
+    }
     private static void slot(ProtosObjectValue p,String name,ProtosNativeClosureBody body){if(p.hasLocalSlot(name))throw new IllegalStateException("Core Future already defines "+name);p.createLocalSlot(name,ProtosClosureValue.nativeClosure(body));}
 }

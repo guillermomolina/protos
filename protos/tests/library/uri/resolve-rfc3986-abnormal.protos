@@ -1,0 +1,56 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Uri: import("std:uri")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+base: Uri.parse("http://a/b/c/d;p?q")
+
+check: (reference, expected) => {
+    actual: Uri.resolve(base, Uri.parse(reference))
+    require(Uri.format(actual) == expected)
+}
+
+check("../../../g", "http://a/g")
+check("../../../../g", "http://a/g")
+check("/./g", "http://a/g")
+check("/../g", "http://a/g")
+check("g.", "http://a/b/c/g.")
+check(".g", "http://a/b/c/.g")
+check("g..", "http://a/b/c/g..")
+check("..g", "http://a/b/c/..g")
+check("./../g", "http://a/b/g")
+check("./g/.", "http://a/b/c/g/")
+check("g/./h", "http://a/b/c/g/h")
+check("g/../h", "http://a/b/c/h")
+check("g;x=1/./y", "http://a/b/c/g;x=1/y")
+check("g;x=1/../y", "http://a/b/c/y")
+
+// Dot-looking syntax in query/fragment is data, not path structure.
+check("g?y/./x", "http://a/b/c/g?y/./x")
+check("g?y/../x", "http://a/b/c/g?y/../x")
+check("g#s/./x", "http://a/b/c/g#s/./x")
+check("g#s/../x", "http://a/b/c/g#s/../x")
+
+// Strict RFC 3986 resolution: an explicit same-spelled scheme is not demoted
+// to a relative reference.
+check("http:g", "http:g")
+
+true

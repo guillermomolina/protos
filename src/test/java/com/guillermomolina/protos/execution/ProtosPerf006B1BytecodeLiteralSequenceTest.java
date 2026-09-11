@@ -32,6 +32,7 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
@@ -145,14 +146,21 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
+                CanonicalSequence supported = canonicalize("1");
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
-                                        "() => 1",
-                                        "perf006-b1-unsupported.protos")
+                                        "1",
+                                        "perf006-b1-unsupported-root-spread.protos")
                                 .build();
 
-                CanonicalSequence sequence = canonicalize("() => 1");
+                CanonicalSequence sequence =
+                        new CanonicalSequence(
+                                List.of(
+                                        new CanonicalSpread(
+                                                supported.expressions().get(0),
+                                                supported.expressions().get(0).span())),
+                                supported.span());
 
                 UnsupportedOperationException failure =
                         assertThrows(

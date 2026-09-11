@@ -43,8 +43,13 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertTrue(source.contains("runtimeHost.hostProcess("));
         assertTrue(source.contains("processContext.execute("));
         assertTrue(source.contains("processContext.evaluatePersistent("));
-        assertTrue(source.contains("executeStandaloneRootTask(session.execute(source.source()))"));
-        assertTrue(source.contains("session.activation, session.runtimeHost"));
+        assertTrue(source.contains("executeStandaloneRootTask(session.executeModuleSource(source))"));
+        assertTrue(
+                source.matches(
+                        "(?s).*ProtosTestToolAsyncExecutionScope\\.install\\("
+                                + "\\s*session\\.activation,"
+                                + "\\s*session\\.runtimeHost,"
+                                + ".*"));
         assertFalse(source.contains("legacyToolSession("));
         assertFalse(source.contains("ProtosSourceCompiler"));
         assertTrue(source.contains("implements AutoCloseable"));
@@ -52,6 +57,9 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertFalse(source.contains("s.compiler.compile(input).call"));
         assertFalse(source.contains("s.compiler.compile(src)"));
         assertTrue(source.contains("Source.newBuilder(ProtosLanguage.ID"));
-        assertTrue(source.contains(".uri(exact.toUri())"));
+        assertTrue(source.contains("processContext.executeFile("));
+        assertTrue(source.contains("processContext.executeModuleSource("));
+        assertFalse(source.contains("private static Source sourceFromPath("));
+        assertFalse(source.contains(".uri(exact.toUri())"));
     }
 }

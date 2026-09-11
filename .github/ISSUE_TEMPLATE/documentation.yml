@@ -1,6 +1,7 @@
 name: Documentation problem
 description: Report missing, unclear, inconsistent, or incorrect documentation
 title: "[Docs] "
+labels: ["status:inbox"]
 body:
   - type: textarea
     id: location

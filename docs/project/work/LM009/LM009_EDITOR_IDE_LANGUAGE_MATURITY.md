@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1 CLOSED; D079 RATIFIED; G2 READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -613,7 +613,7 @@ boundary.
 
 ## LM009-D public debugger decision release
 
-Decision status: **PLAT018 C-prime RATIFIED; D060 B-prime RATIFIED; IMPLEMENTATION PENDING**
+Decision status: **PLAT018 C-prime RATIFIED; D060 B-prime RATIFIED; IMPLEMENTATION CLOSED BY D1+D2**
 
 The platform/runtime debugger-hosting boundary is fixed by
 [`../../decisions/platform/PLAT018_DAP_DEBUG_SESSION_HOSTING.md`](../../decisions/platform/PLAT018_DAP_DEBUG_SESSION_HOSTING.md),
@@ -642,3 +642,494 @@ LM009-E remains the owner of the actual VS Code F5/debug integration and S3 live
 editor evidence. Any new substantive CLI, remote-network, attach, stop-on-entry,
 termination, distribution or editor-configuration choice still crosses its own
 approval gate.
+
+## LM009-D implementation evidence and closure
+
+Status: **CLOSED**
+
+LM009-D is closed by the combined published D1/D2 implementation and the D3
+reconciliation recorded here.
+
+Published implementation:
+
+- **D1** — `d61a92a61d0ca81c966870e915dfed834daca92f`:
+  the debug-only `ProtosPolyglotRuntimeHost` activates the real GraalVM DAP,
+  binds IPv4 loopback port `0`, retains `Suspend=false` and
+  `WaitAttached=true`, keeps raw Graal readiness behind a version-bounded
+  adapter, and makes the matching DAP tool available in the production/runtime
+  distribution while ordinary RuntimeHosts remain DAP-disabled.
+- **D2** — `fcfa8932757c0300248e77bbf50e6ab7e299006b`:
+  the ordinary launcher exposes the ratified
+  `protos debug <file> [application-args...]` surface and emits exactly one
+  compact D060 version-1 `PROTOS_DEBUG_READY {json}` record on stdout after the
+  real endpoint is bound and before guest execution.
+
+The final D2 focal evidence proves the complete LM009-D public-launch path
+against the real GraalVM DAP:
+
+1. the public launcher produces a valid numeric loopback endpoint allocated by
+   the OS rather than by the editor or a Protos port registry;
+2. DAP `initialize`, `launch` and `configurationDone` succeed against that
+   endpoint;
+3. `<file>` and `debug` remain launcher identity while arguments following the
+   file remain ordinary application arguments through `process.args()`;
+4. guest stdout and guest stderr are observed as DAP `output` events with the
+   corresponding categories;
+5. guest output is not duplicated onto the D060 readiness stdout or launcher
+   diagnostics stderr;
+6. normal guest completion leads to DAP `terminated`; after the client closes
+   the session transport, the owning RuntimeHost/Engine completes cleanup and
+   `protos debug` exits successfully; and
+7. complete repository publication validation and isolated-worktree cleanup
+   pass on the published candidate.
+
+The failed D2 v1 and v3 attempts are useful retained implementation evidence.
+v1 exposed that Protos Process standard-stream backends are explicit capabilities
+and therefore bypass Truffle output consumers unless debug mode deliberately
+routes them through the entered `Env.out()` / `Env.err()` channels. v3 then
+proved both guest output categories through DAP and exposed that the focal test
+was incorrectly requiring launcher exit while the DAP client transport remained
+open. The final publication corrects both boundaries rather than weakening the
+test.
+
+No additional executable D3 change is justified: the D2 publication already
+contains the real public-launch lifecycle evidence that D3 was decomposed to
+obtain. D3 is therefore this governance/documentation-only reconciliation.
+
+LM009-D deliberately does **not** select or promise manual attach,
+remote-network listening, rendezvous/readiness files, stop-on-entry,
+`terminateDebuggee`, or a stronger user-visible Stop contract. Those remain
+outside this closure exactly as preserved by PLAT018 and D060.
+
+LM009-E is now released to consume this public launcher/readiness boundary and
+implement the actual VS Code F5 integration plus live S3 evidence. LM009-E must
+remain a thin client of `protos debug` and the real DAP; it must not reconstruct
+GraalVM options, allocate a debugger port, parse raw Graal readiness, proxy DAP,
+or implement Protos semantics in TypeScript.
+
+LM009 as a whole remains **IN_PROGRESS**. Static-language-service work remains
+owned by LM009-F/G/H and packaging/end-to-end release by LM009-I.
+
+This closure reconciliation changes no Protos specification, executable runtime,
+editor executable asset, Maven implementation version, public debugger contract,
+license term or Marketplace publication state.
+
+## LM009-E approved VS Code F5 integration — E1
+
+Status: **IN_PROGRESS — Candidate B-prime explicitly approved; E1 editor wiring published/pending S3**
+
+The project owner explicitly approved LM009-E Candidate B-prime on 2026-09-10.
+The selected reference-editor boundary consumes LM009-D rather than creating a
+second debugger architecture:
+
+- debugger identity is `type: "protos"` with `request: "launch"` only;
+- source breakpoints are contributed for Protos;
+- F5 without a persisted `launch.json` derives one in-memory configuration from
+  the active executable Protos document;
+- persisted configurations expose only `program` plus optional string `args`;
+- the existing machine-local `protos.runtime.executable` remains the sole
+  launcher configuration;
+- a `DebugAdapterDescriptorFactory` owns one child launcher per VS Code session,
+  starts `protos debug <absolute-file> [args...]` without a shell, consumes only
+  D060 version-1 readiness, and returns `DebugAdapterServer(host, port)`;
+- the editor never allocates/probes a port, parses raw GraalVM readiness,
+  proxies DAP, or interprets Protos values/scopes;
+- executable editor integration remains workspace-hosted and Restricted-Mode
+  gated under the LM009-C local/Remote filesystem rule; and
+- attach, remote-listen, readiness-file, stop-on-entry and stronger
+  `terminateDebuggee` behavior remain deliberately unselected.
+
+E1 owns the repository-side VS Code wiring and deterministic Node/Python
+validation. It does **not** close LM009-E: S3 still requires live VS Code
+evidence against the real external launcher for breakpoint, stop location,
+threads, stack, activation-local scope/values, step, continue and clean normal
+termination.
+
+No Protos specification, runtime implementation, Maven implementation version,
+DAP protocol implementation, static language-service architecture or
+Marketplace release is changed by the editor-only E1 tranche.
+
+## LM009-E D065 / PLAT020 / PLAT022 physical source correction
+
+Status: **IMPLEMENTED — repository validation required; live S3 source-presentation retest pending**
+
+Live S3 after E1 proved the external launcher, readiness, breakpoint, threads, stack, activation
+scope/values, step, continue, guest output and process cleanup. The remaining defect was that the
+executing ordinary filesystem source reopened as a second Plain Text editor document.
+
+D065 selected the exact absolute lexically-normalized workspace/execution-host path as ordinary
+physical tooling identity. The first consuming implementation attempt then exposed that Truffle's
+internal `Source.newBuilder(String, File)` overload is not public. PLAT020 therefore ratified
+Candidate A′: keep path/content/module facts backend-neutral outside Context ownership and
+materialize the genuine physical Source only inside the owning entered Protos Context through that
+Context's `Env`.
+
+The unpublished v6 candidate proved those physical Source invariants but the real Graal DAP still
+returned `sourceReference: 1`, because the exact path remained unreadable through the target
+Context filesystem. PLAT022 therefore ratified Candidate D′: one Context-local, deny-by-default
+readability authority admits only exact already-selected physical Sources read-only, with no
+socket/write authority and no global path registry.
+
+The consuming repository correction:
+
+- removes eager path-backed literal `Source` ownership from `ProtosModuleSource`;
+- retains exact characters plus optional selected physical path as immutable resolver facts;
+- admits the exact D065 path read-only in the owning Context before physical Source publication,
+  while unrelated paths remain deny-I/O and sockets/writes remain unavailable;
+- materializes physical Sources through `Env.getPublicTruffleFile(...)`,
+  `canonicalizePath(false)` and the already-read characters;
+- routes direct CLI/debug file execution through that same entered-Context boundary;
+- keeps virtual REPL/`-e` sources virtual and keeps deliberately unhosted semantic harnesses
+  explicitly non-tooling;
+- adds selected-path, symlink-preservation, payload-neutrality, exact-admission,
+  unrelated-path denial, write denial and cross-Context isolation regression coverage;
+- runs the real DAP behavior test through the same Context-local authority and requires the physical
+  Source to be path-only in DAP (`sourceReference` absent); and
+- adds no editor path mapping, DAP proxy, global Source registry/cache, outer-Polyglot execution
+  refactor or Protos semantic change.
+
+LM009-E remains open after repository publication. Final S3 still requires one real VS Code F5
+retest proving that the active `.protos` file remains the same physical Protos document rather than
+being reopened as a virtual/Plain Text source, while the already-proven debugger behaviors and clean
+process termination remain intact.
+
+## LM009-F1 parser-authority static-analysis core
+
+Status: **IMPLEMENTED**
+
+This is the first executable LM009-F slice released by ratified PLAT024
+Candidate A′. It establishes only the editor-neutral parser-authority core; it
+does not yet claim the client-owned session/workspace state or stdio LSP host
+required to close LM009-F.
+
+Published implementation boundary:
+
+- `ProtosDocumentSnapshot` carries one immutable source text plus opaque document
+  identity/version metadata. The core does not interpret that identifier as a
+  filesystem path, URI, module specifier or ModuleKey.
+- `ProtosStaticAnalysisCore` calls the existing real
+  `ProtosParser(String).parseProgram()` directly. It requires no Polyglot/Truffle
+  Context and executes no guest code.
+- `ProtosStaticParseResult` retains either the real parsed `SurfaceSequence` or
+  the parser failure message, exact `SourceSpan`, and
+  `unexpectedEndOfSource` classification. This representation is internal
+  analysis data, not an LM009-G public diagnostic contract.
+- No LSP DTO/JSON dependency, VS Code semantic implementation, workspace/global
+  index, module-resolution policy, background thread or shared mutable registry
+  is introduced by F1.
+
+Focused evidence covers valid unexecuted source, exact unexpected-token span,
+unexpected-EOF classification and opaque snapshot metadata without runtime
+execution.
+
+LM009-F remains **IN_PROGRESS**. The next mechanical tranche is F2
+client-session document/workspace custody and concurrency/cancellation mechanics
+over this core, followed by the dedicated stdio LSP edge. LM009-G/H remain the
+owners of editor-visible diagnostics, symbols, definition, completion, hover,
+signature help and references. Any newly exposed substantive semantic or durable
+platform choice still stops at the ordinary Dxxx/PLATxxx gate.
+
+## LM009-F2 session/workspace snapshot custody
+
+Status: **IMPLEMENTED**
+
+F2 builds on the published F1 parser-authority core without selecting another
+language or platform architecture. It establishes client-session-local mutable
+custody around immutable source snapshots:
+
+- one `ProtosStaticAnalysisSession` instance is owned by one future language
+  server/client session;
+- workspace identifiers remain opaque and partition independent document maps;
+- document identifiers and numeric versions remain opaque analysis metadata;
+- `putDocument` atomically replaces one current immutable snapshot within its
+  workspace without interpreting version ordering;
+- `parseCurrent` first captures one immutable snapshot and then invokes the F1
+  core, so a concurrent replacement cannot alter the source observed by that
+  parse;
+- `isCurrent` compares the tagged snapshot value against current custody before
+  an adapter publishes freshness-sensitive output;
+- closing one document/workspace drops only that custody domain; and
+- state is instance-local with no static/global semantic registry or shared
+  cross-workspace mutable model.
+
+The workspace/document maps are concurrent only to make independent requests
+safe; F2 creates no background executor, worker pool, scheduler, guest Process,
+Actor, Task, Truffle Context or ordinary-runtime overhead.
+
+### Deliberately deferred protocol cancellation boundary
+
+The earlier F decomposition mentioned cancellation mechanics in F2. Current
+implementation audit narrows F2 rather than silently selecting a public
+cancellation/lifetime policy. F2 therefore introduces **no cancellation
+contract**. The F3 LSP edge owns standard protocol request cancellation and
+shutdown mapping. If faithful support later requires a stronger parser-level
+preemption/cooperative-cancellation guarantee, that is evaluated at the normal
+substantive decision gate rather than embedded in this custody class.
+
+LM009-F remains **IN_PROGRESS**. F3 must still provide the PLAT024-dedicated
+toolchain-matched stdio LSP process/lifecycle edge over F1/F2. LM009-G/H continue
+to own editor-visible diagnostics, symbols, definition, completion, hover,
+signature help and references.
+
+## LM009-F3 dedicated stdio LSP host
+
+Status: **IMPLEMENTED**
+
+F3 publishes the process/protocol edge selected by PLAT024 Candidate A′ without
+moving LM009-G/H feature semantics into the foundation.
+
+### Protocol/hosting boundary
+
+- `ProtosLanguageServer` is one client-session-owned LSP service object.
+- `ProtosLanguageServerStdio` uses the standard LSP4J stdio launcher; there is
+  no port allocator, daemon discovery, authentication service or global server.
+- `ProtosLanguageServerMain` is an internal JVM process entry point only. F3
+  deliberately does **not** select the final public `protos ...` CLI spelling,
+  Marketplace launch command or final JAR/Native Image packaging contract.
+- Eclipse LSP4J 1.0.0 is an implementation dependency at the protocol edge.
+  LSP DTOs do not enter `com.guillermomolina.protos.analysis`.
+- ordinary Protos execution instantiates none of the F3 language-server state.
+
+### Document synchronization boundary
+
+F3 advertises exactly full open/change/close document synchronization. It maps
+those notifications to immutable F2 snapshots with the exact LSP document URI,
+version and current text.
+
+All currently open buffers use one server-local custody-domain identifier
+`lsp:open-documents`. This identifier is explicitly **not** a Protos workspace,
+package root, module specifier or `ModuleKey`. There is no cross-document
+semantic resolution in F3, so this container introduces no cross-workspace
+semantic authority. LM009-G must establish any actual workspace/project/module
+mapping through the canonical Protos resolution authorities rather than URI
+prefix/path guessing.
+
+F3 rejects incremental ranged changes because it advertises full synchronization
+only. Numeric document versions remain opaque values passed to F2; F3 does not
+invent ordering beyond replacing snapshots in received notification order.
+
+### Lifecycle and cancellation boundary
+
+`shutdown` records orderly LSP shutdown and returns before process exit. A later
+`exit` requests status `0`; `exit` before `shutdown` requests status `1`,
+matching the standard language-server process lifecycle.
+
+F3 does not introduce a parser-level cancellation/preemption contract. LSP4J
+owns the JSON-RPC protocol machinery, but there are no long-running G/H static
+feature requests in F3 to cancel. If later semantic requests require stronger
+cooperative parser/index cancellation, that requirement must be evaluated
+explicitly rather than inferred from this host.
+
+### Capability boundary
+
+F3 intentionally advertises no diagnostics, document/workspace symbols,
+definition, references, completion, hover or signature help. Those remain
+LM009-G/H. Focused evidence covers:
+
+- only the full document-sync foundation capability is advertised;
+- exact open/change/close snapshot custody;
+- rejection of ranged incremental changes;
+- standard clean/premature exit status; and
+- real LSP `Content-Length` stdio framing through LSP4J.
+
+LM009-F remains **IN_PROGRESS** after F3. The remaining F closure work is the
+reference client/toolchain launch wiring and end-to-end foundation proof that a
+real editor client starts the dedicated matching server without embedding
+Protos semantics in TypeScript.
+
+
+## D070 language-server executable discovery and public launch surface
+
+Status: **RATIFIED — Candidate A′ selected**
+
+Explicit project-owner approval on 2026-09-11 ratifies the public tool-facing
+launcher contract:
+
+```text
+protos language-server
+```
+
+The reference editor must start that command through the already-selected
+`protos.runtime.executable` with argv `["language-server"]`, shell-free. Standard
+LSP over stdin/stdout remains the PLAT024 baseline; stdout is protocol-only while
+the server is active.
+
+The configured Protos executable remains the single toolchain/version authority
+for Run, Debug and the static language server. D070 introduces no second
+language-server executable setting, sibling-path inference rule, editor-owned
+server version, Java/JAR/classpath knowledge, global daemon or TCP discovery.
+
+The public command names the service role rather than its current JVM/LSP
+implementation. A future Native Image, sibling binary or self-hosted server may
+be selected behind the same compatibility launcher without changing editor
+clients.
+
+LM009-F4 is **RELEASED_FOR_IMPLEMENTATION** only after this ratification reaches
+`main`. F4 owns the public CLI dispatch, thin VS Code LanguageClient launch wiring
+and end-to-end foundation proof. LM009-G/H feature semantics remain excluded.
+
+## LM009-F4 public launcher and reference LanguageClient wiring
+
+Status: **CLOSED — S4 foundation live check PASS**
+
+F4 consumes published PLAT024 Candidate A′ and D070 Candidate A′ without adding
+another design choice.
+
+Published implementation boundary:
+
+- `protos language-server` is dispatched by the ordinary `ProtosCli` launcher to
+  the already-published F3 stdio host;
+- `ProtosLanguageServerMain.run(input, output)` exposes only the internal stream
+  boundary needed by the CLI while retaining standard server lifecycle behavior;
+- CLI stdout remains LSP framing only while the command is active and
+  unexpected command arguments fail before protocol startup;
+- the reference VS Code extension uses `vscode-languageclient` as protocol/client
+  machinery and launches exactly `protos.runtime.executable` with
+  `["language-server"]`, shell-free;
+- the existing runtime setting remains the sole Run/Debug/language-server
+  toolchain authority;
+- the LanguageClient document selector names only language id `protos`; it does
+  not convert editor URIs into Protos module/package/path semantics;
+- one extension activation owns at most one client/server process and stops it on
+  deactivation; Restricted Mode owns none;
+- no second server executable setting, sibling path inference, Java/JAR layout,
+  editor-side parser/model, global daemon or TCP discovery is introduced; and
+- LM009-G/H static language-intelligence semantics remain excluded.
+
+Focused repository evidence covers real LSP Content-Length framing through the
+public CLI command, help/argument boundary, exact LanguageClient command/argv and
+single configuration authority, trust gating, client lifecycle/retry, and
+retained Run/Debug/grammar structural tests.
+
+The real VS Code foundation check is now **PASS**. Project-owner evidence against
+published F4 (`ca3d477730e676faf60718e571d0d5367582aa4f`, Protos
+`0.2.371-SNAPSHOT`) proved the complete F closure boundary:
+
+- before opening a `.protos` document, no `language-server` process existed;
+- opening the document in a real Extension Development Host started exactly one
+  matching toolchain server through the selected launcher contract;
+- the observed process was the current GraalVM Java runtime executing the current
+  Protos JAR with argv `language-server`;
+- after multiple edits/saves, the same single server PID remained alive, proving
+  ordinary LSP document synchronization did not crash or restart the service;
+- no second language-server executable setting, Java/JAR setting or editor-side
+  Protos semantic authority was required; and
+- closing the Extension Development Host removed the server process completely,
+  proving client-owned lifecycle/teardown.
+
+The temporary `node_modules` tree required for the live extension check is local
+editor-development state and is ignored by the repository; it is not a Protos
+runtime/distribution artifact.
+
+LM009-F is therefore **CLOSED**. F1/F2/F3/F4 plus the real editor lifecycle and
+document-sync composition satisfy the foundation target without claiming any
+LM009-G/H static feature semantics. **LM009-G is READY** to own diagnostics,
+symbols and definition behavior.
+
+## LM009-G1 parser-derived static diagnostics
+
+Status: **CLOSED**
+
+G1 consumes the published F1/F2/F3/F4 foundation without selecting new Protos
+semantics or workspace/module identity rules.
+
+Published boundary:
+
+- each `didOpen` / full `didChange` snapshot is parsed through the existing
+  `ProtosStaticAnalysisSession` and real `ProtosParser`;
+- a real `ProtosStaticParseResult.Failed` becomes one LSP `Error` diagnostic with
+  the parser message and exact existing `SourceSpan`;
+- source offsets are mapped as UTF-16, matching both the parser's Java-string
+  offset model and the LSP default position encoding, with CRLF treated as one
+  logical line break;
+- successful reparsing publishes an empty diagnostic set for that document and
+  close clears diagnostics without inventing another document version;
+- published open/change diagnostics carry the exact LSP document version, and a
+  result already stale at the F2 snapshot freshness check is not published;
+- no background worker, Truffle Context, guest execution, editor-side parser,
+  filesystem-path inference or module/package authority is added.
+
+G1 intentionally does not define document/workspace symbol policy or definition
+identity. `LM009-G` remains **IN_PROGRESS** and G2 owns the next document-symbol
+audit/implementation boundary. If G2 exposes symbol-ownership or naming semantics
+that are not already determined by the real source model, it stops at the normal
+Dxxx/PLATxxx gate.
+
+## D079 document-symbol projection ratification
+
+Status: **RATIFIED — Candidate A′ selected; LM009-G2 READY**
+
+D079 / GitHub #364 is durably ratified after explicit project-owner approval on
+2026-09-11 and the required expanded comparative review.
+
+The selected G2 contract is intentionally slot-centric:
+
+- every explicit named `SurfaceSlotCreation` is one document symbol;
+- bare `name: value` and member-target `receiver.name: value` both expose the
+  final slot name;
+- `=` assignment, Closure parameters and anonymous expressions do not create
+  baseline document symbols;
+- every slot uses LSP `SymbolKind.Property` strictly as a presentation label,
+  not as a Protos semantic Property category;
+- a Closure-valued slot remains the same slot symbol and is not recategorized as
+  `Function` or `Method` from its value shape;
+- children represent only exact syntactic nesting of slot creations inside the
+  parent slot value subtree; and
+- hierarchy never means ownership, delegation, lookup, receiver/runtime identity
+  or module/package ownership.
+
+The durable decision rationale, candidate comparison, GITHUB010 scorecard,
+expanded prior-art review and future/regret analysis are recorded in
+[`../../decisions/tooling/D079_DOCUMENT_SYMBOL_PROJECTION_FOR_UNIFORM_PROTOS_SLOTS.md`](../../decisions/tooling/D079_DOCUMENT_SYMBOL_PROJECTION_FOR_UNIFORM_PROTOS_SLOTS.md).
+
+This ratification releases **LM009-G2** for bounded document-symbol
+implementation over the existing parser/source-snapshot authorities. It does not
+implement G2, select G3 workspace-index policy, select G4 definition identity, or
+change any LM009-H semantics.
+
+## LM009-G2 parser-derived hierarchical document symbols
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED**
+
+G2 consumes D079 Candidate A′ and the published F1/F2/G1 parser/snapshot
+foundation without introducing workspace indexing or definition identity.
+
+Published implementation boundary:
+
+- the editor-neutral analysis layer projects every explicit named
+  `SurfaceSlotCreation` from the real `Surface*` AST into a protocol-neutral
+  `ProtosDocumentSymbol` model;
+- bare and member-target creations use the final slot name, while `=` assignment,
+  Closure parameters and anonymous expressions never become symbols themselves;
+- the extractor traverses every current `SurfaceExpression` containment position,
+  including assignment subexpressions, call arguments, object parents/items and
+  Closure parameter defaults/body, so a surrounding expression form cannot hide
+  a nested explicit slot creation;
+- a parent symbol receives only creations found inside its value subtree; target
+  receiver traversal remains at the surrounding source level, preserving D079's
+  source-containment-only hierarchy;
+- the LSP edge maps every projected slot uniformly to `SymbolKind.Property`, full
+  creation range and exact final-name selection range; Closure-valued slots are
+  not reclassified as Function/Method and duplicate names remain distinct source
+  occurrences;
+- requests parse the current immutable open-document snapshot and re-check F2
+  freshness after extraction; missing/closed documents, current parse failures or
+  stale results return no symbol tree rather than stale/guessed symbols;
+- hierarchical `DocumentSymbol` is advertised only when the client explicitly
+  reports `hierarchicalDocumentSymbolSupport=true`. No flat `SymbolInformation`
+  fallback is introduced because that would create a second projection outside
+  the ratified D079 hierarchy; and
+- no runtime/guest execution, Truffle Context, background worker, filesystem path
+  inference, module/package resolution or editor-side Protos parser/model is
+  introduced.
+
+Focused evidence covers uniform Property presentation, Closure-valued slots,
+value-subtree nesting, exact member-name selection, duplicate occurrences,
+assignment exclusion, UTF-16 positions, parse-failure clearing and capability
+gating. Repository-selected publication validation remains the broader executable
+merge gate.
+
+`LM009-G` remains **IN_PROGRESS** after G2. Workspace-symbol inclusion/search and
+index lifetime remain G3-owned; go-to-definition identity/resolution remains
+G4-owned. Neither is selected by this slice, and LM009-H remains excluded.
+

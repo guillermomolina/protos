@@ -1,0 +1,110 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Uri: import("std:uri")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+reference: Uri.parse("HTTP://user@example.com:080/a/b?x=%2f#Frag")
+
+require(reference.scheme == "HTTP")
+require(reference.userInfo == "user")
+require(reference.host == "example.com")
+require(reference.port == "080")
+require(reference.path == "/a/b")
+require(reference.query == "x=%2f")
+require(reference.fragment == "Frag")
+
+names: reference.slotNames()
+require(names.size() == 7)
+require(names[0] == "fragment")
+require(names[1] == "host")
+require(names[2] == "path")
+require(names[3] == "port")
+require(names[4] == "query")
+require(names[5] == "scheme")
+require(names[6] == "userInfo")
+
+require(reference.parent() === Object)
+require(reference.freeze() === reference)
+require(reject(() => { reference.path = "/changed" }))
+require(reject(() => { reference.extra: "value" }))
+require(reference.path == "/a/b")
+
+sameText: Uri.parse("HTTP://user@example.com:080/a/b?x=%2f#Frag")
+require(reference !== sameText)
+
+empty: Uri.parse("")
+require(empty.scheme === null)
+require(empty.userInfo === null)
+require(empty.host === null)
+require(empty.port === null)
+require(empty.path == "")
+require(empty.query === null)
+require(empty.fragment === null)
+
+emptyQuery: Uri.parse("scheme:path?")
+require(emptyQuery.scheme == "scheme")
+require(emptyQuery.host === null)
+require(emptyQuery.userInfo === null)
+require(emptyQuery.port === null)
+require(emptyQuery.path == "path")
+require(emptyQuery.query == "")
+require(emptyQuery.fragment === null)
+
+emptyFragment: Uri.parse("scheme:path#")
+require(emptyFragment.query === null)
+require(emptyFragment.fragment == "")
+
+emptyAuthority: Uri.parse("scheme:///path")
+require(emptyAuthority.scheme == "scheme")
+require(emptyAuthority.userInfo === null)
+require(emptyAuthority.host == "")
+require(emptyAuthority.port === null)
+require(emptyAuthority.path == "/path")
+
+networkEmpty: Uri.parse("//?")
+require(networkEmpty.scheme === null)
+require(networkEmpty.userInfo === null)
+require(networkEmpty.host == "")
+require(networkEmpty.port === null)
+require(networkEmpty.path == "")
+require(networkEmpty.query == "")
+
+emptyUserInfo: Uri.parse("//@host/")
+require(emptyUserInfo.userInfo == "")
+require(emptyUserInfo.host == "host")
+
+emptyPort: Uri.parse("//host:/")
+require(emptyPort.host == "host")
+require(emptyPort.port == "")
+
+true

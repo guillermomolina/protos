@@ -1,0 +1,56 @@
+name: Issue intake
+
+on:
+  issues:
+    types:
+      - opened
+      - edited
+      - reopened
+      - labeled
+      - unlabeled
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: issue-intake-${{ github.event.issue.number || 'reconcile-all' }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: ${{ github.repository == 'guillermomolina/protos' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify intake helper
+        run: python3 scripts/issue_intake.py --self-test
+
+      - name: Reconcile changed Issue
+        if: >-
+          ${{ github.event_name == 'issues' &&
+              (github.event.action != 'labeled' &&
+               github.event.action != 'unlabeled' ||
+               startsWith(github.event.label.name, 'family:')) }}
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          python3 scripts/issue_intake.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --issue-number "$ISSUE_NUMBER"
+
+      - name: Reconcile all open Issues
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/issue_intake.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --reconcile-all

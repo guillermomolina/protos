@@ -169,9 +169,11 @@ public final class ProtosModuleRuntime {
             return compiler.compile(source).call(activation);
         }
         return process.callInExecutionHostForRuntime(
-                () ->
-                        ProtosLanguageContext.current()
-                                .parsePublic(source.source())
-                                .call(activation));
+                () -> {
+                    ProtosLanguageContext languageContext = ProtosLanguageContext.current();
+                    return languageContext
+                            .parsePublic(languageContext.materializeModuleSource(source))
+                            .call(activation);
+                });
     }
 }

@@ -1,0 +1,60 @@
+name: Community request
+description: Request a concrete adoption, example, tooling, packaging, or ecosystem improvement
+title: "[Request] "
+labels: ["status:inbox"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for a concrete improvement request that is not already a
+        maintainer-allocated formal Protos work item.
+
+        Language-design proposals, open-ended ideas, and questions belong in
+        GitHub Discussions. Reproducible defects should use the Bug report form,
+        and documentation corrections should use Documentation problem.
+
+        Community requests enter Inbox without a formal `family:*` or scheduling
+        priority. Maintainers may later promote accepted work into a formal Issue.
+
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Requested outcome
+      description: What concrete improvement would you like to see?
+      placeholder: Describe the result rather than prescribing an internal implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation and use case
+      description: What are you trying to do, and what friction does this remove?
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Suggested scope
+      description: Optional examples, constraints, related Issues/Discussions, or a possible bounded starting point.
+
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Contribution interest
+      description: This does not assign the Issue; it only helps maintainers understand whether you may want to contribute.
+      options:
+        - I am only requesting the improvement
+        - I may be able to help with implementation or documentation
+        - I would like guidance for contributing a change
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing Issues and Discussions for the same request.
+          required: true
+        - label: This is a concrete request, not an unresolved language-design proposal.
+          required: true

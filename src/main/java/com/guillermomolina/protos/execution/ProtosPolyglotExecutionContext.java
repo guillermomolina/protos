@@ -23,6 +23,7 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -41,12 +42,16 @@ import org.graalvm.polyglot.Engine;
  */
 public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     /*
-     * Host-only dynamic marker for the staged direct/Polyglot split before A4B3.
-     * It carries no Protos Process, Actor, Task, Context identity or guest state.
+     * Host-only dynamic pointer to the currently entered host wrapper. It routes bounded
+     * Context-local platform services such as PLAT022 admission to the same Polyglot Context
+     * whose Env materializes the physical Source. It is not Protos Process, Actor, Task, or
+     * semantic Context identity and carries no guest state.
      */
-    private static final ThreadLocal<Boolean> ENTERED_CONTEXT = new ThreadLocal<>();
+    private static final ThreadLocal<ProtosPolyglotExecutionContext> ENTERED_CONTEXT =
+            new ThreadLocal<>();
 
     private final Context context;
+    private final ProtosSourceReadabilityAuthority sourceReadability;
     private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
     private final Lock executionLock = lifecycle.readLock();
     private final Lock closeLock = lifecycle.writeLock();
@@ -54,8 +59,12 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     private volatile boolean closeRequested;
     private volatile boolean closed;
 
-    private ProtosPolyglotExecutionContext(Context context, Runnable closedCallback) {
+    private ProtosPolyglotExecutionContext(
+            Context context,
+            ProtosSourceReadabilityAuthority sourceReadability,
+            Runnable closedCallback) {
         this.context = Objects.requireNonNull(context, "context");
+        this.sourceReadability = Objects.requireNonNull(sourceReadability, "sourceReadability");
         this.closedCallback = Objects.requireNonNull(closedCallback, "closedCallback");
     }
 
@@ -75,11 +84,14 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         Objects.requireNonNull(err, "err");
         Objects.requireNonNull(closedCallback, "closedCallback");
 
+        ProtosSourceReadabilityAuthority sourceReadability =
+                new ProtosSourceReadabilityAuthority();
         Context.Builder builder =
                 Context.newBuilder(ProtosLanguage.ID)
                         .in(in)
                         .out(out)
-                        .err(err);
+                        .err(err)
+                        .allowIO(sourceReadability.ioAccess());
         if (engine != null) {
             builder.engine(engine);
         }
@@ -88,7 +100,8 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         try {
             context.initialize(ProtosLanguage.ID);
             initialized = true;
-            return new ProtosPolyglotExecutionContext(context, closedCallback);
+            return new ProtosPolyglotExecutionContext(
+                    context, sourceReadability, closedCallback);
         } finally {
             if (!initialized) {
                 context.close();
@@ -109,6 +122,36 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         return callEntered(
                 () -> {
                     CallTarget target = ProtosLanguageContext.current().parsePublic(source);
+                    return ProtosRootTaskExecution.execute(target, activation);
+                });
+    }
+
+    ProtosExecutionOutcome executeFile(
+            Path path,
+            CharSequence characters,
+            ProtosActivation activation) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(characters, "characters");
+        Objects.requireNonNull(activation, "activation");
+        return callEntered(
+                () -> {
+                    ProtosLanguageContext languageContext = ProtosLanguageContext.current();
+                    Source source = languageContext.materializeFileSource(path, characters);
+                    CallTarget target = languageContext.parsePublic(source);
+                    return ProtosRootTaskExecution.execute(target, activation);
+                });
+    }
+
+    ProtosExecutionOutcome executeModuleSource(
+            ProtosModuleSource moduleSource,
+            ProtosActivation activation) {
+        Objects.requireNonNull(moduleSource, "moduleSource");
+        Objects.requireNonNull(activation, "activation");
+        return callEntered(
+                () -> {
+                    ProtosLanguageContext languageContext = ProtosLanguageContext.current();
+                    Source source = languageContext.materializeModuleSource(moduleSource);
+                    CallTarget target = languageContext.parsePublic(source);
                     return ProtosRootTaskExecution.execute(target, activation);
                 });
     }
@@ -135,8 +178,8 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         try {
             requireOpen();
             context.enter();
-            Boolean previousEntryMarker = ENTERED_CONTEXT.get();
-            ENTERED_CONTEXT.set(Boolean.TRUE);
+            ProtosPolyglotExecutionContext previousEntryMarker = ENTERED_CONTEXT.get();
+            ENTERED_CONTEXT.set(this);
             Throwable failure = null;
             try {
                 return action.get();
@@ -167,7 +210,16 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     }
 
     static boolean hasEnteredContextForRuntime() {
-        return Boolean.TRUE.equals(ENTERED_CONTEXT.get());
+        return ENTERED_CONTEXT.get() != null;
+    }
+
+    static void admitPhysicalSourceForRuntime(Path path) {
+        ProtosPolyglotExecutionContext current = ENTERED_CONTEXT.get();
+        if (current == null) {
+            throw new IllegalStateException(
+                    "physical Source admission requires an entered Protos Process Context");
+        }
+        current.sourceReadability.admit(path);
     }
 
     private void requireOpen() {

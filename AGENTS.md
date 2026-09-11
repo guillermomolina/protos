@@ -95,6 +95,197 @@ a new agent encounters them. If the user explicitly asks to re-evaluate or
 reopen such a decision, treat it as open for the requested review and do not
 advance dependent new design work until the user approves the resulting choice.
 
+## Exhaustive comparative research for Dxxx and PLATxxx
+<!-- GITHUB010 EXHAUSTIVE-DECISION-RESEARCH -->
+
+A newly allocated `Dxxx` or `PLATxxx` is an unresolved research problem, not an
+invitation to select the first locally plausible solution.
+
+Before asking the project owner to approve a substantive `Dxxx` or `PLATxxx`,
+the agent MUST perform and present a comparative investigation broad enough that
+the recommendation is not merely the result of local familiarity,
+implementation convenience, or a small cherry-picked precedent set.
+
+The goal is not to imitate another language, runtime, VM, operating system, or
+tool. Prior art is evidence used to understand the design space, failure modes,
+scaling limits, migration costs, and long-term consequences before selecting the
+solution that best fits Protos.
+
+### Dxxx research breadth
+
+For an implementation-independent `Dxxx`, investigate the same or closely
+analogous problem across materially different language/runtime design families.
+
+The comparison MUST normally include at least five credible systems spanning at
+least three meaningfully different design approaches, unless the domain has
+fewer relevant precedents. If a well-known relevant system is omitted, state why
+it is not materially comparable.
+
+Depending on the question, useful prior art may include prototype/object
+languages, dynamic languages, static languages, functional/concurrent
+languages, capability-oriented systems, distributed languages, language
+specifications, or published research.
+
+Examples include Self, Smalltalk/Pharo, Io, JavaScript, Lua, Ruby, Python, Java,
+C#, C++, Rust, Go, Swift, Erlang/Elixir, Pony, and other systems exposing a
+materially different solution.
+
+Do not compare only syntax, API spelling, or marketing-level behavior. Compare
+the underlying semantics: authority/ownership, identity, lifetime, failure,
+ordering, cancellation, concurrency/distribution consequences, implementation
+freedom, and known limits where relevant.
+
+### PLATxxx research breadth
+
+For a platform/runtime `PLATxxx`, investigate how relevant production runtimes,
+language implementations, VMs, compilers, operating systems, or native
+substrates solve the same architectural problem rather than reasoning only from
+the current Protos implementation.
+
+For a Truffle-related decision, the investigation MUST survey the relevant
+public Truffle implementation space rather than citing only one or two familiar
+languages. Consider, where applicable, GraalJS, TruffleRuby, GraalPy, Espresso,
+Sulong/LLVM, SimpleLanguage and other active or historically informative
+Truffle implementations. Apple Pkl MUST be included in the survey when its
+implementation surface is materially comparable; otherwise record why it is not
+relevant to the specific decision.
+
+The survey MUST also look outside Truffle when mature non-Truffle systems provide
+useful evidence. Depending on the problem, this may include HotSpot/OpenJDK,
+LLVM, V8, .NET/CLR, Swift/Apple compiler/runtime infrastructure, BEAM,
+operating-system kernels, schedulers, databases, distributed runtimes, storage
+systems, or other systems facing the same architectural constraint.
+
+For OS/native/platform boundaries, do not assume Linux/JVM behavior is
+universal. Compare Linux, BSD, macOS/Darwin, Windows, or other hosts whenever
+their differences can affect the choice.
+
+A PLATxxx packet MUST explicitly consider, when relevant:
+
+- Truffle partial evaluation and compilation/deoptimization boundaries;
+- Context isolation and multi-Context behavior;
+- thread, Task, Actor, Process and host-resource ownership;
+- memory scaling and per-instance/per-context state;
+- cancellation, unwind and failure paths;
+- native-image/AOT constraints;
+- Bytecode DSL migration/evolution;
+- alternative schedulers/backends/runtimes; and
+- portability beyond the current host platform.
+
+### Candidate construction
+
+Do not begin with one preferred solution and search only for confirming evidence.
+
+The decision packet MUST expose the meaningful candidate set discovered during
+research, including where applicable:
+
+- the current/status-quo design;
+- the conservative/minimal change;
+- the strongest credible alternative architectures;
+- real hybrid options that remove a genuine trade-off rather than merely
+  accumulating mechanisms; and
+- `defer / do nothing` when deferral is a real option.
+
+A materially credible candidate may be eliminated only with an explicit reason.
+Record important rejected candidates so later agents do not need to rediscover
+the same design space.
+
+### Comparative scoring
+
+After qualitative analysis, score every surviving candidate from **1 to 5** on
+all of the following dimensions:
+
+1. **Correctness / invariant preservation** — preserves required semantics and
+   architectural invariants.
+2. **Protos alignment** — fits the documented Protos design philosophy,
+   including small-universe design, mechanisms over institutions, ordinary
+   things remaining ordinary, no unnecessary privileged entities,
+   orthogonality/composability, locality, pay-only-for-what-you-use, and minimal
+   coordination.
+3. **Future-option resilience** — preserves plausible future
+   language/runtime/library/backend choices instead of prematurely closing them.
+4. **Scalability** — remains sound as objects, data, Tasks, Actors, Processes,
+   Contexts, threads, nodes, workloads, and concurrency increase.
+5. **Conceptual simplicity** — minimizes total semantic/architectural
+   complexity, special cases, hidden rules, and interaction surface rather than
+   merely implementation line count.
+6. **Portability / implementation freedom** — avoids unnecessary coupling to
+   one VM, host mechanism, OS, compiler strategy, runtime identity, or current
+   implementation accident.
+7. **Runtime / resource cost** — CPU, allocation, memory, synchronization,
+   coordination, startup, and whether simple programs pay for unused capability.
+8. **Failure / operability** — predictable failure modes, cancellation/unwind
+   behavior, diagnosability, observability, and recovery of broken invariants.
+9. **Reversibility / migration cost** — difficulty of changing the choice later,
+   including compatibility, persisted-state, deployment, and rollout costs.
+10. **Evidence maturity / implementation risk** — quality of precedent and
+    feasibility evidence versus unproven assumptions or implementation risk.
+
+Each score MUST include a short justification. When evidence is uncertain, mark
+the score confidence as `HIGH`, `MEDIUM`, or `LOW`.
+
+Domain-specific criteria MAY be added, but the common criteria above MUST NOT be
+silently removed.
+
+Scores are comparison aids, not mathematical authority. Do not select a
+candidate merely because its arithmetic total is largest. A hard semantic
+constraint, qualitative threshold, catastrophic failure mode, unacceptable
+future lock-in, or fundamental Protos-philosophy violation may disqualify an
+otherwise high-scoring candidate.
+
+### Future-scenario stress test
+
+Before recommending a candidate, actively test it against plausible future
+scenarios beyond the immediate motivating case.
+
+Where relevant, include:
+
+- much larger workloads and long-lived systems;
+- many Tasks, Actors, Processes or Contexts;
+- multicore/high-concurrency execution;
+- distributed/multi-node execution;
+- cancellation, failure and unwind;
+- alternative schedulers;
+- persistence/serialization;
+- alternative Standard Library implementations;
+- alternative host runtimes/operating systems;
+- migration away from current Truffle machinery;
+- Truffle Bytecode DSL/compiler evolution; and
+- plausible future Protos features that must compose with the decision.
+
+Every substantive Dxxx/PLATxxx packet MUST explicitly answer:
+
+**What plausible future requirement would make us regret selecting this option?**
+
+and:
+
+**If that happens, what escape path remains?**
+
+### Required decision packet
+
+Before requesting project-owner approval, the packet MUST contain:
+
+1. the exact decision and why it is needed;
+2. current Protos constraints and already-ratified decisions;
+3. the prior-art/systems survey and what each comparison contributes;
+4. the complete meaningful candidate set;
+5. the comparative 1–5 scoring matrix with confidence where needed;
+6. failure modes, counterexamples, and disqualifying conditions;
+7. future-scenario and scalability stress analysis;
+8. implementation/runtime/resource consequences;
+9. portability, migration, compatibility, and reversibility consequences;
+10. intentionally deferred questions;
+11. the agent's recommended option and why it is the most Protos-aligned choice;
+    and
+12. the strongest argument **against** the recommendation.
+
+The agent MUST stop at that point for explicit project-owner approval unless the
+specific bounded decision has already been explicitly delegated.
+
+A short investigation that merely finds one plausible implementation, cites one
+or two familiar precedents, or states that an approach is common practice does
+not satisfy this rule.
+
 ## Project decision families
 
 Formal decision identifiers are orthogonal to the documentation role selected by
@@ -506,6 +697,198 @@ In particular:
 More specific instructions may add or refine rules for their scope, but they do
 not silently discard repository-wide requirements.
 
+## Native GitHub Issue hierarchy
+<!-- GITHUB006 NATIVE-ISSUE-HIERARCHY-AUTHORITY -->
+
+GitHub's native Issue parent/sub-issue relationship is the canonical **live
+parent/child coordination structure** for formal Protos work items. Project
+`Parent issue` and `Sub-issues progress` are derived presentation surfaces, not
+independent hierarchy authorities.
+
+When a formal child Issue has durable project identity under the granularity rule
+below:
+
+- establish its native parent relationship in the same coordination step as Issue
+  creation when the available interface supports it, or link it immediately
+  afterward before treating the child as fully reconciled;
+- a textual `Parent: #N`, `Parent work item: #N`, checklist entry, title prefix,
+  family label, Project field, or repository document is not a substitute for
+  the native parent relationship;
+- textual parent prose may remain when it is useful explanatory or historical
+  context, especially on retrospectively migrated Issues, but live hierarchy
+  queries MUST use the native relation;
+- if textual parent prose and the native relationship disagree, stop and
+  reconcile the conflict explicitly rather than silently choosing either source;
+- if the current environment cannot create or mutate native sub-issue
+  relationships, report that coordination limitation explicitly and leave the
+  native-link step visibly pending; do not claim the hierarchy is reconciled
+  merely because parent text was written;
+- `family:<FAMILY>` remains orthogonal and continues to classify formal work
+  ownership only; it MUST NOT encode parent/child structure; and
+- changing a native parent relationship does not by itself change Status,
+  Priority, assignee, design authority, specification authority, or publication
+  state.
+
+Existing historical Issue prose that says native sub-issue mutation was
+unavailable at migration time does not require bulk rewriting after the native
+relationship has been established. Preserve historical wording unless a bounded
+Issue-content reconciliation explicitly owns that cleanup.
+
+## GitHub Issue intake and creation
+<!-- GITHUB007 ISSUE-INTAKE-GOVERNANCE -->
+
+GitHub Issue forms are **intake surfaces**, not authority over Protos semantics,
+design approval, work-family allocation, lifecycle state after intake, or
+scheduling priority.
+
+The repository distinguishes:
+
+- **tracked project work** — maintainer-allocated formal identifiers;
+- **bug reports** — community defect intake, not automatically `BUGxxx`;
+- **documentation problems** — community documentation intake; and
+- **community requests** — concrete adoption/example/tooling/packaging/ecosystem
+  requests. Open-ended questions and language/design proposals belong in
+  Discussions.
+
+Form-created Issues start with `status:inbox`. No Issue form assigns
+`priority:*`; GITHUB005's explicit-unset priority rule remains authoritative.
+
+For a maintainer-authorized formal Issue, `scripts/issue_intake.py` may
+mechanically reconcile only facts already determined by the formal identifier
+and explicit hierarchy declaration:
+
+- derive the one `family:<FAMILY>` label from the identifier prefix;
+- preserve unrelated labels;
+- verify the GITHUB006 native parent relation; and
+- when no native parent exists, consume one unambiguous explicit `Parent: #N`,
+  `Parent work item: #N`, or tracked-work `Parent issue` response only as
+  bootstrap input to establish the native relation.
+
+The helper MUST NOT infer a parent from dependencies, `Triggered by` prose,
+similar names, family membership, or Project grouping. It MUST NOT replace a
+conflicting existing native parent automatically.
+
+A contributor cannot allocate formal Protos work merely by typing an
+identifier-shaped title or selecting the tracked-work form. Automatic formal
+reconciliation requires a maintainer-trusted author association (OWNER, MEMBER
+or COLLABORATOR) or an already-applied `family:*` label that demonstrates
+maintainer adoption. Untrusted formal-looking submissions remain ordinary
+triage.
+
+The intake helper does not infer `Ready`, `In progress`, `Needs decision`,
+`Blocked`, `Paused`, `Review`, assignee, or Priority from Issue prose. Existing
+GITHUB004/GITHUB005 status/priority synchronization remains the sole automated
+Project projection path.
+
+Agents creating formal Issues directly through GitHub APIs/CLI MUST still create
+them correctly in the first place: apply the matching family label, the proper
+live status/assignee when known, and the native parent in the same coordination
+step when the Issue is a formal child. The intake workflow is a convergence
+safety net, not permission to omit those obligations.
+
+## GitHub release milestone governance
+<!-- GITHUB008 RELEASE-MILESTONE-GOVERNANCE -->
+
+GitHub Milestones are reserved for **concrete release targets**. They are not a
+general work-classification or scheduling mechanism.
+
+The repository separates GitHub responsibilities as follows:
+
+- Project `Status` / `Priority` — live scheduling and lifecycle;
+- native Issue parent/sub-issue relationships — formal work hierarchy;
+- `family:<FAMILY>` — formal work-family classification;
+- Milestone — one selected release target / release gate; and
+- Git tag + GitHub Release — source identity and published deliverable for that
+  version.
+
+Agents MUST NOT use Milestones to represent work families, implementation
+phases, generic backlog buckets, `Now` / `Next` / `Later`, priority, status, or a
+second roadmap taxonomy.
+
+Create a milestone only after the project owner has selected a concrete intended
+release target. A milestone title uses the release version without the Git tag
+prefix (for example `0.3.0`); the corresponding tag remains `v0.3.0` and the
+release title may be `Protos 0.3.0`.
+
+A due date is optional. Do not invent a date merely because GitHub supports one;
+use it only when a real project or external commitment exists.
+
+Assign an Issue or Pull Request to a release milestone only when its completion
+is genuinely part of that release gate or explicitly planned release contents.
+Do not propagate milestone membership mechanically through parent/sub-issue
+hierarchy in either direction. Prefer the smallest set of release-significant
+work items that makes milestone progress meaningful, and avoid counting one
+deliverable twice through both a container parent and every child unless those
+items independently gate the release.
+
+Do not infer milestone membership from `family:*`, `status:*`, `priority:*`,
+Project Roadmap, title prefixes, parent relations, implementation-version bumps,
+or proximity to a release. Future release automation may validate a
+project-owner-selected milestone, but it MUST NOT silently choose the target or
+populate release membership.
+
+Closing a milestone means the selected release outcome has been completed and
+published, or has been explicitly abandoned/reconciled. Milestone completion
+percentage alone is not authority to publish or close a release target.
+
+Historical releases do not require retroactive milestones for symmetry. In
+particular, the existing `v0.2.236` prerelease remains valid without a matching
+historical milestone.
+
+Do not create a future milestone such as `0.3.0` merely because it is the next
+plausible semantic version. Selecting the next public release target remains an
+explicit project-owner scheduling/release decision.
+
+## Native GitHub Issue dependencies
+<!-- GITHUB009 NATIVE-ISSUE-DEPENDENCY-AUTHORITY -->
+
+GitHub's native Issue `blocked by` / `blocking` relationships are the canonical
+**live dependency graph** for specific Issue-to-Issue blocking relationships.
+They are deliberately orthogonal to native Parent/Sub-issue hierarchy,
+Issue-owned `status:*`, explicit `priority:*`, and durable repository evidence.
+
+When a formal Protos Issue is genuinely prevented from progressing by another
+specific Issue:
+
+- establish the native `blocked by` / `blocking` relationship in the same
+  coordination step when the exact current blocker is already known and the
+  available interface supports dependency mutation;
+- explanatory or historical `Blocked by`, `Prerequisite`, `State at creation`,
+  checklist, title, family, Project, or repository prose is not a substitute for
+  the native relationship once the exact live dependency is known;
+- do not infer a dependency merely from `status:blocked`, Parent/Sub-issue
+  hierarchy, sibling order, `family:*`, `Triggered by`, roadmap position,
+  identifier numbering, or a prerequisite that has already been satisfied;
+- do not propagate dependency edges mechanically through Parent/Sub-issue
+  hierarchy in either direction;
+- prefer direct real blockers rather than copying every transitive upstream
+  prerequisite onto each downstream Issue;
+- when several exact Issues independently block one Issue, retain one native
+  relationship for each real blocker;
+- if native dependency state conflicts with current explicit coordination or
+  durable evidence, stop and reconcile the conflict rather than silently
+  trusting stale prose or rewriting the graph heuristically; and
+- if the current environment cannot mutate native dependencies, report the exact
+  pending coordination step instead of claiming that text alone reconciled it.
+
+`status:blocked` answers whether an open Issue is currently blocked as lifecycle
+state; a native dependency answers which specific Issue participates in the
+blocking graph. An Issue may therefore be `status:blocked` without a native edge
+when the blocker is external or not represented by one exact Issue.
+
+Closing a blocker does not mechanically select the dependent Issue's next
+`status:*` value and does not require deleting the dependency relationship.
+Closed blocker edges may remain as useful history while GitHub distinguishes
+active unresolved blockers from the complete historical dependency set. Change
+the dependent Issue to `Ready`, `In progress`, `Needs decision`, `Paused`,
+`Review`, or another valid state only from current coordination evidence.
+
+Dependency automation may verify explicit/native state and report drift, but it
+MUST NOT infer blocker identity from arbitrary prose, family, hierarchy, title
+similarity, Status, Project grouping, or implementation numbering. It also MUST
+NOT close dependent Issues or choose lifecycle transitions merely because a
+blocker closes.
+
 ## Live GitHub assignee discipline
 <!-- LIVE-GITHUB-ASSIGNEE-DISCIPLINE -->
 
@@ -667,6 +1050,10 @@ inside the parent Issue/checklist, local plan, or publication report. When an
 already-formal family uses slice suffixes (for example `Ixxx-A` or `LIBxxx-B`),
 preserve that identifier in the owning durable record and GitHub tracking only
 when the slice meets this independent-identity criterion.
+
+When such an independently tracked child Issue is created, its native GitHub
+parent relationship MUST also be established under the **Native GitHub Issue
+hierarchy** rule above; a textual parent note alone is not sufficient.
 
 Before starting each subsequent slice, re-fetch and inspect the current
 `origin/main` and re-check the assumptions that slice depends on. A previously
@@ -1743,6 +2130,7 @@ Normative domain models supplement those core documents for semantically substan
 - `spec/semantics/MODULES.md` — primary normative owner of migrated module semantics.
 - `spec/semantics/ERRORS.md` — primary normative owner of migrated Error semantics.
 - `spec/semantics/VALUES_AND_COLLECTIONS.md` — primary normative owner of value-family, equality/identity, indexing, and collection semantics.
+- `spec/semantics/MATCHING.md` — primary normative owner of ratified matching-protocol, matcher-outcome, and structural-projection semantics.
 
 - `spec/io/IO_CORE.md` — cross-cutting I/O capability, commitment, lifecycle, and wrapper semantics.
 - `spec/io/BYTE_IO.md` — byte-I/O protocol semantics.

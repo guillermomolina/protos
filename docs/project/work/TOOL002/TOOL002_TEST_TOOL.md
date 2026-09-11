@@ -67,8 +67,8 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-E | CLOSED | E1A/E1B/E2A/E2B/E3/E4 complete the retained Package/TOML migration: bundled Protos owns planning, confined source loading, Package execution, Boolean/Error expectation policy and aggregation; duplicate Java corpus-policy ownership is removed. |
 | TOOL002-F | CLOSED | F1/F2/F3 plus the F4 cutover program are published: bundled Protos now owns all retained Future expectation policy and the complete main manifest; duplicate Java Future policy is retired. |
 | TOOL002-G | CLOSED | G1/G1A establish production-scheduler cooperative inspection; G2/G3 migrate the complete retained Actor/Group manifests into bundled-Protos Runner ownership; G4 retires the duplicate Java corpus-policy owners and reconciles closure. |
-| TOOL002-H | IN_PROGRESS | H1 proves real concurrent fresh-Process/Context hosting with private output; D055 ratifies the backend-neutral async exact-execution -> caller-domain Future contract; H2 is READY to implement the bridge and bounded Protos scheduling without selecting deferred jobs/resource/timeout policy. |
-| TOOL002-I | BLOCKED_BY_DEPENDENCIES | After H, add explicit resource constraints/private capabilities where real external-resource sharing requires them. |
+| TOOL002-H | CLOSED | H1/H2A/H2B1/H2B2/H2B3 are published; D055, D069 and PLAT023 remain ratified. Closure reconciliation retains the real public `protos test --jobs N` path, adds a bounded-parallel public CLI regression, runs the broad Test Tool set and the repository top-level FULL publication-validation suite, and introduces no resources, auto-jobs, timeout/kill, retry, remote, specification or native-boundary policy. |
+| TOOL002-I | READY | D076 Candidate D and D077 Candidate D are RATIFIED. I may decompose/implement inert canonical resource keys, private frozen requirement records, sparse strict/versioned TOML requirement data, separate strict/versioned catalog data, fail-closed duplicate/conflict validation and one-explicit-catalog precedence. Public sidecar filename, catalog CLI spelling, exact scope vocabulary, provider APIs and other D077-deferred contracts remain unselected and must cross a later approval gate if a slice reaches them. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | After I, integrate the final Java-first / Protos-tool-second validation pipeline. |
 
 ## TOOL002-E decomposition
@@ -816,15 +816,48 @@ TOOL002-H is IN_PROGRESS after H1 and the explicit D055 decision gate:
   only submission/execution/completion mechanics while bounded admission,
   CaseId/TestPlan, later resources/capacities, aggregation and deterministic
   reporting remain bundled-Protos policy.
-- **H2 — READY.** Implementation must keep the general async exact-execution
-  bridge independently reviewable from bounded Test Tool scheduling. The bridge
-  must marshal inert completion back to the caller Actor domain before guest
-  rematerialization, preserve private output, retain outstanding-execution
-  custody until cleanup, and avoid pretending an already-started same-runtime
-  child is hard-preemptible.
+- **H2 — IN_PROGRESS.** H2A is already closed; H2B now owns bounded bundled-Protos
+  scheduling over that bridge. The implementation must keep async exact execution
+  independently reviewable, marshal inert completion back to the caller Actor
+  domain before guest rematerialization, preserve private output, retain
+  outstanding-execution custody until cleanup, and avoid pretending an
+  already-started same-runtime child is hard-preemptible.
+- **H2B1 — CLOSED — SAME_COMMIT.** Add the first bounded scheduling kernel for
+  simple expectations only. The current runner Task directly fills one bounded
+  wave with `executionAsync(source)` Futures, waits once with `Future.all(...).value()`
+  at the wave boundary, and projects already-rematerialized observations in
+  deterministic TestPlan order. No `Future.then` continuation Task and no per-case
+  `Closure.future()` worker is introduced by the scheduler. Standard `while`
+  supplies the already-ratified suspension/replay composition for the wave loops.
+  The slice leaves sequential `runSimple`, public `protos test` wiring,
+  future/inspection expectations, public jobs/default/fairness policy, resources,
+  carriers and hard containment unchanged.
+- **H2B2 — CLOSED — SAME_COMMIT.** Extend bounded admission to the complete
+  already-supported D expectation set without moving assertion policy out of
+  bundled Protos. Each selected case is routed through the existing semantics:
+  simple execution uses `executionAsync(source)`, `closure-error-parent-fresh`
+  uses its existing source wrapper through `executionAsync`, and Future families
+  use their existing inspector source through `executionInspectAsync`. Both async
+  bridges share one Protos-owned `maxInFlight` wave bound. Completed observations
+  are then projected through the existing `evaluateDCase` policy in TestPlan order;
+  physical completion order remains irrelevant. Public `protos test` wiring and
+  public jobs/default/fairness/resource/carrier/timeout policy remain unchanged.
+- **D069 — RATIFIED** by explicit project-owner approval on 2026-09-11 after an
+  exhaustive cross-runner comparison. `protos test --jobs N` selects positive
+  logical Test Tool execution-slot capacity; absent `--jobs` means `jobs = 1`,
+  and `--jobs 1` is the deterministic serial reduction path. Numeric `jobs`
+  remains independent of JVM threads, CPUs, Processes and physical workers so
+  TOOL002-I resource accounting and future OS/remote backends can compose without
+  changing the public concept. `jobs=auto`, `-j`, profiles/config and resource
+  weights remain deferred.
+- **H2B3 — BLOCKED_BY_PLAT023.** D069 releases the public jobs-policy dependency
+  for real `protos test` bounded-runner integration. The remaining production
+  dependency is PLAT023's separately owned JVM/Truffle async exact-execution
+  carrier topology; H2B3 must not hide that platform choice inside CLI wiring.
 
-H2 does not select a JVM carrier, public `--jobs` spelling/default, `jobs=auto`,
-hard timeout/kill policy, resource syntax, retry policy or remote transport.
+H2 no longer has an unresolved public numeric jobs spelling/default: D069 owns
+that contract. H2 still does not select a JVM carrier, `jobs=auto`, hard
+timeout/kill policy, resource syntax/weights, retry policy or remote transport.
 A newly exposed durable choice in those areas must use the normal Dxxx/PLATxxx
 approval gate.
 
@@ -1145,3 +1178,235 @@ scope before closure.
 ## I026-A4B3 hosting reconciliation
 
 I026-A4B3 changes only the Truffle hosting representation of TOOL002's already-closed exact/fresh/captured mechanics. The exact selected unit is now handed to the child as an inert Truffle `Source`, and parsing/executable-root creation occurs only after the fresh semantic Process is bound to its own `ProtosPolyglotProcessContext`. The Test Tool driver reuses one explicit RuntimeHost/Engine while each child remains a distinct semantic Process with a distinct Context. Private streams, fresh-Process isolation, detached observation, Package Prelude selection, and all TOOL002 expectation/test policy remain unchanged.
+
+## TOOL002-H PLAT023 ratification
+
+PLAT023 is RATIFIED after explicit project-owner approval on 2026-09-11.
+Candidate A′ fixes only the production JVM/Truffle carrier for already-admitted
+same-runtime exact executions:
+
+- H2B / bundled Protos remains the sole outer admission scheduler;
+- D069 `--jobs N` remains logical Test Tool capacity and is not a Thread count;
+- each accepted exact execution gets one fresh named Java platform Thread;
+- the carrier mechanism introduces no second fixed/cached/common-pool capacity or
+  TestPlan queue;
+- accepted host work remains under facility/session custody through terminal
+  cleanup;
+- pre-start withdrawal remains best-effort and started same-runtime work is not
+  advertised as hard-preemptible;
+- caller-domain rematerialization remains unchanged;
+- the RuntimeHost Actor carrier pool is never reused for outer Test Tool work;
+- carrier identity remains non-semantic and replaceable behind
+  `ProtosAsyncExactExecutionFacility.Submission`.
+
+This releases **TOOL002-H2B3** to implement the production Submission plus real
+`protos test` bounded-runner wiring under D055 + D069 + PLAT023. H2B3 must remain
+focal-validation-only while iterating, must not broaden into TOOL002-I resource
+policy, `jobs=auto`, hard OS-worker timeout/kill, retries, sharding, remote
+transport, Actor scheduler changes or another carrier policy, and must stop if a
+new substantive semantic/architecture choice appears.
+
+## TOOL002-H2B3 production Test Tool cutover
+
+H2B3 consumes the already-ratified D055, D069 and PLAT023 boundaries without
+adding another policy layer:
+
+- bundled `Options.protos` parses ordinary `process.args()` for exactly D069
+  `--jobs N`, defaults absence to `1`, and fails explicitly for a missing,
+  malformed, zero, negative or duplicate jobs value;
+- public `Main.protos` routes the conformance, Actor, Group and Package/TOML
+  plans through the already-published H2B2 `Runner.runBounded(...)` path with one
+  shared logical jobs value while retaining sequential plan-to-plan orchestration
+  and deterministic per-plan TestPlan result order;
+- the CLI provisions asynchronous exact-execution and inspection capabilities for
+  the existing Core, Actor and Group execution domains plus asynchronous Package
+  execution, without retaining the now-unused synchronous Test Tool bridges;
+- the PLAT023 production Submission creates one fresh named Java platform Thread
+  for each execution that H2B has already admitted. It has no executor pool,
+  second queue/capacity, CPU heuristic or relationship to the Actor carrier pool;
+- one Test Tool execution scope owns all async facilities plus the shared carrier
+  mechanism and closes those facilities before the owning RuntimeHost Session is
+  terminated, preserving accepted-work custody through terminal cleanup;
+- the production carrier remains replaceable behind
+  `ProtosAsyncExactExecutionFacility.Submission` and does not make Thread identity
+  observable Protos semantics.
+
+H2B3 focal validation is intentionally restricted to
+`ProtosTestToolH2B3PublicIntegrationTest`. It proves the public Main cutover,
+D069 parser boundaries, installation of all production async bootstrap routes,
+real generic execution/inspection over the production carrier, fresh/distinct
+named platform carriers, and the rule that already-started work is not reported
+as pre-start cancellable. Broader Test Tool/full-suite reconciliation remains the
+next H closure responsibility and is not run during H2B3 iteration.
+
+H2B3 adds no `jobs=auto`, `-j`, resource weights/declarations, hard timeout/kill,
+retry, sharding, remote execution, Actor scheduler/carrier change, specification
+change or native boundary. TOOL002-H remains **IN_PROGRESS** until its closure
+reconciliation is published; TOOL002-I is not released by this intermediate
+slice alone.
+
+## Temporary slow Test Tool checkpoint gate
+
+Status: **ACTIVE — project-owner approved 2026-09-11**
+
+The real CLI end-to-end smoke in
+`ProtosCliTest.testSubcommandRunsBundledProtosToolThroughCommonBootstrap()` launches
+the complete bundled Test Tool corpus and takes several minutes on the normal
+development host. Running that nested full Test Tool traversal inside every
+ordinary Maven validation makes iterative slices prohibitively slow without
+adding proportional evidence, because the retained Test Tool families already
+exercise their bounded scheduler, execution bridges, corpus ownership and
+production carrier directly.
+
+Until this temporary gate is explicitly retired, ordinary `mvn test` leaves that
+single end-to-end method **SKIPPED**. The test remains in the repository and is
+enabled explicitly with:
+
+```text
+mvn -Dprotos.testToolCheckpoint=true \
+    -Dtest=ProtosCliTest#testSubcommandRunsBundledProtosToolThroughCommonBootstrap \
+    test
+```
+
+The checkpoint runs real `protos test --jobs 2`, exercising the public CLI,
+bundled-tool bootstrap, D069 option path, H2B bounded runner and PLAT023 production
+carrier without paying the serial-default runtime.
+
+Run the checkpoint at meaningful reconciliation points rather than every child
+slice: in particular TOOL002-H closure, after material Test Tool scheduler/carrier
+changes, and before a release or other owner-requested broad validation. A normal
+passing Maven suite with this method skipped is not evidence that the explicit
+checkpoint passed; checkpoint evidence must be reported separately.
+
+This is validation-workflow policy only. It changes no Protos semantics, Test Tool
+public contract, D069 default (`jobs=1`), production implementation, specification,
+native boundary or implementation version.
+
+## TOOL002-H closure reconciliation
+
+Status: **CLOSED — broader reconciliation required by GitHub #95 completed before publication**
+
+The H closure adds no production Test Tool mechanism and selects no new public
+semantics. It reconciles the already-published H1/H2A/H2B1/H2B2/H2B3 chain under
+the retained D055, D069 and PLAT023 decisions.
+
+The closure candidate retains one lightweight Tool-owned reconciliation test
+that verifies the published H2B3 cutover remains materialized: public Main still
+uses D069 `Options.jobs(process.args())`, all four retained plans still route
+through `Runner.runBounded(...)`, and the PLAT023 production carrier remains the
+fresh platform-thread mechanism.
+
+Closure validation is intentionally broader than the H2B implementation
+iterations but avoids repeatedly traversing the same multi-minute CLI corpus:
+
+1. the owner-approved explicit checkpoint runs the real
+   `ProtosCliTest.testSubcommandRunsBundledProtosToolThroughCommonBootstrap`
+   with `-Dprotos.testToolCheckpoint=true`, which executes
+   `protos test --jobs 2` exactly once;
+2. `scripts/validation_impact.py --top-level-closure` must classify the closure
+   candidate as `FULL`, not the PERF007 `FULL:NON_TOOL` quarantine, because the
+   closure contains a Tool-owned reconciliation test;
+3. `scripts/publication_validation.py --top-level-closure` then runs the source
+   style prevention gate and complete Maven suite with the slow CLI checkpoint
+   skipped by default, as required by the temporary checkpoint policy.
+
+No validation result is reused across an advancing `main`; the publication
+launcher aborts if `origin/main` changes after the immutable candidate was
+validated.
+
+TOOL002-H therefore closes without adding `jobs=auto`, `-j`, resource
+declarations/weights, hard timeout/kill, retry, sharding, remote execution,
+Actor scheduler/carrier changes, specification changes or native-boundary
+changes. **TOOL002-I is released to READY solely because its dependency on H is
+satisfied; this closure does not preselect I's resource-policy details.**
+
+## TOOL002-I D076 resource architecture ratification
+
+Status: **BLOCKED_BY_D077**
+
+D076 / GitHub #359 is **RATIFIED — Candidate D selected** after explicit
+project-owner approval on 2026-09-11 and exhaustive comparison across language
+test frameworks, CI runners, CTest, Slurm, Kubernetes DRA, Buck2 and Bazel Remote
+Execution.
+
+The durable TOOL002-I architecture is:
+
+```text
+inert CaseSpec requirement
+    -> bundled-Protos atomic admission/reservation
+    -> environment-owned resource catalog / placement
+    -> provider
+    -> attempt-private lease/capability
+    -> fresh child Process
+    -> terminal cleanup / release
+```
+
+D069 jobs capacity remains orthogonal. One case's complete resource set is
+reserved atomically before launch. The initial semantic conflict model is shared
+positive-unit capacity versus exclusive whole-resource reservation. Scope/locality
+belongs to the catalog/resource definition, and live authority is created only
+after reservation/placement.
+
+No live provider, lease, worker identity, host object or capability may enter the
+inert TestPlan. Resource/provider loss is infrastructure outcome rather than a
+fabricated semantic Protos Error. No guest-global ResourceManager/registry is
+selected.
+
+TOOL002-I does **not** proceed directly to implementation because D076
+intentionally leaves the representation boundary open. D077 / GitHub #361 must
+select the resource-key carrier, CaseSpec requirement representation, catalog
+entry/configuration representation and malformed/duplicate declaration behavior
+before an implementation slice can materialize D076-D.
+
+This checkpoint selects no `jobs=auto`, fairness, retry, timeout/kill, sharding,
+remote transport, CAS, CPU/memory auto-accounting or physical-worker policy.
+
+## TOOL002-I D077 representation ratification
+
+Status: **READY**
+
+D077 / GitHub #361 is **RATIFIED — Candidate D selected** after explicit
+project-owner approval on 2026-09-11 and exhaustive comparison across CTest,
+cargo-nextest, Kubernetes DRA, Slurm, Nomad, Buck2, Bazel/Remote Execution,
+JUnit, TOML and current ordinary-Protos Array/Map/private-tuple representations.
+
+The selected bounded representation is:
+
+```text
+manifest.tsv
+    +
+optional sparse strict/versioned TOML requirement data
+    -> private frozen Array<Requirement> inside CaseSpec
+
+separate strict/versioned environment catalog
+    -> atomic reservation
+    -> provider/profile resolution
+    -> attempt-private capability
+```
+
+The resource key is one canonical hierarchical lower-case ASCII String. A
+requirement is a fixed private inert record carrying key, mode and units-or-null.
+Declaration storage remains an Array so duplicate declarations are visible before
+any scheduler Map/index is built.
+
+The persistent modes are `shared` with positive units and `exclusive` without
+units. Duplicate `(case,key)` requirements, duplicate catalog keys, malformed
+keys, unknown schema fields/versions/modes/scopes, invalid shared units and units
+on exclusive declarations fail closed. No declaration-order, last-wins, implicit
+sum or implicit merge policy exists.
+
+The same logical resource key initially joins requirement, catalog entry,
+reservation and provisioned capability bundle. No alias/binding/claim-name
+institution is selected.
+
+The initial configuration invariant is zero or one explicit catalog source per
+invocation, with no implicit user/system/environment/parent/repository merge or
+inheritance. No catalog means an empty catalog. Unsatisfied resource requirements
+remain infrastructure/configuration evidence under D076, not guest Errors.
+
+TOOL002-I is released to READY for bounded implementation/decomposition under
+D076+D077. The physical sidecar filename, exact public catalog-selection CLI
+spelling, exact initial public scope-name vocabulary, provider API details,
+selector language, binding aliases and catalog inheritance/merge remain
+deliberately unselected. A slice that needs one of those contracts must stop at
+the normal design-approval gate.

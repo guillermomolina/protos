@@ -1,4 +1,618 @@
+## 0.2.386-SNAPSHOT
+
+- Implement `TOOL002-I4 — Requirement mode/units validation` under the ratified D076/D077 contract. Keep the private inert Requirement carrier and canonical resource-key validation from I2/I3, require exact semantic String modes `shared` or `exclusive`, require `shared` units to be a positive ordinary unbounded Core `Integer` using the existing strict `Integer.div(1)` receiver-domain validation (therefore rejecting Float, fixed-width and delegated lookalikes), and require `exclusive` units to be exactly canonical `null`. Unknown modes and malformed units fail closed before the frozen Requirement is materialized. CaseSpec attachment, persistent requirement TOML/sidecar, catalog, reservation/capacity scheduling, provider, CLI and scope vocabulary remain excluded. Implementation version becomes `0.2.386-SNAPSHOT`.
+
+## 0.2.385-SNAPSHOT
+
+- Implement `TOOL002-I3 — canonical resource-key validation` under the ratified D077 lexical contract. Validate each private Requirement key as an ordinary String in canonical `segment[/segment...]` form: every segment starts with lower-case ASCII letter/digit, later bytes are limited to lower-case ASCII letters, digits, `.`, `_` or `-`, and empty/leading/trailing segments, uppercase, whitespace, unsupported punctuation and non-ASCII input fail closed before the frozen Requirement is materialized. Mode/units validation, CaseSpec attachment, persistent requirements, catalog, reservation, provider, CLI and scope vocabulary remain excluded. Implementation version becomes `0.2.385-SNAPSHOT`.
+
+## 0.2.384-SNAPSHOT
+
+- Implement `PERF006-B6A4 — ordinary native C-prime fast path prerequisite` under the already-ratified PLAT019 native-boundary architecture. Remove the temporary B3 fail-closed guard that rejected ordinary non-suspending native Closures merely because execution is Task-backed; keep suspension capability explicit, keep structured-control provenance unchanged, and route ordinary natives through the existing synchronous `PreparedClosureCall.enterNative()` path. Add Bytecode Task conformance for direct native Closures, receiver/method-home native methods, real Core Integer native protocol dispatch, exact native Error propagation, and a completed native prefix followed by `Future.value()` suspension without replay. No module-import continuation migration, production parse cutover, replay retirement, specification/public API change, or optimizer-runtime wiring is included. Implementation version becomes `0.2.384-SNAPSHOT`.
+
+## 0.2.383-SNAPSHOT
+
+- Implement `TOOL002-I2 — inert Requirement record` under the ratified D076/D077 representation boundary. Add the private frozen three-field `Requirement` tuple carrier `(key, mode, units-or-null)` plus named private accessors for each field, with focal evidence covering shared integer units, exclusive null units, frozen fixed shape and fresh identity. This slice adds no requirement validation, CaseSpec attachment beyond I1's empty carrier, persistent sidecar/TOML loading, catalog, reservation/capacity logic, provider, CLI surface or public scope vocabulary. Implementation version becomes `0.2.383-SNAPSHOT`.
+
+## 0.2.382-SNAPSHOT
+
+- Implement `LM009-G2 — parser-derived hierarchical document symbols` (GitHub #360) under ratified D079 Candidate A′. Project every explicit named `SurfaceSlotCreation` from the real parser AST through a protocol-neutral outline model, map all slots uniformly to LSP `SymbolKind.Property`, retain only exact value-subtree source containment as hierarchy, preserve full creation/exact final-name ranges and duplicate occurrences, and return no stale/guessed tree for missing or failed current snapshots. Advertise the feature only to clients with hierarchical document-symbol support and add no flat `SymbolInformation` fallback, workspace/module index, definition identity, guest execution or LM009-H behavior. Add focused hierarchy, UTF-16, parse-failure and capability evidence. Implementation version becomes `0.2.382-SNAPSHOT`.
+
+## 0.2.381-SNAPSHOT
+
+- Implement `PERF006-B6A3C — canonical Object literal and contextual composition Bytecode coverage` on the ratified C-prime backend. Pre-lower one child Bytecode body target per canonical Object position, evaluate the optional parent exactly once before construction, create the ordinary construction activation with the existing lexical-capture boundary, and compose child continuations without inventing Closure/ReturnHome ownership. Lower contextual `...source` through the existing atomic `composeLocalSlotsFrom` authority with the whole-body reserved-name set, including suspending source expressions without replay. Object literals are also admitted in Closure defaults. B6A3 remaining canonical-form migration is complete; no production parse cutover, replay retirement, specification/public API change, or optimizer-runtime wiring is included. Implementation version becomes `0.2.381-SNAPSHOT`.
+
+## 0.2.380-SNAPSHOT
+
+- Implement `TOOL002-I1 — inert CaseSpec requirement carrier` under the ratified D076/D077 boundary. Extend each private frozen CaseSpec with a fresh frozen empty requirement Array and expose it only through the private named `caseRequirements(spec)` accessor, with focal evidence for emptiness, freezing and per-CaseSpec freshness. This slice introduces no requirement sidecar/catalog parsing, resource-key validation, reservation/capacity logic, provider/capability API, CLI surface or public `scope` vocabulary. Implementation version becomes `0.2.380-SNAPSHOT`.
+
+## 0.2.379-SNAPSHOT
+
+- Ratify `D079 — Document-symbol projection for uniform Protos slots`
+  (GitHub #364) as Candidate A′ after explicit project-owner approval and an
+  expanded comparison across Self, TypeScript/tsserver, Pyright, Ruby LSP/Prism,
+  Go/gopls, rust-analyzer, Eclipse JDT LS, LuaLS, Clojure LSP/EDN and OCaml-LSP.
+  Select every explicit named `SurfaceSlotCreation` as a document symbol with
+  uniform LSP `Property` presentation, no value-shape `Function`/`Method`
+  recategorization, and hierarchy meaning syntactic value-subtree containment
+  only. Release LM009-G2 for bounded implementation. Governance/tooling only:
+  no Protos specification, runtime/native implementation, public language
+  semantics, Maven implementation-version or G2 executable-code change.
+
+
+- Implement `PERF006-B6A3B — canonical Closure-literal Bytecode coverage` on the ratified C-prime backend. Materialize ordinary semantic Closure values directly from Bytecode while preserving lexical-context capture by reference, dynamic receiver, physical method home, return home and prelude; attach one source/language-bound Bytecode execution-plan template per canonical Closure position rather than recompiling on each evaluation. Extend nested/default Closure lowering and prove completed Closure-literal prefixes survive suspension without replay. No Object/composition migration, production parse cutover, replay retirement, specification/public API change, or optimizer-runtime wiring is included. Implementation version becomes `0.2.379-SNAPSHOT`.
+
+## 0.2.378-SNAPSHOT
+
+- Implement `PERF006-B6A3A — canonical super-send Bytecode coverage` on the ratified C-prime backend. Lower `super.message(...)` through the same prepared-call continuation chain used by ordinary sends while preserving physical method-home-parent lookup, dynamic receiver identity, exact selected method home, left-to-right/spread argument semantics, defaults containing `super`, standard control provenance, and suspend/resume without replaying completed prefixes. No Object/Closure literal or composition migration, production parse cutover, replay retirement, specification/public API change, or optimizer-runtime wiring is included. Implementation version becomes `0.2.378-SNAPSHOT`.
+
+## 0.2.377-SNAPSHOT
+
+- Ratify `D077 — Test Tool resource requirement and catalog representation
+  contract` (GitHub #361) as Candidate D after explicit project-owner approval
+  and exhaustive comparison across CTest, cargo-nextest, Kubernetes DRA, Slurm,
+  Nomad, Buck2, Bazel/Remote Execution, JUnit, TOML and current Protos
+  Array/Map/private-tuple representations. Select canonical hierarchical logical
+  resource keys, frozen Array-of-private-record CaseSpec requirements, the
+  existing `manifest.tsv` plus optional sparse strict/versioned TOML requirement
+  data, a separate strict/versioned environment catalog, same-key initial
+  requirement/catalog/reservation/capability correspondence, fail-closed
+  duplicate/conflict handling and zero-or-one explicit catalog-source
+  precedence. Release TOOL002-I to READY for bounded implementation while
+  keeping physical sidecar filename, catalog CLI spelling, exact scope
+  vocabulary, provider API, aliases/selectors, catalog inheritance/merge,
+  fairness, retries, timeout/kill, sharding, remote transport, CAS and jobs-auto
+  explicitly unselected. Governance/design only: no production implementation,
+  specification, native boundary or Maven implementation-version change.
+
+- Implement `PERF006-B6A2 — mutating canonical Bytecode coverage` on the ratified C-prime backend. Add exact Bytecode lowering for bare/explicit slot creation and assignment plus indexed assignment, including mutating Closure defaults and operands that suspend. Preserve AST destination/target prevalidation order, local-only mutation rules, exact RHS results, left-to-right indexed evaluation, and ordinary suspendible `atPut(index, value)` dispatch while discarding its return value. Completed prefixes are retained in Bytecode continuation state rather than replayed. Do not cut over `ProtosLanguage.parse`, migrate Object/Closure literals, composition or `super`, retire legacy replay, change specification/public API, or add optimizer-runtime wiring. Implementation version becomes `0.2.377-SNAPSHOT`.
+
+## 0.2.376-SNAPSHOT
+
+- Implement `LM009-G1 — parser-derived static diagnostics` (GitHub #360) on the
+  published LM009-F service foundation. Publish exactly the real parser failure
+  for each current immutable open-document snapshot through standard LSP push
+  diagnostics, map existing UTF-16 `SourceSpan` offsets to LSP ranges without a
+  second parser, tag diagnostics with the exact LSP document version, clear them
+  on successful reparse and document close, and discard results already stale at
+  the F2 snapshot check. Add focused UTF-16/CRLF range and lifecycle coverage.
+  Introduce no workspace/module inference, guest execution, TypeScript semantic
+  model, symbol/definition policy or LM009-H feature. Implementation version
+  becomes `0.2.376-SNAPSHOT`.
+
+## 0.2.375-SNAPSHOT
+
+- Close `LIB009-E — default-profile CSV baseline closure` (GitHub #358) with integrated conformance, streaming-scale and Actor-independence evidence. Preserve the published five-slot CSV surface exactly; add no CSV production semantics. Add an end-to-end encode/parse/rowParser/writeRows fixture, a row-streaming stress fixture that consumes 4096 rows without retaining a table and assembles an 8192-character field across 2048 feeds, and Java evidence that `std:csv/CSV` module instances are Actor-local while `rowParser()` instances are fresh. Durably mark the ratified A–E default-profile baseline closed while keeping custom dialect/configuration and higher layers explicitly deferred. No `protos/lib`, `src/main`, specification or native-boundary change is included. Implementation version becomes `0.2.375-SNAPSHOT`.
+
+## 0.2.374-SNAPSHOT
+
+- Implement `PERF006-B6A1 — read-only canonical Bytecode coverage` on the ratified C-prime backend. Add exact Bytecode lowering for ordinary member reads, identity/non-identity and `this`/`context`/`args`, including composed operands/default expressions that may suspend. Preserve AST lookup/error behavior, canonical Boolean identity results, exact activation authority and left-to-right exactly-once evaluation with no replay of completed prefixes. Do not cut over `ProtosLanguage.parse`, migrate writes/object/Closure/super forms, retire legacy replay, change specification/public API, or add optimizer-runtime wiring. Implementation version becomes `0.2.374-SNAPSHOT`.
+
+## 0.2.373-SNAPSHOT
+
+- Ratify `D076 — Test Tool resource reservation and capability provisioning
+  architecture` (GitHub #359) as Candidate D after explicit project-owner
+  approval and exhaustive comparison across Swift Testing, Go, ExUnit,
+  pytest-xdist, xUnit/NUnit/MSTest, Gradle, GitHub/GitLab CI, JUnit,
+  cargo-nextest, CTest, Slurm, Kubernetes DRA, Buck2 and Bazel Remote Execution.
+  Select inert CaseSpec resource requirements plus an environment-owned
+  catalog/provider, atomic full-set reservation before launch, D069 jobs as an
+  orthogonal capacity, shared-positive-units versus exclusive-whole-resource
+  conflict semantics, post-placement attempt-private capability materialization,
+  custody through terminal cleanup and infrastructure outcomes distinct from
+  semantic Protos Error. Keep exact manifest/config/carrier representation
+  unresolved under D077 / GitHub #361; TOOL002-I remains blocked on D077.
+  Governance/design only: no production implementation, specification, Maven
+  implementation version, native boundary, `jobs=auto`, fairness, retry,
+  timeout/kill, sharding or remote-protocol change.
+
+- Close `LM009-F — Static language-service foundation` (GitHub #340) after the
+  published F1/F2/F3/F4 chain and the project-owner S4 live VS Code proof. Confirm
+  the selected `protos language-server` contract starts exactly one matching
+  toolchain server, survives repeated document edits/saves without restart, uses
+  no second server/JVM/JAR setting, and terminates when the Extension Development
+  Host closes. Release `LM009-G` for diagnostics/symbols/definition work without
+  claiming any G/H feature semantics. Also ignore editor-local `node_modules`
+  trees exposed by the live `vscode-languageclient` setup. Closure/governance and
+  repository-hygiene only: no Protos specification, production implementation,
+  native boundary or implementation-version change.
+
+- Close `PERF006-B5B — source/instrumentation/logical-location compatibility evidence` under ratified PLAT004/PLAT005/PLAT008/PLAT014 after B5A. Add retained Bytecode evidence that exact root/StatementTag/CallTag source identity and ranges survive metadata materialization without RootTag/RootBodyTag/ExpressionTag expansion, and that composed C-prime caller/callee continuations retain backend-native BytecodeLocation source projections across suspension/resume while completed prefix effects do not replay. B5 is closed; B6 owns normal-source production cutover and legacy replay retirement. Test/evidence only: no production source, specification, public API or implementation-version change.
+
+- Implement `LIB009-D — CSV TextReader/TextWriter adapters` (GitHub #357) after explicit owner approval of the JSON-D3-aligned public surface. Add ordinary `CSV.readRows(textReader, consumer)` with one ordered `readText()` per `read()` and `Future<Boolean>` progress/EOF results, plus `CSV.writeRows(textWriter)` with one ordered `writeText()` per encoded row and an empty-write Future barrier at `finish()`. Reuse the published `rowParser` and `encode` contracts, enforce one outstanding adapter operation, preserve terminal failure/reuse behavior, borrow rather than own supplied Text I/O capabilities, and add no Encoding/BOM/filesystem/network/flush/close authority. Durably record the approved D adapter contract and add async adapter conformance coverage. Export exactly `{parse, encode, rowParser, readRows, writeRows}`; custom dialect API remains deferred. Implementation version becomes `0.2.373-SNAPSHOT`.
+
+## 0.2.372-SNAPSHOT
+
+- Close `TOOL002-H — bounded parallel Test Tool scheduling` (GitHub #95) after
+  the published H1/H2A/H2B1/H2B2/H2B3 chain by running the owner-approved real
+  CLI checkpoint exactly once as `protos test --jobs 2`, retaining a lightweight
+  Tool-owned H2B3 reconciliation test, and forcing the repository top-level
+  closure classifier to `FULL`, which runs the source-style prevention gate and
+  complete Maven suite with the slow CLI checkpoint skipped by default. Confirm
+  D055/D069/PLAT023 boundaries remain intact, public default remains `jobs=1`,
+  admitted work still uses the replaceable fresh platform-thread carrier, and
+  deterministic TestPlan projection/private execution evidence remain covered. Release
+  `TOOL002-I` from its H dependency without selecting any resource syntax,
+  capacity/weight policy, `jobs=auto`, timeout/kill, retry, sharding or remote
+  execution policy. Closure/test/governance only: no production implementation,
+  specification, native-boundary or implementation-version change.
+
+- Implement `PERF006-B5A — Bytecode debugger scope projection bridge` under ratified PLAT015/PLAT013. Configure Bytecode DSL tag instrumentation to use a Protos-owned `NodeLibrary` bridge that obtains the exact `ProtosActivation` from frame argument zero and projects the existing read-only `ProtosDebuggerScope`, rather than exposing Bytecode interpreter locals as guest bindings. Preserve ordinary activation lookup precedence, no named receiver, no artificial language top scope, no debugger mutation/evaluation authority, lazy tooling allocation and the existing StatementTag/CallTag/root-tag policy. This is a backend tooling bridge only; B5B retains source/tag event and logical-location compatibility evidence, and B6 cutover/replay retirement remain separate. Implementation version becomes `0.2.372-SNAPSHOT`.
+
+## 0.2.371-SNAPSHOT
+
+- Close `PERF006-B4G — control/unwind closure evidence` with retained cross-product coverage over canonical non-local return after C-prime suspension, structured ensure cleanup/supersession, Error-handler selection/deactivation including suspendible handlers, Task-local cancellation unwind and supersession, and structured `while` suspension, cancellation and Error exit. Add a static closure guard proving the Bytecode control path does not own replay cursor/checkpoint state while the legacy AST/replay fallback remains intentionally retained until B6. Test/evidence only: no production source, specification, public API or implementation-version change.
+
+- Implement `LM009-F4 — public language-server launcher and reference LanguageClient wiring` (GitHub #340) after published D070 Candidate A′. Expose `protos language-server` through the ordinary CLI and route it to the published F3 standard-LSP/stdio host with protocol-only stdout. Wire the reference VS Code workspace extension through `vscode-languageclient` 10.1.1 using exactly the existing `protos.runtime.executable` plus argv `["language-server"]`, shell-free, with no second server path, JVM/JAR knowledge, URI-to-module guessing or editor-side Protos semantics. Add Restricted-Mode gating, one client-owned lifecycle, focused CLI framing and Node client-contract tests, and preserve all Run/Debug wiring. LM009-F remains IN_PROGRESS pending the real VS Code foundation lifecycle/document-sync check; LM009-G/H features remain excluded. No Protos specification semantics change. Implementation version becomes `0.2.371-SNAPSHOT`.
+
+## 0.2.370-SNAPSHOT
+
+- Implement `LIB009-C — incremental CSV rowParser and chunk-boundary lifecycle` (GitHub #354) after explicit owner approval of fluent parser returns. Add fresh ordinary `CSV.rowParser(consumer)` instances with synchronous `feed(String)` / `finish()` returning the same parser object, strict terminal failure semantics, row-at-a-time emission, CRLF split handling, doubled-quote and quoted-multiline chunk invariance, and bounded retained parser state. Refactor eager `CSV.parse(text)` to consume that same row-parser state machine instead of maintaining a second grammar implementation. Add exhaustive representative every-split-point coverage plus lifecycle, consumer-failure and parser-independence tests. Durably record the approved lifecycle return contract. Export exactly `{parse, encode, rowParser}`; add no custom dialect API, backpressure/resource-limit policy, Java production source or native-boundary expansion. Implementation version becomes `0.2.370-SNAPSHOT`.
+
+## 0.2.369-SNAPSHOT
+
+- Migrate `PERF006-B4F — while` to the ratified PLAT021 C-prime control path. Preserve ordinary inherited `Object.while` lookup and implementation provenance while validating the semantic Closure receiver/body before the first condition activation; execute the canonical standard loop with Bytecode structured `While`, strict exact canonical Boolean condition results, fresh callback activations/ReturnHomes per logical iteration, ignored ordinary body results including Future values, and exact Error/non-local-return/cancellation propagation through existing structured control. Condition/body suspension resumes from Bytecode continuation state without replay checkpoints or completed-callback compaction. Retain the evaluator/replay while implementation only as the AST fallback until B6. B4G cross-product closure evidence remains separate. Implementation version becomes `0.2.369-SNAPSHOT`.
+
+## 0.2.368-SNAPSHOT
+
+- Implement `TOOL002-H2B3 — public bounded Test Tool integration` (GitHub #95)
+  under ratified D055, D069 and PLAT023. Parse D069 `--jobs N` in ordinary
+  bundled Protos from `process.args()`, preserving absent jobs as `1` and explicit
+  failure for missing/malformed/non-positive/duplicate values; route all four
+  retained public plans through the H2B2 bounded runner; and provision async exact
+  execution/inspection through one PLAT023 scope whose already-admitted work runs
+  on fresh named Java platform Threads with no second host pool/capacity and no
+  Actor-carrier reuse. Close async facility custody before RuntimeHost teardown.
+  Validate only the H2B3 focal integration class during this iterative slice;
+  broader Test Tool/full-suite reconciliation remains TOOL002-H closure work.
+  Add no `jobs=auto`, resources, timeout/kill, retry, sharding, remote execution,
+  specification change or native boundary. Implementation version becomes
+  `0.2.368-SNAPSHOT`.
+
+## 0.2.367-SNAPSHOT
+
+- Implement `LIB009-B — default-profile CSV encode and structural round-trip` (GitHub #352) after explicit owner approval of the canonical writer policy. Add pure-Protos `CSV.encode(rows)` with standard-Array/String domain validation, necessary-only quoting for comma/double-quote/CR/LF, doubled embedded quotes and CRLF after every row. Preserve whitespace/application-looking text exactly, reject zero-field rows, and verify `CSV.parse(CSV.encode(rows)) == rows` for valid ordinary row data. Durably record the approved writer policy in the LIB009 design record. Export exactly `{parse, encode}`; add no custom dialect API, headers/types/nulls/sniffing/spreadsheet policy, filesystem/network effect, Java production source or native-boundary expansion. Implementation version becomes `0.2.367-SNAPSHOT`.
+
+## 0.2.366-SNAPSHOT
+
+- Migrate `PERF006-B4E — cancellation unwind` to the ratified PLAT021 C-prime control path. Preserve Task-owned cooperative cancellation and cancellation-first Future resume while injecting one exact backend-private cancellation transfer through the already-materialized Bytecode continuation so crossed structured `ensure` cleanup runs before terminalization. Keep the already-honored request shielded across cleanup suspension, preserve nested LIFO cleanup, mark a later escaping cleanup transfer as cancellation supersession before outer handling, and reuse existing post-cleanup structured-child drainage before publishing terminal cancellation. Retain legacy replay cancellation/ensure machinery only as the AST fallback until B6. `while` migration remains B4F. Implementation version becomes `0.2.366-SNAPSHOT`.
+
+## 0.2.365-SNAPSHOT
+
+- Implement `LIB009-A — strict default-profile CSV row parsing and eager parse` (GitHub #349) on the ratified `std:csv/CSV` architecture. Add pure-Protos `parse(text)` returning ordinary `Array<Array<String>>` data with comma/double-quote CSV syntax, doubled-quote escaping, multiline quoted fields, exact CR/LF/CRLF preservation inside quoted fields, CRLF/LF/CR record boundaries outside quotes, blank-record retention, empty/trailing fields, variable row widths, whitespace-as-data and strict malformed-quote rejection. Use only authority-free Core UTF-8/Bytes buffering and logarithmic chunk accumulation internally to keep scanning linear without defining byte-oriented CSV semantics. Export exactly `{parse}`; add no custom dialect API, header meaning, type/null conversion, sniffing, permissive repair, filesystem/network effect, Java production source or native-boundary expansion. Implementation version becomes `0.2.365-SNAPSHOT`.
+
+## 0.2.364-SNAPSHOT
+
+- Ratify `D070 — Language-server executable discovery and public launch surface` (GitHub #348) after explicit project-owner approval and expanded comparison of Gleam, Swift/SourceKit-LSP, Dart Analysis Server, OCaml/ocamllsp, rust-analyzer, gopls, clangd, Haskell Language Server, Zig/ZLS, Eclipse JDT LS, Scala/Metals, Apple Pkl, Enso and Pyright/Pylance-style deployment families. Select Candidate A′: public tool-facing `protos language-server`, launched shell-free through the existing `protos.runtime.executable`, with standard LSP over stdin/stdout and stdout reserved for protocol framing. Keep the configured Protos executable as the single Run/Debug/language-server toolchain authority; add no second server path setting, sibling-path discovery rule, editor-owned server version or Java/JAR/classpath coupling. Preserve Native Image, sibling-binary and self-hosted implementations behind the stable launcher command. Release LM009-F4 only after this ratification publication; no executable CLI/editor implementation, Maven version, specification or LM009-G/H language-intelligence semantics are included.
+
+- Ratify `LIB009-0 — CSV Standard Library design` (GitHub #346) after explicit project-owner approval and exhaustive comparison of RFC 4180/RFC4180-bis direction, CSVW, Python, Go, Rust, Apache Commons CSV, CsvHelper, Ruby, Node CSV, Papa Parse, Swift CodableCSV, NimbleCSV, cassava, DuckDB and Apache Arrow. Select Candidate A: canonical `std:csv/CSV`, strict authority-free CSV syntax over ordinary `String` fields and `Array<String>` rows, an eager `parse` / `encode` convenience surface, and incremental `rowParser` as the scalable foundation. Preserve CR/LF/CRLF text inside quoted fields, retain blank records and variable row widths instead of silently discarding/normalizing data, use CRLF for default writing, and keep headers, types/null/schema, sniffing, permissive repair, spreadsheet policy, Encoding/BOM, filesystem/network authority, global registries and typed/columnar ingestion outside the kernel. Explicit custom-dialect constructor/slot spelling, configured variants, resource-limit API and higher-level tabular conveniences remain deferred. Governance/documentation only: no specification, executable Standard Library/runtime, Maven version or native-boundary change.
+
+- Close `LIB008-D — integrated URI conformance and initial-surface closure` (GitHub #347) after published A/B/C by re-running the complete retained `std:uri` conformance together with the Standard Library resolver and Core native-boundary guards, plus the repository top-level publication-validation gate. Confirm the final public surface remains exactly `{parse, format, resolve}`, the seven-slot ordinary frozen representation and strict RFC 3986 parse/format/section-5 resolution contracts remain intact, A/B/C introduced no normative specification or Java-production/native URI boundary, and all normalization, IRI/IDNA, WHATWG, DNS/Network/filesystem/HTTP, scheme-policy and URI-equivalence work remains deferred. Documentation/governance closure only: no Protos source, Java source/test, public API or Maven implementation-version change.
+
+- Implement `LM009-F3 — dedicated stdio LSP host foundation` (GitHub #340) as the process/protocol edge selected by ratified PLAT024 Candidate A′. Add a thin `com.guillermomolina.protos.lsp` adapter using Eclipse LSP4J 1.0.0 for standard JSON-RPC/LSP framing, one client-session-owned language server, full open/change/close document synchronization into the published F2 snapshot custody, standard shutdown/exit status handling, and an internal JVM stdio process entry point. Advertise no diagnostics, symbols, definition, references, completion, hover or signature capability; LM009-G/H continue to own those semantics. Keep all open buffers in one explicitly non-semantic server-local custody domain: F3 does not infer workspace/package/module identity from editor URIs. Select no public `protos ...` CLI spelling or final packaging contract and add no parser-level cancellation policy. Add focused capability, full-sync, lifecycle and real Content-Length stdio framing tests. Ordinary Protos execution creates no LSP process, threads or analysis state. No specification or Protos language semantics change. Implementation version becomes `0.2.364-SNAPSHOT`.
+
+## 0.2.363-SNAPSHOT
+
+- Implement `LIB008-C — RFC 3986 URI-reference resolution` (GitHub #345) over the published `std:uri` parse/format component model. Add pure-Protos `resolve(base, reference)` with strict RFC 3986 section 5.2 authority inheritance, path merge and section 5.2.4 dot-segment removal, requiring an `absolute-URI` base with no fragment and preserving the reference fragment. Keep explicit-scheme references on the strict absolute branch, preserve encoded spelling outside literal dot-segment processing, validate inputs/results through the existing format/parse syntax authority, and return fresh frozen ordinary seven-slot data. Add the official section 5.4 normal/abnormal corpus plus boundary/failure conformance; export exactly `{parse, format, resolve}`. Add no normalization API, DNS/Network/filesystem/HTTP effect, Java production source or native boundary. Implementation version becomes `0.2.363-SNAPSHOT`.
+
+## 0.2.362-SNAPSHOT
+
+- Migrate `PERF006-B4D — Error handlers` to the ratified PLAT021 C-prime control path. Preserve ordinary `Error.signal` / `Error.handle(body, handler)` lookup and exact Error occurrence identity while selecting/deactivating the innermost Task-local handler token before Bytecode EH resolves crossed cleanup. Execute the canonical standard handler extent as Bytecode `TryCatch`, keep the selected handler removed while its handler Closure runs or suspends, preserve outer-handler search for replacement Errors, and retain the evaluator/replay implementation only as the AST fallback until B6. Cancellation unwind and `while` migration remain B4E/B4F. Implementation version becomes `0.2.362-SNAPSHOT`.
+
+## 0.2.361-SNAPSHOT
+
+- Implement `LM009-F2 — session/workspace snapshot custody` (GitHub #340) on the published F1 parser-authority core. Add one client-session-local `ProtosStaticAnalysisSession` with independent opaque workspace custody domains, concurrent document maps, immutable snapshot capture, exact-value stale-result detection, replacement/removal, and no global semantic state. Document versions remain opaque metadata: F2 deliberately does not invent LSP version-order rules, path/URI/module identity, cancellation semantics, workspace package resolution, background scheduling, or editor-visible diagnostic/navigation policy. Concurrent parsing observes one captured snapshot while later replacement/removal can only make its tagged result stale. Add focused partitioning, stale-result, version-opacity, lifecycle custody and concurrent-independent-document tests. LM009-F remains IN_PROGRESS for the dedicated stdio LSP host and protocol cancellation/lifecycle edge. No specification or Protos language semantics change. Implementation version becomes `0.2.361-SNAPSHOT`.
+
+## 0.2.360-SNAPSHOT
+
+- Implement `LIB008-B — URI format and exact textual round-trip` (GitHub #344) on the ratified `std:uri` seven-component model. Add pure-Protos `format(reference)` over caller-constructed or parsed ordinary component data, preserve exact stored spelling and absent-vs-present-empty delimiters, and validate the recomposed text through the already-published strict RFC 3986 `parse` authority before returning it. Keep serialization linear through authority-free UTF-8/Bytes buffering; export exactly `{parse, format}`; add real-`std:` round-trip, constructed-data and malformed-input conformance. Add no normalization, percent helper, URI prototype/equality law, resolver, DNS/Network/filesystem effect, Java production source or native boundary. Implementation version becomes `0.2.360-SNAPSHOT`.
+
+## 0.2.359-SNAPSHOT
+
+- Implement `LM009-F1 — parser-authority static-analysis core` (GitHub #340) as the first executable consumer of ratified PLAT024 Candidate A′. Add an editor-neutral immutable source snapshot, protocol-neutral parse success/failure results, and `ProtosStaticAnalysisCore` that invokes the real `ProtosParser` directly over unexecuted source. Preserve exact parser `SourceSpan`, message and unexpected-end classification without translating them into LSP diagnostics yet; treat document identity/version as opaque analysis metadata; introduce no Truffle Context, guest execution, module/path guessing, workspace index, global mutable registry, LSP dependency or VS Code semantic implementation. Add focused tests for valid source, unexpected-token and unexpected-EOF failures, plus opaque snapshot metadata. LM009-F remains IN_PROGRESS for session/workspace custody and the stdio LSP host. No Protos specification or public language semantics change. Implementation version becomes `0.2.359-SNAPSHOT`.
+
+## 0.2.358-SNAPSHOT
+
+- Ratify `PLAT024 — Static language-service hosting and protocol boundary` (GitHub #342) after explicit project-owner approval and exhaustive review of all 16 principal + 21 experimental/historical Truffle catalogue entries, including Apple Pkl as the strongest direct precedent, plus focused future-endurance, scalability and Protos-philosophy scoring. Select Candidate A′: a dedicated toolchain-matched Protos static language-server process owned by each editor/client session, standard LSP over stdio as the baseline transport, a thin editor client, and a protocol-neutral analysis core that directly reuses the real parser/source/module/package authorities without guest execution or a Truffle Context. Keep ordinary runtime execution free of language-server overhead, reject a global daemon and editor-side duplicate semantics as the baseline, preserve Graal dynamic LSP as optional augmentation, and retain a future self-hosted/native server behind the same LSP/core boundary. Release LM009-F only after this ratification publication; no specification, executable implementation, Maven implementation version, DAP architecture or editor executable asset changes are included.
+
+- Implement `LIB008-A — URI component data and strict RFC 3986 parse` (GitHub #341) as the first executable slice of the ratified `std:uri` design. Add a pure-Protos strict RFC 3986 URI-reference parser that returns fresh frozen ordinary seven-slot component records, preserves exact accepted scheme/userInfo/host/port/path/query/fragment and percent-triplet spelling, and distinguishes absent components from present-empty components. Validate and decompose generic authority syntax into preserved textual userInfo/host/port fields, including IPv6 and IPvFuture literals, without DNS, scheme policy, normalization, IDNA/IRI or WHATWG repair; keep all parser helpers local so the A-stage module exports exactly `{parse}`. Use the existing authority-free Core UTF-8 Encoding/Bytes mechanism only as an internal linear-time component buffer. Add real-`std:` Protos conformance for accepted forms, malformed syntax, exact component data, frozen ordinary identity, percent escapes, IP literals, arity/domain rejection and exact module exports. No specification, Java production source or native boundary changes. Implementation version becomes `0.2.358-SNAPSHOT`.
+
+## 0.2.357-SNAPSHOT
+
+- Ratify `PLAT023 — Async exact-execution carrier topology for Test Tool`
+  (GitHub #335) after explicit project-owner approval and exhaustive review of
+  the current Truffle implementation catalogue including Apple Pkl, plus focused
+  future-resilience, scalability and Protos-philosophy scoring. Select Candidate
+  A′: every exact execution already admitted by bundled-Protos H2B scheduling
+  receives one fresh named Java platform Thread; host Submission adds no second
+  concurrency limit or TestPlan queue, retains accepted-work custody through
+  terminal cleanup, never reuses the production Actor carrier pool, and remains
+  replaceable behind the D055 async exact-execution boundary. Preserve D069
+  `--jobs N` as logical Test Tool capacity rather than a JVM-thread count; defer
+  virtual-thread migration, OS-worker hard kill, remote transport, resources,
+  retry/sharding and CPU/NUMA tuning. Release TOOL002-H2B3 without changing
+  executable implementation, Maven implementation version, specification or
+  native boundary.
+
+- Ratify the refined `LIB008-0 — URI reference Standard Library design` (GitHub #339)
+  after explicit project-owner approval. Keep the strict RFC-3986-first,
+  synchronous, deterministic and authority-free architecture, and select canonical
+  module `std:uri` with fresh behavior-free frozen seven-slot ordinary records
+  `{scheme,userInfo,host,port,path,query,fragment}`. `null` means absent while an
+  empty String preserves present-but-empty delimiters; generic host/port remain text.
+  The initial surface is exactly `parse` / `format` / `resolve`; `resolve` requires
+  an RFC `absolute-URI` base (scheme present, fragment absent). No URI-specific
+  equality/hash, implicit normalization, percent helper surface, IRI/IDNA, WHATWG,
+  DNS/Network/filesystem/HTTP or scheme-specific policy is added. Ordinary-Protos
+  UTF-8/Bytes scanning remains an implementation option for linear scaling without
+  changing Core. Governance/documentation only: no specification, executable
+  Standard Library/runtime, Maven version or native-boundary change.
+
+- Migrate `PERF006-B4C — structured ensure` to the ratified PLAT021 C-prime control path. Preserve ordinary `Object.ensure` lookup/provenance while executing the canonical standard implementation as Bytecode `TryFinally`: validation precedes protected-extent entry, suspension is not unwind, body and cleanup may suspend without replay, normal completion preserves the exact body result, pending Error/non-local-return identity survives cleanup suspension, and a later cleanup transfer supersedes the earlier exit. Keep the evaluator/replay implementation as the AST fallback until B6; Error-handler crossing, cancellation unwind, and `while` migration remain B4D/B4E/B4F. Implementation version becomes `0.2.357-SNAPSHOT`.
+
+## 0.2.356-SNAPSHOT
+
+- Implement the LM009-E D065 / PLAT020 / PLAT022 physical-source correction.
+  Keep path-backed source facts backend-neutral until the owning Protos Context
+  is entered; admit only each exact already-selected D065 path read-only in that
+  Context through a deny-by-default custom filesystem; keep unrelated paths,
+  writes and sockets denied; then materialize the physical Truffle Source with
+  `canonicalizePath(false)` and the exact already-read characters. Keep
+  admission Context-local and thread-safe, remove final Truffle `Source`
+  ownership from the resolver payload, preserve virtual/unhosted source paths,
+  and require real DAP to present admitted physical Sources without a positive
+  `sourceReference`. Preserve PLAT018/D060 debugger topology, module semantics,
+  guest filesystem semantics and the VS Code thin-client architecture; live
+  LM009-E S3 remains required before closure.
+
+## 0.2.355-SNAPSHOT
+
+
+- Ratify `D069 — Test Tool parallelism control and default` (GitHub #333) after
+  explicit project-owner approval and exhaustive comparison across Apple Swift
+  Testing/SwiftPM/Xcode, Rust/libtest, cargo-nextest, Go, pytest/xdist, Node,
+  JUnit, Gradle, Maven Surefire, .NET, Elixir ExUnit, CTest, Bazel and Buck2.
+  Select `protos test --jobs N` with positive ordinary Integer `N` as global
+  logical Test Tool execution-slot capacity and preserve absent `--jobs` as
+  `jobs = 1` plus `--jobs 1` as the deterministic serial reduction path. Keep
+  numeric jobs independent of JVM threads/CPUs/Processes/workers so later
+  resource accounting, OS-worker and remote backends compose without redefining
+  the public concept. Defer `jobs=auto`, `-j`, persistent profiles/config,
+  resource weights, PLAT023 carrier topology, timeout/retry/sharding/remote
+  policy. This governance-only ratification changes no executable implementation,
+  Maven implementation version, specification or native boundary.
+- Close `LIB007 — Mathematical integer algorithms` through `LIB007-D`
+  (GitHub #338) after integrated conformance of the complete ratified
+  `std:math/Integer` surface `{gcd,lcm,factorial,pow,powMod}`. Add one real-`std:`
+  Protos closure fixture that composes all five operations, retain the complete
+  A/B/C boundary/domain/arity/large-value corpus and exact no-helper-leakage
+  export assertion, and run repository-selected top-level closure validation.
+  Mark the durable LIB007 design record implementation-complete while retaining
+  all deferred exclusions. No Standard Library executable source, specification,
+  Java production source, Maven implementation version or native boundary changes.
+
+- Advance `PERF006-B4 — control/unwind migration` with bounded B4B non-local return migration under ratified PLAT021 Candidate F. Lower `CanonicalReturn` through the C-prime Bytecode path using the activation's exact live `ProtosReturnHome`, preserve exact return payload identity, consume a transfer only at the prepared invocation that owns that exact home, and carry the same ownership through continuation resume so `^` after a real `Future.value()` suspension cannot escape or replay prior effects. Preserve `InvalidReturn` for missing/completed homes and allow canonical return in already-supported default and composed-expression positions. Do not yet migrate `ensure`, Error handlers, cancellation unwind, or `while`; no Protos specification/public API/global or ThreadLocal control authority changes. Implementation version becomes `0.2.355-SNAPSHOT`.
+
+## 0.2.354-SNAPSHOT
+
+- Ratify `PLAT022 — Context source-readability authority for physical debugger paths` (GitHub #332) after explicit project-owner approval of Candidate D′ and exhaustive Truffle/platform review covering all 16 principal implementations, the historical/experimental catalogue, Graal LSP, Polyglot filesystem machinery, Apple Pkl and mature debugger/source handling. Select one Context-local, deny-by-default read-only authority that admits only exact physical Protos Source paths already selected under D065/PLAT020; keep unrelated files denied, writes and sockets unauthorized, run/debug authority identical, virtual Sources virtual, `ProtosModuleKey`/resolution separate, and already-read characters authoritative. Release the bounded LM009-E implementation slice without changing Protos specification, executable implementation, Maven implementation version, DAP topology, editor protocol or public guest filesystem semantics.
+
+- Implement `LIB007-C — pow / powMod` (GitHub #336) on the ratified
+  `std:math/Integer` surface. Add exact `pow(base,exponent)` with binary
+  exponentiation and canonical `powMod(base,exponent,modulus)` with
+  square-and-multiply plus reduction throughout. Preserve strict ordinary
+  unbounded Core `Integer` inputs, reject negative exponents and non-positive
+  modular moduli, normalize Core negative remainders to `0 <= r < modulus`, and
+  preserve `pow(0,0) == 1` plus `powMod(0,0,m) == 1 mod m` including zero for
+  modulus one. Cover exact large powers/modular exponents, signed-base
+  normalization, family/lookalike rejection, exact arity and exact
+  `{gcd,lcm,factorial,pow,powMod}` exports while retaining A/B regression
+  coverage. Add no modular inverse, negative-exponent extension, constant-time
+  guarantee, Java production/native math bridge or specification change.
+  Implementation version becomes `0.2.354-SNAPSHOT`.
+
+## 0.2.353-SNAPSHOT
+
+- Implement `LIB007-B — factorial` (GitHub #334) on the ratified
+  `std:math/Integer` surface. Add exact `factorial(n)` for non-negative ordinary
+  unbounded Core `Integer` values, preserving the existing strict family gate and
+  using an ordinary-Protos balanced recursive product range so multiplication is
+  not permanently shaped as a naive sequential fold. Cover `0!`, `1!`, representative
+  values through exact `100!`, negative-domain failure, fixed-width/Float/delegated
+  lookalike rejection, exact arity and exact `{gcd,lcm,factorial}` exports while
+  retaining LIB007-A regression coverage. Add no arbitrary magnitude cap, Java
+  production/native math bridge, specification change, implicit numeric widening,
+  power API or backend-specific contract. Implementation version becomes
+  `0.2.353-SNAPSHOT`.
+
+## 0.2.352-SNAPSHOT
+
+- Implement `LIB007-A — gcd / lcm foundation` (GitHub #331) as the first
+  executable slice of the ratified `std:math/Integer` design. Add ordinary-Protos
+  `gcd(a,b)` with sign-normalized Euclidean reduction and `lcm(a,b)` with
+  divide-by-GCD-before-multiply, both restricted to exact unbounded ordinary Core
+  `Integer` arguments through the existing strict Integer receiver-domain gate.
+  Cover zero/sign boundaries, exact arity, fixed-width/Float/delegated-lookalike
+  rejection, exact module exports, and values beyond 64-bit range through the
+  real `std:` resolver. Add no Java production/native math bridge, specification
+  change, implicit numeric widening, `BigInteger` family, factorial/power API or
+  cryptographic guarantee. Implementation version becomes `0.2.352-SNAPSHOT`.
+
+## 0.2.351-SNAPSHOT
+
+- Advance `TOOL002-H2` with `H2B2` complete bounded D-case scheduling. Keep
+  admission in ordinary bundled Protos while reusing the existing execution,
+  closure-wrapper and live-inspection expectation policy: mixed waves may contain
+  `executionAsync` and `executionInspectAsync` Futures but share one Protos-owned
+  `maxInFlight` bound and one `Future.all(...).value()` wave wait. Evaluate only
+  already-rematerialized observations through existing `evaluateDCase` policy and
+  retain deterministic TestPlan result order independently of physical completion
+  order. Add focal evidence covering simple execution, Future resolution,
+  closure-error freshness wrapping, Future terminal failure and stored Future
+  observation identity in the same bounded runner. Keep public `protos test`,
+  `--jobs`/`jobs=auto`, JVM carrier, resources, hard timeout/kill, retry, remote
+  policy, Maven implementation version, specification and native boundary
+  unchanged.
+
+- Advance `TOOL002-H2` with bounded `H2B1` simple-case scheduling after four
+  unpublished validation attempts exposed invalid nested-suspension compositions.
+  Add a Test-Tool-owned bounded kernel in which the current runner Task directly
+  fills one wave with `executionAsync` Futures, waits exactly once at the wave
+  boundary with `Future.all(...).value()`, and evaluates already-rematerialized
+  observations in deterministic TestPlan order. Use the standard suspension-aware
+  `while` protocol for the wave loops; create no `Future.then` continuation Task
+  and no per-case `Closure.future()` worker in the scheduler. Add executable
+  evidence with host capacity above the Protos bound and deliberately reversed
+  physical completion order. Keep sequential `runSimple`, public `protos test`
+  wiring, future/inspection expectation scheduling, public jobs/default/fairness
+  policy, JVM carrier, resource syntax, hard timeout/kill, OS-worker and remote
+  policy unchanged. This intermediate Test-Tool-local slice makes no Maven
+  implementation-version, specification or native-boundary change.
+
+- Ratify `LIB007-0 — Mathematical integer algorithms Standard Library design`
+  (GitHub #329) after explicit project-owner approval and exhaustive comparison
+  across Python/CPython, GHC/ghc-bignum, Apple Swift Numerics, Ruby,
+  Elixir/BEAM, Smalltalk, Rust, .NET, OpenJDK, Julia/GMP, Go, C++/Boost, GMP and
+  Apple Pkl. Select ordinary imported `std:math/Integer` with initial
+  `{gcd,lcm,factorial,pow,powMod}` over exact unbounded ordinary Core `Integer`
+  only; reject implicit fixed-width/Float widening and a duplicate `BigInteger`
+  family; keep algorithms/backend replaceable so Euclid may evolve to
+  Lehmer/HGCD and exponentiation/factorial strategies may specialize without API
+  change; and give `powMod` no cryptographic constant-time guarantee. Release
+  bounded implementation slices only after this durable ratification. No
+  specification, executable implementation/runtime, Maven implementation-version,
+  package-format, license, release-artifact or deployment change.
+
+- Begin `PERF006-B4 — control/unwind migration` with bounded B4A transfer substrate under ratified PLAT021 Candidate F. Make `ProtosSignalException` a Truffle guest exception while preserving the exact Protos Error occurrence and existing signal identity; classify cooperative Task cancellation alongside non-local return as a Truffle `ControlFlowException`; add a backend-private Bytecode EH envelope that carries only the exact original Protos internal control transfer; and wire the Bytecode root interception plus nested call/resume boundary restoration required for later structured cleanup. Add focused identity/category/isolation evidence. Do not yet lower canonical return or migrate `ensure`, `Error.handle`, cancellation unwind, or `while`; no Protos specification, observable semantics, public API, global/ThreadLocal control authority, or selector-specific control intrinsic changes. Implementation version becomes `0.2.351-SNAPSHOT`.
+
+## 0.2.350-SNAPSHOT
+
+- Ratify `D068 — Exact-SHA documentation extractor execution boundary for
+  protos-website` (GitHub #330) after explicit project-owner approval of
+  Candidate A-prime and exhaustive comparison with Apple Swift Symbol
+  Graph/DocC, Go/pkgsite, Rust/rustdoc/docs.rs, Java/Javadoc, .NET/DocFX,
+  Haddock, Dart, Kotlin/Dokka, TypeDoc, ExDoc, Doxygen and Sphinx/autodoc.
+  Require WEB001-J7B to run the Protos-owned documentation producer from the
+  same exact Protos revision selected by `protos-source.lock.json`, and make the
+  existing D064 JSON model the sole durable cross-repository documentation
+  contract. Treat the current JDK21/Maven/TOOL003 invocation as replaceable
+  producer implementation detail; permit only non-authoritative exact-SHA
+  caching; preserve producer-side immutable D064 publication as the future
+  multi-consumer scaling path; and add no website parser, independently
+  versioned extractor release line, committed generated JSON, mandatory Docker
+  ABI, specification change, observable Protos semantic change, Maven
+  implementation-version change, Standard Library semantic change or
+  deployment-runtime change.
+
+- Ratify `PLAT021 — Bytecode C-prime dynamic control/unwind representation` (GitHub #328) after explicit project-owner approval on 2026-09-11 and exhaustive review of the current Truffle implementation catalogue, including Apple Pkl, plus focused future-durability, scalability and Protos-philosophy scoring. Select Candidate F: keep normal values raw, keep PLAT014/019 suspension distinct from unwind, place resumable structured-control phase in Bytecode continuation state, retain guest Error and internal NLR/cancellation as separate transfer lanes, and use only a narrow backend-private EH bridge when internal control must traverse Bytecode cleanup tables. Preserve exact Error and ReturnHome identity, Task-owned cancellation and dynamic-handler authority, suspendible cleanup with transfer supersession, post-lookup implementation provenance, bounded reusable carriers and no replay/global registry/ThreadLocal authority/universal Outcome tax. Release PERF006-B4 for bounded implementation beginning with B4A transfer substrate. No specification, observable Protos semantics, executable runtime implementation, Maven implementation-version, public API, license term or release artifact change.
+
+- Ratify `PLAT020 — Context-bound Truffle file Source materialization` (GitHub #327) after explicit project-owner approval of Candidate A′ and exhaustive review of the complete Truffle implementation catalogue including Apple Pkl. Keep path/content/module facts immutable and backend-neutral outside Truffle Context ownership; materialize genuine physical file-backed Truffle Sources only inside the owning entered Protos Context through that Context's `Env`, preserving D065 path spelling with `canonicalizePath(false)` and the already-read characters with `.content(...)`. Keep `ProtosModuleKey` semantic identity separate, virtual sources virtual, and add no global source registry, Context-crossing `TruffleFile`, editor/DAP repair layer, cache policy, outer-Polyglot execution refactor, specification change, executable implementation or Maven implementation-version change. Release only the bounded LM009-E D065 source-presentation correction.
+
+- Complete the post-D066/D067 minimum `TOOL003` Standard Library documentation
+  extraction path required by WEB001-J7B. Extend the lexer with opt-in line-comment
+  observation that leaves ordinary tokenization unchanged, add a
+  Standard-Library-only static extractor over the real parser, derive canonical
+  `std:` identities from `protos/lib` while excluding physical `core/**`, associate
+  D062 `//!` / `///` Markdown, emit the existing D064 deterministic JSON model
+  including undocumented D067 entries, and report deterministic missing-doc
+  coverage. Generate artifacts on demand from an exact clean Git checkout rather
+  than committing a self-referential revision artifact. Add focused extraction,
+  placement, callable, naming, determinism and current-stdlib tests. No Protos
+  syntax/semantics, Standard Library behavior, visibility/stability policy,
+  runtime documentation state, website renderer, package/CLI/IDE/search framework,
+  or public CLI command is added.
+
+- Ratify `D067 — Standard Library documentation coverage and API-reference
+  publication policy` (GitHub #326) after explicit project-owner approval of
+  Candidate D. Keep the complete mechanically observable importable `std:` module
+  and top-level-slot inventory in the neutral documentation artifact regardless
+  of authored-doc coverage; keep D062 `//!` / `///` prose as an independent
+  optional fact; present undocumented observable entries explicitly rather than
+  silently hiding them or inferring private/unsupported/unstable semantics; and
+  report deterministic missing-documentation coverage without initially making
+  it a build failure. Release only the bounded Standard-Library extractor needed
+  by WEB001-J7B, preserving D061/D062/D064/D066 and TOOL003-A while adding no
+  hide marker, publication manifest, generic package/CLI/IDE/search framework,
+  specification change, executable implementation, Maven implementation-version,
+  Standard Library semantic, deployment or runtime change.
+
+- Ratify `D066 — Documentation authority, project Wiki, and public website topology`
+  (GitHub #325) after explicit project-owner approval and topology re-audit. Keep
+  `guillermomolina/protos` as canonical/version-sensitive authority, reserve the
+  Protos GitHub Wiki for non-authoritative contributor/project knowledge, and
+  retain independent `guillermomolina/protos-website` as public presentation with
+  exact-SHA Protos source input. Refine rather than replace WEB001-B; retain
+  D061/D062/D064 and published TOOL003-A, abandon the unpublished pre-D066
+  TOOL003-B candidate, and require WEB001-J7B to re-derive the smallest
+  Protos-owned deterministic Standard Library extraction mechanism needed by its
+  real consumer before further cross-consumer generalization. No specification,
+  executable implementation, Maven implementation-version, runtime, Standard
+  Library semantic, package-format or deployment change.
+
+- Ratify `D065 — File-backed tooling source path identity and canonicalization` (GitHub #323) after explicit project-owner approval and exhaustive cross-language/source-debugging review. Select Candidate B: ordinary filesystem-backed Protos sources expose to tooling the absolute lexically-normalized path by which the current execution/workspace host selected the source, without resolving symlinks solely for presentation identity. Keep `ProtosModuleKey` and package/module rules authoritative for semantic identity; keep generated/in-memory sources virtual; add no alias registry, editor-side path map or DAP proxy; and defer explicit client/target path mapping until a future mode genuinely has distinct namespaces. Release the bounded LM009-E source-presentation correction while preserving D060/PLAT018 debugger architecture. No specification, executable implementation, Maven implementation-version, Standard Library semantic, package-format, release or deployment change.
+
+- Close `GITHUB010 — Exhaustive Dxxx/PLATxxx comparative decision research
+  policy` (GitHub #324) by strengthening the pre-approval design gate for future
+  substantive decisions. Require broad, materially diverse prior-art research;
+  for Dxxx normally compare at least five credible systems across at least three
+  distinct approaches; for Truffle-related PLATxxx survey the relevant public
+  Truffle implementation space (including Apple Pkl when materially comparable)
+  plus mature non-Truffle/OS/runtime evidence where useful. Require every
+  surviving candidate to be scored 1–5 with justified confidence across
+  correctness/invariants, Protos alignment, future-option resilience,
+  scalability, conceptual simplicity, portability/implementation freedom,
+  runtime/resource cost, failure/operability, reversibility/migration cost, and
+  evidence maturity/implementation risk; require explicit future-regret/escape
+  path stress testing and the strongest argument against the recommendation.
+  Numeric totals remain advisory rather than authority, and explicit
+  project-owner approval remains mandatory. Existing ratified decisions are not
+  reopened. No specification, Protos semantics, runtime implementation,
+  implementation version, public API, release artifact, or scheduling-priority
+  change.
+
+- Begin `TOOL003 — Documentation model and source extractor` (GitHub #322) with
+  bounded `TOOL003-A` under ratified D061/D062/D064. Add a reusable
+  implementation-neutral documentation model with structural Standard Library
+  and package module lineage, stable `(module lineage, top-level slot)` symbol
+  identity, separate exact artifact scopes/occurrence keys, normalized
+  repository-relative source provenance, optional mechanical callable facts and
+  Markdown payload, plus deterministic UTF-8 JSON v1 serialization. Reject
+  duplicate semantic identities, absent-module symbol references,
+  non-normalized/absolute source paths and invented `std:core` identity; keep
+  source coordinates, callable shape, revision/release/content data, UUIDs and
+  hashes out of semantic identity. Emit empty article/relationship collections
+  until their deferred vocabularies are separately ratified. Add focused tests
+  for identity/occurrence separation, source moves, callable evolution,
+  duplicate rejection, privacy/path constraints, canonical ordering, Unicode,
+  LF normalization and exact final-newline output. Source extraction,
+  Standard-Library traversal/artifact generation, API coverage/stability,
+  doctests and website rendering remain outside A. No Protos specification,
+  observable runtime semantics, Standard Library semantics, package format or
+  website change. Implementation version becomes `0.2.349-SNAPSHOT`.
+
+## 0.2.348-SNAPSHOT
+
+- Ratify `GITHUB009 — Native Issue dependency governance and reconciliation`
+  (GitHub #321) after explicit project-owner approval of Candidate C-prime. Make
+  native GitHub `blocked by` / `blocking` relationships the live authority for
+  specific Issue-to-Issue dependencies while keeping Parent/Sub-issue hierarchy,
+  `status:*`, `priority:*`, and durable repository evidence orthogonal. Forbid
+  inferring dependency edges from blocked status, hierarchy, family, `Triggered
+  by`, stale `State at creation` prose, satisfied prerequisites or numbering;
+  forbid mechanical hierarchy propagation; preserve closed-blocker dependency
+  history; and require explicit coordination to choose a dependent Issue's next
+  Status. Keep publication launchers repository-only and defer the reviewed live
+  dependency-graph reconciliation to the post-publication GITHUB009 activation
+  step. No specification, Protos semantics, runtime implementation,
+  implementation version, release artifact or scheduling-priority change.
+
+- Close `PERF001 — Core v0.1 baseline benchmark suite` after PERF001-F retained
+  Future/P/Actor reference evidence and PERF001-G final reproducibility/reporting.
+  Record F evidence `guillermomolina/protos-benchmarks@f34e37da11f209aa9f9ea84465822c3362fc4da0` from H3 harness
+  `b8a9eeca85c241f544512a02a6fa29d935f240ef` and G2 evidence `guillermomolina/protos-benchmarks@45493b49872860f5d29ad3d3a624e0af040c743b` from exact
+  G1 harness `2fad6741b429c3e8d69683806e3aadc64f0812cf`. The final bounded exact-pin replay passes D 44/44, E 18/18
+  and F 12/12 non-retained 2/2/2 while preserving D/E/F retained timing evidence
+  as the sole timing authority; no timing-drift threshold, replacement timing
+  corpus, specification, runtime, implementation version, public API, license
+  term or semantic/platform decision changes.
+
+- Close `GITHUB008 — Release milestone governance` (GitHub #320) with a narrow
+  release-only Milestone contract. Reserve GitHub Milestones for concrete
+  project-owner-selected release targets rather than families, implementation
+  phases, backlog buckets, Project Roadmap, Status or Priority; keep native
+  parent/sub-issue links as hierarchy and Git tags/GitHub Releases as source
+  identity/published delivery. Make milestone due dates optional and real,
+  require release-significant membership rather than mechanical hierarchy
+  propagation, avoid duplicate progress accounting through container parents and
+  children, and forbid inferring milestones from family/status/priority/version
+  movement. Keep historical prerelease `v0.2.236` without a retrospective
+  milestone and deliberately do not create `0.3.0` or any future milestone until
+  the project owner selects an actual release target. No specification, Protos
+  semantics, runtime implementation, implementation version, release artifact,
+  release target, compatibility promise or scheduling priority changes.
+
+- Ratify `D064 — Neutral documentation model schema and stable symbol identity` (GitHub #317) after explicit project-owner approval and exhaustive cross-ecosystem review. Select Candidate G-prime: a compact versioned graph-lite JSON documentation model with durable semantic `SymbolIdentity = (module lineage, top-level slot name)` separated from exact `SymbolOccurrenceKey = (ExactArtifactScope, SymbolIdentity)` and from source/release/content provenance. Keep callable parameter/rest shape as mechanical data rather than identity; treat true module/slot renames as new identities; reject duplicate semantic IDs within one exact artifact; permit only artifact-local numeric indexes as optimizations; require deterministic UTF-8/LF output without timestamps or absolute paths; and allow future sharded/serving formats without redefining symbol identity. Preserve PackageId/version/content separation and defer API coverage, stability/deprecation, doctests, article-ID authoring, rename relations, runtime reflection and website presentation. No specification, runtime/implementation, Maven implementation-version, Standard Library semantic, package-format or deployment change.
+
+- Complete `CLI008-B — value inspection / pretty rendering implementation` with bounded
+  `CLI008-B2B` compact/multiline diagnostic layout under ratified D063. Keep structured
+  values on one line while their bounded compact diagnostic representation is at most 96
+  characters; above that evolvable CLI-only threshold, render Array/Map/IdentityMap,
+  ordinary Object, Bytes/ByteRegion and ProcessArguments structures with deterministic
+  two-space indentation and explicit line breaks. Wide scalar/String diagnostics remain
+  single-line values rather than being reformatted as structure. Preserve the existing
+  depth/item/String/output bounds, cycle handling, local-slot-first Object projection,
+  specialized-family opacity, non-evaluating behavior, and `inspect != print != serialize`
+  separation. Add focused evidence that short structures stay compact, wide structures
+  switch deterministically to multiline layout, nested structure is indented, and wide
+  scalars remain single-line. `CLI008-B` and `CLI008-B2` are now CLOSED; `CLI008-C`
+  remains blocked on PERF006-B4/B5 and no guest-stack capture is included. No specification,
+  serialization API, Error-object, `print(...)`, Actor/Process semantics, runtime resource
+  behavior, or public compatibility promise for the exact width/indentation is introduced.
+
+## 0.2.347-SNAPSHOT
+
+- Add `GITHUB007 — Issue intake and creation governance` (GitHub #319) to keep
+  newly created Issues coherent with GITHUB004–GITHUB006 without reintroducing a
+  second Project authority. Add distinct tracked-work, bug, documentation and
+  community-request intake forms; give form-created Issues neutral
+  `status:inbox` with Priority intentionally unset; keep community reports free
+  of formal `family:*` classification until maintainer promotion; and add a
+  repository-local intake workflow/helper that derives formal family from an
+  authorized identifier, repairs one unambiguous missing native parent, rejects
+  parent conflicts, and refuses to promote untrusted identifier-shaped
+  submissions. Keep the existing Project status/priority synchronizer as the
+  sole Status/Priority projection path. No specification, Protos semantics,
+  runtime implementation, implementation version, public API, release artifact,
+  license term or design decision changes.
+
+- Begin `LM009-E — VS Code debugging integration` with the explicitly owner-approved Candidate B-prime E1 wiring. Contribute Protos source breakpoints and a launch-only `protos` debugger surface; derive F5 active-file configuration without requiring `launch.json`; retain `program` plus optional string `args` as the persisted launch surface; reuse `protos.runtime.executable`; and have one `DebugAdapterDescriptorFactory` launcher child per session start `protos debug <absolute-file> [args...]` without a shell, consume only D060 version-1 `PROTOS_DEBUG_READY` stdout framing, validate numeric loopback endpoint data, and return `DebugAdapterServer` so VS Code talks directly to the real GraalVM DAP. Add deterministic Node/Python coverage for local/Remote active-file configuration, argument/runtime handling, readiness validation, failure cleanup and concurrent-session isolation. Keep attach, remote listen, readiness files, stop-on-entry, DAP proxying and stronger `terminateDebuggee` behavior out of the baseline. S3 live VS Code evidence remains required before LM009-E closure. No Protos specification/runtime, Maven implementation-version, static language service or Marketplace release change.
+
+- Advance `CLI008-B — value inspection / pretty rendering implementation` with bounded
+  `CLI008-B2A` specialized-family inspection coverage under ratified D063. Keep content-backed,
+  authority-free sequence values inspectable from already-materialized semantic snapshots:
+  `Bytes[...]`, `ByteRegion[...]`, and `ProcessArguments[...]`. Give the current specialized
+  capability/reference/resource families stable CLI-only opaque labels instead of `<value>`,
+  including ActorRef, GroupRef, send operations, Encoding, Environment, Path, Process,
+  Process streams, Filesystem/File, Network, TcpConnection, and TcpListener. Do not expose
+  Actor/Group identities, host authority targets, environment contents, native handles,
+  transport/resource state, endpoint internals, Java class names, or host `toString()`.
+  Preserve the existing diagnostic depth/item/String/output bounds and non-evaluating behavior.
+  Add focused evidence for byte-sequence content, resource opacity, Path/Encoding opacity, and
+  the REPL `process.args()` snapshot. `CLI008-B` remains `IN_PROGRESS`; `CLI008-B2B` owns the
+  remaining compact/multiline pretty-layout reconciliation, while `CLI008-C` remains blocked on
+  PERF006-B4/B5. No specification, serialization API, Error-object, stack-capture, `print(...)`,
+  Actor/Process semantics, or runtime resource behavior changes.
+
+## 0.2.346-SNAPSHOT
+
+- Begin `CLI008-B — value inspection / pretty rendering implementation` with bounded `CLI008-B1` after ratified D063 Candidate B + S3. Add a dedicated non-evaluating CLI diagnostic inspector while leaving `ProtosValueRenderer` and the standalone `print(...)` path unchanged; route REPL result and existing Error-value presentation through the diagnostic path; render source-like scalars/quoted escaped Strings, bounded Array/Map/IdentityMap values, and ordinary Objects from local slots only; detect cycles; bound depth, item count, String length and total output; and keep Closure/Future values opaque behind stable diagnostic family labels without Java/Truffle names. Add focused unit and REPL evidence that diagnostic Strings remain quoted, ordinary Object inspection shows local state, cycles/truncation are bounded, and `print("hello")`/`print(object)` retain their prior program-output behavior. CLI008-B remains IN_PROGRESS for specialized opaque-family coverage and richer compact/multiline pretty presentation; CLI008-C remains blocked on PERF006-B4/B5. No specification, serialization API, Error-object, stack-capture, Actor/Process semantics or public guest protocol change.
+
+## 0.2.345-SNAPSHOT
+
+- Close `LM009-D — Public debugger launch contract` after D1/D2 publication and final D3 evidence reconciliation. Retain ratified PLAT018 C-prime RuntimeHost/Engine ownership and D060 B-prime `protos debug <file> [args...]` stdout-readiness contract; record production GraalVM DAP availability, OS-ephemeral loopback endpoint discovery, real DAP initialize/launch/configuration flow, application-argument preservation, guest stdout/stderr projection through DAP without control-stream duplication, and normal completion lifecycle through DAP `terminated`, client transport teardown, RuntimeHost/Engine cleanup and launcher exit 0. The earlier D2 test failures are retained as implementation evidence that exposed and corrected Process standard-stream bypass and DAP transport teardown ordering rather than being suppressed. Release LM009-E for the actual VS Code F5/S3 integration. No attach, remote-listen, readiness-file, stop-on-entry or stronger Stop/`terminateDebuggee` contract is selected; no specification, executable runtime, editor asset or Maven implementation-version change is made by this reconciliation.
+
+- Activate `GITHUB006 — Native Issue hierarchy authority and migration closure`
+  (GitHub #316) after the project-owner-approved native hierarchy reconciliation
+  reports 106 declared parent relationships, 68 already native, 38 added, zero
+  conflicts and maximum depth 4. Make native GitHub parent/sub-issue linkage the
+  canonical live parent/child coordination structure for formal work; require
+  newly created formal child Issues to establish that native relationship at
+  creation or immediately afterward; retain textual `Parent:` prose only as
+  explanatory/historical context rather than hierarchy authority; and expose
+  `Parent issue` plus `Sub-issues progress` as derived Project presentation.
+  Preserve the existing durable-granularity rule so mechanical implementation
+  phases do not become Issues merely from decomposition. No specification,
+  Protos semantics, runtime implementation, implementation version, public API,
+  release artifact, license term, status/priority authority, or design decision
+  changes.
+
+- Implement `LM009-D2` public debugger launcher/readiness wiring under the ratified D060 B-prime contract. Add `protos debug <file> [args...]` to the ordinary CLI; read/validate the explicit source before debugger startup; preserve ordinary application-argument exclusion of the command/source identity; create the D1 PLAT018 debug RuntimeHost; emit exactly one compact `PROTOS_DEBUG_READY {json}` v1 record on stdout after the OS-allocated loopback endpoint is bound and before the Process Context can execute; retain launch diagnostics on stderr; and route guest stdout/stderr through the currently entered Truffle `Env.out()` / `Env.err()` channels so the real GraalVM DAP output consumer observes them, while null Context sinks prevent duplication onto D060 control pipes. Refactor only the shared standalone bootstrap/binding mechanics needed to keep normal and debug execution on the same Process setup. Add a real-DAP public-CLI launch integration test plus CLI help/failure coverage. VS Code F5 remains LM009-E; no attach/remote-listen/readiness-file/stop-on-entry surface is added. No Protos specification or observable language-semantics change. Implementation version becomes `0.2.345-SNAPSHOT`.
+
 ## 0.2.344-SNAPSHOT
+
+- Ratify `D062 — Canonical API documentation authoring convention` (GitHub #313) after explicit project-owner approval and an expanded 21-ecosystem audit including Self, Io, Smalltalk/Pharo, JavaScript, Lua, Go, Rust, Zig, C++, C#, Java, Swift, Kotlin, Haskell, Dart, OCaml, Scala, Ruby, Python, Julia and Elixir. Select Candidate E-prime: `//!` documents the containing module and `///` the immediately following documentable top-level symbol as tooling-only conventions over ordinary Protos `//` comments; ordinary `//`/`/* ... */` remain non-API comments; and canonical supplemental Markdown in `guillermomolina/protos` carries long-form narrative material. Preserve D061 mechanical symbol extraction, avoid duplicate signatures/tags, and defer neutral-model schema, stable symbol IDs, API coverage/publication policy, deprecation vocabulary, doctests, supplemental-article identity and presentation. No specification, runtime/implementation, implementation-version, observable semantics, Standard Library semantics, export/private rule, package format, website or deployment change.
+
+- Ratify `D063 — CLI diagnostic inspection and guest stack presentation contract` (GitHub #314) after explicit project-owner approval of Candidate B + S3 and the additional `inspect != print != serialize` separation. Keep ordinary `print(...)` program output distinct from bounded non-evaluating REPL/CLI inspection; prefer source-like diagnostic forms where natural without requiring universal evaluable/round-trip output; reserve machine interchange for explicit serialization contracts; introduce no nominal `type`; render ordinary objects local-slot-first with deterministic cycle/depth/item/string bounds; and define uncaught guest stacks as guest-only structured metadata owned by the Error transfer/failure occurrence rather than the Error object. Preserve same-Task logical stack across `Future.value()` suspension/resume when C-prime supplies the authority, show async origins only from trustworthy retained provenance, and never fabricate Actor/Process/JVM/Truffle stack continuity. Close CLI008-A, release CLI008-B, and keep CLI008-C dependent on PERF006 B4/B5 or a later PLAT gate only if a new durable host-specific capture decision remains. No specification, runtime implementation, Maven implementation-version, serialization API, Error object, or observable Protos semantic change.
 
 - Ratify `PLAT019 — native semantic suspension bridge into Bytecode C-prime continuations` (GitHub #310) after explicit project-owner approval on 2026-09-10 and exhaustive review of the complete Truffle implementation catalogue (16 principal + 21 experimental/historical entries), including Apple Pkl. Select B-prime: explicit suspension-capable native provenance, explicit resumability before abandoning Java, interpreter-owned PLAT014 C-prime capture, and two-phase Task capture-pending then atomic continuation publication. Deliberately leave the private native-to-interpreter transport representation unspecified. Preserve ordinary native fast paths, Closure extraction/rebinding, lost-wakeup/cancellation/Error semantics, bounded reusable carriers, no replay/global registry/thread identity and B4/B6 ownership boundaries. Release PERF006-B3 for bounded implementation beginning with the two-phase Task publication substrate. No specification, observable semantics, runtime implementation, public API, license term or Maven implementation-version change.
 

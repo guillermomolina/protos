@@ -1,0 +1,61 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+CSV: import("std:csv/CSV")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+simple: CSV.parse("alpha,beta,gamma")
+require(simple.size() == 1)
+require(simple[0].size() == 3)
+require(simple[0][0] == "alpha")
+require(simple[0][1] == "beta")
+require(simple[0][2] == "gamma")
+
+quoted: CSV.parse("\"a,b\",\"a\"\"b\",plain")
+require(quoted.size() == 1)
+require(quoted[0].size() == 3)
+require(quoted[0][0] == "a,b")
+require(quoted[0][1] == "a\"b")
+require(quoted[0][2] == "plain")
+
+empties: CSV.parse(",x,")
+require(empties.size() == 1)
+require(empties[0].size() == 3)
+require(empties[0][0] == "")
+require(empties[0][1] == "x")
+require(empties[0][2] == "")
+
+variable: CSV.parse("a\nb,c\nd,e,f")
+require(variable.size() == 3)
+require(variable[0].size() == 1)
+require(variable[1].size() == 2)
+require(variable[2].size() == 3)
+
+whitespace: CSV.parse("  a , b\t,\" c \"")
+require(whitespace[0][0] == "  a ")
+require(whitespace[0][1] == " b\t")
+require(whitespace[0][2] == " c ")
+
+unicode: CSV.parse("é,雪,\"🙂,ñ\"")
+require(unicode[0][0] == "é")
+require(unicode[0][1] == "雪")
+require(unicode[0][2] == "🙂,ñ")
+
+true

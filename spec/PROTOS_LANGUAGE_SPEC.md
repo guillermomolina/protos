@@ -2,10 +2,10 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-09
+Last updated: 2026-09-11
 Normative I/O-domain semantics are defined in `io/IO_CORE.md`.
 
-Normative semantic-domain ownership is modularized under `semantics/`: `OBJECT_MODEL.md`, `EXECUTION_AND_CONTROL.md`, `CALLABLES.md`, `MODULES.md`, `ERRORS.md`, and `VALUES_AND_COLLECTIONS.md`. Compatibility headings retained in this document are navigation only.
+Normative semantic-domain ownership is modularized under `semantics/`: `OBJECT_MODEL.md`, `EXECUTION_AND_CONTROL.md`, `CALLABLES.md`, `MODULES.md`, `ERRORS.md`, `VALUES_AND_COLLECTIONS.md`, and `MATCHING.md`. Compatibility headings retained in this document are navigation only.
 
 
 Normative concurrency-domain semantics are defined by the modular specifications

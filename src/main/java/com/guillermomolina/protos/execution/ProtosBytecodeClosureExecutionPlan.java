@@ -22,13 +22,23 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
+import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
+import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMember;
+import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
+import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
+import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
@@ -87,9 +97,20 @@ final class ProtosBytecodeClosureExecutionPlan {
                 CanonicalExpression defaultExpression =
                         parameter.defaultValue().orElseThrow();
                 if (!(defaultExpression instanceof CanonicalLiteral)
+                        && !(defaultExpression instanceof CanonicalClosure)
+                        && !(defaultExpression instanceof CanonicalObject)
                         && !(defaultExpression instanceof CanonicalLookup)
+                        && !(defaultExpression instanceof CanonicalIntrinsic)
+                        && !(defaultExpression instanceof CanonicalMember)
+                        && !(defaultExpression instanceof CanonicalIdentity)
+                        && !(defaultExpression instanceof CanonicalNotIdentity)
                         && !(defaultExpression instanceof CanonicalCall)
-                        && !(defaultExpression instanceof CanonicalSend)) {
+                        && !(defaultExpression instanceof CanonicalSend)
+                        && !(defaultExpression instanceof CanonicalReturn)
+                        && !(defaultExpression instanceof CanonicalCreate)
+                        && !(defaultExpression instanceof CanonicalAssign)
+                        && !(defaultExpression instanceof CanonicalIndexedAssign)
+                        && !(defaultExpression instanceof CanonicalSuperSend)) {
                     throw new UnsupportedOperationException(
                             "PERF006-B2C3B3 default expression is not migrated: "
                                     + defaultExpression.getClass().getSimpleName());
@@ -218,6 +239,10 @@ final class ProtosBytecodeClosureExecutionPlan {
      */
     Object executeActivation(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
-        return activationTarget.call(activation);
+        try {
+            return activationTarget.call(activation);
+        } catch (ProtosBytecodeControlTransferException bridged) {
+            throw bridged.transfer();
+        }
     }
 }

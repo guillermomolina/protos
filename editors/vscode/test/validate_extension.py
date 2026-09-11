@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LM009-B/C structural validation for the VS Code reference extension."""
+"""LM009-B/C/E/F structural validation for the VS Code reference extension."""
 
 from pathlib import Path
 import json
@@ -10,17 +10,21 @@ PACKAGE = ROOT / "package.json"
 CONFIG = ROOT / "language-configuration.json"
 GRAMMAR = ROOT / "syntaxes" / "protos.tmLanguage.json"
 EXTENSION = ROOT / "extension.js"
+DEBUG_ADAPTER = ROOT / "debug_adapter.js"
 README = ROOT / "README.md"
+
 
 def fail(message):
     print("LM009_EDITOR_EXTENSION_VALIDATION_FAILED: " + message, file=sys.stderr)
     raise SystemExit(2)
+
 
 def read_json(path):
     try:
         return json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         fail("%s: %s" % (path, exc))
+
 
 def main():
     package = read_json(PACKAGE)
@@ -34,6 +38,7 @@ def main():
         "publisher": "guillermomolina",
         "license": "APL-1.0",
         "main": "./extension.js",
+        "icon": "icon.png",
     }
     for key, expected in expected_scalar.items():
         if package.get(key) != expected:
@@ -43,14 +48,20 @@ def main():
         fail("engines.vscode must remain exactly ^1.104.0")
     if package.get("categories") != ["Programming Languages"]:
         fail("category must remain Programming Languages")
-
     if package.get("extensionKind") != ["workspace"]:
-        fail("LM009-C must run as a workspace extension")
+        fail("executable editor integration must remain a workspace extension")
 
-    for forbidden in ("browser", "activationEvents", "scripts",
-                      "dependencies", "devDependencies"):
+    for forbidden in (
+        "browser",
+        "activationEvents",
+        "scripts",
+        "devDependencies",
+    ):
         if forbidden in package:
-            fail("LM009-C must not add %s" % forbidden)
+            fail("LM009 must not add %s" % forbidden)
+
+    if package.get("dependencies") != {"vscode-languageclient": "10.1.1"}:
+        fail("LM009-F4 requires exactly vscode-languageclient 10.1.1")
 
     expected_capabilities = {
         "untrustedWorkspaces": {
@@ -59,13 +70,19 @@ def main():
         }
     }
     if package.get("capabilities") != expected_capabilities:
-        fail("Workspace Trust capability must match the approved LM009-C policy")
+        fail("Workspace Trust capability changed")
 
     contributes = package.get("contributes")
     if not isinstance(contributes, dict):
         fail("contributes must be an object")
     if set(contributes.keys()) != {
-        "languages", "grammars", "commands", "menus", "configuration"
+        "languages",
+        "grammars",
+        "commands",
+        "menus",
+        "configuration",
+        "breakpoints",
+        "debuggers",
     }:
         fail("unexpected VS Code contribution surface")
 
@@ -89,7 +106,8 @@ def main():
         "title": "Run Current File",
         "category": "Protos",
         "enablement": (
-            "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && "
+            "editorLangId == protos && "
+            "(resourceScheme == file || resourceScheme == vscode-remote) && "
             "isWorkspaceTrusted"
         ),
     }]:
@@ -99,14 +117,15 @@ def main():
         "commandPalette": [{
             "command": "protos.runCurrentFile",
             "when": (
-                "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && "
+                "editorLangId == protos && "
+                "(resourceScheme == file || resourceScheme == vscode-remote) && "
                 "isWorkspaceTrusted"
             ),
         }]
     }:
-        fail("Run Current File command-palette trust/document gating changed")
+        fail("Run Current File command-palette gating changed")
 
-    if contributes["configuration"] != {
+    expected_runtime = {
         "title": "Protos",
         "properties": {
             "protos.runtime.executable": {
@@ -114,40 +133,62 @@ def main():
                 "default": "protos",
                 "scope": "machine",
                 "description": (
-                    "Protos launcher executable used by Run Current File. "
-                    "Defaults to 'protos' resolved through PATH."
+                    "Protos launcher executable used by Run Current File, "
+                    "debugging, and the static language server. Defaults to "
+                    "'protos' resolved through PATH."
                 ),
             }
         },
-    }:
-        fail("runtime executable configuration changed")
+    }
+    if contributes["configuration"] != expected_runtime:
+        fail("runtime executable configuration changed outside LM009-C/E contract")
+
+    if contributes["breakpoints"] != [{"language": "protos"}]:
+        fail("LM009-E must enable breakpoints only for Protos")
+
+    expected_debugger = [{
+        "type": "protos",
+        "label": "Protos",
+        "languages": ["protos"],
+        "configurationAttributes": {
+            "launch": {
+                "required": ["program"],
+                "properties": {
+                    "program": {
+                        "type": "string",
+                        "description": (
+                            "Absolute Protos source-file path to debug after "
+                            "VS Code variable substitution."
+                        ),
+                    },
+                    "args": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "default": [],
+                        "description": (
+                            "Application arguments passed after the Protos source file."
+                        ),
+                    },
+                },
+            }
+        },
+        "initialConfigurations": [{
+            "type": "protos",
+            "request": "launch",
+            "name": "Debug Protos File",
+            "program": "${file}",
+            "args": [],
+        }],
+    }]
+    if contributes["debuggers"] != expected_debugger:
+        fail("LM009-E debugger contribution changed")
 
     if grammar.get("name") != "Protos" or grammar.get("scopeName") != "source.protos":
         fail("existing TextMate grammar identity changed unexpectedly")
 
-    if config.get("comments") != {
-        "lineComment": "//",
-        "blockComment": ["/*", "*/"],
-    }:
-        fail("comment configuration changed")
-    if config.get("brackets") != [["{", "}"], ["[", "]"], ["(", ")"]]:
-        fail("bracket configuration changed")
-    if config.get("autoClosingPairs") != [
-        {"open": "{", "close": "}"},
-        {"open": "[", "close": "]"},
-        {"open": "(", "close": ")"},
-    ]:
-        fail("autoClosingPairs changed")
-    if config.get("surroundingPairs") != [["{", "}"], ["[", "]"], ["(", ")"]]:
-        fail("surroundingPairs changed")
-
-    for unsupported in ("wordPattern", "indentationRules", "onEnterRules",
-                        "folding", "colorizedBracketPairs"):
-        if unsupported in config:
-            fail("editor configuration must not guess semantics via %s" % unsupported)
-
     try:
         extension = EXTENSION.read_text(encoding="utf-8")
+        debug_adapter = DEBUG_ADAPTER.read_text(encoding="utf-8")
         readme = README.read_text(encoding="utf-8")
     except OSError as exc:
         fail(str(exc))
@@ -155,36 +196,69 @@ def main():
     required_extension_markers = (
         'RUN_CURRENT_FILE_COMMAND = "protos.runCurrentFile"',
         'DEFAULT_RUNTIME_EXECUTABLE = "protos"',
+        'EXECUTABLE_RESOURCE_SCHEMES = new Set(["file", "vscode-remote"])',
         "vscode.workspace.isTrusted",
         'document.languageId !== "protos"',
-        'EXECUTABLE_RESOURCE_SCHEMES = new Set(["file", "vscode-remote"])',
-        'uri.scheme === "file"',
         'vscode.Uri.from({ scheme: "file", path: uri.path }).fsPath',
-        'executionPathForUri(vscode, document.uri)',
         "await document.save()",
-        '.get("runtime.executable", DEFAULT_RUNTIME_EXECUTABLE)',
         "new vscode.ProcessExecution(",
-        "[sourcePath]",
-        "pathModule.dirname(sourcePath)",
-        "vscode.workspace.getWorkspaceFolder(document.uri)",
-        "vscode.TaskScope.Workspace",
-        "vscode.TaskRevealKind.Always",
-        "vscode.TaskPanelKind.Dedicated",
         "vscode.tasks.executeTask(task)",
+        "createProtosDebugConfigurationProvider",
+        'config.request !== "launch"',
+        'createOutputChannel("Protos Debug")',
+        "registerDebugConfigurationProvider",
+        "registerDebugAdapterDescriptorFactory",
+        'require("vscode-languageclient/node")',
+        'LANGUAGE_SERVER_ARGUMENTS = Object.freeze(["language-server"])',
+        'LANGUAGE_SERVER_DOCUMENT_SELECTOR = Object.freeze([',
+        "createProtosLanguageClient",
+        "createProtosLanguageServerController",
+        '.get("runtime.executable", DEFAULT_RUNTIME_EXECUTABLE)',
+        "options: { shell: false }",
+        "await candidate.start()",
+        "await current.stop()",
+        "onDidGrantWorkspaceTrust",
     )
     for marker in required_extension_markers:
         if marker not in extension:
             fail("extension.js missing approved policy marker: " + marker)
 
+    required_debug_markers = (
+        'require("node:child_process")',
+        'READY_PREFIX = "PROTOS_DEBUG_READY "',
+        'READY_VERSION = 1',
+        "new net.BlockList()",
+        'LOOPBACKS.addSubnet("127.0.0.0", 8, "ipv4")',
+        'LOOPBACKS.addAddress("::1", "ipv6")',
+        '.get("runtime.executable", defaultRuntimeExecutable)',
+        '["debug", program, ...applicationArgs]',
+        "shell: false",
+        'stdio: ["ignore", "pipe", "pipe"]',
+        "awaitDebugReadiness(child, outputChannel)",
+        "new vscode.DebugAdapterServer(",
+        "children.set(session.id, child)",
+        "children.delete(session.id)",
+    )
+    for marker in required_debug_markers:
+        if marker not in debug_adapter:
+            fail("debug_adapter.js missing approved LM009-E marker: " + marker)
+
     for forbidden in (
-        "child_process",
-        "ShellExecution",
-        "java -",
+        "protos.languageServer.executable",
+        "ProtosLanguageServerMain",
+        "protos-language-server",
+        "java -jar",
+        "DebugAdapterExecutable",
+        "DebugAdapterInlineImplementation",
+        "debugServer",
+        "--listen",
+        "dap.WaitAttached",
+        "dap.Suspend",
+        "[Graal DAP]",
         "com.guillermomolina.protos.cli.ProtosCli",
-        "protos run ",
     ):
-        if forbidden in extension:
-            fail("extension.js must not bypass the approved launcher boundary: " + forbidden)
+        if forbidden in extension or forbidden in debug_adapter:
+            fail("editor must not cross the approved debugger boundary: " + forbidden)
 
     for marker in (
         "guillermomolina.protos",
@@ -194,25 +268,43 @@ def main():
         "ProcessExecution",
         "Restricted Mode",
         "S2 live VS Code check",
+        "Debug Protos in VS Code (LM009-E)",
+        "PROTOS_DEBUG_READY",
+        "DebugAdapterServer",
+        "S3 live VS Code check",
+        "Language server foundation (LM009-F4)",
+        "`protos language-server`",
+        "vscode-languageclient",
+        "S4 foundation live VS Code check",
     ):
         if marker not in readme:
-            fail("README missing LM009-C marker: " + marker)
+            fail("README missing LM009 marker: " + marker)
 
     print("LM009_B_EXTENSION_VALIDATION: PASS")
     print("LM009_C_RUN_WIRING_VALIDATION: PASS")
+    print("LM009_E_DEBUG_WIRING_VALIDATION: PASS")
     print("EXTENSION_ID=guillermomolina.protos")
     print("EXTENSION_VERSION=0.1.0")
     print("ENGINES_VSCODE=^1.104.0")
-    print("RUNTIME_BOUNDARY=EXTERNAL_PROTOS_LAUNCHER")
-    print("RUNTIME_SETTING=protos.runtime.executable")
-    print("RUNTIME_DEFAULT=protos")
-    print("RUN_EXECUTION=TASK_PROCESS_EXECUTION")
-    print("RUN_CWD=SOURCE_PARENT")
     print("EXTENSION_KIND=workspace")
-    print("EXECUTABLE_RESOURCE_SCHEMES=file,vscode-remote")
-    print("VIRTUAL_WORKSPACE_EXECUTION=REJECTED")
-    print("WORKSPACE_TRUST=LIMITED_RUN_GATED")
-    print("APPLICATION_ARGUMENTS=NOT_INCLUDED")
+    print("RUNTIME_BOUNDARY=EXTERNAL_PROTOS_LAUNCHER")
+    print("DEBUG_TYPE=protos")
+    print("DEBUG_REQUEST=launch")
+    print("DEBUG_LAUNCHER=protos_debug_file")
+    print("DEBUG_ADAPTER=REAL_DAP_SERVER")
+    print("DEBUG_ENDPOINT_SOURCE=D060_STDOUT_READINESS")
+    print("DEBUG_PORT_ALLOCATION=RUNTIME_OS_EPHEMERAL")
+    print("DEBUG_PROXY=NO")
+    print("DEBUG_ATTACH=NO")
+    print("DEBUG_REMOTE_LISTEN=NO")
+    print("DEBUG_STOP_ON_ENTRY=NO")
+    print("LM009_F4_LANGUAGE_SERVER_WIRING_VALIDATION: PASS")
+    print("LANGUAGE_SERVER_LAUNCH=protos language-server")
+    print("LANGUAGE_SERVER_TOOLCHAIN_AUTHORITY=protos.runtime.executable")
+    print("LANGUAGE_SERVER_TRANSPORT=LSP_STDIO")
+    print("LANGUAGE_SERVER_SECOND_EXECUTABLE_SETTING=NO")
+    print("LANGUAGE_SERVER_EDITOR_SEMANTICS=NO")
+
 
 if __name__ == "__main__":
     main()

@@ -1,0 +1,165 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Exact mathematical algorithms over ordinary unbounded Core `Integer` values.
+
+/// Returns the non-negative greatest common divisor of two ordinary Integers.
+gcd: (a, b) => {
+    // `div` has a strict ordinary-Integer receiver domain. These calls validate
+    // the supplied values without converting fixed-width or delegated lookalikes.
+    a.div(1)
+    b.div(1)
+
+    left: a
+    right: b
+
+    (left < 0).ifTrue(() => {
+        left = 0 - left
+    })
+    (right < 0).ifTrue(() => {
+        right = 0 - right
+    })
+
+    (() => right != 0).while() {
+        remainder: left.mod(right)
+        left = right
+        right = remainder
+    }
+
+    left
+}
+
+/// Returns the non-negative least common multiple of two ordinary Integers.
+lcm: (a, b) => {
+    // gcd validates both arguments before any zero short-circuit.
+    divisor: gcd(a, b)
+    result: 0
+
+    (a == 0).ifFalse(() => {
+        (b == 0).ifFalse(() => {
+            // Divide first so the implementation does not construct the
+            // avoidable full a*b intermediate before removing the gcd factor.
+            value: a.div(divisor) * b
+            (value < 0).ifTrue(() => {
+                value = 0 - value
+            })
+            result = value
+        })
+    })
+
+    result
+}
+
+/// Returns the exact factorial of a non-negative ordinary Integer.
+factorial: (n) => {
+    // Preserve the strict ordinary-Integer family boundary without conversion.
+    n.div(1)
+
+    (n < 0).ifTrue(() => {
+        Error().signal()
+    })
+
+    // A balanced product tree keeps recursion depth logarithmic and avoids the
+    // permanently sequential multiplication shape rejected by LIB007-0.
+    productRange: (low, high) => {
+        result: 1
+
+        (low <= high).ifTrue(() => {
+            (low == high).ifTrueIfFalse(
+                () => {
+                    result = low
+                },
+                () => {
+                    middle: low + (high - low).div(2)
+                    result =
+                        productRange(low, middle) *
+                        productRange(middle + 1, high)
+                }
+            )
+        })
+
+        result
+    }
+
+    productRange(2, n)
+}
+
+/// Returns the exact non-negative-integer power using exponentiation by squaring.
+pow: (base, exponent) => {
+    base.div(1)
+    exponent.div(1)
+
+    (exponent < 0).ifTrue(() => {
+        Error().signal()
+    })
+
+    result: 1
+    factor: base
+    remaining: exponent
+
+    (() => remaining != 0).while() {
+        (remaining.mod(2) == 1).ifTrue(() => {
+            result = result * factor
+        })
+
+        remaining = remaining.div(2)
+
+        (remaining != 0).ifTrue(() => {
+            factor = factor * factor
+        })
+    }
+
+    result
+}
+
+/// Returns canonical mathematical modular exponentiation for a positive modulus.
+powMod: (base, exponent, modulus) => {
+    base.div(1)
+    exponent.div(1)
+    modulus.div(1)
+
+    (exponent < 0).ifTrue(() => {
+        Error().signal()
+    })
+    (modulus <= 0).ifTrue(() => {
+        Error().signal()
+    })
+
+    canonicalMod: (value) => {
+        remainder: value.mod(modulus)
+        (remainder < 0).ifTrue(() => {
+            remainder = remainder + modulus
+        })
+        remainder
+    }
+
+    result: canonicalMod(1)
+    factor: canonicalMod(base)
+    remaining: exponent
+
+    (() => remaining != 0).while() {
+        (remaining.mod(2) == 1).ifTrue(() => {
+            result = canonicalMod(result * factor)
+        })
+
+        remaining = remaining.div(2)
+
+        (remaining != 0).ifTrue(() => {
+            factor = canonicalMod(factor * factor)
+        })
+    }
+
+    result
+}

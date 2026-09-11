@@ -6,6 +6,16 @@ WEB001 / [#278](https://github.com/guillermomolina/protos/issues/278).
 
 Status: **RATIFIED — CANDIDATE C SELECTED**
 
+> **D066 documentation-topology refinement (2026-09-11):** D066 keeps the
+> independent `guillermomolina/protos-website` repository, exact-SHA read-only
+> Protos source acquisition, Astro + Starlight, static output, provenance and
+> deployment/security separation selected here. It adds a deliberately
+> non-authoritative Protos Wiki for contributor/project knowledge and clarifies
+> that repository separation does not itself justify a broadly generalized
+> cross-consumer documentation-tool platform. Canonical/version-sensitive
+> language, Standard Library, API/reference and durable decision authority stays
+> in `guillermomolina/protos`. D066 refines this audit; it does not replace it.
+
 > **Hosting supersession (WEB001-F, 2026-09-10):** WEB001-B remains the
 > authoritative ratification for repository topology, source authority,
 > exact-SHA source acquisition, local execution, Astro + Starlight, static
