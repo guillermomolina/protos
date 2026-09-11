@@ -186,6 +186,40 @@ D066 is **RATIFIED / CLOSED** at the decision level. No implementation,
 specification, Maven implementation-version, deployment or runtime change is
 included in this governance publication.
 
+<!-- D068-EXACT-SHA-DOC-EXTRACTOR-EXECUTION-BOUNDARY -->
+## D068 — Exact-SHA documentation extractor execution boundary
+
+GitHub Issue [#330](https://github.com/guillermomolina/protos/issues/330)
+ratifies Candidate **A-prime** after explicit project-owner approval.
+
+WEB001-J7B must execute the Protos-owned documentation producer from the same
+exact Protos revision selected by `protos-source.lock.json`. The durable
+cross-repository contract is D064 JSON, not the current Java/Maven producer
+implementation.
+
+The website therefore remains a renderer:
+
+```text
+exact Protos revision
+    -> Protos-owned producer from that revision
+    -> D064 JSON
+    -> protos-website
+```
+
+The current producer may require JDK21/Maven during build/development, but those
+are producer implementation details and MUST NOT enter the production NGINX
+runtime image. An ephemeral exact-SHA cache is permitted only as a
+non-authoritative optimization.
+
+Producer-side immutable D064 publication remains the explicit future scaling
+path if multiple consumers or build frequency justify it. No second website
+parser, independently versioned extractor release line, committed
+self-referential JSON artifact, mandatory Docker ABI, specification change,
+Protos semantic change, Standard Library semantic change or deployment-runtime
+change is authorized.
+
+D068 releases WEB001-J7B for implementation.
+
 <!-- D067-STDLIB-DOCUMENTATION-COVERAGE-POLICY -->
 ## D067 — Standard Library documentation coverage and API-reference publication policy
 

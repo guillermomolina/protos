@@ -1,5 +1,22 @@
 ## 0.2.350-SNAPSHOT
 
+- Ratify `D068 — Exact-SHA documentation extractor execution boundary for
+  protos-website` (GitHub #330) after explicit project-owner approval of
+  Candidate A-prime and exhaustive comparison with Apple Swift Symbol
+  Graph/DocC, Go/pkgsite, Rust/rustdoc/docs.rs, Java/Javadoc, .NET/DocFX,
+  Haddock, Dart, Kotlin/Dokka, TypeDoc, ExDoc, Doxygen and Sphinx/autodoc.
+  Require WEB001-J7B to run the Protos-owned documentation producer from the
+  same exact Protos revision selected by `protos-source.lock.json`, and make the
+  existing D064 JSON model the sole durable cross-repository documentation
+  contract. Treat the current JDK21/Maven/TOOL003 invocation as replaceable
+  producer implementation detail; permit only non-authoritative exact-SHA
+  caching; preserve producer-side immutable D064 publication as the future
+  multi-consumer scaling path; and add no website parser, independently
+  versioned extractor release line, committed generated JSON, mandatory Docker
+  ABI, specification change, observable Protos semantic change, Maven
+  implementation-version change, Standard Library semantic change or
+  deployment-runtime change.
+
 - Ratify `PLAT021 — Bytecode C-prime dynamic control/unwind representation` (GitHub #328) after explicit project-owner approval on 2026-09-11 and exhaustive review of the current Truffle implementation catalogue, including Apple Pkl, plus focused future-durability, scalability and Protos-philosophy scoring. Select Candidate F: keep normal values raw, keep PLAT014/019 suspension distinct from unwind, place resumable structured-control phase in Bytecode continuation state, retain guest Error and internal NLR/cancellation as separate transfer lanes, and use only a narrow backend-private EH bridge when internal control must traverse Bytecode cleanup tables. Preserve exact Error and ReturnHome identity, Task-owned cancellation and dynamic-handler authority, suspendible cleanup with transfer supersession, post-lookup implementation provenance, bounded reusable carriers and no replay/global registry/ThreadLocal authority/universal Outcome tax. Release PERF006-B4 for bounded implementation beginning with B4A transfer substrate. No specification, observable Protos semantics, executable runtime implementation, Maven implementation-version, public API, license term or release artifact change.
 
 - Ratify `PLAT020 — Context-bound Truffle file Source materialization` (GitHub #327) after explicit project-owner approval of Candidate A′ and exhaustive review of the complete Truffle implementation catalogue including Apple Pkl. Keep path/content/module facts immutable and backend-neutral outside Truffle Context ownership; materialize genuine physical file-backed Truffle Sources only inside the owning entered Protos Context through that Context's `Env`, preserving D065 path spelling with `canonicalizePath(false)` and the already-read characters with `.content(...)`. Keep `ProtosModuleKey` semantic identity separate, virtual sources virtual, and add no global source registry, Context-crossing `TruffleFile`, editor/DAP repair layer, cache policy, outer-Polyglot execution refactor, specification change, executable implementation or Maven implementation-version change. Release only the bounded LM009-E D065 source-presentation correction.
