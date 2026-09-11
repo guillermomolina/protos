@@ -18,21 +18,29 @@
 package com.guillermomolina.protos.lsp;
 
 import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
+import com.guillermomolina.protos.analysis.ProtosDocumentSymbol;
+import com.guillermomolina.protos.analysis.ProtosDocumentSymbols;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.DocumentSymbol;
+import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.SymbolInformation;
+import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
 
@@ -41,7 +49,8 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  *
  * <p>The adapter keeps all currently open editor buffers in one server-local
  * custody domain. G1 parses only each exact immutable buffer snapshot and emits
- * parser-derived diagnostics. The domain is still not a Protos
+ * parser-derived diagnostics. G2 derives D079 document symbols from the same
+ * current parser-authoritative snapshot. The domain is still not a Protos
  * workspace/package/module authority; later G slices may introduce mapping only
  * through canonical Protos resolution authorities.</p>
  */
@@ -50,6 +59,7 @@ final class ProtosTextDocumentService implements TextDocumentService {
 
     private final ProtosStaticAnalysisSession session;
     private volatile LanguageClient client;
+    private volatile boolean hierarchicalDocumentSymbolsEnabled;
 
     ProtosTextDocumentService(ProtosStaticAnalysisSession session) {
         this.session = Objects.requireNonNull(session, "session");
@@ -111,6 +121,39 @@ final class ProtosTextDocumentService implements TextDocumentService {
     }
 
     @Override
+    public CompletableFuture<List<Either<SymbolInformation, DocumentSymbol>>> documentSymbol(
+            DocumentSymbolParams params) {
+        Objects.requireNonNull(params, "params");
+        String uri = Objects.requireNonNull(
+                Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
+                "textDocument.uri");
+
+        if (!hierarchicalDocumentSymbolsEnabled) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+
+        Optional<ProtosStaticParseResult> parsed =
+                session.parseCurrent(OPEN_DOCUMENTS_DOMAIN, uri);
+        if (parsed.isEmpty() || !session.isCurrent(OPEN_DOCUMENTS_DOMAIN, parsed.get())) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+        if (!(parsed.get() instanceof ProtosStaticParseResult.Parsed success)) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+
+        List<ProtosDocumentSymbol> symbols = ProtosDocumentSymbols.from(success.program());
+        if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, success)) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+
+        String source = success.snapshot().characters();
+        return CompletableFuture.completedFuture(symbols.stream()
+                .map(symbol -> Either.<SymbolInformation, DocumentSymbol>forRight(
+                        toLspDocumentSymbol(source, symbol)))
+                .toList());
+    }
+
+    @Override
     public void didSave(DidSaveTextDocumentParams params) {
         Objects.requireNonNull(params, "params");
         // Save notifications are not advertised by F3 and carry no additional
@@ -119,6 +162,26 @@ final class ProtosTextDocumentService implements TextDocumentService {
 
     void connect(LanguageClient client) {
         this.client = Objects.requireNonNull(client, "client");
+    }
+
+    void setHierarchicalDocumentSymbolsEnabled(boolean enabled) {
+        hierarchicalDocumentSymbolsEnabled = enabled;
+    }
+
+    private static DocumentSymbol toLspDocumentSymbol(
+            String source,
+            ProtosDocumentSymbol model) {
+        DocumentSymbol symbol = new DocumentSymbol();
+        symbol.setName(model.name());
+        symbol.setKind(SymbolKind.Property);
+        symbol.setRange(ProtosLspSourcePositions.range(source, model.range()));
+        symbol.setSelectionRange(ProtosLspSourcePositions.range(source, model.selectionRange()));
+        if (!model.children().isEmpty()) {
+            symbol.setChildren(model.children().stream()
+                    .map(child -> toLspDocumentSymbol(source, child))
+                    .toList());
+        }
+        return symbol;
     }
 
     private void publishCurrentDiagnostics(String documentUri) {

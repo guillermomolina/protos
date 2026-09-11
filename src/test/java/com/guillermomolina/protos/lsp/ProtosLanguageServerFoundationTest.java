@@ -33,11 +33,14 @@ import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.eclipse.lsp4j.ClientCapabilities;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
+import org.eclipse.lsp4j.DocumentSymbolCapabilities;
 import org.eclipse.lsp4j.InitializeParams;
 import org.eclipse.lsp4j.InitializeResult;
+import org.eclipse.lsp4j.TextDocumentClientCapabilities;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentIdentifier;
 import org.eclipse.lsp4j.TextDocumentItem;
@@ -50,7 +53,7 @@ import org.junit.jupiter.api.Timeout;
 class ProtosLanguageServerFoundationTest {
 
     @Test
-    void initializeAdvertisesOnlyFullDocumentSyncFoundation() {
+    void initializeWithoutHierarchySupportAdvertisesFullSyncAndNoDocumentSymbols() {
         ProtosLanguageServer server = new ProtosLanguageServer(code -> {});
         InitializeResult result = server.initialize(new InitializeParams()).join();
 
@@ -66,6 +69,25 @@ class ProtosLanguageServerFoundationTest {
         assertNull(result.getCapabilities().getCompletionProvider());
         assertNull(result.getCapabilities().getDocumentSymbolProvider());
         assertNull(result.getCapabilities().getWorkspaceSymbolProvider());
+    }
+
+    @Test
+    void initializeAdvertisesDocumentSymbolsOnlyForHierarchicalClients() {
+        ProtosLanguageServer server = new ProtosLanguageServer(code -> {});
+        InitializeParams params = new InitializeParams();
+        ClientCapabilities client = new ClientCapabilities();
+        TextDocumentClientCapabilities textDocument = new TextDocumentClientCapabilities();
+        DocumentSymbolCapabilities documentSymbol = new DocumentSymbolCapabilities();
+        documentSymbol.setHierarchicalDocumentSymbolSupport(Boolean.TRUE);
+        textDocument.setDocumentSymbol(documentSymbol);
+        client.setTextDocument(textDocument);
+        params.setCapabilities(client);
+
+        InitializeResult result = server.initialize(params).join();
+        assertEquals(Boolean.TRUE, result.getCapabilities().getDocumentSymbolProvider().getLeft());
+        assertNull(result.getCapabilities().getWorkspaceSymbolProvider());
+        assertNull(result.getCapabilities().getDefinitionProvider());
+        assertNull(result.getCapabilities().getReferencesProvider());
     }
 
     @Test

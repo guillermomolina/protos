@@ -37,8 +37,9 @@ import org.eclipse.lsp4j.services.WorkspaceService;
  * Thin LSP lifecycle/protocol edge over the editor-neutral static-analysis core.
  *
  * <p>This class retains the LM009-F full document-synchronization boundary.
- * LM009-G1 adds parser-derived push diagnostics; later LM009-G/H slices own
- * symbols, definition, completion, hover, signature help and references.</p>
+ * LM009-G1 adds parser-derived push diagnostics and G2 adds D079-ratified
+ * hierarchical document symbols; later LM009-G/H slices own workspace symbols,
+ * definition, completion, hover, signature help and references.</p>
  */
 public final class ProtosLanguageServer implements LanguageServer, LanguageClientAware {
     private final ProtosStaticAnalysisSession analysisSession;
@@ -65,7 +66,25 @@ public final class ProtosLanguageServer implements LanguageServer, LanguageClien
         ServerCapabilities capabilities = new ServerCapabilities();
         capabilities.setTextDocumentSync(sync);
 
+        boolean hierarchicalDocumentSymbols = supportsHierarchicalDocumentSymbols(params);
+        textDocumentService.setHierarchicalDocumentSymbolsEnabled(hierarchicalDocumentSymbols);
+        if (hierarchicalDocumentSymbols) {
+            capabilities.setDocumentSymbolProvider(Boolean.TRUE);
+        }
+
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));
+    }
+
+    private static boolean supportsHierarchicalDocumentSymbols(InitializeParams params) {
+        if (params.getCapabilities() == null
+                || params.getCapabilities().getTextDocument() == null
+                || params.getCapabilities().getTextDocument().getDocumentSymbol() == null) {
+            return false;
+        }
+        return Boolean.TRUE.equals(params.getCapabilities()
+                .getTextDocument()
+                .getDocumentSymbol()
+                .getHierarchicalDocumentSymbolSupport());
     }
 
     @Override

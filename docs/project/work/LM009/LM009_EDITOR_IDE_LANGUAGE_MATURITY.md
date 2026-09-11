@@ -1086,3 +1086,50 @@ This ratification releases **LM009-G2** for bounded document-symbol
 implementation over the existing parser/source-snapshot authorities. It does not
 implement G2, select G3 workspace-index policy, select G4 definition identity, or
 change any LM009-H semantics.
+
+## LM009-G2 parser-derived hierarchical document symbols
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED**
+
+G2 consumes D079 Candidate A′ and the published F1/F2/G1 parser/snapshot
+foundation without introducing workspace indexing or definition identity.
+
+Published implementation boundary:
+
+- the editor-neutral analysis layer projects every explicit named
+  `SurfaceSlotCreation` from the real `Surface*` AST into a protocol-neutral
+  `ProtosDocumentSymbol` model;
+- bare and member-target creations use the final slot name, while `=` assignment,
+  Closure parameters and anonymous expressions never become symbols themselves;
+- the extractor traverses every current `SurfaceExpression` containment position,
+  including assignment subexpressions, call arguments, object parents/items and
+  Closure parameter defaults/body, so a surrounding expression form cannot hide
+  a nested explicit slot creation;
+- a parent symbol receives only creations found inside its value subtree; target
+  receiver traversal remains at the surrounding source level, preserving D079's
+  source-containment-only hierarchy;
+- the LSP edge maps every projected slot uniformly to `SymbolKind.Property`, full
+  creation range and exact final-name selection range; Closure-valued slots are
+  not reclassified as Function/Method and duplicate names remain distinct source
+  occurrences;
+- requests parse the current immutable open-document snapshot and re-check F2
+  freshness after extraction; missing/closed documents, current parse failures or
+  stale results return no symbol tree rather than stale/guessed symbols;
+- hierarchical `DocumentSymbol` is advertised only when the client explicitly
+  reports `hierarchicalDocumentSymbolSupport=true`. No flat `SymbolInformation`
+  fallback is introduced because that would create a second projection outside
+  the ratified D079 hierarchy; and
+- no runtime/guest execution, Truffle Context, background worker, filesystem path
+  inference, module/package resolution or editor-side Protos parser/model is
+  introduced.
+
+Focused evidence covers uniform Property presentation, Closure-valued slots,
+value-subtree nesting, exact member-name selection, duplicate occurrences,
+assignment exclusion, UTF-16 positions, parse-failure clearing and capability
+gating. Repository-selected publication validation remains the broader executable
+merge gate.
+
+`LM009-G` remains **IN_PROGRESS** after G2. Workspace-symbol inclusion/search and
+index lifetime remain G3-owned; go-to-definition identity/resolution remains
+G4-owned. Neither is selected by this slice, and LM009-H remains excluded.
+
