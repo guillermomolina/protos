@@ -1,0 +1,291 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+parse: (text) => {
+    source: Encoding.UTF8.encode(text)
+
+    fail: () => {
+        Error().signal()
+    }
+
+    fieldBuffer: Encoding.UTF8.encode("")
+
+    fieldChunks: Map()
+    fieldMaxLevel: -1
+
+    carryFieldChunk: null
+    carryFieldChunk = (chunk, level) => {
+        present: fieldChunks.containsKey(level)
+
+        present.ifTrue(() => {
+            left: fieldChunks[level]
+            fieldChunks.remove(level)
+            carryFieldChunk(Array(...left, ...chunk), level + 1)
+        })
+
+        present.ifFalse(() => {
+            fieldChunks[level] = chunk
+            (level > fieldMaxLevel).ifTrue(() => {
+                fieldMaxLevel = level
+            })
+        })
+    }
+
+    collectFieldChunks: null
+    collectFieldChunks = (level, result) => {
+        finalResult: result
+
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            fieldChunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...fieldChunks[level])
+            })
+            finalResult = collectFieldChunks(level - 1, nextResult)
+        })
+
+        finalResult
+    }
+
+    tableChunks: Map()
+    tableMaxLevel: -1
+
+    carryTableChunk: null
+    carryTableChunk = (chunk, level) => {
+        present: tableChunks.containsKey(level)
+
+        present.ifTrue(() => {
+            left: tableChunks[level]
+            tableChunks.remove(level)
+            carryTableChunk(Array(...left, ...chunk), level + 1)
+        })
+
+        present.ifFalse(() => {
+            tableChunks[level] = chunk
+            (level > tableMaxLevel).ifTrue(() => {
+                tableMaxLevel = level
+            })
+        })
+    }
+
+    collectTableChunks: null
+    collectTableChunks = (level, result) => {
+        finalResult: result
+
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            tableChunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...tableChunks[level])
+            })
+            finalResult = collectTableChunks(level - 1, nextResult)
+        })
+
+        finalResult
+    }
+
+    finishField: () => {
+        field: Encoding.UTF8.decode(fieldBuffer)
+        carryFieldChunk(Array(field), 0)
+        fieldBuffer = Encoding.UTF8.encode("")
+    }
+
+    finishRow: () => {
+        row: collectFieldChunks(fieldMaxLevel, Array())
+        carryTableChunk(Array(row), 0)
+
+        fieldChunks = Map()
+        fieldMaxLevel = -1
+    }
+
+    mode: "fieldStart"
+    rowActive: false
+    skipLfAfterCr: false
+
+    source.each((octet) => {
+        skipped: false
+
+        skipLfAfterCr.ifTrue(() => {
+            skipLfAfterCr = false
+            (octet == 10).ifTrue(() => {
+                skipped = true
+            })
+        })
+
+        skipped.ifFalse(() => {
+            previousMode: mode
+
+            (previousMode == "fieldStart").ifTrue(() => {
+                handled: false
+
+                (octet == 44).ifTrue(() => {
+                    finishField()
+                    rowActive = true
+                    handled = true
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 34).ifTrue(() => {
+                        mode = "quoted"
+                        rowActive = true
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 13).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        rowActive = false
+                        skipLfAfterCr = true
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 10).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        rowActive = false
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    fieldBuffer.add(octet)
+                    mode = "unquoted"
+                    rowActive = true
+                })
+            })
+
+            (previousMode == "unquoted").ifTrue(() => {
+                handled: false
+
+                (octet == 44).ifTrue(() => {
+                    finishField()
+                    mode = "fieldStart"
+                    handled = true
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 34).ifTrue(() => {
+                        fail()
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 13).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        mode = "fieldStart"
+                        rowActive = false
+                        skipLfAfterCr = true
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 10).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        mode = "fieldStart"
+                        rowActive = false
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    fieldBuffer.add(octet)
+                })
+            })
+
+            (previousMode == "quoted").ifTrue(() => {
+                (octet == 34).ifTrue(() => {
+                    mode = "afterQuote"
+                })
+                (octet == 34).ifFalse(() => {
+                    fieldBuffer.add(octet)
+                })
+            })
+
+            (previousMode == "afterQuote").ifTrue(() => {
+                handled: false
+
+                (octet == 34).ifTrue(() => {
+                    fieldBuffer.add(34)
+                    mode = "quoted"
+                    handled = true
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 44).ifTrue(() => {
+                        finishField()
+                        mode = "fieldStart"
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 13).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        mode = "fieldStart"
+                        rowActive = false
+                        skipLfAfterCr = true
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    (octet == 10).ifTrue(() => {
+                        finishField()
+                        finishRow()
+                        mode = "fieldStart"
+                        rowActive = false
+                        handled = true
+                    })
+                })
+
+                handled.ifFalse(() => {
+                    fail()
+                })
+            })
+        })
+    })
+
+    (mode == "quoted").ifTrue(() => {
+        fail()
+    })
+
+    (mode == "afterQuote").ifTrue(() => {
+        finishField()
+        finishRow()
+        rowActive = false
+    })
+
+    (mode == "unquoted").ifTrue(() => {
+        finishField()
+        finishRow()
+        rowActive = false
+    })
+
+    (mode == "fieldStart").ifTrue(() => {
+        rowActive.ifTrue(() => {
+            finishField()
+            finishRow()
+            rowActive = false
+        })
+    })
+
+    collectTableChunks(tableMaxLevel, Array())
+}
