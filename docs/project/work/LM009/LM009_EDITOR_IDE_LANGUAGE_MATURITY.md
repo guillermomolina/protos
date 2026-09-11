@@ -870,3 +870,69 @@ LM009-F remains **IN_PROGRESS**. F3 must still provide the PLAT024-dedicated
 toolchain-matched stdio LSP process/lifecycle edge over F1/F2. LM009-G/H continue
 to own editor-visible diagnostics, symbols, definition, completion, hover,
 signature help and references.
+
+## LM009-F3 dedicated stdio LSP host
+
+Status: **IMPLEMENTED**
+
+F3 publishes the process/protocol edge selected by PLAT024 Candidate A′ without
+moving LM009-G/H feature semantics into the foundation.
+
+### Protocol/hosting boundary
+
+- `ProtosLanguageServer` is one client-session-owned LSP service object.
+- `ProtosLanguageServerStdio` uses the standard LSP4J stdio launcher; there is
+  no port allocator, daemon discovery, authentication service or global server.
+- `ProtosLanguageServerMain` is an internal JVM process entry point only. F3
+  deliberately does **not** select the final public `protos ...` CLI spelling,
+  Marketplace launch command or final JAR/Native Image packaging contract.
+- Eclipse LSP4J 1.0.0 is an implementation dependency at the protocol edge.
+  LSP DTOs do not enter `com.guillermomolina.protos.analysis`.
+- ordinary Protos execution instantiates none of the F3 language-server state.
+
+### Document synchronization boundary
+
+F3 advertises exactly full open/change/close document synchronization. It maps
+those notifications to immutable F2 snapshots with the exact LSP document URI,
+version and current text.
+
+All currently open buffers use one server-local custody-domain identifier
+`lsp:open-documents`. This identifier is explicitly **not** a Protos workspace,
+package root, module specifier or `ModuleKey`. There is no cross-document
+semantic resolution in F3, so this container introduces no cross-workspace
+semantic authority. LM009-G must establish any actual workspace/project/module
+mapping through the canonical Protos resolution authorities rather than URI
+prefix/path guessing.
+
+F3 rejects incremental ranged changes because it advertises full synchronization
+only. Numeric document versions remain opaque values passed to F2; F3 does not
+invent ordering beyond replacing snapshots in received notification order.
+
+### Lifecycle and cancellation boundary
+
+`shutdown` records orderly LSP shutdown and returns before process exit. A later
+`exit` requests status `0`; `exit` before `shutdown` requests status `1`,
+matching the standard language-server process lifecycle.
+
+F3 does not introduce a parser-level cancellation/preemption contract. LSP4J
+owns the JSON-RPC protocol machinery, but there are no long-running G/H static
+feature requests in F3 to cancel. If later semantic requests require stronger
+cooperative parser/index cancellation, that requirement must be evaluated
+explicitly rather than inferred from this host.
+
+### Capability boundary
+
+F3 intentionally advertises no diagnostics, document/workspace symbols,
+definition, references, completion, hover or signature help. Those remain
+LM009-G/H. Focused evidence covers:
+
+- only the full document-sync foundation capability is advertised;
+- exact open/change/close snapshot custody;
+- rejection of ranged incremental changes;
+- standard clean/premature exit status; and
+- real LSP `Content-Length` stdio framing through LSP4J.
+
+LM009-F remains **IN_PROGRESS** after F3. The remaining F closure work is the
+reference client/toolchain launch wiring and end-to-end foundation proof that a
+real editor client starts the dedicated matching server without embedding
+Protos semantics in TypeScript.
