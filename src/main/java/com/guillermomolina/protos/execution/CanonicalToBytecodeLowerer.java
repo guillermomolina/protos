@@ -893,6 +893,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredEnsureCall", null);
         BytecodeLocal structuredChild =
                 builder.createLocal("structuredEnsureChildCall", null);
+        BytecodeLocal structuredHandler =
+                builder.createLocal("structuredErrorHandlerCall", null);
+        BytecodeLocal structuredHandlerChild =
+                builder.createLocal("structuredErrorHandlerChildCall", null);
 
         builder.beginIfThenElse();
 
@@ -909,11 +913,7 @@ final class CanonicalToBytecodeLowerer {
                 });
         builder.beginBlock();
 
-        /*
-         * Validation and child-call preparation happen before the protected
-         * semantic extent. A validation Error therefore closes the standard
-         * ensure activation but does not run cleanup.
-         */
+        /* Validation precedes the protected semantic extent. */
         builder.beginStoreLocal(structuredEnsure);
         builder.beginPrepareStructuredEnsureCall();
         builder.emitLoadLocal(preparedCall);
@@ -956,12 +956,95 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredErrorHandlerCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredErrorHandlerCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        /*
+         * Receiver/arity/body/handler validation happens before frame
+         * installation. The returned descriptor owns exactly one Task/direct
+         * dynamic handler token for the protected extent.
+         */
+        builder.beginStoreLocal(structuredHandler);
+        builder.beginPrepareStructuredErrorHandlerCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredErrorHandlerCall();
+        builder.endStoreLocal();
+
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveStructuredErrorHandlerFrame();
+                    builder.emitLoadLocal(structuredHandler);
+                    builder.endLeaveStructuredErrorHandlerFrame();
+                });
+        builder.beginBlock();
+
+        /*
+         * Bytecode DSL TryCatch is a void operation. Each branch writes the
+         * semantic Error.handle result directly into the shared result local;
+         * the TryCatch itself must not be used as a value-producing child.
+         */
+        builder.beginTryCatch();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredHandlerChild);
+        builder.beginLoadStructuredErrorHandlerBodyCall();
+        builder.emitLoadLocal(structuredHandler);
+        builder.endLoadStructuredErrorHandlerBodyCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                result,
+                structuredHandlerChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredHandlerChild);
+        builder.beginPrepareSelectedStructuredErrorHandlerCall();
+        builder.emitLoadLocal(structuredHandler);
+        builder.emitLoadException();
+        builder.endPrepareSelectedStructuredErrorHandlerCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                result,
+                structuredHandlerChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
+        builder.endTryCatch();
+
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();
