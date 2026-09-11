@@ -129,3 +129,21 @@ Publication of this ratified record releases `I026-C` from `BLOCKED_BY_PLAT005` 
 ## I026-C executable consumption
 
 I026-C consumes this ratified architecture in `0.2.311-SNAPSHOT`. The implementation keeps the decision non-normative and semantically invisible: generated instrumentation wrappers are derived machinery, canonical-role tags remain the approved minimum surface, and continuation replay uses PLAT008 logical site identity rather than physical wrapper identity. Focused and full executable validation are publication gates for the consuming slice.
+
+## Later resolution — PLAT026
+
+PLAT026, explicitly approved on 2026-09-11, resolves the `RootTag` part of this
+decision's deliberate deferral after real PERF006-B6 production/DAP evidence established
+the need for generic ROOT support.
+
+The later ratified boundary preserves PLAT005's semantic-minimum rule:
+
+- `RootTag` is provided only for truthful semantic top-level/module/Closure activation
+  roots;
+- Bytecode helper roots such as Object-construction/body children remain untagged;
+- semantic roots use the Bytecode DSL automatic root-tag mechanism so the framework owns
+  the correct pre-prolog probe boundary; and
+- `RootBodyTag` remains deferred.
+
+PLAT026 does not change StatementTag or CallTag semantics and does not make physical
+`RootNode` / `CallTarget` identity a tooling authority.
