@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082 RATIFIED; G3 BLOCKED_BY_PROJECT_BINDING_PREREQUISITE)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082/D085 RATIFIED; G3 BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1169,3 +1169,45 @@ recorded in
 
 LM009-G4 definition identity/resolution remains unstarted and independently decision-
 gated. LM009-H remains excluded.
+
+## D085 static canonical Project Binding provider ratification
+
+Status: **RATIFIED — Candidate F′ selected; LM009-G3 BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION**
+
+D085 / GitHub #370 closes the tooling-authority decision exposed after D082. The
+selected prerequisite architecture is **Package-owned minimal canonical
+ProjectBinding projection + bounded canonical source inventory + validated
+candidate-root acquisition through a replaceable editor-neutral provider**.
+
+The Package Tool/package subsystem remains the sole package/project semantic
+authority. Static tooling consumes a minimal canonical projection sufficient to
+bind exact project/package roots and freshness identity; it does not reimplement
+manifest/lock/workspace semantics. A workspace/editor path may be offered only as
+a candidate location and becomes a ProjectBinding only after exact canonical
+validation at that location. No parent/child project search, nearest-manifest
+inference, recursive project discovery or open-document project creation is
+introduced.
+
+The complete mutable source set is intentionally not frozen into package metadata.
+After canonical package roots are bound, an editor-neutral provider may maintain a
+bounded live inventory only inside those roots. A `.protos` source is admitted only
+when its package-relative path makes an exact canonical round trip with the existing
+logical-module -> confined source mapping, including exact-case/confinement/collision
+rules. Ordinary source add/remove/content changes may therefore update the inventory
+without regenerating package metadata, while manifest/lock/workspace/package-identity
+changes invalidate the binding and require canonical reacquisition.
+
+The provider boundary is replaceable. A future Package Tool daemon, BSP-like build
+provider, remote project service or per-toolchain process topology may provide the same
+binding without changing D082/G3 semantics. Baseline D085 does not require any of those
+institutions and ordinary runtime execution pays no cost when static tooling is absent.
+
+D085 publication releases the **bounded ProjectBinding prerequisite implementation**.
+It does not itself implement that prerequisite and does not implement G3 workspace
+symbols. LM009-G3 remains blocked until the provider/projection/source-inventory
+foundation is published. After that prerequisite is green, G3 may mechanically consume
+it under D082 without reopening project authority.
+
+D085 does not decide G4 definition identity, workspace-symbol ranking/result caps,
+dependency/stdlib index scope, persistent/remote index storage, generated/virtual
+sources, LM009-H semantics, a public BSP protocol, or multi-toolchain process splitting.
