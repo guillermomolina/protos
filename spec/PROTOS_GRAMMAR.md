@@ -154,6 +154,14 @@ Names provided by the standard prelude, such as `Object`, `Future`, `Number`, `S
 
 Core v0.1 defines no additional reserved words such as `if`, `else`, `while`, `for`, `class`, `function`, `try`, `catch`, `throw`, `async`, or `await`.
 
+D093 additionally uses `match`, `case`, and `when` as **contextual structural
+spellings** inside the separately defined matching-expression envelope. They are
+not added to the reserved-word set: lexical recognition still produces ordinary
+identifier tokens, and outside those exact structural positions the spellings
+remain ordinary identifiers/member names. In particular, D073's ordinary
+`pattern.match(subject)` selector remains ordinary member/call syntax.
+
+
 ## 3. Literals
 
 ```ebnf
@@ -643,6 +651,172 @@ expression =
     | non-local-return
     | binary-expression;
 ```
+
+### 7.1 Postfix matching-expression envelope (D093)
+
+D093 ratifies the **outer matching-expression grammar envelope** without
+selecting the internal grammar of a pattern.
+
+The ratified source shape is:
+
+```protos
+subjectExpression match {
+    case PATTERN => armBody
+    case PATTERN when guardExpression => armBody
+}
+```
+
+In this section, `MATCH-PATTERN` below is an explicit grammar **parameter**, not
+a Core v0.1 production selected by D093. A later separately ratified
+pattern-surface decision must replace that parameter with concrete productions
+before this envelope is implementation-complete and added to the executable
+`expression` grammar.
+
+The fixed outer schema is:
+
+```ebnf
+match-expression-envelope =
+    binary-expression,
+    contextual-match-marker,
+    match-body-envelope ;
+
+match-body-envelope =
+    "{",
+    [ newline-run ],
+    match-arm-line-items,
+    [ newline-run ],
+    "}" ;
+
+match-arm-line-items =
+    match-arm-line,
+    { newline-run, match-arm-line } ;
+
+match-arm-line =
+    match-arm-envelope,
+    { ";", match-arm-envelope } ;
+
+match-arm-envelope =
+    contextual-case-marker,
+    MATCH-PATTERN,
+    [ contextual-when-marker, expression ],
+    "=>",
+    closure-body ;
+```
+
+`MATCH-PATTERN` is uppercase here specifically to distinguish the unresolved
+pattern grammar parameter from a defined EBNF nonterminal. It is not a literal
+token and does not imply that ordinary expressions, identifiers, Arrays, Maps,
+binders, OR forms, wildcards, or any other source form have already been admitted
+as patterns.
+
+The envelope requires at least one arm. It introduces no empty-match form.
+
+#### Contextual structural markers
+
+`match`, `case`, and `when` are **not reserved words**. The lexer continues to
+recognize each spelling as an ordinary identifier token under the normal Unicode
+identifier rules.
+
+The parser gives those identifier spellings structural meaning only at these
+positions:
+
+- `match` immediately after the complete `binary-expression` that forms the
+  matching subject and immediately before the matching body;
+- `case` at the start of each arm inside the matching body; and
+- `when` immediately after the complete future `MATCH-PATTERN` of one arm and
+  before that arm's guard expression.
+
+Outside those exact positions they remain ordinary identifiers/member names.
+In particular:
+
+```protos
+match: value
+obj.match(subject)
+case: value
+when: value
+```
+
+retain ordinary identifier/member behavior wherever otherwise valid.
+
+This contextual rule does not reinterpret the already-valid ordinary-call plus
+trailing-Closure shape:
+
+```protos
+match(subject) {
+    body()
+}
+```
+
+That source remains governed by the ordinary call/trailing-Closure grammar; D093
+does not steal it based on the identifier spelling `match`.
+
+#### Precedence and result composition
+
+The matching envelope is lower-precedence than the existing
+`binary-expression` hierarchy: its subject is one complete `binary-expression`.
+
+Thus the future concrete source:
+
+```protos
+a + b match { ... }
+```
+
+has a subject equivalent to `(a + b)`.
+
+D093 does not insert the matching result back into the postfix or binary
+operator hierarchy. Source that needs to use the complete matching result as an
+operand or receiver may parenthesize it:
+
+```protos
+(value match { ... }).message()
+```
+
+The ordinary `slot-creation`, `assignment`, and `non-local-return` expression
+categories remain outside this lower-precedence envelope and may contain the
+matching expression once the pattern grammar activates it.
+
+#### Arm separation and body form
+
+Matching arms use the same source-line separation convention as other braced
+Protos sequences:
+
+- one or more logical newlines separate arm lines;
+- `;` separates multiple arms written on one logical line;
+- D093 adds no trailing-semicolon exception.
+
+Every arm begins with contextual `case`. The optional contextual `when` clause
+is the source attachment point for the D092 guard.
+
+The arm separator is the existing `=>` token. The syntax after it is exactly the
+already-defined `closure-body` shape:
+
+```text
+single expression
+or
+{ expression-sequence }
+```
+
+This reuse does not mean that the source text to the left of `=>` is an ordinary
+Closure parameter list. D088/MATCHING semantics define how successful captures
+become the selected arm's ordinary callable/Closure binding interface.
+
+There is no special `default` or `else` arm grammar in D093 and no fallthrough
+form. A future catch-all is expressed by a separately ratified ordinary
+irrefutable `MATCH-PATTERN`.
+
+#### Activation boundary
+
+D093 fixes this envelope so later pattern-surface work cannot silently change
+the chosen postfix shape, contextual markers, precedence, arm structure, guard
+attachment, `=>` boundary, or body form.
+
+Because D093 intentionally does not define `MATCH-PATTERN`, this revision does
+**not** yet add `match-expression-envelope` as an alternative of the executable
+`expression` production and does not authorize parser/runtime implementation.
+The later pattern-surface ratification must complete the grammar and then connect
+the resulting concrete `match-expression` to `expression` without changing this
+D093 envelope.
+
 
 Slot creation and assignment have the lowest precedence.
 

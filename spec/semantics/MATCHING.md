@@ -9,11 +9,13 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.404`.
-It deliberately does **not** define concrete matching-expression grammar,
-case/arm/default syntax, which source expressions or future surface forms denote
-ordinary value patterns, concrete guard syntax, exhaustivity, standard pattern taxonomy, or named-binding syntax. Those remain unresolved
-until separately ratified.
+`0.1.405`.
+D093 now fixes the outer postfix matching-expression/arm/guard envelope in
+`PROTOS_GRAMMAR.md` and §3.7 fixes its lowering onto this semantic model. This
+document still deliberately does **not** define the internal match-pattern
+grammar, which source forms denote ordinary/structural patterns, binder syntax,
+irrefutable-pattern spelling, OR spelling, exhaustivity, or the broader standard
+pattern taxonomy. Those remain unresolved until separately ratified.
 
 ## 1. Scope and architectural boundary
 
@@ -47,13 +49,14 @@ Error propagation, non-local control behavior, cancellation, and explicit
 suspension semantics. Matching adds no truthiness and no implicit `Future.value`
 or other implicit awaiting/adoption step.
 
-A future standard matching construct that evaluates a subject expression must
-evaluate that subject exactly once at the matching-expression boundary. Arms are
-semantically considered in source order, and the first successful arm wins.
-Execution of a selected arm remains ordinary invocation of the selected callable
-/ Closure according to the existing callable semantics.
+The D093 standard matching-expression envelope evaluates its subject expression
+exactly once at the matching-expression boundary. Arms are semantically considered
+in source order, and the first arm accepted under D092 wins. Execution of a
+selected arm remains ordinary invocation of the selected callable / Closure
+according to the existing callable semantics.
 
-No concrete matching-expression or arm syntax is selected by this revision.
+`PROTOS_GRAMMAR.md` owns the D093 postfix outer envelope. The concrete internal
+pattern grammar and binder spellings remain separately deferred.
 
 ### 2.1 Default ordinary value-pattern behavior
 
@@ -789,7 +792,7 @@ invalid or incompatible result/interface.
 
 D088 does not standardize:
 
-- concrete `match`, `case`, arm, default, binder, or capture syntax;
+- concrete internal pattern, binder, capture, alias, OR, or irrefutable/catch-all spelling; D093 owns the outer `match`/`case`/`when`/`=>` envelope;
 - OR/alternative recognition/backtracking semantics themselves;
 - whole-subject alias/binder semantics or spelling;
 - guard syntax or exhaustivity;
@@ -935,7 +938,7 @@ execution merely because the alternatives appear otherwise optimizable.
 
 D090 does not standardize:
 
-- concrete alternative, `match`, `case`, arm, default, or binder grammar;
+- concrete alternative/OR, binder, or irrefutable/catch-all pattern grammar; D093 owns the outer `match`/`case`/`when`/`=>` envelope;
 - the spelling of an OR operator or whether one source spelling exists;
 - concrete guard syntax; D092 §3.6 defines guard evaluation, arm continuation,
   and terminal no-selection semantics;
@@ -1104,7 +1107,7 @@ tree.
 
 D092 does not standardize:
 
-- concrete `match`, `case`, guard, arm, default, wildcard, or arrow grammar;
+- concrete internal pattern/binder/alias/OR/irrefutable syntax; D093 owns the outer postfix `match` envelope, explicit `case`, optional `when`, `=>`, and Closure-body arm shape;
 - exhaustivity or redundancy checking;
 - whole-subject alias semantics or syntax;
 - optional, repetition, find, subsequence, stream, or general backtracking
@@ -1114,6 +1117,82 @@ D092 does not standardize:
 - a dedicated no-match Error subtype;
 - recognition-only matcher fast paths; or
 - parser/runtime implementation of a future matching surface.
+
+### 3.7 D093 matching surface lowering contract
+
+The outer matching-expression surface is owned normatively by
+`../PROTOS_GRAMMAR.md`. D093 selects the postfix envelope:
+
+```protos
+subjectExpression match {
+    case PATTERN => armBody
+    case PATTERN when guardExpression => armBody
+}
+```
+
+The concrete internal spelling of `PATTERN` remains separately deferred. This
+section owns only the semantic mapping from the D093 surface envelope onto the
+already-ratified D071-D092 matching semantics.
+
+The postfix spelling does **not** send a `match` message to the subject.
+Recognition remains pattern-owned through D073.
+
+For one matching-expression evaluation:
+
+1. evaluate `subjectExpression` exactly once and retain that exact ordinary value
+   as the subject for the complete arm search;
+2. consider arms in deterministic source order;
+3. for each candidate arm, attempt its pattern against that subject only through
+   the existing D073 matcher authority;
+4. consume and validate the matcher outcome under D072/D083 and the applicable
+   standard pattern-family rules;
+5. on canonical `false`, continue to the next arm;
+6. on successful recognition, establish that arm's D088 logical binding
+   interface;
+7. if the arm has `when guardExpression`, evaluate that guard exactly once with
+   those logical bindings under D092:
+   - canonical `false` continues with the next **arm** and never reopens an
+     already-committed D090 alternative;
+   - canonical `true` accepts the arm;
+   - another normal result signals ordinary `Error`; and
+   - Error, non-local control, cancellation and explicit suspension propagate;
+8. invoke the accepted arm body exactly once through the ordinary D088
+   callable/Closure boundary;
+9. the selected arm body's normal result is the normal result of the complete
+   matching expression; non-normal behavior propagates and does not resume arm
+   search; and
+10. if no arm is selected, signal the fresh ordinary `Error` required by D092.
+
+A conceptual lowering may name the once-evaluated subject `S`, but `S` is not a
+user-visible source binding and D093 creates no hidden reflective matching
+environment.
+
+`case` is source structure only. D093 introduces no runtime `Case` object, arm
+descriptor, matching registry, second matcher operation, binding Map, capture
+frame, or default-handler mechanism.
+
+The `=>` source boundary reuses the existing Closure-body surface while D088
+remains authoritative for selected-arm capture-to-argument binding. This does not
+alter ordinary standalone Closure syntax or make a pattern an ordinary Closure
+parameter list.
+
+D093 adds no fallthrough. Once an arm is accepted, only that arm body is
+executed. A future catch-all source spelling must be an ordinary irrefutable
+pattern in a normal `case` arm; D093/D092 define no privileged `default` or
+`else` execution path.
+
+Implementations may lower the surface to a linear arm walk, fuse known standard
+patterns and guards, build decision trees/DAGs, use jump tables/indexes, scalarize
+unobservable capture carriers, or use Bytecode DSL control flow only when
+observable behavior remains identical to D071-D093. In particular they must
+preserve exactly-once subject evaluation, observable matcher order/count,
+effects, D090 first-success commitment, D092 guard behavior, D088 bindings,
+Error/control/cancellation/suspension and the selected result.
+
+D093 does not define concrete pattern productions, binder spelling, whole-subject
+aliases, OR spelling, irrefutable-pattern spelling, exhaustivity/redundancy,
+optional/repetition/search/backtracking patterns, Pattern reflection, or a
+dedicated no-match Error subtype.
 
 ## 4. Explicit structural deconstruction boundary
 

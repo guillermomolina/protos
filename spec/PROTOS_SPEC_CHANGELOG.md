@@ -9,6 +9,26 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.405] - 2026-09-11
+
+### D093 — Postfix match-expression surface and lowering envelope
+- Ratifies the outer matching surface as a low-precedence postfix expression envelope: `subjectExpression match { case PATTERN [when guard] => closureBody ... }`.
+- `match`, `case`, and `when` remain lexical identifier spellings and are structural only in their exact matching positions; the global reserved-word set is unchanged and ordinary `.match(...)` / source-defined `match` names remain valid.
+- The subject is one complete `binary-expression`; the matching result is expression-valued, and source may parenthesize the complete match to use its result as a later operand/receiver.
+- Every matching envelope has at least one explicit `case` arm. Arms follow the existing newline/semicolon source-line convention; `=>` reuses the existing Closure-body boundary. D093 adds no privileged `default`/`else` arm and no fallthrough form.
+- `when` is the source attachment point for exactly D092's strict-Boolean post-pattern guard semantics.
+- The surface lowers only onto D071-D092: subject exactly once, ordered D073 matcher attempts, D072/D083 outcomes, D088 bindings/selected Closure invocation, D090 first-success OR commitment, D092 guard continuation and terminal fresh ordinary Error.
+- No runtime `Match`, `Case`, arm descriptor, registry, binding carrier or second matcher authority is introduced.
+- Concrete internal pattern grammar remains deferred. `PROTOS_GRAMMAR.md` records the D093 outer envelope with an explicit `MATCH-PATTERN` grammar parameter; this revision does not yet activate the envelope in the executable `expression` production or authorize parser/runtime implementation.
+
+### Compatibility and implementation state
+- Normative owners changed: `PROTOS_GRAMMAR.md` for the outer surface envelope and `semantics/MATCHING.md` for its semantic lowering; adds durable non-normative D093 decision record under `docs/project/decisions/language/`.
+- D051 ordinary-call compatibility and D073 ordinary `pattern.match(subject)` remain intact because contextual `match` does not reinterpret `match(subject) { ... }` or reserve the identifier globally.
+- Existing D071-D092 matching semantics remain authoritative and are not reopened.
+- Array/Map/binder/alias/OR/irrefutable pattern source spelling, exhaustivity/redundancy, optional/repetition/search/backtracking patterns, a dedicated no-match Error subtype and implementation remain unresolved.
+- No parser/runtime production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D091 is unrelated Test Tool work and is excluded; later matching checkpoints are excluded.
+
 ## [0.1.404] - 2026-09-11
 
 ### D092 — Guard evaluation, arm continuation and terminal no-selection
