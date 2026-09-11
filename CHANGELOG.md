@@ -1,5 +1,19 @@
 ## 0.2.351-SNAPSHOT
 
+- Advance `TOOL002-H2` with `H2B2` complete bounded D-case scheduling. Keep
+  admission in ordinary bundled Protos while reusing the existing execution,
+  closure-wrapper and live-inspection expectation policy: mixed waves may contain
+  `executionAsync` and `executionInspectAsync` Futures but share one Protos-owned
+  `maxInFlight` bound and one `Future.all(...).value()` wave wait. Evaluate only
+  already-rematerialized observations through existing `evaluateDCase` policy and
+  retain deterministic TestPlan result order independently of physical completion
+  order. Add focal evidence covering simple execution, Future resolution,
+  closure-error freshness wrapping, Future terminal failure and stored Future
+  observation identity in the same bounded runner. Keep public `protos test`,
+  `--jobs`/`jobs=auto`, JVM carrier, resources, hard timeout/kill, retry, remote
+  policy, Maven implementation version, specification and native boundary
+  unchanged.
+
 - Advance `TOOL002-H2` with bounded `H2B1` simple-case scheduling after four
   unpublished validation attempts exposed invalid nested-suspension compositions.
   Add a Test-Tool-owned bounded kernel in which the current runner Task directly

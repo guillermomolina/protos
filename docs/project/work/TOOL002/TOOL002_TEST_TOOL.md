@@ -832,6 +832,16 @@ TOOL002-H is IN_PROGRESS after H1 and the explicit D055 decision gate:
   The slice leaves sequential `runSimple`, public `protos test` wiring,
   future/inspection expectations, public jobs/default/fairness policy, resources,
   carriers and hard containment unchanged.
+- **H2B2 — CLOSED — SAME_COMMIT.** Extend bounded admission to the complete
+  already-supported D expectation set without moving assertion policy out of
+  bundled Protos. Each selected case is routed through the existing semantics:
+  simple execution uses `executionAsync(source)`, `closure-error-parent-fresh`
+  uses its existing source wrapper through `executionAsync`, and Future families
+  use their existing inspector source through `executionInspectAsync`. Both async
+  bridges share one Protos-owned `maxInFlight` wave bound. Completed observations
+  are then projected through the existing `evaluateDCase` policy in TestPlan order;
+  physical completion order remains irrelevant. Public `protos test` wiring and
+  public jobs/default/fairness/resource/carrier/timeout policy remain unchanged.
 
 H2 does not select a JVM carrier, public `--jobs` spelling/default, `jobs=auto`,
 hard timeout/kill policy, resource syntax, retry policy or remote transport.
