@@ -22,9 +22,12 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
@@ -99,7 +102,10 @@ final class ProtosBytecodeClosureExecutionPlan {
                         && !(defaultExpression instanceof CanonicalNotIdentity)
                         && !(defaultExpression instanceof CanonicalCall)
                         && !(defaultExpression instanceof CanonicalSend)
-                        && !(defaultExpression instanceof CanonicalReturn)) {
+                        && !(defaultExpression instanceof CanonicalReturn)
+                        && !(defaultExpression instanceof CanonicalCreate)
+                        && !(defaultExpression instanceof CanonicalAssign)
+                        && !(defaultExpression instanceof CanonicalIndexedAssign)) {
                     throw new UnsupportedOperationException(
                             "PERF006-B2C3B3 default expression is not migrated: "
                                     + defaultExpression.getClass().getSimpleName());

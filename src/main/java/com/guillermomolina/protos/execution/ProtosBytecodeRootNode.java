@@ -264,6 +264,67 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class ResolveWritableLexicalContext {
+        @Specialization
+        public static ProtosObjectValue perform(
+                ProtosActivation activation,
+                String name) {
+            return activation.writableLexicalContext(name)
+                    .orElseThrow(
+                            () ->
+                                    new ProtosSignalException(
+                                            ProtosCoreErrors.newSlotNotFound(activation)));
+        }
+    }
+
+    @Operation
+    public static final class RequireObjectMutationTarget {
+        @Specialization
+        public static ProtosObjectValue perform(
+                ProtosActivation activation,
+                Object target) {
+            if (target instanceof ProtosObjectValue object) {
+                return object;
+            }
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    @Operation
+    public static final class CreateLocalSlot {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                ProtosObjectValue target,
+                String name,
+                Object value) {
+            try {
+                target.createLocalSlot(name, value);
+            } catch (IllegalStateException invalidMutation) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            }
+            return value;
+        }
+    }
+
+    @Operation
+    public static final class AssignLocalSlot {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                ProtosObjectValue target,
+                String name,
+                Object value) {
+            try {
+                target.assignLocalSlot(name, value);
+            } catch (IllegalStateException invalidMutation) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            }
+            return value;
+        }
+    }
+
+    @Operation
     public static final class ReadMember {
         @Specialization
         public static Object perform(

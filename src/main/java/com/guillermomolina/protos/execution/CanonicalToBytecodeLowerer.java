@@ -21,10 +21,13 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
@@ -54,10 +57,12 @@ import java.util.Objects;
  * spread item's exact left-to-right position. Non-spread body/default fast paths
  * remain unchanged.
  * PERF006-B6A1 extends the same C-prime lowering with read-only member,
- * identity and execution-intrinsic expressions, including composed operands
- * that may suspend. The ordinary {@link ProtosSourceCompiler} remains on the
- * established AST lowerer until the remaining canonical forms are migrated
- * and B6 performs the production cutover.</p>
+ * identity and execution-intrinsic expressions. PERF006-B6A2 adds canonical
+ * slot creation/assignment and indexed assignment while preserving the AST
+ * validation/evaluation order and composing ordinary atPut dispatch through
+ * the same continuation backend. The ordinary {@link ProtosSourceCompiler}
+ * remains on the established AST lowerer until the remaining canonical forms
+ * are migrated and B6 performs the production cutover.</p>
  */
 final class CanonicalToBytecodeLowerer {
     private final ProtosLanguage language;
@@ -234,6 +239,22 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalNotIdentity identity) {
             validateSupportedDefaultExpression(identity.left());
             validateSupportedDefaultExpression(identity.right());
+            return;
+        }
+        if (expression instanceof CanonicalCreate create) {
+            create.target().ifPresent(this::validateSupportedDefaultExpression);
+            validateSupportedDefaultExpression(create.value());
+            return;
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            assign.target().ifPresent(this::validateSupportedDefaultExpression);
+            validateSupportedDefaultExpression(assign.value());
+            return;
+        }
+        if (expression instanceof CanonicalIndexedAssign indexedAssign) {
+            validateSupportedDefaultExpression(indexedAssign.receiver());
+            validateSupportedDefaultExpression(indexedAssign.index());
+            validateSupportedDefaultExpression(indexedAssign.value());
             return;
         }
         if (expression instanceof CanonicalCall call) {
@@ -413,6 +434,11 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalNotIdentity identity) {
             return requiresComposedInvocation(identity.left())
                     || requiresComposedInvocation(identity.right());
+        }
+        if (expression instanceof CanonicalCreate
+                || expression instanceof CanonicalAssign
+                || expression instanceof CanonicalIndexedAssign) {
+            return true;
         }
         return false;
     }
@@ -611,6 +637,21 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
             return;
         }
+        if (expression instanceof CanonicalCreate create) {
+            emitBodyCreate(
+                    builder, create, target, preparedCall, childResult, resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            emitBodyAssign(
+                    builder, assign, target, preparedCall, childResult, resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalIndexedAssign indexedAssign) {
+            emitBodyIndexedAssign(
+                    builder, indexedAssign, target, preparedCall, childResult, resumeValue);
+            return;
+        }
         builder.beginStoreLocal(target);
         emitExpression(builder, expression);
         builder.endStoreLocal();
@@ -702,8 +743,331 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
             return;
         }
+        if (expression instanceof CanonicalCreate create) {
+            emitDefaultCreate(
+                    builder, create, target, preparedCall, childResult, resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            emitDefaultAssign(
+                    builder, assign, target, preparedCall, childResult, resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalIndexedAssign indexedAssign) {
+            emitDefaultIndexedAssign(
+                    builder, indexedAssign, target, preparedCall, childResult, resumeValue);
+            return;
+        }
         builder.beginStoreLocal(target);
         emitExpression(builder, expression);
+        builder.endStoreLocal();
+    }
+
+    private static void emitBodyCreate(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalCreate create,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal value = builder.createLocal("createValue", null);
+        if (create.target().isEmpty()) {
+            emitBodyExpressionToLocal(
+                    builder, create.value(), value, preparedCall, childResult, resumeValue);
+            builder.beginStoreLocal(result);
+            builder.beginCreateLocalSlot();
+            builder.emitLoadArgument(0);
+            builder.beginLoadIntrinsic();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(CanonicalIntrinsic.Kind.CONTEXT);
+            builder.endLoadIntrinsic();
+            builder.emitLoadConstant(create.name());
+            builder.emitLoadLocal(value);
+            builder.endCreateLocalSlot();
+            builder.endStoreLocal();
+            return;
+        }
+
+        BytecodeLocal rawTarget = builder.createLocal("createRawTarget", null);
+        BytecodeLocal mutationTarget = builder.createLocal("createMutationTarget", null);
+        emitBodyExpressionToLocal(
+                builder,
+                create.target().orElseThrow(),
+                rawTarget,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.beginStoreLocal(mutationTarget);
+        builder.beginRequireObjectMutationTarget();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(rawTarget);
+        builder.endRequireObjectMutationTarget();
+        builder.endStoreLocal();
+        emitBodyExpressionToLocal(
+                builder, create.value(), value, preparedCall, childResult, resumeValue);
+        builder.beginStoreLocal(result);
+        builder.beginCreateLocalSlot();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(mutationTarget);
+        builder.emitLoadConstant(create.name());
+        builder.emitLoadLocal(value);
+        builder.endCreateLocalSlot();
+        builder.endStoreLocal();
+    }
+
+    private static void emitBodyAssign(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalAssign assign,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal value = builder.createLocal("assignValue", null);
+        BytecodeLocal mutationTarget = builder.createLocal("assignMutationTarget", null);
+
+        if (assign.target().isPresent()) {
+            BytecodeLocal rawTarget = builder.createLocal("assignRawTarget", null);
+            emitBodyExpressionToLocal(
+                    builder,
+                    assign.target().orElseThrow(),
+                    rawTarget,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            builder.beginStoreLocal(mutationTarget);
+            builder.beginRequireObjectMutationTarget();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(rawTarget);
+            builder.endRequireObjectMutationTarget();
+            builder.endStoreLocal();
+        } else {
+            /* AST authority resolves the writable lexical destination before RHS evaluation. */
+            builder.beginStoreLocal(mutationTarget);
+            builder.beginResolveWritableLexicalContext();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(assign.name());
+            builder.endResolveWritableLexicalContext();
+            builder.endStoreLocal();
+        }
+
+        emitBodyExpressionToLocal(
+                builder, assign.value(), value, preparedCall, childResult, resumeValue);
+        builder.beginStoreLocal(result);
+        builder.beginAssignLocalSlot();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(mutationTarget);
+        builder.emitLoadConstant(assign.name());
+        builder.emitLoadLocal(value);
+        builder.endAssignLocalSlot();
+        builder.endStoreLocal();
+    }
+
+    private static void emitBodyIndexedAssign(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalIndexedAssign indexedAssign,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal receiver = builder.createLocal("indexedAssignReceiver", null);
+        BytecodeLocal index = builder.createLocal("indexedAssignIndex", null);
+        BytecodeLocal value = builder.createLocal("indexedAssignValue", null);
+        BytecodeLocal dispatchResult = builder.createLocal("indexedAssignDispatchResult", null);
+
+        emitBodyExpressionToLocal(
+                builder,
+                indexedAssign.receiver(),
+                receiver,
+                preparedCall,
+                childResult,
+                resumeValue);
+        emitBodyExpressionToLocal(
+                builder,
+                indexedAssign.index(),
+                index,
+                preparedCall,
+                childResult,
+                resumeValue);
+        emitBodyExpressionToLocal(
+                builder,
+                indexedAssign.value(),
+                value,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(preparedCall);
+        builder.beginPrepareSendArguments();
+        builder.emitLoadLocal(receiver);
+        builder.emitLoadConstant("atPut");
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(index);
+        builder.emitLoadLocal(value);
+        builder.endPrepareSendArguments();
+        builder.endStoreLocal();
+        emitPreparedInvocation(
+                builder,
+                dispatchResult,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        /* Indexed assignment returns the exact RHS, never the atPut result. */
+        builder.beginStoreLocal(result);
+        builder.emitLoadLocal(value);
+        builder.endStoreLocal();
+    }
+
+    private static void emitDefaultCreate(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalCreate create,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal value = builder.createLocal("defaultCreateValue", null);
+        if (create.target().isEmpty()) {
+            emitDefaultExpressionToLocal(
+                    builder, create.value(), value, preparedCall, childResult, resumeValue);
+            builder.beginStoreLocal(result);
+            builder.beginCreateLocalSlot();
+            builder.emitLoadArgument(0);
+            builder.beginLoadIntrinsic();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(CanonicalIntrinsic.Kind.CONTEXT);
+            builder.endLoadIntrinsic();
+            builder.emitLoadConstant(create.name());
+            builder.emitLoadLocal(value);
+            builder.endCreateLocalSlot();
+            builder.endStoreLocal();
+            return;
+        }
+
+        BytecodeLocal rawTarget = builder.createLocal("defaultCreateRawTarget", null);
+        BytecodeLocal mutationTarget = builder.createLocal("defaultCreateMutationTarget", null);
+        emitDefaultExpressionToLocal(
+                builder,
+                create.target().orElseThrow(),
+                rawTarget,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.beginStoreLocal(mutationTarget);
+        builder.beginRequireObjectMutationTarget();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(rawTarget);
+        builder.endRequireObjectMutationTarget();
+        builder.endStoreLocal();
+        emitDefaultExpressionToLocal(
+                builder, create.value(), value, preparedCall, childResult, resumeValue);
+        builder.beginStoreLocal(result);
+        builder.beginCreateLocalSlot();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(mutationTarget);
+        builder.emitLoadConstant(create.name());
+        builder.emitLoadLocal(value);
+        builder.endCreateLocalSlot();
+        builder.endStoreLocal();
+    }
+
+    private static void emitDefaultAssign(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalAssign assign,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal value = builder.createLocal("defaultAssignValue", null);
+        BytecodeLocal mutationTarget = builder.createLocal("defaultAssignMutationTarget", null);
+
+        if (assign.target().isPresent()) {
+            BytecodeLocal rawTarget = builder.createLocal("defaultAssignRawTarget", null);
+            emitDefaultExpressionToLocal(
+                    builder,
+                    assign.target().orElseThrow(),
+                    rawTarget,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            builder.beginStoreLocal(mutationTarget);
+            builder.beginRequireObjectMutationTarget();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(rawTarget);
+            builder.endRequireObjectMutationTarget();
+            builder.endStoreLocal();
+        } else {
+            builder.beginStoreLocal(mutationTarget);
+            builder.beginResolveWritableLexicalContext();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(assign.name());
+            builder.endResolveWritableLexicalContext();
+            builder.endStoreLocal();
+        }
+
+        emitDefaultExpressionToLocal(
+                builder, assign.value(), value, preparedCall, childResult, resumeValue);
+        builder.beginStoreLocal(result);
+        builder.beginAssignLocalSlot();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(mutationTarget);
+        builder.emitLoadConstant(assign.name());
+        builder.emitLoadLocal(value);
+        builder.endAssignLocalSlot();
+        builder.endStoreLocal();
+    }
+
+    private static void emitDefaultIndexedAssign(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalIndexedAssign indexedAssign,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal receiver = builder.createLocal("defaultIndexedAssignReceiver", null);
+        BytecodeLocal index = builder.createLocal("defaultIndexedAssignIndex", null);
+        BytecodeLocal value = builder.createLocal("defaultIndexedAssignValue", null);
+        BytecodeLocal dispatchResult = builder.createLocal("defaultIndexedAssignDispatchResult", null);
+
+        emitDefaultExpressionToLocal(
+                builder,
+                indexedAssign.receiver(),
+                receiver,
+                preparedCall,
+                childResult,
+                resumeValue);
+        emitDefaultExpressionToLocal(
+                builder,
+                indexedAssign.index(),
+                index,
+                preparedCall,
+                childResult,
+                resumeValue);
+        emitDefaultExpressionToLocal(
+                builder,
+                indexedAssign.value(),
+                value,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(preparedCall);
+        builder.beginPrepareSendArguments();
+        builder.emitLoadLocal(receiver);
+        builder.emitLoadConstant("atPut");
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(index);
+        builder.emitLoadLocal(value);
+        builder.endPrepareSendArguments();
+        builder.endStoreLocal();
+        emitPreparedInvocation(
+                builder,
+                dispatchResult,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(result);
+        builder.emitLoadLocal(value);
         builder.endStoreLocal();
     }
 
@@ -1363,6 +1727,22 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalNotIdentity identity) {
             validateSupportedExpression(identity.left());
             validateSupportedExpression(identity.right());
+            return;
+        }
+        if (expression instanceof CanonicalCreate create) {
+            create.target().ifPresent(this::validateSupportedExpression);
+            validateSupportedExpression(create.value());
+            return;
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            assign.target().ifPresent(this::validateSupportedExpression);
+            validateSupportedExpression(assign.value());
+            return;
+        }
+        if (expression instanceof CanonicalIndexedAssign indexedAssign) {
+            validateSupportedExpression(indexedAssign.receiver());
+            validateSupportedExpression(indexedAssign.index());
+            validateSupportedExpression(indexedAssign.value());
             return;
         }
         if (expression instanceof CanonicalCall call) {

@@ -1,3 +1,7 @@
+## 0.2.377-SNAPSHOT
+
+- Implement `PERF006-B6A2 — mutating canonical Bytecode coverage` on the ratified C-prime backend. Add exact Bytecode lowering for bare/explicit slot creation and assignment plus indexed assignment, including mutating Closure defaults and operands that suspend. Preserve AST destination/target prevalidation order, local-only mutation rules, exact RHS results, left-to-right indexed evaluation, and ordinary suspendible `atPut(index, value)` dispatch while discarding its return value. Completed prefixes are retained in Bytecode continuation state rather than replayed. Do not cut over `ProtosLanguage.parse`, migrate Object/Closure literals, composition or `super`, retire legacy replay, change specification/public API, or add optimizer-runtime wiring. Implementation version becomes `0.2.377-SNAPSHOT`.
+
 ## 0.2.376-SNAPSHOT
 
 - Implement `LM009-G1 — parser-derived static diagnostics` (GitHub #360) on the
