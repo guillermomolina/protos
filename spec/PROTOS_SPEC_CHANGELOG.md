@@ -9,6 +9,24 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.404] - 2026-09-11
+
+### D092 — Guard evaluation, arm continuation and terminal no-selection
+- Ratifies guards as ordinary post-pattern Protos evaluation: a guard runs only after complete D072-valid pattern success, with that arm's D088 logical bindings available.
+- Guard results are strict canonical Booleans: `true` selects the arm; `false` rejects only that arm and continues with the next arm. Every other normal guard result signals ordinary `Error`; there is no truthiness or implicit Future adoption/await.
+- Guard `false` never reopens an already-successful D090 alternative composite. Error, non-local control, cancellation and explicit suspension propagate normally and never become arm rejection.
+- Matching/guard effects are not transactional or rolled back. Rejected-arm bindings remain arm-local while ordinary reachable state mutations remain visible to later arms.
+- A selected arm body executes only after pattern success plus guard acceptance; D088 remains the capture-to-callable binding authority and the selected body's normal result becomes the matching operation's normal result.
+- If no arm is selected, the matching operation signals one fresh ordinary `Error` under the existing standard failure-occurrence rules. D092 adds no `MatchFailure` prototype, `null` fallback, implicit default, or mandatory general exhaustivity institution.
+- Any future catch-all/default surface must be semantically an ordinary irrefutable arm rather than a privileged fallback path.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D092 decision record under `docs/project/decisions/language/`.
+- Existing D071-D090 matcher, capture, collection-pattern, binding and ordered-alternative semantics remain authoritative; D092 refines guarded-arm selection without reopening D090 alternatives or replacing D088.
+- Concrete matching/guard/default grammar, exhaustivity/redundancy analysis, whole-subject aliases, optional/repetition/search/backtracking patterns, pattern reflection and a dedicated no-match Error subtype remain unresolved.
+- No parser, grammar, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D091 is unrelated concurrent Test Tool work and is excluded; later matching-design checkpoints are excluded.
+
 ## [0.1.403] - 2026-09-11
 
 ### D090 — Ordered OR / alternative-pattern semantics

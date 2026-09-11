@@ -9,10 +9,10 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.403`.
+`0.1.404`.
 It deliberately does **not** define concrete matching-expression grammar,
 case/arm/default syntax, which source expressions or future surface forms denote
-ordinary value patterns, guards, exhaustivity, standard pattern taxonomy, or named-binding syntax. Those remain unresolved
+ordinary value patterns, concrete guard syntax, exhaustivity, standard pattern taxonomy, or named-binding syntax. Those remain unresolved
 until separately ratified.
 
 ## 1. Scope and architectural boundary
@@ -258,7 +258,7 @@ A future standard alternative/or-pattern form that exposes fixed source-level
 bindings must provide a stable binding interface across its successful
 alternatives, but D083 does not select the mechanism for proving or representing
 that stability. Source binding names, duplicate-name rules, whole-subject alias
-syntax, guards, exhaustivity, and concrete match/arm grammar remain separate
+syntax, guard syntax, exhaustivity, and concrete match/arm grammar remain separate
 decisions.
 
 Implementations may inline or fuse standard composite layers, pre-size or
@@ -400,7 +400,7 @@ standardize:
 - a generic user-extensible sequence observation protocol;
 - a standard `Sequence` semantic family;
 - source syntax for sequence components, rest, capture names, or arms; or
-- guards, exhaustivity, identity-pattern syntax, or recognition-only fast paths.
+- guard syntax, exhaustivity, identity-pattern syntax, or recognition-only fast paths.
 
 A user/library pattern may already define domain-specific sequence recognition
 through ordinary `pattern.match(subject)`. A future generic opt-in sequence
@@ -631,7 +631,7 @@ standardize:
 - concrete Map-pattern, exactness, remainder, key-expression, capture, or arm
   syntax;
 - named capture/binding spelling or duplicate binding-name rules;
-- guards, exhaustivity, identity-pattern syntax, or recognition-only fast paths.
+- guard syntax, exhaustivity, identity-pattern syntax, or recognition-only fast paths.
 
 A user/library pattern may already define domain-specific keyed recognition
 through ordinary `pattern.match(subject)`. A future generic opt-in keyed
@@ -792,7 +792,7 @@ D088 does not standardize:
 - concrete `match`, `case`, arm, default, binder, or capture syntax;
 - OR/alternative recognition/backtracking semantics themselves;
 - whole-subject alias/binder semantics or spelling;
-- guards or exhaustivity;
+- guard syntax or exhaustivity;
 - repetition or optional-pattern semantics;
 - sequence find/subsequence or stream matching;
 - named arguments or another callable parameter category;
@@ -867,7 +867,8 @@ or another outer condition after alternative recognition, failure of that later
 condition does not make D090 resume the already-successful alternative composite
 at its next branch.
 
-D090 does not otherwise define guard syntax or guard evaluation semantics.
+D090 does not define concrete guard syntax; D092 §3.6 owns guard evaluation,
+arm continuation, and terminal no-selection semantics.
 
 #### 3.5.3 Capture and binding interface
 
@@ -936,7 +937,8 @@ D090 does not standardize:
 
 - concrete alternative, `match`, `case`, arm, default, or binder grammar;
 - the spelling of an OR operator or whether one source spelling exists;
-- guard semantics beyond the no-reopen boundary in §3.5.2;
+- concrete guard syntax; D092 §3.6 defines guard evaluation, arm continuation,
+  and terminal no-selection semantics;
 - exhaustivity or redundancy checking;
 - repetition, optional, find, subsequence, or general backtracking patterns;
 - whole-subject alias semantics or syntax;
@@ -947,6 +949,171 @@ D090 does not standardize:
 Optional tooling/debug metadata or a future explicit pattern-introspection
 protocol may describe source branches and logical binding projections without
 changing the standard D072/D083/D088/D090 runtime contracts.
+
+### 3.6 Standard guarded-arm selection and terminal no-selection
+
+D092 defines the standard semantic behavior of guards and arm continuation
+without selecting concrete source syntax.
+
+The subject expression of a future standard matching construct remains evaluated
+exactly once at the matching-expression boundary under §2. Arms are considered
+in their deterministic semantic source order. Each candidate arm begins by
+attempting its pattern through the existing D073 matcher authority against that
+same already-evaluated subject value.
+
+A canonical `false` pattern result is ordinary arm mismatch and proceeds directly
+to the next arm without evaluating that arm's guard or body. A valid successful
+D072 result establishes the candidate arm's D088 logical binding interface and
+then proceeds according to the guard rules below.
+
+#### 3.6.1 Guard evaluation and strict Boolean result
+
+An arm with no guard is accepted immediately after its pattern succeeds. D092
+does not model the absence of a guard as an implicit hidden Closure invocation or
+Boolean send.
+
+For a guarded arm, the guard is evaluated **exactly once** after complete pattern
+success and before the arm body is selected. The source-visible binders defined
+by that arm's D088 interface are available to the guard with the same ordinary
+captured values that the arm body would receive if selected.
+
+D092 does not add a second capture or binding carrier for guards. Implementations
+may realize those binder values through ordinary activation slots, arguments,
+frame state, or another internal representation, but the observable values and
+binding interface remain those defined by D088.
+
+Guard evaluation is ordinary Protos evaluation. Ordinary lookup, dispatch,
+effects, Error signaling, non-local control, cancellation, and explicit
+suspension semantics apply. There is no guard-specific pure/restricted
+sublanguage, whitelist, truthiness, coercion, implicit `Future.value()`, or other
+implicit await/adoption step.
+
+A normally completing guard must produce exactly one canonical Boolean:
+
+```text
+true     -> accept/select this arm
+false    -> reject this arm and continue with the next arm
+```
+
+Any other normal result signals an ordinary standard `Error` occurrence at the
+guard-result boundary. In particular `null`, Numbers, Strings, Arrays, ordinary
+objects, and Future values are invalid guard results rather than truthy/falsy
+values.
+
+Error, non-local control, cancellation, explicit suspension, and other non-normal
+control behavior from the guard propagate normally. They are not reinterpreted
+as canonical `false` and do not cause a later arm to be attempted.
+
+#### 3.6.2 Guard rejection, effects, and D090 commitment
+
+Canonical `false` rejects the **current arm**, not its already-successful pattern.
+The matching operation then considers the next arm in source order.
+
+Guard rejection never reopens a successful D090 alternative composite. If an
+alternative pattern has committed to one branch under §3.5 and the containing
+arm's guard later returns canonical `false`, the matching operation proceeds to
+the next arm. It does not resume the alternative composite at a later branch and
+does not invoke the successful pattern again.
+
+Matching and guard evaluation are not transactional. Effects already performed
+by a candidate pattern or its guard are not rolled back when the pattern
+mismatches or the guard returns canonical `false`. A later arm therefore observes
+the ordinary reachable program state that exists after those effects.
+
+The D088 source bindings belonging to a rejected candidate remain scoped to that
+arm's guard/body interface; they do not become ambient bindings for later arms.
+This requires no rollback mechanism because arm bindings are not installed as
+mutations of unrelated outer binding state.
+
+A later arm is attempted against the same subject value produced by the one
+matching-expression subject evaluation. D092 does not re-evaluate, clone, freeze,
+or snapshot the subject between arms merely because an earlier guard rejected an
+arm.
+
+#### 3.6.3 Selected-arm body and result
+
+A successful pattern with no guard, or a successful pattern whose guard returns
+canonical `true`, selects that arm.
+
+Only after this acceptance does the arm body execute. D088 remains authoritative
+for mapping the successful D072 capture interface to the arm's ordinary
+callable/Closure binding interface.
+
+The selected arm body's normal result is the normal result of the matching
+operation. Error, non-local control, cancellation, explicit suspension, and other
+non-normal control from the selected body propagate under the existing ordinary
+Protos rules. Such behavior does not resume arm search.
+
+If a selected body suspends, the matching operation suspends at that ordinary
+continuation point. A later arm is not speculatively or concurrently attempted.
+
+#### 3.6.4 Terminal no-selection
+
+If every arm either returns canonical `false` from pattern recognition or is
+rejected by a canonical-`false` guard, and no arm is selected, the matching
+operation signals one **fresh ordinary `Error`** under the standard failure
+occurrence rules in `ERRORS.md`.
+
+D092 introduces no `MatchFailure` standard Error prototype, no canonical-`null`
+fallback result, and no implicit default branch. A normal selected arm remains
+free to return `null`; that successful normal result is distinct from terminal
+no-selection.
+
+D092 does not select concrete catch-all/default syntax. If a future source
+surface provides `default`, `else`, wildcard, or equivalent catch-all spelling,
+that form must be semantically an ordinary irrefutable arm participating in the
+same ordered arm-selection rules rather than a privileged fallback mechanism
+that bypasses matching/guard semantics.
+
+General static exhaustivity is not required by D092. A compiler or tool may prove
+that a particular closed standard pattern set is exhaustive and optimize away an
+unreachable no-selection path, but that proof does not create a closed pattern
+universe or change the general runtime semantics for arbitrary matcher objects.
+
+#### 3.6.5 Optimization and scaling
+
+For an arm selected at position `k`, a straightforward implementation performs
+the ordered matcher attempts needed to reach that arm and evaluates guards only
+for successful candidate patterns. D092 requires no semantic per-arm rollback
+log, speculative binding environment, global guard registry, or parallel branch
+state.
+
+Implementations may inline standard patterns and guards, fuse pattern/binding/
+guard/body control flow, scalarize unobservable capture carriers, or build
+specialized decision structures only when observable behavior is identical.
+
+Such optimization must preserve:
+
+- one evaluation of the subject expression at the matching boundary;
+- semantic arm order and every observable matcher attempt;
+- D072 result validation and D088 binding values;
+- exactly one evaluation of each guard whose candidate pattern succeeds;
+- strict canonical-Boolean guard result handling;
+- ordinary effect visibility across rejected arms;
+- the D090 no-reopen rule;
+- Error, non-local control, cancellation, and explicit suspension behavior;
+- selected-arm body/result behavior; and
+- fresh ordinary Error behavior for reachable terminal no-selection.
+
+In particular, an implementation may not duplicate an effectful guard, move it
+before pattern success, evaluate later guards speculatively, or treat a guard
+failure/control transfer as ordinary arm rejection merely to simplify a decision
+tree.
+
+#### 3.6.6 Boundary and future evolution
+
+D092 does not standardize:
+
+- concrete `match`, `case`, guard, arm, default, wildcard, or arrow grammar;
+- exhaustivity or redundancy checking;
+- whole-subject alias semantics or syntax;
+- optional, repetition, find, subsequence, stream, or general backtracking
+  patterns;
+- first-class Pattern reflection or mandatory capture-signature metadata;
+- a pure/restricted guard sublanguage or effect system;
+- a dedicated no-match Error subtype;
+- recognition-only matcher fast paths; or
+- parser/runtime implementation of a future matching surface.
 
 ## 4. Explicit structural deconstruction boundary
 
@@ -1206,7 +1373,7 @@ This revision intentionally does not select:
 - a `match` keyword or expression grammar;
 - case/arm/default syntax;
 - which source expressions or future surface forms denote ordinary value patterns;
-- guards or exhaustivity;
+- guard syntax or exhaustivity;
 - a standard built-in pattern taxonomy;
 - named capture/binding syntax;
 - repetition and optional-pattern semantics;
