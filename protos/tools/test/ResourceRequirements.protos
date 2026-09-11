@@ -143,3 +143,58 @@ parse: (text) => {
 
     frozenTuple(...declarations)
 }
+// TOOL002-I6D: D091 strict full-TestPlan referential join.
+//
+// `plan` is the complete associated TestPlan. Every declaration must resolve to
+// exactly one existing CaseSpec before any later filtering/sharding stage. The
+// requirements document cannot create cases; output case order/cardinality are
+// inherited from the complete input plan.
+attachToPlan: (plan, declarations) => {
+    cases: Manifest.planCases(plan)
+    caseById: Map()
+    ambiguousCaseIds: Map()
+
+    cases.each((spec) => {
+        id: Manifest.caseId(spec)
+        caseById.containsKey(id).ifTrue(() => {
+            ambiguousCaseIds[id] = true
+        })
+        caseById.containsKey(id).ifFalse(() => {
+            caseById[id] = spec
+        })
+    })
+
+    requirementsByCase: Map()
+    declarations.each((declarationValue) => {
+        id: declarationCase(declarationValue)
+
+        caseById.containsKey(id).ifFalse(() => {
+            fail()
+        })
+        ambiguousCaseIds.containsKey(id).ifTrue(() => {
+            fail()
+        })
+
+        attached: Array()
+        requirementsByCase.containsKey(id).ifTrue(() => {
+            attached = requirementsByCase[id]
+        })
+        attached = Array(...attached, declarationRequirement(declarationValue))
+        requirementsByCase[id] = attached
+    })
+
+    joinedCases: Array()
+    cases.each((spec) => {
+        id: Manifest.caseId(spec)
+        attached: Array()
+        requirementsByCase.containsKey(id).ifTrue(() => {
+            attached = requirementsByCase[id]
+        })
+        joinedCases = Array(
+            ...joinedCases,
+            Manifest.caseSpecWithRequirements(spec, attached)
+        )
+    })
+
+    frozenTuple(frozenTuple(...joinedCases))
+}
