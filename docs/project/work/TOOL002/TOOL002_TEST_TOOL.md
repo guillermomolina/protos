@@ -816,12 +816,22 @@ TOOL002-H is IN_PROGRESS after H1 and the explicit D055 decision gate:
   only submission/execution/completion mechanics while bounded admission,
   CaseId/TestPlan, later resources/capacities, aggregation and deterministic
   reporting remain bundled-Protos policy.
-- **H2 — READY.** Implementation must keep the general async exact-execution
-  bridge independently reviewable from bounded Test Tool scheduling. The bridge
-  must marshal inert completion back to the caller Actor domain before guest
-  rematerialization, preserve private output, retain outstanding-execution
-  custody until cleanup, and avoid pretending an already-started same-runtime
-  child is hard-preemptible.
+- **H2 — IN_PROGRESS.** H2A is already closed; H2B now owns bounded bundled-Protos
+  scheduling over that bridge. The implementation must keep async exact execution
+  independently reviewable, marshal inert completion back to the caller Actor
+  domain before guest rematerialization, preserve private output, retain
+  outstanding-execution custody until cleanup, and avoid pretending an
+  already-started same-runtime child is hard-preemptible.
+- **H2B1 — CLOSED — SAME_COMMIT.** Add the first bounded scheduling kernel for
+  simple expectations only. The current runner Task directly fills one bounded
+  wave with `executionAsync(source)` Futures, waits once with `Future.all(...).value()`
+  at the wave boundary, and projects already-rematerialized observations in
+  deterministic TestPlan order. No `Future.then` continuation Task and no per-case
+  `Closure.future()` worker is introduced by the scheduler. Standard `while`
+  supplies the already-ratified suspension/replay composition for the wave loops.
+  The slice leaves sequential `runSimple`, public `protos test` wiring,
+  future/inspection expectations, public jobs/default/fairness policy, resources,
+  carriers and hard containment unchanged.
 
 H2 does not select a JVM carrier, public `--jobs` spelling/default, `jobs=auto`,
 hard timeout/kill policy, resource syntax, retry policy or remote transport.

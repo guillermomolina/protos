@@ -1,5 +1,20 @@
 ## 0.2.351-SNAPSHOT
 
+- Advance `TOOL002-H2` with bounded `H2B1` simple-case scheduling after four
+  unpublished validation attempts exposed invalid nested-suspension compositions.
+  Add a Test-Tool-owned bounded kernel in which the current runner Task directly
+  fills one wave with `executionAsync` Futures, waits exactly once at the wave
+  boundary with `Future.all(...).value()`, and evaluates already-rematerialized
+  observations in deterministic TestPlan order. Use the standard suspension-aware
+  `while` protocol for the wave loops; create no `Future.then` continuation Task
+  and no per-case `Closure.future()` worker in the scheduler. Add executable
+  evidence with host capacity above the Protos bound and deliberately reversed
+  physical completion order. Keep sequential `runSimple`, public `protos test`
+  wiring, future/inspection expectation scheduling, public jobs/default/fairness
+  policy, JVM carrier, resource syntax, hard timeout/kill, OS-worker and remote
+  policy unchanged. This intermediate Test-Tool-local slice makes no Maven
+  implementation-version, specification or native-boundary change.
+
 - Ratify `LIB007-0 — Mathematical integer algorithms Standard Library design`
   (GitHub #329) after explicit project-owner approval and exhaustive comparison
   across Python/CPython, GHC/ghc-bignum, Apple Swift Numerics, Ruby,
