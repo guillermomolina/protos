@@ -828,3 +828,45 @@ over this core, followed by the dedicated stdio LSP edge. LM009-G/H remain the
 owners of editor-visible diagnostics, symbols, definition, completion, hover,
 signature help and references. Any newly exposed substantive semantic or durable
 platform choice still stops at the ordinary Dxxx/PLATxxx gate.
+
+## LM009-F2 session/workspace snapshot custody
+
+Status: **IMPLEMENTED**
+
+F2 builds on the published F1 parser-authority core without selecting another
+language or platform architecture. It establishes client-session-local mutable
+custody around immutable source snapshots:
+
+- one `ProtosStaticAnalysisSession` instance is owned by one future language
+  server/client session;
+- workspace identifiers remain opaque and partition independent document maps;
+- document identifiers and numeric versions remain opaque analysis metadata;
+- `putDocument` atomically replaces one current immutable snapshot within its
+  workspace without interpreting version ordering;
+- `parseCurrent` first captures one immutable snapshot and then invokes the F1
+  core, so a concurrent replacement cannot alter the source observed by that
+  parse;
+- `isCurrent` compares the tagged snapshot value against current custody before
+  an adapter publishes freshness-sensitive output;
+- closing one document/workspace drops only that custody domain; and
+- state is instance-local with no static/global semantic registry or shared
+  cross-workspace mutable model.
+
+The workspace/document maps are concurrent only to make independent requests
+safe; F2 creates no background executor, worker pool, scheduler, guest Process,
+Actor, Task, Truffle Context or ordinary-runtime overhead.
+
+### Deliberately deferred protocol cancellation boundary
+
+The earlier F decomposition mentioned cancellation mechanics in F2. Current
+implementation audit narrows F2 rather than silently selecting a public
+cancellation/lifetime policy. F2 therefore introduces **no cancellation
+contract**. The F3 LSP edge owns standard protocol request cancellation and
+shutdown mapping. If faithful support later requires a stronger parser-level
+preemption/cooperative-cancellation guarantee, that is evaluated at the normal
+substantive decision gate rather than embedded in this custody class.
+
+LM009-F remains **IN_PROGRESS**. F3 must still provide the PLAT024-dedicated
+toolchain-matched stdio LSP process/lifecycle edge over F1/F2. LM009-G/H continue
+to own editor-visible diagnostics, symbols, definition, completion, hover,
+signature help and references.
