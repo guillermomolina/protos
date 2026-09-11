@@ -10,6 +10,79 @@ infrastructure.
 The project cares about the quality and evidence behind a change, not about
 whether every line was typed manually.
 
+## Your first contribution — about 15 minutes
+
+For a small, already-scoped Issue, you should not need to learn the project's
+entire internal governance before opening a useful Pull Request. The normal
+external-contributor path is:
+
+1. **Fork and clone Protos.** Fork the repository on GitHub, then clone your fork
+   and keep the main repository as `upstream`:
+
+   ```sh
+   git clone https://github.com/<your-user>/protos.git
+   cd protos
+   git remote add upstream https://github.com/guillermomolina/protos.git
+   git fetch upstream
+   ```
+
+   If you already have a clone, just make sure you have the current
+   `upstream/main` before branching.
+
+2. **Use the devcontainer when convenient.** The repository includes a
+   `.devcontainer/` environment so you can use the project's expected toolchain
+   without recreating it manually. It is helpful, not a requirement for every
+   documentation-only contribution.
+
+3. **Pick a bounded Issue before doing broad implementation work.** A `Ready`
+   Issue with no assignee is normally available; `good first issue` is the best
+   starting point for a first contribution. Comment on the Issue if you need a
+   maintainer to assign it to you.
+
+4. **Create a narrow branch from current `upstream/main`:**
+
+   ```sh
+   git fetch upstream
+   git switch -c issue-N-short-name upstream/main
+   ```
+
+5. **Read the authority that applies to your change, then make one narrow
+   change.** The Issue acceptance criteria and the applicable `AGENTS.md` files
+   tell you the operational constraints. If the change would alter language
+   semantics, read the owning normative text under `spec/` first; if the desired
+   behavior is unspecified or contradictory, stop and raise the design question
+   instead of choosing semantics in the implementation.
+
+6. **Add or update the right tests when behavior changes.** When observable
+   behavior can be tested in Protos source, prefer Protos-owned conformance or
+   regression coverage. Use Java tests for host/JVM machinery and boundaries
+   that genuinely belong on the Java side.
+
+7. **Validate according to impact.** For a simple executable contribution, run
+   focused tests for the changed behavior and use `mvn test` as the broad suite
+   unless a more specific current repository rule applies. For a
+   documentation-only contribution, inspect links and commands and run the
+   applicable static/integrity checks; unrelated Maven tests are not
+   automatically required. In either case, inspect the final diff:
+
+   ```sh
+   git diff --check
+   git diff --stat
+   git diff
+   ```
+
+8. **Commit, push, and open the Pull Request using the repository template.**
+   Explain what changed and what validation passed. Use `Closes #N` only when
+   the PR fully satisfies that Issue. If AI materially produced or shaped the
+   contribution, disclose that briefly; AI-assisted and fully AI-generated
+   contributions are welcome. Prompt transcripts, token logs, and
+   human-authored percentages are not required.
+
+That is enough for a normal first PR. The sections below explain the project's
+design discipline, validation expectations, AI policy, and detailed review
+standards. `AGENTS.md` remains the source for the project's more detailed
+operational/publication rules when they apply.
+
 ## Before you start
 
 Protos deliberately separates language design from implementation.
