@@ -665,3 +665,44 @@ This ratification adds only this durable non-normative LIB008 design record and 
 matching changelog entry. It changes no Protos specification, executable runtime,
 Standard Library executable source, Maven implementation version, native
 boundary, package format, license term or deployment.
+
+### LIB008-D — integrated closure CLOSED
+
+Integrated closure version context: `0.2.364-SNAPSHOT` (**unchanged by D**)
+Publication base: `463c1f7e0c0a4e08bbbfc91460f4e1cfbab82331`
+Closure evidence: `SAME_COMMIT`
+Live work item: GitHub Issue `#347`
+Parent work item: GitHub Issue `#339`
+
+D re-runs the complete bounded initial `std:uri` surface as one integrated
+conformance gate after A, B and C are all published. The gate executes
+`ProtosUriModuleTest`, `ProtosStandardLibraryModuleResolverTest` and
+`ProtosCoreNativeBoundaryArchitectureTest` together, then runs the repository
+publication validator as a top-level closure so the current broad non-Tool test
+policy is applied to the exact candidate commit.
+
+The distributed initial URI library remains exactly `protos/lib/uri.protos` and
+its public surface remains exactly `{parse, format, resolve}`. Retained real-`std:`
+conformance covers strict RFC 3986 URI-reference parsing, the seven-slot ordinary
+frozen data shape, absence versus present-empty distinctions, exact textual
+`format(parse(s)) == s` round-trip, caller-constructed structural data, strict
+RFC 3986 section 5 resolution, the complete section 5.4 normal/abnormal corpus,
+and fail-closed malformed-input handling.
+
+Historical changed-path verification over the published A/B/C commits confirms
+that none of those implementation slices changed normative `spec/**` content or
+introduced Java production URI code under `src/main/**`. The integrated Core
+native-boundary architecture guard passes, and executable/source inspection
+continues to show no URI-specific native bridge, `Network`/DNS/filesystem/HTTP
+authority, scheme registry, global mutable parser state, Builder/prototype
+institution, normalization/equality law, IRI/IDNA policy or WHATWG behavior.
+
+LIB008-D changes no Protos source, Java source/test, normative specification,
+native boundary, public Standard Library API or Maven implementation version. It
+records only the successful integrated verification and final project-work
+closure.
+
+The bounded initial `LIB008 — URI reference parsing, resolution and
+serialization` work item is **CLOSED**. Every item explicitly deferred by
+LIB008-0 remains deferred and is not implied, selected or implemented by this
+closure.
