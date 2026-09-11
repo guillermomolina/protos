@@ -289,3 +289,59 @@ parse: (text) => {
 
     collectTableChunks(tableMaxLevel, Array())
 }
+
+encode: (rows) => {
+    table: Array(...rows)
+    output: Encoding.UTF8.encode("")
+
+    appendByte: (octet) => {
+        output.add(octet)
+    }
+
+    table.each((row) => {
+        fields: Array(...row)
+
+        (fields.size() == 0).ifTrue(() => {
+            Error().signal()
+        })
+
+        index: 0
+
+        fields.each((field) => {
+            (index > 0).ifTrue(() => {
+                appendByte(44)
+            })
+
+            bytes: Encoding.UTF8.encode(field)
+            quoteNeeded: false
+
+            bytes.each((octet) => {
+                ((octet == 44) || (octet == 34) || (octet == 13) || (octet == 10)).ifTrue(() => {
+                    quoteNeeded = true
+                })
+            })
+
+            quoteNeeded.ifTrue(() => {
+                appendByte(34)
+            })
+
+            bytes.each((octet) => {
+                (quoteNeeded && (octet == 34)).ifTrue(() => {
+                    appendByte(34)
+                })
+                appendByte(octet)
+            })
+
+            quoteNeeded.ifTrue(() => {
+                appendByte(34)
+            })
+
+            index = index + 1
+        })
+
+        appendByte(13)
+        appendByte(10)
+    })
+
+    Encoding.UTF8.decode(output)
+}

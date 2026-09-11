@@ -449,6 +449,32 @@ heuristics or compatibility cost. Those facilities can still be added as
 composable higher layers without turning `CSV` itself into a large ambient
 policy institution.
 
+## LIB009-B canonical writer policy
+
+Status: **APPROVED — 2026-09-11**
+
+The project owner approved Candidate A for the default-profile writer:
+
+- quote a field if and only if its exact String contains comma, double quote, CR
+  or LF;
+- inside a quoted field, every double quote is doubled;
+- do not quote merely because a field is empty, has leading/trailing whitespace,
+  looks numeric/Boolean/date-like, begins with spreadsheet-formula characters,
+  resembles a database sentinel, or carries any application-specific meaning;
+- emit CRLF after every encoded row, including the final row;
+- an empty table encodes as the empty String;
+- an empty row (`Array()`) is invalid encode input because the already-ratified
+  parser model has no zero-field record representation: an explicit blank record
+  parses as one empty String field;
+- `CSV.parse(CSV.encode(rows)) == rows` remains the structural law for valid
+  encode input;
+- custom dialect representation/spelling remains independently deferred.
+
+This is the smallest deterministic writer policy that preserves exact field text,
+keeps application/DB/spreadsheet compatibility policy out of the CSV kernel and
+lets later streaming output serialize each row independently without buffering
+to discover whether it is the last row.
+
 ## Intentionally deferred
 
 LIB009-0 does not decide:

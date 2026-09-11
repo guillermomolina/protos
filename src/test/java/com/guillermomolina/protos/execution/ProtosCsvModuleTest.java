@@ -30,14 +30,14 @@ import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** Real-std conformance harness for LIB009-A strict default-profile CSV parsing. */
+/** Real-std conformance harness for LIB009-A/B strict default-profile CSV parsing/encoding. */
 final class ProtosCsvModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path CASE_ROOT = Path.of("protos", "tests", "library", "csv");
 
     @Test
-    void importedModuleExportsExactlyParseAtAStage() throws Exception {
+    void importedModuleExportsExactlyParseAndEncodeAtBStage() throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -48,7 +48,7 @@ final class ProtosCsvModuleTest {
                         .call(prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
-        assertEquals(Set.of("parse"), module.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("parse", "encode"), module.localSlotsSnapshot().keySet());
     }
 
     @Test
@@ -69,6 +69,21 @@ final class ProtosCsvModuleTest {
     @Test
     void arityAndStringDomainFailClosed() throws Exception {
         assertFixture("arity-domain-rejection.protos");
+    }
+
+    @Test
+    void encodeCanonicalWriterPolicyConforms() throws Exception {
+        assertFixture("encode-canonical.protos");
+    }
+
+    @Test
+    void encodeParseStructuralRoundTripConforms() throws Exception {
+        assertFixture("encode-roundtrip.protos");
+    }
+
+    @Test
+    void encodeRejectsInvalidTableRowAndFieldDomains() throws Exception {
+        assertFixture("encode-invalid.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {
