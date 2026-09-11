@@ -842,9 +842,22 @@ TOOL002-H is IN_PROGRESS after H1 and the explicit D055 decision gate:
   are then projected through the existing `evaluateDCase` policy in TestPlan order;
   physical completion order remains irrelevant. Public `protos test` wiring and
   public jobs/default/fairness/resource/carrier/timeout policy remain unchanged.
+- **D069 — RATIFIED** by explicit project-owner approval on 2026-09-11 after an
+  exhaustive cross-runner comparison. `protos test --jobs N` selects positive
+  logical Test Tool execution-slot capacity; absent `--jobs` means `jobs = 1`,
+  and `--jobs 1` is the deterministic serial reduction path. Numeric `jobs`
+  remains independent of JVM threads, CPUs, Processes and physical workers so
+  TOOL002-I resource accounting and future OS/remote backends can compose without
+  changing the public concept. `jobs=auto`, `-j`, profiles/config and resource
+  weights remain deferred.
+- **H2B3 — BLOCKED_BY_PLAT023.** D069 releases the public jobs-policy dependency
+  for real `protos test` bounded-runner integration. The remaining production
+  dependency is PLAT023's separately owned JVM/Truffle async exact-execution
+  carrier topology; H2B3 must not hide that platform choice inside CLI wiring.
 
-H2 does not select a JVM carrier, public `--jobs` spelling/default, `jobs=auto`,
-hard timeout/kill policy, resource syntax, retry policy or remote transport.
+H2 no longer has an unresolved public numeric jobs spelling/default: D069 owns
+that contract. H2 still does not select a JVM carrier, `jobs=auto`, hard
+timeout/kill policy, resource syntax/weights, retry policy or remote transport.
 A newly exposed durable choice in those areas must use the normal Dxxx/PLATxxx
 approval gate.
 

@@ -1,5 +1,19 @@
 ## 0.2.355-SNAPSHOT
 
+
+- Ratify `D069 — Test Tool parallelism control and default` (GitHub #333) after
+  explicit project-owner approval and exhaustive comparison across Apple Swift
+  Testing/SwiftPM/Xcode, Rust/libtest, cargo-nextest, Go, pytest/xdist, Node,
+  JUnit, Gradle, Maven Surefire, .NET, Elixir ExUnit, CTest, Bazel and Buck2.
+  Select `protos test --jobs N` with positive ordinary Integer `N` as global
+  logical Test Tool execution-slot capacity and preserve absent `--jobs` as
+  `jobs = 1` plus `--jobs 1` as the deterministic serial reduction path. Keep
+  numeric jobs independent of JVM threads/CPUs/Processes/workers so later
+  resource accounting, OS-worker and remote backends compose without redefining
+  the public concept. Defer `jobs=auto`, `-j`, persistent profiles/config,
+  resource weights, PLAT023 carrier topology, timeout/retry/sharding/remote
+  policy. This governance-only ratification changes no executable implementation,
+  Maven implementation version, specification or native boundary.
 - Close `LIB007 — Mathematical integer algorithms` through `LIB007-D`
   (GitHub #338) after integrated conformance of the complete ratified
   `std:math/Integer` surface `{gcd,lcm,factorial,pow,powMod}`. Add one real-`std:`
