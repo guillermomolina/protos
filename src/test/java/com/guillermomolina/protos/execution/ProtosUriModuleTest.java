@@ -30,14 +30,14 @@ import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** Real-std conformance harness for LIB008-A/B URI parsing and formatting. */
+/** Real-std conformance harness for LIB008-A/B/C URI parsing, formatting and resolution. */
 final class ProtosUriModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path CASE_ROOT = Path.of("protos", "tests", "library", "uri");
 
     @Test
-    void importedModuleExportsExactlyParseAndFormatAtBStage() throws Exception {
+    void importedModuleExportsExactlyInitialSurfaceAtCStage() throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -48,7 +48,7 @@ final class ProtosUriModuleTest {
                         .call(prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
-        assertEquals(Set.of("parse", "format"), module.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("parse", "format", "resolve"), module.localSlotsSnapshot().keySet());
     }
 
     @Test
@@ -84,6 +84,26 @@ final class ProtosUriModuleTest {
     @Test
     void malformedFormatInputsFailClosed() throws Exception {
         assertFixture("format-invalid.protos");
+    }
+
+    @Test
+    void rfc3986NormalResolutionConforms() throws Exception {
+        assertFixture("resolve-rfc3986-normal.protos");
+    }
+
+    @Test
+    void rfc3986AbnormalResolutionConforms() throws Exception {
+        assertFixture("resolve-rfc3986-abnormal.protos");
+    }
+
+    @Test
+    void resolutionBoundariesAndPublicationStateConform() throws Exception {
+        assertFixture("resolve-boundaries.protos");
+    }
+
+    @Test
+    void invalidResolutionInputsFailClosed() throws Exception {
+        assertFixture("resolve-invalid.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {

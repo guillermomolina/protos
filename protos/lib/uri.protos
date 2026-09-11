@@ -694,3 +694,246 @@ format: (reference) => {
 
     candidate
 }
+
+/// Resolves one RFC 3986 URI-reference against one absolute-URI base.
+resolve: (base, reference) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    // Reuse the already-published structural/syntax authority. resolve accepts
+    // component data, not String arguments, and does not create a second grammar.
+    ignoredBaseValidation: format(base)
+    ignoredReferenceValidation: format(reference)
+
+    (base.scheme === null).ifTrue(() => {
+        fail()
+    })
+    (base.fragment !== null).ifTrue(() => {
+        fail()
+    })
+
+    removeLastSegment: (output) => {
+        (() => (output.size() > 0) && (output[output.size() - 1] != 47)).while() {
+            output.removeAt(output.size() - 1)
+        }
+        (output.size() > 0).ifTrue(() => {
+            output.removeAt(output.size() - 1)
+        })
+    }
+
+    // RFC 3986 section 5.2.4. Only literal dot-segment syntax is removed;
+    // percent-encoded dots remain ordinary segment data.
+    removeDotSegments: (path) => {
+        source: Encoding.UTF8.encode(path)
+        output: Encoding.UTF8.encode("")
+        size: source.size()
+        index: 0
+
+        (() => index < size).while() {
+            handled: false
+
+            // A. "../" or "./"
+            (((index + 2) < size) &&
+                (source[index] == 46) &&
+                (source[index + 1] == 46) &&
+                (source[index + 2] == 47)).ifTrue(() => {
+                index = index + 3
+                handled = true
+            })
+
+            ((!handled) &&
+                ((index + 1) < size) &&
+                (source[index] == 46) &&
+                (source[index + 1] == 47)).ifTrue(() => {
+                index = index + 2
+                handled = true
+            })
+
+            // B. "/./" -> "/" and terminal "/." -> "/".
+            ((!handled) &&
+                ((index + 2) < size) &&
+                (source[index] == 47) &&
+                (source[index + 1] == 46) &&
+                (source[index + 2] == 47)).ifTrue(() => {
+                index = index + 2
+                handled = true
+            })
+
+            ((!handled) &&
+                ((index + 2) == size) &&
+                (source[index] == 47) &&
+                (source[index + 1] == 46)).ifTrue(() => {
+                output.add(47)
+                index = size
+                handled = true
+            })
+
+            // C. "/../" -> "/" and terminal "/.." -> "/", removing the
+            // previous output segment in both cases.
+            ((!handled) &&
+                ((index + 3) < size) &&
+                (source[index] == 47) &&
+                (source[index + 1] == 46) &&
+                (source[index + 2] == 46) &&
+                (source[index + 3] == 47)).ifTrue(() => {
+                removeLastSegment(output)
+                index = index + 3
+                handled = true
+            })
+
+            ((!handled) &&
+                ((index + 3) == size) &&
+                (source[index] == 47) &&
+                (source[index + 1] == 46) &&
+                (source[index + 2] == 46)).ifTrue(() => {
+                removeLastSegment(output)
+                output.add(47)
+                index = size
+                handled = true
+            })
+
+            // D. Entire remaining input is "." or "..".
+            ((!handled) &&
+                ((index + 1) == size) &&
+                (source[index] == 46)).ifTrue(() => {
+                index = size
+                handled = true
+            })
+
+            ((!handled) &&
+                ((index + 2) == size) &&
+                (source[index] == 46) &&
+                (source[index + 1] == 46)).ifTrue(() => {
+                index = size
+                handled = true
+            })
+
+            // E. Move the next path segment, including a leading slash when
+            // present, from input to output.
+            handled.ifFalse(() => {
+                (source[index] == 47).ifTrue(() => {
+                    output.add(47)
+                    index = index + 1
+                })
+
+                (() => (index < size) && (source[index] != 47)).while() {
+                    output.add(source[index])
+                    index = index + 1
+                }
+            })
+        }
+
+        Encoding.UTF8.decode(output)
+    }
+
+    // RFC 3986 section 5.2.3.
+    mergePaths: (basePath, referencePath, baseHasAuthority) => {
+        baseBytes: Encoding.UTF8.encode(basePath)
+        referenceBytes: Encoding.UTF8.encode(referencePath)
+        merged: Encoding.UTF8.encode("")
+
+        ((baseHasAuthority) && (baseBytes.size() == 0)).ifTrue(() => {
+            merged.add(47)
+        })
+
+        ((baseHasAuthority) && (baseBytes.size() == 0)).ifFalse(() => {
+            lastSlash: -1
+            scan: 0
+            (() => scan < baseBytes.size()).while() {
+                (baseBytes[scan] == 47).ifTrue(() => {
+                    lastSlash = scan
+                })
+                scan = scan + 1
+            }
+
+            copy: 0
+            (() => copy <= lastSlash).while() {
+                merged.add(baseBytes[copy])
+                copy = copy + 1
+            }
+        })
+
+        copy: 0
+        (() => copy < referenceBytes.size()).while() {
+            merged.add(referenceBytes[copy])
+            copy = copy + 1
+        }
+
+        Encoding.UTF8.decode(merged)
+    }
+
+    targetScheme: null
+    targetUserInfo: null
+    targetHost: null
+    targetPort: null
+    targetPath: ""
+    targetQuery: null
+    targetFragment: reference.fragment
+
+    (reference.scheme !== null).ifTrue(() => {
+        targetScheme = reference.scheme
+        targetUserInfo = reference.userInfo
+        targetHost = reference.host
+        targetPort = reference.port
+        targetPath = removeDotSegments(reference.path)
+        targetQuery = reference.query
+    })
+
+    (reference.scheme === null).ifTrue(() => {
+        targetScheme = base.scheme
+
+        (reference.host !== null).ifTrue(() => {
+            targetUserInfo = reference.userInfo
+            targetHost = reference.host
+            targetPort = reference.port
+            targetPath = removeDotSegments(reference.path)
+            targetQuery = reference.query
+        })
+
+        (reference.host === null).ifTrue(() => {
+            targetUserInfo = base.userInfo
+            targetHost = base.host
+            targetPort = base.port
+
+            (reference.path == "").ifTrue(() => {
+                targetPath = base.path
+                targetQuery = base.query
+                (reference.query !== null).ifTrue(() => {
+                    targetQuery = reference.query
+                })
+            })
+
+            (reference.path == "").ifFalse(() => {
+                referenceBytes: Encoding.UTF8.encode(reference.path)
+                isAbsolutePath: (referenceBytes.size() > 0) && (referenceBytes[0] == 47)
+
+                isAbsolutePath.ifTrue(() => {
+                    targetPath = removeDotSegments(reference.path)
+                })
+
+                isAbsolutePath.ifFalse(() => {
+                    mergedPath: mergePaths(base.path, reference.path, base.host !== null)
+                    targetPath = removeDotSegments(mergedPath)
+                })
+
+                targetQuery = reference.query
+            })
+        })
+    })
+
+    target: {
+        scheme: targetScheme
+        userInfo: targetUserInfo
+        host: targetHost
+        port: targetPort
+        path: targetPath
+        query: targetQuery
+        fragment: targetFragment
+    }
+
+    // Validate the exact result through the same syntax authority before
+    // publication, then return fresh frozen ordinary data.
+    ignoredTargetValidation: format(target)
+    target.freeze()
+}
