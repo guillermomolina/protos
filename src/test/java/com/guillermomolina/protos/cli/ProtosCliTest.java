@@ -2,6 +2,7 @@
 package com.guillermomolina.protos.cli;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -9,6 +10,8 @@ import java.nio.file.*;
 import org.junit.jupiter.api.Test;
 
 final class ProtosCliTest {
+    private static final String TEST_TOOL_CHECKPOINT_PROPERTY = "protos.testToolCheckpoint";
+
     private R run(String... args) {
         var out = new ByteArrayOutputStream();
         var err = new ByteArrayOutputStream();
@@ -131,7 +134,13 @@ final class ProtosCliTest {
 
     @Test
     void testSubcommandRunsBundledProtosToolThroughCommonBootstrap() {
-        R result = run("test");
+        assumeTrue(
+                Boolean.getBoolean(TEST_TOOL_CHECKPOINT_PROPERTY),
+                "slow Test Tool end-to-end checkpoint; enable with -D"
+                        + TEST_TOOL_CHECKPOINT_PROPERTY
+                        + "=true");
+
+        R result = run("test", "--jobs", "2");
 
         assertEquals(0, result.c);
         assertEquals("Protos test tool bootstrap\ntest\n", result.o);

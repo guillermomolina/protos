@@ -1244,3 +1244,40 @@ retry, sharding, remote execution, Actor scheduler/carrier change, specification
 change or native boundary. TOOL002-H remains **IN_PROGRESS** until its closure
 reconciliation is published; TOOL002-I is not released by this intermediate
 slice alone.
+
+## Temporary slow Test Tool checkpoint gate
+
+Status: **ACTIVE — project-owner approved 2026-09-11**
+
+The real CLI end-to-end smoke in
+`ProtosCliTest.testSubcommandRunsBundledProtosToolThroughCommonBootstrap()` launches
+the complete bundled Test Tool corpus and takes several minutes on the normal
+development host. Running that nested full Test Tool traversal inside every
+ordinary Maven validation makes iterative slices prohibitively slow without
+adding proportional evidence, because the retained Test Tool families already
+exercise their bounded scheduler, execution bridges, corpus ownership and
+production carrier directly.
+
+Until this temporary gate is explicitly retired, ordinary `mvn test` leaves that
+single end-to-end method **SKIPPED**. The test remains in the repository and is
+enabled explicitly with:
+
+```text
+mvn -Dprotos.testToolCheckpoint=true \
+    -Dtest=ProtosCliTest#testSubcommandRunsBundledProtosToolThroughCommonBootstrap \
+    test
+```
+
+The checkpoint runs real `protos test --jobs 2`, exercising the public CLI,
+bundled-tool bootstrap, D069 option path, H2B bounded runner and PLAT023 production
+carrier without paying the serial-default runtime.
+
+Run the checkpoint at meaningful reconciliation points rather than every child
+slice: in particular TOOL002-H closure, after material Test Tool scheduler/carrier
+changes, and before a release or other owner-requested broad validation. A normal
+passing Maven suite with this method skipped is not evidence that the explicit
+checkpoint passed; checkpoint evidence must be reported separately.
+
+This is validation-workflow policy only. It changes no Protos semantics, Test Tool
+public contract, D069 default (`jobs=1`), production implementation, specification,
+native boundary or implementation version.
