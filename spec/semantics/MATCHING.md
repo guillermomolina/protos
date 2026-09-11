@@ -9,7 +9,7 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.402`.
+`0.1.403`.
 It deliberately does **not** define concrete matching-expression grammar,
 case/arm/default syntax, which source expressions or future surface forms denote
 ordinary value patterns, guards, exhaustivity, standard pattern taxonomy, or named-binding syntax. Those remain unresolved
@@ -805,6 +805,148 @@ subject as one ordinary capture at a separately ratified position. Optional
 tooling/debug or pattern-introspection metadata can likewise map source names to
 capture positions without changing the D072/D083 runtime carrier or this
 capture-to-arm ABI.
+
+### 3.5 Standard ordered alternative-pattern semantics
+
+D090 defines the standard semantic behavior of an alternative-pattern composite
+without selecting concrete source syntax.
+
+For one alternative-pattern attempt, the alternatives have one deterministic
+semantic order. They are attempted in that order. Each attempted alternative is
+invoked exactly once through the existing D073 matcher authority:
+
+```text
+alternative.match(subject)
+```
+
+Every attempted alternative receives the same ordinary subject value supplied to
+the containing alternative-pattern attempt. The alternative composite does not
+re-evaluate, clone, freeze, snapshot, or otherwise replace that subject merely
+because an earlier alternative mismatched.
+
+#### 3.5.1 Ordered D072 outcome handling
+
+Each attempted alternative's normal result is consumed only through D072:
+
+```text
+alternative result       alternative-composite behavior
+------------------       ------------------------------
+false                    try the next alternative
+true                     succeed immediately with zero captures
+[c1, ..., cn]            succeed immediately with those captures
+```
+
+Only canonical `false` advances to the next alternative.
+
+A valid successful D072 result commits the alternative composite immediately.
+No later alternative is attempted after that success. D090 introduces no
+branch-success ranking, longest/best match, speculative comparison of several
+successful branches, or parallel race among alternatives.
+
+An invalid normal D072 result signals ordinary `Error` at the consuming
+alternative boundary. Error, non-local control, cancellation, explicit
+suspension, and other non-normal control behavior propagate normally from the
+currently attempted matcher and are not reinterpreted as mismatch.
+
+If the current alternative suspends, the containing alternative attempt
+suspends at that point. A later alternative is not started concurrently merely
+because it could eventually match.
+
+#### 3.5.2 Effects and first-success commitment
+
+Ordered alternative matching is not transactional.
+
+An attempted alternative may perform ordinary effects and later return canonical
+`false`. Those effects are not rolled back. The next alternative, if any,
+executes in the ordinary program state that exists after them.
+
+Once one alternative succeeds, selection for that alternative composite is
+final. A later failure outside the composite does not reopen it or continue with
+a later alternative. In particular, if a future matching surface places a guard
+or another outer condition after alternative recognition, failure of that later
+condition does not make D090 resume the already-successful alternative composite
+at its next branch.
+
+D090 does not otherwise define guard syntax or guard evaluation semantics.
+
+#### 3.5.3 Capture and binding interface
+
+D090 adds no new matcher-result carrier. D072/D083 remain authoritative.
+
+A successful alternative contributes the successful D072 capture interface to
+the containing matching operation. One capture remains one ordinary value;
+Array, Map, Closure, Future, remainder, or other aggregate captures are not
+recursively flattened merely because they crossed an alternative boundary.
+
+D088 remains authoritative for source-visible bindings and selected-arm
+invocation.
+
+When several alternatives are exposed through one fixed source arm-binding
+interface, every successful alternative must be projectable onto the same
+ordered logical D088 binding interface. Different alternatives may obtain a
+logical binding from different structural positions, but one selected arm must
+not receive a branch-dependent logical binding layout.
+
+That compatibility belongs to the source/consumer structure. D090 does not
+require arbitrary runtime matcher objects to publish capture names, fixed
+capture arity, a `CaptureSignature`, branch tag, binding Map, `CaptureFrame`, or
+matcher-topology metadata merely to participate in alternatives.
+
+Arbitrary matchers may retain dynamic D072 capture arity. A consumer
+intentionally accepting a variable number of captures may use ordinary Closure
+rest-parameter semantics. A fixed incompatibility that is provable from the
+source/pattern structure should be rejected before execution. If recognition
+has already succeeded and ordinary selected-arm invocation cannot accept the
+actual capture arity, D088's ordinary callable binding/arity `Error` applies; it
+does not retroactively become mismatch and does not cause another alternative
+to be attempted.
+
+#### 3.5.4 Nesting and optimization freedom
+
+Nested standard alternative composites are semantically associative with
+respect to their ordered attempt sequence. Grouping alternatives does not change
+the left-to-right sequence in which their leaf alternatives are attempted.
+Alternative choice is not commutative: reordering alternatives may change which
+matcher runs, which effects occur, or which successful result wins.
+
+Implementations may flatten nested standard alternative nodes, inline standard
+matchers, scalarize or eliminate unobservable intermediate capture carriers, or
+build specialized decision structures only when observable behavior is exactly
+equivalent to this section.
+
+Such optimization must preserve:
+
+- ordinary matcher authority and lookup/dispatch behavior;
+- the alternatives actually attempted and their semantic order;
+- exactly-once invocation of each attempted alternative;
+- first-success commitment;
+- D072 outcome validation;
+- ordinary effects and their visibility to later attempted alternatives;
+- Error, non-local control, cancellation, and explicit suspension behavior;
+- aggregate capture boundaries; and
+- D088 fixed/dynamic arm-binding behavior.
+
+In particular, an implementation may not replace effectful ordered matcher sends
+with an unordered hash/index lookup, parallel race, or speculative multi-branch
+execution merely because the alternatives appear otherwise optimizable.
+
+#### 3.5.5 Boundary and future evolution
+
+D090 does not standardize:
+
+- concrete alternative, `match`, `case`, arm, default, or binder grammar;
+- the spelling of an OR operator or whether one source spelling exists;
+- guard semantics beyond the no-reopen boundary in §3.5.2;
+- exhaustivity or redundancy checking;
+- repetition, optional, find, subsequence, or general backtracking patterns;
+- whole-subject alias semantics or syntax;
+- first-class Pattern reflection or mandatory capture-signature metadata;
+- recognition-only matcher fast paths; or
+- parser/runtime implementation of a future alternative-pattern surface.
+
+Optional tooling/debug metadata or a future explicit pattern-introspection
+protocol may describe source branches and logical binding projections without
+changing the standard D072/D083/D088/D090 runtime contracts.
 
 ## 4. Explicit structural deconstruction boundary
 

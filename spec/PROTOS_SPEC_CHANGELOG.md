@@ -9,6 +9,25 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.403] - 2026-09-11
+
+### D090 — Ordered OR / alternative-pattern semantics
+- Ratifies standard alternatives as deterministic ordered choice: alternatives are attempted in semantic order through ordinary `alternative.match(subject)`, and only canonical `false` advances to the next alternative.
+- The first D072-valid success commits immediately. Canonical `true` succeeds with zero captures; a non-empty capture Array succeeds with its capture interface; invalid normal results signal ordinary `Error`.
+- Error, non-local control, cancellation and explicit suspension propagate from the currently attempted matcher and never trigger another alternative. Alternative execution is neither speculative nor parallel.
+- Effects from an alternative that later mismatches are not rolled back; a later alternative observes ordinary program state after those effects.
+- Later outer failure does not reopen an already-successful alternative composite. In particular, a future guard failure cannot resume D090 at a later branch; guard semantics otherwise remain deferred.
+- D072/D083 remain the sole standard capture representation. D090 adds no branch tag, named matcher carrier, `CaptureFrame`, `CaptureSignature`, binding Map, rollback log, mutable sink or second matcher authority.
+- D088 remains authoritative for bindings: alternatives feeding one fixed arm must be projectable to the same ordered logical arm-binding ABI, while arbitrary matchers retain dynamic capture arity and require no static capture-name/signature metadata.
+- Nested standard alternatives preserve the same ordered leaf-attempt sequence regardless of grouping; alternative choice is not commutative. Optimizations may flatten or specialize only when all ordered matcher/effect/control/capture behavior is observationally unchanged.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D090 decision record under `docs/project/decisions/language/`.
+- Existing D072/D073/D083/D084/D086/D088 matching, capture and callable semantics remain authoritative and are not reopened.
+- Concrete alternative/match/arm grammar, OR spelling, guard semantics beyond no-reopen, exhaustivity/redundancy analysis, repetition/optional/search/backtracking patterns, whole-subject alias and pattern reflection remain unresolved.
+- No parser, grammar, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D089 is unrelated concurrent tooling work and is excluded; later matching-design checkpoints are excluded.
+
 ## [0.1.402] - 2026-09-11
 
 ### D088 — Capture-to-arm binding ABI
