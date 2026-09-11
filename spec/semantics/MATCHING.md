@@ -9,11 +9,12 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.397`.
+`0.1.398`.
 It deliberately does **not** define concrete matching-expression grammar,
-case/arm/default syntax, literal-pattern semantics, guards, exhaustivity,
-standard pattern taxonomy, nested-capture flattening, or named-binding syntax.
-Those remain unresolved until separately ratified.
+case/arm/default syntax, which source expressions or future surface forms denote
+ordinary value patterns, guards, exhaustivity, standard pattern taxonomy,
+nested-capture flattening, or named-binding syntax. Those remain unresolved
+until separately ratified.
 
 ## 1. Scope and architectural boundary
 
@@ -54,6 +55,68 @@ Execution of a selected arm remains ordinary invocation of the selected callable
 / Closure according to the existing callable semantics.
 
 No concrete matching-expression or arm syntax is selected by this revision.
+
+### 2.1 Default ordinary value-pattern behavior
+
+Core v0.1 supplies a standard root matcher behavior so an ordinary Protos value
+can act as an ordinary zero-capture value pattern without a hidden wrapper,
+literal-specific recognition path, matcher registry, or second public matching
+operator.
+
+The standard root selector is:
+
+```text
+Object.match(subject)
+```
+
+When ordinary lookup selects this standard root behavior, the original matcher
+receiver remains the pattern value. For one invocation, the behavior performs
+**exactly one ordinary equality send with the original pattern receiver:**
+
+```text
+this == subject
+```
+
+The equality result is returned unchanged. Under the existing equality contract,
+canonical `false` therefore becomes the D072 no-match result and canonical
+`true` becomes D072 successful recognition with zero captures. The standard
+root behavior never produces a capture Array.
+
+The equality operation is ordinary Protos behavior. Its lookup, dispatch,
+effects, Error behavior, non-local control, cancellation, and explicit suspension
+compose exactly as they do outside matching. The existing equality result
+contract remains authoritative: an invalid normal `==` result is an equality
+protocol violation and is not converted to mismatch or truthiness.
+
+The standard root matcher does **not**:
+
+- perform an `===` identity pre-check or shortcut;
+- call `subject == this` as a fallback or symmetry repair;
+- invoke `==` more than once for one root matcher invocation;
+- consult `hash`, `identityHashOf`, Map membership, or another indexing/hash
+  mechanism;
+- coerce a result, apply truthiness, retry, or reinterpret an Error as mismatch;
+- implicitly await or adopt a Future; or
+- introduce a special rule for Number, String, `true`, `false`, `null`, or
+  another literal/value family.
+
+An object that wants recognition semantics different from its ordinary semantic
+equality may override or shadow `match(subject)` through ordinary object behavior.
+That selected override is then the same D073 matcher authority and need not use
+`==` at all. This allows domain matchers such as ranges, regular expressions, or
+other abstractions to define recognition without redefining their ordinary
+equality relation.
+
+D081 defines the semantics of this ordinary value-pattern default; it does not
+select concrete matching grammar or which source expressions are admitted as
+value-pattern forms. A future syntax decision may denote an ordinary value as a
+pattern only by preserving the single `pattern.match(subject)` semantic path.
+
+Implementations may specialize standard built-in value cases, inline the root
+matcher/equality path, or build literal decision structures only when observable
+behavior is identical to ordinary lookup and the exactly-once `match`/`==`
+semantics above. In particular, an optimization must not skip an observable
+custom equality invocation merely because `this === subject` is already known.
 
 ## 3. Matcher outcome and positional-capture carrier
 
@@ -358,7 +421,7 @@ This revision intentionally does not select:
 
 - a `match` keyword or expression grammar;
 - case/arm/default syntax;
-- literal/equality pattern semantics;
+- which source expressions or future surface forms denote ordinary value patterns;
 - guards or exhaustivity;
 - a standard built-in pattern taxonomy;
 - nested capture flattening;

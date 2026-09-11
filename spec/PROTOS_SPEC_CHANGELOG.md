@@ -9,6 +9,23 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.398] - 2026-09-11
+
+### D081 — Default ordinary value-pattern matching
+- Ratifies standard inherited value-pattern behavior through the existing D073 authority: `Object.match(subject)` performs exactly one ordinary pattern-side `this == subject` and returns that canonical Boolean result unchanged.
+- Canonical `false` is D072 no-match and canonical `true` is zero-capture success. The default root behavior creates no capture Array.
+- No `===` pre-check, `subject == this` fallback, hashing, truthiness, coercion, retry, implicit await/Future adoption, hidden `ValuePattern`, second matching operator, matcher registry, or literal-family exception table is introduced.
+- Objects needing richer recognition/capture semantics override or shadow ordinary `match(subject)`; they need not redefine `==` as pattern recognition.
+- Standard Number/String/Boolean/null cases require no matching-specific semantic exception; implementations may specialize only when observationally equivalent to the ordinary exactly-once matcher/equality path.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D081 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075, D078 and D080 matching semantics remain unchanged.
+- D079-owned nested-capture composition is not changed or resolved by this publication slice.
+- Concrete match/arm grammar, which source expressions denote ordinary value patterns, named bindings, guards, exhaustivity, sequence/Map patterns, identity-pattern syntax, future Float/NaN-specific pattern semantics, and recognition-only fast paths remain unresolved.
+- No parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D082 and later matching-design checkpoints are excluded.
+
 ## [0.1.397] - 2026-09-11
 
 ### D080 — No generic positional subject-deconstruction protocol
