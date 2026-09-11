@@ -1,5 +1,21 @@
 ## 0.2.373-SNAPSHOT
 
+- Ratify `D076 — Test Tool resource reservation and capability provisioning
+  architecture` (GitHub #359) as Candidate D after explicit project-owner
+  approval and exhaustive comparison across Swift Testing, Go, ExUnit,
+  pytest-xdist, xUnit/NUnit/MSTest, Gradle, GitHub/GitLab CI, JUnit,
+  cargo-nextest, CTest, Slurm, Kubernetes DRA, Buck2 and Bazel Remote Execution.
+  Select inert CaseSpec resource requirements plus an environment-owned
+  catalog/provider, atomic full-set reservation before launch, D069 jobs as an
+  orthogonal capacity, shared-positive-units versus exclusive-whole-resource
+  conflict semantics, post-placement attempt-private capability materialization,
+  custody through terminal cleanup and infrastructure outcomes distinct from
+  semantic Protos Error. Keep exact manifest/config/carrier representation
+  unresolved under D077 / GitHub #361; TOOL002-I remains blocked on D077.
+  Governance/design only: no production implementation, specification, Maven
+  implementation version, native boundary, `jobs=auto`, fairness, retry,
+  timeout/kill, sharding or remote-protocol change.
+
 - Close `LM009-F — Static language-service foundation` (GitHub #340) after the
   published F1/F2/F3/F4 chain and the project-owner S4 live VS Code proof. Confirm
   the selected `protos language-server` contract starts exactly one matching

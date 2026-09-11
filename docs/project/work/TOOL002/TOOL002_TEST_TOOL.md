@@ -68,7 +68,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-F | CLOSED | F1/F2/F3 plus the F4 cutover program are published: bundled Protos now owns all retained Future expectation policy and the complete main manifest; duplicate Java Future policy is retired. |
 | TOOL002-G | CLOSED | G1/G1A establish production-scheduler cooperative inspection; G2/G3 migrate the complete retained Actor/Group manifests into bundled-Protos Runner ownership; G4 retires the duplicate Java corpus-policy owners and reconciles closure. |
 | TOOL002-H | CLOSED | H1/H2A/H2B1/H2B2/H2B3 are published; D055, D069 and PLAT023 remain ratified. Closure reconciliation retains the real public `protos test --jobs N` path, adds a bounded-parallel public CLI regression, runs the broad Test Tool set and the repository top-level FULL publication-validation suite, and introduces no resources, auto-jobs, timeout/kill, retry, remote, specification or native-boundary policy. |
-| TOOL002-I | READY | TOOL002-H is closed. Recover the exact repository-defined I scope before implementation; I owns explicit resource constraints/private capabilities where real external-resource sharing requires them and must still stop for any newly exposed substantive resource-policy decision. |
+| TOOL002-I | BLOCKED_BY_D077 | D076 Candidate D is RATIFIED: inert logical requirements + environment-owned catalog/provider, atomic full-set reservation, shared-units/exclusive conflict semantics, post-placement attempt-private capability materialization and terminal-cleanup custody. D077/#361 owns the still-unselected manifest/config/carrier representation required before implementation. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | After I, integrate the final Java-first / Protos-tool-second validation pipeline. |
 
 ## TOOL002-E decomposition
@@ -1319,3 +1319,44 @@ declarations/weights, hard timeout/kill, retry, sharding, remote execution,
 Actor scheduler/carrier changes, specification changes or native-boundary
 changes. **TOOL002-I is released to READY solely because its dependency on H is
 satisfied; this closure does not preselect I's resource-policy details.**
+
+## TOOL002-I D076 resource architecture ratification
+
+Status: **BLOCKED_BY_D077**
+
+D076 / GitHub #359 is **RATIFIED — Candidate D selected** after explicit
+project-owner approval on 2026-09-11 and exhaustive comparison across language
+test frameworks, CI runners, CTest, Slurm, Kubernetes DRA, Buck2 and Bazel Remote
+Execution.
+
+The durable TOOL002-I architecture is:
+
+```text
+inert CaseSpec requirement
+    -> bundled-Protos atomic admission/reservation
+    -> environment-owned resource catalog / placement
+    -> provider
+    -> attempt-private lease/capability
+    -> fresh child Process
+    -> terminal cleanup / release
+```
+
+D069 jobs capacity remains orthogonal. One case's complete resource set is
+reserved atomically before launch. The initial semantic conflict model is shared
+positive-unit capacity versus exclusive whole-resource reservation. Scope/locality
+belongs to the catalog/resource definition, and live authority is created only
+after reservation/placement.
+
+No live provider, lease, worker identity, host object or capability may enter the
+inert TestPlan. Resource/provider loss is infrastructure outcome rather than a
+fabricated semantic Protos Error. No guest-global ResourceManager/registry is
+selected.
+
+TOOL002-I does **not** proceed directly to implementation because D076
+intentionally leaves the representation boundary open. D077 / GitHub #361 must
+select the resource-key carrier, CaseSpec requirement representation, catalog
+entry/configuration representation and malformed/duplicate declaration behavior
+before an implementation slice can materialize D076-D.
+
+This checkpoint selects no `jobs=auto`, fairness, retry, timeout/kill, sharding,
+remote transport, CAS, CPU/memory auto-accounting or physical-worker policy.
