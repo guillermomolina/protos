@@ -27,6 +27,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
+import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
@@ -136,8 +137,8 @@ final class CanonicalToBytecodeLowerer {
                                                 .anyMatch(
                                                         expression ->
                                                                 expression instanceof CanonicalCall
-                                                                        || expression
-                                                                                instanceof CanonicalSend);
+                                                                        || expression instanceof CanonicalSend
+                                                                        || expression instanceof CanonicalReturn);
                                 BytecodeLocal preparedCall =
                                         hasComposedInvocation
                                                 ? builder.createLocal(
@@ -180,6 +181,14 @@ final class CanonicalToBytecodeLowerer {
                                         emitComposedSend(
                                                 builder,
                                                 send,
+                                                result,
+                                                preparedCall,
+                                                childResult,
+                                                resumeValue);
+                                    } else if (expression instanceof CanonicalReturn) {
+                                        emitBodyExpressionToLocal(
+                                                builder,
+                                                expression,
                                                 result,
                                                 preparedCall,
                                                 childResult,
@@ -250,6 +259,10 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
+        if (expression instanceof CanonicalReturn returnExpression) {
+            validateSupportedDefaultExpression(returnExpression.value());
+            return;
+        }
         throw new UnsupportedOperationException(
                 "PERF006-B2C3B3 default expression is not migrated: "
                         + expression.getClass().getSimpleName());
@@ -259,7 +272,8 @@ final class CanonicalToBytecodeLowerer {
         return definition.parameters().stream()
                 .flatMap(parameter -> parameter.defaultValue().stream())
                 .anyMatch(expression -> expression instanceof CanonicalCall
-                        || expression instanceof CanonicalSend);
+                        || expression instanceof CanonicalSend
+                        || expression instanceof CanonicalReturn);
     }
 
     private static void emitClosureParameterBindings(
@@ -320,6 +334,15 @@ final class CanonicalToBytecodeLowerer {
                             defaultChildResult,
                             defaultResumeValue);
                     emitBindDefaultLocal(builder, parameter, defaultValue);
+                } else if (defaultExpression instanceof CanonicalReturn) {
+                    emitDefaultExpressionToLocal(
+                            builder,
+                            defaultExpression,
+                            defaultValue,
+                            defaultPreparedCall,
+                            defaultChildResult,
+                            defaultResumeValue);
+                    emitBindDefaultLocal(builder, parameter, defaultValue);
                 } else {
                     builder.beginBindClosureParameter();
                     builder.emitLoadArgument(0);
@@ -372,7 +395,8 @@ final class CanonicalToBytecodeLowerer {
                 .anyMatch(
                         argument ->
                                 argument instanceof CanonicalCall
-                                        || argument instanceof CanonicalSend);
+                                        || argument instanceof CanonicalSend
+                                        || argument instanceof CanonicalReturn);
     }
 
     private static boolean hasSpreadArgument(
@@ -510,6 +534,22 @@ final class CanonicalToBytecodeLowerer {
             builder.endSourceSection();
             return;
         }
+        if (expression instanceof CanonicalReturn returnExpression) {
+            emitBodyExpressionToLocal(
+                    builder,
+                    returnExpression.value(),
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            builder.beginStoreLocal(target);
+            builder.beginRaiseNonLocalReturn();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(target);
+            builder.endRaiseNonLocalReturn();
+            builder.endStoreLocal();
+            return;
+        }
         builder.beginStoreLocal(target);
         emitExpression(builder, expression);
         builder.endStoreLocal();
@@ -542,6 +582,22 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
             return;
         }
+        if (expression instanceof CanonicalReturn returnExpression) {
+            emitDefaultExpressionToLocal(
+                    builder,
+                    returnExpression.value(),
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            builder.beginStoreLocal(target);
+            builder.beginRaiseNonLocalReturn();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(target);
+            builder.endRaiseNonLocalReturn();
+            builder.endStoreLocal();
+            return;
+        }
         builder.beginStoreLocal(target);
         emitExpression(builder, expression);
         builder.endStoreLocal();
@@ -562,7 +618,8 @@ final class CanonicalToBytecodeLowerer {
         CanonicalExpression receiver = call.receiver();
         boolean stageReceiver =
                 receiver instanceof CanonicalCall
-                        || receiver instanceof CanonicalSend;
+                        || receiver instanceof CanonicalSend
+                        || receiver instanceof CanonicalReturn;
         boolean stageArguments =
                 hasComposedArgument(call.arguments());
         boolean spreadArguments =
@@ -690,7 +747,8 @@ final class CanonicalToBytecodeLowerer {
         CanonicalExpression receiver = send.receiver();
         boolean stageReceiver =
                 receiver instanceof CanonicalCall
-                        || receiver instanceof CanonicalSend;
+                        || receiver instanceof CanonicalSend
+                        || receiver instanceof CanonicalReturn;
         boolean stageArguments =
                 hasComposedArgument(send.arguments());
         boolean spreadArguments =
@@ -828,6 +886,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
         builder.beginStoreLocal(childResult);
         builder.beginResumeContinuation();
+        builder.emitLoadLocal(preparedCall);
         builder.emitLoadLocal(childResult);
         builder.emitLoadLocal(resumeValue);
         builder.endResumeContinuation();
@@ -901,6 +960,10 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
+        if (expression instanceof CanonicalReturn returnExpression) {
+            validateSupportedExpression(returnExpression.value());
+            return;
+        }
         throw new UnsupportedOperationException(
                 "PERF006-B2B Bytecode lowerer does not yet support "
                         + expression.getClass().getSimpleName());
@@ -962,7 +1025,8 @@ final class CanonicalToBytecodeLowerer {
         CanonicalExpression receiver = send.receiver();
         boolean stageReceiver =
                 receiver instanceof CanonicalCall
-                        || receiver instanceof CanonicalSend;
+                        || receiver instanceof CanonicalSend
+                        || receiver instanceof CanonicalReturn;
         boolean stageArguments =
                 hasComposedArgument(send.arguments());
         boolean spreadArguments =
@@ -1086,6 +1150,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(childResult);
         builder.beginResumeContinuation();
+        builder.emitLoadLocal(preparedCall);
         builder.emitLoadLocal(childResult);
         builder.emitLoadLocal(resumeValue);
         builder.endResumeContinuation();
@@ -1123,7 +1188,8 @@ final class CanonicalToBytecodeLowerer {
         CanonicalExpression receiver = call.receiver();
         boolean stageReceiver =
                 receiver instanceof CanonicalCall
-                        || receiver instanceof CanonicalSend;
+                        || receiver instanceof CanonicalSend
+                        || receiver instanceof CanonicalReturn;
         boolean stageArguments = hasComposedArgument(call.arguments());
         boolean spreadArguments = hasSpreadArgument(call.arguments());
         boolean stageInputs =
@@ -1252,6 +1318,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(childResult);
         builder.beginResumeContinuation();
+        builder.emitLoadLocal(preparedCall);
         builder.emitLoadLocal(childResult);
         builder.emitLoadLocal(resumeValue);
         builder.endResumeContinuation();

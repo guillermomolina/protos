@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -234,6 +235,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    @Operation
+    public static final class RaiseNonLocalReturn {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                Object value) {
+            ProtosReturnHome target =
+                    activation.returnHome().orElse(null);
+            if (target == null || !target.isActive()) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newInvalidReturn(activation));
+            }
+            throw new ProtosNonLocalReturnException(target, value);
+        }
+    }
+
     static final class PreparedClosureCall {
         private final RootCallTarget bodyTarget;
         private final ProtosNativeClosureBody nativeBody;
@@ -287,6 +304,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return nativeBody.execute(
                     activation,
                     supplied);
+        }
+        Object handleControlTransfer(ControlFlowException transfer) {
+            if (transfer instanceof ProtosNonLocalReturnException nonLocalReturn
+                    && ownsReturnHome
+                    && returnHome.isActive()
+                    && nonLocalReturn.target() == returnHome) {
+                return nonLocalReturn.value();
+            }
+            throw transfer;
         }
         Object finish(Object result) {
             if (ownsReturnHome && returnHome.isActive()) returnHome.complete();
@@ -634,7 +660,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             try {
                 return node.call(prepared.activation());
             } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
+                return prepared.handleControlTransfer(bridged.transfer());
             }
         }
 
@@ -647,7 +673,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         prepared.bodyTarget(),
                         prepared.activation());
             } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
+                return prepared.handleControlTransfer(bridged.transfer());
             }
         }
     }
@@ -670,6 +696,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class ResumeContinuation {
         @Specialization
         public static Object nativeSuspension(
+                PreparedClosureCall prepared,
                 ProtosNativeSuspension suspension,
                 Object resumeValue) {
             /*
@@ -684,6 +711,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 guards = "result.getContinuationRootNode() == cachedRoot",
                 limit = "3")
         public static Object direct(
+                PreparedClosureCall prepared,
                 ContinuationResult result,
                 Object resumeValue,
                 @Cached("result.getContinuationRootNode()")
@@ -695,12 +723,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         result.getFrame(),
                         resumeValue);
             } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
+                return prepared.handleControlTransfer(bridged.transfer());
             }
         }
 
         @Specialization(replaces = "direct")
         public static Object indirect(
+                PreparedClosureCall prepared,
                 ContinuationResult result,
                 Object resumeValue,
                 @Cached IndirectCallNode node) {
@@ -710,7 +739,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         result.getFrame(),
                         resumeValue);
             } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
+                return prepared.handleControlTransfer(bridged.transfer());
             }
         }
     }
