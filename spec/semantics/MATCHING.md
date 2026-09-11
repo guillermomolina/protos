@@ -9,7 +9,7 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.401`.
+`0.1.402`.
 It deliberately does **not** define concrete matching-expression grammar,
 case/arm/default syntax, which source expressions or future surface forms denote
 ordinary value patterns, guards, exhaustivity, standard pattern taxonomy, or named-binding syntax. Those remain unresolved
@@ -643,6 +643,168 @@ Implementations may specialize normal standard Map receiver checks, retain
 versioned snapshot state, optimize query lookup, scalarize selected values, test
 residual emptiness without materializing a Map, and lazily materialize remainder
 state only when all observable behavior remains identical to this contract.
+
+### 3.4 Capture-to-arm binding ABI
+
+D072/D083 remain the sole standard runtime capture representation. D088
+introduces no named matcher-result carrier, binding Map, `CaptureFrame`,
+`CaptureSignature`, capture-name registry, or required matcher-topology
+introspection.
+
+Once one candidate pattern has **completely succeeded** and its normal outcome
+has been validated under D072, the selected arm consumes that successful capture
+interface through **ordinary Protos callable/Closure invocation**.
+
+The capture-to-arm calling convention is:
+
+```text
+D072 result              selected-arm capture actuals
+-----------              ----------------------------
+true                     zero capture actual arguments
+[c1, ..., cn]            c1, ..., cn as n positional actual arguments
+```
+
+Each positional capture is passed as the exact ordinary captured value. A
+captured Array, Map, Closure, Future, or other aggregate/value remains one
+argument. D088 never recursively expands a capture merely because that captured
+value is itself a collection.
+
+#### 3.4.1 Binding commitment occurs only after complete success
+
+Source-visible arm bindings do not exist during tentative or incomplete
+matching.
+
+A containing pattern may perform ordinary matcher calls, produce intermediate
+captures, execute effects, and later mismatch. Such prior matcher effects remain
+governed by the existing D083 rules and are not rolled back, but no
+source-visible selected-arm binding state is created merely because an earlier
+subpattern already succeeded.
+
+The selected arm's ordinary invocation activation and its parameter bindings are
+established only after the candidate pattern has succeeded completely and its
+D072 carrier has been accepted.
+
+D088 therefore requires no tentative binding environment, mutation log, lexical
+rollback protocol, or binding transaction.
+
+#### 3.4.2 Source names belong to the arm/source interface
+
+A source-visible binding name belongs to the source arm/binding interface, not
+to arbitrary matcher metadata.
+
+For a fixed source binding interface, the language implementation establishes a
+deterministic ordered mapping from source binders to D072 capture positions.
+Those capture values become ordinary positional actual arguments of the
+selected arm, and ordinary Closure parameter binding makes the corresponding
+names ordinary parameter slots in the arm invocation activation.
+
+Concrete source syntax may later place binder names visually at nested
+structural pattern sites. Such syntax may compile those source sites to capture
+positions and ordinary arm parameters; it does not require the runtime
+`pattern.match(subject)` result to carry those names.
+
+Within one fixed source arm-binding interface, binding names are **linear**:
+each source binding name is declared at most once. Duplicate binder names do not
+implicitly mean equality, conjunction, shadowing, or last-write-wins behavior.
+Recognition constraints belong to patterns rather than to duplicate consumer
+names.
+
+#### 3.4.3 Fixed and dynamic capture arity
+
+A fixed arm-binding interface consumes captures positionally.
+
+When the producer's capture interface and the fixed consumer interface are
+statically/source-structurally known to be incompatible, an implementation
+should reject that source before execution rather than deliberately construct an
+arm invocation known to fail.
+
+Arbitrary matcher objects remain free to produce any D072-valid capture count
+allowed by their semantics. D088 does not require them to publish a fixed
+capture arity or capture-name/signature metadata.
+
+A consumer that intentionally accepts a variable number of captures may use the
+already-standard ordinary Closure rest-parameter semantics. Excess positional
+capture actuals then participate in the same ordinary rest binding used by any
+other Closure invocation, including its fresh frozen rest Array contract.
+
+If a candidate pattern has already succeeded but ordinary selected-arm
+invocation cannot accept the supplied capture arity, the resulting callable
+binding/arity failure is an **ordinary invocation Error**. It is not retroactive
+pattern mismatch and does not authorize trying a later arm.
+
+D088 introduces no implicit missing capture, placeholder argument, capture
+padding, silent capture dropping, or automatic aggregate conversion merely to
+make an incompatible arm callable.
+
+#### 3.4.4 Future alternative-pattern binding compatibility
+
+D088 does not define OR/alternative recognition, retry, ordering, side-effect,
+or backtracking semantics.
+
+It fixes the consumer-side invariant such a later standard alternative form must
+respect:
+
+> when several alternatives are exposed through one fixed source arm-binding
+> interface, every successful alternative must map its public captures onto the
+> same ordered logical arm-binding interface.
+
+Different alternatives may obtain a logical binding from different structural
+positions, but the selected arm must not receive a branch-dependent binding
+layout.
+
+This compatibility may be proved or rejected by source/compiler pattern
+structure. D088 does not require arbitrary runtime matcher objects to publish
+capture names solely to support future alternatives.
+
+#### 3.4.5 Ordinary invocation semantics remain authoritative
+
+After successful capture conversion into positional actual arguments, ordinary
+Closure/callable semantics remain authoritative for activation creation,
+parameter binding, `args`, rest binding, receiver/callable behavior, Error,
+non-local return, cancellation, explicit suspension, and all other ordinary
+invocation behavior.
+
+Passing a captured value to an arm preserves ordinary Protos argument-passing
+identity. D088 performs no cloning merely to create a binding.
+
+An implementation may specialize a known standard pattern and known arm,
+scalarize capture values directly into arm parameter/frame state, or eliminate
+an otherwise unobservable intermediate capture Array only when observable
+behavior is exactly equivalent to:
+
+```text
+pattern.match(subject)
+        ↓
+D072 validation / D083 capture sequence
+        ↓
+ordinary selected-arm invocation with positional capture actuals
+```
+
+Such specialization must preserve matcher dispatch, matcher call count/order,
+effects, Error/control/suspension behavior, aggregate capture boundaries,
+ordinary arm invocation behavior, and failures that would be observable from an
+invalid or incompatible result/interface.
+
+#### 3.4.6 Boundary and future evolution
+
+D088 does not standardize:
+
+- concrete `match`, `case`, arm, default, binder, or capture syntax;
+- OR/alternative recognition/backtracking semantics themselves;
+- whole-subject alias/binder semantics or spelling;
+- guards or exhaustivity;
+- repetition or optional-pattern semantics;
+- sequence find/subsequence or stream matching;
+- named arguments or another callable parameter category;
+- a first-class pattern reflection API;
+- mandatory capture-name/arity/signature metadata on arbitrary matchers; or
+- parser/runtime implementation of the future matching surface.
+
+A future explicit whole-subject alias can remain additive by contributing the
+subject as one ordinary capture at a separately ratified position. Optional
+tooling/debug or pattern-introspection metadata can likewise map source names to
+capture positions without changing the D072/D083 runtime carrier or this
+capture-to-arm ABI.
 
 ## 4. Explicit structural deconstruction boundary
 

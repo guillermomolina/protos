@@ -9,6 +9,25 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.402] - 2026-09-11
+
+### D088 — Capture-to-arm binding ABI
+- Ratifies D072/D083 positional captures as the sole standard runtime capture payload for source arm binding; no named matcher-result carrier, binding Map, `CaptureFrame`, `CaptureSignature`, or required capture-name metadata is introduced.
+- After one candidate pattern succeeds completely and its D072 result is validated, the selected arm is invoked through ordinary Protos callable/Closure semantics: `true` supplies zero capture actuals and `[c1, ..., cn]` supplies `c1 ... cn` as ordinary positional actual arguments.
+- Source-visible binder names belong to the source/arm binding interface and become ordinary selected-arm parameter slots; no source-visible arm binding exists during tentative/failing matching and no binding rollback mechanism is introduced.
+- One D072 capture remains one arm argument. Captured Arrays, Maps and other aggregate values remain opaque ordinary values, preserving D083/D084/D086 capture boundaries.
+- Fixed source binding interfaces are linear; duplicate binder names are invalid rather than hidden equality/conjunction or shadowing semantics.
+- Arbitrary matchers may retain dynamic capture arity. Consumers intentionally accepting variable capture counts may use existing ordinary Closure rest-parameter semantics.
+- Recognition success followed by selected-arm arity/binding incompatibility is ordinary callable invocation Error, not mismatch and not permission to try another arm.
+- Future OR/alternative patterns exposed through one fixed arm interface must map every successful alternative onto the same ordered logical binding interface; OR recognition/backtracking itself remains unresolved.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D088 decision record under `docs/project/decisions/language/`.
+- Existing D072/D073/D083/D084/D086 matching and callable semantics remain unchanged.
+- Named binding syntax, whole-subject alias, OR recognition mechanics, guards, exhaustivity, repetition/optional semantics and sequence-search/stream semantics remain unresolved.
+- No parser, grammar, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D087 is unrelated concurrent work and is excluded; D089 and later matching checkpoints are excluded.
+
 ## [0.1.401] - 2026-09-11
 
 ### D086 — Standard Map keyed-pattern semantics
