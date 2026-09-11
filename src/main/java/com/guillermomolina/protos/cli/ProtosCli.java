@@ -295,45 +295,32 @@ public final class ProtosCli {
                     out,
                     err,
                     session -> {
-                        ProtosExactExecutionFacility.install(
-                                session.activation, session.runtimeHost);
-                        ProtosExactExecutionFacility.installInspection(
-                                session.activation, session.runtimeHost);
-                        ProtosExactExecutionFacility.install(
-                                session.activation,
-                                "actorExecution",
-                                actorPrelude,
-                                session.runtimeHost);
-                        ProtosExactExecutionFacility.installInspection(
-                                session.activation,
-                                "actorExecutionInspect",
-                                actorPrelude,
-                                session.runtimeHost);
-                        ProtosExactExecutionFacility.install(
-                                session.activation,
-                                "groupExecution",
-                                groupPrelude,
-                                session.runtimeHost);
-                        ProtosExactExecutionFacility.installInspection(
-                                session.activation,
-                                "groupExecutionInspect",
-                                groupPrelude,
-                                session.runtimeHost);
-                        ProtosExactExecutionFacility.install(
-                                session.activation,
-                                "packageExecution",
-                                packagePrelude,
-                                session.runtimeHost);
-                        installBundledToolFilesystem(
-                                session, "filesystem", filesystemBackend);
-                        installBundledToolFilesystem(
-                                session, "actorFilesystem", actorFilesystemBackend);
-                        installBundledToolFilesystem(
-                                session, "groupFilesystem", groupFilesystemBackend);
-                        installBundledToolFilesystem(
-                                session,
-                                "packageTomlFilesystem",
-                                packageTomlFilesystemBackend);
+                        ProtosTestToolAsyncExecutionScope executionScope =
+                                ProtosTestToolAsyncExecutionScope.install(
+                                        session.activation,
+                                        session.runtimeHost,
+                                        actorPrelude,
+                                        groupPrelude,
+                                        packagePrelude);
+                        boolean provisioned = false;
+                        try {
+                            installBundledToolFilesystem(
+                                    session, "filesystem", filesystemBackend);
+                            installBundledToolFilesystem(
+                                    session, "actorFilesystem", actorFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session, "groupFilesystem", groupFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageTomlFilesystem",
+                                    packageTomlFilesystemBackend);
+                            provisioned = true;
+                            return executionScope::close;
+                        } finally {
+                            if (!provisioned) {
+                                executionScope.close();
+                            }
+                        }
                     });
         }
     }
@@ -362,9 +349,11 @@ public final class ProtosCli {
                     in,
                     out,
                     err,
-                    session ->
-                            installBundledToolFilesystem(
-                                    session, "filesystem", filesystemBackend));
+                    session -> {
+                        installBundledToolFilesystem(
+                                session, "filesystem", filesystemBackend);
+                        return NOOP_BUNDLED_TOOL_CLEANUP;
+                    });
         }
     }
 
@@ -377,7 +366,7 @@ public final class ProtosCli {
             PrintStream err)
             throws Exception {
         return runBundledTool(
-                toolName, diagnosticName, args, in, out, err, session -> {});
+                toolName, diagnosticName, args, in, out, err, session -> NOOP_BUNDLED_TOOL_CLEANUP);
     }
 
     private int runBundledTool(
@@ -425,8 +414,12 @@ public final class ProtosCli {
                         in,
                         out,
                         err);
+        BundledToolSessionCleanup cleanup = NOOP_BUNDLED_TOOL_CLEANUP;
         try {
-            provisioner.provision(session);
+            cleanup =
+                    Objects.requireNonNull(
+                            provisioner.provision(session),
+                            "bundled tool provisioner returned null cleanup");
             ProtosModuleKey entryModule = resolver.entryModule(entryModuleName);
             ProtosModuleSource source = resolver.loadSource(entryModule).requireKey(entryModule);
             executeStandaloneRootTask(session.executeModuleSource(source));
@@ -441,7 +434,11 @@ public final class ProtosCli {
             err.println(diagnosticName + " tool runtime error: " + e.getMessage());
             return 1;
         } finally {
-            session.terminate();
+            try {
+                cleanup.close();
+            } finally {
+                session.terminate();
+            }
         }
     }
 
@@ -469,8 +466,15 @@ public final class ProtosCli {
     }
 
     @FunctionalInterface
+    private interface BundledToolSessionCleanup {
+        void close();
+    }
+
+    private static final BundledToolSessionCleanup NOOP_BUNDLED_TOOL_CLEANUP = () -> {};
+
+    @FunctionalInterface
     private interface BundledToolSessionProvisioner {
-        void provision(Session session);
+        BundledToolSessionCleanup provision(Session session);
     }
 
     private static List<String> applicationArguments(String[] args, int start) {
@@ -1057,7 +1061,7 @@ public final class ProtosCli {
                         + "  protos debug <file> [args...]\n"
                         + "  protos run <entry> [args...]\n"
                         + "  protos package [args...]\n"
-                        + "  protos test [args...]\n"
+                        + "  protos test [--jobs N] [args...]\n"
                         + "  protos\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"
@@ -1069,6 +1073,8 @@ public final class ProtosCli {
                         + "Debug executes one explicit file through the standard DAP debugger; "
                         + "its one PROTOS_DEBUG_READY JSON record is emitted on stdout before "
                         + "guest execution and guest output then travels through DAP.\n"
+                        + "Test Tool --jobs N selects positive logical execution capacity; "
+                        + "without --jobs the Test Tool uses jobs = 1.\n"
                         + "Application arguments are available through process.args(); "
                         + "the file/source launcher identity is excluded.\n"
                         + "The CLI provisions stdin/stdout/stderr as byte streams with "

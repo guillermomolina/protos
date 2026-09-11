@@ -1,3 +1,19 @@
+## 0.2.368-SNAPSHOT
+
+- Implement `TOOL002-H2B3 — public bounded Test Tool integration` (GitHub #95)
+  under ratified D055, D069 and PLAT023. Parse D069 `--jobs N` in ordinary
+  bundled Protos from `process.args()`, preserving absent jobs as `1` and explicit
+  failure for missing/malformed/non-positive/duplicate values; route all four
+  retained public plans through the H2B2 bounded runner; and provision async exact
+  execution/inspection through one PLAT023 scope whose already-admitted work runs
+  on fresh named Java platform Threads with no second host pool/capacity and no
+  Actor-carrier reuse. Close async facility custody before RuntimeHost teardown.
+  Validate only the H2B3 focal integration class during this iterative slice;
+  broader Test Tool/full-suite reconciliation remains TOOL002-H closure work.
+  Add no `jobs=auto`, resources, timeout/kill, retry, sharding, remote execution,
+  specification change or native boundary. Implementation version becomes
+  `0.2.368-SNAPSHOT`.
+
 ## 0.2.367-SNAPSHOT
 
 - Implement `LIB009-B — default-profile CSV encode and structural round-trip` (GitHub #352) after explicit owner approval of the canonical writer policy. Add pure-Protos `CSV.encode(rows)` with standard-Array/String domain validation, necessary-only quoting for comma/double-quote/CR/LF, doubled embedded quotes and CRLF after every row. Preserve whitespace/application-looking text exactly, reject zero-field rows, and verify `CSV.parse(CSV.encode(rows)) == rows` for valid ordinary row data. Durably record the approved writer policy in the LIB009 design record. Export exactly `{parse, encode}`; add no custom dialect API, headers/types/nulls/sniffing/spreadsheet policy, filesystem/network effect, Java production source or native-boundary expansion. Implementation version becomes `0.2.367-SNAPSHOT`.

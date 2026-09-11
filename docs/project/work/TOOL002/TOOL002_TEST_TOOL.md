@@ -67,7 +67,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-E | CLOSED | E1A/E1B/E2A/E2B/E3/E4 complete the retained Package/TOML migration: bundled Protos owns planning, confined source loading, Package execution, Boolean/Error expectation policy and aggregation; duplicate Java corpus-policy ownership is removed. |
 | TOOL002-F | CLOSED | F1/F2/F3 plus the F4 cutover program are published: bundled Protos now owns all retained Future expectation policy and the complete main manifest; duplicate Java Future policy is retired. |
 | TOOL002-G | CLOSED | G1/G1A establish production-scheduler cooperative inspection; G2/G3 migrate the complete retained Actor/Group manifests into bundled-Protos Runner ownership; G4 retires the duplicate Java corpus-policy owners and reconciles closure. |
-| TOOL002-H | IN_PROGRESS | H1, H2A, H2B1 and H2B2 are closed; D055 ratifies the async exact-execution boundary; D069 ratifies public `--jobs N` logical capacity with serial default; PLAT023 ratifies fresh platform-Thread-per-admitted-execution host transport. H2B3 is READY to integrate the bounded runner into real `protos test` without selecting resources, auto-jobs, hard timeout/kill, retry or remote policy. |
+| TOOL002-H | IN_PROGRESS | H1 and H2A are closed; H2B1/H2B2 publish bounded ordinary-Protos scheduling; D069 and PLAT023 are ratified; H2B3 publishes the real `protos test` cutover with D069 `--jobs N` parsing and PLAT023 fresh platform-thread submission. Parent H remains open for closure reconciliation before TOOL002-I. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | After H, add explicit resource constraints/private capabilities where real external-resource sharing requires them. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | After I, integrate the final Java-first / Protos-tool-second validation pipeline. |
 
@@ -1205,3 +1205,42 @@ focal-validation-only while iterating, must not broaden into TOOL002-I resource
 policy, `jobs=auto`, hard OS-worker timeout/kill, retries, sharding, remote
 transport, Actor scheduler changes or another carrier policy, and must stop if a
 new substantive semantic/architecture choice appears.
+
+## TOOL002-H2B3 production Test Tool cutover
+
+H2B3 consumes the already-ratified D055, D069 and PLAT023 boundaries without
+adding another policy layer:
+
+- bundled `Options.protos` parses ordinary `process.args()` for exactly D069
+  `--jobs N`, defaults absence to `1`, and fails explicitly for a missing,
+  malformed, zero, negative or duplicate jobs value;
+- public `Main.protos` routes the conformance, Actor, Group and Package/TOML
+  plans through the already-published H2B2 `Runner.runBounded(...)` path with one
+  shared logical jobs value while retaining sequential plan-to-plan orchestration
+  and deterministic per-plan TestPlan result order;
+- the CLI provisions asynchronous exact-execution and inspection capabilities for
+  the existing Core, Actor and Group execution domains plus asynchronous Package
+  execution, without retaining the now-unused synchronous Test Tool bridges;
+- the PLAT023 production Submission creates one fresh named Java platform Thread
+  for each execution that H2B has already admitted. It has no executor pool,
+  second queue/capacity, CPU heuristic or relationship to the Actor carrier pool;
+- one Test Tool execution scope owns all async facilities plus the shared carrier
+  mechanism and closes those facilities before the owning RuntimeHost Session is
+  terminated, preserving accepted-work custody through terminal cleanup;
+- the production carrier remains replaceable behind
+  `ProtosAsyncExactExecutionFacility.Submission` and does not make Thread identity
+  observable Protos semantics.
+
+H2B3 focal validation is intentionally restricted to
+`ProtosTestToolH2B3PublicIntegrationTest`. It proves the public Main cutover,
+D069 parser boundaries, installation of all production async bootstrap routes,
+real generic execution/inspection over the production carrier, fresh/distinct
+named platform carriers, and the rule that already-started work is not reported
+as pre-start cancellable. Broader Test Tool/full-suite reconciliation remains the
+next H closure responsibility and is not run during H2B3 iteration.
+
+H2B3 adds no `jobs=auto`, `-j`, resource weights/declarations, hard timeout/kill,
+retry, sharding, remote execution, Actor scheduler/carrier change, specification
+change or native boundary. TOOL002-H remains **IN_PROGRESS** until its closure
+reconciliation is published; TOOL002-I is not released by this intermediate
+slice alone.

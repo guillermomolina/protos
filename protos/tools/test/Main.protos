@@ -15,28 +15,41 @@
 
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
+Options: import("self:Options")
+
+jobs: Options.jobs(process.args())
 
 plan: Manifest.load(filesystem)
 packageTomlPlan: Manifest.loadPackageToml(packageTomlFilesystem)
 actorPlan: Manifest.load(actorFilesystem)
 groupPlan: Manifest.load(groupFilesystem)
-run: Runner.runSimple(plan, filesystem, execution, executionInspect)
-actorRun: Runner.runSimple(
+run: Runner.runBounded(
+    plan,
+    filesystem,
+    executionAsync,
+    executionInspectAsync,
+    jobs
+)
+actorRun: Runner.runBounded(
     actorPlan,
     actorFilesystem,
-    actorExecution,
-    actorExecutionInspect
+    actorExecutionAsync,
+    actorExecutionInspectAsync,
+    jobs
 )
-groupRun: Runner.runSimple(
+groupRun: Runner.runBounded(
     groupPlan,
     groupFilesystem,
-    groupExecution,
-    groupExecutionInspect
+    groupExecutionAsync,
+    groupExecutionInspectAsync,
+    jobs
 )
-packageTomlRun: Runner.runSimple(
+packageTomlRun: Runner.runBounded(
     packageTomlPlan,
     packageTomlFilesystem,
-    packageExecution
+    packageExecutionAsync,
+    null,
+    jobs
 )
 
 writer: TextWriter(process.stdout(), process.stdoutEncoding())

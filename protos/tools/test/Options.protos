@@ -1,0 +1,62 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+optionError: () => {
+    Error().signal()
+}
+
+parsePositiveInteger: (text) => {
+    source: Encoding.UTF8.encode(text)
+    (source.size() == 0).ifTrue(() => { optionError() })
+
+    value: 0
+    source.each((octet) => {
+        digit: (octet >= 48) && (octet <= 57)
+        digit.ifFalse(() => { optionError() })
+        value = value * 10 + (octet - 48)
+    })
+
+    (value > 0).ifFalse(() => { optionError() })
+    value
+}
+
+// D069: --jobs is one positive logical Test Tool capacity value. Unknown
+// arguments remain outside this bounded slice so H2B3 does not invent a second
+// Test Tool option policy.
+jobs: (arguments) => {
+    result: 1
+    seen: false
+    expectingValue: false
+
+    // process.args() is an ordinary canonical Array snapshot. Traverse it with
+    // the retained Array.each contract instead of adding an index/while parser.
+    arguments.each((argument) => {
+        expectingValue.ifTrue(() => {
+            result = parsePositiveInteger(argument)
+            expectingValue = false
+        })
+
+        expectingValue.ifFalse(() => {
+            (argument === "--jobs").ifTrue(() => {
+                seen.ifTrue(() => { optionError() })
+                seen = true
+                expectingValue = true
+            })
+        })
+    })
+
+    expectingValue.ifTrue(() => { optionError() })
+    result
+}
