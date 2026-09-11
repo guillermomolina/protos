@@ -1,0 +1,763 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Toml: import("tool-shared:Toml10/TomlSyntax")
+
+statements: (text) => {
+    ignoredStringValidation: text + ""
+    source: Encoding.UTF8.encode(text)
+    index: 0
+    length: source.size()
+
+    result: Array()
+    buffer: Encoding.UTF8.encode("")
+    significant: false
+    squareDepth: 0
+    braceDepth: 0
+    stringQuote: -1
+    multiline: false
+    comment: false
+
+    fail: () => {
+        Error().signal()
+    }
+
+    peek: () => {
+        value: -1
+        (index < length).ifTrue(() => {
+            value = source[index]
+        })
+        value
+    }
+
+    take: () => {
+        (index >= length).ifTrue(() => {
+            fail()
+        })
+        value: source[index]
+        index = index + 1
+        value
+    }
+
+    append: (octet) => {
+        buffer.add(octet)
+        (octet == 32).ifFalse(() => {
+            (octet == 9).ifFalse(() => {
+                significant = true
+            })
+        })
+    }
+
+    appendQuotes: null
+    appendQuotes = (quote, remaining) => {
+        (remaining > 0).ifTrue(() => {
+            append(quote)
+            appendQuotes(quote, remaining - 1)
+        })
+    }
+
+    quoteRun: (quote) => {
+        look: index
+        count: 0
+
+        scan: null
+        scan = () => {
+            (look < length).ifTrue(() => {
+                (source[look] == quote).ifTrue(() => {
+                    count = count + 1
+                    look = look + 1
+                    scan()
+                })
+            })
+        }
+
+        scan()
+        count
+    }
+
+    finish: () => {
+        significant.ifTrue(() => {
+            result = Array(...result, Encoding.UTF8.decode(buffer))
+        })
+        buffer = Encoding.UTF8.encode("")
+        significant = false
+    }
+
+    appendNewline: (include) => {
+        first: take()
+        (first == 10).ifTrue(() => {
+            include.ifTrue(() => { append(10) })
+        })
+        (first == 13).ifTrue(() => {
+            (peek() == 10).ifFalse(() => {
+                fail()
+            })
+            second: take()
+            include.ifTrue(() => {
+                append(13)
+                append(second)
+            })
+        })
+        (first == 10).ifFalse(() => {
+            (first == 13).ifFalse(() => {
+                fail()
+            })
+        })
+    }
+
+    step: () => {
+        octet: peek()
+
+        wasComment: comment
+        wasComment.ifTrue(() => {
+            isNewline: octet == 10
+            (octet == 13).ifTrue(() => { isNewline = true })
+
+            isNewline.ifTrue(() => {
+                comment = false
+                nested: squareDepth > 0
+                (braceDepth > 0).ifTrue(() => { nested = true })
+                nested.ifTrue(() => {
+                    appendNewline(true)
+                })
+                nested.ifFalse(() => {
+                    appendNewline(false)
+                    finish()
+                })
+            })
+
+            isNewline.ifFalse(() => {
+                index = index + 1
+            })
+        })
+
+        wasComment.ifFalse(() => {
+            wasString: stringQuote >= 0
+            wasString.ifTrue(() => {
+                wasMultiline: multiline
+                wasMultiline.ifTrue(() => {
+                    // Snapshot this before closing mutates stringQuote.
+                    quoteOctet: octet == stringQuote
+                    quoteOctet.ifTrue(() => {
+                        run: quoteRun(stringQuote)
+                        (run >= 3).ifTrue(() => {
+                            (run > 5).ifTrue(() => {
+                                fail()
+                            })
+                            appendQuotes(stringQuote, run)
+                            index = index + run
+                            stringQuote = -1
+                            multiline = false
+                        })
+                        (run < 3).ifTrue(() => {
+                            append(take())
+                        })
+                    })
+
+                    quoteOctet.ifFalse(() => {
+                        escapedBasic: stringQuote == 34
+                        (octet == 92).ifFalse(() => {
+                            escapedBasic = false
+                        })
+
+                        escapedBasic.ifTrue(() => {
+                            append(take())
+                            (index >= length).ifTrue(() => {
+                                fail()
+                            })
+                            append(take())
+                        })
+
+                        escapedBasic.ifFalse(() => {
+                            append(take())
+                        })
+                    })
+                })
+
+                wasMultiline.ifFalse(() => {
+                    isNewline: octet == 10
+                    (octet == 13).ifTrue(() => { isNewline = true })
+                    isNewline.ifTrue(() => {
+                        fail()
+                    })
+
+                    escapedBasic: stringQuote == 34
+                    (octet == 92).ifFalse(() => {
+                        escapedBasic = false
+                    })
+
+                    escapedBasic.ifTrue(() => {
+                        append(take())
+                        (index >= length).ifTrue(() => {
+                            fail()
+                        })
+                        append(take())
+                    })
+
+                    escapedBasic.ifFalse(() => {
+                        append(take())
+                        (octet == stringQuote).ifTrue(() => {
+                            stringQuote = -1
+                        })
+                    })
+                })
+            })
+
+            wasString.ifFalse(() => {
+                (octet == 35).ifTrue(() => {
+                    comment = true
+                    index = index + 1
+                })
+
+                (octet == 35).ifFalse(() => {
+                    isQuote: octet == 34
+                    (octet == 39).ifTrue(() => { isQuote = true })
+
+                    isQuote.ifTrue(() => {
+                        run: quoteRun(octet)
+                        (run >= 3).ifTrue(() => {
+                            appendQuotes(octet, 3)
+                            index = index + 3
+                            stringQuote = octet
+                            multiline = true
+                        })
+                        (run < 3).ifTrue(() => {
+                            append(take())
+                            stringQuote = octet
+                            multiline = false
+                        })
+                    })
+
+                    isQuote.ifFalse(() => {
+                        (octet == 91).ifTrue(() => {
+                            squareDepth = squareDepth + 1
+                            append(take())
+                        })
+                        (octet == 93).ifTrue(() => {
+                            (squareDepth == 0).ifTrue(() => {
+                                fail()
+                            })
+                            squareDepth = squareDepth - 1
+                            append(take())
+                        })
+                        (octet == 123).ifTrue(() => {
+                            braceDepth = braceDepth + 1
+                            append(take())
+                        })
+                        (octet == 125).ifTrue(() => {
+                            (braceDepth == 0).ifTrue(() => {
+                                fail()
+                            })
+                            braceDepth = braceDepth - 1
+                            append(take())
+                        })
+
+                        structural: octet == 91
+                        (octet == 93).ifTrue(() => { structural = true })
+                        (octet == 123).ifTrue(() => { structural = true })
+                        (octet == 125).ifTrue(() => { structural = true })
+
+                        structural.ifFalse(() => {
+                            isNewline: octet == 10
+                            (octet == 13).ifTrue(() => { isNewline = true })
+
+                            isNewline.ifTrue(() => {
+                                nested: squareDepth > 0
+                                (braceDepth > 0).ifTrue(() => { nested = true })
+                                nested.ifTrue(() => {
+                                    appendNewline(true)
+                                })
+                                nested.ifFalse(() => {
+                                    appendNewline(false)
+                                    finish()
+                                })
+                            })
+
+                            isNewline.ifFalse(() => {
+                                append(take())
+                            })
+                        })
+                    })
+                })
+            })
+        })
+
+    }
+
+    visitIndex: 0
+    source.each((ignoredOctet) => {
+        (visitIndex == index).ifTrue(() => {
+            step()
+        })
+        visitIndex = visitIndex + 1
+    })
+
+    (index == length).ifFalse(() => {
+        fail()
+    })
+
+    (stringQuote >= 0).ifTrue(() => {
+        fail()
+    })
+    (squareDepth != 0).ifTrue(() => {
+        fail()
+    })
+    (braceDepth != 0).ifTrue(() => {
+        fail()
+    })
+
+    finish()
+    result
+}
+
+table: (text) => {
+    items: statements(text)
+
+    fail: () => {
+        Error().signal()
+    }
+
+    node: (kind, value) => {
+        result: {
+            kind: kind
+            value: value
+        }
+        result
+    }
+
+    root: node("table", Map())
+    states: IdentityMap()
+    states[root] = "root"
+    current: root
+
+    isSpace: (octet) => {
+        result: octet == 32
+        (octet == 9).ifTrue(() => {
+            result = true
+        })
+        result
+    }
+
+    decodeRange: (source, start, end) => {
+        buffer: Encoding.UTF8.encode("")
+        position: start
+
+        copy: null
+        copy = () => {
+            (position < end).ifTrue(() => {
+                buffer.add(source[position])
+                position = position + 1
+                copy()
+            })
+        }
+
+        copy()
+        Encoding.UTF8.decode(buffer)
+    }
+
+    trimBounds: (source) => {
+        left: 0
+        right: source.size()
+
+        trimLeft: null
+        trimLeft = () => {
+            (left < right).ifTrue(() => {
+                isSpace(source[left]).ifTrue(() => {
+                    left = left + 1
+                    trimLeft()
+                })
+            })
+        }
+
+        trimRight: null
+        trimRight = () => {
+            (right > left).ifTrue(() => {
+                isSpace(source[right - 1]).ifTrue(() => {
+                    right = right - 1
+                    trimRight()
+                })
+            })
+        }
+
+        trimLeft()
+        trimRight()
+        {
+            left: left
+            right: right
+        }
+    }
+
+    markInlineTable: (valueNode) => {
+        (valueNode.kind == "table").ifTrue(() => {
+            states[valueNode] = "inline"
+        })
+    }
+
+    putDotted: null
+    putDotted = (tableNode, parts, position, valueNode) => {
+        name: parts[position]
+        last: position == parts.size() - 1
+        entries: tableNode.value
+
+        last.ifTrue(() => {
+            entries.containsKey(name).ifTrue(() => {
+                fail()
+            })
+            entries[name] = valueNode
+            markInlineTable(valueNode)
+        })
+
+        last.ifFalse(() => {
+            child: null
+            entries.containsKey(name).ifTrue(() => {
+                child = entries[name]
+                (child.kind == "table").ifFalse(() => {
+                    fail()
+                })
+                states.containsKey(child).ifFalse(() => {
+                    fail()
+                })
+                state: states[child]
+                (state == "header").ifTrue(() => {
+                    fail()
+                })
+                (state == "inline").ifTrue(() => {
+                    fail()
+                })
+                (state == "implicit").ifTrue(() => {
+                    states[child] = "dotted"
+                })
+            })
+
+            entries.containsKey(name).ifFalse(() => {
+                child = node("table", Map())
+                entries[name] = child
+                states[child] = "dotted"
+            })
+
+            putDotted(child, parts, position + 1, valueNode)
+        })
+    }
+
+    latestArrayTable: (arrayNode) => {
+        (arrayNode.kind == "array").ifFalse(() => {
+            fail()
+        })
+        states.containsKey(arrayNode).ifFalse(() => {
+            fail()
+        })
+        (states[arrayNode] == "array-table").ifFalse(() => {
+            fail()
+        })
+        elements: arrayNode.value
+        (elements.size() == 0).ifTrue(() => {
+            fail()
+        })
+        selected: elements[elements.size() - 1]
+        (selected.kind == "table").ifFalse(() => {
+            fail()
+        })
+        selected
+    }
+
+    existingParent: (child) => {
+        selected: null
+
+        (child.kind == "table").ifTrue(() => {
+            states.containsKey(child).ifFalse(() => {
+                fail()
+            })
+            (states[child] == "inline").ifTrue(() => {
+                fail()
+            })
+            selected = child
+        })
+
+        (child.kind == "array").ifTrue(() => {
+            selected = latestArrayTable(child)
+        })
+
+        (selected === null).ifTrue(() => {
+            fail()
+        })
+        selected
+    }
+
+    selectHeader: (parts) => {
+        selected: root
+        position: 0
+
+        walk: null
+        walk = () => {
+            name: parts[position]
+            last: position == parts.size() - 1
+            entries: selected.value
+            child: null
+
+            entries.containsKey(name).ifTrue(() => {
+                child = entries[name]
+
+                last.ifTrue(() => {
+                    (child.kind == "table").ifFalse(() => {
+                        fail()
+                    })
+                    states.containsKey(child).ifFalse(() => {
+                        fail()
+                    })
+                    state: states[child]
+                    (state == "implicit").ifTrue(() => {
+                        states[child] = "header"
+                    })
+                    (state == "implicit").ifFalse(() => {
+                        fail()
+                    })
+                    selected = child
+                })
+
+                last.ifFalse(() => {
+                    selected = existingParent(child)
+                })
+            })
+
+            entries.containsKey(name).ifFalse(() => {
+                child = node("table", Map())
+                entries[name] = child
+                last.ifTrue(() => {
+                    states[child] = "header"
+                })
+                last.ifFalse(() => {
+                    states[child] = "implicit"
+                })
+                selected = child
+            })
+
+            last.ifFalse(() => {
+                position = position + 1
+                walk()
+            })
+        }
+
+        walk()
+        selected
+    }
+
+    selectArrayHeader: (parts) => {
+        selected: root
+        position: 0
+        created: null
+
+        walk: null
+        walk = () => {
+            name: parts[position]
+            last: position == parts.size() - 1
+            entries: selected.value
+            child: null
+
+            last.ifTrue(() => {
+                element: node("table", Map())
+                states[element] = "array-element"
+
+                entries.containsKey(name).ifTrue(() => {
+                    child = entries[name]
+                    (child.kind == "array").ifFalse(() => {
+                        fail()
+                    })
+                    states.containsKey(child).ifFalse(() => {
+                        fail()
+                    })
+                    (states[child] == "array-table").ifFalse(() => {
+                        fail()
+                    })
+                    child.value = Array(...child.value, element)
+                })
+
+                entries.containsKey(name).ifFalse(() => {
+                    child = node("array", Array(element))
+                    entries[name] = child
+                    states[child] = "array-table"
+                })
+
+                created = element
+            })
+
+            last.ifFalse(() => {
+                entries.containsKey(name).ifTrue(() => {
+                    child = entries[name]
+                    selected = existingParent(child)
+                })
+
+                entries.containsKey(name).ifFalse(() => {
+                    child = node("table", Map())
+                    entries[name] = child
+                    states[child] = "implicit"
+                    selected = child
+                })
+
+                position = position + 1
+                walk()
+            })
+        }
+
+        walk()
+        created
+    }
+
+    parseHeader: (statement) => {
+        source: Encoding.UTF8.encode(statement)
+        bounds: trimBounds(source)
+        (bounds.left >= bounds.right).ifTrue(() => {
+            fail()
+        })
+        (source[bounds.left] == 91).ifFalse(() => {
+            fail()
+        })
+        (source[bounds.right - 1] == 93).ifFalse(() => {
+            fail()
+        })
+
+        arrayHeader: false
+        keyStart: bounds.left + 1
+        keyEnd: bounds.right - 1
+
+        (keyStart < keyEnd).ifTrue(() => {
+            (source[keyStart] == 91).ifTrue(() => {
+                arrayHeader = true
+                (keyStart + 1 >= keyEnd).ifTrue(() => {
+                    fail()
+                })
+                (source[keyEnd - 1] == 93).ifFalse(() => {
+                    fail()
+                })
+                keyStart = keyStart + 1
+                keyEnd = keyEnd - 1
+            })
+        })
+
+        keyText: decodeRange(source, keyStart, keyEnd)
+        {
+            array: arrayHeader
+            path: Toml.keyPath(keyText)
+        }
+    }
+
+    parseAssignment: (statement) => {
+        source: Encoding.UTF8.encode(statement)
+        length: source.size()
+        position: 0
+        quote: -1
+        separator: -1
+
+        scan: null
+        scan = () => {
+            (position < length).ifTrue(() => {
+                (separator < 0).ifTrue(() => {
+                    octet: source[position]
+                    inQuote: quote >= 0
+
+                    inQuote.ifTrue(() => {
+                        escaped: quote == 34
+                        (octet == 92).ifFalse(() => {
+                            escaped = false
+                        })
+
+                        escaped.ifTrue(() => {
+                            position = position + 1
+                            (position >= length).ifTrue(() => {
+                                fail()
+                            })
+                            position = position + 1
+                        })
+
+                        escaped.ifFalse(() => {
+                            (octet == quote).ifTrue(() => {
+                                quote = -1
+                            })
+                            position = position + 1
+                        })
+                    })
+
+                    inQuote.ifFalse(() => {
+                        isQuote: octet == 34
+                        (octet == 39).ifTrue(() => {
+                            isQuote = true
+                        })
+
+                        isQuote.ifTrue(() => {
+                            quote = octet
+                            position = position + 1
+                        })
+
+                        isQuote.ifFalse(() => {
+                            isNewline: octet == 10
+                            (octet == 13).ifTrue(() => {
+                                isNewline = true
+                            })
+                            isNewline.ifTrue(() => {
+                                fail()
+                            })
+
+                            (octet == 61).ifTrue(() => {
+                                separator = position
+                            })
+                            position = position + 1
+                        })
+                    })
+
+                    scan()
+                })
+            })
+        }
+
+        scan()
+        (quote >= 0).ifTrue(() => {
+            fail()
+        })
+        (separator < 0).ifTrue(() => {
+            fail()
+        })
+
+        keyText: decodeRange(source, 0, separator)
+        valueText: decodeRange(source, separator + 1, length)
+        {
+            path: Toml.keyPath(keyText)
+            value: Toml.value(valueText)
+        }
+    }
+
+    items.each((statement) => {
+        source: Encoding.UTF8.encode(statement)
+        bounds: trimBounds(source)
+        (bounds.left >= bounds.right).ifTrue(() => {
+            fail()
+        })
+
+        header: source[bounds.left] == 91
+        header.ifTrue(() => {
+            parsedHeader: parseHeader(statement)
+            parsedHeader.array.ifTrue(() => {
+                current = selectArrayHeader(parsedHeader.path)
+            })
+            parsedHeader.array.ifFalse(() => {
+                current = selectHeader(parsedHeader.path)
+            })
+        })
+
+        header.ifFalse(() => {
+            assignment: parseAssignment(statement)
+            putDotted(current, assignment.path, 0, assignment.value)
+        })
+    })
+    root
+}

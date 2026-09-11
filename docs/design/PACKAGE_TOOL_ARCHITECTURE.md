@@ -196,45 +196,36 @@ general facilities can naturally express:
 This code is trusted toolchain code, but it remains Protos code using ordinary
 language mechanisms and explicit capabilities.
 
-## Future reusable-library extraction opportunities
+## Reusable-library and toolchain extraction boundaries
 
-This is a **non-committing architecture note**, not a roadmap item, blocker, or
-request to create a `LIBxxx`/`TOOLxxx` task. The current Package Tool may keep
-these components bundled under `protos/tools/package/` until a real second use
-case justifies extraction.
+This section records reusable mechanism boundaries without turning every reusable
+component into a public library or a separate roadmap item.
 
-Two components are particularly worth revisiting later:
+### TOML front-end — private shared bootstrap authority
 
-### TOML front-end
+D087 ratifies the schema-neutral TOML syntax/document machinery as one private
+shared bundled-tool bootstrap authority. The version-pinned TOML 1.0 implementation
+lives under `protos/tools/shared/Toml10/`; Package Tool reaches it through the
+private bundled-tool resolver boundary behind retained tool-local `self:` adapters.
 
-`self:TomlSyntax` and the schema-neutral portions of `self:TomlDocument` are
-strong candidates for extraction into a reusable TOML library.
-
-The reason is architectural rather than cosmetic: TOOL001-C1 through C4 were
-deliberately built below package-manifest meaning. They parse TOML syntax and
-assemble the canonical TOML document/table model; package ownership begins above
-that boundary in `self:ManifestSchemaV1`.
-
-A future extraction should therefore preserve this split:
+The ownership split remains:
 
 ```text
-reusable TOML syntax/document library
+private shared TOML 1.0 syntax/document mechanism
         |
         v
 Package Tool ManifestSchemaV1
 ```
 
-Before promoting that code to a public or Standard Library surface, audit:
-
-- complete TOML 1.0 conformance of the intended public surface;
-- the error/diagnostic contract expected by non-Package-Tool callers;
-- whether the reusable API should expose syntax nodes, canonical table/value
-  values, or both;
-- whether the first extraction should remain an internal bundled library before
-  acquiring a stable public `std:` namespace.
-
-`ManifestSchemaV1`, package-manifest diagnostics, and package policy remain
-Package Tool responsibilities even if the TOML front-end moves.
+The shared layer owns TOML lexical/syntactic/document mechanics only. Package
+Tool retains tiny tool-local `self:TomlSyntax` / `self:TomlDocument` adapters that
+carry no parser mechanics. Their shared imports are resolved once at authorized
+module initialization and captured lexically before exact-source callers enter the
+exported Closures; this preserves existing Package/bootstrap callers without
+granting ambient `tool-shared:` access. `ManifestSchemaV1`, package-manifest diagnostics,
+and package policy remain Package Tool responsibilities. D087 does not select a
+public Standard Library TOML API or data model, and Package Tool bootstrap remains
+independent from project package resolution.
 
 ### Semantic Versioning core
 
@@ -287,8 +278,9 @@ Any future extraction must:
   package-specific rules into a supposedly universal library;
 - be independently designed, tested, and tracked when it becomes actual work.
 
-Until then, keeping the implementations local to the Package Tool is deliberate
-and does not invalidate their future reuse potential.
+For components that have not crossed an approved extraction boundary, keeping the
+implementation local to Package Tool remains deliberate and does not invalidate
+future reuse potential.
 
 ### D. Exact package-backed runtime resolver
 

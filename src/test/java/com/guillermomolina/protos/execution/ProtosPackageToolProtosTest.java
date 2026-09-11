@@ -856,7 +856,7 @@ final class ProtosPackageToolProtosTest {
         ProtosStandardLibraryModuleResolver standard =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosBundledToolModuleResolver resolver =
-                new ProtosBundledToolModuleResolver("package", TOOL_ROOT, standard);
+                new ProtosBundledToolModuleResolver("package", TOOL_ROOT, (TOOL_ROOT).resolveSibling("shared"), standard);
         return new ProtosCoreBootstrap().bootstrap(CORE, resolver);
     }
 

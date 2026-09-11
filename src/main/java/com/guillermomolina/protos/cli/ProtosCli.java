@@ -263,7 +263,7 @@ public final class ProtosCli {
                                 core,
                                 new ProtosBundledToolModuleResolver(
                                         "package",
-                                        packageToolRoot,
+                                        packageToolRoot, (packageToolRoot).resolveSibling("shared"),
                                         standardLibraryResolver));
         ProtosPrelude actorPrelude =
                 new ProtosCoreBootstrap()

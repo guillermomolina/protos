@@ -85,7 +85,7 @@ final class ProtosPackageContentVerification {
         try {
             ProtosBundledToolModuleResolver toolResolver =
                     new ProtosBundledToolModuleResolver(
-                            "package", packageToolRoot, standardLibraryResolver);
+                            "package", packageToolRoot, (packageToolRoot).resolveSibling("shared"), standardLibraryResolver);
             ProtosPrelude toolPrelude =
                     new ProtosCoreBootstrap().bootstrap(coreRoot, toolResolver);
             ProtosStandaloneProcessBootstrap.Result bootstrap =

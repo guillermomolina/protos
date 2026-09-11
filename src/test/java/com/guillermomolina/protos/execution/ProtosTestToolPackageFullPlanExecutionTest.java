@@ -63,7 +63,7 @@ final class ProtosTestToolPackageFullPlanExecutionTest {
                                 CORE,
                                 new ProtosBundledToolModuleResolver(
                                         "package",
-                                        PACKAGE_TOOL_ROOT,
+                                        PACKAGE_TOOL_ROOT, (PACKAGE_TOOL_ROOT).resolveSibling("shared"),
                                         new ProtosStandardLibraryModuleResolver(
                                                 STANDARD_LIBRARY)));
         ProtosActivation activation = testPrelude.newModuleActivation();
