@@ -147,7 +147,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
     }
 
     @Test
-    void taskBackedNativeCallRemainsFailClosedUntilSuspensionCapabilityBridge()
+    void taskBackedOrdinaryNativeCallUsesDirectFastPathAfterB6A4()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -162,36 +162,30 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                     nativeExecutions.incrementAndGet();
                                     return ProtosNullValue.INSTANCE;
                                 });
-                AtomicReference<UnsupportedOperationException> failure =
-                        new AtomicReference<>();
 
                 ProtosTask task =
                         domain.createTask(
                                 null,
                                 current -> {
                                     module.attachTask(current);
-                                    failure.set(
-                                            assertThrows(
-                                                UnsupportedOperationException.class,
-                                                () ->
-                                                    ProtosBytecodeRootNode.PrepareClosureCall.perform(
-                                                        nativeClosure,
-                                                        module)));
-                                    current.complete(ProtosNullValue.INSTANCE);
+                                    ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                                            ProtosBytecodeRootNode.PrepareClosureCall.perform(
+                                                    nativeClosure,
+                                                    module);
+                                    assertTrue(prepared.isNative());
+                                    Object value = prepared.enterNative();
+                                    current.complete(prepared.finish(value));
                                 });
 
                 assertTrue(domain.dispatchOne());
                 assertEquals(ProtosTask.State.COMPLETED, task.state());
-                assertTrue(
-                        failure.get()
-                                .getMessage()
-                                .contains("native suspension capability"));
-                assertEquals(0, nativeExecutions.get());
+                assertSame(ProtosNullValue.INSTANCE, task.result().orElseThrow());
+                assertEquals(1, nativeExecutions.get());
             } finally {
                 context.leave();
             }
         }
-        System.out.println("PERF006_B3B_TASK_NATIVE_FAIL_CLOSED=PASS");
+        System.out.println("PERF006_B3B_TASK_NATIVE_DIRECT_FAST_PATH=PASS");
     }
 
     @Test

@@ -1405,22 +1405,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         if (closure.nativeBody().isPresent()) {
             ProtosNativeClosureBody nativeBody =
                     closure.nativeBody().orElseThrow();
-            if (activation.task().isPresent()
-                    && !(nativeBody
-                            instanceof ProtosSuspensionCapableNativeClosureBody)
-                    && !structuredEnsure
-                    && !structuredErrorHandler
-                    && !structuredWhile
-                    && !directControlNative) {
-                /*
-                 * PLAT019 capability is explicit. Ordinary Task-backed natives
-                 * remain fail-closed. PLAT021 admits only the exact standard
-                 * structured-control implementations, plus Error.signal's
-                 * non-suspending direct control transfer, by provenance.
-                 */
-                throw new UnsupportedOperationException(
-                        "PERF006-B3 native suspension capability or PERF006-B4 structured control capability is required for Task-backed Bytecode invocation");
-            }
+            /*
+             * PLAT019 keeps the ordinary non-suspending native path direct and
+             * pay-only-when-used. Only bodies carrying the explicit suspension
+             * capability enter executeForBytecodeContinuation(); ordinary native
+             * bodies execute synchronously through PreparedClosureCall.enterNative().
+             * PLAT021 structured-control provenance remains independently guarded.
+             */
             return PreparedClosureCall.nativeCall(
                     nativeBody,
                     supplied,
