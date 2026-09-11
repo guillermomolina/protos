@@ -1,3 +1,7 @@
+## 0.2.378-SNAPSHOT
+
+- Implement `PERF006-B6A3A — canonical super-send Bytecode coverage` on the ratified C-prime backend. Lower `super.message(...)` through the same prepared-call continuation chain used by ordinary sends while preserving physical method-home-parent lookup, dynamic receiver identity, exact selected method home, left-to-right/spread argument semantics, defaults containing `super`, standard control provenance, and suspend/resume without replaying completed prefixes. No Object/Closure literal or composition migration, production parse cutover, replay retirement, specification/public API change, or optimizer-runtime wiring is included. Implementation version becomes `0.2.378-SNAPSHOT`.
+
 ## 0.2.377-SNAPSHOT
 
 - Ratify `D077 — Test Tool resource requirement and catalog representation

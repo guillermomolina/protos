@@ -38,6 +38,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
+import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
@@ -60,7 +61,10 @@ import java.util.Objects;
  * identity and execution-intrinsic expressions. PERF006-B6A2 adds canonical
  * slot creation/assignment and indexed assignment while preserving the AST
  * validation/evaluation order and composing ordinary atPut dispatch through
- * the same continuation backend. The ordinary {@link ProtosSourceCompiler}
+ * the same continuation backend. PERF006-B6A3A adds canonical super sends,
+ * preserving physical method-home lookup, dynamic receiver identity, spread
+ * argument semantics and C-prime suspension composition. The ordinary
+ * {@link ProtosSourceCompiler}
  * remains on the established AST lowerer until the remaining canonical forms
  * are migrated and B6 performs the production cutover.</p>
  */
@@ -281,6 +285,16 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
+        if (expression instanceof CanonicalSuperSend send) {
+            for (CanonicalExpression argument : send.arguments()) {
+                if (argument instanceof CanonicalSpread spread) {
+                    validateSupportedDefaultExpression(spread.expression());
+                } else {
+                    validateSupportedDefaultExpression(argument);
+                }
+            }
+            return;
+        }
         if (expression instanceof CanonicalReturn returnExpression) {
             validateSupportedDefaultExpression(returnExpression.value());
             return;
@@ -421,6 +435,7 @@ final class CanonicalToBytecodeLowerer {
             CanonicalExpression expression) {
         if (expression instanceof CanonicalCall
                 || expression instanceof CanonicalSend
+                || expression instanceof CanonicalSuperSend
                 || expression instanceof CanonicalReturn) {
             return true;
         }
@@ -578,6 +593,20 @@ final class CanonicalToBytecodeLowerer {
             builder.endSourceSection();
             return;
         }
+        if (expression instanceof CanonicalSuperSend send) {
+            builder.beginSourceSection(
+                    send.span().startOffset(),
+                    send.span().length());
+            emitComposedSuperSend(
+                    builder,
+                    send,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            builder.endSourceSection();
+            return;
+        }
         if (expression instanceof CanonicalReturn returnExpression) {
             emitBodyExpressionToLocal(
                     builder,
@@ -676,6 +705,16 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalSend send) {
             emitComposedDefaultSend(
+                    builder,
+                    send,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalSuperSend send) {
+            emitComposedDefaultSuperSend(
                     builder,
                     send,
                     target,
@@ -1069,6 +1108,164 @@ final class CanonicalToBytecodeLowerer {
         builder.beginStoreLocal(result);
         builder.emitLoadLocal(value);
         builder.endStoreLocal();
+    }
+
+    private static void emitComposedSuperSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSuperSend send,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        requireDefaultScratch(result, preparedCall, childResult, resumeValue);
+        boolean stageArguments = hasComposedArgument(send.arguments());
+        boolean spreadArguments = hasSpreadArgument(send.arguments());
+        boolean stageInputs = stageArguments || spreadArguments;
+        BytecodeLocal suppliedVector = null;
+        java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
+
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        if (stageInputs) {
+            if (spreadArguments) {
+                suppliedVector = builder.createLocal("superSuppliedArgumentVector", null);
+                emitBodySpreadArgumentVector(
+                        builder,
+                        send.arguments(),
+                        suppliedVector,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+            } else {
+                argumentValues = new java.util.ArrayList<>(send.arguments().size());
+                for (CanonicalExpression argument : send.arguments()) {
+                    BytecodeLocal argumentValue = builder.createLocal("superArgument", null);
+                    emitBodyExpressionToLocal(
+                            builder,
+                            argument,
+                            argumentValue,
+                            preparedCall,
+                            childResult,
+                            resumeValue);
+                    argumentValues.add(argumentValue);
+                }
+            }
+        }
+
+        builder.beginStoreLocal(preparedCall);
+        if (spreadArguments) {
+            builder.beginPrepareSuperSendVector();
+            builder.emitLoadConstant(send.message());
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(suppliedVector);
+            builder.endPrepareSuperSendVector();
+        } else {
+            builder.beginPrepareSuperSendArguments();
+            builder.emitLoadConstant(send.message());
+            builder.emitLoadArgument(0);
+            if (stageInputs) {
+                for (BytecodeLocal argumentValue : argumentValues) {
+                    builder.emitLoadLocal(argumentValue);
+                }
+            } else {
+                for (CanonicalExpression argument : send.arguments()) {
+                    emitExpression(builder, argument);
+                }
+            }
+            builder.endPrepareSuperSendArguments();
+        }
+        builder.endStoreLocal();
+
+        emitPreparedInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+    }
+
+    private static void emitComposedDefaultSuperSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSuperSend send,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        requireDefaultScratch(result, preparedCall, childResult, resumeValue);
+        boolean stageArguments = hasComposedArgument(send.arguments());
+        boolean spreadArguments = hasSpreadArgument(send.arguments());
+        boolean stageInputs = stageArguments || spreadArguments;
+        BytecodeLocal suppliedVector = null;
+        java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
+
+        builder.beginSourceSection(
+                send.span().startOffset(),
+                send.span().length());
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
+
+        if (stageInputs) {
+            if (spreadArguments) {
+                suppliedVector = builder.createLocal("defaultSuperSuppliedArgumentVector", null);
+                emitDefaultSpreadArgumentVector(
+                        builder,
+                        send.arguments(),
+                        suppliedVector,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+            } else {
+                argumentValues = new java.util.ArrayList<>(send.arguments().size());
+                for (CanonicalExpression argument : send.arguments()) {
+                    BytecodeLocal argumentValue = builder.createLocal("defaultSuperArgument", null);
+                    emitDefaultExpressionToLocal(
+                            builder,
+                            argument,
+                            argumentValue,
+                            preparedCall,
+                            childResult,
+                            resumeValue);
+                    argumentValues.add(argumentValue);
+                }
+            }
+        }
+
+        builder.beginStoreLocal(preparedCall);
+        if (spreadArguments) {
+            builder.beginPrepareSuperSendVector();
+            builder.emitLoadConstant(send.message());
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(suppliedVector);
+            builder.endPrepareSuperSendVector();
+        } else {
+            builder.beginPrepareSuperSendArguments();
+            builder.emitLoadConstant(send.message());
+            builder.emitLoadArgument(0);
+            if (stageInputs) {
+                for (BytecodeLocal argumentValue : argumentValues) {
+                    builder.emitLoadLocal(argumentValue);
+                }
+            } else {
+                for (CanonicalExpression argument : send.arguments()) {
+                    emitExpression(builder, argument);
+                }
+            }
+            builder.endPrepareSuperSendArguments();
+        }
+        builder.endStoreLocal();
+
+        emitPreparedInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTag(StandardTags.CallTag.class);
+        builder.endSourceSection();
     }
 
     private static void emitComposedDefaultCall(
@@ -1758,6 +1955,16 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalSend send) {
             validateSupportedExpression(send.receiver());
+            for (CanonicalExpression argument : send.arguments()) {
+                if (argument instanceof CanonicalSpread spread) {
+                    validateSupportedExpression(spread.expression());
+                } else {
+                    validateSupportedExpression(argument);
+                }
+            }
+            return;
+        }
+        if (expression instanceof CanonicalSuperSend send) {
             for (CanonicalExpression argument : send.arguments()) {
                 if (argument instanceof CanonicalSpread spread) {
                     validateSupportedExpression(spread.expression());

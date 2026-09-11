@@ -37,6 +37,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
+import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
@@ -105,7 +106,8 @@ final class ProtosBytecodeClosureExecutionPlan {
                         && !(defaultExpression instanceof CanonicalReturn)
                         && !(defaultExpression instanceof CanonicalCreate)
                         && !(defaultExpression instanceof CanonicalAssign)
-                        && !(defaultExpression instanceof CanonicalIndexedAssign)) {
+                        && !(defaultExpression instanceof CanonicalIndexedAssign)
+                        && !(defaultExpression instanceof CanonicalSuperSend)) {
                     throw new UnsupportedOperationException(
                             "PERF006-B2C3B3 default expression is not migrated: "
                                     + defaultExpression.getClass().getSimpleName());
