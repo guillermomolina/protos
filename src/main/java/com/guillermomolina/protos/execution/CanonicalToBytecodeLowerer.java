@@ -63,7 +63,10 @@ import java.util.Objects;
  * validation/evaluation order and composing ordinary atPut dispatch through
  * the same continuation backend. PERF006-B6A3A adds canonical super sends,
  * preserving physical method-home lookup, dynamic receiver identity, spread
- * argument semantics and C-prime suspension composition. The ordinary
+ * argument semantics and C-prime suspension composition. PERF006-B6A3B adds
+ * Closure literal materialization with exact lexical/receiver/method-home/
+ * return-home/prelude capture and a pre-lowered Bytecode execution-plan
+ * template per canonical Closure position. The ordinary
  * {@link ProtosSourceCompiler}
  * remains on the established AST lowerer until the remaining canonical forms
  * are migrated and B6 performs the production cutover.</p>
@@ -71,10 +74,24 @@ import java.util.Objects;
 final class CanonicalToBytecodeLowerer {
     private final ProtosLanguage language;
     private final Source source;
+    private final java.util.IdentityHashMap<CanonicalClosure, ProtosClosureExecutionPlan>
+            bytecodeClosurePlans = new java.util.IdentityHashMap<>();
 
     CanonicalToBytecodeLowerer(ProtosLanguage language, Source source) {
         this.language = Objects.requireNonNull(language, "language");
         this.source = Objects.requireNonNull(source, "source");
+    }
+
+    private ProtosClosureExecutionPlan bytecodeClosurePlan(
+            CanonicalClosure definition) {
+        ProtosClosureExecutionPlan existing = bytecodeClosurePlans.get(definition);
+        if (existing != null) {
+            return existing;
+        }
+        ProtosClosureExecutionPlan plan =
+                ProtosClosureExecutionPlan.bytecode(definition, language, source);
+        bytecodeClosurePlans.put(definition, plan);
+        return plan;
     }
 
     CallTarget lower(CanonicalSequence sequence) {
@@ -231,6 +248,10 @@ final class CanonicalToBytecodeLowerer {
                 || expression instanceof CanonicalIntrinsic) {
             return;
         }
+        if (expression instanceof CanonicalClosure closure) {
+            bytecodeClosurePlan(closure);
+            return;
+        }
         if (expression instanceof CanonicalMember member) {
             validateSupportedDefaultExpression(member.receiver());
             return;
@@ -310,7 +331,7 @@ final class CanonicalToBytecodeLowerer {
                 .anyMatch(CanonicalToBytecodeLowerer::requiresComposedInvocation);
     }
 
-    private static void emitClosureParameterBindings(
+    private void emitClosureParameterBindings(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
             BytecodeLocal defaultValue,
@@ -410,7 +431,7 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private static void emitBindDefaultLocal(
+    private void emitBindDefaultLocal(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter,
             BytecodeLocal defaultValue) {
@@ -472,7 +493,7 @@ final class CanonicalToBytecodeLowerer {
         return argument;
     }
 
-    private static void emitBodySpreadArgumentVector(
+    private void emitBodySpreadArgumentVector(
             ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> arguments,
             BytecodeLocal suppliedVector,
@@ -515,7 +536,7 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private static void emitDefaultSpreadArgumentVector(
+    private void emitDefaultSpreadArgumentVector(
             ProtosBytecodeRootNodeGen.Builder builder,
             java.util.List<CanonicalExpression> arguments,
             BytecodeLocal suppliedVector,
@@ -558,7 +579,7 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private static void emitBodyExpressionToLocal(
+    private void emitBodyExpressionToLocal(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
             BytecodeLocal target,
@@ -686,7 +707,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private static void emitDefaultExpressionToLocal(
+    private void emitDefaultExpressionToLocal(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression,
             BytecodeLocal target,
@@ -802,7 +823,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private static void emitBodyCreate(
+    private void emitBodyCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
             BytecodeLocal result,
@@ -854,7 +875,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private static void emitBodyAssign(
+    private void emitBodyAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             BytecodeLocal result,
@@ -901,7 +922,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private static void emitBodyIndexedAssign(
+    private void emitBodyIndexedAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalIndexedAssign indexedAssign,
             BytecodeLocal result,
@@ -957,7 +978,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private static void emitDefaultCreate(
+    private void emitDefaultCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCreate create,
             BytecodeLocal result,
@@ -1009,7 +1030,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private static void emitDefaultAssign(
+    private void emitDefaultAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
             BytecodeLocal result,
@@ -1055,7 +1076,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private static void emitDefaultIndexedAssign(
+    private void emitDefaultIndexedAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalIndexedAssign indexedAssign,
             BytecodeLocal result,
@@ -1110,7 +1131,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
-    private static void emitComposedSuperSend(
+    private void emitComposedSuperSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSuperSend send,
             BytecodeLocal result,
@@ -1187,7 +1208,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endTag(StandardTags.CallTag.class);
     }
 
-    private static void emitComposedDefaultSuperSend(
+    private void emitComposedDefaultSuperSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSuperSend send,
             BytecodeLocal result,
@@ -1268,7 +1289,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endSourceSection();
     }
 
-    private static void emitComposedDefaultCall(
+    private void emitComposedDefaultCall(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call,
             BytecodeLocal result,
@@ -1394,7 +1415,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endSourceSection();
     }
 
-    private static void emitComposedDefaultSend(
+    private void emitComposedDefaultSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
@@ -1522,7 +1543,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endSourceSection();
     }
 
-    private static void emitComposedPreparedDefaultInvocation(
+    private void emitComposedPreparedDefaultInvocation(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -1536,7 +1557,7 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
     }
 
-    private static void emitPreparedInvocation(
+    private void emitPreparedInvocation(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -1811,7 +1832,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endIfThenElse();
     }
 
-    private static void emitScopedOrdinaryPreparedInvocation(
+    private void emitScopedOrdinaryPreparedInvocation(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -1834,7 +1855,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endTryFinally();
     }
 
-    private static void emitOrdinaryPreparedInvocation(
+    private void emitOrdinaryPreparedInvocation(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -1884,7 +1905,7 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private static void emitBindSuppliedClosureParameter(
+    private void emitBindSuppliedClosureParameter(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter,
             int positionalIndex) {
@@ -1910,6 +1931,10 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalLiteral
                 || expression instanceof CanonicalLookup
                 || expression instanceof CanonicalIntrinsic) {
+            return;
+        }
+        if (expression instanceof CanonicalClosure closure) {
+            bytecodeClosurePlan(closure);
             return;
         }
         if (expression instanceof CanonicalMember member) {
@@ -1996,11 +2021,19 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private static void emitExpression(
+    private void emitExpression(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalExpression expression) {
         if (expression instanceof CanonicalLiteral literal) {
             builder.emitLoadConstant(materialize(literal));
+            return;
+        }
+        if (expression instanceof CanonicalClosure closure) {
+            builder.beginMaterializeClosure();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(closure);
+            builder.emitLoadConstant(bytecodeClosurePlan(closure));
+            builder.endMaterializeClosure();
             return;
         }
         if (expression instanceof CanonicalLookup lookup) {
@@ -2041,7 +2074,7 @@ final class CanonicalToBytecodeLowerer {
                         + expression.getClass().getSimpleName());
     }
 
-    private static void emitLookup(
+    private void emitLookup(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup) {
         builder.beginLookup();
@@ -2050,7 +2083,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endLookup();
     }
 
-    private static void emitComposedSend(
+    private void emitComposedSend(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSend send,
             BytecodeLocal result,
@@ -2179,7 +2212,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endTag(StandardTags.CallTag.class);
     }
 
-    private static void emitComposedCall(
+    private void emitComposedCall(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call,
             BytecodeLocal result,

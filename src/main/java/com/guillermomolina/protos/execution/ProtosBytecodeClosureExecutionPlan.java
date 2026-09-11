@@ -96,6 +96,7 @@ final class ProtosBytecodeClosureExecutionPlan {
                 CanonicalExpression defaultExpression =
                         parameter.defaultValue().orElseThrow();
                 if (!(defaultExpression instanceof CanonicalLiteral)
+                        && !(defaultExpression instanceof CanonicalClosure)
                         && !(defaultExpression instanceof CanonicalLookup)
                         && !(defaultExpression instanceof CanonicalIntrinsic)
                         && !(defaultExpression instanceof CanonicalMember)

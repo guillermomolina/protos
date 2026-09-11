@@ -1,3 +1,7 @@
+## 0.2.379-SNAPSHOT
+
+- Implement `PERF006-B6A3B — canonical Closure-literal Bytecode coverage` on the ratified C-prime backend. Materialize ordinary semantic Closure values directly from Bytecode while preserving lexical-context capture by reference, dynamic receiver, physical method home, return home and prelude; attach one source/language-bound Bytecode execution-plan template per canonical Closure position rather than recompiling on each evaluation. Extend nested/default Closure lowering and prove completed Closure-literal prefixes survive suspension without replay. No Object/composition migration, production parse cutover, replay retirement, specification/public API change, or optimizer-runtime wiring is included. Implementation version becomes `0.2.379-SNAPSHOT`.
+
 ## 0.2.378-SNAPSHOT
 
 - Implement `PERF006-B6A3A — canonical super-send Bytecode coverage` on the ratified C-prime backend. Lower `super.message(...)` through the same prepared-call continuation chain used by ordinary sends while preserving physical method-home-parent lookup, dynamic receiver identity, exact selected method home, left-to-right/spread argument semantics, defaults containing `super`, standard control provenance, and suspend/resume without replaying completed prefixes. No Object/Closure literal or composition migration, production parse cutover, replay retirement, specification/public API change, or optimizer-runtime wiring is included. Implementation version becomes `0.2.378-SNAPSHOT`.

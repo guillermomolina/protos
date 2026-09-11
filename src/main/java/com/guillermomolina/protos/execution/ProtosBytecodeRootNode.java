@@ -384,6 +384,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class MaterializeClosure {
+        @Specialization
+        public static ProtosClosureValue perform(
+                ProtosActivation activation,
+                CanonicalClosure definition,
+                ProtosClosureExecutionPlan executionPlan) {
+            return new ProtosClosureValue(
+                    definition,
+                    activation.lexicalContextsForClosureCapture(),
+                    activation.receiver(),
+                    activation.methodHome().orElse(null),
+                    activation.returnHome().orElse(null),
+                    activation.prelude().orElse(null),
+                    executionPlan);
+        }
+    }
+
+    @Operation
     public static final class RaiseNonLocalReturn {
         @Specialization
         public static Object perform(
