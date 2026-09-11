@@ -1,5 +1,22 @@
 ## 0.2.377-SNAPSHOT
 
+- Ratify `D077 — Test Tool resource requirement and catalog representation
+  contract` (GitHub #361) as Candidate D after explicit project-owner approval
+  and exhaustive comparison across CTest, cargo-nextest, Kubernetes DRA, Slurm,
+  Nomad, Buck2, Bazel/Remote Execution, JUnit, TOML and current Protos
+  Array/Map/private-tuple representations. Select canonical hierarchical logical
+  resource keys, frozen Array-of-private-record CaseSpec requirements, the
+  existing `manifest.tsv` plus optional sparse strict/versioned TOML requirement
+  data, a separate strict/versioned environment catalog, same-key initial
+  requirement/catalog/reservation/capability correspondence, fail-closed
+  duplicate/conflict handling and zero-or-one explicit catalog-source
+  precedence. Release TOOL002-I to READY for bounded implementation while
+  keeping physical sidecar filename, catalog CLI spelling, exact scope
+  vocabulary, provider API, aliases/selectors, catalog inheritance/merge,
+  fairness, retries, timeout/kill, sharding, remote transport, CAS and jobs-auto
+  explicitly unselected. Governance/design only: no production implementation,
+  specification, native boundary or Maven implementation-version change.
+
 - Implement `PERF006-B6A2 — mutating canonical Bytecode coverage` on the ratified C-prime backend. Add exact Bytecode lowering for bare/explicit slot creation and assignment plus indexed assignment, including mutating Closure defaults and operands that suspend. Preserve AST destination/target prevalidation order, local-only mutation rules, exact RHS results, left-to-right indexed evaluation, and ordinary suspendible `atPut(index, value)` dispatch while discarding its return value. Completed prefixes are retained in Bytecode continuation state rather than replayed. Do not cut over `ProtosLanguage.parse`, migrate Object/Closure literals, composition or `super`, retire legacy replay, change specification/public API, or add optimizer-runtime wiring. Implementation version becomes `0.2.377-SNAPSHOT`.
 
 ## 0.2.376-SNAPSHOT

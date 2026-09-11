@@ -68,7 +68,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-F | CLOSED | F1/F2/F3 plus the F4 cutover program are published: bundled Protos now owns all retained Future expectation policy and the complete main manifest; duplicate Java Future policy is retired. |
 | TOOL002-G | CLOSED | G1/G1A establish production-scheduler cooperative inspection; G2/G3 migrate the complete retained Actor/Group manifests into bundled-Protos Runner ownership; G4 retires the duplicate Java corpus-policy owners and reconciles closure. |
 | TOOL002-H | CLOSED | H1/H2A/H2B1/H2B2/H2B3 are published; D055, D069 and PLAT023 remain ratified. Closure reconciliation retains the real public `protos test --jobs N` path, adds a bounded-parallel public CLI regression, runs the broad Test Tool set and the repository top-level FULL publication-validation suite, and introduces no resources, auto-jobs, timeout/kill, retry, remote, specification or native-boundary policy. |
-| TOOL002-I | BLOCKED_BY_D077 | D076 Candidate D is RATIFIED: inert logical requirements + environment-owned catalog/provider, atomic full-set reservation, shared-units/exclusive conflict semantics, post-placement attempt-private capability materialization and terminal-cleanup custody. D077/#361 owns the still-unselected manifest/config/carrier representation required before implementation. |
+| TOOL002-I | READY | D076 Candidate D and D077 Candidate D are RATIFIED. I may decompose/implement inert canonical resource keys, private frozen requirement records, sparse strict/versioned TOML requirement data, separate strict/versioned catalog data, fail-closed duplicate/conflict validation and one-explicit-catalog precedence. Public sidecar filename, catalog CLI spelling, exact scope vocabulary, provider APIs and other D077-deferred contracts remain unselected and must cross a later approval gate if a slice reaches them. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | After I, integrate the final Java-first / Protos-tool-second validation pipeline. |
 
 ## TOOL002-E decomposition
@@ -1360,3 +1360,53 @@ before an implementation slice can materialize D076-D.
 
 This checkpoint selects no `jobs=auto`, fairness, retry, timeout/kill, sharding,
 remote transport, CAS, CPU/memory auto-accounting or physical-worker policy.
+
+## TOOL002-I D077 representation ratification
+
+Status: **READY**
+
+D077 / GitHub #361 is **RATIFIED — Candidate D selected** after explicit
+project-owner approval on 2026-09-11 and exhaustive comparison across CTest,
+cargo-nextest, Kubernetes DRA, Slurm, Nomad, Buck2, Bazel/Remote Execution,
+JUnit, TOML and current ordinary-Protos Array/Map/private-tuple representations.
+
+The selected bounded representation is:
+
+```text
+manifest.tsv
+    +
+optional sparse strict/versioned TOML requirement data
+    -> private frozen Array<Requirement> inside CaseSpec
+
+separate strict/versioned environment catalog
+    -> atomic reservation
+    -> provider/profile resolution
+    -> attempt-private capability
+```
+
+The resource key is one canonical hierarchical lower-case ASCII String. A
+requirement is a fixed private inert record carrying key, mode and units-or-null.
+Declaration storage remains an Array so duplicate declarations are visible before
+any scheduler Map/index is built.
+
+The persistent modes are `shared` with positive units and `exclusive` without
+units. Duplicate `(case,key)` requirements, duplicate catalog keys, malformed
+keys, unknown schema fields/versions/modes/scopes, invalid shared units and units
+on exclusive declarations fail closed. No declaration-order, last-wins, implicit
+sum or implicit merge policy exists.
+
+The same logical resource key initially joins requirement, catalog entry,
+reservation and provisioned capability bundle. No alias/binding/claim-name
+institution is selected.
+
+The initial configuration invariant is zero or one explicit catalog source per
+invocation, with no implicit user/system/environment/parent/repository merge or
+inheritance. No catalog means an empty catalog. Unsatisfied resource requirements
+remain infrastructure/configuration evidence under D076, not guest Errors.
+
+TOOL002-I is released to READY for bounded implementation/decomposition under
+D076+D077. The physical sidecar filename, exact public catalog-selection CLI
+spelling, exact initial public scope-name vocabulary, provider API details,
+selector language, binding aliases and catalog inheritance/merge remain
+deliberately unselected. A slice that needs one of those contracts must stop at
+the normal design-approval gate.
