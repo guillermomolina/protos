@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1 CLOSED)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1 CLOSED; D079 RATIFIED; G2 READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1054,3 +1054,35 @@ identity. `LM009-G` remains **IN_PROGRESS** and G2 owns the next document-symbol
 audit/implementation boundary. If G2 exposes symbol-ownership or naming semantics
 that are not already determined by the real source model, it stops at the normal
 Dxxx/PLATxxx gate.
+
+## D079 document-symbol projection ratification
+
+Status: **RATIFIED — Candidate A′ selected; LM009-G2 READY**
+
+D079 / GitHub #364 is durably ratified after explicit project-owner approval on
+2026-09-11 and the required expanded comparative review.
+
+The selected G2 contract is intentionally slot-centric:
+
+- every explicit named `SurfaceSlotCreation` is one document symbol;
+- bare `name: value` and member-target `receiver.name: value` both expose the
+  final slot name;
+- `=` assignment, Closure parameters and anonymous expressions do not create
+  baseline document symbols;
+- every slot uses LSP `SymbolKind.Property` strictly as a presentation label,
+  not as a Protos semantic Property category;
+- a Closure-valued slot remains the same slot symbol and is not recategorized as
+  `Function` or `Method` from its value shape;
+- children represent only exact syntactic nesting of slot creations inside the
+  parent slot value subtree; and
+- hierarchy never means ownership, delegation, lookup, receiver/runtime identity
+  or module/package ownership.
+
+The durable decision rationale, candidate comparison, GITHUB010 scorecard,
+expanded prior-art review and future/regret analysis are recorded in
+[`../../decisions/tooling/D079_DOCUMENT_SYMBOL_PROJECTION_FOR_UNIFORM_PROTOS_SLOTS.md`](../../decisions/tooling/D079_DOCUMENT_SYMBOL_PROJECTION_FOR_UNIFORM_PROTOS_SLOTS.md).
+
+This ratification releases **LM009-G2** for bounded document-symbol
+implementation over the existing parser/source-snapshot authorities. It does not
+implement G2, select G3 workspace-index policy, select G4 definition identity, or
+change any LM009-H semantics.

@@ -1,5 +1,17 @@
 ## 0.2.379-SNAPSHOT
 
+- Ratify `D079 — Document-symbol projection for uniform Protos slots`
+  (GitHub #364) as Candidate A′ after explicit project-owner approval and an
+  expanded comparison across Self, TypeScript/tsserver, Pyright, Ruby LSP/Prism,
+  Go/gopls, rust-analyzer, Eclipse JDT LS, LuaLS, Clojure LSP/EDN and OCaml-LSP.
+  Select every explicit named `SurfaceSlotCreation` as a document symbol with
+  uniform LSP `Property` presentation, no value-shape `Function`/`Method`
+  recategorization, and hierarchy meaning syntactic value-subtree containment
+  only. Release LM009-G2 for bounded implementation. Governance/tooling only:
+  no Protos specification, runtime/native implementation, public language
+  semantics, Maven implementation-version or G2 executable-code change.
+
+
 - Implement `PERF006-B6A3B — canonical Closure-literal Bytecode coverage` on the ratified C-prime backend. Materialize ordinary semantic Closure values directly from Bytecode while preserving lexical-context capture by reference, dynamic receiver, physical method home, return home and prelude; attach one source/language-bound Bytecode execution-plan template per canonical Closure position rather than recompiling on each evaluation. Extend nested/default Closure lowering and prove completed Closure-literal prefixes survive suspension without replay. No Object/composition migration, production parse cutover, replay retirement, specification/public API change, or optimizer-runtime wiring is included. Implementation version becomes `0.2.379-SNAPSHOT`.
 
 ## 0.2.378-SNAPSHOT
