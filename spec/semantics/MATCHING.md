@@ -9,7 +9,7 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.400`.
+`0.1.401`.
 It deliberately does **not** define concrete matching-expression grammar,
 case/arm/default syntax, which source expressions or future surface forms denote
 ordinary value patterns, guards, exhaustivity, standard pattern taxonomy, or named-binding syntax. Those remain unresolved
@@ -412,6 +412,238 @@ pre-child observation into frame slots, avoid unused remainder work, fuse
 standard child matchers, or optimize fresh frozen remainder storage only when
 the observable behavior remains identical to this contract.
 
+### 3.3 Standard Map keyed-pattern semantics
+
+Core v0.1 standard keyed matching is a standard pattern-owned specialization for
+subjects that own **normal standard `Map` keyed-entry state**. It does not
+define a generic mapping capability or infer Map-pattern participation from
+ordinary indexing, member, or iteration behavior.
+
+An ordinary object does not become eligible for this standard Map-pattern
+contract merely because it defines or inherits `at`, `atPut`, `containsKey`,
+`size`, `each`, another iteration facility, String-keyed indexed contents, or
+Map-like ordinary slots. Delegating to a Map or copying Map behavior likewise
+does not confer standard Map keyed-entry state. `IdentityMap` does not
+participate automatically because its identity-key relation is a distinct
+standard collection contract.
+
+A standard Map pattern presented with an ineligible subject returns canonical
+`false` as ordinary mismatch. D086 introduces no implicit conversion, generic
+`Mapping` family, mapping registry, host-type test, generic keyed-projection
+protocol, or fallback call to subject-side mapping behavior.
+
+#### 3.3.1 Keyed requirements and stable association observation
+
+For one standard Map-pattern attempt, before any query-key `hash` / `==`
+behavior or nested mapped-value child matcher is executed, the matcher
+establishes one **stable shallow logical snapshot** of the subject Map's current
+associations.
+
+For every association in that snapshot, the semantic observation preserves:
+
+```text
+stored representative key reference
+mapped value reference
+recorded key hash
+relative insertion-order position
+```
+
+The observation is shallow. Keys and mapped values remain the same ordinary
+objects and are not cloned, frozen, or otherwise transformed merely because
+matching observes them.
+
+Mutation of the original Map's keyed-entry state after snapshot establishment
+does not add, remove, replace, or reorder associations in the current matching
+attempt. D086 introduces no transaction, rollback, global Map lock, or deep
+snapshot of contained key/value objects.
+
+The snapshot is semantic, not a required physical representation. An
+implementation may use copied association references, versioned/persistent
+table state, copy-on-write storage, retained generations, or another mechanism
+when the observable result is identical. A Map pattern that does not request a
+remainder is not required merely by D086 to allocate a public copied Map.
+
+Each standard keyed requirement consists semantically of:
+
+```text
+query key value
+mapped-value child pattern
+```
+
+The query key is an ordinary value used for Map key lookup. D086 does **not**
+make that position an arbitrary pattern scanned against every subject key.
+Which source forms construct or evaluate query-key values remains a separate
+surface-language decision.
+
+#### 3.3.2 Key resolution uses the existing normal-Map relation
+
+Each keyed requirement is resolved independently against the stable association
+snapshot using the existing normal standard-Map key-search relation from
+`VALUES_AND_COLLECTIONS.md`.
+
+For one keyed requirement, the matcher:
+
+1. computes the query key's current standard `hash` exactly once for that search;
+2. applies the existing standard Map hash-result and comparison-scope contracts;
+3. considers only snapshot associations whose recorded hash equals that query
+   hash;
+4. considers those candidates in snapshot insertion order;
+5. sends exactly one ordinary:
+
+   ```text
+   queryKey == storedRepresentativeKey
+   ```
+
+   for each candidate that is actually compared;
+6. selects the first candidate whose comparison returns canonical `true`;
+7. continues to the next candidate on canonical `false`; and
+8. returns canonical `false` for the containing Map pattern when no candidate
+   matches.
+
+The standard Map pattern does not reverse equality, try both directions,
+substitute `===`, recompute candidate recorded hashes, use `Object.match` as a
+key relation, or perform `containsKey` followed by `at`. Map's existing
+`hash` + query-side `==` search remains the sole standard key-equivalence
+authority for normal Map matching.
+
+`hash` and `==` remain ordinary Protos behavior. Their effects, Error,
+non-local control, cancellation, explicit suspension, invalid-result failures,
+and existing Map comparison-scope restrictions remain observable and propagate
+unchanged. Effects are not rolled back.
+
+A missing requested key is ordinary pattern mismatch, not the ordinary
+missing-key `Map.at` Error. Conversely, a present association whose mapped value
+is `null`, `false`, `true`, an Array, Closure, Future, or any other ordinary
+value remains present and supplies that exact value to its mapped-value child
+pattern.
+
+All keyed requirements are resolved and their selected mapped-value references
+are fixed before the first mapped-value child matcher is invoked. Later child
+effects therefore cannot change which subject associations or mapped-value
+references were selected for the current attempt.
+
+#### 3.3.3 Repeated/equivalent keyed requirements
+
+Multiple keyed requirements may select the same snapshot association.
+
+Each requirement performs its own ordinary Map key search under §3.3.2. If two
+query key values both resolve to the same association, their mapped-value child
+patterns are repeated constraints on that same selected mapped-value reference.
+
+D086 introduces no duplicate-query-key validation pass or duplicate-key Error.
+For residue accounting, a subject association selected by one or more
+requirements counts as selected once.
+
+#### 3.3.4 Residue policy: open, exact, or matched remainder
+
+A standard Map pattern has one semantic residue policy:
+
+```text
+ignore          -> open/subset matching
+require-empty   -> exact keyed matching
+match-remainder -> match the unmatched associations as one Map value
+```
+
+`ignore` is the default. Every keyed requirement must resolve and every
+mapped-value child attempted later must succeed, but unrelated snapshot
+associations do not themselves cause mismatch. Consequently a zero-requirement
+open standard Map pattern recognizes any eligible normal standard Map.
+
+For `require-empty`, structural resolution succeeds only when every snapshot
+association was selected by at least one keyed requirement. No remainder Map
+needs to be allocated merely to test that no unmatched association remains.
+
+For `match-remainder`, the residual association set is every snapshot
+association not selected by any keyed requirement. The remainder child receives
+the ordinary remainder value defined below.
+
+Residue policy does not change key equality, keyed-requirement search, or
+mapped-value selection. It only determines what the pattern requires of
+unselected snapshot associations.
+
+#### 3.3.5 Fresh frozen standard Map remainder
+
+When `match-remainder` semantically requires the residue value, that value is a
+fresh **frozen normal standard `Map`** containing exactly the unmatched snapshot
+associations in their original relative insertion order.
+
+For each retained association, remainder construction preserves:
+
+```text
+stored representative key reference
+mapped value reference
+recorded key hash
+relative insertion order
+```
+
+Remainder construction does not send ordinary user-visible `hash`, `==`,
+`atPut`, `each`, or another iteration/key protocol merely to rebuild those
+associations. In particular, a mutable stored key whose current `hash` has
+changed does not have its recorded hash silently recomputed while the remainder
+is created.
+
+An empty residual set produces a fresh frozen empty normal standard Map.
+
+The remainder is a distinct identity-bearing Map object for each semantically
+materialized attempt. Freezing is shallow: the representative key and mapped
+value objects are not recursively frozen or cloned.
+
+Implementations may defer physical remainder materialization until the
+remainder child is reached, share internal backing state, or use another
+representation only when observable behavior is exactly that of the required
+fresh frozen normal standard Map, including distinct Map identity, frozen
+behavior, preserved association state/order, and independence from later
+keyed-entry mutation of the original subject Map.
+
+An open/subset pattern that ignores residue must not be required to materialize
+a remainder Map. An exact pattern need only establish residual emptiness.
+
+#### 3.3.6 Child execution and D083 composition
+
+After structural key resolution and residue validation are complete,
+mapped-value child matchers execute in deterministic keyed-requirement order.
+Each attempted child is invoked exactly once and receives the mapped-value
+reference fixed during the snapshot-resolution phase.
+
+For `match-remainder`, the remainder child executes after the mapped-value
+children if all earlier children succeed. Implementations may therefore defer
+remainder materialization until that child is actually reached.
+
+Canonical `false`, invalid matcher outcomes, Error, non-local control,
+cancellation, explicit suspension, prior effects, and positional capture
+composition obey the existing D072/D073/D083 contracts.
+
+A remainder Map is one ordinary child subject. If a child matcher captures that
+Map as one value, D072 carries it as one capture and D083 preserves it as one
+capture. Its entries are never recursively converted into separate captures.
+
+#### 3.3.7 Boundary and future evolution
+
+D086 defines standard finite normal-Map keyed-pattern semantics only. It does not
+standardize:
+
+- `IdentityMap` keyed-pattern participation;
+- arbitrary key-pattern scanning/search across subject entries;
+- defaults or optional behavior for absent keys;
+- a generic user-extensible keyed-projection/mapping protocol;
+- keyed patterns for arbitrary `at`/`containsKey` objects;
+- Map-entry repetition, quantification, or search patterns;
+- concrete Map-pattern, exactness, remainder, key-expression, capture, or arm
+  syntax;
+- named capture/binding spelling or duplicate binding-name rules;
+- guards, exhaustivity, identity-pattern syntax, or recognition-only fast paths.
+
+A user/library pattern may already define domain-specific keyed recognition
+through ordinary `pattern.match(subject)`. A future generic opt-in keyed
+observation protocol, `IdentityMap` specialization, or entry-search pattern
+remains possible only through a separate explicit decision backed by concrete
+use evidence.
+
+Implementations may specialize normal standard Map receiver checks, retain
+versioned snapshot state, optimize query lookup, scalarize selected values, test
+residual emptiness without materializing a Map, and lazily materialize remainder
+state only when all observable behavior remains identical to this contract.
+
 ## 4. Explicit structural deconstruction boundary
 
 Generic structural matching must not infer a subject's logical structure from
@@ -594,9 +826,9 @@ A future whole-subject binding facility, if separately ratified, may bind the
 original subject without requiring logical-field enumeration. D078 does not
 select such syntax or binding semantics.
 
-Collection-specific Map/sequence remainder behavior is a separate design
-question because indexed/keyed collections already have their own explicit
-structural protocols. D078 does not select those semantics.
+Collection-specific Map/sequence matching and remainder behavior is owned
+by the separately ratified collection-specific contracts where defined;
+D078 itself does not select or redefine those semantics.
 
 A future complete logical-view facility may be considered only through a
 separate explicit decision backed by concrete use evidence. Such a facility must
@@ -673,7 +905,6 @@ This revision intentionally does not select:
 - guards or exhaustivity;
 - a standard built-in pattern taxonomy;
 - named capture/binding syntax;
-- Map/keyed pattern semantics and Map remainder capture;
 - repetition and optional-pattern semantics;
 - sequence find/subsequence and iterator/stream pattern semantics;
 - whole-subject alias/binding syntax and semantics;

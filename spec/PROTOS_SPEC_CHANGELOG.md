@@ -9,6 +9,24 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.401] - 2026-09-11
+
+### D086 — Standard Map keyed-pattern semantics
+- Ratifies standard keyed matching as pattern-owned semantics specialized to subjects owning normal standard `Map` keyed-entry state; `IdentityMap`, arbitrary `at`/`containsKey` objects, delegated/copied Map behavior, slots, and generic mapping duck types do not automatically participate.
+- One stable shallow logical snapshot of current Map associations is established before query-key `hash` / `==` behavior or nested mapped-value child matching. Snapshot associations preserve representative key references, mapped value references, recorded hashes, and relative insertion order.
+- Each keyed requirement uses an ordinary query key value and the existing normal-Map search relation: compute that query's current standard hash once, filter by recorded hash, inspect candidates in snapshot insertion order, and send `queryKey == storedRepresentativeKey`. Missing requested keys are mismatch, not `Map.at` Error.
+- All keyed requirements resolve before mapped-value child matching. Repeated/equivalent requirements are allowed as repeated constraints and may select the same subject association; residue accounting counts a selected association once.
+- Residue policy is explicit: `ignore` is open/subset default, `require-empty` provides exact keyed matching, and `match-remainder` supplies unmatched associations to a remainder child.
+- A requested remainder is a fresh frozen normal standard `Map` preserving unmatched snapshot associations, recorded hashes and relative insertion order without ordinary user-visible `hash`, `==`, `atPut`, or iteration sends merely to rebuild the residue. Remainder allocation may be deferred or omitted when unobservable.
+- D072/D073/D083 capture/failure/control semantics remain authoritative; a captured remainder Map is one ordinary captured value and is never flattened into entries.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D086 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075, D078, D080, D081, D083 and D084 matching semantics remain unchanged.
+- `IdentityMap` keyed patterns, arbitrary key-pattern entry search, optional/defaulted missing keys, generic keyed projection, repetition/quantification, concrete grammar, source binding spelling, guards and exhaustivity remain unresolved.
+- No parser, grammar, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D085 and D087 are unrelated concurrent work and are excluded; D088 and later matching-design checkpoints are excluded.
+
 ## [0.1.400] - 2026-09-11
 
 ### D084 — Standard Array sequence-pattern semantics
