@@ -1,3 +1,7 @@
+## 0.2.380-SNAPSHOT
+
+- Implement `TOOL002-I1 — inert CaseSpec requirement carrier` under the ratified D076/D077 boundary. Extend each private frozen CaseSpec with a fresh frozen empty requirement Array and expose it only through the private named `caseRequirements(spec)` accessor, with focal evidence for emptiness, freezing and per-CaseSpec freshness. This slice introduces no requirement sidecar/catalog parsing, resource-key validation, reservation/capacity logic, provider/capability API, CLI surface or public `scope` vocabulary. Implementation version becomes `0.2.380-SNAPSHOT`.
+
 ## 0.2.379-SNAPSHOT
 
 - Ratify `D079 — Document-symbol projection for uniform Protos slots`

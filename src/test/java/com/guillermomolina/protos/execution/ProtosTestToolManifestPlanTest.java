@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
@@ -90,8 +91,14 @@ final class ProtosTestToolManifestPlanTest {
                                 new ProtosSourceCompiler().compile(source),
                                 fixture.activation()));
 
-        assertEquals(4, caseSpec.indexedSize().intValueExact());
+        assertEquals(5, caseSpec.indexedSize().intValueExact());
         org.junit.jupiter.api.Assertions.assertTrue(caseSpec.isFrozen());
+        ProtosArrayValue requirements =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        caseSpec.indexedAt(java.math.BigInteger.valueOf(4)));
+        assertEquals(0, requirements.indexedSize().intValueExact());
+        org.junit.jupiter.api.Assertions.assertTrue(requirements.isFrozen());
         assertEquals(
                 "integer/add-small.protos",
                 assertInstanceOf(
@@ -119,6 +126,41 @@ final class ProtosTestToolManifestPlanTest {
                         fixture.activation());
 
         assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void caseSpecRequirementsAccessorReturnsFreshFrozenEmptyArrays()
+            throws Exception {
+        Fixture fixture = fixture();
+        String source =
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "first: Manifest.caseSpec(Array(\"i1/first.protos\", \"integer\", \"1\"))\n"
+                        + "second: Manifest.caseSpec(Array(\"i1/second.protos\", \"integer\", \"2\"))\n"
+                        + "Array(Manifest.caseRequirements(first), "
+                        + "Manifest.caseRequirements(second))";
+
+        ProtosArrayValue requirements =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                new ProtosSourceCompiler().compile(source),
+                                fixture.activation()));
+        assertEquals(2, requirements.indexedSize().intValueExact());
+
+        ProtosArrayValue first =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        requirements.indexedAt(java.math.BigInteger.ZERO));
+        ProtosArrayValue second =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        requirements.indexedAt(java.math.BigInteger.ONE));
+
+        assertEquals(0, first.indexedSize().intValueExact());
+        assertEquals(0, second.indexedSize().intValueExact());
+        org.junit.jupiter.api.Assertions.assertTrue(first.isFrozen());
+        org.junit.jupiter.api.Assertions.assertTrue(second.isFrozen());
+        assertNotSame(first, second);
     }
 
     @Test
