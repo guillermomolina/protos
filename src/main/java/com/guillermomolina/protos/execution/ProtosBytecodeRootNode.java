@@ -401,6 +401,141 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    static final class PreparedObjectConstruction {
+        private final RootCallTarget bodyTarget;
+        private final ProtosActivation activation;
+        private final ProtosObjectValue object;
+
+        PreparedObjectConstruction(
+                RootCallTarget bodyTarget,
+                ProtosActivation activation,
+                ProtosObjectValue object) {
+            this.bodyTarget = java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            this.object = java.util.Objects.requireNonNull(object, "object");
+        }
+
+        RootCallTarget bodyTarget() {
+            return bodyTarget;
+        }
+
+        ProtosActivation activation() {
+            return activation;
+        }
+
+        ProtosObjectValue object() {
+            return object;
+        }
+    }
+
+    @Operation
+    public static final class PrepareObjectConstruction {
+        @Specialization
+        public static PreparedObjectConstruction perform(
+                ProtosActivation enclosing,
+                Object parent,
+                RootCallTarget bodyTarget) {
+            ProtosObjectValue object = new ProtosObjectValue(parent);
+            ProtosActivation construction =
+                    ProtosActivation.forObjectConstruction(object, enclosing);
+            return new PreparedObjectConstruction(bodyTarget, construction, object);
+        }
+    }
+
+    @Operation
+    public static final class EnterObjectConstruction {
+        @Specialization(
+                guards = "prepared.bodyTarget() == cachedTarget",
+                limit = "3")
+        public static Object direct(
+                PreparedObjectConstruction prepared,
+                @Cached("prepared.bodyTarget()") RootCallTarget cachedTarget,
+                @Cached("create(cachedTarget)") DirectCallNode node) {
+            try {
+                return node.call(prepared.activation());
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+        }
+
+        @Specialization(replaces = "direct")
+        public static Object indirect(
+                PreparedObjectConstruction prepared,
+                @Cached IndirectCallNode node) {
+            try {
+                return node.call(prepared.bodyTarget(), prepared.activation());
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+        }
+    }
+
+    @Operation
+    public static final class ResumeObjectConstruction {
+        @Specialization(
+                guards = "result.getContinuationRootNode() == cachedRoot",
+                limit = "3")
+        public static Object direct(
+                @SuppressWarnings("unused") PreparedObjectConstruction prepared,
+                ContinuationResult result,
+                Object resumeValue,
+                @Cached("result.getContinuationRootNode()") ContinuationRootNode cachedRoot,
+                @Cached("create(cachedRoot.getCallTarget())") DirectCallNode node) {
+            try {
+                return node.call(result.getFrame(), resumeValue);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+        }
+
+        @Specialization(replaces = "direct")
+        public static Object indirect(
+                @SuppressWarnings("unused") PreparedObjectConstruction prepared,
+                ContinuationResult result,
+                Object resumeValue,
+                @Cached IndirectCallNode node) {
+            try {
+                return node.call(
+                        result.getContinuationCallTarget(),
+                        result.getFrame(),
+                        resumeValue);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
+        }
+    }
+
+    @Operation
+    public static final class FinishObjectConstruction {
+        @Specialization
+        public static ProtosObjectValue perform(
+                PreparedObjectConstruction prepared,
+                @SuppressWarnings("unused") Object bodyResult) {
+            return prepared.object();
+        }
+    }
+
+    @Operation
+    public static final class ComposeLocalSlots {
+        @Specialization
+        public static ProtosObjectValue perform(
+                ProtosActivation activation,
+                Object sourceValue,
+                java.util.Set<String> reservedNames) {
+            if (!(sourceValue instanceof ProtosObjectValue source)) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            }
+
+            ProtosObjectValue target = activation.context();
+            try {
+                target.composeLocalSlotsFrom(source, reservedNames);
+            } catch (IllegalStateException failure) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            }
+            return target;
+        }
+    }
+
     @Operation
     public static final class RaiseNonLocalReturn {
         @Specialization

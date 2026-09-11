@@ -1,3 +1,7 @@
+## 0.2.381-SNAPSHOT
+
+- Implement `PERF006-B6A3C — canonical Object literal and contextual composition Bytecode coverage` on the ratified C-prime backend. Pre-lower one child Bytecode body target per canonical Object position, evaluate the optional parent exactly once before construction, create the ordinary construction activation with the existing lexical-capture boundary, and compose child continuations without inventing Closure/ReturnHome ownership. Lower contextual `...source` through the existing atomic `composeLocalSlotsFrom` authority with the whole-body reserved-name set, including suspending source expressions without replay. Object literals are also admitted in Closure defaults. B6A3 remaining canonical-form migration is complete; no production parse cutover, replay retirement, specification/public API change, or optimizer-runtime wiring is included. Implementation version becomes `0.2.381-SNAPSHOT`.
+
 ## 0.2.380-SNAPSHOT
 
 - Implement `TOOL002-I1 — inert CaseSpec requirement carrier` under the ratified D076/D077 boundary. Extend each private frozen CaseSpec with a fresh frozen empty requirement Array and expose it only through the private named `caseRequirements(spec)` accessor, with focal evidence for emptiness, freezing and per-CaseSpec freshness. This slice introduces no requirement sidecar/catalog parsing, resource-key validation, reservation/capacity logic, provider/capability API, CLI surface or public `scope` vocabulary. Implementation version becomes `0.2.380-SNAPSHOT`.

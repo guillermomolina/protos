@@ -33,6 +33,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
@@ -97,6 +98,7 @@ final class ProtosBytecodeClosureExecutionPlan {
                         parameter.defaultValue().orElseThrow();
                 if (!(defaultExpression instanceof CanonicalLiteral)
                         && !(defaultExpression instanceof CanonicalClosure)
+                        && !(defaultExpression instanceof CanonicalObject)
                         && !(defaultExpression instanceof CanonicalLookup)
                         && !(defaultExpression instanceof CanonicalIntrinsic)
                         && !(defaultExpression instanceof CanonicalMember)

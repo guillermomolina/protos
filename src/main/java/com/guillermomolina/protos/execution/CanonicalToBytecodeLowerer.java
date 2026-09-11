@@ -19,11 +19,13 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
@@ -33,6 +35,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -41,6 +44,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
 import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
@@ -66,7 +70,11 @@ import java.util.Objects;
  * argument semantics and C-prime suspension composition. PERF006-B6A3B adds
  * Closure literal materialization with exact lexical/receiver/method-home/
  * return-home/prelude capture and a pre-lowered Bytecode execution-plan
- * template per canonical Closure position. The ordinary
+ * template per canonical Closure position. PERF006-B6A3C adds Object
+ * literals and contextual composition using a pre-lowered child Bytecode
+ * root per Object position plus a non-Closure construction carrier, so
+ * construction activation/lexical-capture semantics and suspension are
+ * preserved without manufacturing ReturnHome ownership. The ordinary
  * {@link ProtosSourceCompiler}
  * remains on the established AST lowerer until the remaining canonical forms
  * are migrated and B6 performs the production cutover.</p>
@@ -76,6 +84,10 @@ final class CanonicalToBytecodeLowerer {
     private final Source source;
     private final java.util.IdentityHashMap<CanonicalClosure, ProtosClosureExecutionPlan>
             bytecodeClosurePlans = new java.util.IdentityHashMap<>();
+    private final java.util.IdentityHashMap<CanonicalObject, RootCallTarget>
+            bytecodeObjectBodyTargets = new java.util.IdentityHashMap<>();
+    private final java.util.IdentityHashMap<CanonicalCompose, java.util.Set<String>>
+            bytecodeComposeReservedNames = new java.util.IdentityHashMap<>();
 
     CanonicalToBytecodeLowerer(ProtosLanguage language, Source source) {
         this.language = Objects.requireNonNull(language, "language");
@@ -92,6 +104,40 @@ final class CanonicalToBytecodeLowerer {
                 ProtosClosureExecutionPlan.bytecode(definition, language, source);
         bytecodeClosurePlans.put(definition, plan);
         return plan;
+    }
+
+    private RootCallTarget bytecodeObjectBodyTarget(
+            CanonicalObject object) {
+        RootCallTarget existing = bytecodeObjectBodyTargets.get(object);
+        if (existing != null) {
+            return existing;
+        }
+
+        java.util.Set<String> reservedNames = object.reservedLocalSlotNames();
+        for (CanonicalExpression expression : object.body().expressions()) {
+            if (expression instanceof CanonicalCompose compose) {
+                java.util.Set<String> previous =
+                        bytecodeComposeReservedNames.put(compose, reservedNames);
+                if (previous != null && !previous.equals(reservedNames)) {
+                    throw new IllegalStateException(
+                            "canonical composition item belongs to multiple object bodies");
+                }
+            }
+        }
+
+        RootCallTarget target = lowerRoot(object.body(), null).getCallTarget();
+        bytecodeObjectBodyTargets.put(object, target);
+        return target;
+    }
+
+    private java.util.Set<String> composeReservedNames(
+            CanonicalCompose compose) {
+        java.util.Set<String> reservedNames = bytecodeComposeReservedNames.get(compose);
+        if (reservedNames == null) {
+            throw new AssertionError(
+                    "contextual composition item was not registered by its object body");
+        }
+        return reservedNames;
     }
 
     CallTarget lower(CanonicalSequence sequence) {
@@ -250,6 +296,11 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalClosure closure) {
             bytecodeClosurePlan(closure);
+            return;
+        }
+        if (expression instanceof CanonicalObject object) {
+            object.parent().ifPresent(this::validateSupportedDefaultExpression);
+            bytecodeObjectBodyTarget(object);
             return;
         }
         if (expression instanceof CanonicalMember member) {
@@ -457,7 +508,9 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalCall
                 || expression instanceof CanonicalSend
                 || expression instanceof CanonicalSuperSend
-                || expression instanceof CanonicalReturn) {
+                || expression instanceof CanonicalReturn
+                || expression instanceof CanonicalObject
+                || expression instanceof CanonicalCompose) {
             return true;
         }
         if (expression instanceof CanonicalMember member) {
@@ -628,6 +681,26 @@ final class CanonicalToBytecodeLowerer {
             builder.endSourceSection();
             return;
         }
+        if (expression instanceof CanonicalObject object) {
+            emitBodyObjectLiteral(
+                    builder,
+                    object,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalCompose compose) {
+            emitBodyCompose(
+                    builder,
+                    compose,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
         if (expression instanceof CanonicalReturn returnExpression) {
             emitBodyExpressionToLocal(
                     builder,
@@ -744,6 +817,16 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
             return;
         }
+        if (expression instanceof CanonicalObject object) {
+            emitDefaultObjectLiteral(
+                    builder,
+                    object,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
         if (expression instanceof CanonicalReturn returnExpression) {
             emitDefaultExpressionToLocal(
                     builder,
@@ -820,6 +903,152 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.beginStoreLocal(target);
         emitExpression(builder, expression);
+        builder.endStoreLocal();
+    }
+
+    private void emitBodyObjectLiteral(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalObject object,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        requireDefaultScratch(result, preparedCall, childResult, resumeValue);
+        BytecodeLocal parent = builder.createLocal("objectParent", null);
+        BytecodeLocal construction = builder.createLocal("preparedObjectConstruction", null);
+
+        if (object.parent().isPresent()) {
+            emitBodyExpressionToLocal(
+                    builder,
+                    object.parent().orElseThrow(),
+                    parent,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+        } else {
+            builder.beginStoreLocal(parent);
+            builder.emitLoadConstant(ProtosObjectValue.rootObject());
+            builder.endStoreLocal();
+        }
+
+        builder.beginStoreLocal(construction);
+        builder.beginPrepareObjectConstruction();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(parent);
+        builder.emitLoadConstant(bytecodeObjectBodyTarget(object));
+        builder.endPrepareObjectConstruction();
+        builder.endStoreLocal();
+
+        emitPreparedObjectConstruction(
+                builder,
+                result,
+                construction,
+                childResult,
+                resumeValue);
+    }
+
+    private void emitDefaultObjectLiteral(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalObject object,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        requireDefaultScratch(result, preparedCall, childResult, resumeValue);
+        BytecodeLocal parent = builder.createLocal("defaultObjectParent", null);
+        BytecodeLocal construction = builder.createLocal("defaultPreparedObjectConstruction", null);
+
+        if (object.parent().isPresent()) {
+            emitDefaultExpressionToLocal(
+                    builder,
+                    object.parent().orElseThrow(),
+                    parent,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+        } else {
+            builder.beginStoreLocal(parent);
+            builder.emitLoadConstant(ProtosObjectValue.rootObject());
+            builder.endStoreLocal();
+        }
+
+        builder.beginStoreLocal(construction);
+        builder.beginPrepareObjectConstruction();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(parent);
+        builder.emitLoadConstant(bytecodeObjectBodyTarget(object));
+        builder.endPrepareObjectConstruction();
+        builder.endStoreLocal();
+
+        emitPreparedObjectConstruction(
+                builder,
+                result,
+                construction,
+                childResult,
+                resumeValue);
+    }
+
+    private void emitBodyCompose(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalCompose compose,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal sourceValue = builder.createLocal("compositionSource", null);
+        emitBodyExpressionToLocal(
+                builder,
+                compose.object(),
+                sourceValue,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.beginStoreLocal(result);
+        builder.beginComposeLocalSlots();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(sourceValue);
+        builder.emitLoadConstant(composeReservedNames(compose));
+        builder.endComposeLocalSlots();
+        builder.endStoreLocal();
+    }
+
+    private void emitPreparedObjectConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal construction,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginStoreLocal(childResult);
+        builder.beginEnterObjectConstruction();
+        builder.emitLoadLocal(construction);
+        builder.endEnterObjectConstruction();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+        builder.beginIsContinuation();
+        builder.emitLoadLocal(childResult);
+        builder.endIsContinuation();
+        builder.beginBlock();
+        builder.beginStoreLocal(resumeValue);
+        builder.beginYield();
+        builder.emitLoadLocal(childResult);
+        builder.endYield();
+        builder.endStoreLocal();
+        builder.beginStoreLocal(childResult);
+        builder.beginResumeObjectConstruction();
+        builder.emitLoadLocal(construction);
+        builder.emitLoadLocal(childResult);
+        builder.emitLoadLocal(resumeValue);
+        builder.endResumeObjectConstruction();
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishObjectConstruction();
+        builder.emitLoadLocal(construction);
+        builder.emitLoadLocal(childResult);
+        builder.endFinishObjectConstruction();
         builder.endStoreLocal();
     }
 
@@ -1935,6 +2164,19 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalClosure closure) {
             bytecodeClosurePlan(closure);
+            return;
+        }
+        if (expression instanceof CanonicalObject object) {
+            object.parent().ifPresent(this::validateSupportedExpression);
+            bytecodeObjectBodyTarget(object);
+            return;
+        }
+        if (expression instanceof CanonicalCompose compose) {
+            if (!bytecodeComposeReservedNames.containsKey(compose)) {
+                throw new UnsupportedOperationException(
+                        "CanonicalCompose is valid only in its registered Object body");
+            }
+            validateSupportedExpression(compose.object());
             return;
         }
         if (expression instanceof CanonicalMember member) {
