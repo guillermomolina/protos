@@ -67,7 +67,8 @@ import java.util.List;
         enableYield = true,
         enableTagInstrumentation = true,
         enableRootTagging = false,
-        enableRootBodyTagging = false)
+        enableRootBodyTagging = false,
+        tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
     protected ProtosBytecodeRootNode(
             ProtosLanguage language,

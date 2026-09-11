@@ -1,3 +1,7 @@
+## 0.2.372-SNAPSHOT
+
+- Implement `PERF006-B5A — Bytecode debugger scope projection bridge` under ratified PLAT015/PLAT013. Configure Bytecode DSL tag instrumentation to use a Protos-owned `NodeLibrary` bridge that obtains the exact `ProtosActivation` from frame argument zero and projects the existing read-only `ProtosDebuggerScope`, rather than exposing Bytecode interpreter locals as guest bindings. Preserve ordinary activation lookup precedence, no named receiver, no artificial language top scope, no debugger mutation/evaluation authority, lazy tooling allocation and the existing StatementTag/CallTag/root-tag policy. This is a backend tooling bridge only; B5B retains source/tag event and logical-location compatibility evidence, and B6 cutover/replay retirement remain separate. Implementation version becomes `0.2.372-SNAPSHOT`.
+
 ## 0.2.371-SNAPSHOT
 
 - Close `PERF006-B4G — control/unwind closure evidence` with retained cross-product coverage over canonical non-local return after C-prime suspension, structured ensure cleanup/supersession, Error-handler selection/deactivation including suspendible handlers, Task-local cancellation unwind and supersession, and structured `while` suspension, cancellation and Error exit. Add a static closure guard proving the Bytecode control path does not own replay cursor/checkpoint state while the legacy AST/replay fallback remains intentionally retained until B6. Test/evidence only: no production source, specification, public API or implementation-version change.
