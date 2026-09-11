@@ -64,9 +64,9 @@ noMatch: source.parallelFindIndex((value) => {
 })
 print(noMatch.value())
 
-// parallelReduce combines values in one canonical reduction tree, so a
-// commutative, associative reducer has a deterministic result; an empty
-// source reduces to null.
+// parallelReduce uses one canonical logical reduction tree, so scheduling does
+// not choose the parenthesization. Do not assume sequential left-fold semantics;
+// an empty source reduces to null.
 sum: source.parallelReduce((a, b) => {
     a + b
 })
