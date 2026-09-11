@@ -5,7 +5,9 @@ Status: Draft
 Last updated: 2026-09-11
 
 This document is the primary normative owner of the ratified matching-protocol
-semantics introduced by D071 through D074 at specification revision `0.1.394`.
+semantics introduced by D071 through D075. D075 ratifies the exact named
+structural-projection request/result/failure contract at specification revision
+`0.1.395`.
 It deliberately does **not** define concrete matching-expression grammar,
 case/arm/default syntax, literal-pattern semantics, guards, exhaustivity,
 standard pattern taxonomy, nested-capture flattening, or named-binding syntax.
@@ -121,14 +123,115 @@ architecture is a **named, selective logical projection**.
 
 A generic structural matcher requests the logical field names it actually needs.
 The subject controls which logical names it exposes and what ordinary Protos
-values those names denote. A request for a subset of logical names must not, by
+values those names denote. A request for a subset of logical names does not, by
 language rule, require enumeration or materialization of a complete structural
 view.
 
-The logical names are an explicit matching API of the subject. They are not
-aliases for local-slot names, delegated member names, indexed keys, physical
-field names, or host-layout offsets unless the subject's own eventual projection
-behavior deliberately chooses the same names.
+The required public projection selector is the ordinary variadic message:
+
+```text
+subject.deconstructFields(...names)
+```
+
+Here `field` means a logical matching field. It does not mean a local slot,
+delegated member, indexed entry, physical field, host-layout offset, or other
+representation detail. The selector name deliberately keeps named logical
+projection distinct from any future separately ratified positional
+subject-deconstruction capability.
+
+### 5.1 Request contract
+
+A standard generic structural-projection request supplies zero or more
+**pairwise-distinct semantic String values** as ordinary positional arguments.
+Their ordinary argument order is the correspondence order for a successful
+projection result. A dynamic standard Array of names may use the existing call
+spread mechanism; named projection introduces no request-object, request-Array,
+Map, Set, mode object, or second invocation mechanism.
+
+A conforming generic structural matcher forms the complete requested-name vector
+before projection and invokes `deconstructFields` once with that vector. It does
+not probe one field at a time, retry projection, or use `null`, a Boolean, a
+special Array, or another mode value to request a complete view.
+
+The standard root behavior is:
+
+```text
+Object.deconstructFields(...names) -> false
+```
+
+for a valid request. Therefore an ordinary object that does not opt into named
+structural projection inherits a normal no-view result through ordinary
+delegation. An object opts in by ordinary overriding/shadowing of
+`deconstructFields`; no registry, protocol type, `respondsTo` institution,
+manual `parent()` traversal, or caught missing-lookup Error is required.
+
+Invalid request arguments are not structural mismatch. A standard consumer or
+standard root behavior that receives a non-String requested name or a duplicate
+requested name signals an ordinary `Error` at the violated protocol boundary.
+
+### 5.2 Normal result carrier
+
+For a valid request, the normal result contract is exact:
+
+```text
+false        -> subject exposes no named structural view for this attempt
+null         -> named structural view exists, but at least one requested logical name is unavailable
+true         -> successful projection of zero requested names
+[v1, ...]    -> successful projection of N > 0 requested names
+```
+
+Only canonical `false` denotes no exposed named structural view. Only canonical
+`null` denotes participation in named structural projection with one or more
+requested logical names unavailable. Both outcomes make the containing generic
+structural pattern fail normally; they remain distinct inside the projection
+protocol so absence of the capability is not conflated with absence of a
+requested logical field.
+
+For a request containing zero names, canonical `true` is the only successful
+normal result. An empty outer Array is invalid rather than a second spelling of
+zero-name success.
+
+For a successful request containing `N > 0` names, the result must be a standard
+non-empty Array of exactly `N` elements. Result elements correspond **one-to-one**
+to requested names in request order:
+
+```text
+result[i] -> logical value for requested name names[i]
+```
+
+Each projected value is an ordinary Protos value and may itself be `null`,
+`false`, `true`, an Array, Closure, Future, or arbitrary object. Thus `[null]`
+means successful projection of one logical field whose value is `null`; it is not
+the missing-field sentinel.
+
+Any other normal result is invalid projection output. This includes an Array of
+the wrong length, an empty Array, `true` for a nonzero request, a Number, String,
+Map, Future, or arbitrary object outside the exact carrier above. A standard
+structural-matching consumer signals an ordinary `Error` at that protocol
+boundary rather than silently interpreting invalid output as mismatch.
+
+### 5.3 Exactly-once observation and shallow snapshot
+
+For one generic structural-projection attempt, the consumer:
+
+1. forms the complete ordered request;
+2. invokes `deconstructFields` **exactly once**;
+3. completes and validates that invocation before any nested field subpattern is executed;
+4. for a successful Array result, captures a **shallow ordered snapshot** of the returned Array's indexed element references immediately; and
+5. runs nested field subpatterns against that captured ordered value sequence.
+
+The consumer does not re-read the returned Array after nested matching begins and
+does not re-invoke the subject to refresh a field. Mutating or aliasing the result
+Array after the snapshot therefore cannot change which projected references the
+current attempt observes. This is not a deep copy: if a projected value is itself
+a mutable object, nested matching observes that same ordinary object.
+
+`deconstructFields` remains ordinary Protos behavior. Error, non-local return,
+cancellation, and explicit suspension propagate according to the existing
+language rules. Matching adds no implicit await, adoption, retry, transaction,
+or atomicity guarantee around an explicitly suspending projection method.
+
+### 5.4 Representation and future-capability boundary
 
 Physical/internal field reordering is not observable through this contract.
 Adding an implementation cache, helper slot, method slot, delegated behavior, or
@@ -141,11 +244,11 @@ pattern-owned `match(subject)` behavior and its D072 capture carrier. Array, Map
 Bytes, and other indexed contents remain governed by their existing collection
 and indexing semantics rather than being reclassified as object fields.
 
-The exact selector name for named projection, the request carrier, result
-carrier/order, distinction between no structural view and a missing requested
-logical field, complete-view/remainder capability, and any positional
-subject-deconstruction protocol remain unresolved and are not inferred by this
-section.
+Complete-view enumeration and remainder / `**rest`-like matching remain
+unresolved and are not encoded as a special argument to `deconstructFields`.
+Any future capability that enumerates all logical fields requires a separate
+ratified decision. A universal positional subject-deconstruction protocol likewise
+remains unresolved.
 
 ## 6. Effects, ordering, and implementation freedom
 
@@ -175,11 +278,9 @@ This revision intentionally does not select:
 - a standard built-in pattern taxonomy;
 - nested capture flattening;
 - named capture/binding syntax;
-- the exact named-projection selector;
-- the request/result/failure carrier for structural projection;
 - complete-view or `**rest`-like semantics;
 - a universal positional subject-deconstruction protocol; or
 - a recognition-only matcher fast path.
 
 Until those questions are separately ratified, implementations and libraries
-must not treat them as implied by D071-D074.
+must not treat them as implied by D071-D075.

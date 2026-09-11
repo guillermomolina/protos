@@ -9,6 +9,19 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.395] - 2026-09-11
+
+### D075 — Named projection request/result/failure contract
+- Ratifies `deconstructFields(...names)` as one ordinary variadic named-projection call over zero or more pairwise-distinct semantic String names; ordinary argument order defines response correspondence and call spread handles dynamic name lists without a request object.
+- Exact normal results are canonical `false` for no named structural view, canonical `null` when projection exists but at least one requested name is unavailable, canonical `true` for successful zero-name projection, and a non-empty standard Array of exactly N values for N requested names in request order. Invalid requests/results signal ordinary `Error` at the violated protocol boundary.
+- Standardizes `Object.deconstructFields(...names) -> false` for valid requests, making participation an ordinary override/shadow rather than registry/reflection/type membership.
+- Requires exactly one projection call per structural attempt and an immediate shallow ordered snapshot of successful projected references before nested subpatterns. Error/control/cancellation/explicit suspension propagate normally; no implicit await, retry, transaction, deep copy, or atomicity is introduced.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D075 decision record under `docs/project/decisions/language/`.
+- Complete-view/remainder (`**rest`-like) projection, universal positional subject deconstruction, concrete match grammar, named bindings, nested capture flattening, guards, exhaustivity, literal/equality patterns, and recognition-only fast paths remain unresolved.
+- No grammar, parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+
 ## [0.1.394] - 2026-09-11
 
 ### D071-D074 — Extensible matching protocol architecture
