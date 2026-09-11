@@ -9,7 +9,7 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.399`.
+`0.1.400`.
 It deliberately does **not** define concrete matching-expression grammar,
 case/arm/default syntax, which source expressions or future surface forms denote
 ordinary value patterns, guards, exhaustivity, standard pattern taxonomy, or named-binding syntax. Those remain unresolved
@@ -267,6 +267,150 @@ frame storage only when the observable result is equivalent to the semantics
 above. Such optimization must preserve matcher dispatch, required call count and
 order, Error/control/suspension behavior, shallow capture-value boundaries, and
 the prohibition on recursive flattening.
+
+### 3.2 Standard Array sequence-pattern semantics
+
+Core v0.1 standard sequence matching is a standard pattern-owned specialization
+for subjects that own **standard Array indexed state**. It does not define a
+generic positional-object view or infer sequence membership from ordinary
+indexing behavior.
+
+An ordinary object does not become eligible for this standard sequence-pattern
+contract merely because it defines or inherits `at`, `atPut`, `size`, `each`, an
+iterator, numeric-key behavior, or other collection-like messages. Delegating to
+an Array or copying Array behavior likewise does not confer standard Array
+indexed state. `String`, `Bytes`, `Map`, iterators, generators, streams, and
+arbitrary user-defined indexable objects do not participate automatically.
+
+A standard sequence pattern presented with an ineligible subject returns
+canonical `false` as ordinary mismatch. D084 introduces no implicit conversion,
+registration table, `Sequence` family, host-type test, generic positional
+deconstruction protocol, or fallback call to a subject-side sequence view.
+
+#### 3.2.1 Fixed shape and one explicit remainder
+
+A standard sequence pattern with `N` fixed child components and no remainder
+component requires the subject Array's current indexed element count to be
+exactly `N`. A different length causes canonical `false` before any element
+child matcher is invoked. Fixed sequence matching is therefore exact-length by
+default; extra elements are not silently ignored.
+
+A standard sequence pattern may contain **at most one semantic remainder component**.
+The remainder may occur between a fixed prefix and fixed suffix. For a pattern
+with `P` fixed prefix children and `S` fixed suffix children, the subject length
+must satisfy:
+
+```text
+length >= P + S
+```
+
+The remainder denotes exactly the contiguous unmatched middle range. It may
+contain zero elements. More than one semantic remainder component is outside the
+standard Core v0.1 sequence-pattern contract; Core does not choose a greediness,
+backtracking, split-distribution, or subsequence-search policy for such a form.
+
+A remainder component whose standard semantics merely accepts and discards the
+unmatched middle does not require that middle to be traversed or materialized.
+A remainder component that must itself receive the unmatched aggregate is given
+the remainder value defined below.
+
+#### 3.2.2 Shallow logical observation before child matching
+
+For one standard sequence-pattern attempt, after standard Array receiver
+eligibility is established and before **any** nested sequence child matcher is
+invoked, the sequence matcher establishes one shallow logical observation of
+the subject Array state needed by that attempt.
+
+It determines the current indexed element count once for the attempt and
+captures the element references required by all fixed prefix/suffix positions.
+If a remainder child requires the unmatched aggregate, the unmatched middle
+element references are captured as part of the same pre-child observation. A
+discard-only remainder need not observe the middle element references.
+
+The observation is shallow. If an observed Array element is a mutable ordinary
+object, the same object reference is supplied to the child matcher; D084 does
+not deep-copy or freeze captured element values.
+
+Mutation of the original Array's indexed positions after this pre-child
+observation cannot change which element references the current sequence-pattern
+attempt has already selected. D084 introduces no transaction, deep snapshot,
+global lock, or new synchronization primitive around those ordinary element
+objects.
+
+The standard sequence matcher performs this Array observation through the
+standard Array semantic state. It **does not send ordinary `size`, `at`, `each`, iterator, or deconstruction messages**
+to determine the sequence shape or obtain the observed standard Array elements.
+This preserves the existing distinction between standard Array state and
+ordinary user-defined indexing protocols.
+
+#### 3.2.3 Remainder aggregate value
+
+When a remainder component must receive the unmatched range as one ordinary
+value, that value is a fresh **frozen standard Array** whose indexed elements are
+exactly the shallowly observed unmatched middle element references, in original
+ascending subject-index order.
+
+An empty unmatched range therefore produces a fresh frozen empty standard Array.
+Each semantically materialized remainder aggregate has distinct standard Array
+identity for that attempt. Freezing is shallow: mutable objects referenced by
+the remainder are not themselves frozen or cloned.
+
+An implementation may defer physical remainder construction, share backing
+storage, or use another internal representation only when the observable result
+is exactly that of the required fresh frozen standard Array, including its
+distinct identity, frozen behavior, element order, and independence from later
+indexed mutation of the original subject Array.
+
+If the remainder component merely accepts/discards any unmatched range and does
+not semantically require a remainder subject value, implementations must not be
+required to allocate such an Array merely to preserve an invisible artifact.
+
+#### 3.2.4 Child execution and D083 composition
+
+After the pre-child observation is established, child matchers execute in the
+standard sequence pattern's semantic left-to-right component order: fixed prefix
+children, the remainder child when one exists, then fixed suffix children.
+
+Each attempted child is invoked exactly once. Canonical `false`, invalid matcher
+outcomes, Error, non-local control, cancellation, explicit suspension, prior
+effects, and capture concatenation obey the existing D072/D073/D083 contracts.
+
+A remainder Array is one ordinary child subject. If a child matcher captures
+that Array as one value, D072 carries it as one capture and D083 preserves it as
+one capture. For example, a captured remainder value `[r1, r2]` may contribute:
+
+```text
+[[r1, r2]]
+```
+
+to a child result and remains the single captured Array value `[r1, r2]` in the
+containing composite's capture sequence. It is never recursively flattened into
+separate `r1` and `r2` captures.
+
+#### 3.2.5 Boundary and future evolution
+
+D084 defines standard finite Array sequence-pattern semantics only. It does not
+standardize:
+
+- Map/keyed patterns or Map remainder capture;
+- String- or Bytes-specific pattern semantics;
+- iterator, generator, stream, lazy, or infinite-sequence matching;
+- find/subsequence/search patterns;
+- repetition or optional-pattern semantics;
+- a generic user-extensible sequence observation protocol;
+- a standard `Sequence` semantic family;
+- source syntax for sequence components, rest, capture names, or arms; or
+- guards, exhaustivity, identity-pattern syntax, or recognition-only fast paths.
+
+A user/library pattern may already define domain-specific sequence recognition
+through ordinary `pattern.match(subject)`. A future generic opt-in sequence
+protocol remains possible only through a separate explicit decision backed by
+concrete interoperability evidence.
+
+Implementations may specialize standard Array receiver tests, scalarize the
+pre-child observation into frame slots, avoid unused remainder work, fuse
+standard child matchers, or optimize fresh frozen remainder storage only when
+the observable behavior remains identical to this contract.
 
 ## 4. Explicit structural deconstruction boundary
 
@@ -529,7 +673,9 @@ This revision intentionally does not select:
 - guards or exhaustivity;
 - a standard built-in pattern taxonomy;
 - named capture/binding syntax;
-- collection-specific Map/sequence remainder semantics;
+- Map/keyed pattern semantics and Map remainder capture;
+- repetition and optional-pattern semantics;
+- sequence find/subsequence and iterator/stream pattern semantics;
 - whole-subject alias/binding syntax and semantics;
 - a recognition-only matcher fast path.
 

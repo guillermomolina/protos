@@ -9,6 +9,23 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.400] - 2026-09-11
+
+### D084 — Standard Array sequence-pattern semantics
+- Ratifies standard finite sequence matching as pattern-owned semantics specialized to subjects that own standard Array indexed state; arbitrary `at`/`size`/`each` behavior, iteration, delegation to Array, String, Bytes, Map, and other objects do not automatically confer sequence-pattern eligibility.
+- Fixed sequence patterns are exact-length by default. A standard sequence pattern may contain at most one semantic remainder component, representing exactly the contiguous unmatched middle between fixed prefix/suffix children and allowing zero elements.
+- Before any child matcher runs, the sequence matcher establishes a shallow logical observation of every Array element reference semantically needed by that attempt. It does not obtain standard Array structure by sending ordinary `size`, `at`, `each`, iterator, or deconstruction messages.
+- A discard-only remainder need not traverse/materialize the middle. When the unmatched remainder must be supplied as one value, it is a fresh frozen standard Array containing the shallow unmatched references in order, including a fresh frozen empty Array for an empty remainder.
+- Child execution and captures remain governed by D072/D073/D083. A captured remainder Array is one ordinary capture and is never recursively flattened.
+- No generic `Sequence` family, registration mechanism, universal positional subject protocol, borrowed Slice/View type, iterator rollback rule, subsequence-search rule, or sequence-deconstruction protocol is introduced.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D084 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075, D078, D080, D081 and D083 matching semantics remain unchanged.
+- Map/keyed patterns and Map remainder capture, repetition/optional patterns, sequence find/subsequence search, iterator/generator/stream matching, String/Bytes patterns, generic sequence interoperability, concrete grammar, source binding spelling, guards and exhaustivity remain unresolved.
+- No parser, grammar, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D085 and later matching-design checkpoints are excluded.
+
 ## [0.1.399] - 2026-09-11
 
 ### D083 — Standard composite capture composition
