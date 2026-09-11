@@ -1,0 +1,96 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+CSV: import("std:csv/CSV")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+finished: CSV.rowParser((row) => { null })
+finished.feed("a")
+require(finished.finish() === finished)
+require(reject(() => { finished.feed("") }))
+require(reject(() => { finished.finish() }))
+
+unterminated: CSV.rowParser((row) => { null })
+unterminated.feed("\"abc")
+require(reject(() => { unterminated.finish() }))
+require(reject(() => { unterminated.feed("x") }))
+require(reject(() => { unterminated.finish() }))
+
+emitted: 0
+malformed: CSV.rowParser((row) => {
+    emitted = emitted + 1
+})
+malformed.feed("ok\r\n")
+require(emitted == 1)
+require(reject(() => { malformed.feed("\"bad\"x") }))
+require(emitted == 1)
+require(reject(() => { malformed.feed("\r\n") }))
+require(reject(() => { malformed.finish() }))
+require(emitted == 1)
+
+consumerCalls: 0
+consumerFailure: CSV.rowParser((row) => {
+    consumerCalls = consumerCalls + 1
+    Error().signal()
+})
+require(reject(() => { consumerFailure.feed("a\n") }))
+require(consumerCalls == 1)
+require(reject(() => { consumerFailure.feed("b\n") }))
+require(reject(() => { consumerFailure.finish() }))
+require(consumerCalls == 1)
+
+flushCount: 0
+flushed: null
+flush: CSV.rowParser((row) => {
+    flushCount = flushCount + 1
+    flushed = row
+})
+flush.feed("final,row")
+require(flushCount == 0)
+flush.finish()
+require(flushCount == 1)
+require(flushed.size() == 2)
+require(flushed[0] == "final")
+require(flushed[1] == "row")
+
+require(reject(() => { CSV.rowParser() }))
+require(reject(() => { CSV.rowParser((row) => { null }, (row) => { null }) }))
+
+wrongFeed: CSV.rowParser((row) => { null })
+require(reject(() => { wrongFeed.feed() }))
+require(reject(() => { wrongFeed.feed("a", "b") }))
+require(reject(() => { wrongFeed.feed(42) }))
+
+wrongFinish: CSV.rowParser((row) => { null })
+require(reject(() => { wrongFinish.finish("x") }))
+
+true

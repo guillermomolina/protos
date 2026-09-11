@@ -475,6 +475,29 @@ keeps application/DB/spreadsheet compatibility policy out of the CSV kernel and
 lets later streaming output serialize each row independently without buffering
 to discover whether it is the last row.
 
+## LIB009-C incremental lifecycle return contract
+
+Status: **APPROVED — 2026-09-11**
+
+The project owner approved the established Protos incremental-parser lifecycle
+contract for CSV:
+
+```text
+parser = CSV.rowParser(consumer)
+parser.feed(chunk) === parser
+parser.finish() === parser
+```
+
+Each `rowParser` call returns one fresh ordinary parser object. Successful
+`feed(String)` and successful `finish()` return that exact same parser object.
+After successful `finish()`, reuse fails. Syntax failure or consumer failure
+leaves the parser terminal. This intentionally matches the already-published
+`JSON.eventParser` / `JSON.eventWriter` lifecycle instead of introducing another
+incremental API convention.
+
+The decision does not add result counts, consumer-result forwarding, progress
+objects, backpressure, resource-limit policy or custom dialect representation.
+
 ## Intentionally deferred
 
 LIB009-0 does not decide:

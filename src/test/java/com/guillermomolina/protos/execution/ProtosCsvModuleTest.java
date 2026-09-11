@@ -30,14 +30,14 @@ import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** Real-std conformance harness for LIB009-A/B strict default-profile CSV parsing/encoding. */
+/** Real-std conformance harness for LIB009-A/B/C default-profile CSV parsing/encoding/streaming. */
 final class ProtosCsvModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path CASE_ROOT = Path.of("protos", "tests", "library", "csv");
 
     @Test
-    void importedModuleExportsExactlyParseAndEncodeAtBStage() throws Exception {
+    void importedModuleExportsExactlyParseEncodeAndRowParserAtCStage() throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -48,7 +48,7 @@ final class ProtosCsvModuleTest {
                         .call(prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
-        assertEquals(Set.of("parse", "encode"), module.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("parse", "encode", "rowParser"), module.localSlotsSnapshot().keySet());
     }
 
     @Test
@@ -84,6 +84,14 @@ final class ProtosCsvModuleTest {
     @Test
     void encodeRejectsInvalidTableRowAndFieldDomains() throws Exception {
         assertFixture("encode-invalid.protos");
+    }
+
+    @Test
+    void incrementalRowParserConforms() throws Exception {
+        assertFixture("row-parser-basic.protos");
+        assertFixture("row-parser-boundaries.protos");
+        assertFixture("row-parser-lifecycle.protos");
+        assertFixture("row-parser-independence.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {
