@@ -223,13 +223,11 @@ public final class ProtosCapturedProcessExecution {
                                         null,
                                         null,
                                         task ->
-                                                task.executeAction(
-                                                        () ->
-                                                                ProtosClosureInvoker.invokeInTask(
-                                                                        inspectorClosure,
-                                                                        List.of(subject),
-                                                                        activation,
-                                                                        task)));
+                                                ProtosClosureInvoker.executeInTaskForRuntime(
+                                                        inspectorClosure,
+                                                        List.of(subject),
+                                                        activation,
+                                                        task));
                 processContext.callForRuntime(
                         () -> {
                             activation.executionDomain()

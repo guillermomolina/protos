@@ -1117,6 +1117,115 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    static PreparedClosureCall prepareTaskOwnedDirectClosureIfBytecode(
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation creator,
+            ProtosTask task) {
+        java.util.Objects.requireNonNull(closure, "closure");
+        java.util.Objects.requireNonNull(supplied, "supplied");
+        java.util.Objects.requireNonNull(creator, "creator");
+        java.util.Objects.requireNonNull(task, "task");
+        if (closure.nativeBody().isPresent()) {
+            return null;
+        }
+        ProtosClosureExecutionPlan plan = taskOwnedBytecodePlan(closure);
+        if (plan == null) {
+            return null;
+        }
+        ProtosActivation activation =
+                ProtosActivation.forClosureInvocation(
+                        closure,
+                        supplied,
+                        creator.prelude().orElse(null),
+                        creator.actorModuleState(),
+                        creator.currentModuleKey().orElse(null),
+                        creator.executionDomain());
+        activation.attachTask(task);
+        return new PreparedClosureCall(
+                plan.bytecodeActivationTargetForComposition(),
+                activation);
+    }
+
+    static PreparedClosureCall prepareTaskOwnedSelectedCallIfBytecode(
+            Object receiver,
+            ProtosSlotLookupResult selected,
+            List<?> supplied,
+            ProtosActivation creator,
+            ProtosTask task) {
+        java.util.Objects.requireNonNull(receiver, "receiver");
+        java.util.Objects.requireNonNull(selected, "selected");
+        java.util.Objects.requireNonNull(supplied, "supplied");
+        java.util.Objects.requireNonNull(creator, "creator");
+        java.util.Objects.requireNonNull(task, "task");
+
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(creator));
+        }
+
+        /*
+         * Preserve PLAT017 exactly: ordinary D013 lookup has already selected
+         * Object.call. Only the exact canonical selection may invoke the Closure
+         * receiver intrinsically; aliases/overrides remain normal methods.
+         */
+        if (receiver instanceof ProtosClosureValue targetClosure
+                && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                        closure,
+                        selected.home())) {
+            return prepareTaskOwnedDirectClosureIfBytecode(
+                    targetClosure,
+                    supplied,
+                    creator,
+                    task);
+        }
+
+        if (closure.nativeBody().isPresent()) {
+            return null;
+        }
+        ProtosClosureExecutionPlan plan = taskOwnedBytecodePlan(closure);
+        if (plan == null) {
+            return null;
+        }
+        ProtosActivation activation =
+                ProtosActivation.forImmediateMethodInvocation(
+                        closure,
+                        supplied,
+                        receiver,
+                        selected.home(),
+                        creator.prelude().orElse(null),
+                        creator.actorModuleState(),
+                        creator.currentModuleKey().orElse(null),
+                        creator.executionDomain());
+        activation.attachTask(task);
+        return new PreparedClosureCall(
+                plan.bytecodeActivationTargetForComposition(),
+                activation);
+    }
+
+    private static ProtosClosureExecutionPlan taskOwnedBytecodePlan(
+            ProtosClosureValue closure) {
+        ProtosClosureExecutionPlan template =
+                closure.executionPlanForRuntimeInvocation();
+
+        ProtosLanguageContext enteredContext =
+                ProtosLanguageContext.currentIfEnteredForRuntime();
+        if (enteredContext != null) {
+            if (closure.requiresContextLocalExecutionProjectionForRuntime()
+                    || !template.isBytecodeBackendForRuntime()) {
+                if (template.source().isEmpty()) {
+                    return null;
+                }
+                return enteredContext.bytecodeExecutionPlanForEnteredClosure(
+                        closure,
+                        template);
+            }
+        } else if (closure.requiresContextLocalExecutionProjectionForRuntime()) {
+            return null;
+        }
+
+        return template.isBytecodeBackendForRuntime() ? template : null;
+    }
+
     @Operation
     public static final class PrepareClosureCall {
         @Specialization
@@ -1458,9 +1567,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     private static void rejectComposedInvocationProjection(
             ProtosClosureValue closure) {
-        if (closure.requiresContextLocalExecutionProjectionForRuntime()) {
+        if (closure.requiresContextLocalExecutionProjectionForRuntime()
+                && ProtosLanguageContext.currentIfEnteredForRuntime() == null) {
             throw new UnsupportedOperationException(
-                    "PERF006-B2 shared-Context Closure projection is not migrated yet");
+                    "Context-local Closure projection requires an entered Protos Context");
         }
     }
 
@@ -1496,9 +1606,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "structured control capability requires the canonical native implementation");
         }
         ProtosClosureExecutionPlan plan = closure.executionPlanForRuntimeInvocation();
+        ProtosLanguageContext enteredContext =
+                ProtosLanguageContext.currentIfEnteredForRuntime();
+        if (enteredContext != null
+                && (closure.requiresContextLocalExecutionProjectionForRuntime()
+                        || !plan.isBytecodeBackendForRuntime())) {
+            if (plan.source().isEmpty()) {
+                throw new UnsupportedOperationException(
+                        "C-prime composition cannot project a source-less AST Closure plan");
+            }
+            plan =
+                    enteredContext.bytecodeExecutionPlanForEnteredClosure(
+                            closure,
+                            plan);
+        }
         if (!plan.isBytecodeBackendForRuntime()) {
             throw new UnsupportedOperationException(
-                    "PERF006-B2 composed invocation receiver still has an AST execution plan");
+                    "C-prime composed invocation requires a Bytecode execution plan");
         }
         return new PreparedClosureCall(plan.bytecodeActivationTargetForComposition(), activation);
     }

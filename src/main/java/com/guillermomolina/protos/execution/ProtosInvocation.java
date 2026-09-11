@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import java.util.List;
 import java.util.Objects;
@@ -69,6 +70,118 @@ public final class ProtosInvocation {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }
         return invokeSelected(receiver, selected, supplied, caller);
+    }
+
+    public static void executeInTaskForRuntime(
+            Object receiver,
+            List<?> supplied,
+            ProtosActivation caller,
+            ProtosTask task) {
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(caller, "caller");
+        Objects.requireNonNull(task, "task");
+
+        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                caller.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "polymorphic invocation requires an owning Core prelude"));
+        ProtosSlotLookupResult selected;
+        try {
+            selected =
+                    ProtosValueLookup.lookup(receiver, "call", prelude)
+                            .orElseThrow(
+                                    () ->
+                                            new ProtosSignalException(
+                                                    ProtosCoreErrors.newError(caller)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            task.fail(ProtosCoreErrors.newError(caller));
+            return;
+        } catch (ProtosSignalException signalled) {
+            task.fail(signalled.error());
+            return;
+        }
+        executeSelectedInTaskForRuntime(receiver, selected, supplied, caller, task);
+    }
+
+    public static void executeMessageInTaskForRuntime(
+            Object receiver,
+            String selector,
+            List<?> supplied,
+            ProtosActivation caller,
+            ProtosTask task) {
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(selector, "selector");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(caller, "caller");
+        Objects.requireNonNull(task, "task");
+
+        ProtosSlotLookupResult selected;
+        try {
+            selected =
+                    ProtosValueLookup.lookup(
+                                    receiver,
+                                    selector,
+                                    caller.prelude().orElse(null))
+                            .orElseThrow(
+                                    () ->
+                                            new ProtosSignalException(
+                                                    ProtosCoreErrors.newSlotNotFound(caller)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            task.fail(ProtosCoreErrors.newError(caller));
+            return;
+        } catch (ProtosSignalException signalled) {
+            task.fail(signalled.error());
+            return;
+        }
+        executeSelectedInTaskForRuntime(receiver, selected, supplied, caller, task);
+    }
+
+    private static void executeSelectedInTaskForRuntime(
+            Object receiver,
+            ProtosSlotLookupResult selected,
+            List<?> supplied,
+            ProtosActivation caller,
+            ProtosTask task) {
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            task.fail(ProtosCoreErrors.newError(caller));
+            return;
+        }
+
+        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                ProtosBytecodeRootNode.prepareTaskOwnedSelectedCallIfBytecode(
+                        receiver,
+                        selected,
+                        supplied,
+                        caller,
+                        task);
+        if (prepared != null) {
+            ProtosBytecodeTaskExecution.executePreparedClosure(task, prepared);
+            return;
+        }
+
+        task.executeAction(
+                () -> {
+                    if (receiver instanceof ProtosClosureValue targetClosure
+                            && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                                    closure,
+                                    selected.home())) {
+                        return ProtosClosureInvoker.invokeInTask(
+                                targetClosure,
+                                supplied,
+                                caller,
+                                task);
+                    }
+                    return ProtosClosureInvoker.invokeImmediateMethodInTask(
+                            closure,
+                            receiver,
+                            selected.home(),
+                            supplied,
+                            caller,
+                            task);
+                });
     }
 
     public static Object invokeSuperMessage(

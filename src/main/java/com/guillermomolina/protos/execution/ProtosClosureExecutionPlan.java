@@ -120,6 +120,23 @@ public final class ProtosClosureExecutionPlan {
                 .lowerClosurePlan(definition);
     }
 
+    ProtosClosureExecutionPlan rebuildBytecodeForLanguage(
+            CanonicalClosure definition, ProtosLanguage language) {
+        Objects.requireNonNull(definition, "definition");
+        Objects.requireNonNull(language, "language");
+        if (bytecodePlan != null) {
+            return new ProtosClosureExecutionPlan(
+                    bytecodePlan.rebuildForLanguage(definition, language));
+        }
+        Source exactSource =
+                rootFactory.source()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Bytecode Closure projection requires exact source"));
+        return bytecode(definition, language, exactSource);
+    }
+
     Optional<ProtosLanguage> language() {
         return bytecodePlan != null
                 ? Optional.of(bytecodePlan.language())

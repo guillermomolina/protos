@@ -59,7 +59,8 @@ public final class ProtosStandardFutureProtocol {
             ProtosFutureValue result=new ProtosFutureValue(futurePrototype,domain);
             ProtosTask parent=activation.task().orElse(null);
             ProtosTask task=domain.createTask(parent,result,current ->
-                    current.executeAction(() -> ProtosClosureInvoker.invokeInTask(closure,List.of(),activation,current)));
+                    ProtosClosureInvoker.executeInTaskForRuntime(
+                            closure,List.of(),activation,current));
             result.attachProducerTask(task, activation);
             return result;
         }));
@@ -82,7 +83,8 @@ public final class ProtosStandardFutureProtocol {
                 source.removeObserver(dep);
             }
             switch(source.state()) {
-                case RESOLVED -> current.executeAction(() -> ProtosInvocation.invoke(transform,List.of(source.resolvedValue().orElseThrow()),activation));
+                case RESOLVED -> ProtosInvocation.executeInTaskForRuntime(
+                        transform,List.of(source.resolvedValue().orElseThrow()),activation,current);
                 case FAILED -> current.fail(source.failedError().orElseThrow());
                 case CANCELLED -> { current.requestCancellation(); current.observeCancellation(); }
                 case PENDING -> throw new IllegalStateException("continuation resumed before source terminal");

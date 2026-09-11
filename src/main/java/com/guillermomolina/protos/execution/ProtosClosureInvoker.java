@@ -49,6 +49,62 @@ public final class ProtosClosureInvoker {
         return invokePrepared(closure, supplied, activation);
     }
 
+    public static void executeInTaskForRuntime(
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation creator,
+            com.guillermomolina.protos.runtime.ProtosTask task) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(creator, "creator");
+        Objects.requireNonNull(task, "task");
+
+        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                ProtosBytecodeRootNode.prepareTaskOwnedDirectClosureIfBytecode(
+                        closure,
+                        supplied,
+                        creator,
+                        task);
+        if (prepared != null) {
+            ProtosBytecodeTaskExecution.executePreparedClosure(task, prepared);
+            return;
+        }
+
+        task.executeAction(
+                () -> invokeInTask(closure, supplied, creator, task));
+    }
+
+    static Object invokeImmediateMethodInTask(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            List<?> supplied,
+            ProtosActivation creator,
+            com.guillermomolina.protos.runtime.ProtosTask task) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(methodHome, "methodHome");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(creator, "creator");
+        Objects.requireNonNull(task, "task");
+
+        ProtosActivation activation =
+                task.evaluatorContinuation()
+                        .rootInvocationActivation(
+                                () ->
+                                        ProtosActivation.forImmediateMethodInvocation(
+                                                closure,
+                                                supplied,
+                                                receiver,
+                                                methodHome,
+                                                creator.prelude().orElse(null),
+                                                creator.actorModuleState(),
+                                                creator.currentModuleKey().orElse(null),
+                                                creator.executionDomain()));
+        activation.attachTask(task);
+        return invokePrepared(closure, supplied, activation);
+    }
+
     public static Object invoke(
             ProtosClosureValue closure,
             List<?> supplied,

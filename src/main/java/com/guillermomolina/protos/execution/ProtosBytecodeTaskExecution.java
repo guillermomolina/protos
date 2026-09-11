@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.Objects;
 
 /**
@@ -53,6 +54,128 @@ final class ProtosBytecodeTaskExecution {
         runSegment(
                 task,
                 () -> target.call(activation));
+    }
+
+    static void executePreparedClosure(
+            ProtosTask task,
+            ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+        Objects.requireNonNull(task, "task");
+        Objects.requireNonNull(prepared, "prepared");
+        if (prepared.isNative() || prepared.isImmediate()) {
+            throw new IllegalArgumentException(
+                    "Task-owned C-prime Closure entry requires a source-backed Bytecode call");
+        }
+        runPreparedSegment(
+                task,
+                prepared,
+                () -> prepared.bodyTarget().call(prepared.activation()));
+    }
+
+    private static void resumePreparedPublished(
+            ProtosTask task,
+            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            ContinuationResult continuation,
+            ProtosTask.WaitDependency dependency) {
+        runPreparedSegment(
+                task,
+                prepared,
+                () -> {
+                    if (task.cancellationRequested()) {
+                        return continuation.continueWith(
+                                beginCancellationTransfer(
+                                        task,
+                                        "published Task-owned Closure C-prime resume"));
+                    }
+                    if (!task.consumeResume(dependency)) {
+                        throw new IllegalStateException(
+                                "published Task-owned Closure continuation resumed without its dependency");
+                    }
+                    return continuation.continueWith(ProtosNullValue.INSTANCE);
+                });
+    }
+
+    private static void runPreparedSegment(
+            ProtosTask task,
+            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            java.util.function.Supplier<Object> segment) {
+        try {
+            Object outcome =
+                    Objects.requireNonNull(
+                            segment.get(),
+                            "Task-owned Closure C-prime segment returned null");
+            drivePreparedOutcome(task, prepared, outcome);
+        } catch (ProtosBytecodeControlTransferException bridged) {
+            try {
+                Object handled =
+                        prepared.handleControlTransfer(
+                                bridged.transfer());
+                drivePreparedOutcome(task, prepared, handled);
+            } catch (ProtosTaskCancellationException cancelled) {
+                prepared.complete();
+                finishCancellationUnwind(task);
+            } catch (ControlFlowException escaping) {
+                prepared.complete();
+                throw escaping;
+            }
+        } catch (ProtosTaskCancellationException cancelled) {
+            prepared.complete();
+            finishCancellationUnwind(task);
+        } catch (ProtosSignalException signalled) {
+            prepared.complete();
+            task.fail(signalled.error());
+        } catch (RuntimeException failure) {
+            prepared.complete();
+            throw failure;
+        } catch (Error failure) {
+            prepared.complete();
+            throw failure;
+        }
+    }
+
+    private static void drivePreparedOutcome(
+            ProtosTask task,
+            ProtosBytecodeRootNode.PreparedClosureCall prepared,
+            Object initialOutcome) {
+        Object outcome = initialOutcome;
+        while (true) {
+            if (!(outcome instanceof ContinuationResult continuation)) {
+                task.complete(prepared.finish(outcome));
+                return;
+            }
+
+            ProtosNativeSuspension leaf =
+                    nativeSuspensionLeaf(continuation);
+            ProtosTask.WaitDependency dependency =
+                    leaf.dependency();
+
+            if (!task.beginSuspensionCapture(dependency)) {
+                if (task.cancellationRequested()) {
+                    outcome =
+                            Objects.requireNonNull(
+                                    continuation.continueWith(
+                                            beginCancellationTransfer(
+                                                    task,
+                                                    "pre-publication Task-owned Closure C-prime suspension")),
+                                    "cancelled Task-owned Closure continuation returned null");
+                    continue;
+                }
+                outcome =
+                        Objects.requireNonNull(
+                                continuation.continueWith(ProtosNullValue.INSTANCE),
+                                "ready Task-owned Closure continuation returned null");
+                continue;
+            }
+
+            task.publishSuspensionContinuation(
+                    dependency,
+                    resumedTask ->
+                            resumePreparedPublished(
+                                    resumedTask,
+                                    prepared,
+                                    continuation,
+                                    dependency));
+            return;
+        }
     }
 
     private static void resumePublished(

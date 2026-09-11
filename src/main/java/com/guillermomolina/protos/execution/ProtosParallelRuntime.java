@@ -300,7 +300,7 @@ public final class ProtosParallelRuntime {
         try{
             ProtosActivation creator=s.caller.prelude().orElseThrow().newModuleActivation(
                     new ProtosActorModuleState(),null,s.caller.prelude().orElseThrow().newExecutionContext(),d);
-            ProtosTask root=d.createTask(null,t->{creator.attachTask(t);t.executeAction(()->ProtosInvocation.invoke(s.callable,s.args,creator));});
+            ProtosTask root=d.createTask(null,t->{creator.attachTask(t);ProtosInvocation.executeInTaskForRuntime(s.callable,s.args,creator,t);});
             d.dispatchUntilTerminal(root,()->{
                 Runnable helper=EXECUTOR.getQueue().poll();if(helper==null)return false;helper.run();return true;
             });

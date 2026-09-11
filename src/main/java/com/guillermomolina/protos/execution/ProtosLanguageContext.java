@@ -37,12 +37,29 @@ final class ProtosLanguageContext {
     private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
             sharedExecutionPlans = new ConcurrentHashMap<>();
 
+    /*
+     * PERF006-B6A6A1 keeps the historical AST projection cache as the B6B oracle and
+     * owns a separate C-prime projection cache. Both are Context-local and disappear
+     * with this ProtosLanguageContext; neither changes semantic Closure identity.
+     */
+    private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
+            sharedBytecodeExecutionPlans = new ConcurrentHashMap<>();
+
     ProtosLanguageContext(ProtosLanguage language, TruffleLanguage.Env env) {
         this.language = Objects.requireNonNull(language, "language");
         this.env = Objects.requireNonNull(env, "env");
     }
 
     static ProtosLanguageContext current() {
+        return REFERENCE.get(null);
+    }
+
+    static ProtosLanguageContext currentIfEnteredForRuntime() {
+        try {
+            org.graalvm.polyglot.Context.getCurrent();
+        } catch (IllegalStateException noEnteredContext) {
+            return null;
+        }
         return REFERENCE.get(null);
     }
 
@@ -54,6 +71,20 @@ final class ProtosLanguageContext {
                 template,
                 ignored ->
                         template.rebuildForLanguage(
+                                Objects.requireNonNull(
+                                        closure.definition(),
+                                        "entered Closure definition"),
+                                language));
+    }
+
+    ProtosClosureExecutionPlan bytecodeExecutionPlanForEnteredClosure(
+            ProtosClosureValue closure, ProtosClosureExecutionPlan template) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(template, "template");
+        return sharedBytecodeExecutionPlans.computeIfAbsent(
+                template,
+                ignored ->
+                        template.rebuildBytecodeForLanguage(
                                 Objects.requireNonNull(
                                         closure.definition(),
                                         "entered Closure definition"),
@@ -82,6 +113,10 @@ final class ProtosLanguageContext {
 
     int projectedExecutionPlanCountForTesting() {
         return sharedExecutionPlans.size();
+    }
+
+    int projectedBytecodeExecutionPlanCountForTesting() {
+        return sharedBytecodeExecutionPlans.size();
     }
 
     ProtosLanguage languageForRuntime() {
