@@ -697,6 +697,49 @@ In particular:
 More specific instructions may add or refine rules for their scope, but they do
 not silently discard repository-wide requirements.
 
+## GitHub connector/API repository-write safety
+<!-- GITHUB-CONNECTOR-WRITE-SAFETY -->
+
+GitHub connector/API access has two distinct roles: **read/live coordination**
+and **repository publication**. Agents MUST NOT blur those roles merely because
+the active connection has `push` or `admin` permission.
+
+Capability, permission, connectivity, existence, schema, and error-path probes
+MUST be read-only. An agent MUST NOT call repository-content or Git-ref mutation
+operations such as `create_file`, `update_file`, `delete_file`, `create_commit`,
+`update_ref`, or equivalent REST/GraphQL/connector writes merely to discover
+whether a write would succeed. In particular, NEVER create sentinel/probe
+artifacts such as `noop`, `test`, `NONEXISTENT`, `nonexistent`, empty files, or
+temporary commits in the repository.
+
+Normal Protos source, specification, test, documentation, and repository-policy
+changes MUST flow through the repository's Git publication path: materialize the
+bounded delta in an isolated branch/worktree, validate it according to its
+validation class, commit it there, re-check the publication base, and publish by
+a normal non-force Git fast-forward. Do not bypass that path by directly editing
+repository contents or moving Git refs through the GitHub connector/API.
+
+This restriction does **not** prohibit intended live GitHub coordination
+mutations governed elsewhere in this file, such as creating/updating Issues or
+Pull Requests, labels, assignees, native hierarchy/dependency relations, release
+coordination, or other non-repository-content metadata. Those operations may be
+performed when the task actually requires that exact coordination mutation; they
+MUST NOT be used as generic write-capability probes.
+
+Read-only GitHub operations may inspect repository metadata, files, commits,
+refs, checks, workflow results, Issues, Pull Requests, and other state whenever
+needed. If the available interface exposes only a mutating operation for a
+question that can be answered safely another way, use the read-only path. If
+write capability remains uncertain, **fail closed and report the limitation**;
+do not discover it by mutating the repository.
+
+If an accidental connector/API repository-content or Git-ref mutation is
+detected, stop the affected work immediately and report the exact commit/ref and
+paths changed. Do not silently hide the incident with a second cleanup commit or
+continue publication as though the mutation had not happened. Recovery must be
+an explicit bounded action that preserves enough evidence to understand what was
+changed and why.
+
 ## Native GitHub Issue hierarchy
 <!-- GITHUB006 NATIVE-ISSUE-HIERARCHY-AUTHORITY -->
 
