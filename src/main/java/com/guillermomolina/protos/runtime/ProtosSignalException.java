@@ -17,15 +17,16 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.exception.AbstractTruffleException;
 import java.util.Objects;
 import java.util.Optional;
 
-public final class ProtosSignalException extends RuntimeException {
+public final class ProtosSignalException extends AbstractTruffleException {
     private final ProtosObjectValue error;
     private ProtosDynamicControlState.Frame selectedHandlerFrame;
 
     public ProtosSignalException(ProtosObjectValue error) {
-        super(null, null, false, false);
+        super();
         this.error = Objects.requireNonNull(error, "error");
     }
 

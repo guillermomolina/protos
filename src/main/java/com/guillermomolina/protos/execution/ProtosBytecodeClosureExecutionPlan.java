@@ -218,6 +218,10 @@ final class ProtosBytecodeClosureExecutionPlan {
      */
     Object executeActivation(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
-        return activationTarget.call(activation);
+        try {
+            return activationTarget.call(activation);
+        } catch (ProtosBytecodeControlTransferException bridged) {
+            throw bridged.transfer();
+        }
     }
 }

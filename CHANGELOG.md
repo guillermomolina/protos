@@ -1,3 +1,7 @@
+## 0.2.351-SNAPSHOT
+
+- Begin `PERF006-B4 — control/unwind migration` with bounded B4A transfer substrate under ratified PLAT021 Candidate F. Make `ProtosSignalException` a Truffle guest exception while preserving the exact Protos Error occurrence and existing signal identity; classify cooperative Task cancellation alongside non-local return as a Truffle `ControlFlowException`; add a backend-private Bytecode EH envelope that carries only the exact original Protos internal control transfer; and wire the Bytecode root interception plus nested call/resume boundary restoration required for later structured cleanup. Add focused identity/category/isolation evidence. Do not yet lower canonical return or migrate `ensure`, `Error.handle`, cancellation unwind, or `while`; no Protos specification, observable semantics, public API, global/ThreadLocal control authority, or selector-specific control intrinsic changes. Implementation version becomes `0.2.351-SNAPSHOT`.
+
 ## 0.2.350-SNAPSHOT
 
 - Ratify `D068 — Exact-SHA documentation extractor execution boundary for

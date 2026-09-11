@@ -4,7 +4,9 @@
  */
 package com.guillermomolina.protos.execution;
 
-/** Host-only transfer for cooperative task cancellation unwind. */
-public final class ProtosTaskCancellationException extends RuntimeException {
-    public ProtosTaskCancellationException() { super(null, null, false, false); }
+import com.oracle.truffle.api.nodes.ControlFlowException;
+
+/** Backend-private control transfer for cooperative Task cancellation unwind. */
+public final class ProtosTaskCancellationException extends ControlFlowException {
+    public ProtosTaskCancellationException() {}
 }

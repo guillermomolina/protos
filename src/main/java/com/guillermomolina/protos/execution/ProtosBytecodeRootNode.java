@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
@@ -40,6 +41,8 @@ import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.RootNode;
@@ -65,6 +68,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosLanguage language,
             FrameDescriptor frameDescriptor) {
         super(language, frameDescriptor);
+    }
+
+    @Override
+    public Object interceptControlFlowException(
+            ControlFlowException transfer,
+            VirtualFrame frame,
+            BytecodeNode bytecodeNode,
+            int bytecodeIndex)
+            throws Throwable {
+        throw ProtosBytecodeControlTransferException.bridge(transfer);
     }
 
     /**
@@ -618,16 +631,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         RootCallTarget cachedTarget,
                 @Cached("create(cachedTarget)")
                         DirectCallNode node) {
-            return node.call(prepared.activation());
+            try {
+                return node.call(prepared.activation());
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
         }
 
         @Specialization(replaces = "direct")
         public static Object indirect(
                 PreparedClosureCall prepared,
                 @Cached IndirectCallNode node) {
-            return node.call(
-                    prepared.bodyTarget(),
-                    prepared.activation());
+            try {
+                return node.call(
+                        prepared.bodyTarget(),
+                        prepared.activation());
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
         }
     }
 
@@ -669,9 +690,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ContinuationRootNode cachedRoot,
                 @Cached("create(cachedRoot.getCallTarget())")
                         DirectCallNode node) {
-            return node.call(
-                    result.getFrame(),
-                    resumeValue);
+            try {
+                return node.call(
+                        result.getFrame(),
+                        resumeValue);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
         }
 
         @Specialization(replaces = "direct")
@@ -679,10 +704,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ContinuationResult result,
                 Object resumeValue,
                 @Cached IndirectCallNode node) {
-            return node.call(
-                    result.getContinuationCallTarget(),
-                    result.getFrame(),
-                    resumeValue);
+            try {
+                return node.call(
+                        result.getContinuationCallTarget(),
+                        result.getFrame(),
+                        resumeValue);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                throw bridged.transfer();
+            }
         }
     }
 
