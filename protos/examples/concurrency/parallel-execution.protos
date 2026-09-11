@@ -1,0 +1,84 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+// Isolated parallel execution: closure.parallel() runs the computation in a
+// fresh isolated P domain, with no implicit access to the caller's mutable
+// lexical state. Inputs cross the boundary explicitly, and the result is
+// observed through an ordinary Future.
+
+// The projected closure has no lexical edge back to the caller, so data is
+// passed as an argument rather than captured from the surrounding source.
+multiplier: 6
+
+scale: (value, factor) => {
+    value * factor
+}
+
+// parallel(...) returns a Future in the caller's execution domain; value()
+// observes it. Changing `multiplier` after this point cannot affect the
+// already-snapshotted P input.
+print(scale.parallel(7, multiplier).value())
+
+// The Array parallel algorithms are conveniences over the same isolation
+// model. Workers may run in any physical order, but every operation below is
+// deterministic across machines and schedulers.
+
+source: Array(3, 1, 4, 1, 5, 9, 2, 6)
+
+// parallelMap preserves logical source order.
+squares: source.parallelMap((value) => {
+    value * value
+})
+print(squares.value())
+
+// parallelFilter preserves source order; the predicate must answer exact
+// canonical true or false.
+evens: source.parallelFilter((value) => {
+    value.mod(2) == 0
+})
+print(evens.value())
+
+// parallelFindIndex selects the lowest matching logical index, not the
+// fastest worker, and null means no element matched.
+firstEven: source.parallelFindIndex((value) => {
+    value.mod(2) == 0
+})
+print(firstEven.value())
+
+noMatch: source.parallelFindIndex((value) => {
+    value > 100
+})
+print(noMatch.value())
+
+// parallelReduce uses one canonical logical reduction tree, so scheduling does
+// not choose the parenthesization. Do not assume sequential left-fold semantics;
+// an empty source reduces to null.
+sum: source.parallelReduce((a, b) => {
+    a + b
+})
+print(sum.value())
+
+emptySum: Array().parallelReduce((a, b) => {
+    a + b
+})
+print(emptySum.value())
+
+// parallelSort is deterministic and stable.
+sorted: source.parallelSort((a, b) => {
+    a < b
+})
+print(sorted.value())
