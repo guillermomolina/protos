@@ -1,5 +1,20 @@
 ## 0.2.357-SNAPSHOT
 
+- Ratify `PLAT023 — Async exact-execution carrier topology for Test Tool`
+  (GitHub #335) after explicit project-owner approval and exhaustive review of
+  the current Truffle implementation catalogue including Apple Pkl, plus focused
+  future-resilience, scalability and Protos-philosophy scoring. Select Candidate
+  A′: every exact execution already admitted by bundled-Protos H2B scheduling
+  receives one fresh named Java platform Thread; host Submission adds no second
+  concurrency limit or TestPlan queue, retains accepted-work custody through
+  terminal cleanup, never reuses the production Actor carrier pool, and remains
+  replaceable behind the D055 async exact-execution boundary. Preserve D069
+  `--jobs N` as logical Test Tool capacity rather than a JVM-thread count; defer
+  virtual-thread migration, OS-worker hard kill, remote transport, resources,
+  retry/sharding and CPU/NUMA tuning. Release TOOL002-H2B3 without changing
+  executable implementation, Maven implementation version, specification or
+  native boundary.
+
 - Ratify `LIB008-0 — URI reference Standard Library design` (GitHub #339)
   after explicit project-owner approval and exhaustive comparison of RFC 3986/3987/8820,
   WHATWG URL, Java, .NET, Python, Go, Rust, JavaScript/Node, Ruby, Boost.URL,

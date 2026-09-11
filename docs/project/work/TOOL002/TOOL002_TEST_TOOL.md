@@ -67,7 +67,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-E | CLOSED | E1A/E1B/E2A/E2B/E3/E4 complete the retained Package/TOML migration: bundled Protos owns planning, confined source loading, Package execution, Boolean/Error expectation policy and aggregation; duplicate Java corpus-policy ownership is removed. |
 | TOOL002-F | CLOSED | F1/F2/F3 plus the F4 cutover program are published: bundled Protos now owns all retained Future expectation policy and the complete main manifest; duplicate Java Future policy is retired. |
 | TOOL002-G | CLOSED | G1/G1A establish production-scheduler cooperative inspection; G2/G3 migrate the complete retained Actor/Group manifests into bundled-Protos Runner ownership; G4 retires the duplicate Java corpus-policy owners and reconciles closure. |
-| TOOL002-H | IN_PROGRESS | H1 proves real concurrent fresh-Process/Context hosting with private output; D055 ratifies the backend-neutral async exact-execution -> caller-domain Future contract; H2 is READY to implement the bridge and bounded Protos scheduling without selecting deferred jobs/resource/timeout policy. |
+| TOOL002-H | IN_PROGRESS | H1, H2A, H2B1 and H2B2 are closed; D055 ratifies the async exact-execution boundary; D069 ratifies public `--jobs N` logical capacity with serial default; PLAT023 ratifies fresh platform-Thread-per-admitted-execution host transport. H2B3 is READY to integrate the bounded runner into real `protos test` without selecting resources, auto-jobs, hard timeout/kill, retry or remote policy. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | After H, add explicit resource constraints/private capabilities where real external-resource sharing requires them. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | After I, integrate the final Java-first / Protos-tool-second validation pipeline. |
 
@@ -1178,3 +1178,30 @@ scope before closure.
 ## I026-A4B3 hosting reconciliation
 
 I026-A4B3 changes only the Truffle hosting representation of TOOL002's already-closed exact/fresh/captured mechanics. The exact selected unit is now handed to the child as an inert Truffle `Source`, and parsing/executable-root creation occurs only after the fresh semantic Process is bound to its own `ProtosPolyglotProcessContext`. The Test Tool driver reuses one explicit RuntimeHost/Engine while each child remains a distinct semantic Process with a distinct Context. Private streams, fresh-Process isolation, detached observation, Package Prelude selection, and all TOOL002 expectation/test policy remain unchanged.
+
+## TOOL002-H PLAT023 ratification
+
+PLAT023 is RATIFIED after explicit project-owner approval on 2026-09-11.
+Candidate A′ fixes only the production JVM/Truffle carrier for already-admitted
+same-runtime exact executions:
+
+- H2B / bundled Protos remains the sole outer admission scheduler;
+- D069 `--jobs N` remains logical Test Tool capacity and is not a Thread count;
+- each accepted exact execution gets one fresh named Java platform Thread;
+- the carrier mechanism introduces no second fixed/cached/common-pool capacity or
+  TestPlan queue;
+- accepted host work remains under facility/session custody through terminal
+  cleanup;
+- pre-start withdrawal remains best-effort and started same-runtime work is not
+  advertised as hard-preemptible;
+- caller-domain rematerialization remains unchanged;
+- the RuntimeHost Actor carrier pool is never reused for outer Test Tool work;
+- carrier identity remains non-semantic and replaceable behind
+  `ProtosAsyncExactExecutionFacility.Submission`.
+
+This releases **TOOL002-H2B3** to implement the production Submission plus real
+`protos test` bounded-runner wiring under D055 + D069 + PLAT023. H2B3 must remain
+focal-validation-only while iterating, must not broaden into TOOL002-I resource
+policy, `jobs=auto`, hard OS-worker timeout/kill, retries, sharding, remote
+transport, Actor scheduler changes or another carrier policy, and must stop if a
+new substantive semantic/architecture choice appears.
