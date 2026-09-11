@@ -546,6 +546,34 @@ public final class ProtosTask {
     }
 
     /**
+     * Begins cancellation unwind for an already-materialized C-prime continuation.
+     *
+     * <p>Unlike the legacy observation path, this entry deliberately does not
+     * terminalize the task or enter childDrain merely because no replay-owned
+     * ensure frame is visible. The suspended Bytecode continuation itself owns
+     * the active structured cleanup extents and must receive the exact control
+     * transfer first. Existing structured children still receive their one
+     * idempotent cancellation request immediately; post-cleanup child drainage
+     * remains owned by {@link #finishCancellationUnwind()}.
+     */
+    public boolean beginContinuationCancellationUnwindForRuntime() {
+        java.util.Set<ProtosTask> cancelChildren;
+        synchronized (this) {
+            if (cancellationPhase != CancellationPhase.REQUESTED || isTerminal()) {
+                return false;
+            }
+            requireState(State.RUNNING, "begin continuation cancellation unwind");
+            cancellationPhase = CancellationPhase.UNWINDING;
+            cancelChildren = Set.copyOf(children);
+        }
+
+        for (ProtosTask child : cancelChildren) {
+            child.requestCancellation();
+        }
+        return true;
+    }
+
+    /**
      * Completes an already-delivered cancellation after all crossed ensure cleanup has finished.
      *
      * <p>Any structured children still owned at this cutover, including children created while

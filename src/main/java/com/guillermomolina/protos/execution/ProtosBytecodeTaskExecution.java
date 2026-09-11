@@ -63,11 +63,10 @@ final class ProtosBytecodeTaskExecution {
                 task,
                 () -> {
                     if (task.cancellationRequested()) {
-                        if (!task.observeCancellation()) {
-                            throw new IllegalStateException(
-                                    "published C-prime cancellation was not observable");
-                        }
-                        return SegmentTerminal.CANCELLED;
+                        return continuation.continueWith(
+                                beginCancellationTransfer(
+                                        task,
+                                        "published C-prime resume"));
                     }
                     if (!task.consumeResume(dependency)) {
                         throw new IllegalStateException(
@@ -86,10 +85,15 @@ final class ProtosBytecodeTaskExecution {
                     Objects.requireNonNull(
                             segment.get(),
                             "Bytecode C-prime segment returned null");
-            if (outcome == SegmentTerminal.CANCELLED) {
+            driveOutcome(task, outcome);
+        } catch (ProtosBytecodeControlTransferException bridged) {
+            if (bridged.transfer() instanceof ProtosTaskCancellationException) {
+                finishCancellationUnwind(task);
                 return;
             }
-            driveOutcome(task, outcome);
+            throw bridged;
+        } catch (ProtosTaskCancellationException cancelled) {
+            finishCancellationUnwind(task);
         } catch (ProtosSignalException signalled) {
             task.fail(signalled.error());
         }
@@ -118,11 +122,14 @@ final class ProtosBytecodeTaskExecution {
              */
             if (!task.beginSuspensionCapture(dependency)) {
                 if (task.cancellationRequested()) {
-                    if (!task.observeCancellation()) {
-                        throw new IllegalStateException(
-                                "pre-publication C-prime cancellation was not observable");
-                    }
-                    return;
+                    outcome =
+                            Objects.requireNonNull(
+                                    continuation.continueWith(
+                                            beginCancellationTransfer(
+                                                    task,
+                                                    "pre-publication C-prime suspension")),
+                                    "cancelled C-prime continuation returned null");
+                    continue;
                 }
                 outcome =
                         Objects.requireNonNull(
@@ -156,7 +163,20 @@ final class ProtosBytecodeTaskExecution {
         return suspension;
     }
 
-    private enum SegmentTerminal {
-        CANCELLED
+    private static ProtosTaskCancellationException beginCancellationTransfer(
+            ProtosTask task,
+            String boundary) {
+        if (!task.beginContinuationCancellationUnwindForRuntime()) {
+            throw new IllegalStateException(
+                    boundary + " cancellation was not observable");
+        }
+        return new ProtosTaskCancellationException();
+    }
+
+    private static void finishCancellationUnwind(ProtosTask task) {
+        if (!task.finishCancellationUnwind()) {
+            throw new IllegalStateException(
+                    "C-prime cancellation transfer escaped without an active cancellation unwind");
+        }
     }
 }

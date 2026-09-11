@@ -922,6 +922,15 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginTryFinally(
                 () -> {
+                    /*
+                     * TryCatch is deliberately inside the generated finally.
+                     * It sees only a later transfer escaping cleanup; the
+                     * original pending cancellation is rethrown by the outer
+                     * TryFinally after this generator returns and therefore is
+                     * not mistaken for a superseding cleanup transfer.
+                     */
+                    builder.beginTryCatch();
+
                     builder.beginBlock();
                     builder.beginStoreLocal(structuredChild);
                     builder.beginLoadStructuredEnsureCleanupCall();
@@ -935,6 +944,17 @@ final class CanonicalToBytecodeLowerer {
                             childResult,
                             resumeValue);
                     builder.endBlock();
+
+                    builder.beginBlock();
+                    builder.beginSupersedeCancellationUnwindIfActive();
+                    builder.emitLoadArgument(0);
+                    builder.endSupersedeCancellationUnwindIfActive();
+                    builder.beginRethrowTruffleException();
+                    builder.emitLoadException();
+                    builder.endRethrowTruffleException();
+                    builder.endBlock();
+
+                    builder.endTryCatch();
                 });
         builder.beginBlock();
         builder.beginStoreLocal(structuredChild);

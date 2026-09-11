@@ -28,6 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosSuspensionCapableNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -535,6 +536,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class RethrowTruffleException {
+        @Specialization
+        public static void perform(AbstractTruffleException exception) {
+            throw exception;
+        }
+    }
+
+    @Operation
+    public static final class SupersedeCancellationUnwindIfActive {
+        @Specialization
+        public static void perform(ProtosActivation activation) {
+            ProtosTask task = activation.task().orElse(null);
+            if (task == null
+                    || task.cancellationPhase()
+                            != ProtosTask.CancellationPhase.UNWINDING) {
+                return;
+            }
+            if (!task.supersedeCancellationUnwind()) {
+                throw new IllegalStateException(
+                        "escaping cleanup transfer could not supersede cancellation unwind");
+            }
+        }
+    }
+
+    @Operation
     public static final class IsStructuredErrorHandlerCall {
         @Specialization
         public static boolean perform(PreparedClosureCall prepared) {
@@ -1028,10 +1054,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosNativeSuspension suspension,
                 Object resumeValue) {
             /*
-             * resumeValue is only C-prime transport through caller roots.
-             * The native descriptor already owns the state needed to finish the
-             * logical operation, so the Java native activation is not re-entered.
+             * Normal resume values are only C-prime transport through caller
+             * roots; the native descriptor owns the state needed to finish the
+             * logical operation. B4E reserves only the backend-private exact
+             * cancellation transfer as an unwind injection marker. It reaches
+             * the suspended native leaf without re-entering/re-observing the
+             * detached Future waiter, then enters the existing B4A EH bridge.
              */
+            if (resumeValue instanceof ProtosTaskCancellationException cancellation) {
+                ProtosTask task =
+                        prepared.activation().task()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "C-prime cancellation resume requires a task"));
+                if (task.cancellationPhase()
+                        != ProtosTask.CancellationPhase.UNWINDING) {
+                    throw new IllegalStateException(
+                            "C-prime cancellation resume requires UNWINDING phase");
+                }
+                throw cancellation;
+            }
             return suspension.resume();
         }
 
