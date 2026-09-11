@@ -1211,3 +1211,45 @@ it under D082 without reopening project authority.
 D085 does not decide G4 definition identity, workspace-symbol ranking/result caps,
 dependency/stdlib index scope, persistent/remote index storage, generated/virtual
 sources, LM009-H semantics, a public BSP protocol, or multi-toolchain process splitting.
+
+## LM009-G3P P1 canonical bounded source inventory
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED**
+Coordination: GitHub #373
+Authority: D082 Candidate A′ + D085 Candidate F′
+
+P1 implements only the current-source inventory half of the ratified ProjectBinding
+prerequisite. It does not create a project, package or source-set authority.
+
+Published implementation boundary:
+
+- `ProtosWorkspacePackageSourceInventory` accepts only an already-bound
+  `ProtosWorkspacePackageDirectoryIndex`; it has no workspace-folder, manifest,
+  lockfile or project-discovery input;
+- enumeration begins separately from each package root already authorized by the
+  detached canonical workspace package plan;
+- candidate files are admitted only when they are ordinary `.protos` sources whose
+  package-relative spelling forms a valid existing `ProtosPackageRuntimeNames`
+  logical module and whose exact logical-module -> source round trip succeeds through
+  `ProtosWorkspacePackageSourceLookup`;
+- the existing source lookup therefore remains the authority for exact spelling,
+  ASCII case-fold ambiguity, portable runtime names, symlink real-target confinement
+  and final regular-file validation; P1 does not reimplement those rules;
+- entries resolving outside an authorized package root are not admitted, while a
+  case-fold ambiguity or other failure of an otherwise-valid exact module round trip
+  fails the inventory snapshot closed;
+- results are immutable and deterministically ordered by PackageId then logical
+  module, suitable for later ProjectBinding snapshot construction without making
+  ordering a package semantic; and
+- no dependency/Standard Library inventory, open-document overlay, workspace-symbol
+  index/query, definition behavior, guest/Truffle execution, background daemon,
+  persistent projection/sidecar or editor-specific package model is introduced.
+
+Focused evidence covers canonical nested modules, rejection of invalid/non-module
+entries, immutable deterministic output, already-bound workspace member package
+identity, ASCII case-fold ambiguity and confinement against escaping symlink sources.
+
+`LM009-G3` remains **BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION**. P2/P3/P4 under
+GitHub #373 still own the inert ProjectBinding/projection carrier, exact candidate-root
+provider/acquisition integration and prerequisite closure. D085's explicitly deferred
+projection persistence/production mechanism is not selected by P1.
