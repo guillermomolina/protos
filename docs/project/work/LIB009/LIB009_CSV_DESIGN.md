@@ -1,6 +1,6 @@
 # LIB009 — CSV Standard Library design
 
-Status: **LIB009-0 RATIFIED — default-profile implementation slices released**
+Status: **LIB009 DEFAULT-PROFILE BASELINE CLOSED — A–E implemented; deferred extensions remain explicit**
 
 Owning work item: GitHub Issue `#346` — `LIB009 — CSV parsing, encoding and streaming`
 
@@ -543,6 +543,42 @@ input EOF / successful output `finish()` also make reuse invalid. No extra
 buffering, Encoding/BOM policy, filesystem/network convenience, cancellation
 policy, custom dialect representation, generic serializer abstraction or
 resource-limit policy is introduced by this slice.
+
+## LIB009-E default-profile baseline closure
+
+Status: **CLOSURE EVIDENCE INCLUDED — publication of this commit closes the
+ratified A–E default-profile baseline**
+
+LIB009-E adds no CSV semantics and no public slots. It closes the implementation
+baseline by exercising the already-published contracts together and by recording
+their scaling/isolation evidence.
+
+Closure evidence:
+
+- the exported module surface remains exactly `parse`, `encode`, `rowParser`,
+  `readRows` and `writeRows`;
+- eager `encode -> parse` and incremental `rowParser` agree on representative
+  exact String data including commas, doubled quotes, embedded CRLF and Unicode;
+- `writeRows` reproduces the same canonical default-profile bytes through the
+  borrowed TextWriter boundary and uses only the already-approved empty-write
+  finish barrier;
+- the streaming stress fixture processes 4096 complete rows while the consumer
+  retains only a count and validates a separate 8192-character field assembled
+  across 2048 feed calls; this is executable evidence that whole-table
+  accumulation is not compulsory for row streaming, not a benchmark or a new
+  memory guarantee;
+- the Java harness verifies the existing module-runtime invariant directly for
+  `std:csv/CSV`: repeated import within one Actor returns the same Actor-local
+  module instance, a distinct Actor receives a distinct module instance, and
+  independent `rowParser()` calls return fresh parser objects;
+- no Java production code, native boundary, filesystem/network authority,
+  Encoding/BOM selection, global dialect registry/cache/threadpool or
+  process-global mutable CSV state is added.
+
+The deliberately deferred custom-dialect public constructor/configuration
+spelling remains unresolved. Closing the default-profile baseline does not
+silently select that API or any of the other higher-level conveniences listed
+below.
 
 ## Intentionally deferred
 

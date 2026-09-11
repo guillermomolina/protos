@@ -1,3 +1,7 @@
+## 0.2.375-SNAPSHOT
+
+- Close `LIB009-E — default-profile CSV baseline closure` (GitHub #358) with integrated conformance, streaming-scale and Actor-independence evidence. Preserve the published five-slot CSV surface exactly; add no CSV production semantics. Add an end-to-end encode/parse/rowParser/writeRows fixture, a row-streaming stress fixture that consumes 4096 rows without retaining a table and assembles an 8192-character field across 2048 feeds, and Java evidence that `std:csv/CSV` module instances are Actor-local while `rowParser()` instances are fresh. Durably mark the ratified A–E default-profile baseline closed while keeping custom dialect/configuration and higher layers explicitly deferred. No `protos/lib`, `src/main`, specification or native-boundary change is included. Implementation version becomes `0.2.375-SNAPSHOT`.
+
 ## 0.2.374-SNAPSHOT
 
 - Implement `PERF006-B6A1 — read-only canonical Bytecode coverage` on the ratified C-prime backend. Add exact Bytecode lowering for ordinary member reads, identity/non-identity and `this`/`context`/`args`, including composed operands/default expressions that may suspend. Preserve AST lookup/error behavior, canonical Boolean identity results, exact activation authority and left-to-right exactly-once evaluation with no replay of completed prefixes. Do not cut over `ProtosLanguage.parse`, migrate writes/object/Closure/super forms, retire legacy replay, change specification/public API, or add optimizer-runtime wiring. Implementation version becomes `0.2.374-SNAPSHOT`.
