@@ -161,6 +161,11 @@ identifier tokens, and outside those exact structural positions the spellings
 remain ordinary identifiers/member names. In particular, D073's ordinary
 `pattern.match(subject)` selector remains ordinary member/call syntax.
 
+D095 additionally gives `exact` and `captures` contextual structural meaning
+inside match-pattern syntax; neither becomes globally reserved. `_` is wildcard
+only in pattern position. Pattern `@`, `|`, `%{` and `...` do not change ordinary
+expression/operator grammar.
+
 
 ## 3. Literals
 
@@ -649,38 +654,20 @@ expression =
       slot-creation
     | assignment
     | non-local-return
-    | binary-expression;
+    | match-expression ;
 ```
 
-### 7.1 Postfix matching-expression envelope (D093)
+### 7.1 Matching expressions and match-pattern grammar (D093/D095)
 
-D093 ratifies the **outer matching-expression grammar envelope** without
-selecting the internal grammar of a pattern.
-
-The ratified source shape is:
-
-```protos
-subjectExpression match {
-    case PATTERN => armBody
-    case PATTERN when guardExpression => armBody
-}
-```
-
-In this section, `MATCH-PATTERN` below is an explicit grammar **parameter**, not
-a Core v0.1 production selected by D093. A later separately ratified
-pattern-surface decision must replace that parameter with concrete productions
-before this envelope is implementation-complete and added to the executable
-`expression` grammar.
-
-The fixed outer schema is:
+D093 owns the outer postfix envelope. D095 completes its previous pattern
+parameter and activates the grammar normatively.
 
 ```ebnf
-match-expression-envelope =
+match-expression =
     binary-expression,
-    contextual-match-marker,
-    match-body-envelope ;
+    [ contextual-match-marker, match-body ] ;
 
-match-body-envelope =
+match-body =
     "{",
     [ newline-run ],
     match-arm-line-items,
@@ -692,131 +679,178 @@ match-arm-line-items =
     { newline-run, match-arm-line } ;
 
 match-arm-line =
-    match-arm-envelope,
-    { ";", match-arm-envelope } ;
+    match-arm,
+    { ";", match-arm } ;
 
-match-arm-envelope =
+match-arm =
     contextual-case-marker,
-    MATCH-PATTERN,
+    match-pattern,
     [ contextual-when-marker, expression ],
     "=>",
     closure-body ;
+
+match-pattern =
+    or-pattern ;
+
+or-pattern =
+    aliased-pattern,
+    { "|", aliased-pattern } ;
+
+aliased-pattern =
+      binder-alias-pattern
+    | primary-match-pattern ;
+
+binder-alias-pattern =
+    "@", identifier, ":", aliased-pattern ;
+
+primary-match-pattern =
+      binder-pattern
+    | wildcard-pattern
+    | array-pattern
+    | exact-map-pattern
+    | map-pattern
+    | parenthesized-match-pattern
+    | matcher-value-pattern, [ capture-interface ] ;
+
+binder-pattern =
+    "@", identifier ;
+
+wildcard-pattern =
+    "_" ;
+
+parenthesized-match-pattern =
+    "(", match-pattern, ")" ;
+
+matcher-value-pattern =
+    matcher-value-primary,
+    { postfix-operation } ;
+
+matcher-value-primary =
+      literal
+    | identifier
+    | intrinsic-reference ;
 ```
 
-`MATCH-PATTERN` is uppercase here specifically to distinguish the unresolved
-pattern grammar parameter from a defined EBNF nonterminal. It is not a literal
-token and does not imply that ordinary expressions, identifiers, Arrays, Maps,
-binders, OR forms, wildcards, or any other source form have already been admitted
-as patterns.
+Pattern `|` has the lowest precedence. `@name: pattern` aliases the current
+subsubject; aliasing a whole OR therefore uses parentheses:
+`@whole: (p1 | p2)`.
 
-The envelope requires at least one arm. It introduces no empty-match form.
+A matcher-value pattern is evaluated exactly once when that position is attempted
+and then participates only through D073.
 
-#### Contextual structural markers
+#### Array patterns
 
-`match`, `case`, and `when` are **not reserved words**. The lexer continues to
-recognize each spelling as an ordinary identifier token under the normal Unicode
-identifier rules.
+```ebnf
+array-pattern =
+    "[",
+    [ layout ],
+    [ array-pattern-items ],
+    [ layout ],
+    "]" ;
 
-The parser gives those identifier spellings structural meaning only at these
-positions:
+array-pattern-items =
+      array-fixed-items
+    | array-fixed-items, ",", [ layout ], array-remainder-item,
+      [ ",", [ layout ], array-fixed-items ]
+    | array-remainder-item,
+      [ ",", [ layout ], array-fixed-items ] ;
 
-- `match` immediately after the complete `binary-expression` that forms the
-  matching subject and immediately before the matching body;
-- `case` at the start of each arm inside the matching body; and
-- `when` immediately after the complete future `MATCH-PATTERN` of one arm and
-  before that arm's guard expression.
+array-fixed-items =
+    match-pattern,
+    { ",", [ layout ], match-pattern } ;
 
-Outside those exact positions they remain ordinary identifiers/member names.
-In particular:
-
-```protos
-match: value
-obj.match(subject)
-case: value
-when: value
+array-remainder-item =
+    "...",
+    [ primary-match-pattern ] ;
 ```
 
-retain ordinary identifier/member behavior wherever otherwise valid.
+At most one remainder is allowed. There is no trailing comma. Bare `...`
+discards the D084 remainder; `...nested` supplies the D084 remainder Array as the
+current subsubject to `nested`.
 
-This contextual rule does not reinterpret the already-valid ordinary-call plus
-trailing-Closure shape:
+#### Map patterns
 
-```protos
-match(subject) {
-    body()
-}
+```ebnf
+map-pattern =
+    "%", map-pattern-body ;
+
+exact-map-pattern =
+    contextual-exact-marker, "%", map-pattern-body ;
+
+map-pattern-body =
+    "{",
+    [ layout ],
+    [ map-pattern-items ],
+    [ layout ],
+    "}" ;
+
+map-pattern-items =
+      map-pattern-entry,
+      { ",", [ layout ], map-pattern-entry },
+      [ ",", [ layout ], map-remainder-item ]
+    | map-remainder-item ;
+
+map-pattern-entry =
+    binary-expression,
+    ":",
+    match-pattern ;
+
+map-remainder-item =
+    "...",
+    [ primary-match-pattern ] ;
 ```
 
-That source remains governed by the ordinary call/trailing-Closure grammar; D093
-does not steal it based on the identifier spelling `match`.
+There is no trailing comma. At most one Map remainder is permitted and it is
+final. `%{}` is open/subset by D086; `exact %{}` requires empty residue.
 
-#### Precedence and result composition
+#### Opaque matcher capture interfaces
 
-The matching envelope is lower-precedence than the existing
-`binary-expression` hierarchy: its subject is one complete `binary-expression`.
+```ebnf
+capture-interface =
+    contextual-captures-marker,
+    "(",
+    [ layout ],
+    capture-binding-items,
+    [ layout ],
+    ")" ;
 
-Thus the future concrete source:
+capture-binding-items =
+      capture-required-items,
+      [ ",", [ layout ], capture-rest-item ]
+    | capture-rest-item ;
 
-```protos
-a + b match { ... }
+capture-required-items =
+    identifier,
+    { ",", [ layout ], identifier } ;
+
+capture-rest-item =
+    "...", identifier ;
 ```
 
-has a subject equivalent to `(a + b)`.
+`captures` is contextual and consumer-side only. Names are unique and a rest
+name, if present, is final. `captures()` is not admitted.
 
-D093 does not insert the matching result back into the postfix or binary
-operator hierarchy. Source that needs to use the complete matching result as an
-operand or receiver may parenthesize it:
+#### Static binding validation
 
-```protos
-(value match { ... }).message()
+Fixed binder names are unique and linear. Every successful D090 OR branch used
+with a fixed interface must expose the same ordered logical binder-name sequence.
+
+#### Expression activation
+
+With D095 the normative executable expression grammar is:
+
+```ebnf
+expression =
+      slot-creation
+    | assignment
+    | non-local-return
+    | match-expression ;
 ```
 
-The ordinary `slot-creation`, `assignment`, and `non-local-return` expression
-categories remain outside this lower-precedence envelope and may contain the
-matching expression once the pattern grammar activates it.
+`match-expression` contains the ordinary `binary-expression` fallback, preserving
+all existing binary expressions when no contextual `match` suffix is present.
 
-#### Arm separation and body form
-
-Matching arms use the same source-line separation convention as other braced
-Protos sequences:
-
-- one or more logical newlines separate arm lines;
-- `;` separates multiple arms written on one logical line;
-- D093 adds no trailing-semicolon exception.
-
-Every arm begins with contextual `case`. The optional contextual `when` clause
-is the source attachment point for the D092 guard.
-
-The arm separator is the existing `=>` token. The syntax after it is exactly the
-already-defined `closure-body` shape:
-
-```text
-single expression
-or
-{ expression-sequence }
-```
-
-This reuse does not mean that the source text to the left of `=>` is an ordinary
-Closure parameter list. D088/MATCHING semantics define how successful captures
-become the selected arm's ordinary callable/Closure binding interface.
-
-There is no special `default` or `else` arm grammar in D093 and no fallthrough
-form. A future catch-all is expressed by a separately ratified ordinary
-irrefutable `MATCH-PATTERN`.
-
-#### Activation boundary
-
-D093 fixes this envelope so later pattern-surface work cannot silently change
-the chosen postfix shape, contextual markers, precedence, arm structure, guard
-attachment, `=>` boundary, or body form.
-
-Because D093 intentionally does not define `MATCH-PATTERN`, this revision does
-**not** yet add `match-expression-envelope` as an alternative of the executable
-`expression` production and does not authorize parser/runtime implementation.
-The later pattern-surface ratification must complete the grammar and then connect
-the resulting concrete `match-expression` to `expression` without changing this
-D093 envelope.
-
+This specification activation does not itself implement parser/runtime support.
 
 Slot creation and assignment have the lowest precedence.
 

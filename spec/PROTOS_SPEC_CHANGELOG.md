@@ -9,6 +9,24 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.406] - 2026-09-11
+
+### D095 — Match-pattern source grammar and explicit binding surface
+- Ratifies D095-A-prime and completes D093's pattern grammar parameter.
+- Bare literal/reference/call/member forms remain ordinary matcher/value patterns; bare identifiers are never implicit binders.
+- Adds contextual `@name`, `_`, `@name: pattern`, standard Array `[ ... ]`, standard Map `%{ ... }`, `exact %{ ... }`, D090 `|`, contextual remainder `...`, and consumer-side `captures(...)`.
+- Array syntax maps only to D084; Map syntax maps only to D086.
+- Map query keys evaluate once left-to-right after the D086 snapshot and before child matching; all keys resolve before mapped-value children run.
+- Fixed binders are unique/linear; fixed OR branches expose the same ordered logical binding interface.
+- `captures(...)` adds no matcher-side names/arity metadata and does not change D072/D088.
+- Activates the normative D093 matching-expression grammar in `PROTOS_GRAMMAR.md`.
+
+### Compatibility and implementation state
+- D071-D093 semantics are preserved.
+- `exact` and `captures` remain contextual, `_` remains an ordinary identifier outside pattern position, and `@`/`|` remain ordinary symbolic-operator characters outside pattern position.
+- No Pattern runtime class, registry, CaptureSignature, BindingMap, generic object inspection, or generic deconstruction protocol is introduced.
+- Parser/runtime implementation remains separate; no Java implementation or implementation-version change is included.
+
 ## [0.1.405] - 2026-09-11
 
 ### D093 — Postfix match-expression surface and lowering envelope

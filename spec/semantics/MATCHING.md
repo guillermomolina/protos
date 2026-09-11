@@ -9,13 +9,12 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.405`.
+`0.1.406`.
 D093 now fixes the outer postfix matching-expression/arm/guard envelope in
-`PROTOS_GRAMMAR.md` and §3.7 fixes its lowering onto this semantic model. This
-document still deliberately does **not** define the internal match-pattern
-grammar, which source forms denote ordinary/structural patterns, binder syntax,
-irrefutable-pattern spelling, OR spelling, exhaustivity, or the broader standard
-pattern taxonomy. Those remain unresolved until separately ratified.
+`PROTOS_GRAMMAR.md` and §3.7 fixes its lowering onto this semantic model. D095 now defines the Core v0.1 internal match-pattern grammar, binder/discard,
+Array/Map/remainder, OR, alias and opaque-matcher capture-interface source forms
+in `PROTOS_GRAMMAR.md`, with their semantic mapping in §3.8. Exhaustivity and
+optional/repetition/search families remain separately unresolved.
 
 ## 1. Scope and architectural boundary
 
@@ -1189,10 +1188,46 @@ preserve exactly-once subject evaluation, observable matcher order/count,
 effects, D090 first-success commitment, D092 guard behavior, D088 bindings,
 Error/control/cancellation/suspension and the selected result.
 
-D093 does not define concrete pattern productions, binder spelling, whole-subject
-aliases, OR spelling, irrefutable-pattern spelling, exhaustivity/redundancy,
-optional/repetition/search/backtracking patterns, Pattern reflection, or a
-dedicated no-match Error subtype.
+D095 now owns the concrete Core v0.1 pattern productions, binder/discard,
+whole-current-subject alias, OR spelling and standard Array/Map source forms.
+D093/D095 still do not define exhaustivity/redundancy, optional/repetition/search/
+backtracking families, Pattern reflection, or a dedicated no-match Error subtype.
+
+### 3.8 D095 source-pattern mapping and binding rules
+
+D095 maps the concrete source grammar to the already-ratified matching semantics.
+
+- A `matcher-value-pattern` is evaluated exactly once when attempted; the exact
+  resulting ordinary value is invoked only through D073
+  `pattern.match(currentSubject)`.
+- `@name` is irrefutable success with exactly one capture containing the current
+  subsubject.
+- `_` is irrefutable success with zero captures.
+- `@name: nested` contributes the alias capture first, then composes nested
+  captures under D083; source binding still commits only after full success.
+- `[ ... ]` is exclusively the D084 standard Array pattern. Bare remainder `...`
+  discards; `...nested` applies `nested` to the one D084 fresh frozen remainder
+  Array.
+- `%{ ... }` is exclusively the D086 normal standard Map pattern and is
+  open/subset by default. `exact %{ ... }` selects require-empty residue.
+- For one Map attempt, establish the D086 stable shallow association snapshot
+  first; then evaluate query-key binary expressions exactly once left-to-right;
+  resolve every required key against that snapshot; only after all required keys
+  resolve invoke mapped-value child matchers in source order.
+- Map query-key effects are ordinary and not rolled back, but cannot redefine
+  the already-established association snapshot.
+- Bare Map remainder `...` discards; `...nested` applies `nested` to the one
+  D086 fresh frozen remainder Map.
+- Pattern `|` is exactly D090 ordered OR. Fixed successful alternatives expose
+  the same ordered logical binder-name sequence.
+- `captures(...)` names D072 positional captures only at the source consumer
+  boundary. It sends no message, changes no matcher metadata, and follows D088
+  required/rest binding semantics.
+- Duplicate fixed binder names are invalid and never imply equality or rebinding.
+
+D095 introduces no Pattern base class, extractor registry, CaptureSignature,
+BindingMap, CaptureFrame, generic object inspection, generic positional
+deconstruction, or generic sequence/keyed deconstruction protocol.
 
 ## 4. Explicit structural deconstruction boundary
 
