@@ -897,6 +897,12 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredErrorHandlerCall", null);
         BytecodeLocal structuredHandlerChild =
                 builder.createLocal("structuredErrorHandlerChildCall", null);
+        BytecodeLocal structuredWhile =
+                builder.createLocal("structuredWhileCall", null);
+        BytecodeLocal structuredWhileChild =
+                builder.createLocal("structuredWhileChildCall", null);
+        BytecodeLocal structuredWhileConditionResult =
+                builder.createLocal("structuredWhileConditionResult", null);
 
         builder.beginIfThenElse();
 
@@ -1056,12 +1062,88 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredWhileCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredWhileCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        /* Validate the standard while receiver/body before the first condition activation. */
+        builder.beginStoreLocal(structuredWhile);
+        builder.beginPrepareStructuredWhileCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredWhileCall();
+        builder.endStoreLocal();
+
+        /*
+         * PLAT021: loop phase lives in Bytecode control state. Every logical
+         * condition/body activation is prepared fresh so each invocation owns
+         * its own activation/ReturnHome; suspension resumes at the exact loop
+         * PC without a replay checkpoint or callback compaction cursor.
+         */
+        builder.beginWhile();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredWhileChild);
+        builder.beginPrepareStructuredWhileConditionCall();
+        builder.emitLoadLocal(structuredWhile);
+        builder.endPrepareStructuredWhileConditionCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                structuredWhileConditionResult,
+                structuredWhileChild,
+                childResult,
+                resumeValue);
+        builder.beginStructuredWhileCondition();
+        builder.emitLoadLocal(structuredWhile);
+        builder.emitLoadLocal(structuredWhileConditionResult);
+        builder.endStructuredWhileCondition();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredWhileChild);
+        builder.beginPrepareStructuredWhileBodyCall();
+        builder.emitLoadLocal(structuredWhile);
+        builder.endPrepareStructuredWhileBodyCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredWhileChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

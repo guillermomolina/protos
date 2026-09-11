@@ -1,3 +1,7 @@
+## 0.2.369-SNAPSHOT
+
+- Migrate `PERF006-B4F — while` to the ratified PLAT021 C-prime control path. Preserve ordinary inherited `Object.while` lookup and implementation provenance while validating the semantic Closure receiver/body before the first condition activation; execute the canonical standard loop with Bytecode structured `While`, strict exact canonical Boolean condition results, fresh callback activations/ReturnHomes per logical iteration, ignored ordinary body results including Future values, and exact Error/non-local-return/cancellation propagation through existing structured control. Condition/body suspension resumes from Bytecode continuation state without replay checkpoints or completed-callback compaction. Retain the evaluator/replay while implementation only as the AST fallback until B6. B4G cross-product closure evidence remains separate. Implementation version becomes `0.2.369-SNAPSHOT`.
+
 ## 0.2.368-SNAPSHOT
 
 - Implement `TOOL002-H2B3 — public bounded Test Tool integration` (GitHub #95)

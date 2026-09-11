@@ -21,6 +21,7 @@ import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
@@ -284,6 +285,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final boolean ownsReturnHome;
         private final boolean structuredEnsure;
         private final boolean structuredErrorHandler;
+        private final boolean structuredWhile;
         private final boolean directControlNative;
 
         PreparedClosureCall(RootCallTarget bodyTarget, ProtosActivation activation) {
@@ -292,6 +294,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     null,
                     List.of(),
                     activation,
+                    false,
                     false,
                     false,
                     false);
@@ -304,6 +307,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 boolean structuredEnsure,
                 boolean structuredErrorHandler,
+                boolean structuredWhile,
                 boolean directControlNative) {
             this.bodyTarget = bodyTarget;
             this.nativeBody = nativeBody;
@@ -314,10 +318,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.ownsReturnHome = activation.ownsReturnHome();
             this.structuredEnsure = structuredEnsure;
             this.structuredErrorHandler = structuredErrorHandler;
+            this.structuredWhile = structuredWhile;
             this.directControlNative = directControlNative;
             int controlCapabilities =
                     (structuredEnsure ? 1 : 0)
                             + (structuredErrorHandler ? 1 : 0)
+                            + (structuredWhile ? 1 : 0)
                             + (directControlNative ? 1 : 0);
             if (controlCapabilities > 1) {
                 throw new IllegalArgumentException(
@@ -331,6 +337,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 boolean structuredEnsure,
                 boolean structuredErrorHandler,
+                boolean structuredWhile,
                 boolean directControlNative) {
             return new PreparedClosureCall(
                     null,
@@ -339,6 +346,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation,
                     structuredEnsure,
                     structuredErrorHandler,
+                    structuredWhile,
                     directControlNative);
         }
 
@@ -347,6 +355,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         boolean isNative() { return nativeBody != null; }
         boolean isStructuredEnsure() { return structuredEnsure; }
         boolean isStructuredErrorHandler() { return structuredErrorHandler; }
+        boolean isStructuredWhile() { return structuredWhile; }
 
         PreparedEnsureCall prepareStructuredEnsure() {
             if (!structuredEnsure) {
@@ -364,6 +373,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return new PreparedEnsureCall(
                     prepareDirectClosureCall(body, List.of(), activation),
                     prepareDirectClosureCall(cleanup, List.of(), activation));
+        }
+
+        PreparedWhileCall prepareStructuredWhile() {
+            if (!structuredWhile) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured while capability");
+            }
+            Object receiver = activation.receiver();
+            if (!(receiver instanceof ProtosClosureValue condition)
+                    || supplied.size() != 1
+                    || !(supplied.get(0) instanceof ProtosClosureValue body)) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            return new PreparedWhileCall(condition, body, activation);
         }
 
         PreparedErrorHandlerCall prepareStructuredErrorHandler() {
@@ -403,9 +428,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw new IllegalStateException(
                         "prepared Closure call is not native");
             }
-            if (structuredEnsure || structuredErrorHandler) {
+            if (structuredEnsure || structuredErrorHandler || structuredWhile) {
                 throw new IllegalStateException(
-                        "structured control native must execute through Bytecode EH");
+                        "structured control native must execute through Bytecode control operations");
             }
             if (activation.task().isPresent()
                     && nativeBody
@@ -456,6 +481,41 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         PreparedClosureCall body() { return body; }
         PreparedClosureCall cleanup() { return cleanup; }
+    }
+
+    static final class PreparedWhileCall {
+        private final ProtosClosureValue condition;
+        private final ProtosClosureValue body;
+        private final ProtosActivation activation;
+
+        PreparedWhileCall(
+                ProtosClosureValue condition,
+                ProtosClosureValue body,
+                ProtosActivation activation) {
+            this.condition = java.util.Objects.requireNonNull(condition, "condition");
+            this.body = java.util.Objects.requireNonNull(body, "body");
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+        }
+
+        PreparedClosureCall prepareCondition() {
+            return prepareDirectClosureCall(condition, List.of(), activation);
+        }
+
+        PreparedClosureCall prepareBody() {
+            return prepareDirectClosureCall(body, List.of(), activation);
+        }
+
+        boolean conditionResult(Object result) {
+            if (result == ProtosBooleanValue.TRUE) {
+                return true;
+            }
+            if (result == ProtosBooleanValue.FALSE) {
+                return false;
+            }
+            throw ProtosCoreErrors.signal(
+                    activation,
+                    ProtosCoreErrors.newError(activation));
+        }
     }
 
     static final class PreparedErrorHandlerCall {
@@ -532,6 +592,46 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static PreparedClosureCall perform(PreparedEnsureCall prepared) {
             return prepared.cleanup();
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredWhileCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredWhile();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredWhileCall {
+        @Specialization
+        public static PreparedWhileCall perform(PreparedClosureCall prepared) {
+            return prepared.prepareStructuredWhile();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredWhileConditionCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedWhileCall prepared) {
+            return prepared.prepareCondition();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredWhileBodyCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedWhileCall prepared) {
+            return prepared.prepareBody();
+        }
+    }
+
+    @Operation
+    public static final class StructuredWhileCondition {
+        @Specialization
+        public static boolean perform(PreparedWhileCall prepared, Object result) {
+            return prepared.conditionResult(result);
         }
     }
 
@@ -786,6 +886,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 activation,
                 ProtosStandardObjectProtocol.isStandardEnsureImplementation(targetClosure),
                 ProtosStandardErrorProtocol.isStandardHandleImplementation(targetClosure),
+                ProtosStandardObjectProtocol.isStandardWhileImplementation(targetClosure),
                 ProtosStandardErrorProtocol.isStandardSignalImplementation(targetClosure));
     }
 
@@ -894,6 +995,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         closure,
                         methodHome,
                         caller),
+                ProtosStandardObjectProtocol.isCanonicalStandardWhileSelection(
+                        closure,
+                        methodHome),
                 ProtosStandardErrorProtocol.isCanonicalStandardSignalSelection(
                         closure,
                         methodHome,
@@ -928,6 +1032,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 activation,
                 false,
                 false,
+                false,
                 false);
     }
 
@@ -956,6 +1061,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosActivation activation,
             boolean structuredEnsure,
             boolean structuredErrorHandler,
+            boolean structuredWhile,
             boolean directControlNative) {
         if (closure.nativeBody().isPresent()) {
             ProtosNativeClosureBody nativeBody =
@@ -965,6 +1071,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             instanceof ProtosSuspensionCapableNativeClosureBody)
                     && !structuredEnsure
                     && !structuredErrorHandler
+                    && !structuredWhile
                     && !directControlNative) {
                 /*
                  * PLAT019 capability is explicit. Ordinary Task-backed natives
@@ -981,9 +1088,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation,
                     structuredEnsure,
                     structuredErrorHandler,
+                    structuredWhile,
                     directControlNative);
         }
-        if (structuredEnsure || structuredErrorHandler || directControlNative) {
+        if (structuredEnsure || structuredErrorHandler || structuredWhile || directControlNative) {
             throw new IllegalStateException(
                     "structured control capability requires the canonical native implementation");
         }

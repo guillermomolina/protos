@@ -42,6 +42,10 @@ public final class ProtosStandardObjectProtocol {
             ProtosStandardObjectProtocol::ensure;
     private static final ProtosClosureValue STANDARD_ENSURE =
             ProtosClosureValue.nativeClosure(STANDARD_ENSURE_BODY);
+    private static final ProtosNativeClosureBody STANDARD_WHILE_BODY =
+            ProtosStandardObjectProtocol::whileLoop;
+    private static final ProtosClosureValue STANDARD_WHILE =
+            ProtosClosureValue.nativeClosure(STANDARD_WHILE_BODY);
 
     private ProtosStandardObjectProtocol() {}
 
@@ -62,6 +66,18 @@ public final class ProtosStandardObjectProtocol {
     static boolean isStandardEnsureImplementation(
             ProtosClosureValue closure) {
         return closure.nativeBody().orElse(null) == STANDARD_ENSURE_BODY;
+    }
+
+    static boolean isCanonicalStandardWhileSelection(
+            Object behavior,
+            ProtosObjectValue home) {
+        return behavior == STANDARD_WHILE
+                && home.isRootObject();
+    }
+
+    static boolean isStandardWhileImplementation(
+            ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_WHILE_BODY;
     }
 
     public static void install() {
@@ -157,7 +173,7 @@ public final class ProtosStandardObjectProtocol {
         if (!object.hasLocalSlot("while")) {
             object.createLocalSlot(
                     "while",
-                    ProtosClosureValue.nativeClosure(ProtosStandardObjectProtocol::whileLoop));
+                    STANDARD_WHILE);
         }
     }
 
