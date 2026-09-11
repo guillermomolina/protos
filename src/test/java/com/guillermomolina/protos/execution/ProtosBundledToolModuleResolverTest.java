@@ -69,6 +69,63 @@ final class ProtosBundledToolModuleResolverTest {
     }
 
     @Test
+    void privateSharedBootstrapUsesStableIdentityAndPreservesSelfConfinement() throws Exception {
+        Path packageRoot = toolRoot.resolve("package-root");
+        Path testRoot = toolRoot.resolve("test-root");
+        Path sharedRoot = toolRoot.resolve("shared-root");
+        writeModuleAt(packageRoot, "Main", "value: 1");
+        writeModuleAt(testRoot, "Main", "value: 2");
+        writeModuleAt(sharedRoot, "Probe", "answer: 42");
+        writeModuleAt(sharedRoot, "Helper", "name: \"shared\"");
+
+        ProtosBundledToolModuleResolver packageResolver =
+                new ProtosBundledToolModuleResolver(
+                        "package", packageRoot, sharedRoot, ProtosModuleResolver.rejecting());
+        ProtosBundledToolModuleResolver testResolver =
+                new ProtosBundledToolModuleResolver(
+                        "test", testRoot, sharedRoot, ProtosModuleResolver.rejecting());
+
+        ProtosModuleKey packageEntry = packageResolver.entryModule("Main");
+        ProtosModuleKey testEntry = testResolver.entryModule("Main");
+        ProtosModuleKey packageProbe =
+                packageResolver.resolve("tool-shared:Probe", Optional.of(packageEntry));
+        ProtosModuleKey testProbe =
+                testResolver.resolve("tool-shared:Probe", Optional.of(testEntry));
+
+        assertEquals(new ProtosModuleKey("bundled-tool-shared:Probe"), packageProbe);
+        assertEquals(packageProbe, testProbe);
+        assertEquals("answer: 42", packageResolver.loadSource(packageProbe).characters());
+        assertEquals("answer: 42", testResolver.loadSource(testProbe).characters());
+
+        ProtosModuleKey helper =
+                packageResolver.resolve("tool-shared:Helper", Optional.of(packageProbe));
+        assertEquals(new ProtosModuleKey("bundled-tool-shared:Helper"), helper);
+
+        assertThrows(
+                IOException.class,
+                () -> packageResolver.resolve("self:Helper", Optional.of(packageProbe)));
+        assertThrows(
+                IOException.class,
+                () -> packageResolver.resolve("tool-shared:Probe", Optional.empty()));
+        assertThrows(
+                IOException.class,
+                () ->
+                        packageResolver.resolve(
+                                "tool-shared:Probe",
+                                Optional.of(new ProtosModuleKey("std:collections/Array"))));
+        assertThrows(
+                IOException.class,
+                () -> packageResolver.resolve("tool-shared:probe", Optional.of(packageEntry)));
+
+        ProtosBundledToolModuleResolver unconfigured =
+                new ProtosBundledToolModuleResolver(
+                        "package", packageRoot, ProtosModuleResolver.rejecting());
+        assertThrows(
+                IOException.class,
+                () -> unconfigured.resolve("tool-shared:Probe", Optional.of(packageEntry)));
+    }
+
+    @Test
     void standardRequestsDelegateWithoutTurningStdIntoToolIdentity() throws Exception {
         ProtosModuleResolver standard =
                 new ProtosModuleResolver() {
@@ -91,6 +148,15 @@ final class ProtosBundledToolModuleResolverTest {
         ProtosModuleKey key = resolver.resolve("std:probe/Module", Optional.empty());
         assertEquals(new ProtosModuleKey("std:probe/Module"), key);
         assertEquals("value: 7", resolver.loadSource(key).characters());
+    }
+
+    private static void writeModuleAt(Path root, String logicalName, String source)
+            throws IOException {
+        Path path =
+                root.resolve(
+                        logicalName.replace('/', java.io.File.separatorChar) + ".protos");
+        Files.createDirectories(path.getParent());
+        Files.writeString(path, source, StandardCharsets.UTF_8);
     }
 
     private void writeModule(String logicalName, String source) throws IOException {

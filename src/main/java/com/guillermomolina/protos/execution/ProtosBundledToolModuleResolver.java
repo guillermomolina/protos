@@ -29,16 +29,19 @@ import java.util.Set;
 /**
  * Host resolver for one exact Protos tool bundled with the selected toolchain.
  *
- * <p>The resolver deliberately accepts only {@code self:} for tool-local modules and delegates
- * {@code std:} to the selected Standard Library resolver. It never searches project manifests,
- * lockfiles, package stores, working directories, or ambient module paths.
+ * <p>The resolver accepts {@code self:} only for tool-local modules, an explicitly configured
+ * private shared-bootstrap namespace only inside the bundled-tool/toolchain closure, and
+ * delegates {@code std:} to the selected Standard Library resolver. It never searches project
+ * manifests, lockfiles, package stores, working directories, or ambient module paths.
  *
  * <p>{@code bundled-tool:...} is an internal ModuleKey namespace, not a user-visible import
  * specifier.
  */
 public final class ProtosBundledToolModuleResolver implements ProtosModuleResolver {
     private static final String SELF_PREFIX = "self:";
+    private static final String SHARED_PREFIX = "tool-shared:";
     private static final String TOOL_KEY_PREFIX = "bundled-tool:";
+    private static final String SHARED_KEY_PREFIX = "bundled-tool-shared:";
     private static final Set<String> WINDOWS_RESERVED_SEGMENTS =
             Set.of(
                     "CON", "PRN", "AUX", "NUL",
@@ -46,16 +49,27 @@ public final class ProtosBundledToolModuleResolver implements ProtosModuleResolv
                     "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9");
 
     private final Path toolRoot;
+    private final Optional<Path> sharedRoot;
     private final String canonicalPrefix;
     private final ProtosModuleResolver standardLibraryResolver;
 
     public ProtosBundledToolModuleResolver(
             String toolName, Path toolRoot, ProtosModuleResolver standardLibraryResolver) {
+        this(toolName, toolRoot, null, standardLibraryResolver);
+    }
+
+    public ProtosBundledToolModuleResolver(
+            String toolName,
+            Path toolRoot,
+            Path sharedRoot,
+            ProtosModuleResolver standardLibraryResolver) {
         Objects.requireNonNull(toolName, "toolName");
         if (!isPortableSegment(toolName) || isWindowsReservedSegment(toolName)) {
             throw new IllegalArgumentException("invalid bundled-tool name");
         }
         this.toolRoot = Objects.requireNonNull(toolRoot, "toolRoot").toAbsolutePath().normalize();
+        this.sharedRoot =
+                Optional.ofNullable(sharedRoot).map(path -> path.toAbsolutePath().normalize());
         this.canonicalPrefix = TOOL_KEY_PREFIX + toolName + "/";
         this.standardLibraryResolver =
                 Objects.requireNonNull(standardLibraryResolver, "standardLibraryResolver");
@@ -76,6 +90,23 @@ public final class ProtosBundledToolModuleResolver implements ProtosModuleResolv
 
         if (exactSpecifier.startsWith("std:")) {
             return standardLibraryResolver.resolve(exactSpecifier, importingModule);
+        }
+        if (exactSpecifier.startsWith(SHARED_PREFIX)) {
+            Path selectedSharedRoot =
+                    sharedRoot.orElseThrow(
+                            () -> new IOException("shared bundled-tool modules unavailable"));
+            if (importingModule.isEmpty()) {
+                throw new IOException("shared bundled-tool import requires importer");
+            }
+            String importerId = importingModule.orElseThrow().canonicalId();
+            if (!importerId.startsWith(canonicalPrefix)
+                    && !importerId.startsWith(SHARED_KEY_PREFIX)) {
+                throw new IOException("shared bundled-tool import escaped toolchain closure");
+            }
+            String logicalName =
+                    requireLogicalName(exactSpecifier.substring(SHARED_PREFIX.length()));
+            sourcePath(selectedSharedRoot, logicalName);
+            return new ProtosModuleKey(SHARED_KEY_PREFIX + logicalName);
         }
         if (!exactSpecifier.startsWith(SELF_PREFIX)) {
             throw new IOException("unsupported bundled-tool module specifier");
@@ -98,19 +129,31 @@ public final class ProtosBundledToolModuleResolver implements ProtosModuleResolv
         if (canonicalId.startsWith("std:")) {
             return standardLibraryResolver.loadSource(key);
         }
+        if (canonicalId.startsWith(SHARED_KEY_PREFIX)) {
+            Path selectedSharedRoot =
+                    sharedRoot.orElseThrow(
+                            () -> new IOException("shared bundled-tool modules unavailable"));
+            String logicalName =
+                    requireLogicalName(canonicalId.substring(SHARED_KEY_PREFIX.length()));
+            return ProtosModuleSource.fromPath(key, sourcePath(selectedSharedRoot, logicalName));
+        }
         if (!canonicalId.startsWith(canonicalPrefix)) {
             throw new IOException("module is outside bundled-tool closure");
         }
 
         String logicalName =
                 requireLogicalName(canonicalId.substring(canonicalPrefix.length()));
-        Path source = sourcePath(logicalName);
+        Path source = sourcePath(toolRoot, logicalName);
         return ProtosModuleSource.fromPath(key, source);
     }
 
     private Path sourcePath(String logicalName) throws IOException {
+        return sourcePath(toolRoot, logicalName);
+    }
+
+    private static Path sourcePath(Path root, String logicalName) throws IOException {
         String[] segments = logicalName.split("/", -1);
-        Path current = toolRoot;
+        Path current = root;
         for (int i = 0; i < segments.length - 1; i++) {
             current = requireExactChild(current, segments[i], true);
         }
@@ -118,7 +161,7 @@ public final class ProtosBundledToolModuleResolver implements ProtosModuleResolv
         Path source =
                 requireExactChild(
                         current, segments[segments.length - 1] + ".protos", false);
-        Path realRoot = toolRoot.toRealPath();
+        Path realRoot = root.toRealPath();
         Path realSource = source.toRealPath();
         if (!realSource.startsWith(realRoot)) {
             throw new IOException("bundled-tool module escaped its distribution root");
