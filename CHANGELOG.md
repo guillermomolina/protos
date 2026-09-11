@@ -1,3 +1,16 @@
+## 0.2.352-SNAPSHOT
+
+- Implement `LIB007-A — gcd / lcm foundation` (GitHub #331) as the first
+  executable slice of the ratified `std:math/Integer` design. Add ordinary-Protos
+  `gcd(a,b)` with sign-normalized Euclidean reduction and `lcm(a,b)` with
+  divide-by-GCD-before-multiply, both restricted to exact unbounded ordinary Core
+  `Integer` arguments through the existing strict Integer receiver-domain gate.
+  Cover zero/sign boundaries, exact arity, fixed-width/Float/delegated-lookalike
+  rejection, exact module exports, and values beyond 64-bit range through the
+  real `std:` resolver. Add no Java production/native math bridge, specification
+  change, implicit numeric widening, `BigInteger` family, factorial/power API or
+  cryptographic guarantee. Implementation version becomes `0.2.352-SNAPSHOT`.
+
 ## 0.2.351-SNAPSHOT
 
 - Advance `TOOL002-H2` with `H2B2` complete bounded D-case scheduling. Keep
