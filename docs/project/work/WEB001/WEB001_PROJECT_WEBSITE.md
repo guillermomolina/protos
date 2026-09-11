@@ -186,6 +186,32 @@ D066 is **RATIFIED / CLOSED** at the decision level. No implementation,
 specification, Maven implementation-version, deployment or runtime change is
 included in this governance publication.
 
+<!-- D067-STDLIB-DOCUMENTATION-COVERAGE-POLICY -->
+## D067 — Standard Library documentation coverage and API-reference publication policy
+
+GitHub Issue [#326](https://github.com/guillermomolina/protos/issues/326) owns
+the remaining coverage/publication checkpoint exposed while re-deriving the
+minimum WEB001-J7B extraction path after D066.
+
+The project owner explicitly approved Candidate D on 2026-09-11. The neutral
+Standard Library documentation artifact must retain the complete mechanically
+observable importable `std:` module/top-level-slot inventory. D062 `//!` / `///`
+documentation is an independent optional fact: missing prose does not hide an
+observable slot or imply private/unsupported/unstable semantics.
+
+WEB001-J7B must visibly distinguish documented entries from undocumented
+observable entries. Missing documentation is initially reported as deterministic
+coverage rather than a build failure. No hide marker, publication manifest,
+visibility system, stability vocabulary or website-owned API authority is added.
+
+D067 therefore releases the bounded Protos-owned minimum extractor required by
+WEB001-J7B; the website remains downstream until that deterministic artifact path
+is published.
+
+D067 is **RATIFIED / CLOSED** at the decision level. No implementation,
+specification, Maven implementation-version, Standard Library semantic,
+deployment or runtime change is included in this governance publication.
+
 <!-- WEB001-F-PRODUCTION-HOSTING-ARCHITECTURE -->
 ## WEB001-F — production hosting architecture
 

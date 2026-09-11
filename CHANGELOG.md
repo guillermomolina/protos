@@ -1,5 +1,19 @@
 ## 0.2.349-SNAPSHOT
 
+- Ratify `D067 — Standard Library documentation coverage and API-reference
+  publication policy` (GitHub #326) after explicit project-owner approval of
+  Candidate D. Keep the complete mechanically observable importable `std:` module
+  and top-level-slot inventory in the neutral documentation artifact regardless
+  of authored-doc coverage; keep D062 `//!` / `///` prose as an independent
+  optional fact; present undocumented observable entries explicitly rather than
+  silently hiding them or inferring private/unsupported/unstable semantics; and
+  report deterministic missing-documentation coverage without initially making
+  it a build failure. Release only the bounded Standard-Library extractor needed
+  by WEB001-J7B, preserving D061/D062/D064/D066 and TOOL003-A while adding no
+  hide marker, publication manifest, generic package/CLI/IDE/search framework,
+  specification change, executable implementation, Maven implementation-version,
+  Standard Library semantic, deployment or runtime change.
+
 - Ratify `D066 — Documentation authority, project Wiki, and public website topology`
   (GitHub #325) after explicit project-owner approval and topology re-audit. Keep
   `guillermomolina/protos` as canonical/version-sensitive authority, reserve the

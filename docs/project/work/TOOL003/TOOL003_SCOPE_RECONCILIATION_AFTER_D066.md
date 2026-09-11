@@ -108,3 +108,51 @@ WEB001_J7B               BLOCKED until minimum extraction path is re-derived
 D061_D062_D064           RATIFIED / unchanged
 D066                     RATIFIED
 ```
+
+
+
+## D067 coverage/publication reconciliation
+
+D067 ratifies Candidate D for the remaining API-coverage question exposed by
+the post-D066 re-derivation.
+
+The minimum extractor MUST include every mechanically observable importable
+`std:` module and top-level slot in the neutral artifact. D062-authored
+documentation remains optional and independent. An entry without `//!` / `///`
+documentation is emitted with missing documentation and reported in deterministic
+coverage; it is not hidden, filtered, marked private, or treated as a build
+failure.
+
+This closes the coverage-policy prerequisite that the earlier scope
+reconciliation intentionally left deferred. The next TOOL003 implementation is
+therefore bounded to the Standard-Library-only extractor needed by WEB001-J7B:
+
+```text
+protos/lib/**/*.protos
+    excluding protos/lib/core/**
+        |
+        v
+real parser + D062 comment association
+        |
+        v
+canonical std:<logical-name> identity
+        |
+        v
+TOOL003-A / D064 deterministic JSON
+        +
+deterministic missing-doc coverage
+```
+
+No generic package `SourceUnit` API, CLI/IDE/search integration, universal
+documentation graph, hide marker, publication manifest or website renderer is
+part of this implementation slice.
+
+Updated state:
+
+```text
+TOOL003                  IN_PROGRESS — minimum extractor READY
+TOOL003_A                PUBLISHED / retained
+TOOL003_B_OLD_CANDIDATE  ABANDONED_UNPUBLISHED
+D067                     RATIFIED
+WEB001_J7B               BLOCKED until minimum extractor publication
+```
