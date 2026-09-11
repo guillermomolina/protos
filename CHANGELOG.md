@@ -1,5 +1,7 @@
 ## 0.2.354-SNAPSHOT
 
+- Ratify `PLAT022 — Context source-readability authority for physical debugger paths` (GitHub #332) after explicit project-owner approval of Candidate D′ and exhaustive Truffle/platform review covering all 16 principal implementations, the historical/experimental catalogue, Graal LSP, Polyglot filesystem machinery, Apple Pkl and mature debugger/source handling. Select one Context-local, deny-by-default read-only authority that admits only exact physical Protos Source paths already selected under D065/PLAT020; keep unrelated files denied, writes and sockets unauthorized, run/debug authority identical, virtual Sources virtual, `ProtosModuleKey`/resolution separate, and already-read characters authoritative. Release the bounded LM009-E implementation slice without changing Protos specification, executable implementation, Maven implementation version, DAP topology, editor protocol or public guest filesystem semantics.
+
 - Implement `LIB007-C — pow / powMod` (GitHub #336) on the ratified
   `std:math/Integer` surface. Add exact `pow(base,exponent)` with binary
   exponentiation and canonical `powMod(base,exponent,modulus)` with
