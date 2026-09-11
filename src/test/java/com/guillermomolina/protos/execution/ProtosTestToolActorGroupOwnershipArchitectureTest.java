@@ -91,9 +91,9 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
         String g3Fixture = Files.readString(G3_FIXTURE, StandardCharsets.UTF_8);
 
         assertTrue(main.contains("actorPlan: Manifest.load(actorFilesystem)"));
-        assertTrue(main.contains("actorRun: Runner.runSimple("));
+        assertTrue(main.contains("actorRun: Runner.runBounded("));
         assertTrue(main.contains("groupPlan: Manifest.load(groupFilesystem)"));
-        assertTrue(main.contains("groupRun: Runner.runSimple("));
+        assertTrue(main.contains("groupRun: Runner.runBounded("));
         assertTrue(runner.contains("(kind === \"future-integer-one-of\").ifTrue"));
 
         assertTrue(
