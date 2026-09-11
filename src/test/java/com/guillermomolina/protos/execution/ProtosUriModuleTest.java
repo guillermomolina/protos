@@ -30,14 +30,14 @@ import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** Real-std conformance harness for LIB008-A strict RFC 3986 URI parsing. */
+/** Real-std conformance harness for LIB008-A/B URI parsing and formatting. */
 final class ProtosUriModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path CASE_ROOT = Path.of("protos", "tests", "library", "uri");
 
     @Test
-    void importedModuleExportsExactlyParseAtAStage() throws Exception {
+    void importedModuleExportsExactlyParseAndFormatAtBStage() throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -48,7 +48,7 @@ final class ProtosUriModuleTest {
                         .call(prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
-        assertEquals(Set.of("parse"), module.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("parse", "format"), module.localSlotsSnapshot().keySet());
     }
 
     @Test
@@ -69,6 +69,21 @@ final class ProtosUriModuleTest {
     @Test
     void arityAndStringDomainFailClosed() throws Exception {
         assertFixture("arity-domain-rejection.protos");
+    }
+
+    @Test
+    void formatRoundTripConforms() throws Exception {
+        assertFixture("format-roundtrip.protos");
+    }
+
+    @Test
+    void callerConstructedComponentDataFormatsExactly() throws Exception {
+        assertFixture("format-constructed.protos");
+    }
+
+    @Test
+    void malformedFormatInputsFailClosed() throws Exception {
+        assertFixture("format-invalid.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {

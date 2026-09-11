@@ -570,3 +570,127 @@ parse: (text) => {
 
     reference.freeze()
 }
+
+/// Serializes one validated seven-component RFC 3986 URI-reference record.
+format: (reference) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    // These ordinary lookups intentionally define the structural input boundary:
+    // a caller may construct compatible data; no Uri prototype/class is required.
+    schemeValue: reference.scheme
+    userInfoValue: reference.userInfo
+    hostValue: reference.host
+    portValue: reference.port
+    pathValue: reference.path
+    queryValue: reference.query
+    fragmentValue: reference.fragment
+
+    output: Encoding.UTF8.encode("")
+
+    appendText: (value) => {
+        // Encoding.UTF8 has the strict semantic String argument domain required
+        // here and produces fresh Bytes without adding authority.
+        encoded: Encoding.UTF8.encode(value)
+        index: 0
+        (() => index < encoded.size()).while() {
+            output.add(encoded[index])
+            index = index + 1
+        }
+    }
+
+    validateOptionalText: (value) => {
+        (value === null).ifFalse(() => {
+            ignoredValidation: Encoding.UTF8.encode(value)
+        })
+    }
+
+    validateOptionalText(schemeValue)
+    validateOptionalText(userInfoValue)
+    validateOptionalText(hostValue)
+    validateOptionalText(portValue)
+    ignoredPathValidation: Encoding.UTF8.encode(pathValue)
+    validateOptionalText(queryValue)
+    validateOptionalText(fragmentValue)
+
+    // Authority presence is represented only by host presence. There is no
+    // second raw-authority source of truth.
+    (hostValue === null).ifTrue(() => {
+        (userInfoValue !== null).ifTrue(() => {
+            fail()
+        })
+        (portValue !== null).ifTrue(() => {
+            fail()
+        })
+    })
+
+    (schemeValue !== null).ifTrue(() => {
+        appendText(schemeValue)
+        output.add(58)
+    })
+
+    (hostValue !== null).ifTrue(() => {
+        output.add(47)
+        output.add(47)
+
+        (userInfoValue !== null).ifTrue(() => {
+            appendText(userInfoValue)
+            output.add(64)
+        })
+
+        appendText(hostValue)
+
+        (portValue !== null).ifTrue(() => {
+            output.add(58)
+            appendText(portValue)
+        })
+    })
+
+    appendText(pathValue)
+
+    (queryValue !== null).ifTrue(() => {
+        output.add(63)
+        appendText(queryValue)
+    })
+
+    (fragmentValue !== null).ifTrue(() => {
+        output.add(35)
+        appendText(fragmentValue)
+    })
+
+    candidate: Encoding.UTF8.decode(output)
+
+    // Keep one RFC-3986 syntax authority: parse the exact serialized candidate
+    // and require lossless recovery of every supplied component. This catches
+    // malformed component spelling, delimiter ambiguity, raw non-ASCII input,
+    // invalid scheme/path relations, malformed percent escapes and invalid
+    // authority syntax without maintaining a second grammar inside format().
+    parsed: parse(candidate)
+
+    sameOptionalText: (actual, expected) => {
+        same: false
+
+        (expected === null).ifTrue(() => {
+            same = actual === null
+        })
+
+        (expected !== null).ifTrue(() => {
+            (actual !== null).ifTrue(() => {
+                same = actual == expected
+            })
+        })
+
+        same
+    }
+
+    sameOptionalText(parsed.scheme, schemeValue).ifFalse(() => { fail() })
+    sameOptionalText(parsed.userInfo, userInfoValue).ifFalse(() => { fail() })
+    sameOptionalText(parsed.host, hostValue).ifFalse(() => { fail() })
+    sameOptionalText(parsed.port, portValue).ifFalse(() => { fail() })
+    (parsed.path == pathValue).ifFalse(() => { fail() })
+    sameOptionalText(parsed.query, queryValue).ifFalse(() => { fail() })
+    sameOptionalText(parsed.fragment, fragmentValue).ifFalse(() => { fail() })
+
+    candidate
+}

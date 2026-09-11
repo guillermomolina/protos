@@ -1,0 +1,80 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Uri: import("std:uri")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+relative: {
+    scheme: null
+    userInfo: null
+    host: null
+    port: null
+    path: "a/b"
+    query: null
+    fragment: null
+}
+require(Uri.format(relative) == "a/b")
+
+authority: {
+    scheme: "HTTP"
+    userInfo: ""
+    host: "Example.COM"
+    port: ""
+    path: "/%7e"
+    query: ""
+    fragment: "Frag"
+}
+require(Uri.format(authority) == "HTTP://@Example.COM:/%7e?#Frag")
+
+allEmptyPresent: {
+    scheme: "x"
+    userInfo: ""
+    host: ""
+    port: ""
+    path: ""
+    query: ""
+    fragment: ""
+}
+require(Uri.format(allEmptyPresent) == "x://@:?#")
+
+literal: {
+    scheme: null
+    userInfo: null
+    host: "[v1.fe80::a]"
+    port: "00080"
+    path: "/p"
+    query: "q=%2f"
+    fragment: null
+}
+require(Uri.format(literal) == "//[v1.fe80::a]:00080/p?q=%2f")
+
+// format validates structural compatibility, not provenance from parse().
+mutableCallerData: {
+    scheme: "custom"
+    userInfo: null
+    host: null
+    port: null
+    path: "payload"
+    query: null
+    fragment: null
+}
+require(Uri.format(mutableCallerData) == "custom:payload")
+
+true
