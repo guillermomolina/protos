@@ -9,6 +9,23 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.397] - 2026-09-11
+
+### D080 — No generic positional subject-deconstruction protocol
+- Ratifies that Core v0.1 does not require arbitrary objects to expose a universal positional logical view or generic subject-side positional deconstruction protocol.
+- D075 `deconstructFields(...names)` remains the generic subject-side object structural protocol; domain-specific positional extraction remains pattern-owned through ordinary `pattern.match(subject)` and D072 captures.
+- Intrinsically ordered values remain under their own collection/indexing or future sequence/tuple-like semantics; no positional order is inferred from slots, delegation, declaration order, D075 name order, indexed state, prototype ancestry, or host representation.
+- No required `deconstruct()`, `deconstructPositions`, `componentN`, ordered positional-schema metadata, dedicated positional-view object, or request-polymorphic deconstruction selector is introduced.
+- A future opt-in positional subject protocol remains possible only through a separate explicit decision backed by ecosystem evidence.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D080 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075 and D078 matcher/named structural semantics remain unchanged.
+- D079 nested-capture composition is neither changed nor resolved by this publication slice.
+- Concrete match grammar, named bindings, literal/equality patterns, guards, exhaustivity, Map/sequence remainder semantics, future sequence/tuple pattern syntax, and recognition-only fast paths remain unresolved.
+- No grammar, parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D081 and later matching-design checkpoints are excluded.
+
 ## [0.1.396] - 2026-09-11
 
 ### D078 — Open/subset named-object structural matching

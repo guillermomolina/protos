@@ -9,7 +9,7 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.396`.
+`0.1.397`.
 It deliberately does **not** define concrete matching-expression grammar,
 case/arm/default syntax, literal-pattern semantics, guards, exhaustivity,
 standard pattern taxonomy, nested-capture flattening, or named-binding syntax.
@@ -251,7 +251,12 @@ Core v0.1 by standardizing **open/subset matching without generic remainder
 capture**. This does not add a special full-view argument, sentinel, or mode to
 `deconstructFields`, and it does not add a second complete-view authority.
 
-A universal positional subject-deconstruction protocol remains unresolved.
+D080 resolves the generic positional subject-deconstruction question for
+Core v0.1: arbitrary objects do **not** acquire a universal positional product
+layout or a required subject-side positional deconstruction protocol. Positional
+domain extraction remains available through pattern-owned `match(subject)`, and
+intrinsically ordered values remain governed by their own collection/indexing
+semantics.
 
 ### 5.5 Open/subset named-object matching
 
@@ -287,6 +292,49 @@ separate explicit decision backed by concrete use evidence. Such a facility must
 not silently redefine the D075 selective projection contract or make existing
 open/subset patterns observe newly added logical fields.
 
+### 5.6 Positional subject-deconstruction boundary
+
+Core v0.1 does **not** require arbitrary objects to expose a generic positional logical-deconstruction protocol.
+
+The generic subject-side structural protocol for ordinary record/object-like
+matching remains the named selective D075 operation:
+
+```text
+subject.deconstructFields(...names)
+```
+
+D080 introduces no required `deconstruct()`, `deconstructPositions`,
+`componentN`, ordered positional-schema metadata, dedicated positional-view
+object, or request-polymorphic deconstruction selector.
+
+No positional order is inferred from local slots, delegated members, source or
+declaration order, D075 request/name order, indexed state, prototype ancestry,
+host representation, or another reflective property. Adding or reordering
+ordinary implementation state therefore cannot silently alter a subject's
+generic positional matching contract, because Core defines no such contract.
+
+This boundary does not remove positional extraction from the language.
+A domain-specific pattern may use the already-ratified
+`pattern.match(subject)` authority and return ordinary D072 positional captures.
+Different patterns may therefore expose different legitimate domain views of
+the same subject without forcing the subject to choose one universal component
+ordering.
+
+Likewise, Array and other intrinsically ordered or future sequence/tuple-like
+values remain governed by their own collection/indexing semantics. D080 does
+not reclassify indexed contents as generic object fields and does not select
+future sequence-pattern syntax.
+
+An object or library may expose an ordinary domain API whose values have
+positional meaning. D080 only declines to elevate one such convention into a
+required generic matching protocol for arbitrary objects.
+
+A future opt-in subject-side positional protocol may be considered only by a
+separate explicit decision backed by ecosystem evidence that a shared positional
+contract provides independent value beyond pattern-owned extraction and
+collection semantics. Such a future protocol must not silently derive order
+from D075 named projection or redefine existing matching behavior.
+
 ## 6. Effects, ordering, and implementation freedom
 
 Matching protocols are ordinary Protos behavior and may therefore have ordinary
@@ -317,7 +365,6 @@ This revision intentionally does not select:
 - named capture/binding syntax;
 - collection-specific Map/sequence remainder semantics;
 - whole-subject alias/binding syntax and semantics;
-- a universal positional subject-deconstruction protocol; or
 - a recognition-only matcher fast path.
 
 Until those questions are separately ratified, implementations and libraries
