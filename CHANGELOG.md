@@ -1,3 +1,16 @@
+## 0.2.376-SNAPSHOT
+
+- Implement `LM009-G1 — parser-derived static diagnostics` (GitHub #360) on the
+  published LM009-F service foundation. Publish exactly the real parser failure
+  for each current immutable open-document snapshot through standard LSP push
+  diagnostics, map existing UTF-16 `SourceSpan` offsets to LSP ranges without a
+  second parser, tag diagnostics with the exact LSP document version, clear them
+  on successful reparse and document close, and discard results already stale at
+  the F2 snapshot check. Add focused UTF-16/CRLF range and lifecycle coverage.
+  Introduce no workspace/module inference, guest execution, TypeScript semantic
+  model, symbol/definition policy or LM009-H feature. Implementation version
+  becomes `0.2.376-SNAPSHOT`.
+
 ## 0.2.375-SNAPSHOT
 
 - Close `LIB009-E — default-profile CSV baseline closure` (GitHub #358) with integrated conformance, streaming-scale and Actor-independence evidence. Preserve the published five-slot CSV surface exactly; add no CSV production semantics. Add an end-to-end encode/parse/rowParser/writeRows fixture, a row-streaming stress fixture that consumes 4096 rows without retaining a table and assembles an 8192-character field across 2048 feeds, and Java evidence that `std:csv/CSV` module instances are Actor-local while `rowParser()` instances are fresh. Durably mark the ratified A–E default-profile baseline closed while keeping custom dialect/configuration and higher layers explicitly deferred. No `protos/lib`, `src/main`, specification or native-boundary change is included. Implementation version becomes `0.2.375-SNAPSHOT`.

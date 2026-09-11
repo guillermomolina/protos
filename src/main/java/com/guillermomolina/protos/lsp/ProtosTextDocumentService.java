@@ -19,6 +19,7 @@ package com.guillermomolina.protos.lsp;
 
 import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
+import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -26,24 +27,29 @@ import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
+import org.eclipse.lsp4j.Diagnostic;
+import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentItem;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
+import org.eclipse.lsp4j.services.LanguageClient;
 import org.eclipse.lsp4j.services.TextDocumentService;
 
 /**
  * LSP document-synchronization adapter.
  *
  * <p>The adapter keeps all currently open editor buffers in one server-local
- * custody domain because F3 performs no cross-document semantic resolution.
- * The domain is not a Protos workspace/package/module authority. LM009-G may
- * introduce real workspace/project mapping only through the canonical Protos
- * resolution authorities.</p>
+ * custody domain. G1 parses only each exact immutable buffer snapshot and emits
+ * parser-derived diagnostics. The domain is still not a Protos
+ * workspace/package/module authority; later G slices may introduce mapping only
+ * through canonical Protos resolution authorities.</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
 
     private final ProtosStaticAnalysisSession session;
+    private volatile LanguageClient client;
 
     ProtosTextDocumentService(ProtosStaticAnalysisSession session) {
         this.session = Objects.requireNonNull(session, "session");
@@ -63,6 +69,7 @@ final class ProtosTextDocumentService implements TextDocumentService {
         session.putDocument(
                 OPEN_DOCUMENTS_DOMAIN,
                 new ProtosDocumentSnapshot(uri, version.longValue(), text));
+        publishCurrentDiagnostics(uri);
     }
 
     @Override
@@ -90,6 +97,7 @@ final class ProtosTextDocumentService implements TextDocumentService {
         session.putDocument(
                 OPEN_DOCUMENTS_DOMAIN,
                 new ProtosDocumentSnapshot(uri, version.longValue(), text));
+        publishCurrentDiagnostics(uri);
     }
 
     @Override
@@ -99,6 +107,7 @@ final class ProtosTextDocumentService implements TextDocumentService {
                 Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
                 "textDocument.uri");
         session.closeDocument(OPEN_DOCUMENTS_DOMAIN, uri);
+        publishDiagnostics(uri, null, List.of());
     }
 
     @Override
@@ -106,6 +115,67 @@ final class ProtosTextDocumentService implements TextDocumentService {
         Objects.requireNonNull(params, "params");
         // Save notifications are not advertised by F3 and carry no additional
         // foundation behavior if a client sends one defensively.
+    }
+
+    void connect(LanguageClient client) {
+        this.client = Objects.requireNonNull(client, "client");
+    }
+
+    private void publishCurrentDiagnostics(String documentUri) {
+        LanguageClient currentClient = client;
+        if (currentClient == null) {
+            return;
+        }
+
+        Optional<ProtosStaticParseResult> parsed =
+                session.parseCurrent(OPEN_DOCUMENTS_DOMAIN, documentUri);
+        if (parsed.isEmpty() || !session.isCurrent(OPEN_DOCUMENTS_DOMAIN, parsed.get())) {
+            return;
+        }
+
+        ProtosStaticParseResult result = parsed.get();
+        List<Diagnostic> diagnostics;
+        if (result instanceof ProtosStaticParseResult.Failed failure) {
+            Diagnostic diagnostic = new Diagnostic();
+            diagnostic.setRange(ProtosLspSourcePositions.range(
+                    result.snapshot().characters(),
+                    failure.span()));
+            diagnostic.setSeverity(DiagnosticSeverity.Error);
+            diagnostic.setSource("protos");
+            diagnostic.setMessage(failure.message());
+            diagnostics = List.of(diagnostic);
+        } else {
+            diagnostics = List.of();
+        }
+
+        publishDiagnostics(
+                documentUri,
+                Math.toIntExact(result.snapshot().version()),
+                diagnostics,
+                currentClient);
+    }
+
+    private void publishDiagnostics(
+            String documentUri,
+            Integer version,
+            List<Diagnostic> diagnostics) {
+        LanguageClient currentClient = client;
+        if (currentClient == null) {
+            return;
+        }
+        publishDiagnostics(documentUri, version, diagnostics, currentClient);
+    }
+
+    private static void publishDiagnostics(
+            String documentUri,
+            Integer version,
+            List<Diagnostic> diagnostics,
+            LanguageClient currentClient) {
+        PublishDiagnosticsParams params = new PublishDiagnosticsParams();
+        params.setUri(documentUri);
+        params.setVersion(version);
+        params.setDiagnostics(diagnostics);
+        currentClient.publishDiagnostics(params);
     }
 
     Optional<ProtosDocumentSnapshot> currentSnapshot(String documentUri) {

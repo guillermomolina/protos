@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G READY**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1 CLOSED)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1025,3 +1025,32 @@ LM009-F is therefore **CLOSED**. F1/F2/F3/F4 plus the real editor lifecycle and
 document-sync composition satisfy the foundation target without claiming any
 LM009-G/H static feature semantics. **LM009-G is READY** to own diagnostics,
 symbols and definition behavior.
+
+## LM009-G1 parser-derived static diagnostics
+
+Status: **CLOSED**
+
+G1 consumes the published F1/F2/F3/F4 foundation without selecting new Protos
+semantics or workspace/module identity rules.
+
+Published boundary:
+
+- each `didOpen` / full `didChange` snapshot is parsed through the existing
+  `ProtosStaticAnalysisSession` and real `ProtosParser`;
+- a real `ProtosStaticParseResult.Failed` becomes one LSP `Error` diagnostic with
+  the parser message and exact existing `SourceSpan`;
+- source offsets are mapped as UTF-16, matching both the parser's Java-string
+  offset model and the LSP default position encoding, with CRLF treated as one
+  logical line break;
+- successful reparsing publishes an empty diagnostic set for that document and
+  close clears diagnostics without inventing another document version;
+- published open/change diagnostics carry the exact LSP document version, and a
+  result already stale at the F2 snapshot freshness check is not published;
+- no background worker, Truffle Context, guest execution, editor-side parser,
+  filesystem-path inference or module/package authority is added.
+
+G1 intentionally does not define document/workspace symbol policy or definition
+identity. `LM009-G` remains **IN_PROGRESS** and G2 owns the next document-symbol
+audit/implementation boundary. If G2 exposes symbol-ownership or naming semantics
+that are not already determined by the real source model, it stops at the normal
+Dxxx/PLATxxx gate.

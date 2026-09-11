@@ -36,9 +36,9 @@ import org.eclipse.lsp4j.services.WorkspaceService;
 /**
  * Thin LSP lifecycle/protocol edge over the editor-neutral static-analysis core.
  *
- * <p>This class deliberately advertises only full open/change/close document
- * synchronization. LM009-G/H own diagnostics, symbols, definition, completion,
- * hover, signature help and references.</p>
+ * <p>This class retains the LM009-F full document-synchronization boundary.
+ * LM009-G1 adds parser-derived push diagnostics; later LM009-G/H slices own
+ * symbols, definition, completion, hover, signature help and references.</p>
  */
 public final class ProtosLanguageServer implements LanguageServer, LanguageClientAware {
     private final ProtosStaticAnalysisSession analysisSession;
@@ -91,9 +91,7 @@ public final class ProtosLanguageServer implements LanguageServer, LanguageClien
 
     @Override
     public void connect(LanguageClient client) {
-        Objects.requireNonNull(client, "client");
-        // F3 has no server->client feature notifications yet. LM009-G may retain
-        // this proxy when diagnostics become an approved published capability.
+        textDocumentService.connect(Objects.requireNonNull(client, "client"));
     }
 
     ProtosTextDocumentService textDocuments() {
