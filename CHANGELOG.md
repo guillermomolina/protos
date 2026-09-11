@@ -1,3 +1,7 @@
+## 0.2.357-SNAPSHOT
+
+- Migrate `PERF006-B4C — structured ensure` to the ratified PLAT021 C-prime control path. Preserve ordinary `Object.ensure` lookup/provenance while executing the canonical standard implementation as Bytecode `TryFinally`: validation precedes protected-extent entry, suspension is not unwind, body and cleanup may suspend without replay, normal completion preserves the exact body result, pending Error/non-local-return identity survives cleanup suspension, and a later cleanup transfer supersedes the earlier exit. Keep the evaluator/replay implementation as the AST fallback until B6; Error-handler crossing, cancellation unwind, and `while` migration remain B4D/B4E/B4F. Implementation version becomes `0.2.357-SNAPSHOT`.
+
 ## 0.2.356-SNAPSHOT
 
 - Implement the LM009-E D065 / PLAT020 / PLAT022 physical-source correction.

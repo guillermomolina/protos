@@ -258,16 +258,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final ProtosActivation activation;
         private final ProtosReturnHome returnHome;
         private final boolean ownsReturnHome;
+        private final boolean structuredEnsure;
 
         PreparedClosureCall(RootCallTarget bodyTarget, ProtosActivation activation) {
-            this(java.util.Objects.requireNonNull(bodyTarget, "bodyTarget"), null, List.of(), activation);
+            this(
+                    java.util.Objects.requireNonNull(bodyTarget, "bodyTarget"),
+                    null,
+                    List.of(),
+                    activation,
+                    false);
         }
 
         private PreparedClosureCall(
                 RootCallTarget bodyTarget,
                 ProtosNativeClosureBody nativeBody,
                 List<?> supplied,
-                ProtosActivation activation) {
+                ProtosActivation activation,
+                boolean structuredEnsure) {
             this.bodyTarget = bodyTarget;
             this.nativeBody = nativeBody;
             this.supplied = List.copyOf(supplied);
@@ -275,22 +282,53 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.returnHome = activation.returnHome().orElseThrow(
                     () -> new IllegalStateException("Closure invocation requires a return home"));
             this.ownsReturnHome = activation.ownsReturnHome();
+            this.structuredEnsure = structuredEnsure;
         }
 
         static PreparedClosureCall nativeCall(
                 ProtosNativeClosureBody nativeBody,
                 List<?> supplied,
-                ProtosActivation activation) {
-            return new PreparedClosureCall(null, java.util.Objects.requireNonNull(nativeBody, "nativeBody"), supplied, activation);
+                ProtosActivation activation,
+                boolean structuredEnsure) {
+            return new PreparedClosureCall(
+                    null,
+                    java.util.Objects.requireNonNull(nativeBody, "nativeBody"),
+                    supplied,
+                    activation,
+                    structuredEnsure);
         }
 
         RootCallTarget bodyTarget() { return bodyTarget; }
         ProtosActivation activation() { return activation; }
         boolean isNative() { return nativeBody != null; }
+        boolean isStructuredEnsure() { return structuredEnsure; }
+
+        PreparedEnsureCall prepareStructuredEnsure() {
+            if (!structuredEnsure) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured ensure capability");
+            }
+            Object receiver = activation.receiver();
+            if (!(receiver instanceof ProtosClosureValue body)
+                    || supplied.size() != 1
+                    || !(supplied.get(0) instanceof ProtosClosureValue cleanup)) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            return new PreparedEnsureCall(
+                    prepareDirectClosureCall(body, activation),
+                    prepareDirectClosureCall(cleanup, activation));
+        }
+
         Object enterNative() {
             if (nativeBody == null) {
                 throw new IllegalStateException(
                         "prepared Closure call is not native");
+            }
+            if (structuredEnsure) {
+                throw new IllegalStateException(
+                        "structured ensure must execute through Bytecode TryFinally");
             }
             if (activation.task().isPresent()
                     && nativeBody
@@ -305,6 +343,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation,
                     supplied);
         }
+
         Object handleControlTransfer(ControlFlowException transfer) {
             if (transfer instanceof ProtosNonLocalReturnException nonLocalReturn
                     && ownsReturnHome
@@ -314,9 +353,71 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             throw transfer;
         }
+
+        void complete() {
+            if (ownsReturnHome && returnHome.isActive()) {
+                returnHome.complete();
+            }
+        }
+
         Object finish(Object result) {
-            if (ownsReturnHome && returnHome.isActive()) returnHome.complete();
+            complete();
             return result;
+        }
+    }
+
+    static final class PreparedEnsureCall {
+        private final PreparedClosureCall body;
+        private final PreparedClosureCall cleanup;
+
+        PreparedEnsureCall(
+                PreparedClosureCall body,
+                PreparedClosureCall cleanup) {
+            this.body = java.util.Objects.requireNonNull(body, "body");
+            this.cleanup = java.util.Objects.requireNonNull(cleanup, "cleanup");
+        }
+
+        PreparedClosureCall body() { return body; }
+        PreparedClosureCall cleanup() { return cleanup; }
+    }
+
+    @Operation
+    public static final class IsStructuredEnsureCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredEnsure();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredEnsureCall {
+        @Specialization
+        public static PreparedEnsureCall perform(PreparedClosureCall prepared) {
+            return prepared.prepareStructuredEnsure();
+        }
+    }
+
+    @Operation
+    public static final class LoadStructuredEnsureBodyCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedEnsureCall prepared) {
+            return prepared.body();
+        }
+    }
+
+    @Operation
+    public static final class LoadStructuredEnsureCleanupCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedEnsureCall prepared) {
+            return prepared.cleanup();
+        }
+    }
+
+    @Operation
+    public static final class CompleteClosureCall {
+        @Specialization
+        public static void perform(PreparedClosureCall prepared) {
+            prepared.complete();
         }
     }
 
@@ -493,7 +594,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return finishPreparingComposedCall(
                 targetClosure,
                 supplied,
-                activation);
+                activation,
+                ProtosStandardObjectProtocol.isStandardEnsureImplementation(
+                        targetClosure));
     }
 
     @Operation
@@ -590,7 +693,35 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         attachTaskOrInheritDynamicControlState(
                 activation,
                 caller);
-        return finishPreparingComposedCall(closure, supplied, activation);
+        return finishPreparingComposedCall(
+                closure,
+                supplied,
+                activation,
+                ProtosStandardObjectProtocol.isCanonicalStandardEnsureSelection(
+                        closure,
+                        methodHome));
+    }
+
+    private static PreparedClosureCall prepareDirectClosureCall(
+            ProtosClosureValue closure,
+            ProtosActivation caller) {
+        rejectComposedInvocationProjection(closure);
+        ProtosActivation activation =
+                ProtosActivation.forClosureInvocation(
+                        closure,
+                        List.of(),
+                        caller.prelude().orElse(null),
+                        caller.actorModuleState(),
+                        caller.currentModuleKey().orElse(null),
+                        caller.executionDomain());
+        attachTaskOrInheritDynamicControlState(
+                activation,
+                caller);
+        return finishPreparingComposedCall(
+                closure,
+                List.of(),
+                activation,
+                false);
     }
 
     private static void attachTaskOrInheritDynamicControlState(
@@ -613,25 +744,35 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     private static PreparedClosureCall finishPreparingComposedCall(
-            ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation activation,
+            boolean structuredEnsure) {
         if (closure.nativeBody().isPresent()) {
             ProtosNativeClosureBody nativeBody =
                     closure.nativeBody().orElseThrow();
             if (activation.task().isPresent()
                     && !(nativeBody
-                            instanceof ProtosSuspensionCapableNativeClosureBody)) {
+                            instanceof ProtosSuspensionCapableNativeClosureBody)
+                    && !structuredEnsure) {
                 /*
                  * PLAT019 capability is explicit. An ordinary Task-backed native
                  * remains fail-closed so it cannot accidentally enter the legacy
-                 * replay suspension path.
+                 * replay suspension path. PLAT021 structured ensure is the one
+                 * separate capability consumed entirely by Bytecode TryFinally.
                  */
                 throw new UnsupportedOperationException(
-                        "PERF006-B3 native suspension capability is required for Task-backed Bytecode invocation");
+                        "PERF006-B3 native suspension capability or PERF006-B4 structured control capability is required for Task-backed Bytecode invocation");
             }
             return PreparedClosureCall.nativeCall(
                     nativeBody,
                     supplied,
-                    activation);
+                    activation,
+                    structuredEnsure);
+        }
+        if (structuredEnsure) {
+            throw new IllegalStateException(
+                    "structured ensure capability requires the canonical native implementation");
         }
         ProtosClosureExecutionPlan plan = closure.executionPlanForRuntimeInvocation();
         if (!plan.isBytecodeBackendForRuntime()) {

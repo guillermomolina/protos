@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.ProtosEvaluatorContinuation;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -37,6 +38,10 @@ public final class ProtosStandardObjectProtocol {
     private static final ProtosClosureValue STANDARD_CALL =
             ProtosClosureValue.nativeClosure(
                     ProtosStandardObjectProtocol::call);
+    private static final ProtosNativeClosureBody STANDARD_ENSURE_BODY =
+            ProtosStandardObjectProtocol::ensure;
+    private static final ProtosClosureValue STANDARD_ENSURE =
+            ProtosClosureValue.nativeClosure(STANDARD_ENSURE_BODY);
 
     private ProtosStandardObjectProtocol() {}
 
@@ -45,6 +50,18 @@ public final class ProtosStandardObjectProtocol {
             ProtosObjectValue home) {
         return behavior == STANDARD_CALL
                 && home.isRootObject();
+    }
+
+    static boolean isCanonicalStandardEnsureSelection(
+            Object behavior,
+            ProtosObjectValue home) {
+        return behavior == STANDARD_ENSURE
+                && home.isRootObject();
+    }
+
+    static boolean isStandardEnsureImplementation(
+            ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_ENSURE_BODY;
     }
 
     public static void install() {
@@ -135,7 +152,7 @@ public final class ProtosStandardObjectProtocol {
         if (!object.hasLocalSlot("ensure")) {
             object.createLocalSlot(
                     "ensure",
-                    ProtosClosureValue.nativeClosure(ProtosStandardObjectProtocol::ensure));
+                    STANDARD_ENSURE);
         }
         if (!object.hasLocalSlot("while")) {
             object.createLocalSlot(

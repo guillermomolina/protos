@@ -869,11 +869,139 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        emitPreparedInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+    }
+
+    private static void emitPreparedInvocation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        requireDefaultScratch(
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        BytecodeLocal structuredEnsure =
+                builder.createLocal("structuredEnsureCall", null);
+        BytecodeLocal structuredChild =
+                builder.createLocal("structuredEnsureChildCall", null);
+
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredEnsureCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredEnsureCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        /*
+         * Validation and child-call preparation happen before the protected
+         * semantic extent. A validation Error therefore closes the standard
+         * ensure activation but does not run cleanup.
+         */
+        builder.beginStoreLocal(structuredEnsure);
+        builder.beginPrepareStructuredEnsureCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredEnsureCall();
+        builder.endStoreLocal();
+
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginBlock();
+                    builder.beginStoreLocal(structuredChild);
+                    builder.beginLoadStructuredEnsureCleanupCall();
+                    builder.emitLoadLocal(structuredEnsure);
+                    builder.endLoadStructuredEnsureCleanupCall();
+                    builder.endStoreLocal();
+                    emitScopedOrdinaryPreparedInvocation(
+                            builder,
+                            childResult,
+                            structuredChild,
+                            childResult,
+                            resumeValue);
+                    builder.endBlock();
+                });
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredChild);
+        builder.beginLoadStructuredEnsureBodyCall();
+        builder.emitLoadLocal(structuredEnsure);
+        builder.endLoadStructuredEnsureBodyCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                result,
+                structuredChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitOrdinaryPreparedInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    private static void emitScopedOrdinaryPreparedInvocation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+        emitOrdinaryPreparedInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+    }
+
+    private static void emitOrdinaryPreparedInvocation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
         builder.beginStoreLocal(childResult);
         builder.beginEnterClosureCall();
         builder.emitLoadLocal(preparedCall);
         builder.endEnterClosureCall();
         builder.endStoreLocal();
+
         builder.beginWhile();
         builder.beginIsContinuation();
         builder.emitLoadLocal(childResult);
@@ -893,6 +1021,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
         builder.endBlock();
         builder.endWhile();
+
         builder.beginStoreLocal(result);
         builder.beginFinishClosureCall();
         builder.emitLoadLocal(preparedCall);
@@ -1128,44 +1257,13 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endStoreLocal();
 
-        builder.beginStoreLocal(childResult);
-        builder.beginEnterClosureCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.endEnterClosureCall();
-        builder.endStoreLocal();
 
-        builder.beginWhile();
-
-        builder.beginIsContinuation();
-        builder.emitLoadLocal(childResult);
-        builder.endIsContinuation();
-
-        builder.beginBlock();
-
-        builder.beginStoreLocal(resumeValue);
-        builder.beginYield();
-        builder.emitLoadLocal(childResult);
-        builder.endYield();
-        builder.endStoreLocal();
-
-        builder.beginStoreLocal(childResult);
-        builder.beginResumeContinuation();
-        builder.emitLoadLocal(preparedCall);
-        builder.emitLoadLocal(childResult);
-        builder.emitLoadLocal(resumeValue);
-        builder.endResumeContinuation();
-        builder.endStoreLocal();
-
-        builder.endBlock();
-        builder.endWhile();
-
-        builder.beginStoreLocal(result);
-        builder.beginFinishClosureCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.emitLoadLocal(childResult);
-        builder.endFinishClosureCall();
-        builder.endStoreLocal();
-
+        emitPreparedInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
@@ -1296,50 +1394,13 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endStoreLocal();
 
-        builder.beginStoreLocal(childResult);
-        builder.beginEnterClosureCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.endEnterClosureCall();
-        builder.endStoreLocal();
 
-        builder.beginWhile();
-
-        builder.beginIsContinuation();
-        builder.emitLoadLocal(childResult);
-        builder.endIsContinuation();
-
-        builder.beginBlock();
-
-        builder.beginStoreLocal(resumeValue);
-        builder.beginYield();
-        builder.emitLoadLocal(childResult);
-        builder.endYield();
-        builder.endStoreLocal();
-
-        builder.beginStoreLocal(childResult);
-        builder.beginResumeContinuation();
-        builder.emitLoadLocal(preparedCall);
-        builder.emitLoadLocal(childResult);
-        builder.emitLoadLocal(resumeValue);
-        builder.endResumeContinuation();
-        builder.endStoreLocal();
-
-        builder.endBlock();
-        builder.endWhile();
-
-        /*
-         * A composed call is statement-shaped in the Bytecode builder: prepare,
-         * enter, yield/resume and finish are sibling operations. Only the final
-         * FinishClosureCall is value-producing, so only that operation occupies
-         * the StoreLocal child slot.
-         */
-        builder.beginStoreLocal(result);
-        builder.beginFinishClosureCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.emitLoadLocal(childResult);
-        builder.endFinishClosureCall();
-        builder.endStoreLocal();
-
+        emitPreparedInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
