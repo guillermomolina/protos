@@ -87,9 +87,12 @@ public final class ProtosCanonicalInitialModuleExecution {
                     activation);
         }
         return process.callInExecutionHostForRuntime(
-                () ->
-                        ProtosRootTaskExecution.execute(
-                                ProtosLanguageContext.current().parsePublic(source.source()),
-                                activation));
+                () -> {
+                    ProtosLanguageContext languageContext = ProtosLanguageContext.current();
+                    return ProtosRootTaskExecution.execute(
+                            languageContext.parsePublic(
+                                    languageContext.materializeModuleSource(source)),
+                            activation);
+                });
     }
 }

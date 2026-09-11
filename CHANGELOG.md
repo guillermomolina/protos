@@ -1,3 +1,18 @@
+## 0.2.356-SNAPSHOT
+
+- Implement the LM009-E D065 / PLAT020 / PLAT022 physical-source correction.
+  Keep path-backed source facts backend-neutral until the owning Protos Context
+  is entered; admit only each exact already-selected D065 path read-only in that
+  Context through a deny-by-default custom filesystem; keep unrelated paths,
+  writes and sockets denied; then materialize the physical Truffle Source with
+  `canonicalizePath(false)` and the exact already-read characters. Keep
+  admission Context-local and thread-safe, remove final Truffle `Source`
+  ownership from the resolver payload, preserve virtual/unhosted source paths,
+  and require real DAP to present admitted physical Sources without a positive
+  `sourceReference`. Preserve PLAT018/D060 debugger topology, module semantics,
+  guest filesystem semantics and the VS Code thin-client architecture; live
+  LM009-E S3 remains required before closure.
+
 ## 0.2.355-SNAPSHOT
 
 

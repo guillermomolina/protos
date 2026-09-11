@@ -267,19 +267,28 @@ The current Truffle realization is an implementation detail, not the decision it
 
 ## Current Truffle realization
 
-For the current implementation, a path-originating source should be built as a genuine file-backed
-Truffle `Source` while preserving the characters Protos already read and disabling Truffle path
-canonicalization:
+PLAT020 supersedes only D065's original illustrative `File`-overload realization after real
+compilation proved that overload is not a supported public Truffle language API. The
+implementation-independent D065 path rule is unchanged.
+
+Under ratified PLAT020 Candidate A′, path and exact already-read characters remain backend-neutral
+facts until the owning Protos Context is entered. Ratified PLAT022 Candidate D′ additionally makes
+that exact already-selected path read-only inside only that owning Context before Truffle publishes
+the physical Source; unrelated paths remain deny-I/O and sockets/writes remain unavailable.
+
+The Context then materializes the genuine physical Truffle `Source` through its own `Env`:
 
 ```java
-Source.newBuilder(ProtosLanguage.ID, exact.toFile())
+ProtosPolyglotExecutionContext.admitPhysicalSourceForRuntime(exact);
+TruffleFile file = env.getPublicTruffleFile(exact.toString());
+Source.newBuilder(ProtosLanguage.ID, file)
         .canonicalizePath(false)
         .content(characters)
         .mimeType(ProtosLanguage.MIME_TYPE)
         .build();
 ```
 
-The expected properties are:
+The expected properties remain:
 
 ```text
 Source.getPath() == selected absolute lexically-normalized path
@@ -287,21 +296,31 @@ Source.getCharacters() == exact characters already read by Protos
 Source.getName() == ordinary file name derived by the file-backed Source
 ```
 
-This implementation must be applied coherently to the path-originating production boundaries rather
-than as a VS Code-specific workaround.
+The `TruffleFile`, final physical `Source`, and PLAT022 readability admission are Context-owned
+realization machinery rather than members of the backend-neutral resolver payload. Admission does
+not become source resolution or semantic module identity, and does not authorize any parent,
+sibling, canonical-target spelling or unrelated host path. This implementation applies coherently
+to path-originating production boundaries rather than as a VS Code-specific workaround.
 
 ## Implementation consequences
 
-The first consuming correction is bounded to LM009-E source presentation and the shared file-backed
-source construction boundary:
+The first consuming correction is bounded to LM009-E source presentation and the shared
+D065/PLAT020/PLAT022 source boundary:
 
-- change `ProtosCli.sourceFromPath(...)` to create a genuine file-backed Source under Candidate B;
-- change `ProtosModuleSource.fromPath(...)` consistently;
-- preserve already-read source characters rather than introducing an unnecessary second source read;
-- add regression coverage that `Source.getPath()` is the expected absolute normalized selected path;
-- preserve existing URI, language and character guarantees;
-- update the CLI architecture assertion that currently encodes literal-source-plus-URI construction;
-- leave literal/in-memory `Source.newBuilder(language, characters, name)` call sites unchanged;
+- keep direct-file path plus exact already-read characters neutral until the owning Process Context
+  is entered;
+- change `ProtosModuleSource.fromPath(...)` to retain neutral path/content facts rather than an eager
+  Truffle `Source`;
+- admit only the exact selected physical path read-only in the owning Context before materialization;
+- keep unrelated paths deny-I/O, writes denied, sockets denied and admission state Context-local;
+- materialize hosted physical Sources through the current `ProtosLanguageContext` `Env`;
+- preserve deliberately virtual REPL/`-e`/generated sources as literal sources;
+- preserve the deliberately unhosted Java semantic/compiler harness path without claiming physical
+  debugger identity for its literal representation;
+- add regression coverage that hosted `Source.getPath()` is the expected absolute normalized
+  selected path and that symlink spelling is not resolved solely for presentation;
+- preserve URI, language and character guarantees on the hosted physical Source;
+- remove the CLI architecture assertion that encoded eager literal-source-plus-URI construction;
 - do not introduce editor-side source mapping or DAP protocol translation; and
 - repeat LM009-E live S3 acceptance after implementation.
 

@@ -19,8 +19,10 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.TruffleFile;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.source.Source;
+import java.nio.file.Path;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -88,6 +90,25 @@ final class ProtosLanguageContext {
 
     ProtosLanguage languageForTesting() {
         return languageForRuntime();
+    }
+
+    Source materializeModuleSource(ProtosModuleSource source) {
+        Objects.requireNonNull(source, "source");
+        return source.physicalPath()
+                .map(path -> materializeFileSource(path, source.characters()))
+                .orElseGet(source::literalSource);
+    }
+
+    Source materializeFileSource(Path path, CharSequence characters) {
+        Path exact = Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
+        Objects.requireNonNull(characters, "characters");
+        ProtosPolyglotExecutionContext.admitPhysicalSourceForRuntime(exact);
+        TruffleFile file = env.getPublicTruffleFile(exact.toString());
+        return Source.newBuilder(ProtosLanguage.ID, file)
+                .canonicalizePath(false)
+                .content(characters)
+                .mimeType(ProtosLanguage.MIME_TYPE)
+                .build();
     }
 
     CallTarget parsePublic(Source source) {

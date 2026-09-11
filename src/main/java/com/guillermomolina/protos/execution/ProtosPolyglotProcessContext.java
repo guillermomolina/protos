@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.oracle.truffle.api.source.Source;
+import java.nio.file.Path;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Supplier;
@@ -51,6 +52,24 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         Objects.requireNonNull(source, "source");
         requireActivationProcess(activation);
         return context.execute(source, activation);
+    }
+
+    public ProtosExecutionOutcome executeFile(
+            Path path,
+            CharSequence characters,
+            ProtosActivation activation) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(characters, "characters");
+        requireActivationProcess(activation);
+        return context.executeFile(path, characters, activation);
+    }
+
+    public ProtosExecutionOutcome executeModuleSource(
+            ProtosModuleSource source,
+            ProtosActivation activation) {
+        Objects.requireNonNull(source, "source");
+        requireActivationProcess(activation);
+        return context.executeModuleSource(source, activation);
     }
 
     /** Persistent top-level evaluation for REPL-like drivers inside this exact Process Context. */

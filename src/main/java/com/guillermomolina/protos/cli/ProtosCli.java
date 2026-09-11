@@ -104,7 +104,7 @@ public final class ProtosCli {
                 return usage(err, "unknown option: " + args[0]);
             }
 
-            Path sourcePath = Path.of(args[0]);
+            Path sourcePath = Path.of(args[0]).toAbsolutePath().normalize();
             String src;
             try {
                 src = Files.readString(sourcePath, StandardCharsets.UTF_8);
@@ -116,8 +116,9 @@ public final class ProtosCli {
                                 + e.getMessage());
                 return 1;
             }
-            return evalOneShot(
-                    sourceFromPath(sourcePath, src),
+            return evalFileOneShot(
+                    sourcePath,
+                    src,
                     applicationArguments(args, 1),
                     in,
                     out,
@@ -136,7 +137,7 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws IOException {
-        Path sourcePath = Path.of(sourceArgument);
+        Path sourcePath = Path.of(sourceArgument).toAbsolutePath().normalize();
         String sourceText;
         try {
             sourceText = Files.readString(sourcePath, StandardCharsets.UTF_8);
@@ -151,8 +152,9 @@ public final class ProtosCli {
 
         try (Session session =
                 debugSession(applicationArguments, in, out, err)) {
-            return eval(
-                    sourceFromPath(sourcePath, sourceText),
+            return evalFile(
+                    sourcePath,
+                    sourceText,
                     session,
                     err);
         } catch (IOException | RuntimeException failure) {
@@ -427,7 +429,7 @@ public final class ProtosCli {
             provisioner.provision(session);
             ProtosModuleKey entryModule = resolver.entryModule(entryModuleName);
             ProtosModuleSource source = resolver.loadSource(entryModule).requireKey(entryModule);
-            executeStandaloneRootTask(session.execute(source.source()));
+            executeStandaloneRootTask(session.executeModuleSource(source));
             return 0;
         } catch (ParseError e) {
             err.println(diagnosticName + " tool syntax error: " + e.getMessage());
@@ -485,6 +487,19 @@ public final class ProtosCli {
             throws IOException {
         try (Session session = session(applicationArguments, in, out, err)) {
             return eval(source, session, err);
+        }
+    }
+
+    private int evalFileOneShot(
+            Path sourcePath,
+            String characters,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
+        try (Session session = session(applicationArguments, in, out, err)) {
+            return evalFile(sourcePath, characters, session, err);
         }
     }
 
@@ -970,6 +985,26 @@ public final class ProtosCli {
         }
     }
 
+    private int evalFile(
+            Path sourcePath,
+            String characters,
+            Session s,
+            PrintStream err) {
+        try {
+            executeStandaloneRootTask(s.executeFile(sourcePath, characters));
+            return 0;
+        } catch (ParseError e) {
+            err.println("Syntax error: " + e.getMessage());
+            return 1;
+        } catch (ProtosSignalException e) {
+            err.println("Error: " + diagnosticInspector.render(e.error()));
+            return 1;
+        } catch (RuntimeException e) {
+            err.println("Runtime error: " + e.getMessage());
+            return 1;
+        }
+    }
+
     /*
      * CLI policy translates the shared mechanical terminal outcome into the historical
      * standalone command behavior. The cooperative RootActor task execution itself is owned by
@@ -991,18 +1026,6 @@ public final class ProtosCli {
         Objects.requireNonNull(characters, "characters");
         Objects.requireNonNull(name, "name");
         return Source.newBuilder(ProtosLanguage.ID, characters, name)
-                .mimeType(ProtosLanguage.MIME_TYPE)
-                .build();
-    }
-
-    private static Source sourceFromPath(Path path, String characters) {
-        Path exact = Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
-        Objects.requireNonNull(characters, "characters");
-        return Source.newBuilder(
-                        ProtosLanguage.ID,
-                        characters,
-                        exact.getFileName().toString())
-                .uri(exact.toUri())
                 .mimeType(ProtosLanguage.MIME_TYPE)
                 .build();
     }
@@ -1081,6 +1104,26 @@ public final class ProtosCli {
                         "session is not bound to a Polyglot Process Context");
             }
             return processContext.execute(
+                    Objects.requireNonNull(source, "source"), activation);
+        }
+
+        ProtosExecutionOutcome executeFile(Path path, CharSequence characters) {
+            if (processContext == null) {
+                throw new IllegalStateException(
+                        "session is not bound to a Polyglot Process Context");
+            }
+            return processContext.executeFile(
+                    Objects.requireNonNull(path, "path"),
+                    Objects.requireNonNull(characters, "characters"),
+                    activation);
+        }
+
+        ProtosExecutionOutcome executeModuleSource(ProtosModuleSource source) {
+            if (processContext == null) {
+                throw new IllegalStateException(
+                        "session is not bound to a Polyglot Process Context");
+            }
+            return processContext.executeModuleSource(
                     Objects.requireNonNull(source, "source"), activation);
         }
 

@@ -59,11 +59,10 @@ final class ProtosA4B3ModuleProcessHostingTest {
             try {
                 Engine engine = context.engineForTesting();
                 ProtosExecutionOutcome outcome =
-                        context.execute(
+                        context.executeModuleSource(
                                 ProtosModuleSource.fromCharacters(
-                                                new ProtosModuleKey("entry"),
-                                                "import(\"m\")")
-                                        .source(),
+                                        new ProtosModuleKey("entry"),
+                                        "import(\"m\")"),
                                 bootstrap.activation());
 
                 assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
@@ -136,12 +135,14 @@ final class ProtosA4B3ModuleProcessHostingTest {
 
         assertTrue(moduleRuntime.contains("executeModuleSource(source, moduleActivation);"));
         assertTrue(moduleRuntime.contains("process.callInExecutionHostForRuntime("));
-        assertTrue(moduleRuntime.contains(".parsePublic(source.source())"));
+        assertTrue(moduleRuntime.contains("materializeModuleSource(source)"));
+        assertFalse(moduleRuntime.contains(".parsePublic(source.source())"));
         assertFalse(moduleRuntime.contains("compiler.compile(source).call(moduleActivation);"));
         assertTrue(moduleRuntime.contains("return compiler.compile(source).call(activation);"));
 
         assertTrue(canonical.contains("process.callInExecutionHostForRuntime("));
-        assertTrue(canonical.contains("ProtosLanguageContext.current().parsePublic(source.source())"));
+        assertTrue(canonical.contains("materializeModuleSource(source)"));
+        assertFalse(canonical.contains("parsePublic(source.source())"));
         assertTrue(canonical.contains("ProtosRootTaskExecution.execute("));
         assertTrue(canonical.contains("new ProtosSourceCompiler().compile(source)"));
 

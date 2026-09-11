@@ -748,3 +748,47 @@ termination.
 No Protos specification, runtime implementation, Maven implementation version,
 DAP protocol implementation, static language-service architecture or
 Marketplace release is changed by the editor-only E1 tranche.
+
+## LM009-E D065 / PLAT020 / PLAT022 physical source correction
+
+Status: **IMPLEMENTED — repository validation required; live S3 source-presentation retest pending**
+
+Live S3 after E1 proved the external launcher, readiness, breakpoint, threads, stack, activation
+scope/values, step, continue, guest output and process cleanup. The remaining defect was that the
+executing ordinary filesystem source reopened as a second Plain Text editor document.
+
+D065 selected the exact absolute lexically-normalized workspace/execution-host path as ordinary
+physical tooling identity. The first consuming implementation attempt then exposed that Truffle's
+internal `Source.newBuilder(String, File)` overload is not public. PLAT020 therefore ratified
+Candidate A′: keep path/content/module facts backend-neutral outside Context ownership and
+materialize the genuine physical Source only inside the owning entered Protos Context through that
+Context's `Env`.
+
+The unpublished v6 candidate proved those physical Source invariants but the real Graal DAP still
+returned `sourceReference: 1`, because the exact path remained unreadable through the target
+Context filesystem. PLAT022 therefore ratified Candidate D′: one Context-local, deny-by-default
+readability authority admits only exact already-selected physical Sources read-only, with no
+socket/write authority and no global path registry.
+
+The consuming repository correction:
+
+- removes eager path-backed literal `Source` ownership from `ProtosModuleSource`;
+- retains exact characters plus optional selected physical path as immutable resolver facts;
+- admits the exact D065 path read-only in the owning Context before physical Source publication,
+  while unrelated paths remain deny-I/O and sockets/writes remain unavailable;
+- materializes physical Sources through `Env.getPublicTruffleFile(...)`,
+  `canonicalizePath(false)` and the already-read characters;
+- routes direct CLI/debug file execution through that same entered-Context boundary;
+- keeps virtual REPL/`-e` sources virtual and keeps deliberately unhosted semantic harnesses
+  explicitly non-tooling;
+- adds selected-path, symlink-preservation, payload-neutrality, exact-admission,
+  unrelated-path denial, write denial and cross-Context isolation regression coverage;
+- runs the real DAP behavior test through the same Context-local authority and requires the physical
+  Source to be path-only in DAP (`sourceReference` absent); and
+- adds no editor path mapping, DAP proxy, global Source registry/cache, outer-Polyglot execution
+  refactor or Protos semantic change.
+
+LM009-E remains open after repository publication. Final S3 still requires one real VS Code F5
+retest proving that the active `.protos` file remains the same physical Protos document rather than
+being reopened as a virtual/Plain Text source, while the already-proven debugger behaviors and clean
+process termination remain intact.
