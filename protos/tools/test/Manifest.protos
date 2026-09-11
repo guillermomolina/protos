@@ -275,6 +275,39 @@ requirementUnits: (requirement) => {
     requirement[2]
 }
 
+// I5 attaches already-ratified Requirement data to one CaseSpec. Rebuild each
+// Requirement through the canonical constructor so the attached records are
+// fixed/frozen even when the caller supplies an ordinary mutable Array shape.
+// D077 rejects duplicate (case,key) declarations rather than merging them.
+caseSpecWithRequirements: (spec, suppliedRequirements) => {
+    seenKeys: Map()
+    validated: Array()
+
+    suppliedRequirements.each((supplied) => {
+        canonical: requirement(
+            requirementKey(supplied),
+            requirementMode(supplied),
+            requirementUnits(supplied)
+        )
+        key: requirementKey(canonical)
+
+        seenKeys.containsKey(key).ifTrue(() => {
+            fail()
+        })
+        seenKeys[key] = true
+        validated = Array(...validated, canonical)
+    })
+
+    requirements: frozenTuple(...validated)
+    frozenTuple(
+        caseId(spec),
+        casePath(spec),
+        caseExpectation(spec),
+        caseExpected(spec),
+        requirements
+    )
+}
+
 parseLine: (line) => {
     bytes: Encoding.UTF8.encode(line)
     ignore: bytes.size() == 0

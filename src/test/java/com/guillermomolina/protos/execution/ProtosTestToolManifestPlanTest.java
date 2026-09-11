@@ -346,6 +346,177 @@ final class ProtosTestToolManifestPlanTest {
     }
 
     @Test
+    void caseSpecRequirementAttachmentPreservesOrderAndFreezesCanonicalRecords()
+            throws Exception {
+        Fixture fixture = fixture();
+        String source =
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "base: Manifest.caseSpec(Array(\"i5/resourceful.protos\", \"integer\", \"7\"))\n"
+                        + "attached: Manifest.caseSpecWithRequirements(base, Array("
+                        + "Array(\"gpu\", \"shared\", 2), "
+                        + "Array(\"db/integration\", \"exclusive\", null)))\n"
+                        + "requirements: Manifest.caseRequirements(attached)\n"
+                        + "Array(attached, requirements, "
+                        + "Manifest.requirementKey(requirements[0]), "
+                        + "Manifest.requirementMode(requirements[0]), "
+                        + "Manifest.requirementUnits(requirements[0]), "
+                        + "Manifest.requirementKey(requirements[1]), "
+                        + "Manifest.requirementMode(requirements[1]), "
+                        + "Manifest.requirementUnits(requirements[1]))";
+
+        ProtosArrayValue observed =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                new ProtosSourceCompiler().compile(source),
+                                fixture.activation()));
+        assertEquals(8, observed.indexedSize().intValueExact());
+
+        ProtosArrayValue attached =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        observed.indexedAt(java.math.BigInteger.ZERO));
+        ProtosArrayValue requirements =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        observed.indexedAt(java.math.BigInteger.ONE));
+        assertEquals(5, attached.indexedSize().intValueExact());
+        assertEquals(2, requirements.indexedSize().intValueExact());
+        org.junit.jupiter.api.Assertions.assertTrue(attached.isFrozen());
+        org.junit.jupiter.api.Assertions.assertTrue(requirements.isFrozen());
+
+        ProtosArrayValue first =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        requirements.indexedAt(java.math.BigInteger.ZERO));
+        ProtosArrayValue second =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        requirements.indexedAt(java.math.BigInteger.ONE));
+        org.junit.jupiter.api.Assertions.assertTrue(first.isFrozen());
+        org.junit.jupiter.api.Assertions.assertTrue(second.isFrozen());
+        assertEquals(3, first.indexedSize().intValueExact());
+        assertEquals(3, second.indexedSize().intValueExact());
+
+        assertEquals(
+                "gpu",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(2)))
+                        .value());
+        assertEquals(
+                "shared",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(3)))
+                        .value());
+        assertEquals(
+                2,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(4)))
+                        .value()
+                        .intValueExact());
+        assertEquals(
+                "db/integration",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(5)))
+                        .value());
+        assertEquals(
+                "exclusive",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(6)))
+                        .value());
+        assertSame(
+                ProtosNullValue.INSTANCE,
+                observed.indexedAt(java.math.BigInteger.valueOf(7)));
+    }
+
+    @Test
+    void caseSpecRequirementAttachmentRejectsDuplicateCaseKeyWithoutMerging()
+            throws Exception {
+        Fixture controlFixture = fixture();
+        String controlSource =
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "base: Manifest.caseSpec(Array(\"i5/control.protos\", \"integer\", \"1\"))\n"
+                        + "Manifest.caseSpecWithRequirements(base, Array("
+                        + "Manifest.requirement(\"gpu\", \"shared\", 1)))";
+        ProtosExecutionOutcome controlOutcome =
+                ProtosRootTaskExecution.execute(
+                        new ProtosSourceCompiler().compile(controlSource),
+                        controlFixture.activation());
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                controlOutcome.state(),
+                "single canonical Requirement must attach before duplicate rejection is tested");
+
+        String[] duplicatePairs = {
+            "Manifest.requirement(\"gpu\", \"shared\", 1), "
+                    + "Manifest.requirement(\"gpu\", \"shared\", 1)",
+            "Manifest.requirement(\"gpu\", \"shared\", 2), "
+                    + "Manifest.requirement(\"gpu\", \"exclusive\", null)"
+        };
+
+        for (String duplicatePair : duplicatePairs) {
+            Fixture fixture = fixture();
+            String source =
+                    "Manifest: import(\"self:Manifest\")\n"
+                            + "base: Manifest.caseSpec(Array(\"i5/duplicate.protos\", \"integer\", \"1\"))\n"
+                            + "Manifest.caseSpecWithRequirements(base, Array("
+                            + duplicatePair
+                            + "))";
+            ProtosExecutionOutcome outcome =
+                    ProtosRootTaskExecution.execute(
+                            new ProtosSourceCompiler().compile(source),
+                            fixture.activation());
+            assertEquals(
+                    ProtosExecutionOutcome.State.FAILED,
+                    outcome.state(),
+                    () -> "expected duplicate (case,key) to fail closed: " + duplicatePair);
+        }
+    }
+
+    @Test
+    void sameResourceKeyMayAppearInDifferentCaseSpecs()
+            throws Exception {
+        Fixture fixture = fixture();
+        String source =
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "first: Manifest.caseSpec(Array(\"i5/first.protos\", \"integer\", \"1\"))\n"
+                        + "second: Manifest.caseSpec(Array(\"i5/second.protos\", \"integer\", \"2\"))\n"
+                        + "first = Manifest.caseSpecWithRequirements(first, Array("
+                        + "Manifest.requirement(\"gpu\", \"shared\", 1)))\n"
+                        + "second = Manifest.caseSpecWithRequirements(second, Array("
+                        + "Manifest.requirement(\"gpu\", \"exclusive\", null)))\n"
+                        + "Array(Manifest.caseRequirements(first).size(), "
+                        + "Manifest.caseRequirements(second).size())";
+
+        ProtosArrayValue sizes =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                new ProtosSourceCompiler().compile(source),
+                                fixture.activation()));
+        assertEquals(2, sizes.indexedSize().intValueExact());
+        assertEquals(
+                1,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                sizes.indexedAt(java.math.BigInteger.ZERO))
+                        .value()
+                        .intValueExact());
+        assertEquals(
+                1,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                sizes.indexedAt(java.math.BigInteger.ONE))
+                        .value()
+                        .intValueExact());
+    }
+
+    @Test
     void batchedManifestTraversalDoesNotGrowOneProtosFramePerRow(
             @TempDir Path corpusRoot) throws Exception {
         int rowCount = 2048;
