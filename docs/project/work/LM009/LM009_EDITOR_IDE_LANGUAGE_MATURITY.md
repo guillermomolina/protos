@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1 CLOSED; D079 RATIFIED; G2 READY)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082 RATIFIED; G3 BLOCKED_BY_PROJECT_BINDING_PREREQUISITE)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1133,3 +1133,39 @@ merge gate.
 index lifetime remain G3-owned; go-to-definition identity/resolution remains
 G4-owned. Neither is selected by this slice, and LM009-H remains excluded.
 
+## D082 workspace-symbol authority ratification
+
+Status: **RATIFIED — Candidate A′ selected; LM009-G3 BLOCKED_BY_PROJECT_BINDING_PREREQUISITE**
+
+D082 / GitHub #367 is durably ratified after explicit project-owner approval on
+2026-09-11 and the expanded cross-language/tool audit. The selected architecture is
+**Canonical Project Binding + partitioned incremental workspace index + exact
+live-document overlay**.
+
+The durable authority boundary is:
+
+- an editor/LSP workspace folder is coordination input, not Protos project identity;
+- project membership and complete workspace source inventory come from a canonical
+  editor-neutral Protos package/project authority;
+- each exact project binding owns an independent incremental symbol-index domain;
+- exact open-document snapshots override current source content only after canonical
+  mapping to a bound source and never create module identity themselves;
+- `workspace/symbol` may aggregate across exact project domains at the request boundary;
+- baseline search covers mutable/workspace package source only, while dependencies,
+  `std:`, persistence and remote indexing remain future optional layers; and
+- D079 remains authoritative for the indexed declaration unit and LSP `Property`
+  presentation.
+
+Ratification deliberately does **not** release G3 implementation. The repository still
+lacks an editor-neutral canonical provider for exact `ProjectBinding + source inventory`.
+LM009-G3 therefore remains blocked until that prerequisite is separately designed and
+published. G3 must not substitute raw filesystem scanning, open-document-only workspace
+symbols, per-query Package Tool guest execution or a global dependency/stdlib index.
+
+The durable D082 rationale, expanded prior-art survey, candidate comparison, mandatory
+GITHUB010 scorecard, future/scalability stress analysis and explicit owner approval are
+recorded in
+[`../../decisions/tooling/D082_WORKSPACE_SYMBOL_PROJECT_SOURCE_SET_AND_INDEX_AUTHORITY.md`](../../decisions/tooling/D082_WORKSPACE_SYMBOL_PROJECT_SOURCE_SET_AND_INDEX_AUTHORITY.md).
+
+LM009-G4 definition identity/resolution remains unstarted and independently decision-
+gated. LM009-H remains excluded.
