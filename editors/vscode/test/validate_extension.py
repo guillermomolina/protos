@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""LM009-B/C/E structural validation for the VS Code reference extension."""
+"""LM009-B/C/E/F structural validation for the VS Code reference extension."""
 
 from pathlib import Path
 import json
@@ -55,11 +55,13 @@ def main():
         "browser",
         "activationEvents",
         "scripts",
-        "dependencies",
         "devDependencies",
     ):
         if forbidden in package:
             fail("LM009 must not add %s" % forbidden)
+
+    if package.get("dependencies") != {"vscode-languageclient": "10.1.1"}:
+        fail("LM009-F4 requires exactly vscode-languageclient 10.1.1")
 
     expected_capabilities = {
         "untrustedWorkspaces": {
@@ -131,8 +133,9 @@ def main():
                 "default": "protos",
                 "scope": "machine",
                 "description": (
-                    "Protos launcher executable used by Run Current File and "
-                    "debugging. Defaults to 'protos' resolved through PATH."
+                    "Protos launcher executable used by Run Current File, "
+                    "debugging, and the static language server. Defaults to "
+                    "'protos' resolved through PATH."
                 ),
             }
         },
@@ -205,6 +208,16 @@ def main():
         'createOutputChannel("Protos Debug")',
         "registerDebugConfigurationProvider",
         "registerDebugAdapterDescriptorFactory",
+        'require("vscode-languageclient/node")',
+        'LANGUAGE_SERVER_ARGUMENTS = Object.freeze(["language-server"])',
+        'LANGUAGE_SERVER_DOCUMENT_SELECTOR = Object.freeze([',
+        "createProtosLanguageClient",
+        "createProtosLanguageServerController",
+        '.get("runtime.executable", DEFAULT_RUNTIME_EXECUTABLE)',
+        "options: { shell: false }",
+        "await candidate.start()",
+        "await current.stop()",
+        "onDidGrantWorkspaceTrust",
     )
     for marker in required_extension_markers:
         if marker not in extension:
@@ -231,6 +244,10 @@ def main():
             fail("debug_adapter.js missing approved LM009-E marker: " + marker)
 
     for forbidden in (
+        "protos.languageServer.executable",
+        "ProtosLanguageServerMain",
+        "protos-language-server",
+        "java -jar",
         "DebugAdapterExecutable",
         "DebugAdapterInlineImplementation",
         "debugServer",
@@ -255,6 +272,10 @@ def main():
         "PROTOS_DEBUG_READY",
         "DebugAdapterServer",
         "S3 live VS Code check",
+        "Language server foundation (LM009-F4)",
+        "`protos language-server`",
+        "vscode-languageclient",
+        "S4 foundation live VS Code check",
     ):
         if marker not in readme:
             fail("README missing LM009 marker: " + marker)
@@ -277,6 +298,12 @@ def main():
     print("DEBUG_ATTACH=NO")
     print("DEBUG_REMOTE_LISTEN=NO")
     print("DEBUG_STOP_ON_ENTRY=NO")
+    print("LM009_F4_LANGUAGE_SERVER_WIRING_VALIDATION: PASS")
+    print("LANGUAGE_SERVER_LAUNCH=protos language-server")
+    print("LANGUAGE_SERVER_TOOLCHAIN_AUTHORITY=protos.runtime.executable")
+    print("LANGUAGE_SERVER_TRANSPORT=LSP_STDIO")
+    print("LANGUAGE_SERVER_SECOND_EXECUTABLE_SETTING=NO")
+    print("LANGUAGE_SERVER_EDITOR_SEMANTICS=NO")
 
 
 if __name__ == "__main__":

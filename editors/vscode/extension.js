@@ -9,6 +9,14 @@ const {
 const RUN_CURRENT_FILE_COMMAND = "protos.runCurrentFile";
 const DEFAULT_RUNTIME_EXECUTABLE = "protos";
 const EXECUTABLE_RESOURCE_SCHEMES = new Set(["file", "vscode-remote"]);
+const LANGUAGE_CLIENT_ID = "protosLanguageServer";
+const LANGUAGE_CLIENT_NAME = "Protos Language Server";
+const LANGUAGE_SERVER_ARGUMENTS = Object.freeze(["language-server"]);
+const LANGUAGE_SERVER_DOCUMENT_SELECTOR = Object.freeze([
+    Object.freeze({ language: "protos" })
+]);
+
+let languageServerController;
 
 function executionPathForUri(vscode, uri) {
     if (!EXECUTABLE_RESOURCE_SCHEMES.has(uri.scheme)) {
@@ -207,7 +215,85 @@ function createProtosDebugConfigurationProvider(vscode) {
     };
 }
 
-function activate(context) {
+function configuredRuntimeExecutable(vscode) {
+    const configuredRuntime = vscode.workspace
+        .getConfiguration("protos")
+        .get("runtime.executable", DEFAULT_RUNTIME_EXECUTABLE);
+
+    if (
+        typeof configuredRuntime !== "string" ||
+        configuredRuntime.trim().length === 0
+    ) {
+        throw new Error(
+            "Configure protos.runtime.executable with a Protos launcher executable."
+        );
+    }
+    return configuredRuntime;
+}
+
+function createProtosLanguageClient(vscode, languageClientApi) {
+    const api = languageClientApi || require("vscode-languageclient/node");
+    const runtimeExecutable = configuredRuntimeExecutable(vscode);
+
+    const serverOptions = {
+        command: runtimeExecutable,
+        args: Array.from(LANGUAGE_SERVER_ARGUMENTS),
+        options: { shell: false }
+    };
+    const clientOptions = {
+        documentSelector: LANGUAGE_SERVER_DOCUMENT_SELECTOR.map(
+            (selector) => ({ ...selector })
+        )
+    };
+
+    return new api.LanguageClient(
+        LANGUAGE_CLIENT_ID,
+        LANGUAGE_CLIENT_NAME,
+        serverOptions,
+        clientOptions
+    );
+}
+
+function createProtosLanguageServerController(vscode, languageClientApi) {
+    let client;
+
+    return {
+        async start() {
+            if (!vscode.workspace.isTrusted) {
+                return undefined;
+            }
+            if (client) {
+                return client;
+            }
+
+            try {
+                const candidate =
+                    createProtosLanguageClient(vscode, languageClientApi);
+                await candidate.start();
+                client = candidate;
+                return client;
+            } catch (error) {
+                const detail =
+                    error instanceof Error ? error.message : String(error);
+                await vscode.window.showErrorMessage(
+                    `Unable to start the Protos language server: ${detail}`
+                );
+                client = undefined;
+                return undefined;
+            }
+        },
+
+        async stop() {
+            const current = client;
+            client = undefined;
+            if (current) {
+                await current.stop();
+            }
+        }
+    };
+}
+
+async function activate(context) {
     const vscode = require("vscode");
 
     const runDisposable = vscode.commands.registerCommand(
@@ -233,24 +319,50 @@ function activate(context) {
             debugFactory
         );
 
+    languageServerController =
+        createProtosLanguageServerController(vscode);
+
+    const trustDisposable =
+        typeof vscode.workspace.onDidGrantWorkspaceTrust === "function"
+            ? vscode.workspace.onDidGrantWorkspaceTrust(() => {
+                void languageServerController.start();
+            })
+            : { dispose() {} };
+
     context.subscriptions.push(
         runDisposable,
         debugOutput,
         debugFactory,
         debugProviderDisposable,
-        debugFactoryDisposable
+        debugFactoryDisposable,
+        trustDisposable
     );
+
+    await languageServerController.start();
 }
 
-function deactivate() {}
+async function deactivate() {
+    if (languageServerController) {
+        const current = languageServerController;
+        languageServerController = undefined;
+        await current.stop();
+    }
+}
 
 module.exports = {
     activate,
     deactivate,
     createRunCurrentFile,
     createProtosDebugConfigurationProvider,
+    createProtosLanguageClient,
+    createProtosLanguageServerController,
+    configuredRuntimeExecutable,
     executionPathForUri,
     RUN_CURRENT_FILE_COMMAND,
     DEFAULT_RUNTIME_EXECUTABLE,
-    EXECUTABLE_RESOURCE_SCHEMES
+    EXECUTABLE_RESOURCE_SCHEMES,
+    LANGUAGE_CLIENT_ID,
+    LANGUAGE_CLIENT_NAME,
+    LANGUAGE_SERVER_ARGUMENTS,
+    LANGUAGE_SERVER_DOCUMENT_SELECTOR
 };

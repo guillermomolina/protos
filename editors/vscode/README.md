@@ -41,15 +41,19 @@ dependency need introduced after VS Code 1.104.
 From `editors/vscode/`:
 
 ```sh
+npm install --no-package-lock
 python3 test/validate_grammar.py
 python3 test/validate_extension.py
 node test/run_current_file.test.js
 node test/debug_integration.test.js
+node test/language_server_integration.test.js
 ```
 
-The structural validators use Python; executable editor-wiring checks use Node.
-They add no npm dependency and do not add Node/npm to ordinary Protos
-Maven/runtime development.
+The static language-service client uses Microsoft's `vscode-languageclient`
+package. Node/npm remains an editor-development/packaging concern only; ordinary
+Protos Maven/runtime development and execution do not depend on Node/npm.
+`--no-package-lock` keeps this pre-LM009-I development workflow from creating a
+new distribution lockfile policy before editor packaging is closed.
 
 ## S1 live VS Code check
 
@@ -233,3 +237,67 @@ live evidence for: breakpoint stop location, threads, stack, activation-local
 scope, representative scalar/indexed values, step, continue, guest output and
 clean normal termination. The project owner live check is the acceptance
 surface; Marketplace publication remains LM009-I.
+
+## Language server foundation (LM009-F4)
+
+LM009-F4 consumes ratified PLAT024 and D070. The reference extension stays a
+thin standard-LSP client and starts the language server through the same selected
+toolchain executable already used by Run and Debug:
+
+```text
+protos.runtime.executable
+        +
+["language-server"]
+```
+
+The resulting public command is:
+
+```text
+protos language-server
+```
+
+The extension uses `vscode-languageclient` and passes the executable plus argv
+directly with `shell: false`. It does not know the Java main class, JAR/classpath
+layout, or whether a future implementation behind the launcher is JVM, Native
+Image, a sibling binary, or self-hosted Protos.
+
+The client selects Protos documents by language id only. Their LSP URI and exact
+editor text are sent through standard document synchronization to the F3 server;
+the extension does not infer package, module, workspace or filesystem identity
+from those URIs. Those authorities remain server/toolchain responsibilities for
+later LM009-G/H work.
+
+The language server is client-session-owned and runs in the workspace extension
+host. Local, Remote SSH and Dev Container sessions therefore use the same
+toolchain namespace already selected for Run/Debug. Restricted Mode starts no
+language-server process; after Workspace Trust is granted, the same controller
+may start it normally.
+
+F4 adds no diagnostics, symbols, definition, references, completion, hover or
+signature-help semantics. Those remain LM009-G/H.
+
+### S4 foundation live VS Code check
+
+Repository tests prove the CLI/LSP framing and thin client launch contract, but
+LM009-F closure still requires one real VS Code host check.
+
+After building the current Protos launcher and running
+`npm install --no-package-lock` in `editors/vscode/`, open the extension through
+an Extension Development Host (or an equivalent local test installation), point
+`protos.runtime.executable` at that exact current launcher and open a `.protos`
+document.
+
+The foundation live check is:
+
+1. opening the Protos document starts exactly one matching
+   `protos language-server` child in the workspace extension host;
+2. editing the document leaves the server healthy while normal LSP
+   open/change/close synchronization is exercised;
+3. no second server-path setting or Java/JAR command is required;
+4. closing/reloading the Extension Development Host stops the client-owned
+   server process cleanly; and
+5. no static language feature is claimed yet merely because the foundation is
+   alive.
+
+Once this live composition is confirmed, LM009-F can close and LM009-G can own
+the first visible static diagnostics/symbol/definition features.

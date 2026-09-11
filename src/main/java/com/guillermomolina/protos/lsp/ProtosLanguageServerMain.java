@@ -17,17 +17,30 @@
 
 package com.guillermomolina.protos.lsp;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.Objects;
+
 /**
- * Internal JVM process entry point for the dedicated stdio language-server host.
+ * JVM entry point for the dedicated stdio language-server host.
  *
- * <p>This class does not select the final public {@code protos ...} CLI spelling
- * or distribution packaging; those remain outside LM009-F3.</p>
+ * <p>D070 makes {@code protos language-server} the public tool-facing launcher.
+ * This class remains the internal JVM host behind that stable launcher contract.</p>
  */
 public final class ProtosLanguageServerMain {
     private ProtosLanguageServerMain() {}
 
     public static void main(String[] args) throws Exception {
+        run(System.in, System.out);
+    }
+
+    /** Runs one client-owned standard-LSP session over the supplied byte streams. */
+    public static void run(InputStream input, OutputStream output) throws Exception {
         ProtosLanguageServer server = new ProtosLanguageServer(System::exit);
-        ProtosLanguageServerStdio.start(server, System.in, System.out).get();
+        ProtosLanguageServerStdio.start(
+                        server,
+                        Objects.requireNonNull(input, "input"),
+                        Objects.requireNonNull(output, "output"))
+                .get();
     }
 }

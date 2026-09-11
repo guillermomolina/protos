@@ -62,7 +62,7 @@
           "type": "string",
           "default": "protos",
           "scope": "machine",
-          "description": "Protos launcher executable used by Run Current File and debugging. Defaults to 'protos' resolved through PATH."
+          "description": "Protos launcher executable used by Run Current File, debugging, and the static language server. Defaults to 'protos' resolved through PATH."
         }
       }
     },
@@ -110,6 +110,9 @@
         ]
       }
     ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "10.1.1"
   },
   "main": "./extension.js",
   "capabilities": {

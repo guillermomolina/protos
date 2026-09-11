@@ -967,3 +967,42 @@ clients.
 LM009-F4 is **RELEASED_FOR_IMPLEMENTATION** only after this ratification reaches
 `main`. F4 owns the public CLI dispatch, thin VS Code LanguageClient launch wiring
 and end-to-end foundation proof. LM009-G/H feature semantics remain excluded.
+
+## LM009-F4 public launcher and reference LanguageClient wiring
+
+Status: **IMPLEMENTED_PENDING_LIVE_FOUNDATION_CHECK**
+
+F4 consumes published PLAT024 Candidate A′ and D070 Candidate A′ without adding
+another design choice.
+
+Published implementation boundary:
+
+- `protos language-server` is dispatched by the ordinary `ProtosCli` launcher to
+  the already-published F3 stdio host;
+- `ProtosLanguageServerMain.run(input, output)` exposes only the internal stream
+  boundary needed by the CLI while retaining standard server lifecycle behavior;
+- CLI stdout remains LSP framing only while the command is active and
+  unexpected command arguments fail before protocol startup;
+- the reference VS Code extension uses `vscode-languageclient` as protocol/client
+  machinery and launches exactly `protos.runtime.executable` with
+  `["language-server"]`, shell-free;
+- the existing runtime setting remains the sole Run/Debug/language-server
+  toolchain authority;
+- the LanguageClient document selector names only language id `protos`; it does
+  not convert editor URIs into Protos module/package/path semantics;
+- one extension activation owns at most one client/server process and stops it on
+  deactivation; Restricted Mode owns none;
+- no second server executable setting, sibling path inference, Java/JAR layout,
+  editor-side parser/model, global daemon or TCP discovery is introduced; and
+- LM009-G/H static language-intelligence semantics remain excluded.
+
+Focused repository evidence covers real LSP Content-Length framing through the
+public CLI command, help/argument boundary, exact LanguageClient command/argv and
+single configuration authority, trust gating, client lifecycle/retry, and
+retained Run/Debug/grammar structural tests.
+
+LM009-F remains **IN_PROGRESS** until the real VS Code foundation check proves
+that the current selected toolchain launches one matching server, normal
+document synchronization remains healthy, and Extension Host teardown leaves no
+server child. That live check does not require or claim LM009-G/H diagnostics or
+navigation.

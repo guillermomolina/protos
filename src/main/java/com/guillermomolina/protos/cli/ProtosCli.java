@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.execution.*;
+import com.guillermomolina.protos.lsp.ProtosLanguageServerMain;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.*;
 import com.oracle.truffle.api.source.Source;
@@ -60,6 +61,13 @@ public final class ProtosCli {
             if (args.length == 1 && (args[0].equals("--version") || args[0].equals("-v"))) {
                 String v = getClass().getPackage().getImplementationVersion();
                 out.println("Protos " + (v == null ? "development" : v));
+                return 0;
+            }
+            if (args[0].equals("language-server")) {
+                if (args.length != 1) {
+                    return usage(err, "language-server accepts no arguments");
+                }
+                ProtosLanguageServerMain.run(in, out);
                 return 0;
             }
             if (args[0].equals("debug")) {
@@ -1059,6 +1067,7 @@ public final class ProtosCli {
                         + "  protos <file> [args...]\n"
                         + "  protos -e <source> [args...]\n"
                         + "  protos debug <file> [args...]\n"
+                        + "  protos language-server\n"
                         + "  protos run <entry> [args...]\n"
                         + "  protos package [args...]\n"
                         + "  protos test [--jobs N] [args...]\n"
@@ -1073,6 +1082,8 @@ public final class ProtosCli {
                         + "Debug executes one explicit file through the standard DAP debugger; "
                         + "its one PROTOS_DEBUG_READY JSON record is emitted on stdout before "
                         + "guest execution and guest output then travels through DAP.\n"
+                        + "Language-server starts the toolchain-matched static service using "
+                        + "standard LSP over stdin/stdout; stdout is protocol-only while active.\n"
                         + "Test Tool --jobs N selects positive logical execution capacity; "
                         + "without --jobs the Test Tool uses jobs = 1.\n"
                         + "Application arguments are available through process.args(); "
