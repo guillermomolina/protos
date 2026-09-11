@@ -792,3 +792,39 @@ LM009-E remains open after repository publication. Final S3 still requires one r
 retest proving that the active `.protos` file remains the same physical Protos document rather than
 being reopened as a virtual/Plain Text source, while the already-proven debugger behaviors and clean
 process termination remain intact.
+
+## LM009-F1 parser-authority static-analysis core
+
+Status: **IMPLEMENTED**
+
+This is the first executable LM009-F slice released by ratified PLAT024
+Candidate A′. It establishes only the editor-neutral parser-authority core; it
+does not yet claim the client-owned session/workspace state or stdio LSP host
+required to close LM009-F.
+
+Published implementation boundary:
+
+- `ProtosDocumentSnapshot` carries one immutable source text plus opaque document
+  identity/version metadata. The core does not interpret that identifier as a
+  filesystem path, URI, module specifier or ModuleKey.
+- `ProtosStaticAnalysisCore` calls the existing real
+  `ProtosParser(String).parseProgram()` directly. It requires no Polyglot/Truffle
+  Context and executes no guest code.
+- `ProtosStaticParseResult` retains either the real parsed `SurfaceSequence` or
+  the parser failure message, exact `SourceSpan`, and
+  `unexpectedEndOfSource` classification. This representation is internal
+  analysis data, not an LM009-G public diagnostic contract.
+- No LSP DTO/JSON dependency, VS Code semantic implementation, workspace/global
+  index, module-resolution policy, background thread or shared mutable registry
+  is introduced by F1.
+
+Focused evidence covers valid unexecuted source, exact unexpected-token span,
+unexpected-EOF classification and opaque snapshot metadata without runtime
+execution.
+
+LM009-F remains **IN_PROGRESS**. The next mechanical tranche is F2
+client-session document/workspace custody and concurrency/cancellation mechanics
+over this core, followed by the dedicated stdio LSP edge. LM009-G/H remain the
+owners of editor-visible diagnostics, symbols, definition, completion, hover,
+signature help and references. Any newly exposed substantive semantic or durable
+platform choice still stops at the ordinary Dxxx/PLATxxx gate.
