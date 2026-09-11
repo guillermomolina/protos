@@ -1,5 +1,16 @@
 ## 0.2.373-SNAPSHOT
 
+- Close `LM009-F — Static language-service foundation` (GitHub #340) after the
+  published F1/F2/F3/F4 chain and the project-owner S4 live VS Code proof. Confirm
+  the selected `protos language-server` contract starts exactly one matching
+  toolchain server, survives repeated document edits/saves without restart, uses
+  no second server/JVM/JAR setting, and terminates when the Extension Development
+  Host closes. Release `LM009-G` for diagnostics/symbols/definition work without
+  claiming any G/H feature semantics. Also ignore editor-local `node_modules`
+  trees exposed by the live `vscode-languageclient` setup. Closure/governance and
+  repository-hygiene only: no Protos specification, production implementation,
+  native boundary or implementation-version change.
+
 - Close `PERF006-B5B — source/instrumentation/logical-location compatibility evidence` under ratified PLAT004/PLAT005/PLAT008/PLAT014 after B5A. Add retained Bytecode evidence that exact root/StatementTag/CallTag source identity and ranges survive metadata materialization without RootTag/RootBodyTag/ExpressionTag expansion, and that composed C-prime caller/callee continuations retain backend-native BytecodeLocation source projections across suspension/resume while completed prefix effects do not replay. B5 is closed; B6 owns normal-source production cutover and legacy replay retirement. Test/evidence only: no production source, specification, public API or implementation-version change.
 
 - Implement `LIB009-D — CSV TextReader/TextWriter adapters` (GitHub #357) after explicit owner approval of the JSON-D3-aligned public surface. Add ordinary `CSV.readRows(textReader, consumer)` with one ordered `readText()` per `read()` and `Future<Boolean>` progress/EOF results, plus `CSV.writeRows(textWriter)` with one ordered `writeText()` per encoded row and an empty-write Future barrier at `finish()`. Reuse the published `rowParser` and `encode` contracts, enforce one outstanding adapter operation, preserve terminal failure/reuse behavior, borrow rather than own supplied Text I/O capabilities, and add no Encoding/BOM/filesystem/network/flush/close authority. Durably record the approved D adapter contract and add async adapter conformance coverage. Export exactly `{parse, encode, rowParser, readRows, writeRows}`; custom dialect API remains deferred. Implementation version becomes `0.2.373-SNAPSHOT`.

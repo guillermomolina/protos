@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G READY**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -970,7 +970,7 @@ and end-to-end foundation proof. LM009-G/H feature semantics remain excluded.
 
 ## LM009-F4 public launcher and reference LanguageClient wiring
 
-Status: **IMPLEMENTED_PENDING_LIVE_FOUNDATION_CHECK**
+Status: **CLOSED — S4 foundation live check PASS**
 
 F4 consumes published PLAT024 Candidate A′ and D070 Candidate A′ without adding
 another design choice.
@@ -1001,8 +1001,27 @@ public CLI command, help/argument boundary, exact LanguageClient command/argv an
 single configuration authority, trust gating, client lifecycle/retry, and
 retained Run/Debug/grammar structural tests.
 
-LM009-F remains **IN_PROGRESS** until the real VS Code foundation check proves
-that the current selected toolchain launches one matching server, normal
-document synchronization remains healthy, and Extension Host teardown leaves no
-server child. That live check does not require or claim LM009-G/H diagnostics or
-navigation.
+The real VS Code foundation check is now **PASS**. Project-owner evidence against
+published F4 (`ca3d477730e676faf60718e571d0d5367582aa4f`, Protos
+`0.2.371-SNAPSHOT`) proved the complete F closure boundary:
+
+- before opening a `.protos` document, no `language-server` process existed;
+- opening the document in a real Extension Development Host started exactly one
+  matching toolchain server through the selected launcher contract;
+- the observed process was the current GraalVM Java runtime executing the current
+  Protos JAR with argv `language-server`;
+- after multiple edits/saves, the same single server PID remained alive, proving
+  ordinary LSP document synchronization did not crash or restart the service;
+- no second language-server executable setting, Java/JAR setting or editor-side
+  Protos semantic authority was required; and
+- closing the Extension Development Host removed the server process completely,
+  proving client-owned lifecycle/teardown.
+
+The temporary `node_modules` tree required for the live extension check is local
+editor-development state and is ignored by the repository; it is not a Protos
+runtime/distribution artifact.
+
+LM009-F is therefore **CLOSED**. F1/F2/F3/F4 plus the real editor lifecycle and
+document-sync composition satisfy the foundation target without claiming any
+LM009-G/H static feature semantics. **LM009-G is READY** to own diagnostics,
+symbols and definition behavior.
