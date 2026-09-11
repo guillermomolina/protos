@@ -1,5 +1,18 @@
 ## 0.2.349-SNAPSHOT
 
+- Ratify `D066 — Documentation authority, project Wiki, and public website topology`
+  (GitHub #325) after explicit project-owner approval and topology re-audit. Keep
+  `guillermomolina/protos` as canonical/version-sensitive authority, reserve the
+  Protos GitHub Wiki for non-authoritative contributor/project knowledge, and
+  retain independent `guillermomolina/protos-website` as public presentation with
+  exact-SHA Protos source input. Refine rather than replace WEB001-B; retain
+  D061/D062/D064 and published TOOL003-A, abandon the unpublished pre-D066
+  TOOL003-B candidate, and require WEB001-J7B to re-derive the smallest
+  Protos-owned deterministic Standard Library extraction mechanism needed by its
+  real consumer before further cross-consumer generalization. No specification,
+  executable implementation, Maven implementation-version, runtime, Standard
+  Library semantic, package-format or deployment change.
+
 - Ratify `D065 — File-backed tooling source path identity and canonicalization` (GitHub #323) after explicit project-owner approval and exhaustive cross-language/source-debugging review. Select Candidate B: ordinary filesystem-backed Protos sources expose to tooling the absolute lexically-normalized path by which the current execution/workspace host selected the source, without resolving symlinks solely for presentation identity. Keep `ProtosModuleKey` and package/module rules authoritative for semantic identity; keep generated/in-memory sources virtual; add no alias registry, editor-side path map or DAP proxy; and defer explicit client/target path mapping until a future mode genuinely has distinct namespaces. Release the bounded LM009-E source-presentation correction while preserving D060/PLAT018 debugger architecture. No specification, executable implementation, Maven implementation-version, Standard Library semantic, package-format, release or deployment change.
 
 - Close `GITHUB010 — Exhaustive Dxxx/PLATxxx comparative decision research

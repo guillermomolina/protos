@@ -152,6 +152,40 @@ No website bootstrap, dependency pin, production-host implementation, DNS
 change, logo publication, or playground implementation is included in the
 WEB001-B ratification.
 
+<!-- D066-DOCUMENTATION-AUTHORITY-WIKI-WEBSITE-TOPOLOGY -->
+## D066 — documentation authority, project Wiki, and public website topology
+
+GitHub Issue [#325](https://github.com/guillermomolina/protos/issues/325) owns the
+durable topology refinement triggered while re-auditing WEB001-J7B / TOOL003.
+
+The project owner explicitly approved Candidate D on 2026-09-11. D066 keeps the
+WEB001-B independent companion-repository model and separates three roles:
+
+```text
+protos repository  -> canonical/version-sensitive authority
+Protos Wiki        -> non-authoritative contributor/project knowledge
+protos-website     -> public user-facing presentation and deployment
+```
+
+The Wiki may host onboarding, build/development guidance, project orientation,
+FAQ, troubleshooting, glossary and workflow explanations, but it is not a
+specification, API authority, decision registry or release-versioned reference.
+GitHub stores the Wiki as its own Git repository, so version-sensitive material
+continues to live with the exact `protos` revision it describes.
+
+`protos-source.lock.json` remains a valid reproducibility mechanism for the
+independent website. D066 instead corrects an implementation inference: the
+cross-repository boundary does not require Protos to pre-build a universal
+documentation platform for hypothetical CLI/IDE/package consumers. D061, D062
+and D064 remain ratified; TOOL003-A remains published; the unpublished pre-D066
+TOOL003-B candidate is abandoned; and WEB001-J7B must re-derive the smallest
+Protos-owned deterministic Standard Library extraction mechanism that its real
+consumer currently requires.
+
+D066 is **RATIFIED / CLOSED** at the decision level. No implementation,
+specification, Maven implementation-version, deployment or runtime change is
+included in this governance publication.
+
 <!-- WEB001-F-PRODUCTION-HOSTING-ARCHITECTURE -->
 ## WEB001-F — production hosting architecture
 
