@@ -1281,7 +1281,7 @@ the initial TOOL002 closure.
 | TOOL002-H | IN_PROGRESS | H1 concurrent fresh-Process/Context overlap proof is published; D055 ratifies the general async exact-execution -> caller-domain Future contract; H2 is READY for bridge + bounded Protos scheduling implementation. |
 | TOOL002-H1 | CLOSED | `7bc0d7a4dbc6788be14b33ea29b8ad8c2b12b794` / `0.2.303-SNAPSHOT`; test-impact proof that one shared RuntimeHost can host two simultaneous fresh semantic Process Contexts with private stdout; no production/version/CLI policy change. |
 | TOOL002-H2 | READY | D055 RATIFIED; implement the general asynchronous exact-execution -> ordinary caller-domain Future bridge, then bounded bundled-Protos scheduling with deterministic logical result order; JVM carrier/jobs-auto/resource/timeout policy remains deferred. |
-| TOOL002-I | BLOCKED_BY_DEPENDENCIES | TOOL002-H; explicit resource constraints/private capabilities for real external-resource sharing. |
+| TOOL002-I | READY | D076/D077/D087 RATIFIED; I1-I5 CLOSED. Persistent requirement parsing may continue through the private shared bundled-tool TOML bootstrap boundary; D077/D087 deferred public filenames, CLI, scope, provider and generalized internal-tool dependency contracts remain gated. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | TOOL002-I; CI/launcher integration: Java implementation tests first, then the Protos test tool for the Protos corpus. |
 
 Detailed scope and architecture references live in
