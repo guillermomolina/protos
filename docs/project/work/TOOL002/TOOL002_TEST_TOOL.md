@@ -67,8 +67,8 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-E | CLOSED | E1A/E1B/E2A/E2B/E3/E4 complete the retained Package/TOML migration: bundled Protos owns planning, confined source loading, Package execution, Boolean/Error expectation policy and aggregation; duplicate Java corpus-policy ownership is removed. |
 | TOOL002-F | CLOSED | F1/F2/F3 plus the F4 cutover program are published: bundled Protos now owns all retained Future expectation policy and the complete main manifest; duplicate Java Future policy is retired. |
 | TOOL002-G | CLOSED | G1/G1A establish production-scheduler cooperative inspection; G2/G3 migrate the complete retained Actor/Group manifests into bundled-Protos Runner ownership; G4 retires the duplicate Java corpus-policy owners and reconciles closure. |
-| TOOL002-H | IN_PROGRESS | H1 and H2A are closed; H2B1/H2B2 publish bounded ordinary-Protos scheduling; D069 and PLAT023 are ratified; H2B3 publishes the real `protos test` cutover with D069 `--jobs N` parsing and PLAT023 fresh platform-thread submission. Parent H remains open for closure reconciliation before TOOL002-I. |
-| TOOL002-I | BLOCKED_BY_DEPENDENCIES | After H, add explicit resource constraints/private capabilities where real external-resource sharing requires them. |
+| TOOL002-H | CLOSED | H1/H2A/H2B1/H2B2/H2B3 are published; D055, D069 and PLAT023 remain ratified. Closure reconciliation retains the real public `protos test --jobs N` path, adds a bounded-parallel public CLI regression, runs the broad Test Tool set and the repository top-level FULL publication-validation suite, and introduces no resources, auto-jobs, timeout/kill, retry, remote, specification or native-boundary policy. |
+| TOOL002-I | READY | TOOL002-H is closed. Recover the exact repository-defined I scope before implementation; I owns explicit resource constraints/private capabilities where real external-resource sharing requires them and must still stop for any newly exposed substantive resource-policy decision. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | After I, integrate the final Java-first / Protos-tool-second validation pipeline. |
 
 ## TOOL002-E decomposition
@@ -1281,3 +1281,41 @@ checkpoint passed; checkpoint evidence must be reported separately.
 This is validation-workflow policy only. It changes no Protos semantics, Test Tool
 public contract, D069 default (`jobs=1`), production implementation, specification,
 native boundary or implementation version.
+
+## TOOL002-H closure reconciliation
+
+Status: **CLOSED — broader reconciliation required by GitHub #95 completed before publication**
+
+The H closure adds no production Test Tool mechanism and selects no new public
+semantics. It reconciles the already-published H1/H2A/H2B1/H2B2/H2B3 chain under
+the retained D055, D069 and PLAT023 decisions.
+
+The closure candidate retains one lightweight Tool-owned reconciliation test
+that verifies the published H2B3 cutover remains materialized: public Main still
+uses D069 `Options.jobs(process.args())`, all four retained plans still route
+through `Runner.runBounded(...)`, and the PLAT023 production carrier remains the
+fresh platform-thread mechanism.
+
+Closure validation is intentionally broader than the H2B implementation
+iterations but avoids repeatedly traversing the same multi-minute CLI corpus:
+
+1. the owner-approved explicit checkpoint runs the real
+   `ProtosCliTest.testSubcommandRunsBundledProtosToolThroughCommonBootstrap`
+   with `-Dprotos.testToolCheckpoint=true`, which executes
+   `protos test --jobs 2` exactly once;
+2. `scripts/validation_impact.py --top-level-closure` must classify the closure
+   candidate as `FULL`, not the PERF007 `FULL:NON_TOOL` quarantine, because the
+   closure contains a Tool-owned reconciliation test;
+3. `scripts/publication_validation.py --top-level-closure` then runs the source
+   style prevention gate and complete Maven suite with the slow CLI checkpoint
+   skipped by default, as required by the temporary checkpoint policy.
+
+No validation result is reused across an advancing `main`; the publication
+launcher aborts if `origin/main` changes after the immutable candidate was
+validated.
+
+TOOL002-H therefore closes without adding `jobs=auto`, `-j`, resource
+declarations/weights, hard timeout/kill, retry, sharding, remote execution,
+Actor scheduler/carrier changes, specification changes or native-boundary
+changes. **TOOL002-I is released to READY solely because its dependency on H is
+satisfied; this closure does not preselect I's resource-policy details.**

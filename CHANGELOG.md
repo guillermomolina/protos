@@ -1,5 +1,19 @@
 ## 0.2.372-SNAPSHOT
 
+- Close `TOOL002-H — bounded parallel Test Tool scheduling` (GitHub #95) after
+  the published H1/H2A/H2B1/H2B2/H2B3 chain by running the owner-approved real
+  CLI checkpoint exactly once as `protos test --jobs 2`, retaining a lightweight
+  Tool-owned H2B3 reconciliation test, and forcing the repository top-level
+  closure classifier to `FULL`, which runs the source-style prevention gate and
+  complete Maven suite with the slow CLI checkpoint skipped by default. Confirm
+  D055/D069/PLAT023 boundaries remain intact, public default remains `jobs=1`,
+  admitted work still uses the replaceable fresh platform-thread carrier, and
+  deterministic TestPlan projection/private execution evidence remain covered. Release
+  `TOOL002-I` from its H dependency without selecting any resource syntax,
+  capacity/weight policy, `jobs=auto`, timeout/kill, retry, sharding or remote
+  execution policy. Closure/test/governance only: no production implementation,
+  specification, native-boundary or implementation-version change.
+
 - Implement `PERF006-B5A — Bytecode debugger scope projection bridge` under ratified PLAT015/PLAT013. Configure Bytecode DSL tag instrumentation to use a Protos-owned `NodeLibrary` bridge that obtains the exact `ProtosActivation` from frame argument zero and projects the existing read-only `ProtosDebuggerScope`, rather than exposing Bytecode interpreter locals as guest bindings. Preserve ordinary activation lookup precedence, no named receiver, no artificial language top scope, no debugger mutation/evaluation authority, lazy tooling allocation and the existing StatementTag/CallTag/root-tag policy. This is a backend tooling bridge only; B5B retains source/tag event and logical-location compatibility evidence, and B6 cutover/replay retirement remain separate. Implementation version becomes `0.2.372-SNAPSHOT`.
 
 ## 0.2.371-SNAPSHOT
