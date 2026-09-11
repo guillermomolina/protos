@@ -936,3 +936,34 @@ LM009-F remains **IN_PROGRESS** after F3. The remaining F closure work is the
 reference client/toolchain launch wiring and end-to-end foundation proof that a
 real editor client starts the dedicated matching server without embedding
 Protos semantics in TypeScript.
+
+
+## D070 language-server executable discovery and public launch surface
+
+Status: **RATIFIED — Candidate A′ selected**
+
+Explicit project-owner approval on 2026-09-11 ratifies the public tool-facing
+launcher contract:
+
+```text
+protos language-server
+```
+
+The reference editor must start that command through the already-selected
+`protos.runtime.executable` with argv `["language-server"]`, shell-free. Standard
+LSP over stdin/stdout remains the PLAT024 baseline; stdout is protocol-only while
+the server is active.
+
+The configured Protos executable remains the single toolchain/version authority
+for Run, Debug and the static language server. D070 introduces no second
+language-server executable setting, sibling-path inference rule, editor-owned
+server version, Java/JAR/classpath knowledge, global daemon or TCP discovery.
+
+The public command names the service role rather than its current JVM/LSP
+implementation. A future Native Image, sibling binary or self-hosted server may
+be selected behind the same compatibility launcher without changing editor
+clients.
+
+LM009-F4 is **RELEASED_FOR_IMPLEMENTATION** only after this ratification reaches
+`main`. F4 owns the public CLI dispatch, thin VS Code LanguageClient launch wiring
+and end-to-end foundation proof. LM009-G/H feature semantics remain excluded.
