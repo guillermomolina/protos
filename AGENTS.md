@@ -2130,6 +2130,7 @@ Normative domain models supplement those core documents for semantically substan
 - `spec/semantics/MODULES.md` — primary normative owner of migrated module semantics.
 - `spec/semantics/ERRORS.md` — primary normative owner of migrated Error semantics.
 - `spec/semantics/VALUES_AND_COLLECTIONS.md` — primary normative owner of value-family, equality/identity, indexing, and collection semantics.
+- `spec/semantics/MATCHING.md` — primary normative owner of ratified matching-protocol, matcher-outcome, and structural-projection semantics.
 
 - `spec/io/IO_CORE.md` — cross-cutting I/O capability, commitment, lifecycle, and wrapper semantics.
 - `spec/io/BYTE_IO.md` — byte-I/O protocol semantics.

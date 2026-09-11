@@ -29,3 +29,10 @@ specification revision and decision outcome are unchanged by the move; observabl
 Protos semantics remain authoritative under `spec/`.
 
 This list is not a closed manifest for future language decisions.
+
+## Subsequent language-domain decisions
+
+- [`D071_MULTI_WAY_MATCHING_ARCHITECTURE.md`](D071_MULTI_WAY_MATCHING_ARCHITECTURE.md)
+- [`D072_MATCHER_OUTCOME_CAPTURE_CARRIER.md`](D072_MATCHER_OUTCOME_CAPTURE_CARRIER.md)
+- [`D073_MATCHER_INVOCATION_AUTHORITY.md`](D073_MATCHER_INVOCATION_AUTHORITY.md)
+- [`D074_STRUCTURAL_DECONSTRUCTION_VIEW_ARCHITECTURE.md`](D074_STRUCTURAL_DECONSTRUCTION_VIEW_ARCHITECTURE.md)

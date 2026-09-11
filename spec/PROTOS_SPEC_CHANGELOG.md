@@ -9,6 +9,34 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.394] - 2026-09-11
+
+### D071-D074 — Extensible matching protocol architecture
+- Publishes the project-owner-ratified matching architecture after exhaustive comparative review:
+  pattern-owned recognition, explicit subject-owned structural projection, source-order / first-success
+  matching, ordinary selected-branch invocation, no truthiness and no implicit await.
+- Standardizes the single required public matcher authority as `pattern.match(subject)` and the exact
+  matcher outcome carrier: canonical `false` for no match, canonical `true` for zero-capture success,
+  and a non-empty standard Array for positional captures. Every other normal outcome is invalid at the
+  standard matcher-consuming boundary; Error and non-normal control propagate normally.
+- Standardizes the subject-side architecture for generic object structural matching as a named,
+  selective logical projection. Structural matching does not implicitly enumerate slots, delegated
+  members, prototype ancestry, indexed contents, or host representation, and ordinary objects acquire
+  no universal positional product layout.
+- Leaves syntax, arms/defaults, literal/equality patterns, guards, exhaustivity, built-in pattern
+  taxonomy, nested capture flattening, named bindings, exact structural-projection selector/request/
+  result/failure carrier, full-view/remainder semantics, positional subject deconstruction, and any
+  recognition-only optimization protocol explicitly unresolved.
+
+### Compatibility and implementation state
+- New primary normative owner: `semantics/MATCHING.md`; `PROTOS_LANGUAGE_SPEC.md` and root `AGENTS.md`
+  register that modular owner for navigation and future-agent authority.
+- Adds durable non-normative decision records D071-D074 under
+  `docs/project/decisions/language/` and indexes them from that decision domain.
+- No grammar, parser, production implementation, Maven implementation version, native boundary,
+  license term, or standard-library source is changed by this publication slice.
+- D075 and all later matching-design checkpoints are excluded.
+
 ## [0.1.393] - 2026-09-09
 
 ### D052 — TCP live-resource object topology
