@@ -21,7 +21,9 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
@@ -30,14 +32,14 @@ import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** Real-std conformance harness for LIB009-A/B/C default-profile CSV parsing/encoding/streaming. */
+/** Real-std conformance harness for LIB009-A/B/C/D CSV codec, streaming and Text I/O composition. */
 final class ProtosCsvModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path CASE_ROOT = Path.of("protos", "tests", "library", "csv");
 
     @Test
-    void importedModuleExportsExactlyParseEncodeAndRowParserAtCStage() throws Exception {
+    void importedModuleExportsExactlyPublishedDStageSurface() throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -48,7 +50,9 @@ final class ProtosCsvModuleTest {
                         .call(prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
-        assertEquals(Set.of("parse", "encode", "rowParser"), module.localSlotsSnapshot().keySet());
+        assertEquals(
+                Set.of("parse", "encode", "rowParser", "readRows", "writeRows"),
+                module.localSlotsSnapshot().keySet());
     }
 
     @Test
@@ -94,19 +98,48 @@ final class ProtosCsvModuleTest {
         assertFixture("row-parser-independence.protos");
     }
 
+    @Test
+    void textReaderAndWriterAdaptersConform() throws Exception {
+        assertFixture("text-adapter-reader.protos");
+        assertFixture("text-adapter-writer.protos");
+        assertFixture("text-adapter-overlap.protos");
+        assertFixture("text-adapter-terminal-errors.protos");
+    }
+
     private static void assertFixture(String fixture) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
+        ProtosActivation activation = prelude.newModuleActivation();
         Object result =
                 new ProtosSourceCompiler()
                         .compile(
                                 Files.readString(
                                         CASE_ROOT.resolve(fixture),
                                         StandardCharsets.UTF_8))
-                        .call(prelude.newModuleActivation());
+                        .call(activation);
+
+        if (result instanceof ProtosFutureValue future) {
+            awaitTerminal(future, activation, fixture);
+            assertEquals(ProtosFutureValue.State.RESOLVED, future.state(), fixture);
+            result = future.resolvedValue().orElseThrow();
+        }
 
         assertSame(ProtosBooleanValue.TRUE, result, fixture);
+    }
+
+    private static void awaitTerminal(
+            ProtosFutureValue future, ProtosActivation activation, String fixture) {
+        int dispatches = 0;
+        while (future.state() == ProtosFutureValue.State.PENDING) {
+            if (!activation.executionDomain().dispatchOne()) {
+                throw new AssertionError(fixture + ": pending Future with no runnable work");
+            }
+            dispatches++;
+            if (dispatches > 100000) {
+                throw new AssertionError(fixture + ": Future exceeded bounded terminal progress");
+            }
+        }
     }
 }

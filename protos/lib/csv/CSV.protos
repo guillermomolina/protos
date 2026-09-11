@@ -395,3 +395,101 @@ encode: (rows) => {
 
     Encoding.UTF8.decode(output)
 }
+
+readRows: (textReader, emit) => {
+    parser: rowParser(emit)
+    busy: false
+    finished: false
+    adapter: null
+
+    ensureReady: () => {
+        busy.ifTrue(() => {
+            Error().signal()
+        })
+        finished.ifTrue(() => {
+            Error().signal()
+        })
+    }
+
+    adapter = {
+        read: () => {
+            ensureReady()
+
+            // Enter the operation before crossing the supplied capability
+            // boundary so synchronous reader failure is terminal as well.
+            busy = true
+            readFuture: textReader.readText()
+            completion: readFuture.then((chunk) => {
+                more: true
+
+                (chunk === null).ifTrue(() => {
+                    parser.finish()
+                    finished = true
+                    more = false
+                })
+
+                (chunk === null).ifFalse(() => {
+                    parser.feed(chunk)
+                })
+
+                busy = false
+                more
+            })
+
+            completion
+        }
+    }
+
+    adapter
+}
+
+writeRows: (textWriter) => {
+    busy: false
+    finished: false
+    adapter: null
+
+    ensureReady: () => {
+        busy.ifTrue(() => {
+            Error().signal()
+        })
+        finished.ifTrue(() => {
+            Error().signal()
+        })
+    }
+
+    adapter = {
+        feed: (row) => {
+            ensureReady()
+
+            // Keep validation/encoding and downstream writing in one terminal
+            // operation, mirroring JSON.writeEvents.
+            busy = true
+            chunk: encode(Array(row))
+            writeFuture: textWriter.writeText(chunk)
+            completion: writeFuture.then((ignored) => {
+                busy = false
+                adapter
+            })
+
+            completion
+        }
+
+        finish: () => {
+            ensureReady()
+
+            // Ordered zero-output Future barrier. It adds no CSV bytes and does
+            // not flush, close, or take ownership of the supplied writer.
+            busy = true
+            barrier: textWriter.writeText("")
+            completion: barrier.then((ignored) => {
+                finished = true
+                busy = false
+                adapter
+            })
+
+            completion
+        }
+    }
+
+    adapter
+}

@@ -498,6 +498,52 @@ incremental API convention.
 The decision does not add result counts, consumer-result forwarding, progress
 objects, backpressure, resource-limit policy or custom dialect representation.
 
+## LIB009-D TextReader/TextWriter adapter contract
+
+Status: **APPROVED — 2026-09-11**
+
+The project owner approved Candidate A, intentionally mirroring the established
+JSON D3 Future-shaped I/O composition pattern with CSV row vocabulary:
+
+```text
+input = CSV.readRows(textReader, consumer)
+input.read() -> Future<Boolean>
+
+output = CSV.writeRows(textWriter)
+output.feed(row) -> Future
+output.finish() -> Future
+```
+
+`readRows` creates one fresh ordinary adapter around the already-published
+`rowParser`. Each `read()` allows at most one outstanding adapter operation and
+performs exactly one ordered `TextReader.readText()` operation. A non-null
+String chunk is fed synchronously to `rowParser` and successful completion
+resolves to canonical `true`; `null` EOF finalizes the row parser and successful
+completion resolves to canonical `false`.
+
+`readRows` deliberately uses `readText()` rather than `readLine()`: quoted CSV
+fields may contain CR, LF or CRLF and TextReader chunk boundaries have no CSV
+record significance. The supplied TextReader is borrowed. The CSV adapter never
+closes it, changes its Encoding, takes ownership of its underlying source, or
+creates filesystem/network authority.
+
+`writeRows` creates one fresh ordinary adapter. Each `feed(row)` validates and
+encodes exactly one row using the already-published default writer policy and
+performs exactly one ordered `TextWriter.writeText(encodedRow)` operation. At
+most one adapter operation may be outstanding, providing explicit backpressure.
+
+`writeRows.finish()` performs one ordered `TextWriter.writeText("")` zero-output
+barrier, matching JSON D3 and Core TextWriter empty-write semantics. It adds no
+CSV bytes and does not call `flush()` or `close()`. The supplied TextWriter is
+borrowed and its ownership/lifecycle remains entirely with the caller.
+
+A synchronous capability/validation failure, a parser/consumer failure, or a
+failed downstream Future leaves the corresponding adapter terminal. Successful
+input EOF / successful output `finish()` also make reuse invalid. No extra
+buffering, Encoding/BOM policy, filesystem/network convenience, cancellation
+policy, custom dialect representation, generic serializer abstraction or
+resource-limit policy is introduced by this slice.
+
 ## Intentionally deferred
 
 LIB009-0 does not decide:

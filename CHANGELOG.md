@@ -1,3 +1,7 @@
+## 0.2.373-SNAPSHOT
+
+- Implement `LIB009-D — CSV TextReader/TextWriter adapters` (GitHub #357) after explicit owner approval of the JSON-D3-aligned public surface. Add ordinary `CSV.readRows(textReader, consumer)` with one ordered `readText()` per `read()` and `Future<Boolean>` progress/EOF results, plus `CSV.writeRows(textWriter)` with one ordered `writeText()` per encoded row and an empty-write Future barrier at `finish()`. Reuse the published `rowParser` and `encode` contracts, enforce one outstanding adapter operation, preserve terminal failure/reuse behavior, borrow rather than own supplied Text I/O capabilities, and add no Encoding/BOM/filesystem/network/flush/close authority. Durably record the approved D adapter contract and add async adapter conformance coverage. Export exactly `{parse, encode, rowParser, readRows, writeRows}`; custom dialect API remains deferred. Implementation version becomes `0.2.373-SNAPSHOT`.
+
 ## 0.2.372-SNAPSHOT
 
 - Close `TOOL002-H — bounded parallel Test Tool scheduling` (GitHub #95) after
