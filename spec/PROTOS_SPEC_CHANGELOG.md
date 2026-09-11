@@ -9,6 +9,23 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.399] - 2026-09-11
+
+### D083 — Standard composite capture composition
+- Ratifies one-level D072 carrier concatenation for standard composites: each immediate child remains opaque and is consumed only through `child.match(childSubject)`; canonical `false` stops the composite as mismatch, canonical `true` contributes zero captures, and a non-empty child capture Array contributes exactly its top-level elements in carrier order.
+- Captured values are never recursively flattened. An Array-valued capture remains one ordinary capture (`[[1, 2]]` is one captured `[1, 2]` value), preserving D072's existing `[[]]` distinction.
+- Ordered standard children execute in deterministic semantic order, left-to-right for ordered child lists, exactly once until mismatch. Valid child carriers are shallowly consumed before the next child; invalid outcomes signal ordinary `Error`; Error/control/cancellation/explicit suspension propagate and prior effects are not rolled back.
+- All-success with zero total captures returns canonical `true`; all-success with captures returns one standard non-empty Array containing the concatenated shallow capture sequence.
+- Rest/repetition/whole-subject and similar aggregation remain explicit pattern-family behavior: a pattern that wants an aggregate to be one capture publishes that ordinary aggregate value as one D072 capture.
+- No capture-tree reflection, fixed `captureArity`, capture-name Map, `CaptureFrame`, mutable sink/CPS path, second matcher authority, or mandatory signature protocol is introduced.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D083 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075, D078, D080 and D081 matching semantics remain unchanged.
+- Concrete match/arm grammar, source binding spelling and duplicate-name policy, alternative/or binding-interface mechanics, guards, exhaustivity, sequence/Map remainder semantics, repetition/optional/rest semantics, whole-subject alias syntax, identity-pattern syntax, and recognition-only fast paths remain unresolved.
+- No parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D082 is unrelated concurrent work and is excluded; D084 and later matching-design checkpoints are excluded.
+
 ## [0.1.398] - 2026-09-11
 
 ### D081 — Default ordinary value-pattern matching

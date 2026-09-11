@@ -9,11 +9,10 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.398`.
+`0.1.399`.
 It deliberately does **not** define concrete matching-expression grammar,
 case/arm/default syntax, which source expressions or future surface forms denote
-ordinary value patterns, guards, exhaustivity, standard pattern taxonomy,
-nested-capture flattening, or named-binding syntax. Those remain unresolved
+ordinary value patterns, guards, exhaustivity, standard pattern taxonomy, or named-binding syntax. Those remain unresolved
 until separately ratified.
 
 ## 1. Scope and architectural boundary
@@ -163,6 +162,111 @@ ultimately ignores those captures. This revision deliberately defines no second
 recognition-only semantic path. A later optional optimization protocol may be
 considered only by a separate decision and must not redefine the success
 relation established here.
+
+### 3.1 Standard composite capture composition
+
+For any standard composite pattern whose separately defined semantics evaluate an
+ordered set or sequence of child matcher attempts, each immediate child remains
+an **opaque ordinary matcher**. The composite invokes that child only through the
+D073 authority:
+
+```text
+child.match(childSubject)
+```
+
+D083 does not create a new standard pattern taxonomy or concrete matching syntax.
+It defines how a standard composite that already has child attempts composes
+their D072 outcomes.
+
+For one standard composite attempt, child attempts occur in the composite's
+deterministic semantic child order. When that child domain is ordered, such as an
+ordered child list, the order is left-to-right. Each attempted child is invoked
+exactly once. A normal canonical `false` result makes the composite fail
+immediately; later children are not invoked.
+
+A successful child contributes captures according to its exact D072 result:
+
+```text
+true         -> contribute zero captures
+[c1, ...]    -> contribute c1 ... cn in carrier order
+```
+
+Only the **outer D072 carrier level** participates in this concatenation.
+Captured values are never recursively flattened merely because a capture value is itself an Array
+or another collection. For example:
+
+```text
+child -> [[1, 2]]
+```
+
+publishes exactly one capture whose ordinary value is the Array `[1, 2]`. Amid
+other captures, a standard parent may therefore produce:
+
+```text
+[a, [1, 2], b]
+```
+
+but it must not reinterpret that result as:
+
+```text
+[a, 1, 2, b]
+```
+
+Likewise, `true` contributes no capture, `[true]` contributes one captured
+Boolean, `[false]` contributes one captured Boolean, and `[[]]` contributes one
+captured empty Array. The containing composite inserts no placeholder for a
+zero-capture child.
+
+Before invoking the next child, the standard composite shallowly consumes the
+top-level indexed element references of each valid child capture Array. Mutation
+of that carrier Array after this observation cannot retroactively change which
+capture references the current composite attempt has already observed. This is
+not a deep copy: a captured mutable object remains that same ordinary object.
+
+If every child succeeds and the concatenated capture sequence is empty, the
+composite returns canonical `true`. If every child succeeds and one or more
+captures were contributed, the composite returns one standard non-empty Array
+containing those capture references in composition order.
+
+An invalid normal child matcher outcome is an ordinary D072 protocol violation
+and causes `Error` at the consuming composite boundary; it is not mismatch or
+zero-capture success. Error, non-local control, cancellation, explicit
+suspension, and other non-normal behavior produced by a child propagate under
+ordinary Protos rules. Effects already performed by earlier attempted children
+are not rolled back when a later child mismatches or fails.
+
+Aggregation is explicit at the pattern's public result boundary. A pattern that
+semantically wants several values to constitute **one capture** publishes an
+ordinary aggregate value as one D072 capture. For example, a future repetition
+or rest pattern that chooses to capture an Array `[v1, v2, v3]` as one value
+publishes:
+
+```text
+[[v1, v2, v3]]
+```
+
+D083 does not choose repetition, optional, rest, or whole-subject pattern
+semantics themselves.
+
+Arbitrary user-defined `match(subject)` implementations remain constrained by
+D072 and their own documented behavior only. D083 does not require child-pattern
+topology introspection, a fixed capture arity, capture-name metadata, a
+`CaptureFrame`, a mutable capture sink, a callback/CPS path, or another matcher
+authority.
+
+A future standard alternative/or-pattern form that exposes fixed source-level
+bindings must provide a stable binding interface across its successful
+alternatives, but D083 does not select the mechanism for proving or representing
+that stability. Source binding names, duplicate-name rules, whole-subject alias
+syntax, guards, exhaustivity, and concrete match/arm grammar remain separate
+decisions.
+
+Implementations may inline or fuse standard composite layers, pre-size or
+eliminate intermediate carrier Arrays, or write captures directly into internal
+frame storage only when the observable result is equivalent to the semantics
+above. Such optimization must preserve matcher dispatch, required call count and
+order, Error/control/suspension behavior, shallow capture-value boundaries, and
+the prohibition on recursive flattening.
 
 ## 4. Explicit structural deconstruction boundary
 
@@ -424,7 +528,6 @@ This revision intentionally does not select:
 - which source expressions or future surface forms denote ordinary value patterns;
 - guards or exhaustivity;
 - a standard built-in pattern taxonomy;
-- nested capture flattening;
 - named capture/binding syntax;
 - collection-specific Map/sequence remainder semantics;
 - whole-subject alias/binding syntax and semantics;
