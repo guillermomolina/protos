@@ -5,9 +5,11 @@ Status: Draft
 Last updated: 2026-09-11
 
 This document is the primary normative owner of the ratified matching-protocol
-semantics introduced by D071 through D075. D075 ratifies the exact named
-structural-projection request/result/failure contract at specification revision
-`0.1.395`.
+semantics introduced by D071-D075 and D078. D075 ratifies the exact named
+structural-projection request/result/failure contract, while D078 ratifies
+open/subset named-object matching and declines a generic complete-view/remainder
+protocol in Core v0.1. The latest matching specification revision is
+`0.1.396`.
 It deliberately does **not** define concrete matching-expression grammar,
 case/arm/default syntax, literal-pattern semantics, guards, exhaustivity,
 standard pattern taxonomy, nested-capture flattening, or named-binding syntax.
@@ -244,11 +246,46 @@ pattern-owned `match(subject)` behavior and its D072 capture carrier. Array, Map
 Bytes, and other indexed contents remain governed by their existing collection
 and indexing semantics rather than being reclassified as object fields.
 
-Complete-view enumeration and remainder / `**rest`-like matching remain
-unresolved and are not encoded as a special argument to `deconstructFields`.
-Any future capability that enumerates all logical fields requires a separate
-ratified decision. A universal positional subject-deconstruction protocol likewise
-remains unresolved.
+D078 resolves generic **named-object** complete-view/remainder behavior for
+Core v0.1 by standardizing **open/subset matching without generic remainder
+capture**. This does not add a special full-view argument, sentinel, or mode to
+`deconstructFields`, and it does not add a second complete-view authority.
+
+A universal positional subject-deconstruction protocol remains unresolved.
+
+### 5.5 Open/subset named-object matching
+
+Generic named object structural matching is **open/subset**. Only logical field
+names explicitly requested through the D075 `deconstructFields(...names)`
+operation participate in that structural attempt.
+
+A subject may expose additional logical fields that the pattern did not request.
+Those unrequested logical fields:
+
+- do not cause the structural pattern to fail;
+- are not enumerated or materialized merely because matching occurs;
+- do not become captures implicitly; and
+- do not become observable through slots, delegated lookup, indexed state,
+  prototype ancestry, host reflection, or another fallback path.
+
+Core v0.1 does not standardize a generic named-object `**rest`-like capture, a
+complete logical-field schema, or a required complete-view operation. In
+particular it requires no `deconstructAllFields`, `deconstructFieldNames`,
+`deconstructFieldsAndRest`, `DeconstructionView`, or equivalent second
+deconstruction authority.
+
+A future whole-subject binding facility, if separately ratified, may bind the
+original subject without requiring logical-field enumeration. D078 does not
+select such syntax or binding semantics.
+
+Collection-specific Map/sequence remainder behavior is a separate design
+question because indexed/keyed collections already have their own explicit
+structural protocols. D078 does not select those semantics.
+
+A future complete logical-view facility may be considered only through a
+separate explicit decision backed by concrete use evidence. Such a facility must
+not silently redefine the D075 selective projection contract or make existing
+open/subset patterns observe newly added logical fields.
 
 ## 6. Effects, ordering, and implementation freedom
 
@@ -278,9 +315,10 @@ This revision intentionally does not select:
 - a standard built-in pattern taxonomy;
 - nested capture flattening;
 - named capture/binding syntax;
-- complete-view or `**rest`-like semantics;
+- collection-specific Map/sequence remainder semantics;
+- whole-subject alias/binding syntax and semantics;
 - a universal positional subject-deconstruction protocol; or
 - a recognition-only matcher fast path.
 
 Until those questions are separately ratified, implementations and libraries
-must not treat them as implied by D071-D075.
+must not treat them as implied by D071-D075 or D078.

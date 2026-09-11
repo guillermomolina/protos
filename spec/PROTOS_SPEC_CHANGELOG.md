@@ -9,6 +9,21 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.396] - 2026-09-11
+
+### D078 — Open/subset named-object structural matching
+- Ratifies generic named object structural matching as open/subset: only logical field names explicitly requested through D075 `deconstructFields(...names)` participate; additional logical fields do not cause mismatch, are not enumerated/materialized by matching, and are not implicitly captured.
+- Core v0.1 does not standardize generic named-object `**rest` / remainder capture or complete logical-field enumeration. D075 remains the single generic named-projection authority and gains no full-view mode or sentinel.
+- No required `deconstructAllFields`, `deconstructFieldNames`, `deconstructFieldsAndRest`, `DeconstructionView`, slot/delegation enumeration, indexed-state reinterpretation, or host-reflection fallback is introduced.
+- A future whole-subject alias may be considered separately without implying enumeration; collection-specific Map/sequence remainder semantics also remain separate. A future complete-view protocol requires another explicit decision backed by concrete use evidence.
+
+### Compatibility and implementation state
+- Normative owner changed: `semantics/MATCHING.md`; adds durable non-normative D078 decision record under `docs/project/decisions/language/`.
+- Existing D071-D075 matcher and selective-projection semantics remain unchanged.
+- Concrete match grammar, named/whole-subject binding syntax, Map/sequence remainder semantics, positional subject deconstruction, nested capture flattening, literal/equality patterns, guards, exhaustivity, and recognition-only fast paths remain unresolved.
+- No grammar, parser, production implementation, Maven implementation version, native boundary, license term, or standard-library source changes in this publication slice.
+- D079 and later matching-design checkpoints are excluded.
+
 ## [0.1.395] - 2026-09-11
 
 ### D075 — Named projection request/result/failure contract
