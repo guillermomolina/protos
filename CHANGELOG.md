@@ -1,5 +1,19 @@
 ## 0.2.351-SNAPSHOT
 
+- Ratify `LIB007-0 — Mathematical integer algorithms Standard Library design`
+  (GitHub #329) after explicit project-owner approval and exhaustive comparison
+  across Python/CPython, GHC/ghc-bignum, Apple Swift Numerics, Ruby,
+  Elixir/BEAM, Smalltalk, Rust, .NET, OpenJDK, Julia/GMP, Go, C++/Boost, GMP and
+  Apple Pkl. Select ordinary imported `std:math/Integer` with initial
+  `{gcd,lcm,factorial,pow,powMod}` over exact unbounded ordinary Core `Integer`
+  only; reject implicit fixed-width/Float widening and a duplicate `BigInteger`
+  family; keep algorithms/backend replaceable so Euclid may evolve to
+  Lehmer/HGCD and exponentiation/factorial strategies may specialize without API
+  change; and give `powMod` no cryptographic constant-time guarantee. Release
+  bounded implementation slices only after this durable ratification. No
+  specification, executable implementation/runtime, Maven implementation-version,
+  package-format, license, release-artifact or deployment change.
+
 - Begin `PERF006-B4 — control/unwind migration` with bounded B4A transfer substrate under ratified PLAT021 Candidate F. Make `ProtosSignalException` a Truffle guest exception while preserving the exact Protos Error occurrence and existing signal identity; classify cooperative Task cancellation alongside non-local return as a Truffle `ControlFlowException`; add a backend-private Bytecode EH envelope that carries only the exact original Protos internal control transfer; and wire the Bytecode root interception plus nested call/resume boundary restoration required for later structured cleanup. Add focused identity/category/isolation evidence. Do not yet lower canonical return or migrate `ensure`, `Error.handle`, cancellation unwind, or `while`; no Protos specification, observable semantics, public API, global/ThreadLocal control authority, or selector-specific control intrinsic changes. Implementation version becomes `0.2.351-SNAPSHOT`.
 
 ## 0.2.350-SNAPSHOT
