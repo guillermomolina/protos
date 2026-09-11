@@ -1,3 +1,19 @@
+## 0.2.354-SNAPSHOT
+
+- Implement `LIB007-C — pow / powMod` (GitHub #336) on the ratified
+  `std:math/Integer` surface. Add exact `pow(base,exponent)` with binary
+  exponentiation and canonical `powMod(base,exponent,modulus)` with
+  square-and-multiply plus reduction throughout. Preserve strict ordinary
+  unbounded Core `Integer` inputs, reject negative exponents and non-positive
+  modular moduli, normalize Core negative remainders to `0 <= r < modulus`, and
+  preserve `pow(0,0) == 1` plus `powMod(0,0,m) == 1 mod m` including zero for
+  modulus one. Cover exact large powers/modular exponents, signed-base
+  normalization, family/lookalike rejection, exact arity and exact
+  `{gcd,lcm,factorial,pow,powMod}` exports while retaining A/B regression
+  coverage. Add no modular inverse, negative-exponent extension, constant-time
+  guarantee, Java production/native math bridge or specification change.
+  Implementation version becomes `0.2.354-SNAPSHOT`.
+
 ## 0.2.353-SNAPSHOT
 
 - Implement `LIB007-B — factorial` (GitHub #334) on the ratified

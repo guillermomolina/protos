@@ -95,3 +95,71 @@ factorial: (n) => {
 
     productRange(2, n)
 }
+
+/// Returns the exact non-negative-integer power using exponentiation by squaring.
+pow: (base, exponent) => {
+    base.div(1)
+    exponent.div(1)
+
+    (exponent < 0).ifTrue(() => {
+        Error().signal()
+    })
+
+    result: 1
+    factor: base
+    remaining: exponent
+
+    (() => remaining != 0).while() {
+        (remaining.mod(2) == 1).ifTrue(() => {
+            result = result * factor
+        })
+
+        remaining = remaining.div(2)
+
+        (remaining != 0).ifTrue(() => {
+            factor = factor * factor
+        })
+    }
+
+    result
+}
+
+/// Returns canonical mathematical modular exponentiation for a positive modulus.
+powMod: (base, exponent, modulus) => {
+    base.div(1)
+    exponent.div(1)
+    modulus.div(1)
+
+    (exponent < 0).ifTrue(() => {
+        Error().signal()
+    })
+    (modulus <= 0).ifTrue(() => {
+        Error().signal()
+    })
+
+    canonicalMod: (value) => {
+        remainder: value.mod(modulus)
+        (remainder < 0).ifTrue(() => {
+            remainder = remainder + modulus
+        })
+        remainder
+    }
+
+    result: canonicalMod(1)
+    factor: canonicalMod(base)
+    remaining: exponent
+
+    (() => remaining != 0).while() {
+        (remaining.mod(2) == 1).ifTrue(() => {
+            result = canonicalMod(result * factor)
+        })
+
+        remaining = remaining.div(2)
+
+        (remaining != 0).ifTrue(() => {
+            factor = canonicalMod(factor * factor)
+        })
+    }
+
+    result
+}
