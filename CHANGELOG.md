@@ -1,3 +1,7 @@
+## 0.2.386-SNAPSHOT
+
+- Implement `TOOL002-I4 — Requirement mode/units validation` under the ratified D076/D077 contract. Keep the private inert Requirement carrier and canonical resource-key validation from I2/I3, require exact semantic String modes `shared` or `exclusive`, require `shared` units to be a positive ordinary unbounded Core `Integer` using the existing strict `Integer.div(1)` receiver-domain validation (therefore rejecting Float, fixed-width and delegated lookalikes), and require `exclusive` units to be exactly canonical `null`. Unknown modes and malformed units fail closed before the frozen Requirement is materialized. CaseSpec attachment, persistent requirement TOML/sidecar, catalog, reservation/capacity scheduling, provider, CLI and scope vocabulary remain excluded. Implementation version becomes `0.2.386-SNAPSHOT`.
+
 ## 0.2.385-SNAPSHOT
 
 - Implement `TOOL002-I3 — canonical resource-key validation` under the ratified D077 lexical contract. Validate each private Requirement key as an ordinary String in canonical `segment[/segment...]` form: every segment starts with lower-case ASCII letter/digit, later bytes are limited to lower-case ASCII letters, digits, `.`, `_` or `-`, and empty/leading/trailing segments, uppercase, whitespace, unsupported punctuation and non-ASCII input fail closed before the frozen Requirement is materialized. Mode/units validation, CaseSpec attachment, persistent requirements, catalog, reservation, provider, CLI and scope vocabulary remain excluded. Implementation version becomes `0.2.385-SNAPSHOT`.

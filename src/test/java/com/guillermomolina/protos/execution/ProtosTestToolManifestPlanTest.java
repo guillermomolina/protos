@@ -291,6 +291,61 @@ final class ProtosTestToolManifestPlanTest {
     }
 
     @Test
+    void requirementModeUnitsValidationAcceptsOnlyRatifiedShapes()
+            throws Exception {
+        Fixture fixture = fixture();
+        String validSource =
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Array("
+                        + "Manifest.requirement(\"gpu\", \"shared\", 1), "
+                        + "Manifest.requirement(\"db/integration\", \"shared\", "
+                        + "999999999999999999999999999999999999), "
+                        + "Manifest.requirement(\"license/ansys\", \"exclusive\", null))";
+
+        ProtosArrayValue valid =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                new ProtosSourceCompiler().compile(validSource),
+                                fixture.activation()));
+        assertEquals(3, valid.indexedSize().intValueExact());
+
+        String[] invalidArguments = {
+            "\"gpu\", \"shared\", 0",
+            "\"gpu\", \"shared\", -1",
+            "\"gpu\", \"shared\", null",
+            "\"gpu\", \"shared\", 1.0",
+            "\"gpu\", \"shared\", Int64(1)",
+            "\"gpu\", \"shared\", Integer {}",
+            "\"gpu\", \"shared\", \"1\"",
+            "\"gpu\", \"exclusive\", 1",
+            "\"gpu\", \"exclusive\", 0",
+            "\"gpu\", \"exclusive\", \"\"",
+            "\"gpu\", \"unknown\", null",
+            "\"gpu\", \"SHARED\", 1",
+            "\"gpu\", 1, null"
+        };
+        for (String invalidArgumentsValue : invalidArguments) {
+            Fixture invalidFixture = fixture();
+            String source =
+                    "Manifest: import(\"self:Manifest\")\n"
+                            + "Manifest.requirement("
+                            + invalidArgumentsValue
+                            + ")";
+            ProtosExecutionOutcome outcome =
+                    ProtosRootTaskExecution.execute(
+                            new ProtosSourceCompiler().compile(source),
+                            invalidFixture.activation());
+            assertEquals(
+                    ProtosExecutionOutcome.State.FAILED,
+                    outcome.state(),
+                    () ->
+                            "expected invalid Requirement mode/units to fail closed: "
+                                    + invalidArgumentsValue);
+        }
+    }
+
+    @Test
     void batchedManifestTraversalDoesNotGrowOneProtosFramePerRow(
             @TempDir Path corpusRoot) throws Exception {
         int rowCount = 2048;

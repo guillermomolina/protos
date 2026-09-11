@@ -223,11 +223,44 @@ resourceKeyValue: (key) => {
     key
 }
 
-// Private inert Requirement tuple selected by D077. I3 validates only the
-// already-ratified canonical resource key; mode/units and persistence remain
-// owned by later TOOL002-I slices.
+validateRequirementModeUnits: (mode, units) => {
+    // Exercise the strict semantic String receiver domain without converting
+    // the mode value. Unknown canonical String modes still fail below.
+    ignoredModeStringValidation: mode + ""
+    known: false
+
+    (mode == "shared").ifTrue(() => {
+        // Core Integer.div has the strict ordinary-unbounded-Integer receiver
+        // domain already used by the Standard Library for family validation.
+        // It rejects Float, fixed-width values and delegated lookalikes without
+        // converting the supplied units.
+        units.div(1)
+        (units <= 0).ifTrue(() => {
+            fail()
+        })
+        known = true
+    })
+
+    (mode == "exclusive").ifTrue(() => {
+        (units === null).ifFalse(() => {
+            fail()
+        })
+        known = true
+    })
+
+    known.ifFalse(() => {
+        fail()
+    })
+    true
+}
+
+// Private inert Requirement tuple selected by D077. I3 validates the canonical
+// resource key and I4 validates only the already-ratified mode/units shape.
+// CaseSpec attachment and persistent materialization remain later I slices.
 requirement: (key, mode, units) => {
-    frozenTuple(resourceKeyValue(key), mode, units)
+    validatedKey: resourceKeyValue(key)
+    validateRequirementModeUnits(mode, units)
+    frozenTuple(validatedKey, mode, units)
 }
 
 requirementKey: (requirement) => {
