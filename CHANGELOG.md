@@ -1,5 +1,7 @@
 ## 0.2.350-SNAPSHOT
 
+- Ratify `PLAT020 — Context-bound Truffle file Source materialization` (GitHub #327) after explicit project-owner approval of Candidate A′ and exhaustive review of the complete Truffle implementation catalogue including Apple Pkl. Keep path/content/module facts immutable and backend-neutral outside Truffle Context ownership; materialize genuine physical file-backed Truffle Sources only inside the owning entered Protos Context through that Context's `Env`, preserving D065 path spelling with `canonicalizePath(false)` and the already-read characters with `.content(...)`. Keep `ProtosModuleKey` semantic identity separate, virtual sources virtual, and add no global source registry, Context-crossing `TruffleFile`, editor/DAP repair layer, cache policy, outer-Polyglot execution refactor, specification change, executable implementation or Maven implementation-version change. Release only the bounded LM009-E D065 source-presentation correction.
+
 - Complete the post-D066/D067 minimum `TOOL003` Standard Library documentation
   extraction path required by WEB001-J7B. Extend the lexer with opt-in line-comment
   observation that leaves ordinary tokenization unchanged, add a

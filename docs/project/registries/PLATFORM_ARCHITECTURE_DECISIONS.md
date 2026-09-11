@@ -55,6 +55,7 @@ process remains authoritative first.
 | PLAT017 | Selected-standard `Object.call` Bytecode intrinsic after ordinary D013 lookup | RATIFIED | Explicit project-owner approval, 2026-09-10 after exhaustive Truffle implementation audit covering all 16 principal + 21 experimental catalogue entries, with deep Bytecode DSL/SimpleLanguage, TruffleSqueak, Espresso, TruffleRuby, Sulong, GraalJS, GraalPy, FastR, GraalWasm, Enso, SOMns and Pkl review plus future/scalability/Protos-fit analysis | PERF006-B2D3B and later D013-conformant Bytecode call preparation |
 | PLAT018 | GraalVM DAP debug-invocation ownership, OS-ephemeral loopback endpoint and readiness boundary | RATIFIED | Explicit project-owner approval, 2026-09-10 after extended Truffle-language/GraalVM DAP lifecycle, port-0, future/scalability and Protos-fit review | LM009-D/E and future debugger launchers/distributions |
 | PLAT019 | Native semantic suspension bridge into Bytecode C-prime continuations | RATIFIED | Explicit project-owner approval, 2026-09-10 after exhaustive audit of all 16 principal + 21 experimental/historical Truffle catalogue entries including Apple Pkl, with future/scalability/Protos-fit scoring selecting B-prime | PERF006-B3 and future JVM/Truffle suspension-capable native boundaries |
+| PLAT020 | Context-bound Truffle file Source materialization | RATIFIED | Explicit project-owner approval, 2026-09-11 after exhaustive audit of all 16 principal + 21 experimental/historical Truffle catalogue entries including Apple Pkl, with future/scalability/Protos-fit scoring selecting A′ | LM009-E / D065 source-presentation correction and future hosted physical Source materialization |
 See `docs/project/decisions/platform/PLAT001_TRUFFLE_RUNTIME_HOSTING.md` for the selected topology,
 its non-semantic boundary, alternatives, scaling rationale, invariants, and
 explicitly deferred choices.
@@ -98,3 +99,6 @@ See `docs/project/decisions/platform/PLAT018_DAP_DEBUG_SESSION_HOSTING.md` for t
 
 
 See `docs/project/decisions/platform/PLAT019_NATIVE_SEMANTIC_SUSPENSION_BRIDGE.md` for the selected B-prime suspension-capable native provenance boundary, explicit resumability requirement, interpreter-owned C-prime capture, two-phase Task continuation publication, exhaustive Truffle/Apple-Pkl review, scalability constraints and deliberately unspecified private native-to-interpreter transport.
+
+
+See `docs/project/decisions/platform/PLAT020_CONTEXT_BOUND_TRUFFLE_FILE_SOURCE_MATERIALIZATION.md` for the selected A′ split between immutable backend-neutral source facts and owning-Context physical Truffle Source materialization, exhaustive Truffle/Apple-Pkl review, D065 path/content invariants, multi-Context scalability constraints and deliberately deferred Java representation/cache choices.
