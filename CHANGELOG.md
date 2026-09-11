@@ -1,5 +1,7 @@
 ## 0.2.349-SNAPSHOT
 
+- Ratify `D065 — File-backed tooling source path identity and canonicalization` (GitHub #323) after explicit project-owner approval and exhaustive cross-language/source-debugging review. Select Candidate B: ordinary filesystem-backed Protos sources expose to tooling the absolute lexically-normalized path by which the current execution/workspace host selected the source, without resolving symlinks solely for presentation identity. Keep `ProtosModuleKey` and package/module rules authoritative for semantic identity; keep generated/in-memory sources virtual; add no alias registry, editor-side path map or DAP proxy; and defer explicit client/target path mapping until a future mode genuinely has distinct namespaces. Release the bounded LM009-E source-presentation correction while preserving D060/PLAT018 debugger architecture. No specification, executable implementation, Maven implementation-version, Standard Library semantic, package-format, release or deployment change.
+
 - Close `GITHUB010 — Exhaustive Dxxx/PLATxxx comparative decision research
   policy` (GitHub #324) by strengthening the pre-approval design gate for future
   substantive decisions. Require broad, materially diverse prior-art research;
