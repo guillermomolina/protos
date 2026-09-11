@@ -166,6 +166,24 @@ caseRequirements: (spec) => {
     spec[4]
 }
 
+// Private inert Requirement tuple selected by D077. Validation and persistent
+// materialization are deliberately owned by later TOOL002-I slices.
+requirement: (key, mode, units) => {
+    frozenTuple(key, mode, units)
+}
+
+requirementKey: (requirement) => {
+    requirement[0]
+}
+
+requirementMode: (requirement) => {
+    requirement[1]
+}
+
+requirementUnits: (requirement) => {
+    requirement[2]
+}
+
 parseLine: (line) => {
     bytes: Encoding.UTF8.encode(line)
     ignore: bytes.size() == 0

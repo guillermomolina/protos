@@ -28,6 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.oracle.truffle.api.CallTarget;
@@ -161,6 +162,80 @@ final class ProtosTestToolManifestPlanTest {
         org.junit.jupiter.api.Assertions.assertTrue(first.isFrozen());
         org.junit.jupiter.api.Assertions.assertTrue(second.isFrozen());
         assertNotSame(first, second);
+    }
+
+    @Test
+    void inertRequirementRecordIsFrozenAndAccessibleThroughNamedAccessors()
+            throws Exception {
+        Fixture fixture = fixture();
+        String source =
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "shared: Manifest.requirement(\"gpu\", \"shared\", 2)\n"
+                        + "exclusive: Manifest.requirement(\"db/integration\", \"exclusive\", null)\n"
+                        + "Array(shared, exclusive, "
+                        + "Manifest.requirementKey(shared), "
+                        + "Manifest.requirementMode(shared), "
+                        + "Manifest.requirementUnits(shared), "
+                        + "Manifest.requirementKey(exclusive), "
+                        + "Manifest.requirementMode(exclusive), "
+                        + "Manifest.requirementUnits(exclusive))";
+
+        ProtosArrayValue observed =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                new ProtosSourceCompiler().compile(source),
+                                fixture.activation()));
+        assertEquals(8, observed.indexedSize().intValueExact());
+
+        ProtosArrayValue shared =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        observed.indexedAt(java.math.BigInteger.ZERO));
+        ProtosArrayValue exclusive =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        observed.indexedAt(java.math.BigInteger.ONE));
+        assertEquals(3, shared.indexedSize().intValueExact());
+        assertEquals(3, exclusive.indexedSize().intValueExact());
+        org.junit.jupiter.api.Assertions.assertTrue(shared.isFrozen());
+        org.junit.jupiter.api.Assertions.assertTrue(exclusive.isFrozen());
+        assertNotSame(shared, exclusive);
+
+        assertEquals(
+                "gpu",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(2)))
+                        .value());
+        assertEquals(
+                "shared",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(3)))
+                        .value());
+        assertEquals(
+                2,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(4)))
+                        .value()
+                        .intValueExact());
+        assertEquals(
+                "db/integration",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(5)))
+                        .value());
+        assertEquals(
+                "exclusive",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(java.math.BigInteger.valueOf(6)))
+                        .value());
+        assertSame(
+                ProtosNullValue.INSTANCE,
+                observed.indexedAt(java.math.BigInteger.valueOf(7)));
     }
 
     @Test

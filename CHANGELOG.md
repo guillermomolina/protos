@@ -1,3 +1,7 @@
+## 0.2.383-SNAPSHOT
+
+- Implement `TOOL002-I2 — inert Requirement record` under the ratified D076/D077 representation boundary. Add the private frozen three-field `Requirement` tuple carrier `(key, mode, units-or-null)` plus named private accessors for each field, with focal evidence covering shared integer units, exclusive null units, frozen fixed shape and fresh identity. This slice adds no requirement validation, CaseSpec attachment beyond I1's empty carrier, persistent sidecar/TOML loading, catalog, reservation/capacity logic, provider, CLI surface or public scope vocabulary. Implementation version becomes `0.2.383-SNAPSHOT`.
+
 ## 0.2.382-SNAPSHOT
 
 - Implement `LM009-G2 — parser-derived hierarchical document symbols` (GitHub #360) under ratified D079 Candidate A′. Project every explicit named `SurfaceSlotCreation` from the real parser AST through a protocol-neutral outline model, map all slots uniformly to LSP `SymbolKind.Property`, retain only exact value-subtree source containment as hierarchy, preserve full creation/exact final-name ranges and duplicate occurrences, and return no stale/guessed tree for missing or failed current snapshots. Advertise the feature only to clients with hierarchical document-symbol support and add no flat `SymbolInformation` fallback, workspace/module index, definition identity, guest execution or LM009-H behavior. Add focused hierarchy, UTF-16, parse-failure and capability evidence. Implementation version becomes `0.2.382-SNAPSHOT`.
