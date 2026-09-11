@@ -1,5 +1,17 @@
 ## 0.2.357-SNAPSHOT
 
+- Ratify `LIB008-0 — URI reference Standard Library design` (GitHub #339)
+  after explicit project-owner approval and exhaustive comparison of RFC 3986/3987/8820,
+  WHATWG URL, Java, .NET, Python, Go, Rust, JavaScript/Node, Ruby, Boost.URL,
+  Swift/Foundation, libcurl, Erlang and Elixir. Select strict RFC-3986-first generic
+  URI-reference parsing over ordinary frozen Protos component data, with exact accepted
+  spelling and absent-vs-empty distinctions preserved, explicit `parse` / `format` /
+  `resolve`, and no implicit normalization, URI equality/hash law, DNS/Network effect,
+  scheme registry, form-query interpretation, IDNA/IRI conversion or WHATWG browser
+  repair semantics. Defer normalization helpers, authority decomposition, IRI/IDNA,
+  WHATWG web URLs and scheme-specific policy. Governance/documentation only: no
+  specification, executable Standard Library/runtime, Maven version or native-boundary change.
+
 - Migrate `PERF006-B4C — structured ensure` to the ratified PLAT021 C-prime control path. Preserve ordinary `Object.ensure` lookup/provenance while executing the canonical standard implementation as Bytecode `TryFinally`: validation precedes protected-extent entry, suspension is not unwind, body and cleanup may suspend without replay, normal completion preserves the exact body result, pending Error/non-local-return identity survives cleanup suspension, and a later cleanup transfer supersedes the earlier exit. Keep the evaluator/replay implementation as the AST fallback until B6; Error-handler crossing, cancellation unwind, and `while` migration remain B4D/B4E/B4F. Implementation version becomes `0.2.357-SNAPSHOT`.
 
 ## 0.2.356-SNAPSHOT
