@@ -156,3 +156,37 @@ TOOL003_B_OLD_CANDIDATE  ABANDONED_UNPUBLISHED
 D067                     RATIFIED
 WEB001_J7B               BLOCKED until minimum extractor publication
 ```
+
+<!-- TOOL003-MINIMUM-STDLIB-EXTRACTOR -->
+## Minimum Standard Library extractor after D067
+
+D067 closes the final coverage/publication prerequisite left open by the D066
+scope reconciliation. Candidate D requires complete mechanical inventory plus
+an explicit missing-documentation state.
+
+The bounded implementation selected from that authority is recorded in
+`TOOL003_MINIMUM_STDLIB_EXTRACTOR.md`.
+
+It is intentionally Standard-Library-specific:
+
+- canonical input is `protos/lib/**/*.protos`, excluding physical `core/**`;
+- module identity is derived only from the existing `std:` distribution mapping;
+- the real Protos parser owns source structure;
+- the lexer exposes only opt-in ordinary line-comment observation for D062;
+- TOOL003-A owns the D064 model/JSON;
+- missing `//!` / `///` prose remains `null` and is reported as D067 coverage;
+- the artifact is generated on demand from an exact clean checkout rather than
+  committed; and
+- no generic package, CLI, IDE/LSP, search or website-renderer framework is
+  introduced.
+
+After successful publication of this slice:
+
+```text
+TOOL003                  COMPLETE AT CURRENT EARNED SCOPE
+TOOL003_A                PUBLISHED / retained
+TOOL003_MIN_EXTRACTOR    PUBLISHED
+TOOL003_B_OLD_CANDIDATE  ABANDONED_UNPUBLISHED
+D067                     RATIFIED
+WEB001_J7B               READY
+```

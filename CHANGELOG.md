@@ -1,4 +1,18 @@
-## 0.2.349-SNAPSHOT
+## 0.2.350-SNAPSHOT
+
+- Complete the post-D066/D067 minimum `TOOL003` Standard Library documentation
+  extraction path required by WEB001-J7B. Extend the lexer with opt-in line-comment
+  observation that leaves ordinary tokenization unchanged, add a
+  Standard-Library-only static extractor over the real parser, derive canonical
+  `std:` identities from `protos/lib` while excluding physical `core/**`, associate
+  D062 `//!` / `///` Markdown, emit the existing D064 deterministic JSON model
+  including undocumented D067 entries, and report deterministic missing-doc
+  coverage. Generate artifacts on demand from an exact clean Git checkout rather
+  than committing a self-referential revision artifact. Add focused extraction,
+  placement, callable, naming, determinism and current-stdlib tests. No Protos
+  syntax/semantics, Standard Library behavior, visibility/stability policy,
+  runtime documentation state, website renderer, package/CLI/IDE/search framework,
+  or public CLI command is added.
 
 - Ratify `D067 — Standard Library documentation coverage and API-reference
   publication policy` (GitHub #326) after explicit project-owner approval of

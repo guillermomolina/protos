@@ -67,6 +67,21 @@ public final class ProtosLexer {
     private final String source;
     private int pos;
 
+    /**
+     * Raw ordinary line-comment occurrence exposed only to opt-in tooling.
+     *
+     * <p>The text excludes the leading {@code //}; the span includes the full
+     * comment and excludes the logical newline.</p>
+     */
+    public record LineCommentOccurrence(
+            String text,
+            com.guillermomolina.protos.source.SourceSpan span) {
+        public LineCommentOccurrence {
+            java.util.Objects.requireNonNull(text, "text");
+            java.util.Objects.requireNonNull(span, "span");
+        }
+    }
+
     public ProtosLexer(String source) {
         this.source = source == null ? "" : source;
     }
@@ -89,6 +104,17 @@ public final class ProtosLexer {
      * @return token occurrences in source order, including EOF
      */
     public List<TokenOccurrence> tokenizeOccurrences() {
+        return tokenizeOccurrences(null);
+    }
+
+    /**
+     * Tokenizes source while optionally observing ordinary line comments.
+     *
+     * <p>The observer is tooling-only. Comments remain absent from the token
+     * stream, and a null observer preserves the ordinary allocation behavior.</p>
+     */
+    public List<TokenOccurrence> tokenizeOccurrences(
+            java.util.function.Consumer<LineCommentOccurrence> lineCommentSink) {
         List<TokenOccurrence> tokens = new ArrayList<>();
 
         while (!atEnd()) {
@@ -107,7 +133,7 @@ public final class ProtosLexer {
             }
 
             if (startsWith("//")) {
-                skipLineComment();
+                skipLineComment(lineCommentSink);
                 continue;
             }
 
@@ -556,10 +582,19 @@ public final class ProtosLexer {
         }
     }
 
-    private void skipLineComment() {
+    private void skipLineComment(
+            java.util.function.Consumer<LineCommentOccurrence> lineCommentSink) {
+        int start = pos;
         pos += 2;
+        int contentStart = pos;
         while (!atEnd() && !isLogicalNewlineStart(codePointAt(pos))) {
             advanceCodePoint(codePointAt(pos));
+        }
+        if (lineCommentSink != null) {
+            lineCommentSink.accept(
+                    new LineCommentOccurrence(
+                            source.substring(contentStart, pos),
+                            new com.guillermomolina.protos.source.SourceSpan(start, pos)));
         }
     }
 
