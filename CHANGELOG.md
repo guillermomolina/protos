@@ -15,17 +15,19 @@
   executable implementation, Maven implementation version, specification or
   native boundary.
 
-- Ratify `LIB008-0 — URI reference Standard Library design` (GitHub #339)
-  after explicit project-owner approval and exhaustive comparison of RFC 3986/3987/8820,
-  WHATWG URL, Java, .NET, Python, Go, Rust, JavaScript/Node, Ruby, Boost.URL,
-  Swift/Foundation, libcurl, Erlang and Elixir. Select strict RFC-3986-first generic
-  URI-reference parsing over ordinary frozen Protos component data, with exact accepted
-  spelling and absent-vs-empty distinctions preserved, explicit `parse` / `format` /
-  `resolve`, and no implicit normalization, URI equality/hash law, DNS/Network effect,
-  scheme registry, form-query interpretation, IDNA/IRI conversion or WHATWG browser
-  repair semantics. Defer normalization helpers, authority decomposition, IRI/IDNA,
-  WHATWG web URLs and scheme-specific policy. Governance/documentation only: no
-  specification, executable Standard Library/runtime, Maven version or native-boundary change.
+- Ratify the refined `LIB008-0 — URI reference Standard Library design` (GitHub #339)
+  after explicit project-owner approval. Keep the strict RFC-3986-first,
+  synchronous, deterministic and authority-free architecture, and select canonical
+  module `std:uri` with fresh behavior-free frozen seven-slot ordinary records
+  `{scheme,userInfo,host,port,path,query,fragment}`. `null` means absent while an
+  empty String preserves present-but-empty delimiters; generic host/port remain text.
+  The initial surface is exactly `parse` / `format` / `resolve`; `resolve` requires
+  an RFC `absolute-URI` base (scheme present, fragment absent). No URI-specific
+  equality/hash, implicit normalization, percent helper surface, IRI/IDNA, WHATWG,
+  DNS/Network/filesystem/HTTP or scheme-specific policy is added. Ordinary-Protos
+  UTF-8/Bytes scanning remains an implementation option for linear scaling without
+  changing Core. Governance/documentation only: no specification, executable
+  Standard Library/runtime, Maven version or native-boundary change.
 
 - Migrate `PERF006-B4C — structured ensure` to the ratified PLAT021 C-prime control path. Preserve ordinary `Object.ensure` lookup/provenance while executing the canonical standard implementation as Bytecode `TryFinally`: validation precedes protected-extent entry, suspension is not unwind, body and cleanup may suspend without replay, normal completion preserves the exact body result, pending Error/non-local-return identity survives cleanup suspension, and a later cleanup transfer supersedes the earlier exit. Keep the evaluator/replay implementation as the AST fallback until B6; Error-handler crossing, cancellation unwind, and `while` migration remain B4D/B4E/B4F. Implementation version becomes `0.2.357-SNAPSHOT`.
 

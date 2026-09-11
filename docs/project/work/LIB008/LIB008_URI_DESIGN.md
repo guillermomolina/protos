@@ -43,13 +43,13 @@ an optional library contract over ordinary existing Protos mechanisms.
 The selected canonical module identity is:
 
 ```text
-std:uri/Uri
+std:uri
 ```
 
 The selected physical distribution path is:
 
 ```text
-protos/lib/uri/Uri.protos
+protos/lib/uri.protos
 ```
 
 This follows the existing Standard Library naming rule exactly. `Uri` is a module
@@ -61,19 +61,40 @@ Importing the module grants no authority and performs no host I/O.
 
 The base abstraction is the RFC 3986 **URI-reference**, not only an absolute URL.
 It therefore covers both absolute URIs and relative references using one generic
-five-component representation:
+seven-slot representation:
 
 ```text
-scheme     String | null
-authority  String | null
-path       String
-query      String | null
-fragment   String | null
+scheme    String | null
+userInfo  String | null
+host      String | null
+port      String | null
+path      String
+query     String | null
+fragment  String | null
 ```
 
 `null` means the component/delimiter is absent. An empty String means the
 component is present but empty. This distinction is observable and must survive
 parse/format round trips.
+
+The exact presence rules are:
+
+- `scheme == null`: no scheme is present and the value is a relative reference;
+- `host == null`: the authority delimiter `//` is absent;
+- `host == ""`: authority is present with an empty host;
+- when `host == null`, both `userInfo` and `port` are also `null`;
+- `userInfo == null`: no `@`; `userInfo == ""`: `@` is present with empty userinfo;
+- `port == null`: no port `:` delimiter; `port == ""`: the delimiter is present
+  with an empty generic RFC port;
+- `path` is never `null`, but it may be `""`;
+- `query == null`: no `?`; `query == ""`: `?` is present with an empty query; and
+- `fragment == null`: no `#`; `fragment == ""`: `#` is present with an empty
+  fragment.
+
+All String fields preserve their exact accepted RFC spelling, including case and
+percent-triplet spelling. `host` is generic RFC host text; an IP-literal retains
+its bracket spelling. No field is an `IpAddress`, DNS-name object or Integer
+port.
 
 Examples:
 
@@ -94,7 +115,7 @@ a path production, including the empty path.
 ### Ordinary Protos data
 
 A successful parse returns fresh ordinary behavior-free Protos data containing
-exactly the selected five public component slots. The result is frozen before it
+exactly the selected seven public component slots. The result is frozen before it
 is returned so the parse result itself cannot acquire a second mutable state
 contract.
 
@@ -102,17 +123,18 @@ This is **not** a new Core value-identity family. It does not change `===`, and
 LIB008-0 does not define a URI-specific `==` or hash law.
 
 The component values are only existing Core `String` values or canonical `null`.
-No Closure-valued library behavior is stored in the returned data graph.
-Consequently LIB008 does not need a privileged transfer rule, library prototype
-identity or behavior-bearing wrapper merely to carry URI data across ordinary
-Protos boundaries.
+No Closure-valued library behavior is stored in the returned data graph, and the
+record delegates directly to ordinary `Object` rather than to a library
+prototype containing behavior. Consequently LIB008 does not need a privileged
+transfer rule, library prototype identity or behavior-bearing wrapper merely to
+carry URI data across ordinary Protos boundaries.
 
 ## Selected initial public surface
 
 The initial bounded public surface is:
 
 ```text
-std:uri/Uri
+std:uri
 
     parse(text)                 -> URI-reference data
     format(reference)           -> String
@@ -207,7 +229,7 @@ state. Parser state is call-local.
 
 ## `format(reference)` contract
 
-`format` accepts one reference value satisfying the selected five-component data
+`format` accepts one reference value satisfying the selected seven-slot data
 shape and validates all components before producing text.
 
 It does not guess, repair or normalize malformed component data. Invalid data
@@ -217,10 +239,13 @@ Serialization follows RFC 3986 generic component delimiters exactly and preserve
 absence versus empty presence:
 
 ```text
-scheme ":"        only when scheme is present
-"//" authority    only when authority is present
-"?" query         only when query is present
-"#" fragment      only when fragment is present
+scheme ":"                   only when scheme is present
+"//"                         only when host is not null
+userinfo "@"                 only when userInfo is not null
+host                          exactly as stored when authority is present
+":" port                     only when port is not null
+"?" query                    only when query is present
+"#" fragment                 only when fragment is present
 ```
 
 `format` does not apply scheme-specific default ports, authority semantics,
@@ -239,9 +264,12 @@ ordinary frozen URI-reference data.
 Both arguments are parsed URI-reference data, not Strings implicitly reparsed by
 the operation. Callers that start from text use `parse` explicitly.
 
-The base must be suitable as an RFC base URI, including a present scheme. An
-invalid base shape or invalid reference shape signals ordinary synchronous
-`Error`.
+The base must conform to RFC `absolute-URI`: its `scheme` must be present and
+its `fragment` must be `null`. A base with no scheme or with a fragment signals
+ordinary synchronous `Error` rather than being silently repaired or stripped.
+The `reference` may be any valid URI-reference, including an empty or
+fragment-only reference. Invalid base/reference shapes signal ordinary
+synchronous `Error`.
 
 Resolution performs the generic RFC algorithm, including the required path merge
 and dot-segment removal that are part of **reference resolution**. This does not
@@ -252,25 +280,30 @@ filesystem, Network authority or HTTP behavior.
 
 ## Authority boundary
 
-The selected base representation preserves the complete generic `authority` as
-text. LIB008-0 does not make decomposed authority fields a second mutable source
-of truth in the base record.
+The selected base representation decomposes RFC generic authority syntax once
+into `userInfo`, `host` and `port` fields. It does **not** store a second raw
+`authority` field, so there is one authoritative representation rather than two
+mutable sources of truth.
 
-RFC 3986 permits generic authority syntax involving `userinfo`, host and port,
-but their higher-level meaning belongs to scheme/application policy.
+Authority presence is represented by `host != null`. Empty-vs-absent delimiter
+states remain exact through the presence rules above, including empty userinfo,
+empty host and empty port. `format` reconstructs the authority spelling exactly
+from those three preserved textual fields.
 
-Therefore:
+RFC 3986 permits generic authority syntax involving userinfo, host and port, but
+their higher-level meaning belongs to scheme/application policy. Therefore:
 
 - generic host is **not** restricted to `IpAddress`;
-- generic port is **not** an `Integer` range contract and not an `IpEndpoint`
+- generic port is text, not an `Integer` range contract and not an `IpEndpoint`
   port;
 - registered names do not cause DNS lookup;
-- IP literals, registered names and future-compatible generic host spellings are
+- IP literals, registered names and IPvFuture-compatible generic spellings are
   syntax until another explicitly selected layer interprets them; and
 - parsing or formatting a URI never acquires `Network` authority.
 
-A later pure helper may decompose generic authority syntax if a concrete consumer
-needs it, but that helper is not part of the selected initial surface.
+The seven-slot decomposition is data, not policy: LIB008 still does not infer
+credentials, DNS identity, default ports, transport endpoints or scheme-specific
+semantics from these fields.
 
 ## Query boundary
 
@@ -302,7 +335,7 @@ URI -> IRI where defined
 with its own Unicode-version and IDNA contracts.
 
 Similarly, a future browser-compatible web URL layer may adopt WHATWG URL and its
-IDNA/special-scheme/file rules without redefining generic `std:uri/Uri` values.
+IDNA/special-scheme/file rules without redefining generic `std:uri` values.
 
 ## Normalization and equivalence boundary
 
@@ -359,6 +392,13 @@ resolve:  O(n) time relative to involved component/path sizes
 
 The public contract does not require a regex/backtracking engine, parser cache,
 scheme registry, process-global interning table or Unicode database.
+
+The implementation remains ordinary Protos. One compatible linear strategy is
+to validate/encode the semantic source String through `Encoding.UTF8`, reject any
+non-ASCII octet for this initial RFC-3986 profile, scan the resulting `Bytes`
+linearly, accumulate component bytes, and decode completed ASCII components back
+to Strings. This is implementation freedom, not a new Core String operation or
+public URI representation requirement.
 
 The selected operations create no thread, Task, Actor, Process, Future, event
 loop, lock, network allocation or global coordination mechanism. Independent
@@ -521,7 +561,7 @@ If future applications require exact browser URL parsing, navigation and
 same-origin-compatible behavior, RFC 3986 alone is insufficient.
 
 **Escape path:** add a distinct WHATWG-oriented web URL layer. Existing
-`std:uri/Uri` remains the generic identifier syntax rather than being silently
+`std:uri` remains the generic identifier syntax rather than being silently
 redefined.
 
 ### Plausible regret: Unicode identifiers become the dominant API
@@ -531,13 +571,14 @@ ASCII URI syntax may feel low-level for user-facing international identifiers.
 **Escape path:** add an explicit IRI/domain layer with a versioned Unicode/IDNA
 contract and explicit mapping to URI. Existing persisted URI syntax stays stable.
 
-### Plausible regret: consumers need authority decomposition constantly
+### Plausible regret: consumers need higher-level authority semantics constantly
 
-Keeping authority raw may require repeated pure parsing by HTTP/network callers.
+The base already exposes generic `userInfo` / `host` / `port` syntax, but HTTP,
+DNS, TLS or credential consumers may need stronger interpreted forms.
 
-**Escape path:** add a pure authority-decomposition helper or a higher-level
-scheme-specific parsed view without changing the five-component base record or
-its text round-trip.
+**Escape path:** add higher-level scheme/domain/network views that consume the
+seven-slot record without changing its generic URI syntax or exact text
+round-trip.
 
 ### Plausible regret: very large generated identifiers need allocation control
 
@@ -571,7 +612,7 @@ LIB008-0 does not select or implement:
 - WHATWG `URL`, special schemes or browser repair rules;
 - IRI parsing/formatting and Unicode normalization;
 - IDNA / UTS #46 / punycode policy;
-- authority-decomposition public helpers;
+- higher-level authority interpretation helpers;
 - DNS resolution or resolver authority;
 - default-port tables;
 - conversion to/from `IpAddress` or `IpEndpoint`;
