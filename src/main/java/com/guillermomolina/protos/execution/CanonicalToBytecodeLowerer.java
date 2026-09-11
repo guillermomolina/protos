@@ -24,8 +24,12 @@ import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
+import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMember;
+import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -49,10 +53,11 @@ import java.util.Objects;
  * representation and the same immediate shallow Array snapshot rule at each
  * spread item's exact left-to-right position. Non-spread body/default fast paths
  * remain unchanged.
- * The ordinary {@link ProtosSourceCompiler} remains
- * on the established AST lowerer
- * until later PERF006-B slices have migrated calls, suspension and control
- * semantics coherently.</p>
+ * PERF006-B6A1 extends the same C-prime lowering with read-only member,
+ * identity and execution-intrinsic expressions, including composed operands
+ * that may suspend. The ordinary {@link ProtosSourceCompiler} remains on the
+ * established AST lowerer until the remaining canonical forms are migrated
+ * and B6 performs the production cutover.</p>
  */
 final class CanonicalToBytecodeLowerer {
     private final ProtosLanguage language;
@@ -135,10 +140,7 @@ final class CanonicalToBytecodeLowerer {
                                 boolean hasComposedInvocation =
                                         sequence.expressions().stream()
                                                 .anyMatch(
-                                                        expression ->
-                                                                expression instanceof CanonicalCall
-                                                                        || expression instanceof CanonicalSend
-                                                                        || expression instanceof CanonicalReturn);
+                                                        CanonicalToBytecodeLowerer::requiresComposedInvocation);
                                 BytecodeLocal preparedCall =
                                         hasComposedInvocation
                                                 ? builder.createLocal(
@@ -169,23 +171,7 @@ final class CanonicalToBytecodeLowerer {
                                             StandardTags.StatementTag.class);
                                     builder.beginBlock();
 
-                                    if (expression instanceof CanonicalCall call) {
-                                        emitComposedCall(
-                                                builder,
-                                                call,
-                                                result,
-                                                preparedCall,
-                                                childResult,
-                                                resumeValue);
-                                    } else if (expression instanceof CanonicalSend send) {
-                                        emitComposedSend(
-                                                builder,
-                                                send,
-                                                result,
-                                                preparedCall,
-                                                childResult,
-                                                resumeValue);
-                                    } else if (expression instanceof CanonicalReturn) {
+                                    if (requiresComposedInvocation(expression)) {
                                         emitBodyExpressionToLocal(
                                                 builder,
                                                 expression,
@@ -232,7 +218,22 @@ final class CanonicalToBytecodeLowerer {
             CanonicalExpression expression) {
         validateSpan(expression.span());
         if (expression instanceof CanonicalLiteral
-                || expression instanceof CanonicalLookup) {
+                || expression instanceof CanonicalLookup
+                || expression instanceof CanonicalIntrinsic) {
+            return;
+        }
+        if (expression instanceof CanonicalMember member) {
+            validateSupportedDefaultExpression(member.receiver());
+            return;
+        }
+        if (expression instanceof CanonicalIdentity identity) {
+            validateSupportedDefaultExpression(identity.left());
+            validateSupportedDefaultExpression(identity.right());
+            return;
+        }
+        if (expression instanceof CanonicalNotIdentity identity) {
+            validateSupportedDefaultExpression(identity.left());
+            validateSupportedDefaultExpression(identity.right());
             return;
         }
         if (expression instanceof CanonicalCall call) {
@@ -271,9 +272,7 @@ final class CanonicalToBytecodeLowerer {
     private static boolean hasComposedDefault(CanonicalClosure definition) {
         return definition.parameters().stream()
                 .flatMap(parameter -> parameter.defaultValue().stream())
-                .anyMatch(expression -> expression instanceof CanonicalCall
-                        || expression instanceof CanonicalSend
-                        || expression instanceof CanonicalReturn);
+                .anyMatch(CanonicalToBytecodeLowerer::requiresComposedInvocation);
     }
 
     private static void emitClosureParameterBindings(
@@ -334,7 +333,8 @@ final class CanonicalToBytecodeLowerer {
                             defaultChildResult,
                             defaultResumeValue);
                     emitBindDefaultLocal(builder, parameter, defaultValue);
-                } else if (defaultExpression instanceof CanonicalReturn) {
+                } else if (defaultExpression instanceof CanonicalReturn
+                        || requiresComposedInvocation(defaultExpression)) {
                     emitDefaultExpressionToLocal(
                             builder,
                             defaultExpression,
@@ -392,11 +392,29 @@ final class CanonicalToBytecodeLowerer {
     private static boolean hasComposedArgument(
             java.util.List<CanonicalExpression> arguments) {
         return arguments.stream()
-                .anyMatch(
-                        argument ->
-                                argument instanceof CanonicalCall
-                                        || argument instanceof CanonicalSend
-                                        || argument instanceof CanonicalReturn);
+                .map(CanonicalToBytecodeLowerer::suppliedArgumentExpression)
+                .anyMatch(CanonicalToBytecodeLowerer::requiresComposedInvocation);
+    }
+
+    private static boolean requiresComposedInvocation(
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalCall
+                || expression instanceof CanonicalSend
+                || expression instanceof CanonicalReturn) {
+            return true;
+        }
+        if (expression instanceof CanonicalMember member) {
+            return requiresComposedInvocation(member.receiver());
+        }
+        if (expression instanceof CanonicalIdentity identity) {
+            return requiresComposedInvocation(identity.left())
+                    || requiresComposedInvocation(identity.right());
+        }
+        if (expression instanceof CanonicalNotIdentity identity) {
+            return requiresComposedInvocation(identity.left())
+                    || requiresComposedInvocation(identity.right());
+        }
+        return false;
     }
 
     private static boolean hasSpreadArgument(
@@ -550,6 +568,49 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
             return;
         }
+        if (expression instanceof CanonicalMember member) {
+            BytecodeLocal receiverValue = builder.createLocal("memberReceiver", null);
+            emitBodyExpressionToLocal(
+                    builder, member.receiver(), receiverValue, preparedCall, childResult, resumeValue);
+            builder.beginStoreLocal(target);
+            builder.beginReadMember();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(receiverValue);
+            builder.emitLoadConstant(member.name());
+            builder.endReadMember();
+            builder.endStoreLocal();
+            return;
+        }
+        if (expression instanceof CanonicalIdentity identity) {
+            BytecodeLocal leftValue = builder.createLocal("identityLeft", null);
+            BytecodeLocal rightValue = builder.createLocal("identityRight", null);
+            emitBodyExpressionToLocal(
+                    builder, identity.left(), leftValue, preparedCall, childResult, resumeValue);
+            emitBodyExpressionToLocal(
+                    builder, identity.right(), rightValue, preparedCall, childResult, resumeValue);
+            builder.beginStoreLocal(target);
+            builder.beginIdentity();
+            builder.emitLoadLocal(leftValue);
+            builder.emitLoadLocal(rightValue);
+            builder.endIdentity();
+            builder.endStoreLocal();
+            return;
+        }
+        if (expression instanceof CanonicalNotIdentity identity) {
+            BytecodeLocal leftValue = builder.createLocal("notIdentityLeft", null);
+            BytecodeLocal rightValue = builder.createLocal("notIdentityRight", null);
+            emitBodyExpressionToLocal(
+                    builder, identity.left(), leftValue, preparedCall, childResult, resumeValue);
+            emitBodyExpressionToLocal(
+                    builder, identity.right(), rightValue, preparedCall, childResult, resumeValue);
+            builder.beginStoreLocal(target);
+            builder.beginNotIdentity();
+            builder.emitLoadLocal(leftValue);
+            builder.emitLoadLocal(rightValue);
+            builder.endNotIdentity();
+            builder.endStoreLocal();
+            return;
+        }
         builder.beginStoreLocal(target);
         emitExpression(builder, expression);
         builder.endStoreLocal();
@@ -598,6 +659,49 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
             return;
         }
+        if (expression instanceof CanonicalMember member) {
+            BytecodeLocal receiverValue = builder.createLocal("defaultMemberReceiver", null);
+            emitDefaultExpressionToLocal(
+                    builder, member.receiver(), receiverValue, preparedCall, childResult, resumeValue);
+            builder.beginStoreLocal(target);
+            builder.beginReadMember();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(receiverValue);
+            builder.emitLoadConstant(member.name());
+            builder.endReadMember();
+            builder.endStoreLocal();
+            return;
+        }
+        if (expression instanceof CanonicalIdentity identity) {
+            BytecodeLocal leftValue = builder.createLocal("defaultIdentityLeft", null);
+            BytecodeLocal rightValue = builder.createLocal("defaultIdentityRight", null);
+            emitDefaultExpressionToLocal(
+                    builder, identity.left(), leftValue, preparedCall, childResult, resumeValue);
+            emitDefaultExpressionToLocal(
+                    builder, identity.right(), rightValue, preparedCall, childResult, resumeValue);
+            builder.beginStoreLocal(target);
+            builder.beginIdentity();
+            builder.emitLoadLocal(leftValue);
+            builder.emitLoadLocal(rightValue);
+            builder.endIdentity();
+            builder.endStoreLocal();
+            return;
+        }
+        if (expression instanceof CanonicalNotIdentity identity) {
+            BytecodeLocal leftValue = builder.createLocal("defaultNotIdentityLeft", null);
+            BytecodeLocal rightValue = builder.createLocal("defaultNotIdentityRight", null);
+            emitDefaultExpressionToLocal(
+                    builder, identity.left(), leftValue, preparedCall, childResult, resumeValue);
+            emitDefaultExpressionToLocal(
+                    builder, identity.right(), rightValue, preparedCall, childResult, resumeValue);
+            builder.beginStoreLocal(target);
+            builder.beginNotIdentity();
+            builder.emitLoadLocal(leftValue);
+            builder.emitLoadLocal(rightValue);
+            builder.endNotIdentity();
+            builder.endStoreLocal();
+            return;
+        }
         builder.beginStoreLocal(target);
         emitExpression(builder, expression);
         builder.endStoreLocal();
@@ -616,10 +720,7 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
         CanonicalExpression receiver = call.receiver();
-        boolean stageReceiver =
-                receiver instanceof CanonicalCall
-                        || receiver instanceof CanonicalSend
-                        || receiver instanceof CanonicalReturn;
+        boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments =
                 hasComposedArgument(call.arguments());
         boolean spreadArguments =
@@ -745,10 +846,7 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
         CanonicalExpression receiver = send.receiver();
-        boolean stageReceiver =
-                receiver instanceof CanonicalCall
-                        || receiver instanceof CanonicalSend
-                        || receiver instanceof CanonicalReturn;
+        boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments =
                 hasComposedArgument(send.arguments());
         boolean spreadArguments =
@@ -1249,7 +1347,22 @@ final class CanonicalToBytecodeLowerer {
             CanonicalExpression expression) {
         validateSpan(expression.span());
         if (expression instanceof CanonicalLiteral
-                || expression instanceof CanonicalLookup) {
+                || expression instanceof CanonicalLookup
+                || expression instanceof CanonicalIntrinsic) {
+            return;
+        }
+        if (expression instanceof CanonicalMember member) {
+            validateSupportedExpression(member.receiver());
+            return;
+        }
+        if (expression instanceof CanonicalIdentity identity) {
+            validateSupportedExpression(identity.left());
+            validateSupportedExpression(identity.right());
+            return;
+        }
+        if (expression instanceof CanonicalNotIdentity identity) {
+            validateSupportedExpression(identity.left());
+            validateSupportedExpression(identity.right());
             return;
         }
         if (expression instanceof CanonicalCall call) {
@@ -1307,6 +1420,35 @@ final class CanonicalToBytecodeLowerer {
             emitLookup(builder, lookup);
             return;
         }
+        if (expression instanceof CanonicalIntrinsic intrinsic) {
+            builder.beginLoadIntrinsic();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(intrinsic.kind());
+            builder.endLoadIntrinsic();
+            return;
+        }
+        if (expression instanceof CanonicalMember member) {
+            builder.beginReadMember();
+            builder.emitLoadArgument(0);
+            emitExpression(builder, member.receiver());
+            builder.emitLoadConstant(member.name());
+            builder.endReadMember();
+            return;
+        }
+        if (expression instanceof CanonicalIdentity identity) {
+            builder.beginIdentity();
+            emitExpression(builder, identity.left());
+            emitExpression(builder, identity.right());
+            builder.endIdentity();
+            return;
+        }
+        if (expression instanceof CanonicalNotIdentity identity) {
+            builder.beginNotIdentity();
+            emitExpression(builder, identity.left());
+            emitExpression(builder, identity.right());
+            builder.endNotIdentity();
+            return;
+        }
         throw new AssertionError(
                 "validated value-shaped Bytecode expression became unsupported: "
                         + expression.getClass().getSimpleName());
@@ -1337,10 +1479,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         CanonicalExpression receiver = send.receiver();
-        boolean stageReceiver =
-                receiver instanceof CanonicalCall
-                        || receiver instanceof CanonicalSend
-                        || receiver instanceof CanonicalReturn;
+        boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments =
                 hasComposedArgument(send.arguments());
         boolean spreadArguments =
@@ -1469,10 +1608,7 @@ final class CanonicalToBytecodeLowerer {
         }
 
         CanonicalExpression receiver = call.receiver();
-        boolean stageReceiver =
-                receiver instanceof CanonicalCall
-                        || receiver instanceof CanonicalSend
-                        || receiver instanceof CanonicalReturn;
+        boolean stageReceiver = requiresComposedInvocation(receiver);
         boolean stageArguments = hasComposedArgument(call.arguments());
         boolean spreadArguments = hasSpreadArgument(call.arguments());
         boolean stageInputs =

@@ -1,3 +1,7 @@
+## 0.2.374-SNAPSHOT
+
+- Implement `PERF006-B6A1 — read-only canonical Bytecode coverage` on the ratified C-prime backend. Add exact Bytecode lowering for ordinary member reads, identity/non-identity and `this`/`context`/`args`, including composed operands/default expressions that may suspend. Preserve AST lookup/error behavior, canonical Boolean identity results, exact activation authority and left-to-right exactly-once evaluation with no replay of completed prefixes. Do not cut over `ProtosLanguage.parse`, migrate writes/object/Closure/super forms, retire legacy replay, change specification/public API, or add optimizer-runtime wiring. Implementation version becomes `0.2.374-SNAPSHOT`.
+
 ## 0.2.373-SNAPSHOT
 
 - Ratify `D076 — Test Tool resource reservation and capability provisioning

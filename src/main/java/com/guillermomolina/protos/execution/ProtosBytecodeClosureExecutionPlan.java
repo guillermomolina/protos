@@ -24,8 +24,12 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
+import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMember;
+import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
@@ -89,6 +93,10 @@ final class ProtosBytecodeClosureExecutionPlan {
                         parameter.defaultValue().orElseThrow();
                 if (!(defaultExpression instanceof CanonicalLiteral)
                         && !(defaultExpression instanceof CanonicalLookup)
+                        && !(defaultExpression instanceof CanonicalIntrinsic)
+                        && !(defaultExpression instanceof CanonicalMember)
+                        && !(defaultExpression instanceof CanonicalIdentity)
+                        && !(defaultExpression instanceof CanonicalNotIdentity)
                         && !(defaultExpression instanceof CanonicalCall)
                         && !(defaultExpression instanceof CanonicalSend)
                         && !(defaultExpression instanceof CanonicalReturn)) {

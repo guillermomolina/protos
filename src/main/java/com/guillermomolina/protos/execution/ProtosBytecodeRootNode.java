@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
+import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
@@ -36,6 +37,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
@@ -258,6 +260,65 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     new ProtosSignalException(
                                             ProtosCoreErrors.newUnqualifiedLookupError(
                                                     activation)));
+        }
+    }
+
+    @Operation
+    public static final class ReadMember {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                Object receiver,
+                String name) {
+            ProtosPrelude prelude = activation.prelude().orElse(null);
+            try {
+                return ProtosValueLookup.readMember(receiver, name, prelude)
+                        .orElseThrow(
+                                () ->
+                                        new ProtosSignalException(
+                                                ProtosCoreErrors.newSlotNotFound(activation)));
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            }
+        }
+    }
+
+    @Operation
+    public static final class Identity {
+        @Specialization
+        public static Object perform(Object left, Object right) {
+            return ProtosIdentity.identical(left, right)
+                    ? ProtosBooleanValue.TRUE
+                    : ProtosBooleanValue.FALSE;
+        }
+    }
+
+    @Operation
+    public static final class NotIdentity {
+        @Specialization
+        public static Object perform(Object left, Object right) {
+            return ProtosIdentity.identical(left, right)
+                    ? ProtosBooleanValue.FALSE
+                    : ProtosBooleanValue.TRUE;
+        }
+    }
+
+    @Operation
+    public static final class LoadIntrinsic {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                CanonicalIntrinsic.Kind kind) {
+            return switch (kind) {
+                case THIS -> activation.receiver();
+                case CONTEXT -> activation.context();
+                case ARGS ->
+                        activation.arguments()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "args requires a Closure invocation activation"));
+            };
         }
     }
 
