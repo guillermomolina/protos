@@ -44,7 +44,12 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertTrue(source.contains("processContext.execute("));
         assertTrue(source.contains("processContext.evaluatePersistent("));
         assertTrue(source.contains("executeStandaloneRootTask(session.executeModuleSource(source))"));
-        assertTrue(source.contains("session.activation, session.runtimeHost"));
+        assertTrue(
+                source.matches(
+                        "(?s).*ProtosTestToolAsyncExecutionScope\\.install\\("
+                                + "\\s*session\\.activation,"
+                                + "\\s*session\\.runtimeHost,"
+                                + ".*"));
         assertFalse(source.contains("legacyToolSession("));
         assertFalse(source.contains("ProtosSourceCompiler"));
         assertTrue(source.contains("implements AutoCloseable"));
