@@ -419,7 +419,24 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         String future =
                 Files.readString(
                         JAVA_ROOT.resolve("execution").resolve("ProtosStandardFutureProtocol.java"));
-        assertEquals(5, occurrences(future, "slot(futurePrototype,"));
+        int ordinaryFutureNativeSlots =
+                occurrences(future, "slot(futurePrototype,");
+        int suspensionCapableFutureNativeSlots =
+                occurrences(
+                        future,
+                        "suspensionSlot(\n                futurePrototype,");
+        assertEquals(
+                4,
+                ordinaryFutureNativeSlots,
+                "Future keeps four ordinary native helper-backed surfaces");
+        assertEquals(
+                1,
+                suspensionCapableFutureNativeSlots,
+                "Future.value is the single PLAT019 suspension-capable native surface");
+        assertEquals(
+                5,
+                ordinaryFutureNativeSlots + suspensionCapableFutureNativeSlots,
+                "Future native/helper-backed standard surface count must not expand silently");
 
         String bootstrap =
                 Files.readString(

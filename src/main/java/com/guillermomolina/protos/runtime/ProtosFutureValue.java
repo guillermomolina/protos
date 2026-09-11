@@ -23,6 +23,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.BiFunction;
+import java.util.function.Supplier;
 
 /** Actor-domain Future state machine. Terminal state and waiter registration share one monitor. */
 public final class ProtosFutureValue extends ProtosObjectValue {
@@ -164,15 +166,163 @@ public final class ProtosFutureValue extends ProtosObjectValue {
                     continue;
                 }
             }
-            return switch (snapshot) {
-                case RESOLVED -> resolved;
-                case FAILED -> throw ProtosCoreErrors.signal(activation, failed);
-                case CANCELLED -> throw ProtosCoreErrors.signal(
-                        activation,
-                        ProtosCoreErrors.newOccurrence(activation, ProtosCoreErrors.StandardError.CANCELLED));
-                case PENDING -> throw new AssertionError("pending handled above");
-            };
+            return observedTerminalValue(
+                    activation,
+                    snapshot,
+                    resolved,
+                    failed);
         }
+    }
+
+    /**
+     * Runtime-only PLAT019 observation entry for a Task-backed C-prime caller.
+     *
+     * <p>This preserves the same Future monitor, private {@link Waiter}, terminal
+     * transition and Error rules as {@link #observeValue(ProtosActivation)}. If
+     * the Future is terminal, the result/Error is observed synchronously. If it
+     * is pending, exactly one ordinary Waiter is registered atomically with the
+     * pending-state observation and handed to the supplied backend factory
+     * together with a logical resumer. The factory may package those two values
+     * into the backend-private suspension transport selected by PLAT019.
+     *
+     * <p>The logical resumer re-observes only this exact registered waiter. It
+     * never creates a second waiter and never re-enters the original native
+     * Java activation.
+     */
+    public Object observeValueForContinuationForRuntime(
+            ProtosActivation activation,
+            BiFunction<
+                            ProtosTask.WaitDependency,
+                            Supplier<Object>,
+                            Object>
+                    pendingFactory) {
+        Objects.requireNonNull(
+                activation,
+                "activation");
+        Objects.requireNonNull(
+                pendingFactory,
+                "pendingFactory");
+        requireDomain(activation);
+
+        State snapshot;
+        Object resolved;
+        ProtosObjectValue failed;
+        Waiter pendingWaiter = null;
+
+        synchronized (this) {
+            snapshot = state;
+            resolved = value;
+            failed = error;
+            if (snapshot == State.PENDING) {
+                ProtosTask task =
+                        activation.task()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "pending Future.value() continuation requires an Actor-local task execution"));
+                pendingWaiter =
+                        new Waiter(
+                                this,
+                                task);
+                waiters.add(pendingWaiter);
+            }
+        }
+
+        if (pendingWaiter == null) {
+            return observedTerminalValue(
+                    activation,
+                    snapshot,
+                    resolved,
+                    failed);
+        }
+
+        Waiter registeredWaiter = pendingWaiter;
+        try {
+            return Objects.requireNonNull(
+                    pendingFactory.apply(
+                            registeredWaiter,
+                            () ->
+                                    resumeValueAfterContinuationWaitForRuntime(
+                                            activation,
+                                            registeredWaiter)),
+                    "pending Future.value() continuation factory returned null");
+        } catch (RuntimeException | Error factoryFailure) {
+            synchronized (this) {
+                waiters.remove(registeredWaiter);
+            }
+            throw factoryFailure;
+        }
+    }
+
+    private Object resumeValueAfterContinuationWaitForRuntime(
+            ProtosActivation activation,
+            Waiter waiter) {
+        Objects.requireNonNull(
+                activation,
+                "activation");
+        Objects.requireNonNull(
+                waiter,
+                "waiter");
+        requireDomain(activation);
+
+        ProtosTask task =
+                activation.task()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Future.value() continuation resumed without an Actor-local task"));
+
+        State snapshot;
+        Object resolved;
+        ProtosObjectValue failed;
+        synchronized (this) {
+            if (waiter.future != this
+                    || waiter.task != task) {
+                throw new IllegalStateException(
+                        "Future.value() continuation waiter does not belong to this observation");
+            }
+
+            /*
+             * A normal terminal transition already cleared this waiter before
+             * making it ready. Removal is intentionally idempotent so the same
+             * code also covers an implementation-visible ready-before-capture
+             * race.
+             */
+            waiters.remove(waiter);
+            snapshot = state;
+            resolved = value;
+            failed = error;
+        }
+
+        if (snapshot == State.PENDING) {
+            throw new IllegalStateException(
+                    "Future.value() continuation resumed before Future terminalization");
+        }
+        return observedTerminalValue(
+                activation,
+                snapshot,
+                resolved,
+                failed);
+    }
+
+    private static Object observedTerminalValue(
+            ProtosActivation activation,
+            State snapshot,
+            Object resolved,
+            ProtosObjectValue failed) {
+        return switch (snapshot) {
+            case RESOLVED -> resolved;
+            case FAILED -> throw ProtosCoreErrors.signal(
+                    activation,
+                    failed);
+            case CANCELLED -> throw ProtosCoreErrors.signal(
+                    activation,
+                    ProtosCoreErrors.newOccurrence(
+                            activation,
+                            ProtosCoreErrors.StandardError.CANCELLED));
+            case PENDING -> throw new AssertionError(
+                    "pending Future observation reached terminal projection");
+        };
     }
 
     public void observe(Observer observer) {
