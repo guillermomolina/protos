@@ -9,12 +9,12 @@ semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.406`.
+`0.1.407`.
 D093 now fixes the outer postfix matching-expression/arm/guard envelope in
 `PROTOS_GRAMMAR.md` and §3.7 fixes its lowering onto this semantic model. D095 now defines the Core v0.1 internal match-pattern grammar, binder/discard,
 Array/Map/remainder, OR, alias and opaque-matcher capture-interface source forms
-in `PROTOS_GRAMMAR.md`, with their semantic mapping in §3.8. Exhaustivity and
-optional/repetition/search families remain separately unresolved.
+in `PROTOS_GRAMMAR.md`, with their semantic mapping in §3.8.
+D096 now defines Core v0.1 static exhaustiveness/redundancy analysis in §3.9 as a conservative tri-state proof layer. Optional/repetition/search pattern families remain separately unresolved.
 
 ## 1. Scope and architectural boundary
 
@@ -1228,6 +1228,173 @@ D095 maps the concrete source grammar to the already-ratified matching semantics
 D095 introduces no Pattern base class, extractor registry, CaptureSignature,
 BindingMap, CaptureFrame, generic object inspection, generic positional
 deconstruction, or generic sequence/keyed deconstruction protocol.
+
+### 3.9 D096 static coverage, exhaustiveness and redundancy contract
+
+Static coverage analysis is an **advisory proof layer** over the already-defined
+runtime matching semantics. It is not a second matcher authority and does not
+change D092 terminal no-selection behavior.
+
+The conceptual analysis result is:
+
+```text
+PROVEN_EXHAUSTIVE
+PROVEN_NON_EXHAUSTIVE
+UNKNOWN
+```
+
+A matching expression is valid Core v0.1 source in all three states, except for
+the syntax-stable structural unreachability errors defined below.
+
+`UNKNOWN` is not `PROVEN_NON_EXHAUSTIVE`. Failure to construct a proof, opaque
+matcher participation, or analysis-budget exhaustion must preserve that
+distinction.
+
+#### 3.9.1 Static knowledge boundary
+
+Coverage analysis may consume only source structure and language-owned static
+facts whose matching meaning is normatively fixed.
+
+It must not execute or semantically speculate about:
+
+- arbitrary `pattern.match(subject)`;
+- D081 ordinary `==`;
+- Map key `hash` / `==`;
+- D095 Map query-key expressions;
+- D092 guards; or
+- arbitrary matcher implementation/delegation state.
+
+D095 `captures(...)` describes only the D088 consumer-side positional binding
+interface and contributes no coverage information.
+
+Core v0.1 requires no `Pattern`, `CoverageSignature`, matcher registry,
+reflection protocol, capture signature or closed matcher hierarchy.
+
+#### 3.9.2 Universal irrefutable forms
+
+The D095 `_` and `@name` patterns are universally irrefutable ordinary
+no-mismatch forms.
+
+Parenthesized irrefutable patterns remain irrefutable. An alias
+`@name: nested` is irrefutable exactly when `nested` is irrefutable.
+
+A D090 OR is irrefutable when a reachable alternative under ordered D090
+semantics is syntactically universal-irrefutable. Earlier alternatives retain
+all ordinary Error/control/cancellation/suspension behavior.
+
+An **unguarded** universal-irrefutable arm establishes
+`PROVEN_EXHAUSTIVE` for ordinary no-selection reachability from that point.
+
+#### 3.9.3 Guards are opaque to positive coverage
+
+Every explicit D092 guard is opaque for positive exhaustiveness and subsumption
+proofs in Core v0.1.
+
+A guarded irrefutable pattern therefore does not prove totality and does not make
+later arms unreachable. Coverage analysis does not execute or assume the value
+of arbitrary guard expressions.
+
+#### 3.9.4 Syntax-stable structural unreachability errors
+
+Core source is invalid when an arm follows an unguarded syntactically
+universal-irrefutable arm, because the later arm can never be attempted through
+normal ordered matching.
+
+Within one D090 OR, an alternative following an already reachable syntactically
+universal-irrefutable alternative is likewise invalid.
+
+This source-error class is intentionally bounded to facts whose truth is fixed by
+the ratified source semantics. A future analyzer discovering richer semantic
+subsumption does not automatically create new source errors.
+
+#### 3.9.5 Richer warnings/lints
+
+A compiler may perform stronger sound usefulness/subsumption analysis over the
+analyzable standard pattern subset.
+
+A richer proven redundant arm/alternative is warning/lint territory, not a Core
+source-validity error.
+
+`PROVEN_NON_EXHAUSTIVE` may likewise produce a warning/lint and, when practical,
+a sound witness. D092 still defines actual runtime no-selection.
+
+`UNKNOWN` alone must not be reported as proven non-exhaustiveness.
+
+#### 3.9.6 Standard Array facts
+
+D084/D095 standard Array patterns may contribute conservative language-owned
+eligibility/shape facts: exact length, one-remainder minimum shape, and
+statically understood nested-irrefutable child positions.
+
+A shape with a bare accepting remainder can cover the eligible standard Array
+domain, but standard Array coverage alone does not cover arbitrary Protos values.
+
+Opaque child matchers keep the relevant subspace `UNKNOWN`.
+
+#### 3.9.7 Standard Map facts
+
+D086/D095 standard Map patterns may contribute only conservative facts.
+
+Because `%{}` is open/subset and contains no requirements, it covers every
+eligible normal standard `Map`.
+
+Because `exact %{}` requires empty residue, it covers only eligible empty normal
+standard Maps.
+
+Key-sensitive Map coverage is opaque whenever a proof would depend on query-key
+evaluation, `hash`, ordinary `==`, mutable key state or arbitrary child matchers.
+Coverage analysis never executes those operations.
+
+#### 3.9.8 D081 value patterns remain opaque
+
+Ordinary value-pattern source occurrences are not deduplicated or treated as
+algebraic constants merely because their source spelling is equal.
+
+Each matcher-value source is evaluated at its own attempt point and may select
+state-sensitive/effectful ordinary matcher behavior. Inherited D081 behavior may
+invoke ordinary pattern-side `==`.
+
+#### 3.9.9 Delegation is not a closed coverage universe
+
+Current prototype/delegation relationships never prove that the set of possible
+future values is closed.
+
+A future separately ratified enum/sealed/closed-domain facility may provide
+static coverage facts to D096 without changing arbitrary matcher behavior.
+
+#### 3.9.10 OR coverage and opacity
+
+D090 OR contributes the union of only those alternative coverage facts the
+analyzer understands soundly.
+
+Opaque alternatives do not denote an empty set. They keep the relevant proof
+`UNKNOWN` unless another independently sufficient fact proves the result, such as
+a later reachable universal `_`.
+
+Coverage reasoning never changes D090 order or first-success commitment.
+
+#### 3.9.11 Bounded analysis
+
+Usefulness/exhaustiveness analysis is resource-bounded.
+
+An implementation may use a pattern matrix, symbolic models or any other sound
+algorithm for the analyzable subset. If its analysis budget is exhausted, it must
+degrade proof precision to `UNKNOWN` rather than reject otherwise valid source.
+
+An implementation may diagnose that analysis precision was reduced.
+
+#### 3.9.12 Runtime and optimization boundary
+
+Coverage analysis never authorizes reordering, duplicating, merging,
+speculatively executing or eliminating observable arbitrary matcher/guard calls.
+
+A stable `PROVEN_EXHAUSTIVE` proof may justify eliminating only the unreachable
+final D092 no-selection branch when every fact used by that proof is stable for
+the generated code.
+
+An unguarded syntactically universal D095 pattern supplies such a stable fact.
+Future cross-module closed-domain proofs require their own versioning/closure
+guarantees or a defensive runtime fallback.
 
 ## 4. Explicit structural deconstruction boundary
 

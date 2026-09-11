@@ -9,6 +9,25 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.407] - 2026-09-11
+
+### D096 — Match exhaustiveness, redundancy and static no-match analysis
+- Ratifies D096-C-prime: static matching coverage is a sound tri-state proof layer with `PROVEN_EXHAUSTIVE`, `PROVEN_NON_EXHAUSTIVE`, and `UNKNOWN`.
+- Core v0.1 does not require every matching expression to be statically exhaustive. `UNKNOWN` and proven partiality remain valid source; D092 terminal fresh ordinary `Error` remains the runtime no-selection semantics.
+- Arbitrary matcher/value patterns, D081 ordinary equality, D095 `captures(...)`, D092 guards, Map query-key evaluation, `hash` and ordinary `==` provide no implicit static coverage contract.
+- `_`, `@name`, and their parenthesized/irrefutable aliases provide syntax-stable irrefutability. An unguarded universal arm proves totality from that point.
+- Arms after an unguarded syntactically universal-irrefutable arm, and OR alternatives after an already reachable syntactically universal-irrefutable alternative, are fixed structural source errors.
+- Richer soundly proven redundancy/subsumption and proven non-exhaustiveness are warning/lint territory rather than Core validity errors; `UNKNOWN` must never be mislabeled non-exhaustive.
+- Standard Array/Map patterns may contribute only conservative D084/D086 language-owned shape/domain facts; key/equality/effect-sensitive reasoning remains opaque.
+- Delegation/prototype state is never inferred to be a closed universe. Future sealed/enum facilities may add separately ratified static proof facts.
+- Analysis is resource-bounded and degrades to `UNKNOWN` on complexity-budget exhaustion rather than rejecting valid source.
+- Coverage proof never changes D071-D095 observable matcher/guard ordering or effects; only a stable exhaustive proof may remove the unreachable final D092 no-selection branch.
+
+### Compatibility and implementation state
+- D071-D095 runtime matching semantics are preserved and not reopened.
+- No new matching syntax, Pattern hierarchy, CoverageSignature, CaptureSignature, matcher registry, reflection protocol, closed delegation taxonomy, MatchFailure subtype or runtime metadata is introduced.
+- No parser/runtime implementation, Java implementation, Maven implementation version, native boundary, standard-library source or license change is included in this ratification slice.
+
 ## [0.1.406] - 2026-09-11
 
 ### D095 — Match-pattern source grammar and explicit binding surface
