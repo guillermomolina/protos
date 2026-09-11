@@ -1294,3 +1294,40 @@ public/durable boundary.
 `LM009-G3` remains **BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION**. P3/P4 under GitHub
 #373 still own exact candidate-root provider/acquisition integration, freshness
 invalidation evidence, multi-root/duplicate-binding behavior and prerequisite closure.
+\
+\n## D089 ProjectBinding projection publication/acquisition ratification
+
+Status: **RATIFIED — Candidate A″ selected**
+Coordination: GitHub #376
+Consumer: LM009-G3P P3 / GitHub #373
+Authority: D082 Candidate A′ + D085 Candidate F′ + D089 Candidate A″
+
+D089 closes the durable production/acquisition mechanism deliberately deferred by
+D085. The selected baseline is a Package-Tool-generated, repository-carried,
+editor-neutral `protos.project` artifact with **dual freshness**:
+
+- Package Tool remains the sole owner of semantic project/package authority and emits
+  the existing `protos-resolution-input-v1` SHA-256 identity into the projection;
+- a separate `protos-project-metadata-v1` SHA-256 covers exact bytes of root
+  `protos.toml`, projected member `protos.toml` files and `protos.lock` using the
+  versioned framing defined by D089;
+- the static provider may recompute only that mechanical byte witness. It does not
+  parse TOML/lock semantics or recompute semantic resolution input;
+- the persisted artifact contains no absolute machine path and no source-file
+  inventory. The exact validated candidate supplies the P2 physical root, and P1 owns
+  the current bounded source inventory inside authorized package roots;
+- missing, stale, malformed or unsupported project metadata fails that binding closed;
+  there is no baseline automatic Package Tool/guest subprocess repair or filesystem
+  project discovery; and
+- individual atomic lock/project publication is sufficient because the mechanical
+  witness includes the exact final `protos.lock` bytes; interrupted publication is
+  detectably stale rather than silently inconsistent.
+
+D089 ratification releases **LM009-G3P P3** to implement only this approved
+`protos.project` producer/reader/provider and exact candidate-root path. P3 remains
+prohibited from introducing automatic refresh, project-discovery heuristics, a second
+manifest/lock semantic authority or workspace-symbol indexing.
+
+`LM009-G3` remains **BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION** until P3/P4 publish and
+GitHub #373 closes. P4 still owns multi-root isolation, duplicate binding rejection,
+freshness invalidation and static no-guest closure evidence.
