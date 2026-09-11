@@ -239,6 +239,58 @@ final class ProtosTestToolManifestPlanTest {
     }
 
     @Test
+    void requirementResourceKeyValidationAcceptsCanonicalAndRejectsMalformedKeys()
+            throws Exception {
+        Fixture fixture = fixture();
+        String validSource =
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Array("
+                        + "Manifest.requirement(\"gpu\", \"shared\", 1), "
+                        + "Manifest.requirement(\"db/integration\", \"shared\", 1), "
+                        + "Manifest.requirement(\"license/ansys\", \"shared\", 1), "
+                        + "Manifest.requirement(\"test/http-server\", \"shared\", 1), "
+                        + "Manifest.requirement(\"vendor/example-device\", \"shared\", 1), "
+                        + "Manifest.requirement(\"gpu.v2/foo_bar-1\", \"shared\", 1), "
+                        + "Manifest.requirement(\"0gpu\", \"shared\", 1))";
+
+        ProtosArrayValue valid =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                new ProtosSourceCompiler().compile(validSource),
+                                fixture.activation()));
+        assertEquals(7, valid.indexedSize().intValueExact());
+
+        String[] invalidKeys = {
+            "",
+            "GPU",
+            "/gpu",
+            "gpu/",
+            "gpu//fast",
+            "gpu fast",
+            "gpu+fast",
+            "-gpu",
+            "é"
+        };
+        for (String invalidKey : invalidKeys) {
+            Fixture invalidFixture = fixture();
+            String source =
+                    "Manifest: import(\"self:Manifest\")\n"
+                            + "Manifest.requirement(\""
+                            + invalidKey
+                            + "\", \"shared\", 1)";
+            ProtosExecutionOutcome outcome =
+                    ProtosRootTaskExecution.execute(
+                            new ProtosSourceCompiler().compile(source),
+                            invalidFixture.activation());
+            assertEquals(
+                    ProtosExecutionOutcome.State.FAILED,
+                    outcome.state(),
+                    () -> "expected invalid resource key to fail closed: " + invalidKey);
+        }
+    }
+
+    @Test
     void batchedManifestTraversalDoesNotGrowOneProtosFramePerRow(
             @TempDir Path corpusRoot) throws Exception {
         int rowCount = 2048;

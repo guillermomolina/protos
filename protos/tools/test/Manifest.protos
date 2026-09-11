@@ -166,10 +166,68 @@ caseRequirements: (spec) => {
     spec[4]
 }
 
-// Private inert Requirement tuple selected by D077. Validation and persistent
-// materialization are deliberately owned by later TOOL002-I slices.
+isResourceKeyStartOctet: (octet) => {
+    ((octet >= 97) && (octet <= 122)) ||
+        ((octet >= 48) && (octet <= 57))
+}
+
+isResourceKeyTailOctet: (octet) => {
+    isResourceKeyStartOctet(octet) ||
+        (octet == 46) ||
+        (octet == 95) ||
+        (octet == 45)
+}
+
+// D077 canonical resource key: segment[/segment...]. Each segment begins with
+// lower-case ASCII letter/digit and continues with lower-case ASCII, digit,
+// '.', '_' or '-'. Slash is namespace structure only; empty segments fail.
+resourceKeyValue: (key) => {
+    source: Encoding.UTF8.encode(key)
+    size: source.size()
+    (size == 0).ifTrue(() => {
+        fail()
+    })
+
+    segmentStart: true
+    index: 0
+    (() => index < size).while() {
+        octet: source[index]
+
+        (octet == 47).ifTrue(() => {
+            segmentStart.ifTrue(() => {
+                fail()
+            })
+            segmentStart = true
+        })
+
+        (octet == 47).ifFalse(() => {
+            allowed: false
+            segmentStart.ifTrue(() => {
+                allowed = isResourceKeyStartOctet(octet)
+            })
+            segmentStart.ifFalse(() => {
+                allowed = isResourceKeyTailOctet(octet)
+            })
+            allowed.ifFalse(() => {
+                fail()
+            })
+            segmentStart = false
+        })
+
+        index = index + 1
+    }
+
+    segmentStart.ifTrue(() => {
+        fail()
+    })
+    key
+}
+
+// Private inert Requirement tuple selected by D077. I3 validates only the
+// already-ratified canonical resource key; mode/units and persistence remain
+// owned by later TOOL002-I slices.
 requirement: (key, mode, units) => {
-    frozenTuple(key, mode, units)
+    frozenTuple(resourceKeyValue(key), mode, units)
 }
 
 requirementKey: (requirement) => {
