@@ -1,6 +1,6 @@
 # GITHUB009 — Native Issue dependency governance and reconciliation
 
-Status: **RATIFIED / ACTIVE — LIVE RECONCILIATION PENDING**
+Status: **CLOSED / ACTIVE**
 
 Owning live Issue: GitHub #321.
 
@@ -167,3 +167,84 @@ After publication, GITHUB009 performs a separate reviewed live reconciliation of
 current Issue dependencies. The owning Issue remains open until that graph has
 been reconciled and verified conflict-free. Closure evidence may then record the
 live migration outcome without changing Protos semantics or runtime behavior.
+
+## Live reconciliation result
+
+The first post-ratification live reconciliation completed on 2026-09-10 against
+all currently open GitHub Issues.
+
+The active native blocking graph contained ten exact Issue-to-Issue edges:
+
+```text
+#47  -> #49
+#48  -> #49
+#92  -> #93
+#95  -> #96
+#96  -> #97
+#47  -> #98
+#48  -> #98
+#98  -> #99
+#107 -> #108
+#108 -> #109
+```
+
+All ten active edges were already represented by GitHub native dependencies.
+Therefore the reviewed migration required no live graph mutation:
+
+```text
+OPEN_DEPENDENCY_GRAPH_RECONCILED=YES
+ACTIVE_EDGES=10
+ACTIVE_EDGES_ALREADY_NATIVE=10
+SAFE_NATIVE_ADDITIONS=0
+NATIVE_REMOVALS=0
+DEPENDENCY_CONFLICTS=0
+AMBIGUOUS_TEXT_MUTATIONS=0
+```
+
+Two open Issues retain one native dependency each on an already-closed
+predecessor:
+
+```text
+#91 -> #92
+#94 -> #95
+```
+
+GitHub reports those relationships in `total_blocked_by` while reporting zero
+active `blocked_by` entries for #92 and #95. They are retained intentionally as
+historical dependency evidence under the ratified closed-blocker rule.
+
+The reconciliation also confirmed deliberate no-edge cases:
+
+- PERF006 / #262 remains `status:blocked` without a native dependency because no
+  exact live Issue blocker is identified;
+- WEB001-I / #300 records completed WEB001-H / #299 as a satisfied prerequisite,
+  not a live blocker;
+- PERF006-B / #276 records closed/ratified prerequisites without manufacturing
+  native blocking edges;
+- TOOL003 / #322 records `Triggered by` decision provenance without converting
+  those decisions into blockers; and
+- Parent/Sub-issue relationships were not propagated into dependency edges.
+
+This result demonstrates that the pre-existing native graph already matched the
+approved C-prime authority model. Reconciliation was therefore verification, not
+an excuse to manufacture changes for migration symmetry.
+
+## Closure
+
+GITHUB009 is closed as a governance/reconciliation work item because:
+
+- Candidate C-prime was explicitly approved by the project owner;
+- the authority model was published on `main` in
+  `d98296aaf6a1d84278863096486df3f4df1287ae`;
+- every open Issue was audited for native dependency state;
+- all ten exact active blocking edges were already native;
+- the two retained closed-blocker relationships behave as intended;
+- no missing safe exact edge, incorrect native edge, or dependency conflict was
+  found; and
+- no dependency was invented from Status, hierarchy, `Triggered by`, a satisfied
+  prerequisite, or historical prose.
+
+The GITHUB009 policy remains active steady-state governance after Issue #321 is
+closed. Future agents must establish exact native dependency relationships when
+known, preserve closed-blocker history, and fail closed rather than infer
+dependency identity from non-authoritative metadata.
