@@ -30,7 +30,7 @@ import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** LIB007 A/B/C real-std conformance for the approved Integer algorithms surface. */
+/** LIB007 closed-surface real-std conformance for the approved Integer algorithms. */
 final class ProtosMathIntegerModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
@@ -100,6 +100,11 @@ final class ProtosMathIntegerModuleTest {
     @Test
     void powerAritiesFailClosed() throws Exception {
         assertFixture("power-arity-rejection.protos");
+    }
+
+    @Test
+    void integratedClosedSurfaceConforms() throws Exception {
+        assertFixture("integrated-closure.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {

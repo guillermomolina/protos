@@ -1,6 +1,6 @@
 # LIB007 — Mathematical integer algorithms Standard Library design
 
-Status: **LIB007-0 CLOSED — design/selection ratified; implementation pending**
+Status: **LIB007 CLOSED — design ratified; initial implementation and integrated conformance complete**
 
 Owning work item: GitHub Issue `#329` — `LIB007 — Mathematical integer algorithms`
 
@@ -323,3 +323,42 @@ This ratification adds only this durable non-normative LIB007 design record and 
 matching changelog entry. It changes no Protos specification, executable
 implementation/runtime, Standard Library executable source, Maven implementation
 version, public release artifact, package format, license term or deployment.
+
+## LIB007 implementation closure
+
+Status: **CLOSED — initial mathematical integer Standard Library surface implemented and integrated**
+
+The bounded initial LIB007 scope is complete. The published module remains exactly:
+
+```text
+std:math/Integer
+
+    gcd(a, b)
+    lcm(a, b)
+    factorial(n)
+    pow(base, exponent)
+    powMod(base, exponent, modulus)
+```
+
+Implementation publication evidence:
+
+- `LIB007-A` — `gcd` / `lcm`: `daf41d1435b65bc07399b546cbc1b6f5fd63a104`;
+- `LIB007-B` — `factorial`: `1b7ae34e326d865c8b8f9c7bec6ea6c7547f9f53`;
+- `LIB007-C` — `pow` / `powMod`: `36c596d80fafdbdcd1548ef14786a0b1c0e58905`;
+- `LIB007-D` — integrated conformance / closure: the publication commit containing
+  this closure section, with its exact SHA retained in GitHub Issue `#338`.
+
+Final conformance uses the ordinary `std:` resolver, retains the complete A/B/C
+boundary/domain/arity/large-value corpus, asserts the exact five-slot public
+export set, and adds an integrated Protos fixture composing all five operations.
+The final publication runs repository-selected top-level closure validation
+rather than child-only validation.
+
+The implementation remains ordinary Protos source. LIB007 introduces no
+specification change, Core numeric-family change, implicit widening, new numeric
+family, Java production/native math bridge, ambient authority, asynchronous
+machinery or cryptographic constant-time guarantee.
+
+All items listed in **Intentionally deferred** remain deferred. Closing LIB007
+does not approve them implicitly; any future substantive semantic or durable
+architecture choice still crosses the project approval gate.

@@ -1,5 +1,15 @@
 ## 0.2.355-SNAPSHOT
 
+- Close `LIB007 — Mathematical integer algorithms` through `LIB007-D`
+  (GitHub #338) after integrated conformance of the complete ratified
+  `std:math/Integer` surface `{gcd,lcm,factorial,pow,powMod}`. Add one real-`std:`
+  Protos closure fixture that composes all five operations, retain the complete
+  A/B/C boundary/domain/arity/large-value corpus and exact no-helper-leakage
+  export assertion, and run repository-selected top-level closure validation.
+  Mark the durable LIB007 design record implementation-complete while retaining
+  all deferred exclusions. No Standard Library executable source, specification,
+  Java production source, Maven implementation version or native boundary changes.
+
 - Advance `PERF006-B4 — control/unwind migration` with bounded B4B non-local return migration under ratified PLAT021 Candidate F. Lower `CanonicalReturn` through the C-prime Bytecode path using the activation's exact live `ProtosReturnHome`, preserve exact return payload identity, consume a transfer only at the prepared invocation that owns that exact home, and carry the same ownership through continuation resume so `^` after a real `Future.value()` suspension cannot escape or replay prior effects. Preserve `InvalidReturn` for missing/completed homes and allow canonical return in already-supported default and composed-expression positions. Do not yet migrate `ensure`, Error handlers, cancellation unwind, or `while`; no Protos specification/public API/global or ThreadLocal control authority changes. Implementation version becomes `0.2.355-SNAPSHOT`.
 
 ## 0.2.354-SNAPSHOT
