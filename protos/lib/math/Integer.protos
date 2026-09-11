@@ -61,3 +61,37 @@ lcm: (a, b) => {
 
     result
 }
+
+/// Returns the exact factorial of a non-negative ordinary Integer.
+factorial: (n) => {
+    // Preserve the strict ordinary-Integer family boundary without conversion.
+    n.div(1)
+
+    (n < 0).ifTrue(() => {
+        Error().signal()
+    })
+
+    // A balanced product tree keeps recursion depth logarithmic and avoids the
+    // permanently sequential multiplication shape rejected by LIB007-0.
+    productRange: (low, high) => {
+        result: 1
+
+        (low <= high).ifTrue(() => {
+            (low == high).ifTrueIfFalse(
+                () => {
+                    result = low
+                },
+                () => {
+                    middle: low + (high - low).div(2)
+                    result =
+                        productRange(low, middle) *
+                        productRange(middle + 1, high)
+                }
+            )
+        })
+
+        result
+    }
+
+    productRange(2, n)
+}

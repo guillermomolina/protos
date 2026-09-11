@@ -30,7 +30,7 @@ import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** LIB007-A real-std conformance for the approved Integer gcd/lcm surface. */
+/** LIB007 A/B real-std conformance for the approved Integer algorithms surface. */
 final class ProtosMathIntegerModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
@@ -49,7 +49,7 @@ final class ProtosMathIntegerModuleTest {
                         .call(prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
-        assertEquals(Set.of("gcd", "lcm"), module.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("gcd", "lcm", "factorial"), module.localSlotsSnapshot().keySet());
     }
 
     @Test
@@ -70,6 +70,21 @@ final class ProtosMathIntegerModuleTest {
     @Test
     void exactArityFailsClosed() throws Exception {
         assertFixture("arity-rejection.protos");
+    }
+
+    @Test
+    void factorialContractConforms() throws Exception {
+        assertFixture("factorial.protos");
+    }
+
+    @Test
+    void factorialDomainFailsClosed() throws Exception {
+        assertFixture("factorial-domain-rejection.protos");
+    }
+
+    @Test
+    void factorialArityFailsClosed() throws Exception {
+        assertFixture("factorial-arity-rejection.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {

@@ -1,3 +1,17 @@
+## 0.2.353-SNAPSHOT
+
+- Implement `LIB007-B — factorial` (GitHub #334) on the ratified
+  `std:math/Integer` surface. Add exact `factorial(n)` for non-negative ordinary
+  unbounded Core `Integer` values, preserving the existing strict family gate and
+  using an ordinary-Protos balanced recursive product range so multiplication is
+  not permanently shaped as a naive sequential fold. Cover `0!`, `1!`, representative
+  values through exact `100!`, negative-domain failure, fixed-width/Float/delegated
+  lookalike rejection, exact arity and exact `{gcd,lcm,factorial}` exports while
+  retaining LIB007-A regression coverage. Add no arbitrary magnitude cap, Java
+  production/native math bridge, specification change, implicit numeric widening,
+  power API or backend-specific contract. Implementation version becomes
+  `0.2.353-SNAPSHOT`.
+
 ## 0.2.352-SNAPSHOT
 
 - Implement `LIB007-A — gcd / lcm foundation` (GitHub #331) as the first
