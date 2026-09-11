@@ -1,3 +1,7 @@
+## 0.2.358-SNAPSHOT
+
+- Implement `LIB008-A — URI component data and strict RFC 3986 parse` (GitHub #341) as the first executable slice of the ratified `std:uri` design. Add a pure-Protos strict RFC 3986 URI-reference parser that returns fresh frozen ordinary seven-slot component records, preserves exact accepted scheme/userInfo/host/port/path/query/fragment and percent-triplet spelling, and distinguishes absent components from present-empty components. Validate and decompose generic authority syntax into preserved textual userInfo/host/port fields, including IPv6 and IPvFuture literals, without DNS, scheme policy, normalization, IDNA/IRI or WHATWG repair; keep all parser helpers local so the A-stage module exports exactly `{parse}`. Use the existing authority-free Core UTF-8 Encoding/Bytes mechanism only as an internal linear-time component buffer. Add real-`std:` Protos conformance for accepted forms, malformed syntax, exact component data, frozen ordinary identity, percent escapes, IP literals, arity/domain rejection and exact module exports. No specification, Java production source or native boundary changes. Implementation version becomes `0.2.358-SNAPSHOT`.
+
 ## 0.2.357-SNAPSHOT
 
 - Ratify `PLAT023 — Async exact-execution carrier topology for Test Tool`
