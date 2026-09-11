@@ -13,6 +13,8 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.oracle.truffle.api.RootCallTarget;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -28,6 +30,210 @@ public final class ProtosModuleRuntime {
     ProtosModuleRuntime(ProtosModuleResolver resolver, ProtosSourceCompiler compiler) {
         this.resolver = Objects.requireNonNull(resolver, "resolver");
         this.compiler = Objects.requireNonNull(compiler, "compiler");
+    }
+
+    /**
+     * Backend-private PLAT025 lifecycle state for one exact standard import.
+     *
+     * <p>This is deliberately not a continuation. The child Bytecode root owns
+     * all resumable interpreter state through the ordinary C-prime
+     * ContinuationResult. This carrier only remembers how to commit or discard
+     * the exact Actor-local module record when that child truly terminates.</p>
+     */
+    static final class PreparedModuleInitialization {
+        private final ProtosModuleKey key;
+        private final ProtosActorModuleState actorState;
+        private final ProtosActorModuleState.ModuleRecord record;
+        private final ProtosObjectValue instance;
+        private final RootCallTarget bodyTarget;
+        private final ProtosActivation activation;
+        private final ProtosActivation caller;
+        private final boolean ownsInitialization;
+        private boolean finalized;
+
+        private PreparedModuleInitialization(
+                ProtosModuleKey key,
+                ProtosActorModuleState actorState,
+                ProtosActorModuleState.ModuleRecord record,
+                ProtosObjectValue instance,
+                RootCallTarget bodyTarget,
+                ProtosActivation activation,
+                ProtosActivation caller,
+                boolean ownsInitialization) {
+            this.key = Objects.requireNonNull(key, "key");
+            this.actorState = Objects.requireNonNull(actorState, "actorState");
+            this.record = Objects.requireNonNull(record, "record");
+            this.instance = Objects.requireNonNull(instance, "instance");
+            this.bodyTarget = bodyTarget;
+            this.activation = Objects.requireNonNull(activation, "activation");
+            this.caller = Objects.requireNonNull(caller, "caller");
+            this.ownsInitialization = ownsInitialization;
+            if (ownsInitialization != (bodyTarget != null)) {
+                throw new IllegalArgumentException(
+                        "module lifecycle ownership must match child-root presence");
+            }
+        }
+
+        static PreparedModuleInitialization cached(
+                ProtosModuleKey key,
+                ProtosActorModuleState actorState,
+                ProtosActorModuleState.ModuleRecord record,
+                ProtosActivation caller) {
+            return new PreparedModuleInitialization(
+                    key,
+                    actorState,
+                    record,
+                    record.instance(),
+                    null,
+                    caller,
+                    caller,
+                    false);
+        }
+
+        static PreparedModuleInitialization initializing(
+                ProtosModuleKey key,
+                ProtosActorModuleState actorState,
+                ProtosActorModuleState.ModuleRecord record,
+                ProtosObjectValue instance,
+                RootCallTarget bodyTarget,
+                ProtosActivation activation,
+                ProtosActivation caller) {
+            return new PreparedModuleInitialization(
+                    key,
+                    actorState,
+                    record,
+                    instance,
+                    Objects.requireNonNull(bodyTarget, "bodyTarget"),
+                    activation,
+                    caller,
+                    true);
+        }
+
+        boolean isImmediate() {
+            return !ownsInitialization;
+        }
+
+        RootCallTarget bodyTarget() {
+            return bodyTarget;
+        }
+
+        ProtosActivation activation() {
+            return activation;
+        }
+
+        ProtosObjectValue immediateResult() {
+            if (!isImmediate()) {
+                throw new IllegalStateException(
+                        "initializing module has a child root");
+            }
+            return instance;
+        }
+
+        Object finish(@SuppressWarnings("unused") Object bodyResult) {
+            if (!ownsInitialization) {
+                return instance;
+            }
+            if (finalized) {
+                throw new IllegalStateException(
+                        "module initialization lifecycle already finalized");
+            }
+            record.markReady();
+            finalized = true;
+            return instance;
+        }
+
+        void fail() {
+            if (!ownsInitialization || finalized) {
+                return;
+            }
+            actorState.removeIfSame(key, record);
+            finalized = true;
+        }
+
+        RuntimeException mapUnexpectedHostFailure(RuntimeException failure) {
+            Objects.requireNonNull(failure, "failure");
+            if (!ownsInitialization) {
+                return failure;
+            }
+            fail();
+            return new ProtosSignalException(ProtosCoreErrors.newError(caller));
+        }
+    }
+
+    PreparedModuleInitialization prepareBytecodeImport(
+            List<?> supplied,
+            ProtosActivation caller) {
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(caller, "caller");
+        if (supplied.size() != 1) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+        }
+        return prepareBytecodeCanonicalModule(
+                resolveModuleKey(supplied.get(0), caller),
+                caller);
+    }
+
+    private PreparedModuleInitialization prepareBytecodeCanonicalModule(
+            ProtosModuleKey key,
+            ProtosActivation caller) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(caller, "caller");
+
+        ProtosActorModuleState actorState = caller.actorModuleState();
+        ProtosActorModuleState.ModuleRecord existing =
+                actorState.lookup(key).orElse(null);
+        if (existing != null) {
+            return PreparedModuleInitialization.cached(
+                    key, actorState, existing, caller);
+        }
+
+        ProtosPrelude prelude =
+                caller.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "module import requires an owning Core prelude"));
+        ProtosObjectValue moduleInstance = prelude.newExecutionContext();
+        ProtosActorModuleState.ModuleRecord record =
+                new ProtosActorModuleState.ModuleRecord(moduleInstance);
+        actorState.put(key, record);
+
+        try {
+            ProtosModuleSource source =
+                    Objects.requireNonNull(resolver.loadSource(key), "module source")
+                            .requireKey(key);
+            ProtosActivation moduleActivation =
+                    prelude.newModuleActivation(
+                            actorState,
+                            key,
+                            moduleInstance,
+                            caller.executionDomain());
+            if (caller.task().isPresent()) {
+                moduleActivation.attachTask(caller.task().orElseThrow());
+            } else {
+                moduleActivation.inheritDynamicControlState(caller);
+            }
+
+            ProtosLanguageContext languageContext = ProtosLanguageContext.current();
+            RootCallTarget bodyTarget =
+                    compiler.compileBytecode(
+                            languageContext.materializeModuleSource(source),
+                            languageContext.languageForRuntime());
+            return PreparedModuleInitialization.initializing(
+                    key,
+                    actorState,
+                    record,
+                    moduleInstance,
+                    bodyTarget,
+                    moduleActivation,
+                    caller);
+        } catch (ProtosSignalException signal) {
+            actorState.removeIfSame(key, record);
+            throw signal;
+        } catch (Exception hostOrCompilerFailure) {
+            actorState.removeIfSame(key, record);
+            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+        }
     }
 
     public Object importModule(Object specifier, ProtosActivation caller) {

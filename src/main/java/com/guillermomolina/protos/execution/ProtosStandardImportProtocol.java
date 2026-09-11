@@ -17,14 +17,66 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.Objects;
 
 final class ProtosStandardImportProtocol {
     private ProtosStandardImportProtocol() {}
+
+    /*
+     * PLAT025 provenance lives in the installed bridge body itself rather than
+     * in a global registry or selector spelling. The body is still an ordinary
+     * native Closure implementation when it is reached outside the exact
+     * post-lookup Bytecode intrinsic.
+     */
+    private static final class StandardImportBody implements ProtosNativeClosureBody {
+        private final ProtosModuleRuntime runtime;
+
+        StandardImportBody(ProtosModuleRuntime runtime) {
+            this.runtime = Objects.requireNonNull(runtime, "runtime");
+        }
+
+        ProtosModuleRuntime runtime() {
+            return runtime;
+        }
+
+        @Override
+        public Object execute(ProtosActivation activation, java.util.List<?> supplied) {
+            if (supplied.size() != 1) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            }
+            return runtime.importModule(supplied.get(0), activation);
+        }
+    }
+
+    static ProtosModuleRuntime selectedRuntimeForBytecodeIntrinsic(
+            Object receiver,
+            ProtosClosureValue selectedBehavior,
+            ProtosObjectValue selectedHome,
+            ProtosPrelude prelude) {
+        if (prelude == null) {
+            return null;
+        }
+        Object standardBinding =
+                prelude.bindings().readLocalSlot("import").orElse(null);
+        if (!(standardBinding instanceof ProtosObjectValue standardFacility)
+                || receiver != standardFacility
+                || selectedHome != standardFacility
+                || standardFacility.readLocalSlot("call").orElse(null) != selectedBehavior) {
+            return null;
+        }
+        ProtosNativeClosureBody body = selectedBehavior.nativeBody().orElse(null);
+        if (!(body instanceof StandardImportBody standardBody)) {
+            return null;
+        }
+        return standardBody.runtime();
+    }
 
     static ProtosObjectValue installImportFacility(
             ProtosObjectValue facility, ProtosModuleRuntime runtime) {
@@ -41,14 +93,7 @@ final class ProtosStandardImportProtocol {
 
         facility.createLocalSlot(
                 "call",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            if (supplied.size() != 1) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            return runtime.importModule(supplied.get(0), activation);
-                        }));
+                ProtosClosureValue.nativeClosure(new StandardImportBody(runtime)));
         return facility.freeze();
     }
 }
