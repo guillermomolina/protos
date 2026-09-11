@@ -95,6 +95,197 @@ a new agent encounters them. If the user explicitly asks to re-evaluate or
 reopen such a decision, treat it as open for the requested review and do not
 advance dependent new design work until the user approves the resulting choice.
 
+## Exhaustive comparative research for Dxxx and PLATxxx
+<!-- GITHUB010 EXHAUSTIVE-DECISION-RESEARCH -->
+
+A newly allocated `Dxxx` or `PLATxxx` is an unresolved research problem, not an
+invitation to select the first locally plausible solution.
+
+Before asking the project owner to approve a substantive `Dxxx` or `PLATxxx`,
+the agent MUST perform and present a comparative investigation broad enough that
+the recommendation is not merely the result of local familiarity,
+implementation convenience, or a small cherry-picked precedent set.
+
+The goal is not to imitate another language, runtime, VM, operating system, or
+tool. Prior art is evidence used to understand the design space, failure modes,
+scaling limits, migration costs, and long-term consequences before selecting the
+solution that best fits Protos.
+
+### Dxxx research breadth
+
+For an implementation-independent `Dxxx`, investigate the same or closely
+analogous problem across materially different language/runtime design families.
+
+The comparison MUST normally include at least five credible systems spanning at
+least three meaningfully different design approaches, unless the domain has
+fewer relevant precedents. If a well-known relevant system is omitted, state why
+it is not materially comparable.
+
+Depending on the question, useful prior art may include prototype/object
+languages, dynamic languages, static languages, functional/concurrent
+languages, capability-oriented systems, distributed languages, language
+specifications, or published research.
+
+Examples include Self, Smalltalk/Pharo, Io, JavaScript, Lua, Ruby, Python, Java,
+C#, C++, Rust, Go, Swift, Erlang/Elixir, Pony, and other systems exposing a
+materially different solution.
+
+Do not compare only syntax, API spelling, or marketing-level behavior. Compare
+the underlying semantics: authority/ownership, identity, lifetime, failure,
+ordering, cancellation, concurrency/distribution consequences, implementation
+freedom, and known limits where relevant.
+
+### PLATxxx research breadth
+
+For a platform/runtime `PLATxxx`, investigate how relevant production runtimes,
+language implementations, VMs, compilers, operating systems, or native
+substrates solve the same architectural problem rather than reasoning only from
+the current Protos implementation.
+
+For a Truffle-related decision, the investigation MUST survey the relevant
+public Truffle implementation space rather than citing only one or two familiar
+languages. Consider, where applicable, GraalJS, TruffleRuby, GraalPy, Espresso,
+Sulong/LLVM, SimpleLanguage and other active or historically informative
+Truffle implementations. Apple Pkl MUST be included in the survey when its
+implementation surface is materially comparable; otherwise record why it is not
+relevant to the specific decision.
+
+The survey MUST also look outside Truffle when mature non-Truffle systems provide
+useful evidence. Depending on the problem, this may include HotSpot/OpenJDK,
+LLVM, V8, .NET/CLR, Swift/Apple compiler/runtime infrastructure, BEAM,
+operating-system kernels, schedulers, databases, distributed runtimes, storage
+systems, or other systems facing the same architectural constraint.
+
+For OS/native/platform boundaries, do not assume Linux/JVM behavior is
+universal. Compare Linux, BSD, macOS/Darwin, Windows, or other hosts whenever
+their differences can affect the choice.
+
+A PLATxxx packet MUST explicitly consider, when relevant:
+
+- Truffle partial evaluation and compilation/deoptimization boundaries;
+- Context isolation and multi-Context behavior;
+- thread, Task, Actor, Process and host-resource ownership;
+- memory scaling and per-instance/per-context state;
+- cancellation, unwind and failure paths;
+- native-image/AOT constraints;
+- Bytecode DSL migration/evolution;
+- alternative schedulers/backends/runtimes; and
+- portability beyond the current host platform.
+
+### Candidate construction
+
+Do not begin with one preferred solution and search only for confirming evidence.
+
+The decision packet MUST expose the meaningful candidate set discovered during
+research, including where applicable:
+
+- the current/status-quo design;
+- the conservative/minimal change;
+- the strongest credible alternative architectures;
+- real hybrid options that remove a genuine trade-off rather than merely
+  accumulating mechanisms; and
+- `defer / do nothing` when deferral is a real option.
+
+A materially credible candidate may be eliminated only with an explicit reason.
+Record important rejected candidates so later agents do not need to rediscover
+the same design space.
+
+### Comparative scoring
+
+After qualitative analysis, score every surviving candidate from **1 to 5** on
+all of the following dimensions:
+
+1. **Correctness / invariant preservation** — preserves required semantics and
+   architectural invariants.
+2. **Protos alignment** — fits the documented Protos design philosophy,
+   including small-universe design, mechanisms over institutions, ordinary
+   things remaining ordinary, no unnecessary privileged entities,
+   orthogonality/composability, locality, pay-only-for-what-you-use, and minimal
+   coordination.
+3. **Future-option resilience** — preserves plausible future
+   language/runtime/library/backend choices instead of prematurely closing them.
+4. **Scalability** — remains sound as objects, data, Tasks, Actors, Processes,
+   Contexts, threads, nodes, workloads, and concurrency increase.
+5. **Conceptual simplicity** — minimizes total semantic/architectural
+   complexity, special cases, hidden rules, and interaction surface rather than
+   merely implementation line count.
+6. **Portability / implementation freedom** — avoids unnecessary coupling to
+   one VM, host mechanism, OS, compiler strategy, runtime identity, or current
+   implementation accident.
+7. **Runtime / resource cost** — CPU, allocation, memory, synchronization,
+   coordination, startup, and whether simple programs pay for unused capability.
+8. **Failure / operability** — predictable failure modes, cancellation/unwind
+   behavior, diagnosability, observability, and recovery of broken invariants.
+9. **Reversibility / migration cost** — difficulty of changing the choice later,
+   including compatibility, persisted-state, deployment, and rollout costs.
+10. **Evidence maturity / implementation risk** — quality of precedent and
+    feasibility evidence versus unproven assumptions or implementation risk.
+
+Each score MUST include a short justification. When evidence is uncertain, mark
+the score confidence as `HIGH`, `MEDIUM`, or `LOW`.
+
+Domain-specific criteria MAY be added, but the common criteria above MUST NOT be
+silently removed.
+
+Scores are comparison aids, not mathematical authority. Do not select a
+candidate merely because its arithmetic total is largest. A hard semantic
+constraint, qualitative threshold, catastrophic failure mode, unacceptable
+future lock-in, or fundamental Protos-philosophy violation may disqualify an
+otherwise high-scoring candidate.
+
+### Future-scenario stress test
+
+Before recommending a candidate, actively test it against plausible future
+scenarios beyond the immediate motivating case.
+
+Where relevant, include:
+
+- much larger workloads and long-lived systems;
+- many Tasks, Actors, Processes or Contexts;
+- multicore/high-concurrency execution;
+- distributed/multi-node execution;
+- cancellation, failure and unwind;
+- alternative schedulers;
+- persistence/serialization;
+- alternative Standard Library implementations;
+- alternative host runtimes/operating systems;
+- migration away from current Truffle machinery;
+- Truffle Bytecode DSL/compiler evolution; and
+- plausible future Protos features that must compose with the decision.
+
+Every substantive Dxxx/PLATxxx packet MUST explicitly answer:
+
+**What plausible future requirement would make us regret selecting this option?**
+
+and:
+
+**If that happens, what escape path remains?**
+
+### Required decision packet
+
+Before requesting project-owner approval, the packet MUST contain:
+
+1. the exact decision and why it is needed;
+2. current Protos constraints and already-ratified decisions;
+3. the prior-art/systems survey and what each comparison contributes;
+4. the complete meaningful candidate set;
+5. the comparative 1–5 scoring matrix with confidence where needed;
+6. failure modes, counterexamples, and disqualifying conditions;
+7. future-scenario and scalability stress analysis;
+8. implementation/runtime/resource consequences;
+9. portability, migration, compatibility, and reversibility consequences;
+10. intentionally deferred questions;
+11. the agent's recommended option and why it is the most Protos-aligned choice;
+    and
+12. the strongest argument **against** the recommendation.
+
+The agent MUST stop at that point for explicit project-owner approval unless the
+specific bounded decision has already been explicitly delegated.
+
+A short investigation that merely finds one plausible implementation, cites one
+or two familiar precedents, or states that an approach is common practice does
+not satisfy this rule.
+
 ## Project decision families
 
 Formal decision identifiers are orthogonal to the documentation role selected by

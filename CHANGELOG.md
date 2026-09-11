@@ -1,5 +1,24 @@
 ## 0.2.349-SNAPSHOT
 
+- Close `GITHUB010 — Exhaustive Dxxx/PLATxxx comparative decision research
+  policy` (GitHub #324) by strengthening the pre-approval design gate for future
+  substantive decisions. Require broad, materially diverse prior-art research;
+  for Dxxx normally compare at least five credible systems across at least three
+  distinct approaches; for Truffle-related PLATxxx survey the relevant public
+  Truffle implementation space (including Apple Pkl when materially comparable)
+  plus mature non-Truffle/OS/runtime evidence where useful. Require every
+  surviving candidate to be scored 1–5 with justified confidence across
+  correctness/invariants, Protos alignment, future-option resilience,
+  scalability, conceptual simplicity, portability/implementation freedom,
+  runtime/resource cost, failure/operability, reversibility/migration cost, and
+  evidence maturity/implementation risk; require explicit future-regret/escape
+  path stress testing and the strongest argument against the recommendation.
+  Numeric totals remain advisory rather than authority, and explicit
+  project-owner approval remains mandatory. Existing ratified decisions are not
+  reopened. No specification, Protos semantics, runtime implementation,
+  implementation version, public API, release artifact, or scheduling-priority
+  change.
+
 - Begin `TOOL003 — Documentation model and source extractor` (GitHub #322) with
   bounded `TOOL003-A` under ratified D061/D062/D064. Add a reusable
   implementation-neutral documentation model with structural Standard Library
