@@ -1253,3 +1253,44 @@ identity, ASCII case-fold ambiguity and confinement against escaping symlink sou
 GitHub #373 still own the inert ProjectBinding/projection carrier, exact candidate-root
 provider/acquisition integration and prerequisite closure. D085's explicitly deferred
 projection persistence/production mechanism is not selected by P1.
+
+## LM009-G3P P2 inert ProjectBinding carriers
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED**
+Coordination: GitHub #373
+Authority: D082 Candidate A′ + D085 Candidate F′
+
+P2 establishes only the editor-neutral immutable data boundary required between the
+canonical package authority / future provider and the D082 static-analysis index. It
+does not choose how that data is produced, persisted, transported or acquired.
+
+Published implementation boundary:
+
+- `ProtosProjectBindingProjection` is an inert package-authority projection carrying
+  one normalized absolute canonical project-root witness, exact root PackageId,
+  exact workspace PackageId/location membership, one internal projection generation
+  and one opaque non-empty freshness witness;
+- the projection interprets no manifest, lockfile or editor workspace and does not
+  define the content or algorithm of the freshness witness;
+- `ProtosProjectBinding` combines one projection with exact physical package-root
+  bindings and already-validated current source identities, defensively freezing all
+  collection inputs;
+- the carrier rejects incomplete or foreign package-root bindings, root-witness
+  mismatch, duplicate PackageId/location/source identity, source packages outside
+  the projection and source paths outside their selected package root;
+- P2 deliberately does not enumerate source files itself; P1 remains the bounded
+  current-source inventory authority over already-authorized package roots;
+- P2 adds no project discovery, candidate-root validation/acquisition, sidecar,
+  serialization format, persistent filename, manifest/lock parser, Package Tool
+  subprocess/daemon, guest/Truffle execution, workspace-symbol index/query,
+  open-document overlay, G4 definition behavior or LM009-H feature.
+
+The generation field versions only this in-memory carrier shape. The freshness witness
+is opaque package-authority data: P2 neither computes nor interprets it. D085's explicit
+choice of the first projection-production/persistence mechanism therefore remains
+unselected and belongs to P3 only if it can be implemented without crossing a new
+public/durable boundary.
+
+`LM009-G3` remains **BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION**. P3/P4 under GitHub
+#373 still own exact candidate-root provider/acquisition integration, freshness
+invalidation evidence, multi-root/duplicate-binding behavior and prerequisite closure.
