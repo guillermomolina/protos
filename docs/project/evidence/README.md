@@ -14,3 +14,4 @@ its references, retention role, and compatibility implications.
   candidate, validation, claims, release-envelope, and observed-publication
   evidence for DIST001.
 - [`D098/`](D098/README.md) — immutable ratification publication, safe-abort, and GitHub closure evidence for D098.
+- [`D099/`](D099/README.md) — immutable ratification publication, safe-abort, and GitHub closure evidence for D099.
