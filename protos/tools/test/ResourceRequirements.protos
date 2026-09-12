@@ -198,3 +198,67 @@ attachToPlan: (plan, declarations) => {
 
     frozenTuple(frozenTuple(...joinedCases))
 }
+
+// TOOL002-I6E: D094 exact corpus-root resource-requirements sidecar acquisition.
+//
+// This remains a private Test Tool planning helper. Public Main wiring stays
+// deferred until D076 resource admission/reservation can prevent a resourceful
+// CaseSpec from starting without its complete required-resource reservation.
+readCorpusRequirementsText: (filesystem) => {
+    file: filesystem.open(
+        Path.relative().child("resource-requirements.toml")
+    ).value()
+    reader: TextReader.owning(file, Encoding.UTF8)
+    text: ""
+
+    readNext: null
+    readNext = () => {
+        chunk: reader.readText().value()
+        (chunk === null).ifFalse(() => {
+            text = text + chunk
+            readNext()
+        })
+    }
+
+    Error.handle(() => {
+        readNext()
+    }, (error) => {
+        reader.close().value()
+        error.signal()
+    })
+
+    reader.close().value()
+    text
+}
+
+// Discover only the exact direct child selected by D094. True absence preserves
+// the supplied complete TestPlan unchanged. Presence is fail-closed: the exact
+// entry must be a regular file, and every later open/read/TOML/schema/D091 join
+// failure propagates rather than being reinterpreted as absence.
+loadFromCorpus: (filesystem, plan) => {
+    entries: filesystem.entries(Path.relative()).value()
+    present: false
+    presentKind: null
+
+    entries.each((entry) => {
+        (entry.name == "resource-requirements.toml").ifTrue(() => {
+            present.ifTrue(() => {
+                fail()
+            })
+            present = true
+            presentKind = entry.kind
+        })
+    })
+
+    result: plan
+    present.ifTrue(() => {
+        (presentKind == "regular").ifFalse(() => {
+            fail()
+        })
+
+        text: readCorpusRequirementsText(filesystem)
+        declarations: parse(text)
+        result = attachToPlan(plan, declarations)
+    })
+    result
+}

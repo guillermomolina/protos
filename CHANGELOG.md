@@ -1,5 +1,8 @@
-## 0.2.399-SNAPSHOT
+## 0.2.400-SNAPSHOT
 
+- Implement `TOOL002-I6E — D094 resource-requirements sidecar discovery and full-plan attachment`. Add private bundled-Test-Tool corpus-root exact-child discovery for the canonical optional `resource-requirements.toml` through the existing confined `Filesystem.entries(Path.relative())` authority. Preserve the exact supplied TestPlan on true absence; require an exact present entry to be `regular`; read the complete document as UTF-8 through the existing Filesystem/TextReader boundary; then reuse I6C strict TOML/schema parsing and I6D/D091 complete-plan attachment before any later filter/shard stage. Fail closed for present non-regular, read, TOML/schema and orphan/join failures. Add confined-tree focal evidence for absence, exact valid attachment, wrong-case non-match, non-regular entries, malformed TOML/schema and orphan declarations. This slice deliberately does not wire discovery into public `Main.protos`, because D076 reservation/capability admission is not yet present there; no resource catalog/provider/CLI/public `std:toml` behavior is added. Implementation version becomes `0.2.400-SNAPSHOT`.
+
+## 0.2.399-SNAPSHOT
 - Fix `BUG005 — Bundled Package Tool CLI omits shared TOML resolver root` (GitHub #419). Provision the already-ratified D087 private `protos/tools/shared` root on the ordinary bundled-tool CLI resolver, restoring `protos package manifest` after TOOL002-I6B moved the canonical TOML 1.0 bootstrap mechanics to `tool-shared:Toml10/...`. Preserve the existing `self:` / `tool-shared:` confinement, Package Tool schema-v1 semantics, caller-CWD authority and distribution layout. Retain `DIST001-B3` as the real extracted-distribution end-to-end regression gate. Implementation version becomes `0.2.399-SNAPSHOT`.
 
 ## 0.2.398-SNAPSHOT
