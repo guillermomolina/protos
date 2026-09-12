@@ -9,6 +9,23 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.410] - 2026-09-12
+
+### D117 — Buffered wrapper delegated-effect commitment across cancellation and close cutover
+- Ratifies D117 Candidate C-prime: standard output wrappers arbitrate a delegated first irreversible effect using three semantic evidence classes — proven zero effect, known irreversible effect, and failure with unknown effect.
+- A pending lower Future does not itself expose producer commitment. While first-effect aftermath is unknown, cancellation, Actor termination and close cutover may be recorded but cannot publish an outer terminal outcome that promises zero irreversible effect.
+- A standard lower cancelled outcome can provide zero-effect evidence because cancellation is terminal only when that lower operation's cancellation contract permits the corresponding zero-effect result.
+- A failed ordinary `ByteWritable.write` may have contributed hidden prefix `k` with `0 <= k <= N`; because `k` is not exposed, failure proves neither `k == 0` nor `k > 0`. The wrapper therefore fails with unknown-effect aftermath, does not let a competing zero-effect cancellation/closure overwrite that failure, and must not replay uncertain output.
+- Once the outer wrapper operation is committed, cancellation of a later required delegated operation is committed failure aftermath rather than outer cancellation.
+- Stronger lower contracts may provide stronger zero-effect evidence, but ordinary Future failure does not imply failure atomicity.
+
+### Compatibility and implementation state
+- `Future` retains exactly `pending`, `resolved`, `failed`, and `cancelled`; D117 adds no public progress/commitment state, partial-write result, byte-count exposure, Error category, hidden Task, scheduler or shadow operation.
+- Existing `IO_CORE.md` commitment/cancellation/close rules and `BYTE_IO.md` hidden-prefix, flush-frontier and no-replay rules remain authoritative; D117 supplies the missing wrapper-composition rule.
+- PLAT009 remains the internal first-effect-gate precedent; PLAT029/PLAT031 remain authoritative for operation-owned C-prime and one `ProtosIoOperation`/one lifecycle buffered ownership.
+- D117 releases the PLAT031 buffered-operation/lifecycle convergence portion of PERF006-B; D112/PLAT030 lifecycle-release execution remains independently unresolved.
+- No executable implementation, Maven implementation-version, native boundary or standard-library source change is included in this ratification slice.
+
 ## [0.1.409] - 2026-09-12
 
 ### D103 — Dynamic capture rest composition and arm-binding interface

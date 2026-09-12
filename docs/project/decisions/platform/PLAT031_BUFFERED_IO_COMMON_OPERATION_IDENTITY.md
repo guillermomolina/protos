@@ -423,3 +423,35 @@ PLAT031 is satisfied only if:
 11. Buffered close/release execution remains governed by PLAT030 and blocked by D112 until that semantic gate is resolved.
 12. Any observable old-Req-vs-common-operation discrepancy stops implementation and opens Dxxx.
 13. Any requirement for duplicated operation authority or a new independently schedulable operation species stops implementation and opens PLAT.
+
+## D117 delegated-effect semantic resolution
+
+D117 / GitHub #444 is ratified as Candidate C-prime.
+
+Where a buffered output operation delegates the outer operation's first
+irreversible effect to a lower standard I/O operation whose Future does not expose
+producer commitment/progress, the adapter uses three-way effect evidence:
+
+```text
+ZERO_EFFECT
+KNOWN_EFFECT
+UNKNOWN_EFFECT_FAILURE
+```
+
+This resolves PLAT031's old-`Req` versus common-operation semantic gate without
+restoring a second commitment authority.
+
+- proven zero effect may return to ordinary pre-commit cancellation/close
+  arbitration;
+- known irreversible effect commits the same `ProtosIoOperation`; and
+- lower failure whose standard contract permits hidden irreversible effect but
+  does not expose it terminates as unknown-effect failure, forbids a false
+  zero-effect cancellation/closure result and forbids unsafe replay.
+
+The exact internal representation may widen PLAT009's existing first-effect
+settlement machinery, but the result Future remains outcome/observation only and
+`Req` remains adapter-local metadata.
+
+D117 releases buffered lifecycle/operation convergence and ordinary
+`BufferedWriter.flush` commitment integration under PLAT031. Buffered
+release/close execution remains independently blocked by D112/PLAT030.

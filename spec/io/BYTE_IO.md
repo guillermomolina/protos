@@ -274,6 +274,84 @@ For one ordered output flow, partial propagation of a failed flush is itself ord
 
 Ordinary `Flushable.flush()` does not expose how far a failed flush propagated. A receiver that nevertheless retains exact internal knowledge of its own propagation progress may remain usable and may allow a later flush to continue from the unpropagated remainder. Such continuation must not duplicate bytes/effects already propagated merely because the earlier flush Future failed.
 
+### 7.1 Delegated first-effect uncertainty in standard output wrappers
+
+A standard output wrapper may need to perform the outer operation's first
+irreversible output/propagation effect by invoking a lower `ByteWritable.write`
+or `Flushable.flush` whose returned Future exposes only its terminal outcome and
+does not expose the lower producer's private commitment/progress state.
+
+The wrapper must preserve the distinction among three kinds of evidence while
+that delegated first effect is in flight:
+
+```text
+ZERO_EFFECT
+KNOWN_EFFECT
+UNKNOWN_EFFECT_FAILURE
+```
+
+These names describe semantic evidence; they are not additional public Future
+states.
+
+Starting the lower operation does not by itself require the outer operation to
+commit when the lower contract still permits a proven zero-effect terminal
+outcome. Conversely, while first-effect aftermath remains unknown, cancellation,
+Actor-termination cancellation or lifecycle close may be recorded and may request
+best-effort lower cancellation, but they must not publish an outer terminal
+outcome whose contract asserts zero irreversible effect.
+
+`ZERO_EFFECT` requires actual proof from the applicable lower contract. In
+particular, when a standard lower I/O Future reaches `cancelled`, that terminal
+state exists only because the lower cancellation contract permitted a zero-effect
+cancelled outcome. If a competing outer cancellation or close cutover is already
+pending and remains eligible, that proven-zero lower aftermath permits the outer
+operation to return to its ordinary pre-commit arbitration.
+
+A lower cancellation does not automatically manufacture an outer cancellation.
+When no eligible outer cancellation/cutover owns that arbitration, failure of a
+required delegated lower operation to complete normally is handled by the
+wrapper's ordinary failure semantics.
+
+When lower aftermath proves that the first irreversible effect required by the
+outer operation occurred, the outer operation is committed before a competing
+zero-effect cancellation or close-cutover outcome may be published.
+
+A failed ordinary `ByteWritable.write` does **not** prove zero effect: by the
+standard write contract it may have contributed an unexposed contiguous prefix
+`k`, where `0 <= k <= N`. It also does not prove that `k > 0`. A wrapper facing
+that ordinary failed lower outcome therefore has **unknown-effect failure**
+evidence.
+
+Unknown-effect failure terminates the outer operation as failure under its
+ordinary wrapper/error rules. It takes precedence over a competing cancellation
+or lifecycle-closure outcome whose contract would assert zero outer effect, but it
+does not expose or invent a positive prefix. Output whose already-completed
+portion cannot be reconstructed exactly must not be replayed merely because the
+lower Future failed.
+
+A stronger lower capability may provide a stronger guarantee. If its normative
+contract proves that a particular failure is failure-atomic and produced zero
+irreversible effect, the wrapper may use that stronger fact as zero-effect
+evidence. Ordinary `ByteWritable` and `Flushable` failure do not imply such a
+guarantee.
+
+Once the outer operation is committed, cancellation of a later required delegated
+operation cannot rewrite the outer Future to `cancelled` as though the outer
+effect never happened. For example, after a buffered wrapper has successfully
+delivered pending bytes to its lower target, cancellation of a subsequently
+required lower `flush()` is committed failure aftermath of the same outer flush,
+not zero-effect cancellation of that outer flush.
+
+This delegated-effect rule composes with the ordinary close cutover. A close that
+races an outer first-effect attempt is resolved from the effect evidence above;
+host callback timing does not retroactively convert uncertain or committed work
+into a closure-terminated zero-effect operation.
+
+The internal arbitration mechanism is implementation-defined. It may use a
+transient first-effect-attempt phase, but it must not add a public Future state,
+expose partial byte counts, create a second operation authority, or make backend
+request identity semantic.
+
 A standard output adapter that exposes `Flushable` propagates flush through the output layers that the adapter itself owns or semantically controls, without inventing durability guarantees beyond those layers.
 
 ---
