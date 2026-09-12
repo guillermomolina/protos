@@ -1,0 +1,292 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// TOOL002-I8B: private live D076 atomic reservation kernel.
+//
+// This module has no queue and owns no candidate ordering/fairness policy.
+// `tryReserve` is synchronous: it checks the complete already-bound resource
+// set before mutating occupancy. Temporary contention returns null. Static
+// requirement/catalog impossibility remains I8A's fail-closed responsibility.
+//
+// Reservation state is invocation-local scheduler state. It never enters the
+// inert TestPlan and carries no provider, Process, host, worker or placement ID.
+// Non-empty successful reservations are tracked in an IdentityMap so release is
+// exact/single-use and a stale reservation cannot release another attempt's
+// compatible occupancy.
+
+Manifest: import("self:Manifest")
+ResourceCatalog: import("self:ResourceCatalog")
+ResourceBinding: import("self:ResourceBinding")
+
+fail: () => {
+    Error().signal()
+}
+
+frozenTuple: (...items) => {
+    items
+}
+
+// Private mutable pool state:
+//   [CatalogEntry, sharedUnitsInUse, exclusiveHeld]
+pool: (entry) => {
+    Array(entry, 0, false)
+}
+
+poolEntry: (poolValue) => {
+    poolValue[0]
+}
+
+poolSharedUsed: (poolValue) => {
+    poolValue[1]
+}
+
+poolExclusiveHeld: (poolValue) => {
+    poolValue[2]
+}
+
+// Private fixed reservation-state carrier:
+//   [Map<resourceKey,pool>, IdentityMap<reservation,true>]
+newState: (catalog) => {
+    pools: Map()
+
+    catalog.each((entry) => {
+        key: ResourceCatalog.entryKey(entry)
+        pools.containsKey(key).ifTrue(() => {
+            fail()
+        })
+
+        capacity: ResourceCatalog.entryCapacity(entry)
+        capacity.div(1)
+        (capacity > 0).ifFalse(() => {
+            fail()
+        })
+
+        pools[key] = pool(entry)
+    })
+
+    frozenTuple(pools, IdentityMap())
+}
+
+statePools: (state) => {
+    state[0]
+}
+
+stateActiveReservations: (state) => {
+    state[1]
+}
+
+poolForBinding: (state, bindingValue) => {
+    requirementValue: ResourceBinding.bindingRequirement(bindingValue)
+    entry: ResourceBinding.bindingCatalogEntry(bindingValue)
+
+    key: Manifest.requirementKey(requirementValue)
+    (ResourceCatalog.entryKey(entry) == key).ifFalse(() => {
+        fail()
+    })
+
+    pools: statePools(state)
+    pools.containsKey(key).ifFalse(() => {
+        fail()
+    })
+
+    poolValue: pools[key]
+
+    // The binding and state must derive from the same validated CatalogEntry
+    // identity. This prevents accidentally mixing two catalog snapshots that
+    // happen to use the same logical key/capacity.
+    (poolEntry(poolValue) === entry).ifFalse(() => {
+        fail()
+    })
+
+    poolValue
+}
+
+canReserveBinding: (state, bindingValue) => {
+    requirementValue: ResourceBinding.bindingRequirement(bindingValue)
+    entry: ResourceBinding.bindingCatalogEntry(bindingValue)
+    poolValue: poolForBinding(state, bindingValue)
+
+    mode: Manifest.requirementMode(requirementValue)
+    units: Manifest.requirementUnits(requirementValue)
+    capacity: ResourceCatalog.entryCapacity(entry)
+
+    allowed: false
+    knownMode: false
+
+    (mode == "shared").ifTrue(() => {
+        used: poolSharedUsed(poolValue)
+        allowed = poolExclusiveHeld(poolValue).not()
+        allowed.ifTrue(() => {
+            allowed = (used + units) <= capacity
+        })
+        knownMode = true
+    })
+
+    (mode == "exclusive").ifTrue(() => {
+        allowed = poolExclusiveHeld(poolValue).not()
+        allowed.ifTrue(() => {
+            allowed = poolSharedUsed(poolValue) == 0
+        })
+        knownMode = true
+    })
+
+    knownMode.ifFalse(() => {
+        fail()
+    })
+
+    allowed
+}
+
+commitBinding: (state, bindingValue) => {
+    requirementValue: ResourceBinding.bindingRequirement(bindingValue)
+    poolValue: poolForBinding(state, bindingValue)
+    mode: Manifest.requirementMode(requirementValue)
+
+    (mode == "shared").ifTrue(() => {
+        poolValue[1] =
+            poolSharedUsed(poolValue) +
+            Manifest.requirementUnits(requirementValue)
+    })
+
+    (mode == "exclusive").ifTrue(() => {
+        poolValue[2] = true
+    })
+
+    true
+}
+
+reservation: (bindings) => {
+    frozenTuple(...bindings)
+}
+
+tryReserve: (bindings, state) => {
+    available: true
+
+    bindings.each((bindingValue) => {
+        available.ifTrue(() => {
+            canReserveBinding(state, bindingValue).ifFalse(() => {
+                available = false
+            })
+        })
+    })
+
+    result: null
+    available.ifTrue(() => {
+        result = reservation(bindings)
+
+        // Resource-free cases remain pay-for-use: there is no live occupancy
+        // and no active-reservation registry entry for an empty reservation.
+        (bindings.size() > 0).ifTrue(() => {
+            bindings.each((bindingValue) => {
+                commitBinding(state, bindingValue)
+            })
+            stateActiveReservations(state)[result] = true
+        })
+    })
+
+    result
+}
+
+validateReleaseBinding: (state, bindingValue) => {
+    requirementValue: ResourceBinding.bindingRequirement(bindingValue)
+    poolValue: poolForBinding(state, bindingValue)
+    mode: Manifest.requirementMode(requirementValue)
+    valid: false
+
+    (mode == "shared").ifTrue(() => {
+        units: Manifest.requirementUnits(requirementValue)
+        valid = poolExclusiveHeld(poolValue).not()
+        valid.ifTrue(() => {
+            valid = poolSharedUsed(poolValue) >= units
+        })
+    })
+
+    (mode == "exclusive").ifTrue(() => {
+        valid = poolExclusiveHeld(poolValue)
+        valid.ifTrue(() => {
+            valid = poolSharedUsed(poolValue) == 0
+        })
+    })
+
+    valid.ifFalse(() => {
+        fail()
+    })
+
+    true
+}
+
+releaseBinding: (state, bindingValue) => {
+    requirementValue: ResourceBinding.bindingRequirement(bindingValue)
+    poolValue: poolForBinding(state, bindingValue)
+    mode: Manifest.requirementMode(requirementValue)
+
+    (mode == "shared").ifTrue(() => {
+        poolValue[1] =
+            poolSharedUsed(poolValue) -
+            Manifest.requirementUnits(requirementValue)
+    })
+
+    (mode == "exclusive").ifTrue(() => {
+        poolValue[2] = false
+    })
+
+    true
+}
+
+release: (reservationValue, state) => {
+    (reservationValue.size() > 0).ifTrue(() => {
+        active: stateActiveReservations(state)
+
+        // Identity ownership is checked before any pool mutation.
+        active.containsKey(reservationValue).ifFalse(() => {
+            fail()
+        })
+
+        // Validate the complete release before mutating any pool.
+        reservationValue.each((bindingValue) => {
+            validateReleaseBinding(state, bindingValue)
+        })
+
+        reservationValue.each((bindingValue) => {
+            releaseBinding(state, bindingValue)
+        })
+
+        active.remove(reservationValue)
+    })
+
+    true
+}
+
+// Private observation helpers used by scheduler-focused tests and later Runner
+// composition. They expose no physical/provider authority.
+sharedUsed: (state, key) => {
+    pools: statePools(state)
+    pools.containsKey(key).ifFalse(() => {
+        fail()
+    })
+    poolSharedUsed(pools[key])
+}
+
+exclusiveHeld: (state, key) => {
+    pools: statePools(state)
+    pools.containsKey(key).ifFalse(() => {
+        fail()
+    })
+    poolExclusiveHeld(pools[key])
+}
+
+activeReservationCount: (state) => {
+    stateActiveReservations(state).size()
+}
