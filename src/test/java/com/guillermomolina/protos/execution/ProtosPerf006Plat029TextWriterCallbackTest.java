@@ -51,20 +51,17 @@ final class ProtosPerf006Plat029TextWriterCallbackTest {
             f.module.context().createLocalSlot("writer", writer);
 
             ProtosFutureValue outer =
-                    assertInstanceOf(
-                            ProtosFutureValue.class,
-                            lowerRoot(
-                                            scope.language(),
-                                            "writer.writeText(\"A\")",
-                                            "plat029-text-writer-write-top.protos")
-                                    .getCallTarget()
-                                    .call(f.module));
+                    invokeCPrimeReturningFuture(
+                            scope.language(),
+                            f,
+                            "writer.writeText(\"A\")",
+                            "plat029-text-writer-write-top.protos");
             assertEquals(ProtosFutureValue.State.PENDING, outer.state());
             assertEquals(0, prefixCalls.get());
             assertEquals(
                     0,
                     f.domain.liveTaskCount(),
-                    "non-Task Bytecode TextWriter entry must not manufacture a hidden Task");
+                    "caller Task must be terminal before operation-owned TextWriter C-prime runs");
 
             assertTrue(f.domain.dispatchOne());
             assertEquals(1, prefixCalls.get());
