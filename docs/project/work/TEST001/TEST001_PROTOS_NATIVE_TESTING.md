@@ -185,25 +185,74 @@ This rule preserves detailed compiler regression coverage while ensuring that a
 future non-Java frontend can still be validated against implementation-independent
 Protos behavior.
 
+## TEST001-B — direct Test Tool CI ownership
+
+Status: CLOSED
+
+TEST001-B makes the already-closed TOOL002 corpus a direct CI authority instead
+of entering the complete corpus through one slow JUnit method.
+
+The CI order remains intentionally Java/host first and Protos-tool second:
+
+```text
+impact-aware Java/runtime validation
+    -> build checkout CLI without rerunning JUnit
+    -> bin/protos test --jobs 2
+```
+
+The second-stage command is the repository's ordinary checkout launcher. CI does
+not call a Java test method to obtain Test Tool coverage, does not introduce a
+special Test Tool entry point, and does not duplicate TOOL002 expectation policy
+in shell or Java.
+
+`ProtosCliTest` retains an independent bootstrap floor by invoking
+`protos test --jobs 0`. The bundled Test Tool resolves and executes its public
+`Main.protos`, but the already-ratified positive-jobs check fails before any
+manifest is loaded. This keeps CLI -> bundled resolver -> Test Tool entry ->
+ordinary Protos option handling under JUnit without making TOOL002 execute its
+own complete corpus as its bootstrap proof.
+
+`ProtosTestToolJClosureReconciliationTest` is reconciled in the same slice. Its
+architectural guard now requires the Java-first stage, the checkout CLI build,
+and the direct public `bin/protos test --jobs 2` stage in that order, while
+explicitly rejecting restoration of the former JUnit/property corpus launcher.
+
+Existing TOOL002 Java tests continue to own host/bootstrap mechanics such as
+resolver wiring, async execution facilities, result-carrier validation,
+provider/resource integration and public cutover invariants. TEST001-B does not
+retire those tests.
+
+No Protos language, Standard Library, Test Tool semantic, scheduler, resource,
+timeout/retry, reporting, distribution or runtime behavior changes in B.
+
+### TEST001-B validation
+
+B is test/CI-impacting and must prove all three layers on the integrated state:
+
+1. focal CLI/Test Tool bootstrap and TOOL002-J CI-architecture JUnit coverage;
+2. the complete Java/JUnit suite;
+3. a packaged checkout followed by direct `bin/protos test --jobs 2`.
+
+The direct Test Tool command is therefore validated before publication, not only
+after GitHub Actions receives the commit.
+
 ## Migration order established by A
 
 The dependency/order for remaining slices is:
 
-1. `TEST001-B` — make TOOL002 a direct first-class CI stage before deleting more
-   Java semantic owners;
-2. `TEST001-C` — establish the durable no-duplicate-primary-owner guard/rule;
-3. `TEST001-D` — reconcile Core/language semantic Java owners against existing or
+1. `TEST001-C` — establish the durable no-duplicate-primary-owner guard/rule;
+2. `TEST001-D` — reconcile Core/language semantic Java owners against existing or
    newly required TOOL002 fixtures;
-4. `TEST001-E` — Process/Task/Future/Actor/Group/cancellation public semantics;
-5. `TEST001-F` — Standard Library public behavior;
-6. `TEST001-G` — package/module/I/O higher-level integration;
-7. `TEST001-H` — extracted portable-distribution Test Tool validation;
-8. `TEST001-I` — final duplicate-owner retirement, bootstrap-floor audit,
+3. `TEST001-E` — Process/Task/Future/Actor/Group/cancellation public semantics;
+4. `TEST001-F` — Standard Library public behavior;
+5. `TEST001-G` — package/module/I/O higher-level integration;
+6. `TEST001-H` — extracted portable-distribution Test Tool validation;
+7. `TEST001-I` — final duplicate-owner retirement, bootstrap-floor audit,
    reporting/documentation reconciliation and closure.
 
-B must precede broad owner retirement: the repository should first prove that
-TOOL002 can fail CI directly rather than relying on the JUnit wrapper that TEST001
-intends to narrow.
+B now precedes broad owner retirement in the published history: the repository
+proves that TOOL002 can fail CI directly and the former full-corpus JUnit wrapper
+has been narrowed to an independent pre-corpus bootstrap floor.
 
 ## Per-test retirement rule
 
@@ -246,8 +295,8 @@ Dxxx/LIBxxx/TOOLxxx/PLATxxx approval gate.
 | Slice | Status | Meaning |
 |---|---|---|
 | TEST001-A | CLOSED | Current suite classified at durable ownership-family level; per-test retirement rule fixed. |
-| TEST001-B | READY | Direct TOOL002 CI execution; narrow JUnit full-corpus wrapper to independent bootstrap floor. |
-| TEST001-C | BLOCKED_BY_B | No-duplicate-primary-owner enforcement after direct CI ownership exists. |
+| TEST001-B | CLOSED | CI invokes packaged checkout `bin/protos test --jobs 2` directly; JUnit retains only a pre-corpus bundled-tool bootstrap floor. |
+| TEST001-C | READY | No-duplicate-primary-owner enforcement after direct CI ownership exists. |
 | TEST001-D | BLOCKED_BY_C | Core/language semantic migration. |
 | TEST001-E | BLOCKED_BY_D | Concurrency/execution-model semantic migration. |
 | TEST001-F | BLOCKED_BY_E | Standard Library migration. |
@@ -261,3 +310,11 @@ Dxxx/LIBxxx/TOOLxxx/PLATxxx approval gate.
 
 No specification, executable implementation, Test Tool behavior, CI behavior,
 implementation version or public compatibility contract changes in A.
+
+## TEST001-B publication classification
+
+`VALIDATION_CLASS=TEST_IMPACT`
+
+CI configuration and Java bootstrap/architecture-test behavior change. Protos
+specification, runtime implementation, Test Tool semantics, public compatibility
+and Maven implementation version do not change.

@@ -117,14 +117,18 @@ jobs:
             --base "$base_sha" \
             --head "$head_sha"
 
-      - name: Run Protos Test Tool checkpoint
+      - name: Build checkout CLI for Protos Test Tool
         shell: bash
         run: |
           set -euo pipefail
-          mvn \
-            -Dprotos.testToolCheckpoint=true \
-            '-Dtest=ProtosCliTest#testSubcommandRunsBundledProtosToolThroughCommonBootstrap' \
-            test
+          mvn -DskipTests package
+          echo "CI_PROTOS_TEST_TOOL_CHECKOUT_BUILD: PASS"
+
+      - name: Run Protos Test Tool directly
+        shell: bash
+        run: |
+          set -euo pipefail
+          bin/protos test --jobs 2
           echo "CI_PROTOS_TEST_TOOL_SECOND_STAGE: PASS"
 
       # The badge is observability only. Keep the JUnit XML even when the test

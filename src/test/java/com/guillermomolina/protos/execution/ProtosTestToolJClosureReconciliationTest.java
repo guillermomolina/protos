@@ -27,29 +27,39 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosTestToolJClosureReconciliationTest {
     @Test
-    void ciValidatesJavaBeforeRunningThePublicProtosTestToolCheckpoint() throws Exception {
+    void ciValidatesJavaBeforeRunningThePublicProtosTestToolDirectly() throws Exception {
         String workflow =
                 Files.readString(
                         Path.of(".github", "workflows", "tests.yml"),
                         StandardCharsets.UTF_8);
 
         int javaFirst = workflow.indexOf("- name: Run impact-aware tests");
-        int protosSecond = workflow.indexOf("- name: Run Protos Test Tool checkpoint");
+        int checkoutBuild = workflow.indexOf("- name: Build checkout CLI for Protos Test Tool");
+        int protosSecond = workflow.indexOf("- name: Run Protos Test Tool directly");
 
         assertTrue(javaFirst >= 0, "Java/runtime validation stage must remain explicit");
         assertTrue(
-                protosSecond > javaFirst,
-                "the public Protos Test Tool checkpoint must run after Java/runtime validation");
+                checkoutBuild > javaFirst,
+                "the checkout CLI build for Test Tool must run after Java/runtime validation");
+        assertTrue(
+                protosSecond > checkoutBuild,
+                "the public Protos Test Tool must run directly after its checkout CLI build");
         assertTrue(
                 workflow.contains("python3 scripts/publication_validation.py"),
                 "the Java-first stage must keep the repository publication validator");
         assertTrue(
-                workflow.contains("-Dprotos.testToolCheckpoint=true"),
-                "the second stage must explicitly enable the real Test Tool checkpoint");
+                workflow.contains("mvn -DskipTests package"),
+                "the second-stage path must build the checkout CLI without rerunning JUnit");
         assertTrue(
+                workflow.contains("bin/protos test --jobs 2"),
+                "CI must execute the public Test Tool directly through the checkout launcher");
+        assertFalse(
+                workflow.contains("-Dprotos.testToolCheckpoint=true"),
+                "CI must not route the complete Test Tool corpus through a JUnit property");
+        assertFalse(
                 workflow.contains(
                         "-Dtest=ProtosCliTest#testSubcommandRunsBundledProtosToolThroughCommonBootstrap"),
-                "the second stage must execute the retained public CLI checkpoint");
+                "CI must not route the complete Test Tool corpus through ProtosCliTest");
     }
 
     @Test
