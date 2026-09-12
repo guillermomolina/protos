@@ -73,6 +73,7 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
         return install(
                 activation,
                 BOOTSTRAP_SLOT,
+                requiredPrelude(activation),
                 registry,
                 runtimeHost,
                 submission,
@@ -87,15 +88,60 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
         return install(
                 activation,
                 INSPECTION_BOOTSTRAP_SLOT,
+                requiredPrelude(activation),
                 registry,
                 runtimeHost,
                 submission,
                 true);
     }
 
+    static ProtosTestResourcefulExecutionFacility installNamed(
+            ProtosActivation activation,
+            String slotName,
+            ProtosPrelude executionPrelude,
+            ProtosTestResourceProviderRegistry registry,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            ProtosAsyncExactExecutionFacility.Submission submission) {
+        return install(
+                activation,
+                slotName,
+                executionPrelude,
+                registry,
+                runtimeHost,
+                submission,
+                false);
+    }
+
+    static ProtosTestResourcefulExecutionFacility installInspectionNamed(
+            ProtosActivation activation,
+            String slotName,
+            ProtosPrelude executionPrelude,
+            ProtosTestResourceProviderRegistry registry,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            ProtosAsyncExactExecutionFacility.Submission submission) {
+        return install(
+                activation,
+                slotName,
+                executionPrelude,
+                registry,
+                runtimeHost,
+                submission,
+                true);
+    }
+
+    private static ProtosPrelude requiredPrelude(ProtosActivation activation) {
+        return activation
+                .prelude()
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "resourceful execution facility requires Core prelude"));
+    }
+
     private static ProtosTestResourcefulExecutionFacility install(
             ProtosActivation activation,
             String slotName,
+            ProtosPrelude executionPrelude,
             ProtosTestResourceProviderRegistry registry,
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosAsyncExactExecutionFacility.Submission submission,
@@ -106,13 +152,7 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
         Objects.requireNonNull(runtimeHost, "runtimeHost");
         Objects.requireNonNull(submission, "submission");
 
-        ProtosPrelude executionPrelude =
-                activation
-                        .prelude()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "resourceful execution facility requires Core prelude"));
+        Objects.requireNonNull(executionPrelude, "executionPrelude");
 
         if (activation.context().hasLocalSlot(slotName)) {
             throw new IllegalStateException(

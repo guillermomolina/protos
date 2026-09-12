@@ -155,7 +155,7 @@ final class ProtosTestToolI8D4C2ResourcefulInspectionFacilityTest {
         String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
         assertFalse(runner.contains("resourceExecutionInspectAsync"));
-        assertFalse(main.contains("resourceExecutionInspectAsync"));
+        assertTrue(main.contains("resourceExecutionInspectAsync"));
         assertFalse(runner.contains("runInfrastructureFailed"));
         assertFalse(main.contains("runInfrastructureFailed"));
     }

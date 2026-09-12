@@ -82,9 +82,10 @@ final class ProtosTestToolI8D5BTestRunOutcomeProjectionTest {
                 runner.contains(
                         "testRunInfrastructureAbortRetainedUnsafeReservationCount: ("));
 
-        // B is projection only. C owns public Main routing and CLI classification.
+        // I8D5C now owns the public Main routing above the closed B projection.
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
-        assertFalse(main.contains("testRunOutcomeFromD108"));
-        assertFalse(main.contains("infrastructure-aborted"));
+        assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
+        assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertTrue(main.trim().endsWith("finalOutcome"));
     }
 }

@@ -11,7 +11,7 @@
 //
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
-// the specific language governing rights and limitations under the License.
+// the specific language governing rights and limitations under the LICENSE.
 
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
@@ -33,37 +33,126 @@ plan: Manifest.load(filesystem)
 packageTomlPlan: Manifest.loadPackageToml(packageTomlFilesystem)
 actorPlan: Manifest.load(actorFilesystem)
 groupPlan: Manifest.load(groupFilesystem)
-run: Runner.runBounded(
+
+completedRuns: Array()
+primaryRun: null
+finalOutcome: null
+invocationAborted: false
+
+primaryD108: Runner.runD108WithResources(
     plan,
+    resourceCatalog,
     filesystem,
     executionAsync,
     executionInspectAsync,
+    resourceExecutionAsync,
+    resourceExecutionInspectAsync,
     jobs
 )
-actorRun: Runner.runBounded(
-    actorPlan,
-    actorFilesystem,
-    actorExecutionAsync,
-    actorExecutionInspectAsync,
-    jobs
-)
-groupRun: Runner.runBounded(
-    groupPlan,
-    groupFilesystem,
-    groupExecutionAsync,
-    groupExecutionInspectAsync,
-    jobs
-)
-packageTomlRun: Runner.runBounded(
-    packageTomlPlan,
-    packageTomlFilesystem,
-    packageExecutionAsync,
-    null,
-    jobs
-)
+
+Runner.d108RunInfrastructureFailed(primaryD108).ifTrue(() => {
+    finalOutcome =
+        Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation(
+            completedRuns,
+            primaryD108,
+            Array(actorPlan, groupPlan, packageTomlPlan)
+        )
+    invocationAborted = true
+})
+
+invocationAborted.not().ifTrue(() => {
+    primaryRun = Runner.d108RunHealthyRun(primaryD108)
+    completedRuns = Array(...completedRuns, primaryRun)
+
+    actorD108: Runner.runD108WithResources(
+        actorPlan,
+        resourceCatalog,
+        actorFilesystem,
+        actorExecutionAsync,
+        actorExecutionInspectAsync,
+        actorResourceExecutionAsync,
+        actorResourceExecutionInspectAsync,
+        jobs
+    )
+
+    Runner.d108RunInfrastructureFailed(actorD108).ifTrue(() => {
+        finalOutcome =
+            Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation(
+                completedRuns,
+                actorD108,
+                Array(groupPlan, packageTomlPlan)
+            )
+        invocationAborted = true
+    })
+
+    invocationAborted.not().ifTrue(() => {
+        actorRun: Runner.d108RunHealthyRun(actorD108)
+        completedRuns = Array(...completedRuns, actorRun)
+
+        groupD108: Runner.runD108WithResources(
+            groupPlan,
+            resourceCatalog,
+            groupFilesystem,
+            groupExecutionAsync,
+            groupExecutionInspectAsync,
+            groupResourceExecutionAsync,
+            groupResourceExecutionInspectAsync,
+            jobs
+        )
+
+        Runner.d108RunInfrastructureFailed(groupD108).ifTrue(() => {
+            finalOutcome =
+                Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation(
+                    completedRuns,
+                    groupD108,
+                    Array(packageTomlPlan)
+                )
+            invocationAborted = true
+        })
+
+        invocationAborted.not().ifTrue(() => {
+            groupRun: Runner.d108RunHealthyRun(groupD108)
+            completedRuns = Array(...completedRuns, groupRun)
+
+            packageTomlD108: Runner.runD108WithResources(
+                packageTomlPlan,
+                resourceCatalog,
+                packageTomlFilesystem,
+                packageExecutionAsync,
+                packageExecutionInspectAsync,
+                packageResourceExecutionAsync,
+                packageResourceExecutionInspectAsync,
+                jobs
+            )
+
+            Runner.d108RunInfrastructureFailed(packageTomlD108).ifTrue(() => {
+                finalOutcome =
+                    Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation(
+                        completedRuns,
+                        packageTomlD108,
+                        Array()
+                    )
+                invocationAborted = true
+            })
+
+            invocationAborted.not().ifTrue(() => {
+                packageTomlRun:
+                    Runner.d108RunHealthyRun(packageTomlD108)
+                completedRuns =
+                    Array(...completedRuns, packageTomlRun)
+
+                finalOutcome =
+                    Runner.testRunOutcomeCompletedAcrossRuns(
+                        primaryRun,
+                        completedRuns
+                    )
+            })
+        })
+    })
+})
 
 writer: TextWriter(process.stdout(), process.stdoutEncoding())
 writer.writeLine("Protos test tool bootstrap")
 writer.writeLine(process.args()[0])
 
-run
+finalOutcome

@@ -110,11 +110,29 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                             packagePrelude,
                             runtimeHost,
                             submission));
+            facilities.add(
+                    ProtosAsyncExactExecutionFacility.installInspection(
+                            activation,
+                            "packageExecutionInspectAsync",
+                            packagePrelude,
+                            runtimeHost,
+                            submission));
+            ProtosPrelude primaryPrelude =
+                    activation
+                            .prelude()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "Test Tool async scope requires Core prelude"));
             resourceExecutionScope =
                     ProtosTestResourceExecutionScope.installEmpty(
                             activation,
                             runtimeHost,
-                            submission);
+                            submission,
+                            primaryPrelude,
+                            actorPrelude,
+                            groupPrelude,
+                            packagePrelude);
             return new ProtosTestToolAsyncExecutionScope(
                     submission,
                     facilities,

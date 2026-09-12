@@ -436,7 +436,11 @@ public final class ProtosCli {
                             "bundled tool provisioner returned null cleanup");
             ProtosModuleKey entryModule = resolver.entryModule(entryModuleName);
             ProtosModuleSource source = resolver.loadSource(entryModule).requireKey(entryModule);
-            executeStandaloneRootTask(session.executeModuleSource(source));
+            Object toolResult =
+                    executeStandaloneRootTask(session.executeModuleSource(source));
+            if (toolName.equals("test")) {
+                return testToolExitCodeForRuntime(toolResult, err);
+            }
             return 0;
         } catch (ParseError e) {
             err.println(diagnosticName + " tool syntax error: " + e.getMessage());
@@ -446,7 +450,7 @@ public final class ProtosCli {
             return 1;
         } catch (RuntimeException e) {
             err.println(diagnosticName + " tool runtime error: " + e.getMessage());
-            return 1;
+            return toolName.equals("test") ? 70 : 1;
         } finally {
             try {
                 cleanup.close();
@@ -454,6 +458,62 @@ public final class ProtosCli {
                 session.terminate();
             }
         }
+    }
+
+    static int testToolExitCodeForRuntime(Object value, PrintStream err) {
+        Objects.requireNonNull(err, "err");
+        if (!(value instanceof ProtosArrayValue outcome)) {
+            throw new IllegalStateException("Test tool returned a non-TestRunOutcome value");
+        }
+
+        List<Object> fields = outcome.indexedSnapshot();
+        if (fields.size() < 4
+                || !(fields.get(0) instanceof ProtosStringValue statusValue)
+                || !(fields.get(3) instanceof ProtosIntegerValue exitValue)) {
+            throw new IllegalStateException("Test tool returned a malformed TestRunOutcome");
+        }
+
+        String status = statusValue.value();
+        final int exitCode;
+        try {
+            exitCode = exitValue.value().intValueExact();
+        } catch (ArithmeticException failure) {
+            throw new IllegalStateException(
+                    "Test tool returned a non-CLI exit classification",
+                    failure);
+        }
+
+        if (status.equals("completed")) {
+            if (exitCode != 0 && exitCode != 1) {
+                throw new IllegalStateException(
+                        "completed TestRunOutcome must select CLI exit 0 or 1");
+            }
+            return exitCode;
+        }
+
+        if (!status.equals("infrastructure-aborted") || exitCode != 3) {
+            throw new IllegalStateException(
+                    "Test tool returned an unknown outcome classification");
+        }
+
+        if (!(fields.get(2) instanceof ProtosArrayValue abortPayload)) {
+            throw new IllegalStateException(
+                    "infrastructure-aborted TestRunOutcome has no abort payload");
+        }
+        List<Object> abortFields = abortPayload.indexedSnapshot();
+        if (abortFields.size() != 5
+                || !(abortFields.get(2) instanceof ProtosArrayValue attempts)
+                || !(abortFields.get(3) instanceof ProtosArrayValue cutover)
+                || !(abortFields.get(4) instanceof ProtosIntegerValue retained)) {
+            throw new IllegalStateException(
+                    "infrastructure-aborted TestRunOutcome has malformed evidence");
+        }
+
+        err.println("Test infrastructure aborted");
+        err.println("infrastructure attempts: " + attempts.indexedSnapshot().size());
+        err.println("cutover not admitted: " + cutover.indexedSnapshot().size());
+        err.println("retained unsafe reservations: " + retained.value());
+        return 3;
     }
 
     private static void installBundledToolFilesystem(

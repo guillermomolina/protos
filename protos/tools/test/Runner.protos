@@ -2342,11 +2342,7 @@ testRunOutcome: (...items) => {
 }
 
 testRunOutcomeCompleted: (run) => {
-    testRunOutcome(
-        "completed",
-        run,
-        null
-    )
+    testRunOutcomeCompletedWithExit(run, 0)
 }
 
 testRunOutcomeInfrastructureAborted: (
@@ -2365,7 +2361,8 @@ testRunOutcomeInfrastructureAborted: (
             infrastructureAttempts,
             cutoverNotAdmittedCases,
             retainedUnsafeReservationCount
-        )
+        ),
+        3
     )
 }
 
@@ -2405,6 +2402,122 @@ testRunOutcomeFromD108: (d108Run) => {
     projected
 }
 
+
+// TOOL002-I8D5C / D116: N-plan invocation aggregation and final D114 CLI classification.
+
+testRunOutcomeCompletedWithExit: (run, exitCode) => {
+    ((exitCode == 0) || (exitCode == 1)).ifFalse(() => {
+        policyError()
+    })
+
+    testRunOutcome(
+        "completed",
+        run,
+        null,
+        exitCode
+    )
+}
+
+testRunOutcomeExitCode: (outcome) => {
+    outcome[3]
+}
+
+testRunOutcomeCompletedAcrossRuns: (
+    primaryRun,
+    executedRuns
+) => {
+    (executedRuns.size() == 0).ifTrue(() => {
+        policyError()
+    })
+
+    primarySeen: false
+    allHealthy: true
+
+    executedRuns.each((run) => {
+        (run === primaryRun).ifTrue(() => {
+            primarySeen = true
+        })
+        runAllPassed(run).ifFalse(() => {
+            allHealthy = false
+        })
+    })
+
+    primarySeen.ifFalse(() => {
+        policyError()
+    })
+
+    exitCode: 0
+    allHealthy.ifFalse(() => {
+        exitCode = 1
+    })
+
+    testRunOutcomeCompletedWithExit(
+        primaryRun,
+        exitCode
+    )
+}
+
+selectedDCaseSpecs: (plan) => {
+    selected: Array()
+    Manifest.planCases(plan).each((spec) => {
+        isDExpectation(spec).ifTrue(() => {
+            selected = Array(...selected, spec)
+        })
+    })
+    resultTuple(...selected)
+}
+
+testRunOutcomeInfrastructureAbortedAcrossInvocation: (
+    completedRuns,
+    abortedD108,
+    laterPlans
+) => {
+    d108RunInfrastructureFailed(abortedD108).ifFalse(() => {
+        policyError()
+    })
+
+    executedCaseRuns: Array()
+    ordinaryUnsupportedCount: 0
+
+    completedRuns.each((run) => {
+        executedCaseRuns =
+            Array(
+                ...executedCaseRuns,
+                ...runCaseResults(run)
+            )
+        ordinaryUnsupportedCount =
+            ordinaryUnsupportedCount +
+            runSkippedCount(run)
+    })
+
+    executedCaseRuns =
+        Array(
+            ...executedCaseRuns,
+            ...d108RunCaseResults(abortedD108)
+        )
+    ordinaryUnsupportedCount =
+        ordinaryUnsupportedCount +
+        d108RunSkippedCount(abortedD108)
+
+    cutoverNotAdmitted:
+        Array(...d108RunCutoverCases(abortedD108))
+
+    laterPlans.each((plan) => {
+        cutoverNotAdmitted =
+            Array(
+                ...cutoverNotAdmitted,
+                ...selectedDCaseSpecs(plan)
+            )
+    })
+
+    testRunOutcomeInfrastructureAborted(
+        resultTuple(...executedCaseRuns),
+        ordinaryUnsupportedCount,
+        d108RunInfrastructureAttempts(abortedD108),
+        resultTuple(...cutoverNotAdmitted),
+        d108RunRetainedReservationCount(abortedD108)
+    )
+}
 
 runBounded: (
     plan,

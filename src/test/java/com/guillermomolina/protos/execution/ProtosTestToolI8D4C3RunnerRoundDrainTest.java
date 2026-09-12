@@ -90,8 +90,8 @@ final class ProtosTestToolI8D4C3RunnerRoundDrainTest {
         // I8D4C3 remains a private Runner composition. Public Main/reporting and
         // production provider-registry wiring are separate later boundaries.
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
-        assertFalse(main.contains("runD108WithResources"));
-        assertFalse(main.contains("resourceExecutionAsync"));
-        assertFalse(main.contains("resourceExecutionInspectAsync"));
+        assertTrue(main.contains("runD108WithResources"));
+        assertTrue(main.contains("resourceExecutionAsync"));
+        assertTrue(main.contains("resourceExecutionInspectAsync"));
     }
 }

@@ -14,80 +14,156 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the LICENSE.
  */
-
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
  * Production host-bootstrap ownership scope for D113 Test Tool resource execution.
  *
- * <p>This is the deliberately narrow public host facade above the private D107/D108 provider
- * registry and C1/C2 resourceful execution facilities. The baseline local Test Tool explicitly
- * installs one immutable empty provider environment. That is a valid D113 environment: resource-free
- * work remains pay-for-use and any resourceful attempt whose logical provider is not explicitly
- * registered fails closed as infrastructure evidence before guest Process creation.
- *
- * <p>The facade intentionally does not make ProviderAdapter, ProviderLease, provider configuration,
- * credentials or registry mutation guest/tool-visible. Future concrete provider support may add an
- * explicit host-side configured construction path below this same facade without introducing
- * discovery or changing D098 logical provider/profile identity.
+ * <p>One invocation observes one immutable environment registry. Each owned Test Tool plan receives
+ * C1/C2 bootstrap routes bound to that plan's exact execution Prelude, so future resourceful
+ * actor/group/package cases cannot accidentally execute in the primary Test Tool Prelude.
  */
 public final class ProtosTestResourceExecutionScope implements AutoCloseable {
 
-    private final ProtosTestResourcefulExecutionFacility ordinary;
-    private final ProtosTestResourcefulExecutionFacility inspection;
+    private final List<ProtosTestResourcefulExecutionFacility> facilities;
     private boolean closed;
 
     private ProtosTestResourceExecutionScope(
-            ProtosTestResourcefulExecutionFacility ordinary,
-            ProtosTestResourcefulExecutionFacility inspection) {
-        this.ordinary = Objects.requireNonNull(ordinary, "ordinary");
-        this.inspection = Objects.requireNonNull(inspection, "inspection");
+            List<ProtosTestResourcefulExecutionFacility> facilities) {
+        this.facilities = List.copyOf(facilities);
     }
 
-    /**
-     * Installs the D113 baseline environment: one explicit immutable empty provider registry.
-     *
-     * <p>The two resulting bootstrap-local routes are the already-closed C1/C2 mechanisms:
-     * {@code resourceExecutionAsync} and {@code resourceExecutionInspectAsync}.
-     */
+    /** Installs only the historical primary C1/C2 pair; retained for bounded focal consumers. */
     public static ProtosTestResourceExecutionScope installEmpty(
             ProtosActivation activation,
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosAsyncExactExecutionFacility.Submission submission) {
         Objects.requireNonNull(activation, "activation");
+        ProtosPrelude primaryPrelude =
+                activation
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "resourceful execution scope requires Core prelude"));
+        return installEmpty(
+                activation,
+                runtimeHost,
+                submission,
+                primaryPrelude,
+                null,
+                null,
+                null);
+    }
+
+    /** Installs the D113 empty-registry environment for every public Test Tool plan. */
+    public static ProtosTestResourceExecutionScope installEmpty(
+            ProtosActivation activation,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            ProtosAsyncExactExecutionFacility.Submission submission,
+            ProtosPrelude primaryPrelude,
+            ProtosPrelude actorPrelude,
+            ProtosPrelude groupPrelude,
+            ProtosPrelude packagePrelude) {
+        Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(runtimeHost, "runtimeHost");
         Objects.requireNonNull(submission, "submission");
+        Objects.requireNonNull(primaryPrelude, "primaryPrelude");
 
         ProtosTestResourceProviderRegistry registry =
                 ProtosTestResourceProviderRegistry.empty();
+        ArrayList<ProtosTestResourcefulExecutionFacility> facilities =
+                new ArrayList<>();
 
-        ProtosTestResourcefulExecutionFacility ordinary = null;
-        ProtosTestResourcefulExecutionFacility inspection = null;
         try {
-            ordinary =
-                    ProtosTestResourcefulExecutionFacility.install(
-                            activation,
-                            registry,
-                            runtimeHost,
-                            submission);
-            inspection =
-                    ProtosTestResourcefulExecutionFacility.installInspection(
-                            activation,
-                            registry,
-                            runtimeHost,
-                            submission);
-            return new ProtosTestResourceExecutionScope(ordinary, inspection);
+            installPair(
+                    facilities,
+                    activation,
+                    "resourceExecutionAsync",
+                    "resourceExecutionInspectAsync",
+                    primaryPrelude,
+                    registry,
+                    runtimeHost,
+                    submission);
+
+            if (actorPrelude != null) {
+                installPair(
+                        facilities,
+                        activation,
+                        "actorResourceExecutionAsync",
+                        "actorResourceExecutionInspectAsync",
+                        actorPrelude,
+                        registry,
+                        runtimeHost,
+                        submission);
+            }
+            if (groupPrelude != null) {
+                installPair(
+                        facilities,
+                        activation,
+                        "groupResourceExecutionAsync",
+                        "groupResourceExecutionInspectAsync",
+                        groupPrelude,
+                        registry,
+                        runtimeHost,
+                        submission);
+            }
+            if (packagePrelude != null) {
+                installPair(
+                        facilities,
+                        activation,
+                        "packageResourceExecutionAsync",
+                        "packageResourceExecutionInspectAsync",
+                        packagePrelude,
+                        registry,
+                        runtimeHost,
+                        submission);
+            }
+
+            return new ProtosTestResourceExecutionScope(facilities);
         } catch (RuntimeException | Error failure) {
-            if (inspection != null) {
-                inspection.close();
-            }
-            if (ordinary != null) {
-                ordinary.close();
-            }
+            closeFacilities(facilities);
             throw failure;
+        }
+    }
+
+    private static void installPair(
+            List<ProtosTestResourcefulExecutionFacility> facilities,
+            ProtosActivation activation,
+            String executionSlot,
+            String inspectionSlot,
+            ProtosPrelude executionPrelude,
+            ProtosTestResourceProviderRegistry registry,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            ProtosAsyncExactExecutionFacility.Submission submission) {
+        facilities.add(
+                ProtosTestResourcefulExecutionFacility.installNamed(
+                        activation,
+                        executionSlot,
+                        executionPrelude,
+                        registry,
+                        runtimeHost,
+                        submission));
+        facilities.add(
+                ProtosTestResourcefulExecutionFacility.installInspectionNamed(
+                        activation,
+                        inspectionSlot,
+                        executionPrelude,
+                        registry,
+                        runtimeHost,
+                        submission));
+    }
+
+    private static void closeFacilities(
+            List<ProtosTestResourcefulExecutionFacility> facilities) {
+        for (int index = facilities.size() - 1; index >= 0; index--) {
+            facilities.get(index).close();
         }
     }
 
@@ -97,10 +173,6 @@ public final class ProtosTestResourceExecutionScope implements AutoCloseable {
             return;
         }
         closed = true;
-
-        // Both facilities share the same immutable registry and host Submission but own independent
-        // outstanding-operation sets. Submission lifetime remains owned by the outer CLI scope.
-        inspection.close();
-        ordinary.close();
+        closeFacilities(facilities);
     }
 }

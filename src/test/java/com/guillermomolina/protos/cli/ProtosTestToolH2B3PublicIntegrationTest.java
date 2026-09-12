@@ -128,7 +128,16 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                     "actorExecutionInspectAsync",
                     "groupExecutionAsync",
                     "groupExecutionInspectAsync",
-                    "packageExecutionAsync")) {
+                    "packageExecutionAsync",
+                    "packageExecutionInspectAsync",
+                    "resourceExecutionAsync",
+                    "resourceExecutionInspectAsync",
+                    "actorResourceExecutionAsync",
+                    "actorResourceExecutionInspectAsync",
+                    "groupResourceExecutionAsync",
+                    "groupResourceExecutionInspectAsync",
+                    "packageResourceExecutionAsync",
+                    "packageResourceExecutionInspectAsync")) {
                 assertTrue(activation.context().hasLocalSlot(slot), "missing async route " + slot);
             }
 
@@ -190,7 +199,8 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         assertTrue(main.contains("Options: import(\"self:Options\")"));
         assertTrue(main.contains("arguments: process.args()"));
         assertTrue(main.contains("jobs: Options.jobs(arguments)"));
-        assertEquals(4, occurrences(main, "Runner.runBounded("));
+        assertEquals(4, occurrences(main, "Runner.runD108WithResources("));
+        assertEquals(0, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));
         assertTrue(main.contains("executionAsync"));
         assertTrue(main.contains("executionInspectAsync"));
@@ -199,6 +209,11 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         assertTrue(main.contains("groupExecutionAsync"));
         assertTrue(main.contains("groupExecutionInspectAsync"));
         assertTrue(main.contains("packageExecutionAsync"));
+        assertTrue(main.contains("packageExecutionInspectAsync"));
+        assertTrue(main.contains("resourceExecutionAsync"));
+        assertTrue(main.contains("actorResourceExecutionAsync"));
+        assertTrue(main.contains("groupResourceExecutionAsync"));
+        assertTrue(main.contains("packageResourceExecutionAsync"));
     }
 
     private static OptionRun runOptionsExpression(String argsExpression) throws Exception {
