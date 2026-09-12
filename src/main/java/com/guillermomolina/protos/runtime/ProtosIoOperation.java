@@ -5,6 +5,15 @@ import java.util.Objects;
 
 /** Internal producer-side state for one asynchronous I/O operation. Commitment is not Future state. */
 public final class ProtosIoOperation {
+    /**
+     * PLAT029 private non-Task execution hook. The concrete driver owns C-prime-specific
+     * mechanics; this operation owns only the driver reference and scheduling state.
+     */
+    @FunctionalInterface
+    public interface DeferredCPrimeExecutionForRuntime {
+        void runSegment(ProtosIoOperation operation);
+    }
+
     enum Phase { UNCOMMITTED, ATTEMPTING_FIRST_EFFECT, COMMITTED, TERMINAL }
 
     private enum DeferredCutover { NONE, CANCELLATION, CLOSE }
@@ -17,6 +26,11 @@ public final class ProtosIoOperation {
     private ProtosObjectValue deferredCloseError;
     private boolean cancellationRequested;
     private Runnable cancellationHandler;
+    private final Object deferredCPrimeLock = new Object();
+    private DeferredCPrimeExecutionForRuntime deferredCPrimeExecution;
+    private boolean deferredCPrimeQueued;
+    private boolean deferredCPrimeRunning;
+    private boolean deferredCPrimeRescheduleRequested;
 
     ProtosIoOperation(ProtosIoLifecycle lifecycle, ProtosActivation origin, ProtosFutureValue future) {
         this.lifecycle=Objects.requireNonNull(lifecycle,"lifecycle");
@@ -30,6 +44,130 @@ public final class ProtosIoOperation {
     public ProtosActivation origin() { return origin; }
     public boolean committed() { synchronized(lifecycle) { return phase == Phase.COMMITTED; } }
     public boolean terminal() { synchronized(lifecycle) { return phase == Phase.TERMINAL; } }
+
+    /** Installs exactly one PLAT029 operation-owned deferred C-prime driver. */
+    public void installDeferredCPrimeExecutionForRuntime(
+            DeferredCPrimeExecutionForRuntime execution) {
+        Objects.requireNonNull(execution, "execution");
+        synchronized (deferredCPrimeLock) {
+            if (terminal()) {
+                throw new IllegalStateException(
+                        "terminal I/O operation cannot acquire deferred C-prime execution");
+            }
+            if (deferredCPrimeExecution != null && deferredCPrimeExecution != execution) {
+                throw new IllegalStateException(
+                        "I/O operation already owns deferred C-prime execution");
+            }
+            deferredCPrimeExecution = execution;
+        }
+    }
+
+    /**
+     * Publishes Actor-local readiness for the operation without executing guest work on the
+     * caller thread. Multiple requests while queued coalesce; one request while running becomes
+     * exactly one later Actor-domain segment.
+     */
+    public boolean requestDeferredCPrimeRunForRuntime() {
+        boolean enqueue = false;
+        boolean accepted;
+        synchronized (deferredCPrimeLock) {
+            if (terminal()) {
+                return false;
+            }
+            if (deferredCPrimeExecution == null) {
+                throw new IllegalStateException(
+                        "I/O operation has no deferred C-prime execution driver");
+            }
+            if (deferredCPrimeQueued) {
+                return false;
+            }
+            if (deferredCPrimeRunning) {
+                accepted = !deferredCPrimeRescheduleRequested;
+                deferredCPrimeRescheduleRequested = true;
+            } else {
+                deferredCPrimeQueued = true;
+                enqueue = true;
+                accepted = true;
+            }
+        }
+        if (enqueue) {
+            origin.executionDomain().enqueueActorIoOperationForRuntime(this);
+        }
+        return accepted;
+    }
+
+    boolean beginDeferredCPrimeDispatchForRuntime() {
+        synchronized (deferredCPrimeLock) {
+            if (!deferredCPrimeQueued) {
+                return false;
+            }
+            deferredCPrimeQueued = false;
+            if (terminal()) {
+                return false;
+            }
+            if (deferredCPrimeRunning) {
+                throw new IllegalStateException(
+                        "I/O operation deferred C-prime execution is already running");
+            }
+            if (deferredCPrimeExecution == null) {
+                throw new IllegalStateException(
+                        "queued I/O operation lost deferred C-prime execution driver");
+            }
+            deferredCPrimeRunning = true;
+            return true;
+        }
+    }
+
+    void runDeferredCPrimeSegmentForRuntime() {
+        DeferredCPrimeExecutionForRuntime execution;
+        synchronized (deferredCPrimeLock) {
+            if (!deferredCPrimeRunning) {
+                throw new IllegalStateException(
+                        "I/O operation deferred C-prime segment is not running");
+            }
+            execution = Objects.requireNonNull(
+                    deferredCPrimeExecution,
+                    "running I/O operation lost deferred C-prime execution driver");
+        }
+
+        boolean requeue = false;
+        try {
+            execution.runSegment(this);
+        } finally {
+            synchronized (deferredCPrimeLock) {
+                if (!deferredCPrimeRunning) {
+                    throw new IllegalStateException(
+                            "I/O operation deferred C-prime running state was corrupted");
+                }
+                deferredCPrimeRunning = false;
+                if (!terminal() && deferredCPrimeRescheduleRequested) {
+                    deferredCPrimeRescheduleRequested = false;
+                    deferredCPrimeQueued = true;
+                    requeue = true;
+                } else {
+                    deferredCPrimeRescheduleRequested = false;
+                    if (terminal()) {
+                        deferredCPrimeExecution = null;
+                    }
+                }
+            }
+            if (requeue) {
+                origin.executionDomain().enqueueActorIoOperationForRuntime(this);
+            }
+        }
+    }
+
+    boolean deferredCPrimeQueuedForTesting() {
+        synchronized (deferredCPrimeLock) {
+            return deferredCPrimeQueued;
+        }
+    }
+
+    boolean deferredCPrimeRunningForTesting() {
+        synchronized (deferredCPrimeLock) {
+            return deferredCPrimeRunning;
+        }
+    }
 
     /** Crosses this operation's irreversible semantic commitment boundary exactly once. */
     public boolean commit() {
@@ -207,6 +345,13 @@ public final class ProtosIoOperation {
     }
 
     private void finishTerminal() {
+        synchronized (deferredCPrimeLock) {
+            deferredCPrimeQueued = false;
+            deferredCPrimeRescheduleRequested = false;
+            if (!deferredCPrimeRunning) {
+                deferredCPrimeExecution = null;
+            }
+        }
         origin.executionDomain().terminalActorIoOperation(this);
         lifecycle.operationTerminal(this);
     }

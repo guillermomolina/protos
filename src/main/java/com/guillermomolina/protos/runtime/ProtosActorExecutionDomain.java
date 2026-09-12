@@ -32,7 +32,7 @@ import java.util.Set;
 public final class ProtosActorExecutionDomain {
     private static final Runnable NOOP_WAKEUP = () -> {};
 
-    private final ArrayDeque<ProtosTask> runnable = new ArrayDeque<>();
+    private final ArrayDeque<Object> runnable = new ArrayDeque<>();
     private final Set<ProtosTask> liveTasks = new LinkedHashSet<>();
     private final Set<ProtosIoOperation> actorIoOperations = new LinkedHashSet<>();
     private final Set<ProtosFutureValue> actorNonTaskFutures = new LinkedHashSet<>();
@@ -86,18 +86,53 @@ public final class ProtosActorExecutionDomain {
         }
     }
 
-    /** Dispatches at most one cooperative execution segment. */
-    public boolean dispatchOne() {
-        ProtosTask task;
+    /** PLAT029 readiness publication for one already-registered Actor-local I/O operation. */
+    void enqueueActorIoOperationForRuntime(ProtosIoOperation operation) {
+        Objects.requireNonNull(operation, "operation");
+        Runnable wakeup = null;
         synchronized (this) {
-            do {
-                task = runnable.pollFirst();
-                if (task == null) {
+            if (!actorIoOperations.contains(operation)) {
+                return;
+            }
+            runnable.addLast(operation);
+            notifyAll();
+            wakeup = schedulerWakeup;
+        }
+        if (wakeup != null) {
+            wakeup.run();
+        }
+    }
+
+    /** Dispatches at most one cooperative Task or PLAT029 I/O-operation segment. */
+    public boolean dispatchOne() {
+        Object scheduled;
+        while (true) {
+            synchronized (this) {
+                scheduled = runnable.pollFirst();
+                if (scheduled == null) {
                     return false;
                 }
-            } while (!task.beginDispatch());
+                if (scheduled instanceof ProtosTask task) {
+                    if (!task.beginDispatch()) {
+                        continue;
+                    }
+                } else if (!(scheduled instanceof ProtosIoOperation)) {
+                    throw new IllegalStateException(
+                            "Actor runnable queue contains an unsupported execution segment");
+                }
+            }
+            if (scheduled instanceof ProtosIoOperation operation
+                    && !operation.beginDeferredCPrimeDispatchForRuntime()) {
+                continue;
+            }
+            break;
         }
-        task.runContinuation();
+
+        if (scheduled instanceof ProtosTask task) {
+            task.runContinuation();
+        } else {
+            ((ProtosIoOperation) scheduled).runDeferredCPrimeSegmentForRuntime();
+        }
         return true;
     }
 
@@ -139,7 +174,8 @@ public final class ProtosActorExecutionDomain {
     }
 
     public synchronized Optional<ProtosTask> nextRunnableForTesting() {
-        return Optional.ofNullable(runnable.peekFirst());
+        Object next = runnable.peekFirst();
+        return next instanceof ProtosTask task ? Optional.of(task) : Optional.empty();
     }
 
     void terminal(ProtosTask task) {
