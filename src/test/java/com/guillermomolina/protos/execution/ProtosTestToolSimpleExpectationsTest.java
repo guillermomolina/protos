@@ -144,6 +144,70 @@ final class ProtosTestToolSimpleExpectationsTest {
     }
 
     @Test
+    void diagnosticRunnerPureAccessorBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "Runner.resultPassed pure accessor",
+                "Runner: import(\"self:Runner\")\n"
+                        + "Runner.resultPassed(Array(true, null))\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticRunnerManifestSlotIdentityBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "Runner Manifest slot identity",
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Runner: import(\"self:Runner\")\n"
+                        + "runnerManifest: Runner.slotValue(\"Manifest\")\n"
+                        + "runnerManifest === Manifest\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticRunnerManifestSlotAccessBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "Runner Manifest slot caseExpectation",
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Runner: import(\"self:Runner\")\n"
+                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
+                        + "runnerManifest: Runner.slotValue(\"Manifest\")\n"
+                        + "runnerManifest.caseExpectation(spec) === \"integer\"\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticLocalClassifierCaptureBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "local classifier capturing Manifest",
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "classifier: (spec) => {\n"
+                        + "    kind: Manifest.caseExpectation(spec)\n"
+                        + "    supported: kind === \"boolean\"\n"
+                        + "    (kind === \"integer\").ifTrue(() => { supported = true })\n"
+                        + "    supported\n"
+                        + "}\n"
+                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
+                        + "classifier(spec)\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticRunnerSingleManifestClassifierBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "Runner single Manifest classifier",
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Runner: import(\"self:Runner\")\n"
+                        + "spec: Manifest.caseSpec(Array(\"diagnostic/fresh.protos\", \"closure-error-parent-fresh\", \"Error\"))\n"
+                        + "Runner.isClosureErrorParentFreshExpectation(spec)\n",
+                fixture);
+    }
+
+    @Test
     void unsupportedExpectationKindFailsClosedAsToolPolicyError()
             throws Exception {
         Fixture fixture = fixture();
