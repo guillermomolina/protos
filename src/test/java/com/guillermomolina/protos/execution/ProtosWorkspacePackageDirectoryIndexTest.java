@@ -26,6 +26,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -70,6 +71,30 @@ final class ProtosWorkspacePackageDirectoryIndexTest {
         ProtosWorkspacePackageProjectIndex projectIndex =
                 ProtosWorkspacePackageProjectIndex.bind(
                         temporary, plan(rootNode, missingMember));
+
+        assertThrows(
+                IOException.class,
+                () -> ProtosWorkspacePackageDirectoryIndex.bind(projectIndex));
+    }
+
+    @Test
+    void rejectsDistinctPackagesSharingOneCanonicalPhysicalRoot() throws Exception {
+        Path realMember = Files.createDirectories(temporary.resolve("libs/member"));
+        Path alias = temporary.resolve("member-alias");
+        try {
+            Files.createSymbolicLink(alias, temporary.relativize(realMember));
+        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
+            Assumptions.assumeTrue(false, "symbolic links unavailable: " + unavailable);
+        }
+
+        ProtosPackageExecutionPlan.PackageNode rootNode = node("root", "");
+        ProtosPackageExecutionPlan.PackageNode firstMember =
+                node("first-pkg", "libs/member");
+        ProtosPackageExecutionPlan.PackageNode aliasedMember =
+                node("second-pkg", "member-alias");
+        ProtosWorkspacePackageProjectIndex projectIndex =
+                ProtosWorkspacePackageProjectIndex.bind(
+                        temporary, plan(rootNode, firstMember, aliasedMember));
 
         assertThrows(
                 IOException.class,

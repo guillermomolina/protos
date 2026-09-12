@@ -60,6 +60,10 @@ final class ProtosWorkspacePackageSourceLookup {
             if (!Files.isDirectory(realSelected) || !realSelected.startsWith(packageRoot)) {
                 throw new IOException("workspace package module escaped its package root");
             }
+            if (!directoryIndex.isOwnedCanonicalPath(packageId, realSelected)) {
+                throw new IOException(
+                        "workspace package module crossed an authorized package boundary");
+            }
             current = realSelected;
         }
 
@@ -68,6 +72,10 @@ final class ProtosWorkspacePackageSourceLookup {
         Path realSource = selectedSource.toRealPath();
         if (!Files.isRegularFile(realSource) || !realSource.startsWith(packageRoot)) {
             throw new IOException("workspace package module escaped its package root");
+        }
+        if (!directoryIndex.isOwnedCanonicalPath(packageId, realSource)) {
+            throw new IOException(
+                    "workspace package module crossed an authorized package boundary");
         }
         return realSource;
     }

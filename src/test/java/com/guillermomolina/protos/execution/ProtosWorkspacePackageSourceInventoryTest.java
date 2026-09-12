@@ -56,25 +56,50 @@ final class ProtosWorkspacePackageSourceInventoryTest {
     }
 
     @Test
-    void inventoriesEveryAlreadyBoundWorkspacePackageUnderItsPackageId() throws Exception {
+    void assignsEachSourceOnlyToItsMostSpecificAuthorizedPackage() throws Exception {
+        Path rootMain = writeSource(temporary, "Main.protos");
         Path memberDirectory = Files.createDirectories(temporary.resolve("libs/member"));
         Path api = writeSource(memberDirectory, "Api.protos");
 
-        List<ProtosWorkspacePackageSourceInventory.Source> memberSources =
+        List<ProtosWorkspacePackageSourceInventory.Source> sources =
                 inventory(
                                 temporary,
                                 node("root", ""),
                                 node("member-pkg", "libs/member"))
-                        .snapshot()
-                        .stream()
-                        .filter(source -> source.packageId().equals("member-pkg"))
-                        .toList();
+                        .snapshot();
+
+        assertEquals(
+                List.of(
+                        new ProtosWorkspacePackageSourceInventory.Source(
+                                "member-pkg", "Api", api.toRealPath()),
+                        new ProtosWorkspacePackageSourceInventory.Source(
+                                "root", "Main", rootMain.toRealPath())),
+                sources);
+    }
+
+    @Test
+    void excludesParentSymlinkAliasesIntoAChildPackageDomain() throws Exception {
+        Path memberDirectory = Files.createDirectories(temporary.resolve("libs/member"));
+        Path api = writeSource(memberDirectory, "Api.protos");
+        Path alias = temporary.resolve("Alias.protos");
+        try {
+            Files.createSymbolicLink(alias, temporary.relativize(api));
+        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
+            Assumptions.assumeTrue(false, "symbolic links unavailable: " + unavailable);
+        }
+
+        List<ProtosWorkspacePackageSourceInventory.Source> sources =
+                inventory(
+                                temporary,
+                                node("root", ""),
+                                node("member-pkg", "libs/member"))
+                        .snapshot();
 
         assertEquals(
                 List.of(
                         new ProtosWorkspacePackageSourceInventory.Source(
                                 "member-pkg", "Api", api.toRealPath())),
-                memberSources);
+                sources);
     }
 
     @Test

@@ -100,6 +100,9 @@ final class ProtosWorkspacePackageSourceInventory {
                                 || !realDirectory.startsWith(packageRoot)) {
                             return FileVisitResult.SKIP_SUBTREE;
                         }
+                        if (!directoryIndex.isOwnedCanonicalPath(packageId, realDirectory)) {
+                            return FileVisitResult.SKIP_SUBTREE;
+                        }
                         return FileVisitResult.CONTINUE;
                     }
 
@@ -112,6 +115,9 @@ final class ProtosWorkspacePackageSourceInventory {
 
                         Path realSource = file.toRealPath();
                         if (!realSource.startsWith(packageRoot)) {
+                            return FileVisitResult.CONTINUE;
+                        }
+                        if (!directoryIndex.isOwnedCanonicalPath(packageId, realSource)) {
                             return FileVisitResult.CONTINUE;
                         }
 

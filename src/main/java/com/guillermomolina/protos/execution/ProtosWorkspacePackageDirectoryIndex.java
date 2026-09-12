@@ -19,7 +19,9 @@ package com.guillermomolina.protos.execution;
 
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -37,14 +39,17 @@ final class ProtosWorkspacePackageDirectoryIndex {
     private final ProtosWorkspacePackageProjectIndex projectIndex;
     private final Map<String, PackageDirectory> packagesById;
     private final Map<String, PackageDirectory> packagesByLocation;
+    private final Map<String, List<Path>> childBoundaryRootsByPackageId;
 
     private ProtosWorkspacePackageDirectoryIndex(
             ProtosWorkspacePackageProjectIndex projectIndex,
             Map<String, PackageDirectory> packagesById,
-            Map<String, PackageDirectory> packagesByLocation) {
+            Map<String, PackageDirectory> packagesByLocation,
+            Map<String, List<Path>> childBoundaryRootsByPackageId) {
         this.projectIndex = projectIndex;
         this.packagesById = packagesById;
         this.packagesByLocation = packagesByLocation;
+        this.childBoundaryRootsByPackageId = childBoundaryRootsByPackageId;
     }
 
     static ProtosWorkspacePackageDirectoryIndex bind(
@@ -54,6 +59,7 @@ final class ProtosWorkspacePackageDirectoryIndex {
 
         LinkedHashMap<String, PackageDirectory> byId = new LinkedHashMap<>();
         LinkedHashMap<String, PackageDirectory> byLocation = new LinkedHashMap<>();
+        LinkedHashMap<Path, PackageDirectory> byCanonicalRoot = new LinkedHashMap<>();
         Path realProjectRoot = projectIndex.realProjectRoot();
 
         for (ProtosPackageExecutionPlan.PackageNode node : projectIndex.plan().packages()) {
@@ -71,6 +77,10 @@ final class ProtosWorkspacePackageDirectoryIndex {
             if (byLocation.putIfAbsent(node.location(), binding) != null) {
                 throw new IOException("duplicate workspace location while binding directories");
             }
+            if (byCanonicalRoot.putIfAbsent(directory, binding) != null) {
+                throw new IOException(
+                        "distinct workspace packages share one canonical physical root");
+            }
         }
 
         PackageDirectory root = byLocation.get("");
@@ -80,8 +90,36 @@ final class ProtosWorkspacePackageDirectoryIndex {
             throw new IOException("workspace root directory binding mismatch");
         }
 
+        LinkedHashMap<String, ArrayList<Path>> mutableChildBoundaries =
+                new LinkedHashMap<>();
+        for (PackageDirectory packageDirectory : byId.values()) {
+            mutableChildBoundaries.put(
+                    packageDirectory.packageNode().ref().packageId(), new ArrayList<>());
+        }
+        for (PackageDirectory packageDirectory : byId.values()) {
+            Path ancestor = packageDirectory.directory().getParent();
+            while (ancestor != null) {
+                PackageDirectory parent = byCanonicalRoot.get(ancestor);
+                if (parent != null) {
+                    mutableChildBoundaries
+                            .get(parent.packageNode().ref().packageId())
+                            .add(packageDirectory.directory());
+                    break;
+                }
+                ancestor = ancestor.getParent();
+            }
+        }
+
+        LinkedHashMap<String, List<Path>> childBoundaries = new LinkedHashMap<>();
+        for (Map.Entry<String, ArrayList<Path>> entry : mutableChildBoundaries.entrySet()) {
+            childBoundaries.put(entry.getKey(), List.copyOf(entry.getValue()));
+        }
+
         return new ProtosWorkspacePackageDirectoryIndex(
-                projectIndex, Map.copyOf(byId), Map.copyOf(byLocation));
+                projectIndex,
+                Map.copyOf(byId),
+                Map.copyOf(byLocation),
+                Map.copyOf(childBoundaries));
     }
 
     ProtosWorkspacePackageProjectIndex projectIndex() {
@@ -90,6 +128,27 @@ final class ProtosWorkspacePackageDirectoryIndex {
 
     PackageDirectory rootPackage() {
         return packagesByLocation.get("");
+    }
+
+    boolean isOwnedCanonicalPath(String packageId, Path canonicalPath)
+            throws IOException {
+        Objects.requireNonNull(canonicalPath, "canonicalPath");
+        PackageDirectory packageDirectory = requirePackage(packageId);
+        Path packageRoot = packageDirectory.directory();
+        if (!canonicalPath.startsWith(packageRoot)) {
+            return false;
+        }
+
+        List<Path> childBoundaries = childBoundaryRootsByPackageId.get(packageId);
+        if (childBoundaries == null) {
+            throw new IOException("workspace PackageId has no source-domain binding");
+        }
+        for (Path childBoundary : childBoundaries) {
+            if (canonicalPath.startsWith(childBoundary)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     PackageDirectory requirePackage(String packageId) throws IOException {

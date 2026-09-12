@@ -51,6 +51,38 @@ final class ProtosWorkspacePackageSourceLookupTest {
     }
 
     @Test
+    void parentLookupStopsAtAnAuthorizedDescendantPackageRoot() throws Exception {
+        Path memberDirectory = Files.createDirectories(temporary.resolve("libs/member"));
+        Path memberApi = writeSource(memberDirectory, "Api.protos");
+
+        ProtosWorkspacePackageSourceLookup lookup =
+                lookup(temporary, node("root", ""), node("member-pkg", "libs/member"));
+
+        assertEquals(memberApi.toRealPath(), lookup.requireSource("member-pkg", "Api"));
+        assertThrows(
+                IOException.class,
+                () -> lookup.requireSource("root", "libs/member/Api"));
+    }
+
+    @Test
+    void parentSymlinkAliasCannotReenterAChildOwnedSource() throws Exception {
+        Path memberDirectory = Files.createDirectories(temporary.resolve("libs/member"));
+        Path memberApi = writeSource(memberDirectory, "Api.protos");
+        Path alias = temporary.resolve("Alias.protos");
+        try {
+            Files.createSymbolicLink(alias, temporary.relativize(memberApi));
+        } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
+            Assumptions.assumeTrue(false, "symbolic links unavailable: " + unavailable);
+        }
+
+        ProtosWorkspacePackageSourceLookup lookup =
+                lookup(temporary, node("root", ""), node("member-pkg", "libs/member"));
+
+        assertThrows(IOException.class, () -> lookup.requireSource("root", "Alias"));
+        assertEquals(memberApi.toRealPath(), lookup.requireSource("member-pkg", "Api"));
+    }
+
+    @Test
     void requiresExactSpellingAndRejectsAsciiCaseFoldAmbiguity() throws Exception {
         writeSource(temporary, "Feature.protos");
         ProtosWorkspacePackageSourceLookup lookup = lookup(temporary, node("root", ""));

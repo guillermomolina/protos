@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082/D085/D089 RATIFIED; G3P P1/P2/P3A CLOSED, P3B/P4 pending; G3 BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082/D085/D089/D102 RATIFIED; G3P P1/P2/P3A + D102 package-domain implementation CLOSED, P3B/P4 pending; G3 BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1408,3 +1408,36 @@ ownership rule. Until that implementation is published, `LM009-G3P P3B` / #413 r
 **BLOCKED_BY_D102_IMPLEMENTATION** and G3 remains
 **BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION**.
 
+## D102 canonical non-overlapping package-domain implementation
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED; LM009-G3P P3B READY**
+
+Coordination: GitHub #413; decision GitHub #421
+
+Authority: D102 Candidate A′ — canonical non-overlapping package source domains
+
+The shared workspace package authorities now realize D102 before P3B resumes:
+
+- physical directory binding rejects distinct PackageIds that resolve to the same
+  canonical physical package root;
+- the bound finite package-root set derives descendant authorized roots as hard source
+  boundaries without scanning for manifests, lockfiles or project markers;
+- exact source lookup rejects both direct traversal into a descendant package root and
+  a symlink whose canonical target belongs to that descendant package;
+- P1 current-source inventory prunes descendant package-root subtrees and excludes
+  canonical child-owned symlink targets, so one physical source is emitted under only
+  its most-specific authorized PackageId;
+- `ProtosWorkspacePackageModuleResolver` continues to consume the same
+  `ProtosWorkspacePackageSourceLookup`, so runtime entry/`self:` resolution inherits the
+  identical boundary rather than receiving an LM009-specific rule; and
+- no `protos.project` format, Package Tool semantic authority, workspace-symbol index,
+  filesystem project discovery, source-set/glob policy or language specification
+  behavior is added.
+
+Focused evidence covers duplicate canonical-root rejection, nested member ownership,
+parent direct lookup rejection, parent symlink-alias rejection, inventory de-duplication
+and runtime resolver rejection of the same parent alias.
+
+This closes only the implementation prerequisite exposed by D102. **LM009-G3P P3B is
+READY to resume** against the shared authority. P3/#413 still owns the previously
+declared integrated validation debt and P4 remains pending.
