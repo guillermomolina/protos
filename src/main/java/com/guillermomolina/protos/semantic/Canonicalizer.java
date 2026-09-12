@@ -27,6 +27,8 @@ import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
+import com.guillermomolina.protos.parser.ast.SurfaceMatch;
+import com.guillermomolina.protos.parser.ast.SurfaceMatchPattern;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
@@ -49,6 +51,8 @@ import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMatch;
+import com.guillermomolina.protos.semantic.ast.CanonicalMatchPattern;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
@@ -63,6 +67,7 @@ public final class Canonicalizer {
     public CanonicalExpression canonicalize(SurfaceExpression expression) {
         return switch (expression) {
             case SurfaceLiteral literal -> lowerLiteral(literal);
+            case SurfaceMatch match -> lowerMatch(match);
             case SurfaceName name -> new CanonicalLookup(name.name(), name.span());
             case SurfaceGroup group -> canonicalize(group.expression());
             case SurfaceIndex index -> lowerIndex(index);
@@ -88,6 +93,100 @@ public final class Canonicalizer {
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
         };
+    }
+
+    private CanonicalExpression lowerMatch(SurfaceMatch match) {
+        return new CanonicalMatch(
+                canonicalize(match.subject()),
+                match.arms().stream().map(this::canonicalizeMatchArm).toList(),
+                match.span());
+    }
+
+    private CanonicalMatch.Arm canonicalizeMatchArm(SurfaceMatch.Arm arm) {
+        return new CanonicalMatch.Arm(
+                canonicalizeMatchPattern(arm.pattern()),
+                arm.guard().map(this::canonicalize),
+                new CanonicalSequence(
+                        canonicalizeAll(arm.body().expressions()),
+                        arm.body().span()),
+                arm.span());
+    }
+
+    private CanonicalMatchPattern canonicalizeMatchPattern(
+            SurfaceMatchPattern pattern) {
+        if (pattern instanceof SurfaceMatchPattern.Binder binder) {
+            return new CanonicalMatchPattern.Binder(binder.name(), binder.span());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Wildcard wildcard) {
+            return new CanonicalMatchPattern.Wildcard(wildcard.span());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Alias alias) {
+            return new CanonicalMatchPattern.Alias(
+                    alias.name(),
+                    canonicalizeMatchPattern(alias.pattern()),
+                    alias.span());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Group group) {
+            return canonicalizeMatchPattern(group.pattern());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Or orPattern) {
+            return new CanonicalMatchPattern.Or(
+                    orPattern.alternatives().stream()
+                            .map(this::canonicalizeMatchPattern)
+                            .toList(),
+                    orPattern.span());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Value value) {
+            return new CanonicalMatchPattern.Value(
+                    canonicalize(value.matcher()),
+                    value.captureInterface().map(this::canonicalizeCaptureInterface),
+                    value.span());
+        }
+        if (pattern instanceof SurfaceMatchPattern.ArrayPattern array) {
+            return new CanonicalMatchPattern.ArrayPattern(
+                    array.prefix().stream()
+                            .map(this::canonicalizeMatchPattern)
+                            .toList(),
+                    array.remainder().map(this::canonicalizeRemainder),
+                    array.suffix().stream()
+                            .map(this::canonicalizeMatchPattern)
+                            .toList(),
+                    array.span());
+        }
+        if (pattern instanceof SurfaceMatchPattern.MapPattern map) {
+            return new CanonicalMatchPattern.MapPattern(
+                    map.exact(),
+                    map.entries().stream()
+                            .map(this::canonicalizeMapEntry)
+                            .toList(),
+                    map.remainder().map(this::canonicalizeRemainder),
+                    map.span());
+        }
+        throw new IllegalStateException(
+                "Unknown SurfaceMatchPattern: " + pattern.getClass().getName());
+    }
+
+    private CanonicalMatchPattern.CaptureInterface canonicalizeCaptureInterface(
+            SurfaceMatchPattern.CaptureInterface captureInterface) {
+        return new CanonicalMatchPattern.CaptureInterface(
+                captureInterface.requiredNames(),
+                captureInterface.restName(),
+                captureInterface.span());
+    }
+
+    private CanonicalMatchPattern.Remainder canonicalizeRemainder(
+            SurfaceMatchPattern.Remainder remainder) {
+        return new CanonicalMatchPattern.Remainder(
+                remainder.pattern().map(this::canonicalizeMatchPattern),
+                remainder.span());
+    }
+
+    private CanonicalMatchPattern.MapEntry canonicalizeMapEntry(
+            SurfaceMatchPattern.MapEntry entry) {
+        return new CanonicalMatchPattern.MapEntry(
+                canonicalize(entry.key()),
+                canonicalizeMatchPattern(entry.valuePattern()),
+                entry.span());
     }
 
     private CanonicalExpression lowerLiteral(SurfaceLiteral literal) {

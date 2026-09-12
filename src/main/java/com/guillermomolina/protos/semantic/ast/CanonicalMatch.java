@@ -18,8 +18,35 @@
 package com.guillermomolina.protos.semantic.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
-public sealed interface CanonicalExpression
-        permits CanonicalAssign, CanonicalCall, CanonicalClosure, CanonicalCompose, CanonicalCreate, CanonicalIdentity, CanonicalNotIdentity, CanonicalIndexedAssign, CanonicalIntrinsic, CanonicalLiteral, CanonicalLookup, CanonicalMatch, CanonicalMember, CanonicalObject, CanonicalReturn, CanonicalSend, CanonicalSequence, CanonicalSpread, CanonicalSuperSend {
-    SourceSpan span();
+/** Backend-neutral compiler IR for the ratified matching expression. */
+public record CanonicalMatch(
+        CanonicalExpression subject,
+        List<Arm> arms,
+        SourceSpan span)
+        implements CanonicalExpression {
+    public CanonicalMatch {
+        Objects.requireNonNull(subject, "subject");
+        arms = List.copyOf(Objects.requireNonNull(arms, "arms"));
+        if (arms.isEmpty()) {
+            throw new IllegalArgumentException("canonical match requires at least one arm");
+        }
+        Objects.requireNonNull(span, "span");
+    }
+
+    public record Arm(
+            CanonicalMatchPattern pattern,
+            Optional<CanonicalExpression> guard,
+            CanonicalSequence body,
+            SourceSpan span) {
+        public Arm {
+            Objects.requireNonNull(pattern, "pattern");
+            guard = Objects.requireNonNull(guard, "guard");
+            Objects.requireNonNull(body, "body");
+            Objects.requireNonNull(span, "span");
+        }
+    }
 }
