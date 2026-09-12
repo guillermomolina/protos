@@ -12,6 +12,22 @@ Primary consumer: `PERF006-B` / GitHub #276, initially the remaining `TextWriter
 
 Normative effect: **none**. PLAT030 changes no Protos-visible Future, Task, Actor, Process, I/O, close, cancellation, failure, ordering, ownership, callback or suspension semantics. It selects only the semantically invisible runtime owner of deferred C-prime execution during one shared asynchronous lifecycle release/close phase after ordinary resource operations have drained.
 
+## D112 semantic prerequisite — RESOLVED
+
+D112 / GitHub #438 is ratified as Candidate A′ at specification revision
+`0.1.411`.
+
+PLAT030 lifecycle-release-owned C′ may therefore execute required guest release
+while the originating Actor remains `TERMINATING` when the lifecycle close was
+already committed before termination cutover. This execution is termination
+cleanup of the existing lifecycle, not a new ordinary Actor turn or Task.
+`TERMINATED` remains a hard boundary: no lifecycle guest callback may execute
+after it.
+
+Backend-only residual release that requires no guest execution does not by itself
+keep the Actor alive. D112 adds no force-kill/timeout policy and does not change
+PLAT030's private release-record representation.
+
 ## Decision
 
 Select **Candidate A′ — lifecycle-release-owned private C-prime execution record + Actor-domain scheduling; close Futures remain outcome followers only**.

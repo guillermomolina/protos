@@ -13,7 +13,7 @@ The I018 ordinary-constructor inventory therefore moves from **139 to 138 sites
 across the same 36 Core providers**, with
 `ProtosStandardBufferedByteIoProtocol.java` moving from 5 to 4 ordinary sites.
 `BufferedWriter.write` remains the local non-suspending buffering leaf and
-`BufferedWriter.close` remains outside this migration pending D112/PLAT030.
+`BufferedWriter.close` remains outside this migration; D112/A′ is now ratified and PLAT030 governs the subsequent lifecycle-release C-prime slice.
 
 ## PERF006-B / PLAT031 — BufferedReader read C-prime boundary reconciliation
 

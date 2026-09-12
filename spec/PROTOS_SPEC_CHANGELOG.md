@@ -9,6 +9,38 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.411] - 2026-09-12
+
+### D112 — Actor termination versus committed I/O lifecycle release requiring guest re-entry
+- Ratifies D112 Candidate A′: a lifecycle `close()` committed before Actor
+  termination cutover becomes an Actor termination-cleanup obligation only while
+  its remaining release requires ordinary guest execution.
+- Required guest release remains in the same Actor execution domain under
+  PLAT030 lifecycle-release-owned C′. It is not a Task, not a new ordinary Actor
+  turn and does not reopen admission after the termination cutover.
+- The Actor remains `TERMINATING` while required pre-cutover committed guest
+  release suspends/resumes and reaches `TERMINATED` only after those obligations
+  and the already-required Task cancellation/unwind cleanup have settled.
+- Backend-only residual work that needs no guest execution does not by itself
+  keep the Actor alive and still may not re-enter guest code after `TERMINATED`.
+- Actor termination remains non-implicit with respect to `close`, `flush`,
+  `sync` and shutdown; D112 applies only to a lifecycle already committed before
+  the termination cutover.
+- D112 adds no system-Actor migration, post-`TERMINATED` guest lane, hidden Task,
+  timeout or force-kill semantics. A future hard-stop policy requires a separate
+  normative decision.
+
+### Compatibility and implementation state
+- Existing Future states, I/O commitment rules, close follower semantics,
+  Actor isolation, Error identity/precedence, PLAT029 operation-owned C′,
+  PLAT030 lifecycle-release ownership, PLAT031 buffered operation identity and
+  D117 delegated-effect arbitration remain intact.
+- D112 releases the previously blocked `TextWriter.close` and equivalent
+  buffered lifecycle-release C′ implementation work under PERF006-B.
+- This ratification slice changes specification/governance only. It changes no
+  Java implementation, Maven implementation version, native boundary or
+  standard-library source and executes no Protos tests.
+
 ## [0.1.410] - 2026-09-12
 
 ### D117 — Buffered wrapper delegated-effect commitment across cancellation and close cutover

@@ -277,7 +277,7 @@ D117 supplies the previously missing observable commitment/cutover rule required
 to perform that convergence without preserving the legacy `Req.committed` as a
 second semantic authority.
 
-D117 does not resolve D112 or PLAT030 lifecycle-release execution semantics.
+D117 did not resolve D112 or PLAT030 lifecycle-release execution semantics. D112 was subsequently ratified independently as Candidate A′ at specification revision `0.1.411`; PLAT030 remains the release-execution architecture authority.
 
 ## Comparative evidence
 

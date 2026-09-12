@@ -807,6 +807,23 @@ non-task-backed producer Futures whose backend work must continue under an
 already-committed operation contract; such residual work remains under
 runtime/producer custody and cannot resume ordinary code in the terminated Actor.
 
+D112 additionally classifies an asynchronous resource lifecycle `close()` that
+was already committed before the Actor termination cutover as an existing
+termination-cleanup obligation **while its remaining release still requires
+ordinary guest execution in that Actor**. Such release execution is not a new
+ordinary Actor turn and does not admit new user work. It remains owned by the
+same Actor execution domain and may suspend/resume only as required to settle the
+already-committed lifecycle. The Actor remains `TERMINATING` until every such
+pre-cutover committed guest-release obligation has settled, together with the
+Actor-local Task cleanup already required by this section.
+
+Once a committed lifecycle has no remaining guest release work, backend-only
+residual producer work does not by itself keep the Actor alive. That residual
+work remains subject to the existing rule that it cannot execute ordinary Protos
+code in an Actor after `TERMINATED`. Actor termination still does not implicitly
+close arbitrary resources, and this rule introduces no timeout, force-kill,
+hidden Task, system-Actor migration, or post-`TERMINATED` guest-execution lane.
+
 Cleanup has no bounded-time guarantee. A task that never reaches a cancellation
 boundary, or cleanup that suspends forever, may therefore delay graceful termination
 forever while the runtime remains otherwise operational. A timeout on an API that

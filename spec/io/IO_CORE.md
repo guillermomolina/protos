@@ -217,6 +217,21 @@ in order to honor an already-committed operation or perform safe cancellation,
 that residual work remains under runtime/producer custody; it may not execute
 ordinary Protos code in the terminated Actor.
 
+D112 specializes that rule for an already-committed lifecycle `close()` whose
+remaining mandatory release still requires ordinary guest execution. If that
+close commitment predates the originating Actor's termination cutover, the
+required guest release is part of that Actor's existing termination cleanup: it
+continues only in the same Actor execution domain, does not become a Task or new
+ordinary Actor turn, and keeps the Actor in `TERMINATING` until the guest release
+obligation settles. Termination cancellation cannot rewrite the committed close
+as a pre-commit cancelled or zero-effect outcome.
+
+This specialization does not make Actor termination implicit close, does not keep
+the Actor alive for backend-only residual work that no longer requires guest
+execution, and never permits guest lifecycle callbacks after `TERMINATED`.
+A future force-kill/timeout policy, if any, requires separate normative
+specification.
+
 Conversely, an uncommitted pending operation must not be allowed to continue
 merely because an implementation failed to associate its non-task-backed Future
 with the Actor that initiated it. This matters in particular for shared logical

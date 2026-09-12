@@ -163,9 +163,9 @@ The operation substrate owns execution/lifecycle state; the adapter owns bufferi
 
 ## Close and release boundary
 
-Adopting `ProtosIoLifecycle` is an identity/lifecycle convergence decision, not authorization to decide D112 implicitly.
+Adopting `ProtosIoLifecycle` was an identity/lifecycle convergence decision and did not authorize PLAT031 to decide D112 implicitly.
 
-Buffered close must use the common lifecycle admission/cutover/follower authority, but the suspendible release implementation remains separately gated by PLAT030 and D112.
+D112 has since been ratified as Candidate A′ at specification revision `0.1.411`. Buffered close still uses the common lifecycle admission/cutover/follower authority, while suspendible release implementation is now released to proceed under PLAT030 plus the D112 termination-cleanup contract.
 
 Therefore the ordinary buffered-operation migration may land while:
 
