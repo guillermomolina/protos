@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082/D085/D089/D102 RATIFIED; G3P P1/P2/P3A/P3B + D102 package-domain implementation CLOSED, P4 pending; G3 BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1470,3 +1470,53 @@ P3B publishes the first editor-neutral consumer of the D089 generation-1
 P3 remains **IN_PROGRESS**. P4 still owns multi-root isolation, duplicate-binding
 rejection, integrated freshness invalidation and static no-guest closure evidence before
 #413/#373 can release LM009-G3.
+## LM009-G3P P4 ProjectBinding prerequisite closure
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED; LM009-G3P CLOSED; LM009-G3 READY**
+
+Coordination: GitHub #373; P3 coordination GitHub #413
+
+Authority: D082 Candidate A′ + D085 Candidate F′ + D089 Candidate A″ + D102 Candidate A′
+
+P4 closes the ProjectBinding prerequisite rather than adding another production
+mechanism. P1 already owns canonical current-source inventory, P2 owns the inert
+ProjectBinding/projection carriers, P3A owns canonical generation-1 `protos.project`
+production, P3B owns exact candidate-root acquisition through the editor-neutral
+provider, and D102 owns the shared non-overlapping package source-domain rule used by
+both runtime and static tooling.
+
+Closure evidence adds one durable integration/architecture test proving all remaining
+P4 obligations together:
+
+- two independent exact candidate roots with the same package/module spelling produce
+  isolated ProjectBinding snapshots and never exchange physical sources;
+- two distinct PackageIds that materialize onto one canonical physical package root
+  fail closed through the ProjectBinding provider, consuming the shared D102 authority;
+- changing any generation-1 mechanical freshness input — root `protos.toml`, a member
+  `protos.toml`, or root `protos.lock` — makes acquisition fail closed until canonical
+  authority is republished;
+- the complete local static ProjectBinding acquisition closure remains free of
+  Polyglot/Truffle Context construction, bundled Package Tool/preflight execution and
+  subprocess execution dependencies;
+- the semantic `protos-resolution-input-v1` witness remains opaque Package Tool
+  authority and is not reinterpreted by the provider;
+- ordinary `.protos` source churn remains live P1 inventory and does not itself stale
+  project authority.
+
+This is the owning top-level reconciliation for the reduced validation debt retained by
+P3A/P3B. Publication MUST run `scripts/publication_validation.py` against the immutable
+candidate with `--top-level-closure`. Under the temporary PERF007 Tool-test isolation
+policy, a closure delta that touches no Tool-owned surface is expected to select the
+broad non-Tool suite (`FULL:NON_TOOL`) while leaving unrelated Tool-owned Maven families
+quarantined; successful publication requires that selected broad suite and the
+repository source-style gate to pass.
+
+When this slice publishes successfully:
+
+- LM009-G3P P3 / GitHub #413 is CLOSED;
+- LM009-G3P P4 is CLOSED;
+- LM009-G3P / GitHub #373 is CLOSED;
+- `LM009-G3` / GitHub #360 moves from
+  `BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION` to **READY**;
+- no workspace-symbol index, G4 definition semantics, LM009-H behavior, new package
+  semantics or new public protocol is introduced by P4 itself.
