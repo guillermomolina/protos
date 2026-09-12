@@ -200,10 +200,21 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
-        if (pattern instanceof CanonicalMatchPattern.ArrayPattern
-                || pattern instanceof CanonicalMatchPattern.MapPattern) {
+        if (pattern instanceof CanonicalMatchPattern.ArrayPattern array) {
+            for (CanonicalMatchPattern item : array.prefix()) {
+                appendMatchParameters(item, parameters);
+            }
+            array.remainder()
+                    .flatMap(CanonicalMatchPattern.Remainder::pattern)
+                    .ifPresent(item -> appendMatchParameters(item, parameters));
+            for (CanonicalMatchPattern item : array.suffix()) {
+                appendMatchParameters(item, parameters);
+            }
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.MapPattern) {
             throw new UnsupportedOperationException(
-                    "I038-D7A intentionally excludes structural Array/Map match patterns");
+                    "I038-D7B intentionally defers Map structural match patterns to I038-D7C");
         }
         throw new AssertionError(
                 "unknown canonical match pattern: "
@@ -295,10 +306,21 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
-        if (pattern instanceof CanonicalMatchPattern.ArrayPattern
-                || pattern instanceof CanonicalMatchPattern.MapPattern) {
+        if (pattern instanceof CanonicalMatchPattern.ArrayPattern array) {
+            for (CanonicalMatchPattern item : array.prefix()) {
+                validateSupportedMatchPattern(item, expressionValidator);
+            }
+            array.remainder()
+                    .flatMap(CanonicalMatchPattern.Remainder::pattern)
+                    .ifPresent(item -> validateSupportedMatchPattern(item, expressionValidator));
+            for (CanonicalMatchPattern item : array.suffix()) {
+                validateSupportedMatchPattern(item, expressionValidator);
+            }
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.MapPattern) {
             throw new UnsupportedOperationException(
-                    "I038-D7A intentionally excludes structural Array/Map match patterns");
+                    "I038-D7B intentionally defers Map structural match patterns to I038-D7C");
         }
         throw new AssertionError(
                 "unknown canonical match pattern: "
@@ -1420,14 +1442,158 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
-        if (pattern instanceof CanonicalMatchPattern.ArrayPattern
-                || pattern instanceof CanonicalMatchPattern.MapPattern) {
+        if (pattern instanceof CanonicalMatchPattern.ArrayPattern array) {
+            BytecodeLocal attempt = builder.createLocal("matchArrayAttempt", null);
+            BytecodeLocal childSubject = builder.createLocal("matchArrayChildSubject", null);
+            BytecodeLocal childCaptures = builder.createLocal("matchArrayChildCaptures", null);
+            boolean hasRemainder = array.remainder().isPresent();
+            boolean materializeRemainder =
+                    array.remainder()
+                            .flatMap(CanonicalMatchPattern.Remainder::pattern)
+                            .isPresent();
+
+            builder.beginStoreLocal(attempt);
+            builder.beginPrepareArrayMatchAttempt();
+            builder.emitLoadLocal(subject);
+            builder.emitLoadConstant(array.prefix().size());
+            builder.emitLoadConstant(hasRemainder);
+            builder.emitLoadConstant(materializeRemainder);
+            builder.emitLoadConstant(array.suffix().size());
+            builder.emitLoadArgument(0);
+            builder.endPrepareArrayMatchAttempt();
+            builder.endStoreLocal();
+
+            builder.beginIfThenElse();
+            builder.beginArrayMatchAttemptSucceeded();
+            builder.emitLoadLocal(attempt);
+            builder.endArrayMatchAttemptSucceeded();
+
+            builder.beginBlock();
+            builder.beginStoreLocal(result);
+            builder.emitCreateSuppliedArgumentVector();
+            builder.endStoreLocal();
+
+            for (int index = 0; index < array.prefix().size(); index++) {
+                emitArrayMatchChild(
+                        builder,
+                        array.prefix().get(index),
+                        attempt,
+                        0,
+                        index,
+                        result,
+                        childSubject,
+                        childCaptures,
+                        preparedCall,
+                        childResult,
+                        resumeValue,
+                        defaultContext);
+            }
+
+            if (materializeRemainder) {
+                emitArrayMatchChild(
+                        builder,
+                        array.remainder()
+                                .orElseThrow()
+                                .pattern()
+                                .orElseThrow(),
+                        attempt,
+                        1,
+                        0,
+                        result,
+                        childSubject,
+                        childCaptures,
+                        preparedCall,
+                        childResult,
+                        resumeValue,
+                        defaultContext);
+            }
+
+            for (int index = 0; index < array.suffix().size(); index++) {
+                emitArrayMatchChild(
+                        builder,
+                        array.suffix().get(index),
+                        attempt,
+                        2,
+                        index,
+                        result,
+                        childSubject,
+                        childCaptures,
+                        preparedCall,
+                        childResult,
+                        resumeValue,
+                        defaultContext);
+            }
+            builder.endBlock();
+
+            builder.beginBlock();
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(attempt);
+            builder.endStoreLocal();
+            builder.endBlock();
+
+            builder.endIfThenElse();
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.MapPattern) {
             throw new AssertionError(
-                    "I038-D7A structural match pattern escaped validation");
+                    "I038-D7B Map structural match pattern escaped validation");
         }
         throw new AssertionError(
                 "unknown canonical match pattern: "
                         + pattern.getClass().getSimpleName());
+    }
+
+
+    private void emitArrayMatchChild(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMatchPattern childPattern,
+            BytecodeLocal arrayAttempt,
+            int section,
+            int index,
+            BytecodeLocal aggregateCaptures,
+            BytecodeLocal childSubject,
+            BytecodeLocal childCaptures,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean defaultContext) {
+        builder.beginIfThenElse();
+        builder.beginMatchAttemptSucceeded();
+        builder.emitLoadLocal(aggregateCaptures);
+        builder.endMatchAttemptSucceeded();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(childSubject);
+        builder.beginArrayMatchChildValue();
+        builder.emitLoadLocal(arrayAttempt);
+        builder.emitLoadConstant(section);
+        builder.emitLoadConstant(index);
+        builder.endArrayMatchChildValue();
+        builder.endStoreLocal();
+
+        emitMatchPatternAttempt(
+                builder,
+                childPattern,
+                childSubject,
+                childCaptures,
+                preparedCall,
+                childResult,
+                resumeValue,
+                defaultContext);
+
+        builder.beginStoreLocal(aggregateCaptures);
+        builder.beginMergeMatchCaptures();
+        builder.emitLoadLocal(aggregateCaptures);
+        builder.emitLoadLocal(childCaptures);
+        builder.endMergeMatchCaptures();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitLocalNoop(builder, aggregateCaptures);
+        builder.endBlock();
+
+        builder.endIfThenElse();
     }
 
     private void emitMatchExpressionToLocal(

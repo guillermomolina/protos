@@ -2786,6 +2786,141 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
 
+
+    /**
+     * Inert D084 Array-pattern attempt state. The carrier snapshots ordinary
+     * element references once before child matching and may materialize the one
+     * fresh frozen remainder Array. It never invokes guest code.
+     */
+    static final class PreparedArrayMatchAttempt {
+        private final List<Object> observed;
+        private final int prefixCount;
+        private final int suffixCount;
+        private final ProtosArrayValue remainder;
+
+        PreparedArrayMatchAttempt(
+                List<Object> observed,
+                int prefixCount,
+                int suffixCount,
+                ProtosArrayValue remainder) {
+            this.observed = List.copyOf(observed);
+            this.prefixCount = prefixCount;
+            this.suffixCount = suffixCount;
+            this.remainder = remainder;
+        }
+
+        Object childValue(int section, int index) {
+            return switch (section) {
+                case 0 -> observed.get(index);
+                case 1 -> {
+                    if (index != 0 || remainder == null) {
+                        throw new IllegalStateException(
+                                "Array match requested an unavailable remainder child");
+                    }
+                    yield remainder;
+                }
+                case 2 -> observed.get(observed.size() - suffixCount + index);
+                default -> throw new IllegalArgumentException(
+                        "unknown Array match child section: " + section);
+            };
+        }
+    }
+
+    @Operation
+    public static final class PrepareArrayMatchAttempt {
+        @Specialization
+        public static Object perform(
+                Object subject,
+                int prefixCount,
+                boolean hasRemainder,
+                boolean materializeRemainder,
+                int suffixCount,
+                ProtosActivation activation) {
+            if (!(subject instanceof ProtosArrayValue array)) {
+                return MATCH_PATTERN_FAILED;
+            }
+
+            List<Object> observed = array.indexedSnapshot();
+            int fixedCount = prefixCount + suffixCount;
+            if (hasRemainder) {
+                if (observed.size() < fixedCount) {
+                    return MATCH_PATTERN_FAILED;
+                }
+            } else if (observed.size() != fixedCount) {
+                return MATCH_PATTERN_FAILED;
+            }
+
+            ProtosArrayValue remainder = null;
+            if (materializeRemainder) {
+                int remainderEnd = observed.size() - suffixCount;
+                remainder =
+                        activation.prelude()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "Array matching requires an owning Core prelude"))
+                                .newFrozenArray(
+                                        observed.subList(prefixCount, remainderEnd));
+            }
+            return new PreparedArrayMatchAttempt(
+                    observed,
+                    prefixCount,
+                    suffixCount,
+                    remainder);
+        }
+    }
+
+    @Operation
+    public static final class ArrayMatchAttemptSucceeded {
+        @Specialization
+        public static boolean perform(Object attempt) {
+            if (attempt == MATCH_PATTERN_FAILED) {
+                return false;
+            }
+            if (attempt instanceof PreparedArrayMatchAttempt) {
+                return true;
+            }
+            throw new IllegalStateException(
+                    "Array match attempt produced an invalid carrier");
+        }
+    }
+
+    @Operation
+    public static final class ArrayMatchChildValue {
+        @Specialization
+        public static Object perform(
+                Object attempt,
+                int section,
+                int index) {
+            if (!(attempt instanceof PreparedArrayMatchAttempt prepared)) {
+                throw new IllegalStateException(
+                        "Array match child requested from a failed/invalid attempt");
+            }
+            return prepared.childValue(section, index);
+        }
+    }
+
+    @Operation
+    public static final class MergeMatchCaptures {
+        @Specialization
+        public static Object perform(
+                Object aggregate,
+                Object child) {
+            if (child == MATCH_PATTERN_FAILED) {
+                return MATCH_PATTERN_FAILED;
+            }
+            if (!(aggregate instanceof PreparedArgumentVector target)
+                    || !(child instanceof PreparedArgumentVector additions)) {
+                throw new IllegalStateException(
+                        "Array match capture merge received an invalid carrier");
+            }
+            for (Object value : additions.snapshot()) {
+                target.append(value);
+            }
+            return target;
+        }
+    }
+
     @Operation
     public static final class DecodeMatchOutcome {
         @Specialization

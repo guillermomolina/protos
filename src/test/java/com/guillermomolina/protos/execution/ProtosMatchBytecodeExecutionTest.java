@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -284,28 +285,149 @@ final class ProtosMatchBytecodeExecutionTest {
         }
     }
 
+
     @Test
-    void structuralArrayAndMapPatternsRemainExplicitlyDeferred() throws Exception {
+    void arrayMatchCorpusHasBytecodeParity() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+
                 for (String name : List.of(
                         "array-fixed-alias.protos",
-                        "map-open-exact.protos")) {
-                    UnsupportedOperationException deferred =
-                            assertThrows(
-                                    UnsupportedOperationException.class,
-                                    () ->
-                                            compileBytecode(
-                                                    language,
-                                                    source(name),
-                                                    name));
-                    assertTrue(
-                            deferred.getMessage().contains("I038-D7A"),
-                            name + ": " + deferred.getMessage());
+                        "array-shape-ineligible.protos",
+                        "array-snapshot-child-order.protos",
+                        "array-remainder-bindings.protos",
+                        "array-empty-remainder.protos",
+                        "array-nested-dynamic-terminal.protos",
+                        "array-effects-retained-on-mismatch.protos")) {
+                    assertSame(
+                            ProtosBooleanValue.TRUE,
+                            executeFixture(language, prelude, name),
+                            name);
                 }
+
+                ProtosArrayValue pair =
+                        (ProtosArrayValue)
+                                executeFixture(
+                                        language,
+                                        prelude,
+                                        "array-remainder-identity.protos");
+                List<Object> values = pair.indexedSnapshot();
+                assertEquals(2, values.size());
+                ProtosArrayValue first = (ProtosArrayValue) values.get(0);
+                ProtosArrayValue second = (ProtosArrayValue) values.get(1);
+                assertTrue(first.isFrozen());
+                assertTrue(second.isFrozen());
+                assertSame(prelude.arrayPrototype(), first.parent().orElseThrow());
+                assertSame(prelude.arrayPrototype(), second.parent().orElseThrow());
+                assertNotSame(first, second);
+                assertEquals(1, first.indexedSnapshot().size());
+                assertEquals(1, second.indexedSnapshot().size());
+                assertSame(
+                        first.indexedSnapshot().get(0),
+                        second.indexedSnapshot().get(0));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void arraySnapshotSurvivesSuspendingChildWithoutReplay() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosActivation module = prelude.newModuleActivation();
+                ProtosActorExecutionDomain domain = module.executionDomain();
+                Dependency dependency = new Dependency();
+                AtomicInteger matcherCalls = new AtomicInteger();
+
+                ProtosObjectValue pausePattern =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                pausePattern.createLocalSlot(
+                        "match",
+                        controlledSuspendingLeaf(
+                                dependency,
+                                ProtosBooleanValue.TRUE,
+                                1,
+                                matcherCalls));
+                module.context().createLocalSlot("pausePattern", pausePattern);
+
+                String characters =
+                        "oldMiddle: {}\n"
+                                + "oldLast: {}\n"
+                                + "replacementMiddle: {}\n"
+                                + "replacementLast: {}\n"
+                                + "subject: Array(1, oldMiddle, oldLast)\n"
+                                + "subject match {\n"
+                                + "    case [pausePattern, ...@middle, @last] =>\n"
+                                + "        (middle.size() == 1) &&\n"
+                                + "        (middle[0] === oldMiddle) &&\n"
+                                + "        (last === oldLast)\n"
+                                + "    case _ => false\n"
+                                + "}\n";
+                RootCallTarget target =
+                        compileBytecode(
+                                language,
+                                characters,
+                                "i038-d7b-array-snapshot-suspension.protos");
+                ProtosTask task =
+                        domain.createTask(
+                                null,
+                                current ->
+                                        ProtosBytecodeTaskExecution.execute(
+                                                current,
+                                                target,
+                                                module));
+
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state());
+                assertEquals(1, matcherCalls.get());
+
+                ProtosArrayValue subject =
+                        (ProtosArrayValue) module.lookup("subject").orElseThrow();
+                Object replacementMiddle =
+                        module.lookup("replacementMiddle").orElseThrow();
+                Object replacementLast =
+                        module.lookup("replacementLast").orElseThrow();
+                subject.indexedPut(BigInteger.ONE, replacementMiddle);
+                subject.indexedPut(BigInteger.valueOf(2), replacementLast);
+
+                assertTrue(dependency.complete());
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state());
+                assertSame(ProtosBooleanValue.TRUE, task.result().orElseThrow());
+                assertEquals(1, matcherCalls.get(), "Array child matcher must not replay");
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void mapPatternRemainsExplicitlyDeferredToD7C() throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                UnsupportedOperationException deferred =
+                        assertThrows(
+                                UnsupportedOperationException.class,
+                                () ->
+                                        compileBytecode(
+                                                language,
+                                                source("map-open-exact.protos"),
+                                                "map-open-exact.protos"));
+                assertTrue(
+                        deferred.getMessage().contains("I038-D7B"),
+                        deferred.getMessage());
             } finally {
                 context.leave();
             }
@@ -359,7 +481,7 @@ final class ProtosMatchBytecodeExecutionTest {
         return ProtosClosureValue.suspensionCapableNativeClosure(
                 (activation, supplied) -> {
                     throw new AssertionError(
-                            "I038-D7A suspension evidence escaped the C-prime native path");
+                            "I038 matching suspension evidence escaped the C-prime native path");
                 },
                 (activation, supplied) -> {
                     assertEquals(expectedArity, supplied.size());
