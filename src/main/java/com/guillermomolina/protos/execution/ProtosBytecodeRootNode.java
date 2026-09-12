@@ -577,6 +577,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final boolean structuredMapEach;
         private final ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup;
         private final boolean structuredMapAtPut;
+        private final boolean structuredMapRemove;
         private final boolean directControlNative;
         private final ProtosModuleRuntime.PreparedModuleInitialization moduleInitialization;
 
@@ -598,6 +599,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     false,
                     null,
                     false,
+                    false,
                     false);
         }
 
@@ -618,6 +620,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean structuredMapEach,
                 ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
                 boolean structuredMapAtPut,
+                boolean structuredMapRemove,
                 boolean directControlNative) {
             this.bodyTarget = bodyTarget;
             this.nativeBody = nativeBody;
@@ -638,6 +641,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredMapEach = structuredMapEach;
             this.structuredMapReadLookup = structuredMapReadLookup;
             this.structuredMapAtPut = structuredMapAtPut;
+            this.structuredMapRemove = structuredMapRemove;
             this.directControlNative = directControlNative;
             this.moduleInitialization = null;
             int controlCapabilities =
@@ -653,6 +657,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             + (structuredMapEach ? 1 : 0)
                             + (structuredMapReadLookup != null ? 1 : 0)
                             + (structuredMapAtPut ? 1 : 0)
+                            + (structuredMapRemove ? 1 : 0)
                             + (directControlNative ? 1 : 0);
             if (controlCapabilities > 1) {
                 throw new IllegalArgumentException(
@@ -676,6 +681,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean structuredMapEach,
                 ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
                 boolean structuredMapAtPut,
+                boolean structuredMapRemove,
                 boolean directControlNative) {
             return new PreparedClosureCall(
                     null,
@@ -694,6 +700,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredMapEach,
                     structuredMapReadLookup,
                     structuredMapAtPut,
+                    structuredMapRemove,
                     directControlNative);
         }
 
@@ -717,6 +724,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredMapEach = false;
             this.structuredMapReadLookup = null;
             this.structuredMapAtPut = false;
+            this.structuredMapRemove = false;
             this.directControlNative = false;
             this.moduleInitialization =
                     java.util.Objects.requireNonNull(
@@ -753,6 +761,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         boolean isStructuredMapEach() { return structuredMapEach; }
         boolean isStructuredMapReadLookup() { return structuredMapReadLookup != null; }
         boolean isStructuredMapAtPut() { return structuredMapAtPut; }
+        boolean isStructuredMapRemove() { return structuredMapRemove; }
 
         PreparedEnsureCall prepareStructuredEnsure() {
             if (!structuredEnsure) {
@@ -921,6 +930,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
+        PreparedMapRemoveCall prepareStructuredMapRemove() {
+            if (!structuredMapRemove) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured Map.remove capability");
+            }
+            return new PreparedMapRemoveCall(
+                    activation.receiver(),
+                    supplied,
+                    activation);
+        }
+
         Object enterNative() {
             if (nativeBody == null) {
                 throw new IllegalStateException(
@@ -937,7 +957,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || structuredIdentityMapEach
                     || structuredMapEach
                     || structuredMapReadLookup != null
-                    || structuredMapAtPut) {
+                    || structuredMapAtPut
+                    || structuredMapRemove) {
                 throw new IllegalStateException(
                         "structured control native must execute through Bytecode control operations");
             }
@@ -2259,6 +2280,231 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    static final class PreparedMapRemoveCall {
+        private final ProtosMapValue map;
+        private final Object key;
+        private final ProtosActivation activation;
+        private BigInteger queryHash;
+        private List<ProtosMapValue.Entry> snapshot;
+        private int index;
+        private ProtosMapValue.Entry match;
+        private boolean hashAccepted;
+        private boolean comparisonEntered;
+
+        PreparedMapRemoveCall(
+                Object receiver,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            if (!(receiver instanceof ProtosMapValue mapValue)
+                    || supplied.size() != 1) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            this.map = mapValue;
+            ProtosStandardMapProtocol.requireMutationEntryForStructured(map, activation);
+            if (!map.isOpen()) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            this.key = supplied.get(0);
+        }
+
+        void enterComparison() {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.remove attempted to nest its own comparison scope");
+            }
+            map.enterComparison();
+            comparisonEntered = true;
+        }
+
+        void leaveComparison() {
+            if (!comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.remove comparison scope left without entry");
+            }
+            map.leaveComparison();
+            comparisonEntered = false;
+        }
+
+        PreparedClosureCall prepareHash() {
+            if (hashAccepted) {
+                throw new IllegalStateException(
+                        "Map.remove hash callback prepared after hash acceptance");
+            }
+            return prepareSend(key, "hash", activation, List.of());
+        }
+
+        void acceptHash(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.remove hash result accepted before comparison-scope exit");
+            }
+            if (hashAccepted) {
+                throw new IllegalStateException(
+                        "Map.remove hash result accepted twice");
+            }
+            queryHash =
+                    ProtosStandardMapProtocol.requireHashResultForStructured(
+                            result,
+                            activation);
+            snapshot = List.copyOf(map.keyedSnapshot());
+            hashAccepted = true;
+        }
+
+        boolean needsEquality() {
+            requireHashAccepted();
+            if (match != null) {
+                return false;
+            }
+            while (index < snapshot.size()
+                    && !snapshot.get(index).recordedHash().equals(queryHash)) {
+                index++;
+            }
+            return index < snapshot.size();
+        }
+
+        PreparedClosureCall prepareEquality() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map.remove equality callback requested without a candidate");
+            }
+            return prepareSend(
+                    key,
+                    "==",
+                    activation,
+                    List.of(snapshot.get(index).key()));
+        }
+
+        void acceptEquality(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.remove equality result accepted before comparison-scope exit");
+            }
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map.remove equality result accepted without a candidate");
+            }
+            boolean equal =
+                    ProtosStandardMapProtocol.requireEqualityResultForStructured(
+                            result,
+                            activation);
+            if (equal) {
+                match = snapshot.get(index);
+            } else {
+                index++;
+            }
+        }
+
+        Object finish() {
+            requireHashAccepted();
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.remove finished with an active comparison scope");
+            }
+            if (needsEquality()) {
+                throw new IllegalStateException(
+                        "Map.remove finished before candidate exhaustion");
+            }
+            if (match == null || !map.isOpen()) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            return map.remove(match);
+        }
+
+        private void requireHashAccepted() {
+            if (!hashAccepted) {
+                throw new IllegalStateException(
+                        "Map.remove used before hash acceptance");
+            }
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredMapRemoveCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredMapRemove();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapRemoveCall {
+        @Specialization
+        public static PreparedMapRemoveCall perform(PreparedClosureCall prepared) {
+            return prepared.prepareStructuredMapRemove();
+        }
+    }
+
+    @Operation
+    public static final class EnterStructuredMapRemoveComparison {
+        @Specialization
+        public static void perform(PreparedMapRemoveCall prepared) {
+            prepared.enterComparison();
+        }
+    }
+
+    @Operation
+    public static final class LeaveStructuredMapRemoveComparison {
+        @Specialization
+        public static void perform(PreparedMapRemoveCall prepared) {
+            prepared.leaveComparison();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapRemoveHashCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedMapRemoveCall prepared) {
+            return prepared.prepareHash();
+        }
+    }
+
+    @Operation
+    public static final class AcceptStructuredMapRemoveHashResult {
+        @Specialization
+        public static void perform(PreparedMapRemoveCall prepared, Object result) {
+            prepared.acceptHash(result);
+        }
+    }
+
+    @Operation
+    public static final class StructuredMapRemoveNeedsEquality {
+        @Specialization
+        public static boolean perform(PreparedMapRemoveCall prepared) {
+            return prepared.needsEquality();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapRemoveEqualityCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedMapRemoveCall prepared) {
+            return prepared.prepareEquality();
+        }
+    }
+
+    @Operation
+    public static final class AcceptStructuredMapRemoveEqualityResult {
+        @Specialization
+        public static void perform(PreparedMapRemoveCall prepared, Object result) {
+            prepared.acceptEquality(result);
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredMapRemove {
+        @Specialization
+        public static Object perform(PreparedMapRemoveCall prepared) {
+            return prepared.finish();
+        }
+    }
+
     static final class PreparedMapEachCall {
         private final ProtosMapValue map;
         private final List<java.util.Map.Entry<Object, Object>> snapshot;
@@ -2801,6 +3047,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardMapProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(targetClosure),
                 ProtosStandardMapProtocol.isStandardAtPutImplementation(targetClosure),
+                ProtosStandardMapProtocol.isStandardRemoveImplementation(targetClosure),
                 ProtosStandardErrorProtocol.isStandardSignalImplementation(targetClosure));
     }
 
@@ -3023,6 +3270,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         closure,
                         methodHome,
                         caller),
+                ProtosStandardMapProtocol.isCanonicalStandardRemoveSelection(
+                        closure,
+                        methodHome,
+                        caller),
                 ProtosStandardErrorProtocol.isCanonicalStandardSignalSelection(
                         closure,
                         methodHome,
@@ -3067,6 +3318,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 false,
                 null,
                 false,
+                false,
                 false);
     }
 
@@ -3106,6 +3358,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             boolean structuredMapEach,
             ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
             boolean structuredMapAtPut,
+            boolean structuredMapRemove,
             boolean directControlNative) {
         if (closure.nativeBody().isPresent()) {
             ProtosNativeClosureBody nativeBody =
@@ -3133,6 +3386,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredMapEach,
                     structuredMapReadLookup,
                     structuredMapAtPut,
+                    structuredMapRemove,
                     directControlNative);
         }
         if (structuredEnsure
@@ -3147,6 +3401,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 || structuredMapEach
                 || structuredMapReadLookup != null
                 || structuredMapAtPut
+                || structuredMapRemove
                 || directControlNative) {
             throw new IllegalStateException(
                     "structured control capability requires the canonical native implementation");

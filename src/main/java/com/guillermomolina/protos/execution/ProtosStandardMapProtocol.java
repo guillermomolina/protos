@@ -16,6 +16,10 @@ public final class ProtosStandardMapProtocol {
          ProtosStandardMapProtocol::containsKey;
  private static final ProtosClosureValue STANDARD_CONTAINS_KEY =
          ProtosClosureValue.nativeClosure(STANDARD_CONTAINS_KEY_BODY);
+ private static final ProtosNativeClosureBody STANDARD_REMOVE_BODY =
+         ProtosStandardMapProtocol::remove;
+ private static final ProtosClosureValue STANDARD_REMOVE =
+         ProtosClosureValue.nativeClosure(STANDARD_REMOVE_BODY);
  private static final ProtosNativeClosureBody STANDARD_EACH_BODY =
          ProtosStandardMapProtocol::each;
  private static final ProtosClosureValue STANDARD_EACH =
@@ -114,6 +118,20 @@ public final class ProtosStandardMapProtocol {
                   .orElse(false);
  }
 
+ static boolean isStandardRemoveImplementation(ProtosClosureValue closure) {
+  return closure.nativeBody().orElse(null) == STANDARD_REMOVE_BODY;
+ }
+
+ static boolean isCanonicalStandardRemoveSelection(
+         ProtosClosureValue behavior,
+         ProtosObjectValue home,
+         ProtosActivation caller) {
+  return behavior == STANDARD_REMOVE
+          && caller.prelude()
+                  .map(prelude -> prelude.mapPrototype() == home)
+                  .orElse(false);
+ }
+
  static boolean isStandardEachImplementation(ProtosClosureValue closure) {
   return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
  }
@@ -133,7 +151,7 @@ public final class ProtosStandardMapProtocol {
   p.createLocalSlot("at", STANDARD_AT);
   p.createLocalSlot("containsKey", STANDARD_CONTAINS_KEY);
   p.createLocalSlot("atPut", STANDARD_AT_PUT);
-  p.createLocalSlot("remove",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,1);mutationEntry(m,a);if(!m.isOpen())throw err(a);var e=find(m,x.get(0),a);if(e==null||!m.isOpen())throw err(a);return m.remove(e);}));
+  p.createLocalSlot("remove", STANDARD_REMOVE);
   p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return new ProtosIntegerValue(BigInteger.valueOf(m.keyedSize()));}));
   p.createLocalSlot("each", STANDARD_EACH);
  }
@@ -162,6 +180,15 @@ public final class ProtosStandardMapProtocol {
   if (!m.isOpen()) throw err(a);
   m.append(k, h, v);
   return v;
+ }
+ private static Object remove(ProtosActivation a, List<?> x) {
+  ProtosMapValue m = map(a);
+  arity(a, x, 1);
+  mutationEntry(m, a);
+  if (!m.isOpen()) throw err(a);
+  ProtosMapValue.Entry e = find(m, x.get(0), a);
+  if (e == null || !m.isOpen()) throw err(a);
+  return m.remove(e);
  }
  private static Object containsKey(ProtosActivation a, List<?> x) {
   ProtosMapValue m = map(a);

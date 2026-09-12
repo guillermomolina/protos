@@ -1850,6 +1850,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredMapAtPutCall", null);
         BytecodeLocal structuredMapAtPutChild =
                 builder.createLocal("structuredMapAtPutChildCall", null);
+        BytecodeLocal structuredMapRemove =
+                builder.createLocal("structuredMapRemoveCall", null);
+        BytecodeLocal structuredMapRemoveChild =
+                builder.createLocal("structuredMapRemoveChildCall", null);
 
         builder.beginIfThenElse();
 
@@ -2694,12 +2698,114 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredMapRemoveCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredMapRemoveCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredMapRemove);
+        builder.beginPrepareStructuredMapRemoveCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredMapRemoveCall();
+        builder.endStoreLocal();
+
+        builder.beginEnterStructuredMapRemoveComparison();
+        builder.emitLoadLocal(structuredMapRemove);
+        builder.endEnterStructuredMapRemoveComparison();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveStructuredMapRemoveComparison();
+                    builder.emitLoadLocal(structuredMapRemove);
+                    builder.endLeaveStructuredMapRemoveComparison();
+                });
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredMapRemoveChild);
+        builder.beginPrepareStructuredMapRemoveHashCall();
+        builder.emitLoadLocal(structuredMapRemove);
+        builder.endPrepareStructuredMapRemoveHashCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapRemoveChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptStructuredMapRemoveHashResult();
+        builder.emitLoadLocal(structuredMapRemove);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredMapRemoveHashResult();
+
+        builder.beginWhile();
+        builder.beginStructuredMapRemoveNeedsEquality();
+        builder.emitLoadLocal(structuredMapRemove);
+        builder.endStructuredMapRemoveNeedsEquality();
+
+        builder.beginBlock();
+        builder.beginEnterStructuredMapRemoveComparison();
+        builder.emitLoadLocal(structuredMapRemove);
+        builder.endEnterStructuredMapRemoveComparison();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveStructuredMapRemoveComparison();
+                    builder.emitLoadLocal(structuredMapRemove);
+                    builder.endLeaveStructuredMapRemoveComparison();
+                });
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredMapRemoveChild);
+        builder.beginPrepareStructuredMapRemoveEqualityCall();
+        builder.emitLoadLocal(structuredMapRemove);
+        builder.endPrepareStructuredMapRemoveEqualityCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapRemoveChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptStructuredMapRemoveEqualityResult();
+        builder.emitLoadLocal(structuredMapRemove);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredMapRemoveEqualityResult();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredMapRemove();
+        builder.emitLoadLocal(structuredMapRemove);
+        builder.endFinishStructuredMapRemove();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();
