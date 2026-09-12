@@ -1,0 +1,109 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Options: import("self:Options")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+// Ordinary, option-like and structural-looking unknown arguments remain a
+// TOOL002-local ignore policy. Exact recognized options after them still work.
+selected: Options.parse(Array(
+    "test",
+    "ordinary-unknown",
+    "--future-option",
+    "--",
+    "--jobs",
+    "3",
+    "--resource-catalog",
+    "catalog.toml",
+    "trailing-unknown"
+))
+
+require(selected[0] == 3)
+require(selected[1] == "catalog.toml")
+
+// LIB011 supports attached long values in general, but TOOL002 did not publish
+// attached forms. The adapter therefore leaves them unknown rather than silently
+// widening D069/D099.
+attachedRemainUnknown: Options.parse(Array(
+    "test",
+    "--jobs=9",
+    "--resource-catalog=other.toml"
+))
+require(attachedRemainUnknown[0] == 1)
+require(attachedRemainUnknown[1] === null)
+
+// Once a recognized value-taking option is selected, the next token is literal.
+catalogValueLooksLikeJobs:
+    Options.parse(Array("test", "--resource-catalog", "--jobs"))
+require(catalogValueLooksLikeJobs[0] == 1)
+require(catalogValueLooksLikeJobs[1] == "--jobs")
+
+// Unknown options do not claim following values. A later exact TOOL002 option is
+// still recognized, matching the historical state-machine parser.
+unknownThenJobs:
+    Options.parse(Array("test", "--foreign", "--jobs", "4"))
+require(unknownThenJobs[0] == 4)
+require(unknownThenJobs[1] === null)
+
+// TOOL002 historically did not treat `--` as a structural delimiter.
+afterDoubleDash:
+    Options.parse(Array("test", "--", "--jobs", "5"))
+require(afterDoubleDash[0] == 5)
+
+// Existing fail-closed policy remains owned by the same public selectors.
+require(reject(() => {
+    Options.jobs(Array("test", "--jobs"))
+}))
+
+require(reject(() => {
+    Options.jobs(Array("test", "--jobs", "2", "--jobs", "3"))
+}))
+
+require(reject(() => {
+    Options.jobs(Array("test", "--jobs", "0"))
+}))
+
+require(reject(() => {
+    Options.jobs(Array("test", "--jobs", "--resource-catalog"))
+}))
+
+require(reject(() => {
+    Options.resourceCatalogPath(Array(
+        "test",
+        "--resource-catalog",
+        "a.toml",
+        "--resource-catalog",
+        "b.toml"
+    ))
+}))
+
+true

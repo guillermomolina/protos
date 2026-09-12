@@ -13,6 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+CommandLine: import("std:cli/CommandLine")
+
 optionError: () => {
     Error().signal()
 }
@@ -32,49 +34,145 @@ parsePositiveInteger: (text) => {
     value
 }
 
-// TOOL002-I7B3A: D069/D099 coordinated Test Tool option traversal.
-//
-// Both public selectors derive from one parser contract that recognizes both
-// value-bearing options. A consumed value token is literal and is never
-// reinterpreted by the other option merely because it begins with "-".
-parse: (arguments) => {
-    jobsValue: 1
-    jobsSeen: false
-    resourceCatalogPathValue: null
-    resourceCatalogSeen: false
+jobsOption: CommandLine.option({
+    key: "jobs"
+    long: "jobs"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "N"
+    help: null
+})
 
-    // 0 = no pending value, 1 = --jobs value, 2 = --resource-catalog PATH.
-    expectingValue: 0
+resourceCatalogOption: CommandLine.option({
+    key: "resourceCatalog"
+    long: "resource-catalog"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "PATH"
+    help: null
+})
+
+commandSpec: CommandLine.command({
+    name: "test"
+    help: null
+    options: Array(jobsOption, resourceCatalogOption)
+    positionals: Array()
+    subcommands: Array()
+})
+
+// LIB011-E adapter boundary.
+//
+// Generic CommandLine parsing stays strict. TOOL002 historically ignores every
+// argument except the exact separate-token forms --jobs VALUE and
+// --resource-catalog PATH. Preserve that Tool-owned policy by projecting only
+// those recognized option/value token pairs before invoking the strict stdlib
+// parser.
+//
+// A selected value token is projected literally and is never reinterpreted as a
+// second option merely because it begins with "-". Unknown tokens, including
+// "--", attached forms such as --jobs=3 and future foreign options, remain
+// ignored exactly as before.
+projectArguments: (arguments) => {
+    newBuilder: () => {
+        {
+            chunks: Map()
+            maxLevel: -1
+        }
+    }
+
+    carryChunk: null
+    carryChunk = (builder, chunk, level) => {
+        present: builder.chunks.containsKey(level)
+
+        present.ifTrue(() => {
+            left: builder.chunks[level]
+            builder.chunks.remove(level)
+            carryChunk(builder, Array(...left, ...chunk), level + 1)
+        })
+
+        present.ifFalse(() => {
+            builder.chunks[level] = chunk
+            (level > builder.maxLevel).ifTrue(() => {
+                builder.maxLevel = level
+            })
+        })
+    }
+
+    appendBuilt: (builder, value) => {
+        carryChunk(builder, Array(value), 0)
+    }
+
+    collectChunks: null
+    collectChunks = (builder, level, result) => {
+        finalResult: result
+
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            builder.chunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...builder.chunks[level])
+            })
+            finalResult = collectChunks(builder, level - 1, nextResult)
+        })
+
+        finalResult
+    }
+
+    builder: newBuilder()
+    expectingSelectedValue: false
 
     arguments.each((argument) => {
-        wasExpectingValue: expectingValue
+        wasExpectingSelectedValue: expectingSelectedValue
 
-        (wasExpectingValue == 1).ifTrue(() => {
-            jobsValue = parsePositiveInteger(argument)
-            expectingValue = 0
+        wasExpectingSelectedValue.ifTrue(() => {
+            appendBuilt(builder, argument)
+            expectingSelectedValue = false
         })
 
-        (wasExpectingValue == 2).ifTrue(() => {
-            resourceCatalogPathValue = argument
-            expectingValue = 0
-        })
+        wasExpectingSelectedValue.ifFalse(() => {
+            selected:
+                (argument === "--jobs") ||
+                (argument === "--resource-catalog")
 
-        (wasExpectingValue == 0).ifTrue(() => {
-            (argument === "--jobs").ifTrue(() => {
-                jobsSeen.ifTrue(() => { optionError() })
-                jobsSeen = true
-                expectingValue = 1
-            })
-
-            (argument === "--resource-catalog").ifTrue(() => {
-                resourceCatalogSeen.ifTrue(() => { optionError() })
-                resourceCatalogSeen = true
-                expectingValue = 2
+            selected.ifTrue(() => {
+                appendBuilt(builder, argument)
+                expectingSelectedValue = true
             })
         })
     })
 
-    (expectingValue == 0).ifFalse(() => { optionError() })
+    collectChunks(builder, builder.maxLevel, Array())
+}
+
+// D069/D099/D101 coordinated Test Tool option interpretation.
+//
+// LIB011 now owns structural recognition, separate-value literal consumption,
+// duplicate rejection and missing-value rejection for the projected option
+// stream. TOOL002 retains:
+// - unknown-argument policy through projectArguments;
+// - D069 positive-Integer conversion/default;
+// - D099/D101 resource-catalog absence and exact PATH selection.
+parse: (arguments) => {
+    parsed: CommandLine.parse(commandSpec, projectArguments(arguments))
+
+    jobsValue: 1
+    resourceCatalogPathValue: null
+
+    parsed.command.options.each((occurrence) => {
+        (occurrence.key == "jobs").ifTrue(() => {
+            jobsValue = parsePositiveInteger(occurrence.value)
+        })
+
+        (occurrence.key == "resourceCatalog").ifTrue(() => {
+            resourceCatalogPathValue = occurrence.value
+        })
+    })
+
     Array(jobsValue, resourceCatalogPathValue)
 }
 

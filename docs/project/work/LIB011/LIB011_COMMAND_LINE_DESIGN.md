@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C CLOSED — D115 Candidate C′; LIB011-D CLOSED — D118 F′ + D119 A′; LIB011-E READY**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C CLOSED — D115 Candidate C′; LIB011-D CLOSED — D118 F′ + D119 A′; LIB011-E CLOSED; LIB011-F READY**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1299,13 +1299,42 @@ The durable decisions remain:
 
 ### LIB011-E — Test Tool adoption
 
-**READY.**
+**CLOSED — TOOL002 option recognition migrated to LIB011 without policy change.**
 
-Audit and migrate TOOL002's common command-line mechanism onto LIB011 without
-silently changing Test Tool-specific defaults, validation or unknown-argument
-policy.
+The bundled Test Tool `Options` module now imports `std:cli/CommandLine` and
+defines one canonical command specification for the already-ratified
+`--jobs N` (D069) and `--resource-catalog PATH` (D099/D101) options.
+
+TOOL002's historical unknown-argument policy remains Tool-local. Before invoking
+the strict LIB011 parser, `Options` performs a bounded projection over the explicit
+argument Array that retains only exact separate-token TOOL002 option spellings and
+their immediately selected literal value tokens. Unknown ordinary tokens,
+option-like tokens, structural-looking `--`, attached forms such as `--jobs=3`
+and future foreign spellings remain ignored exactly as before.
+
+The projection does not own generic option semantics. `CommandLine.parse` now owns
+the common structural mechanism for the projected stream: recognized value
+consumption, missing-value failure and duplicate occurrence rejection. Once parse
+succeeds, TOOL002 still owns D069 positive-Integer conversion/defaulting and the
+D099/D101 exact resource-catalog PATH selection/absence policy.
+
+`Main.protos` remains unchanged and continues to obtain explicit
+`process.args()` once and call the retained Tool-owned selectors
+`Options.jobs(arguments)` and `Options.resourceCatalogPath(arguments)`. No Java
+host parser, new CLI spelling, short option, attached-value form, default,
+discovery, merge, environment fallback or output/help behavior is introduced.
+
+Authoritative semantic evidence is executable Protos source at
+`protos/tests/tooling/tool002-lib011-options-adoption.protos`; Java is only its
+bundled-tool execution harness plus retained complementary TOOL002 evidence.
+
+This slice changes no D069/D099/D101 semantics, no Test Tool scheduling/resource
+architecture, no Core/native boundary and no Protos language specification.
+
 
 ### LIB011-F — adversarial/conformance closure
+
+**READY.**
 
 Exercise malformed specs, duplicate occurrences, missing values, negative-looking
 values, `--`, clusters, nested commands, large specs and isolation/concurrency
