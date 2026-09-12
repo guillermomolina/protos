@@ -2619,48 +2619,105 @@ separate evidence that the policy itself is obsolete.
 
 
 Impact-aware publication validation is a bounded exception for intermediate
-executable/test-impact slices whose definitive publication delta is
-**unequivocally local to one tool**. It reduces repeated validation of unrelated
-tool corpora without weakening validation of shared or ambiguous changes.
+executable/test-impact slices whose definitive publication delta can be
+**deterministically bounded to an explicit affected-test dependency closure**.
+Tool-local routing is one established instance of that rule; it is not the only
+possible bounded profile. The purpose is to avoid repeatedly paying for unrelated
+repository-wide validation while preserving a mandatory integrated closure gate.
 
 The exception is governed by these rules:
 
 1. Derive impact from the complete definitive delta against the execution-time
-   `PUBLICATION_BASE` plus an explicit repository-maintained dependency map.
-   A work-item identifier such as `TOOL001` or `TOOL002` is only coordination
+   `PUBLICATION_BASE` plus an explicit dependency closure. A work-item identifier
+   such as `I031`, `TOOL001`, `TOOL002`, `PERF006`, or `LIB001` is coordination
    metadata and MUST NOT by itself select test scope.
-2. The reduced path MAY be used only through a deterministic repository selector
-   that recognizes every changed executable/test-impact path and classifies the
-   whole delta as one explicitly mapped tool-local surface. Until such a selector
-   is published, or whenever it does not recognize the complete delta, run the
-   complete Maven test suite.
-3. A recognized tool-local delta MUST run the selector's complete affected set
-   for that tool, including its owned corpus plus every shared smoke,
-   conformance, adapter, or integration test that the maintained dependency map
-   declares necessary. "Focused" never means one convenient test when the mapped
-   affected set is broader.
-4. Changes touching shared production surfaces such as `src/main/**`,
-   distributable shared library/Core surfaces under `protos/lib/**`, build or
-   generation configuration, shared runtime/compiler/parser/filesystem/module
-   machinery, or shared executable test infrastructure require the complete
-   Maven test suite under this conservative policy.
+
+2. A reduced publication path MAY be selected in either of two ways:
+
+   - a deterministic repository selector classifies the complete delta into an
+     already-maintained impact profile such as `TOOL_LOCAL:*`; or
+   - for an intermediate slice that the generic selector cannot yet express, the
+     launcher declares a bounded `FOCAL_BOUNDED` profile containing the exact
+     patch-owned paths, the conservative validation-dependency closure, the exact
+     retained focal/regression test set, and the owning top-level work item that
+     retains the final full-suite obligation.
+
+   A launcher MUST NOT call a profile `FOCAL_BOUNDED` merely because the diff is
+   small or the focal tests are convenient.
+
+3. Any reduced profile MUST run its **complete declared affected set**, including
+   every shared smoke, conformance, adapter, integration, regression, or corpus
+   test that the maintained map or slice-specific dependency proof says can
+   observe the changed behavior. "Focused" means bounded by demonstrated impact;
+   it never means one convenient test while a known affected test is omitted.
+
+4. Shared production surfaces such as `src/main/**`, distributable shared
+   library/Core surfaces under `protos/lib/**`, and shared
+   runtime/compiler/parser/filesystem/module machinery **default to `FULL`**.
+   An intermediate already-approved implementation slice MAY instead use
+   `FOCAL_BOUNDED` only when all of the following are true:
+
+   - the owning top-level executable work item remains open after this
+     publication and this slice does not claim top-level closure/reconciliation;
+   - the slice implements already-approved semantics/architecture and does not
+     resolve a new `Dxxx`/`PLATxxx` choice inside the reduced-validation path;
+   - the launcher explicitly declares the patch-owned paths and a conservative
+     dependency closure broad enough to include every known consumer that could
+     invalidate the slice;
+   - source/style/static and compile/generation gates applicable to the changed
+     surface pass before behavioral tests;
+   - every test in the declared affected set passes; and
+   - the publication report records the deferred integrated obligation as
+     `FULL_VALIDATION_DEBT: <owning-work-item>`.
+
+   Changes to build/generation configuration, dependency/toolchain coordinates,
+   shared executable test infrastructure, or another surface whose effects
+   cannot be conservatively bounded remain `FULL`.
+
 5. Cross-tool deltas, unknown paths, newly introduced executable/test-impact
-   paths not yet classified by the map, and any dependency ambiguity fail closed
-   to the complete Maven test suite. Never guess that an unclassified path is
-   local.
-6. Impact-aware omission of unrelated suites applies only to intermediate
-   publications. Closing or reconciling an owning top-level executable work item
-   such as an `Ixxx`, `TOOLxxx`, `LIBxxx`, or comparable parent requires a
-   complete Maven test suite over the exact closure candidate, even if earlier
-   child slices used tool-local routing.
-7. The launcher/report MUST state the selected impact class, the affected test
-   set, why any broader suites were skipped, and whether top-level reconciliation
-   requires a complete suite. This evidence belongs in the owning Issue work log
-   after successful publication.
-8. This validation optimization is repository tooling policy only. It MUST NOT
-   resume, duplicate, or emulate a suspended Test Tool scheduler, alter Protos
-   execution semantics, or convert host-level validation routing into language
-   behavior.
+   paths without a demonstrated mapping/closure, and any dependency ambiguity
+   fail closed to the complete Maven test suite. Never guess that an unclassified
+   or poorly understood path is local.
+
+6. Reduced validation applies only to **intermediate publications**. Closing or
+   reconciling an owning top-level executable work item such as an `Ixxx`,
+   `TOOLxxx`, `LIBxxx`, `PERFxxx`, `CLIxxx`, or comparable parent requires a
+   complete unrestricted Maven test suite over the exact closure candidate.
+   Passing intermediate focal profiles accumulates evidence; it does not discharge
+   this final integrated obligation.
+
+7. Validation MUST be ordered from cheapest/highest-signal gate to most expensive:
+   materialization/preconditions, changed-path/static/style checks, compilation,
+   focal/declared affected tests, and only then any required full suite. Agents and
+   launchers MUST NOT run unrestricted `mvn test` merely to discover whether a
+   patch materializes, compiles, or passes its focal regressions. A failed earlier
+   gate stops the candidate before the expensive suite.
+
+8. Expensive validation belongs to the **exact candidate**, not to an invocation
+   attempt. If the complete suite already passed for an exact candidate commit and
+   publication then fails solely because of credentials, network/transport, or
+   another push-layer failure, the suite MUST NOT be rerun merely to retry the
+   same bytes. Re-fetch `origin/main` and rerun the publication race gate:
+
+   - if `origin/main` is still the candidate's validated `PUBLICATION_BASE`, retry
+     only the non-force fast-forward push of that exact candidate;
+   - if `origin/main` moved, reuse is governed by the existing concurrent-
+     publication validation-reuse proof rules above; without such a proof, abort
+     rather than treating the old full-suite result as portable to a new base.
+
+   Any change to candidate bytes, candidate commit, or relevant validation
+   dependency closure invalidates this exact-candidate reuse.
+
+9. The launcher/report MUST state the selected impact/profile class, the complete
+   affected test set, why broader suites were skipped, whether integrated
+   full-suite validation is deferred, and which top-level work item owns that
+   debt. This evidence belongs in the owning Issue work log after successful
+   publication.
+
+10. This validation optimization is repository tooling policy only. It MUST NOT
+    resume, duplicate, or emulate a suspended Test Tool scheduler, alter Protos
+    execution semantics, or convert host-level validation routing into language
+    behavior.
 
 Representative reporting for an intermediate recognized tool-local publication:
 
@@ -2670,7 +2727,17 @@ Representative reporting for an intermediate recognized tool-local publication:
     FULL_TEST_SUITE: SKIPPED (impact-aware tool-local intermediate publication)
     TOP_LEVEL_RECONCILIATION: NOT_REQUIRED_FOR_THIS_CHILD_SLICE
 
-For shared, ambiguous, unknown, cross-tool, or top-level closure candidates:
+Representative reporting for an intermediate bounded shared-production slice:
+
+    VALIDATION_CLASS: EXECUTABLE_IMPACT
+    VALIDATION_IMPACT: FOCAL_BOUNDED
+    AFFECTED_TEST_SET: <declared complete bounded regression set>
+    FULL_TEST_SUITE: DEFERRED_TO_TOP_LEVEL_CLOSURE
+    FULL_VALIDATION_DEBT: <owning-work-item>
+    TOP_LEVEL_RECONCILIATION: NOT_REQUIRED_FOR_THIS_CHILD_SLICE
+
+For ambiguous, unknown, unbounded, build/generation-impact, or top-level closure
+candidates:
 
     VALIDATION_CLASS: EXECUTABLE_IMPACT
     VALIDATION_IMPACT: FULL
