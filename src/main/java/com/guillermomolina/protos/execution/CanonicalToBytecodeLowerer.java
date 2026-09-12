@@ -1834,6 +1834,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredEnvironmentEachCall", null);
         BytecodeLocal structuredEnvironmentEachChild =
                 builder.createLocal("structuredEnvironmentEachChildCall", null);
+        BytecodeLocal structuredIdentityMapEach =
+                builder.createLocal("structuredIdentityMapEachCall", null);
+        BytecodeLocal structuredIdentityMapEachChild =
+                builder.createLocal("structuredIdentityMapEachChildCall", null);
 
         builder.beginIfThenElse();
 
@@ -2366,12 +2370,71 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredIdentityMapEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredIdentityMapEachCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredIdentityMapEach);
+        builder.beginPrepareStructuredIdentityMapEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredIdentityMapEachCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+        builder.beginStructuredIdentityMapEachHasNext();
+        builder.emitLoadLocal(structuredIdentityMapEach);
+        builder.endStructuredIdentityMapEachHasNext();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredIdentityMapEachChild);
+        builder.beginPrepareStructuredIdentityMapEachEntryCall();
+        builder.emitLoadLocal(structuredIdentityMapEach);
+        builder.endPrepareStructuredIdentityMapEachEntryCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredIdentityMapEachChild,
+                childResult,
+                resumeValue);
+        builder.beginAdvanceStructuredIdentityMapEach();
+        builder.emitLoadLocal(structuredIdentityMapEach);
+        builder.endAdvanceStructuredIdentityMapEach();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredIdentityMapEach();
+        builder.emitLoadLocal(structuredIdentityMapEach);
+        builder.endFinishStructuredIdentityMapEach();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();
