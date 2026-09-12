@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-B2 IN_PROGRESS — B2A CLOSED; B2B1 document/path scaling CLOSED; B2B2 lexical/AoT parser closure READY**
+Status: **LIB010-B2 IN_PROGRESS — B2A/B2B1/B2B2A CLOSED; B2B2B numeric/AoT parser closure READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -1069,13 +1069,18 @@ LIB010-B implementation is deliberately split into two publications:
     this document path no longer consume host stack proportional to document/path
     size. Retained evidence covers 4,096 flat assignments and 1,536-component
     dotted-assignment/header paths.
-  - **B2B2 — lexical/AoT parser closure: READY.** Remove the remaining
-    input-proportional scalar/token recursion and repeated array-of-tables
-    accumulation hotspot, retain long-token/repeated-AoT stress evidence, and
-    close LIB010-B.
+  - **B2B2 — lexical/AoT parser closure: IN_PROGRESS.**
+    - **B2B2A — textual lexical scaling: CLOSED.** Quoted/bare key, basic/literal
+      String, whitespace/trivia and bare-token gather/trim/copy paths no longer
+      recurse in proportion to input length. Retained stress evidence covers
+      4,096-character keys and 8,192-character Strings/whitespace.
+    - **B2B2B — numeric/AoT scaling + parser closure: READY.** Remove remaining
+      Integer/Float/temporal token recursion and repeated array-of-tables
+      whole-Array rebuilding, retain long numeric/repeated-AoT evidence, perform
+      the final recursion/scaling audit, and close LIB010-B.
 
-B1, B2A and B2B1 are intermediate `FOCAL_BOUNDED` publications. Integrated full
-validation remains deferred to the owning `LIB010` closure.
+B1, B2A, B2B1 and B2B2A are intermediate `FOCAL_BOUNDED` publications.
+Integrated full validation remains deferred to the owning `LIB010` closure.
 
 ## Deliberately deferred
 

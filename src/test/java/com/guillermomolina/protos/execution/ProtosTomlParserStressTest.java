@@ -137,6 +137,55 @@ final class ProtosTomlParserStressTest {
         assertSame(ProtosBooleanValue.TRUE, result);
     }
 
+    @Test
+    void parsesLongKeysAndStringsWithoutHostRecursiveLexicalScanning() throws Exception {
+        String quotedKey = "q".repeat(4096);
+        String basic = "b".repeat(8192);
+        String literal = "l".repeat(8192);
+        String inlineKey = "i".repeat(4096);
+
+        String input =
+                "\"" + quotedKey + "\" = 1\n"
+                        + "basic = \"" + basic + "\"\n"
+                        + "literal = '" + literal + "'\n"
+                        + "inline = { " + inlineKey + " = 7 }\n";
+
+        Object result =
+                evaluate(
+                        input,
+                        """
+                        root: TOML.parse(input)
+                        (root.kind === "table") &&
+                            (root.value["basic"].value.size() == 8192) &&
+                            (root.value["literal"].value.size() == 8192) &&
+                            (root.value["inline"].kind === "table")
+                        """);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void parsesLongWhitespaceAndArrayTriviaWithoutHostRecursiveLexicalScanning()
+            throws Exception {
+        String spaces = " ".repeat(8192);
+        String input =
+                "spaced =" + spaces + "1\n"
+                        + "items = [1," + spaces + "2]\n";
+
+        Object result =
+                evaluate(
+                        input,
+                        """
+                        root: TOML.parse(input)
+                        (root.value["spaced"].value == 1) &&
+                            (root.value["items"].kind === "array") &&
+                            (root.value["items"].value.size() == 2) &&
+                            (root.value["items"].value[1].value == 2)
+                        """);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
     private static Object evaluate(String input, String body) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);

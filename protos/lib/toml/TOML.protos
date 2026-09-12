@@ -609,10 +609,8 @@ parse: (text) => {
             buffer: Encoding.UTF8.encode("")
             done: false
 
-            scan: null
-            scan = () => {
-                done.ifFalse(() => {
-                    octet: take()
+            (() => done === false).while(() => {
+                octet: take()
                     (octet == 34).ifTrue(() => {
                         done = true
                     })
@@ -683,12 +681,8 @@ parse: (text) => {
                             })
                             buffer.add(octet)
                         })
-                        scan()
                     })
-                })
-            }
-
-            scan()
+            })
             Encoding.UTF8.decode(buffer)
         }
 
@@ -699,10 +693,8 @@ parse: (text) => {
             buffer: Encoding.UTF8.encode("")
             done: false
 
-            scan: null
-            scan = () => {
-                done.ifFalse(() => {
-                    octet: take()
+            (() => done === false).while(() => {
+                octet: take()
                     (octet == 39).ifTrue(() => {
                         done = true
                     })
@@ -718,12 +710,8 @@ parse: (text) => {
                             fail()
                         })
                         buffer.add(octet)
-                        scan()
                     })
-                })
-            }
-
-            scan()
+            })
             Encoding.UTF8.decode(buffer)
         }
 
@@ -881,21 +869,28 @@ parse: (text) => {
             })
         }
 
-        skipSpaces: null
-        skipSpaces = () => {
-            (index < length).ifTrue(() => {
-                isSpace(source[index]).ifTrue(() => {
+        skipSpaces: () => {
+            scanning: true
+            (() => scanning && (index < length)).while(() => {
+                whitespace: isSpace(source[index])
+                whitespace.ifTrue(() => {
                     index = index + 1
-                    skipSpaces()
+                })
+                whitespace.ifFalse(() => {
+                    scanning = false
                 })
             })
         }
 
-        skipComment: null
-        skipComment = () => {
-            (index < length).ifTrue(() => {
+        skipComment: () => {
+            scanning: true
+            (() => scanning && (index < length)).while(() => {
                 octet: source[index]
-                isNewlineStart(octet).ifFalse(() => {
+                newline: isNewlineStart(octet)
+                newline.ifTrue(() => {
+                    scanning = false
+                })
+                newline.ifFalse(() => {
                     invalidControl: octet < 32
                     (octet == 127).ifTrue(() => {
                         invalidControl = true
@@ -907,32 +902,30 @@ parse: (text) => {
                         fail()
                     })
                     index = index + 1
-                    skipComment()
                 })
             })
         }
 
-        skipArrayTrivia: null
-        skipArrayTrivia = () => {
-            progressed: false
-            (index < length).ifTrue(() => {
-                octet: source[index]
-                isSpace(octet).ifTrue(() => {
-                    index = index + 1
-                    progressed = true
+        skipArrayTrivia: () => {
+            progressed: true
+            (() => progressed).while(() => {
+                progressed = false
+                (index < length).ifTrue(() => {
+                    octet: source[index]
+                    isSpace(octet).ifTrue(() => {
+                        index = index + 1
+                        progressed = true
+                    })
+                    isNewlineStart(octet).ifTrue(() => {
+                        consumeNewline()
+                        progressed = true
+                    })
+                    (octet == 35).ifTrue(() => {
+                        index = index + 1
+                        skipComment()
+                        progressed = true
+                    })
                 })
-                isNewlineStart(octet).ifTrue(() => {
-                    consumeNewline()
-                    progressed = true
-                })
-                (octet == 35).ifTrue(() => {
-                    index = index + 1
-                    skipComment()
-                    progressed = true
-                })
-            })
-            progressed.ifTrue(() => {
-                skipArrayTrivia()
             })
         }
 
@@ -1042,19 +1035,18 @@ parse: (text) => {
             buffer: Encoding.UTF8.encode("")
             done: false
 
-            countQuotes: null
-            countQuotes = (count) => {
-                result: count
-                (peek() == 34).ifTrue(() => {
+            countQuotes: (initial) => {
+                count: initial
+                (() => peek() == 34).while(() => {
                     index = index + 1
-                    result = countQuotes(count + 1)
+                    count = count + 1
                 })
-                result
+                count
             }
 
-            skipContinuationWhitespace: null
-            skipContinuationWhitespace = () => {
-                (index < length).ifTrue(() => {
+            skipContinuationWhitespace: () => {
+                scanning: true
+                (() => scanning && (index < length)).while(() => {
                     octet: source[index]
                     whitespace: isSpace(octet)
                     isNewlineStart(octet).ifTrue(() => {
@@ -1068,16 +1060,16 @@ parse: (text) => {
                         isNewlineStart(octet).ifFalse(() => {
                             index = index + 1
                         })
-                        skipContinuationWhitespace()
+                    })
+                    whitespace.ifFalse(() => {
+                        scanning = false
                     })
                 })
             }
 
-            scan: null
-            scan = () => {
-                done.ifFalse(() => {
-                    octet: take()
-                    ordinaryOctet: true
+            (() => done === false).while(() => {
+                octet: take()
+                ordinaryOctet: true
 
                     multiline.ifFalse(() => {
                         (octet == 34).ifTrue(() => {
@@ -1123,51 +1115,34 @@ parse: (text) => {
                                     seeking: true
                                     sawNewline: false
 
-                                    inspect: null
-                                    inspect = () => {
-                                        seeking.ifTrue(() => {
-                                            (look < length).ifTrue(() => {
-                                                candidate: source[look]
+                                    (() => seeking && (look < length)).while(() => {
+                                        candidate: source[look]
+                                        candidateSpace: isSpace(candidate)
+                                        candidateNewline: isNewlineStart(candidate)
 
-                                                isSpace(candidate).ifTrue(() => {
-                                                    look = look + 1
-                                                    inspect()
-                                                })
-
-                                                isNewlineStart(candidate).ifTrue(() => {
-                                                    sawNewline = true
-                                                    seeking = false
-                                                })
-
-                                                isSpace(candidate).ifFalse(() => {
-                                                    isNewlineStart(candidate).ifFalse(() => {
-                                                        seeking = false
-                                                    })
-                                                })
-                                            })
-
-                                            (look >= length).ifTrue(() => {
-                                                seeking = false
-                                            })
+                                        candidateSpace.ifTrue(() => {
+                                            look = look + 1
                                         })
-                                    }
-
-                                    inspect()
+                                        candidateNewline.ifTrue(() => {
+                                            sawNewline = true
+                                            seeking = false
+                                        })
+                                        (candidateSpace || candidateNewline).ifFalse(() => {
+                                            seeking = false
+                                        })
+                                    })
+                                    (look >= length).ifTrue(() => {
+                                        seeking = false
+                                    })
                                     sawNewline.ifTrue(() => {
                                         continuation = true
                                     })
                                 })
 
                                 continuation.ifTrue(() => {
-                                    skipBeforeNewline: null
-                                    skipBeforeNewline = () => {
-                                        isSpace(peek()).ifTrue(() => {
-                                            index = index + 1
-                                            skipBeforeNewline()
-                                        })
-                                    }
-
-                                    skipBeforeNewline()
+                                    (() => isSpace(peek())).while(() => {
+                                        index = index + 1
+                                    })
                                     isNewlineStart(peek()).ifFalse(() => {
                                         fail()
                                     })
@@ -1258,12 +1233,8 @@ parse: (text) => {
                             })
                         })
 
-                        scan()
                     })
-                })
-            }
-
-            scan()
+            })
             Encoding.UTF8.decode(buffer)
         }
 
@@ -1286,21 +1257,18 @@ parse: (text) => {
             buffer: Encoding.UTF8.encode("")
             done: false
 
-            countQuotes: null
-            countQuotes = (count) => {
-                result: count
-                (peek() == 39).ifTrue(() => {
+            countQuotes: (initial) => {
+                count: initial
+                (() => peek() == 39).while(() => {
                     index = index + 1
-                    result = countQuotes(count + 1)
+                    count = count + 1
                 })
-                result
+                count
             }
 
-            scan: null
-            scan = () => {
-                done.ifFalse(() => {
-                    octet: take()
-                    ordinaryOctet: true
+            (() => done === false).while(() => {
+                octet: take()
+                ordinaryOctet: true
 
                     multiline.ifFalse(() => {
                         (octet == 39).ifTrue(() => {
@@ -1364,12 +1332,8 @@ parse: (text) => {
                             })
                         })
 
-                        scan()
                     })
-                })
-            }
-
-            scan()
+            })
             Encoding.UTF8.decode(buffer)
         }
 
@@ -1405,19 +1369,18 @@ parse: (text) => {
                 (first == 39).ifFalse(() => {
                     buffer: Encoding.UTF8.encode("")
 
-                    gather: null
-                    gather = () => {
-                        (index < length).ifTrue(() => {
-                            octet: source[index]
-                            isBareKeyOctet(octet).ifTrue(() => {
-                                buffer.add(octet)
-                                index = index + 1
-                                gather()
-                            })
+                    gathering: true
+                    (() => gathering && (index < length)).while(() => {
+                        octet: source[index]
+                        bare: isBareKeyOctet(octet)
+                        bare.ifTrue(() => {
+                            buffer.add(octet)
+                            index = index + 1
                         })
-                    }
-
-                    gather()
+                        bare.ifFalse(() => {
+                            gathering = false
+                        })
+                    })
                     (buffer.size() == 0).ifTrue(() => {
                         fail()
                     })
@@ -2322,8 +2285,8 @@ parse: (text) => {
         parseBareValue: () => {
             token: Encoding.UTF8.encode("")
 
-            gather: null
-            gather = () => {
+            gathering: true
+            (() => gathering).while(() => {
                 octet: peek()
                 terminator: octet < 0
                 isNewlineStart(octet).ifTrue(() => { terminator = true })
@@ -2332,6 +2295,9 @@ parse: (text) => {
                 (octet == 93).ifTrue(() => { terminator = true })
                 (octet == 125).ifTrue(() => { terminator = true })
 
+                terminator.ifTrue(() => {
+                    gathering = false
+                })
                 terminator.ifFalse(() => {
                     invalidControl: octet < 32
                     (octet == 9).ifTrue(() => {
@@ -2344,38 +2310,30 @@ parse: (text) => {
                         fail()
                     })
                     token.add(take())
-                    gather()
                 })
-            }
-
-            gather()
+            })
             (token.size() == 0).ifTrue(() => {
                 fail()
             })
 
             right: token.size()
-            trimRight: null
-            trimRight = () => {
-                (right > 0).ifTrue(() => {
-                    isSpace(token[right - 1]).ifTrue(() => {
-                        right = right - 1
-                        trimRight()
-                    })
+            trimming: true
+            (() => trimming && (right > 0)).while(() => {
+                whitespace: isSpace(token[right - 1])
+                whitespace.ifTrue(() => {
+                    right = right - 1
                 })
-            }
-            trimRight()
+                whitespace.ifFalse(() => {
+                    trimming = false
+                })
+            })
 
             trimmed: Encoding.UTF8.encode("")
             copyIndex: 0
-            copyTrimmed: null
-            copyTrimmed = () => {
-                (copyIndex < right).ifTrue(() => {
-                    trimmed.add(token[copyIndex])
-                    copyIndex = copyIndex + 1
-                    copyTrimmed()
-                })
-            }
-            copyTrimmed()
+            (() => copyIndex < right).while(() => {
+                trimmed.add(token[copyIndex])
+                copyIndex = copyIndex + 1
+            })
 
             (trimmed.size() == 0).ifTrue(() => {
                 fail()
