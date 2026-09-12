@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.*;
+import org.graalvm.polyglot.Context;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -30,6 +31,49 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosStandardTextWriterProtocolTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
+
+    @Test
+    void ordinaryInvocationInsideEnteredContextStaysOnOrdinaryTextWriterPath()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                assertNotNull(
+                        ProtosLanguageContext.currentIfEnteredForRuntime(),
+                        "test requires an entered Protos language Context");
+
+                ProtosPrelude prelude = core();
+                ProtosActivation activation = prelude.newModuleActivation();
+                ScriptedTarget target = new ScriptedTarget(activation, false, false);
+                ProtosObjectValue writer =
+                        writer(
+                                prelude,
+                                activation,
+                                target.target,
+                                encoding(prelude, "UTF8"),
+                                false);
+
+                ProtosFutureValue result = writeLine(writer, activation, "once");
+
+                assertEquals(ProtosFutureValue.State.RESOLVED, result.state());
+                assertEquals(
+                        1,
+                        target.writes,
+                        "ordinary Java invocation must not be rerouted merely because a Truffle Context is entered");
+                assertEquals(1, target.payloads.size());
+                assertArrayEquals(
+                        new byte[] {'o', 'n', 'c', 'e', '\n'},
+                        target.payloads.get(0));
+                assertEquals(
+                        0,
+                        activation.executionDomain().runnableCount(),
+                        "ordinary TextWriter invocation must not schedule a C-prime operation");
+            } finally {
+                context.leave();
+            }
+        }
+    }
 
     @Test
     void factoryIsSourceBackedFrozenFreshAndValidatesCapabilitiesSynchronously()

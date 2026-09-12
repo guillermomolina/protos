@@ -158,7 +158,7 @@ public final class ProtosStandardTextWriterProtocol {
                                 instanceof ProtosStringValue text)) {
                     yield invalidFuture(activation);
                 }
-                if (cPrime || ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+                if (cPrime) {
                     yield writer.writeTextForCPrimeRuntime(
                             activation,
                             text.value(),
@@ -174,7 +174,7 @@ public final class ProtosStandardTextWriterProtocol {
                 if (!supplied.isEmpty()) {
                     yield invalidFuture(activation);
                 }
-                if (cPrime || ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+                if (cPrime) {
                     yield writer.flushForCPrimeRuntime(
                             activation,
                             ProtosTextWriterCPrimeExecution.planForEnteredContext());
