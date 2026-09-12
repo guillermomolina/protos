@@ -1,0 +1,1605 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+CommandLine: import("std:cli/CommandLine")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+opt0: CommandLine.option({
+    key: "key0"
+    long: "option0"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE0"
+    help: "Large option 0"
+})
+
+opt1: CommandLine.option({
+    key: "key1"
+    long: "option1"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE1"
+    help: "Large option 1"
+})
+
+opt2: CommandLine.option({
+    key: "key2"
+    long: "option2"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE2"
+    help: "Large option 2"
+})
+
+opt3: CommandLine.option({
+    key: "key3"
+    long: "option3"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE3"
+    help: "Large option 3"
+})
+
+opt4: CommandLine.option({
+    key: "key4"
+    long: "option4"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE4"
+    help: "Large option 4"
+})
+
+opt5: CommandLine.option({
+    key: "key5"
+    long: "option5"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE5"
+    help: "Large option 5"
+})
+
+opt6: CommandLine.option({
+    key: "key6"
+    long: "option6"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE6"
+    help: "Large option 6"
+})
+
+opt7: CommandLine.option({
+    key: "key7"
+    long: "option7"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE7"
+    help: "Large option 7"
+})
+
+opt8: CommandLine.option({
+    key: "key8"
+    long: "option8"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE8"
+    help: "Large option 8"
+})
+
+opt9: CommandLine.option({
+    key: "key9"
+    long: "option9"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE9"
+    help: "Large option 9"
+})
+
+opt10: CommandLine.option({
+    key: "key10"
+    long: "option10"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE10"
+    help: "Large option 10"
+})
+
+opt11: CommandLine.option({
+    key: "key11"
+    long: "option11"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE11"
+    help: "Large option 11"
+})
+
+opt12: CommandLine.option({
+    key: "key12"
+    long: "option12"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE12"
+    help: "Large option 12"
+})
+
+opt13: CommandLine.option({
+    key: "key13"
+    long: "option13"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE13"
+    help: "Large option 13"
+})
+
+opt14: CommandLine.option({
+    key: "key14"
+    long: "option14"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE14"
+    help: "Large option 14"
+})
+
+opt15: CommandLine.option({
+    key: "key15"
+    long: "option15"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE15"
+    help: "Large option 15"
+})
+
+opt16: CommandLine.option({
+    key: "key16"
+    long: "option16"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE16"
+    help: "Large option 16"
+})
+
+opt17: CommandLine.option({
+    key: "key17"
+    long: "option17"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE17"
+    help: "Large option 17"
+})
+
+opt18: CommandLine.option({
+    key: "key18"
+    long: "option18"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE18"
+    help: "Large option 18"
+})
+
+opt19: CommandLine.option({
+    key: "key19"
+    long: "option19"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE19"
+    help: "Large option 19"
+})
+
+opt20: CommandLine.option({
+    key: "key20"
+    long: "option20"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE20"
+    help: "Large option 20"
+})
+
+opt21: CommandLine.option({
+    key: "key21"
+    long: "option21"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE21"
+    help: "Large option 21"
+})
+
+opt22: CommandLine.option({
+    key: "key22"
+    long: "option22"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE22"
+    help: "Large option 22"
+})
+
+opt23: CommandLine.option({
+    key: "key23"
+    long: "option23"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE23"
+    help: "Large option 23"
+})
+
+opt24: CommandLine.option({
+    key: "key24"
+    long: "option24"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE24"
+    help: "Large option 24"
+})
+
+opt25: CommandLine.option({
+    key: "key25"
+    long: "option25"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE25"
+    help: "Large option 25"
+})
+
+opt26: CommandLine.option({
+    key: "key26"
+    long: "option26"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE26"
+    help: "Large option 26"
+})
+
+opt27: CommandLine.option({
+    key: "key27"
+    long: "option27"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE27"
+    help: "Large option 27"
+})
+
+opt28: CommandLine.option({
+    key: "key28"
+    long: "option28"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE28"
+    help: "Large option 28"
+})
+
+opt29: CommandLine.option({
+    key: "key29"
+    long: "option29"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE29"
+    help: "Large option 29"
+})
+
+opt30: CommandLine.option({
+    key: "key30"
+    long: "option30"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE30"
+    help: "Large option 30"
+})
+
+opt31: CommandLine.option({
+    key: "key31"
+    long: "option31"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE31"
+    help: "Large option 31"
+})
+
+opt32: CommandLine.option({
+    key: "key32"
+    long: "option32"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE32"
+    help: "Large option 32"
+})
+
+opt33: CommandLine.option({
+    key: "key33"
+    long: "option33"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE33"
+    help: "Large option 33"
+})
+
+opt34: CommandLine.option({
+    key: "key34"
+    long: "option34"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE34"
+    help: "Large option 34"
+})
+
+opt35: CommandLine.option({
+    key: "key35"
+    long: "option35"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE35"
+    help: "Large option 35"
+})
+
+opt36: CommandLine.option({
+    key: "key36"
+    long: "option36"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE36"
+    help: "Large option 36"
+})
+
+opt37: CommandLine.option({
+    key: "key37"
+    long: "option37"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE37"
+    help: "Large option 37"
+})
+
+opt38: CommandLine.option({
+    key: "key38"
+    long: "option38"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE38"
+    help: "Large option 38"
+})
+
+opt39: CommandLine.option({
+    key: "key39"
+    long: "option39"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE39"
+    help: "Large option 39"
+})
+
+opt40: CommandLine.option({
+    key: "key40"
+    long: "option40"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE40"
+    help: "Large option 40"
+})
+
+opt41: CommandLine.option({
+    key: "key41"
+    long: "option41"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE41"
+    help: "Large option 41"
+})
+
+opt42: CommandLine.option({
+    key: "key42"
+    long: "option42"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE42"
+    help: "Large option 42"
+})
+
+opt43: CommandLine.option({
+    key: "key43"
+    long: "option43"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE43"
+    help: "Large option 43"
+})
+
+opt44: CommandLine.option({
+    key: "key44"
+    long: "option44"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE44"
+    help: "Large option 44"
+})
+
+opt45: CommandLine.option({
+    key: "key45"
+    long: "option45"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE45"
+    help: "Large option 45"
+})
+
+opt46: CommandLine.option({
+    key: "key46"
+    long: "option46"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE46"
+    help: "Large option 46"
+})
+
+opt47: CommandLine.option({
+    key: "key47"
+    long: "option47"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE47"
+    help: "Large option 47"
+})
+
+opt48: CommandLine.option({
+    key: "key48"
+    long: "option48"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE48"
+    help: "Large option 48"
+})
+
+opt49: CommandLine.option({
+    key: "key49"
+    long: "option49"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE49"
+    help: "Large option 49"
+})
+
+opt50: CommandLine.option({
+    key: "key50"
+    long: "option50"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE50"
+    help: "Large option 50"
+})
+
+opt51: CommandLine.option({
+    key: "key51"
+    long: "option51"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE51"
+    help: "Large option 51"
+})
+
+opt52: CommandLine.option({
+    key: "key52"
+    long: "option52"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE52"
+    help: "Large option 52"
+})
+
+opt53: CommandLine.option({
+    key: "key53"
+    long: "option53"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE53"
+    help: "Large option 53"
+})
+
+opt54: CommandLine.option({
+    key: "key54"
+    long: "option54"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE54"
+    help: "Large option 54"
+})
+
+opt55: CommandLine.option({
+    key: "key55"
+    long: "option55"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE55"
+    help: "Large option 55"
+})
+
+opt56: CommandLine.option({
+    key: "key56"
+    long: "option56"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE56"
+    help: "Large option 56"
+})
+
+opt57: CommandLine.option({
+    key: "key57"
+    long: "option57"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE57"
+    help: "Large option 57"
+})
+
+opt58: CommandLine.option({
+    key: "key58"
+    long: "option58"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE58"
+    help: "Large option 58"
+})
+
+opt59: CommandLine.option({
+    key: "key59"
+    long: "option59"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE59"
+    help: "Large option 59"
+})
+
+opt60: CommandLine.option({
+    key: "key60"
+    long: "option60"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE60"
+    help: "Large option 60"
+})
+
+opt61: CommandLine.option({
+    key: "key61"
+    long: "option61"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE61"
+    help: "Large option 61"
+})
+
+opt62: CommandLine.option({
+    key: "key62"
+    long: "option62"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE62"
+    help: "Large option 62"
+})
+
+opt63: CommandLine.option({
+    key: "key63"
+    long: "option63"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE63"
+    help: "Large option 63"
+})
+
+opt64: CommandLine.option({
+    key: "key64"
+    long: "option64"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE64"
+    help: "Large option 64"
+})
+
+opt65: CommandLine.option({
+    key: "key65"
+    long: "option65"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE65"
+    help: "Large option 65"
+})
+
+opt66: CommandLine.option({
+    key: "key66"
+    long: "option66"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE66"
+    help: "Large option 66"
+})
+
+opt67: CommandLine.option({
+    key: "key67"
+    long: "option67"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE67"
+    help: "Large option 67"
+})
+
+opt68: CommandLine.option({
+    key: "key68"
+    long: "option68"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE68"
+    help: "Large option 68"
+})
+
+opt69: CommandLine.option({
+    key: "key69"
+    long: "option69"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE69"
+    help: "Large option 69"
+})
+
+opt70: CommandLine.option({
+    key: "key70"
+    long: "option70"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE70"
+    help: "Large option 70"
+})
+
+opt71: CommandLine.option({
+    key: "key71"
+    long: "option71"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE71"
+    help: "Large option 71"
+})
+
+opt72: CommandLine.option({
+    key: "key72"
+    long: "option72"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE72"
+    help: "Large option 72"
+})
+
+opt73: CommandLine.option({
+    key: "key73"
+    long: "option73"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE73"
+    help: "Large option 73"
+})
+
+opt74: CommandLine.option({
+    key: "key74"
+    long: "option74"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE74"
+    help: "Large option 74"
+})
+
+opt75: CommandLine.option({
+    key: "key75"
+    long: "option75"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE75"
+    help: "Large option 75"
+})
+
+opt76: CommandLine.option({
+    key: "key76"
+    long: "option76"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE76"
+    help: "Large option 76"
+})
+
+opt77: CommandLine.option({
+    key: "key77"
+    long: "option77"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE77"
+    help: "Large option 77"
+})
+
+opt78: CommandLine.option({
+    key: "key78"
+    long: "option78"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE78"
+    help: "Large option 78"
+})
+
+opt79: CommandLine.option({
+    key: "key79"
+    long: "option79"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE79"
+    help: "Large option 79"
+})
+
+opt80: CommandLine.option({
+    key: "key80"
+    long: "option80"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE80"
+    help: "Large option 80"
+})
+
+opt81: CommandLine.option({
+    key: "key81"
+    long: "option81"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE81"
+    help: "Large option 81"
+})
+
+opt82: CommandLine.option({
+    key: "key82"
+    long: "option82"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE82"
+    help: "Large option 82"
+})
+
+opt83: CommandLine.option({
+    key: "key83"
+    long: "option83"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE83"
+    help: "Large option 83"
+})
+
+opt84: CommandLine.option({
+    key: "key84"
+    long: "option84"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE84"
+    help: "Large option 84"
+})
+
+opt85: CommandLine.option({
+    key: "key85"
+    long: "option85"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE85"
+    help: "Large option 85"
+})
+
+opt86: CommandLine.option({
+    key: "key86"
+    long: "option86"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE86"
+    help: "Large option 86"
+})
+
+opt87: CommandLine.option({
+    key: "key87"
+    long: "option87"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE87"
+    help: "Large option 87"
+})
+
+opt88: CommandLine.option({
+    key: "key88"
+    long: "option88"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE88"
+    help: "Large option 88"
+})
+
+opt89: CommandLine.option({
+    key: "key89"
+    long: "option89"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE89"
+    help: "Large option 89"
+})
+
+opt90: CommandLine.option({
+    key: "key90"
+    long: "option90"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE90"
+    help: "Large option 90"
+})
+
+opt91: CommandLine.option({
+    key: "key91"
+    long: "option91"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE91"
+    help: "Large option 91"
+})
+
+opt92: CommandLine.option({
+    key: "key92"
+    long: "option92"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE92"
+    help: "Large option 92"
+})
+
+opt93: CommandLine.option({
+    key: "key93"
+    long: "option93"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE93"
+    help: "Large option 93"
+})
+
+opt94: CommandLine.option({
+    key: "key94"
+    long: "option94"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE94"
+    help: "Large option 94"
+})
+
+opt95: CommandLine.option({
+    key: "key95"
+    long: "option95"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE95"
+    help: "Large option 95"
+})
+
+opt96: CommandLine.option({
+    key: "key96"
+    long: "option96"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE96"
+    help: "Large option 96"
+})
+
+opt97: CommandLine.option({
+    key: "key97"
+    long: "option97"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE97"
+    help: "Large option 97"
+})
+
+opt98: CommandLine.option({
+    key: "key98"
+    long: "option98"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE98"
+    help: "Large option 98"
+})
+
+opt99: CommandLine.option({
+    key: "key99"
+    long: "option99"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE99"
+    help: "Large option 99"
+})
+
+opt100: CommandLine.option({
+    key: "key100"
+    long: "option100"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE100"
+    help: "Large option 100"
+})
+
+opt101: CommandLine.option({
+    key: "key101"
+    long: "option101"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE101"
+    help: "Large option 101"
+})
+
+opt102: CommandLine.option({
+    key: "key102"
+    long: "option102"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE102"
+    help: "Large option 102"
+})
+
+opt103: CommandLine.option({
+    key: "key103"
+    long: "option103"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE103"
+    help: "Large option 103"
+})
+
+opt104: CommandLine.option({
+    key: "key104"
+    long: "option104"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE104"
+    help: "Large option 104"
+})
+
+opt105: CommandLine.option({
+    key: "key105"
+    long: "option105"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE105"
+    help: "Large option 105"
+})
+
+opt106: CommandLine.option({
+    key: "key106"
+    long: "option106"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE106"
+    help: "Large option 106"
+})
+
+opt107: CommandLine.option({
+    key: "key107"
+    long: "option107"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE107"
+    help: "Large option 107"
+})
+
+opt108: CommandLine.option({
+    key: "key108"
+    long: "option108"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE108"
+    help: "Large option 108"
+})
+
+opt109: CommandLine.option({
+    key: "key109"
+    long: "option109"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE109"
+    help: "Large option 109"
+})
+
+opt110: CommandLine.option({
+    key: "key110"
+    long: "option110"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE110"
+    help: "Large option 110"
+})
+
+opt111: CommandLine.option({
+    key: "key111"
+    long: "option111"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE111"
+    help: "Large option 111"
+})
+
+opt112: CommandLine.option({
+    key: "key112"
+    long: "option112"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE112"
+    help: "Large option 112"
+})
+
+opt113: CommandLine.option({
+    key: "key113"
+    long: "option113"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE113"
+    help: "Large option 113"
+})
+
+opt114: CommandLine.option({
+    key: "key114"
+    long: "option114"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE114"
+    help: "Large option 114"
+})
+
+opt115: CommandLine.option({
+    key: "key115"
+    long: "option115"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE115"
+    help: "Large option 115"
+})
+
+opt116: CommandLine.option({
+    key: "key116"
+    long: "option116"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE116"
+    help: "Large option 116"
+})
+
+opt117: CommandLine.option({
+    key: "key117"
+    long: "option117"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE117"
+    help: "Large option 117"
+})
+
+opt118: CommandLine.option({
+    key: "key118"
+    long: "option118"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE118"
+    help: "Large option 118"
+})
+
+opt119: CommandLine.option({
+    key: "key119"
+    long: "option119"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE119"
+    help: "Large option 119"
+})
+
+opt120: CommandLine.option({
+    key: "key120"
+    long: "option120"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE120"
+    help: "Large option 120"
+})
+
+opt121: CommandLine.option({
+    key: "key121"
+    long: "option121"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE121"
+    help: "Large option 121"
+})
+
+opt122: CommandLine.option({
+    key: "key122"
+    long: "option122"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE122"
+    help: "Large option 122"
+})
+
+opt123: CommandLine.option({
+    key: "key123"
+    long: "option123"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE123"
+    help: "Large option 123"
+})
+
+opt124: CommandLine.option({
+    key: "key124"
+    long: "option124"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE124"
+    help: "Large option 124"
+})
+
+opt125: CommandLine.option({
+    key: "key125"
+    long: "option125"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE125"
+    help: "Large option 125"
+})
+
+opt126: CommandLine.option({
+    key: "key126"
+    long: "option126"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE126"
+    help: "Large option 126"
+})
+
+opt127: CommandLine.option({
+    key: "key127"
+    long: "option127"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "VALUE127"
+    help: "Large option 127"
+})
+
+spec: CommandLine.command({
+    name: "large"
+    help: "Large command"
+    options: Array(
+        opt0, opt1, opt2, opt3, opt4, opt5, opt6, opt7, opt8, opt9, opt10, opt11, opt12, opt13, opt14, opt15, opt16, opt17, opt18, opt19, opt20, opt21, opt22, opt23, opt24, opt25, opt26, opt27, opt28, opt29, opt30, opt31, opt32, opt33, opt34, opt35, opt36, opt37, opt38, opt39, opt40, opt41, opt42, opt43, opt44, opt45, opt46, opt47, opt48, opt49, opt50, opt51, opt52, opt53, opt54, opt55, opt56, opt57, opt58, opt59, opt60, opt61, opt62, opt63, opt64, opt65, opt66, opt67, opt68, opt69, opt70, opt71, opt72, opt73, opt74, opt75, opt76, opt77, opt78, opt79, opt80, opt81, opt82, opt83, opt84, opt85, opt86, opt87, opt88, opt89, opt90, opt91, opt92, opt93, opt94, opt95, opt96, opt97, opt98, opt99, opt100, opt101, opt102, opt103, opt104, opt105, opt106, opt107, opt108, opt109, opt110, opt111, opt112, opt113, opt114, opt115, opt116, opt117, opt118, opt119, opt120, opt121, opt122, opt123, opt124, opt125, opt126, opt127
+    )
+    positionals: Array()
+    subcommands: Array()
+})
+
+arguments: Array(
+    "--option0", "value0", "--option1", "value1", "--option2", "value2", "--option3", "value3", "--option4", "value4", "--option5", "value5", "--option6", "value6", "--option7", "value7", "--option8", "value8", "--option9", "value9", "--option10", "value10", "--option11", "value11", "--option12", "value12", "--option13", "value13", "--option14", "value14", "--option15", "value15", "--option16", "value16", "--option17", "value17", "--option18", "value18", "--option19", "value19", "--option20", "value20", "--option21", "value21", "--option22", "value22", "--option23", "value23", "--option24", "value24", "--option25", "value25", "--option26", "value26", "--option27", "value27", "--option28", "value28", "--option29", "value29", "--option30", "value30", "--option31", "value31", "--option32", "value32", "--option33", "value33", "--option34", "value34", "--option35", "value35", "--option36", "value36", "--option37", "value37", "--option38", "value38", "--option39", "value39", "--option40", "value40", "--option41", "value41", "--option42", "value42", "--option43", "value43", "--option44", "value44", "--option45", "value45", "--option46", "value46", "--option47", "value47", "--option48", "value48", "--option49", "value49", "--option50", "value50", "--option51", "value51", "--option52", "value52", "--option53", "value53", "--option54", "value54", "--option55", "value55", "--option56", "value56", "--option57", "value57", "--option58", "value58", "--option59", "value59", "--option60", "value60", "--option61", "value61", "--option62", "value62", "--option63", "value63", "--option64", "value64", "--option65", "value65", "--option66", "value66", "--option67", "value67", "--option68", "value68", "--option69", "value69", "--option70", "value70", "--option71", "value71", "--option72", "value72", "--option73", "value73", "--option74", "value74", "--option75", "value75", "--option76", "value76", "--option77", "value77", "--option78", "value78", "--option79", "value79", "--option80", "value80", "--option81", "value81", "--option82", "value82", "--option83", "value83", "--option84", "value84", "--option85", "value85", "--option86", "value86", "--option87", "value87", "--option88", "value88", "--option89", "value89", "--option90", "value90", "--option91", "value91", "--option92", "value92", "--option93", "value93", "--option94", "value94", "--option95", "value95", "--option96", "value96", "--option97", "value97", "--option98", "value98", "--option99", "value99", "--option100", "value100", "--option101", "value101", "--option102", "value102", "--option103", "value103", "--option104", "value104", "--option105", "value105", "--option106", "value106", "--option107", "value107", "--option108", "value108", "--option109", "value109", "--option110", "value110", "--option111", "value111", "--option112", "value112", "--option113", "value113", "--option114", "value114", "--option115", "value115", "--option116", "value116", "--option117", "value117", "--option118", "value118", "--option119", "value119", "--option120", "value120", "--option121", "value121", "--option122", "value122", "--option123", "value123", "--option124", "value124", "--option125", "value125", "--option126", "value126", "--option127", "value127"
+)
+
+parsed: CommandLine.parse(spec, arguments)
+
+require(parsed.arguments.size() == 256)
+require(parsed.command.options.size() == 128)
+
+require(parsed.command.options[0].key == "key0")
+require(parsed.command.options[0].spelling == "--option0")
+require(parsed.command.options[0].value == "value0")
+require(parsed.command.options[0].tokenIndex == 0)
+require(parsed.command.options[0].valueTokenIndex == 1)
+
+require(parsed.command.options[127].key == "key127")
+require(parsed.command.options[127].spelling == "--option127")
+require(parsed.command.options[127].value == "value127")
+require(parsed.command.options[127].tokenIndex == 254)
+require(parsed.command.options[127].valueTokenIndex == 255)
+
+rendered: CommandLine.renderHelp(spec, Array())
+expected: "Usage: large [OPTIONS]\n\nLarge command\n\nOptions:\n  --option0 VALUE0\n    Large option 0\n  --option1 VALUE1\n    Large option 1\n  --option2 VALUE2\n    Large option 2\n  --option3 VALUE3\n    Large option 3\n  --option4 VALUE4\n    Large option 4\n  --option5 VALUE5\n    Large option 5\n  --option6 VALUE6\n    Large option 6\n  --option7 VALUE7\n    Large option 7\n  --option8 VALUE8\n    Large option 8\n  --option9 VALUE9\n    Large option 9\n  --option10 VALUE10\n    Large option 10\n  --option11 VALUE11\n    Large option 11\n  --option12 VALUE12\n    Large option 12\n  --option13 VALUE13\n    Large option 13\n  --option14 VALUE14\n    Large option 14\n  --option15 VALUE15\n    Large option 15\n  --option16 VALUE16\n    Large option 16\n  --option17 VALUE17\n    Large option 17\n  --option18 VALUE18\n    Large option 18\n  --option19 VALUE19\n    Large option 19\n  --option20 VALUE20\n    Large option 20\n  --option21 VALUE21\n    Large option 21\n  --option22 VALUE22\n    Large option 22\n  --option23 VALUE23\n    Large option 23\n  --option24 VALUE24\n    Large option 24\n  --option25 VALUE25\n    Large option 25\n  --option26 VALUE26\n    Large option 26\n  --option27 VALUE27\n    Large option 27\n  --option28 VALUE28\n    Large option 28\n  --option29 VALUE29\n    Large option 29\n  --option30 VALUE30\n    Large option 30\n  --option31 VALUE31\n    Large option 31\n  --option32 VALUE32\n    Large option 32\n  --option33 VALUE33\n    Large option 33\n  --option34 VALUE34\n    Large option 34\n  --option35 VALUE35\n    Large option 35\n  --option36 VALUE36\n    Large option 36\n  --option37 VALUE37\n    Large option 37\n  --option38 VALUE38\n    Large option 38\n  --option39 VALUE39\n    Large option 39\n  --option40 VALUE40\n    Large option 40\n  --option41 VALUE41\n    Large option 41\n  --option42 VALUE42\n    Large option 42\n  --option43 VALUE43\n    Large option 43\n  --option44 VALUE44\n    Large option 44\n  --option45 VALUE45\n    Large option 45\n  --option46 VALUE46\n    Large option 46\n  --option47 VALUE47\n    Large option 47\n  --option48 VALUE48\n    Large option 48\n  --option49 VALUE49\n    Large option 49\n  --option50 VALUE50\n    Large option 50\n  --option51 VALUE51\n    Large option 51\n  --option52 VALUE52\n    Large option 52\n  --option53 VALUE53\n    Large option 53\n  --option54 VALUE54\n    Large option 54\n  --option55 VALUE55\n    Large option 55\n  --option56 VALUE56\n    Large option 56\n  --option57 VALUE57\n    Large option 57\n  --option58 VALUE58\n    Large option 58\n  --option59 VALUE59\n    Large option 59\n  --option60 VALUE60\n    Large option 60\n  --option61 VALUE61\n    Large option 61\n  --option62 VALUE62\n    Large option 62\n  --option63 VALUE63\n    Large option 63\n  --option64 VALUE64\n    Large option 64\n  --option65 VALUE65\n    Large option 65\n  --option66 VALUE66\n    Large option 66\n  --option67 VALUE67\n    Large option 67\n  --option68 VALUE68\n    Large option 68\n  --option69 VALUE69\n    Large option 69\n  --option70 VALUE70\n    Large option 70\n  --option71 VALUE71\n    Large option 71\n  --option72 VALUE72\n    Large option 72\n  --option73 VALUE73\n    Large option 73\n  --option74 VALUE74\n    Large option 74\n  --option75 VALUE75\n    Large option 75\n  --option76 VALUE76\n    Large option 76\n  --option77 VALUE77\n    Large option 77\n  --option78 VALUE78\n    Large option 78\n  --option79 VALUE79\n    Large option 79\n  --option80 VALUE80\n    Large option 80\n  --option81 VALUE81\n    Large option 81\n  --option82 VALUE82\n    Large option 82\n  --option83 VALUE83\n    Large option 83\n  --option84 VALUE84\n    Large option 84\n  --option85 VALUE85\n    Large option 85\n  --option86 VALUE86\n    Large option 86\n  --option87 VALUE87\n    Large option 87\n  --option88 VALUE88\n    Large option 88\n  --option89 VALUE89\n    Large option 89\n  --option90 VALUE90\n    Large option 90\n  --option91 VALUE91\n    Large option 91\n  --option92 VALUE92\n    Large option 92\n  --option93 VALUE93\n    Large option 93\n  --option94 VALUE94\n    Large option 94\n  --option95 VALUE95\n    Large option 95\n  --option96 VALUE96\n    Large option 96\n  --option97 VALUE97\n    Large option 97\n  --option98 VALUE98\n    Large option 98\n  --option99 VALUE99\n    Large option 99\n  --option100 VALUE100\n    Large option 100\n  --option101 VALUE101\n    Large option 101\n  --option102 VALUE102\n    Large option 102\n  --option103 VALUE103\n    Large option 103\n  --option104 VALUE104\n    Large option 104\n  --option105 VALUE105\n    Large option 105\n  --option106 VALUE106\n    Large option 106\n  --option107 VALUE107\n    Large option 107\n  --option108 VALUE108\n    Large option 108\n  --option109 VALUE109\n    Large option 109\n  --option110 VALUE110\n    Large option 110\n  --option111 VALUE111\n    Large option 111\n  --option112 VALUE112\n    Large option 112\n  --option113 VALUE113\n    Large option 113\n  --option114 VALUE114\n    Large option 114\n  --option115 VALUE115\n    Large option 115\n  --option116 VALUE116\n    Large option 116\n  --option117 VALUE117\n    Large option 117\n  --option118 VALUE118\n    Large option 118\n  --option119 VALUE119\n    Large option 119\n  --option120 VALUE120\n    Large option 120\n  --option121 VALUE121\n    Large option 121\n  --option122 VALUE122\n    Large option 122\n  --option123 VALUE123\n    Large option 123\n  --option124 VALUE124\n    Large option 124\n  --option125 VALUE125\n    Large option 125\n  --option126 VALUE126\n    Large option 126\n  --option127 VALUE127\n    Large option 127"
+
+require(rendered == expected)
+require(rendered == CommandLine.renderHelp(spec, Array()))
+
+// Re-parsing the same frozen spec must not retain occurrence counts or argv state.
+second: CommandLine.parse(spec, Array("--option127", "again"))
+require(second.command.options.size() == 1)
+require(second.command.options[0].key == "key127")
+require(second.command.options[0].value == "again")
+require(second.command.options[0].tokenIndex == 0)
+require(second.command.options[0].valueTokenIndex == 1)
+
+true

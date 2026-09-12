@@ -139,6 +139,16 @@ final class ProtosCommandLineModuleTest {
         assertFixture("help-rendering-path-d118.protos");
     }
 
+    @Test
+    void largeSpecificationAndArgumentVectorConformInProtos() throws Exception {
+        assertFixture("closure-large-spec.protos");
+    }
+
+    @Test
+    void independentConcurrentInvocationsRemainIsolatedInProtos() throws Exception {
+        assertRootTaskFixture("closure-isolation-concurrency.protos");
+    }
+
     private static void assertFixture(String fixture) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
@@ -153,5 +163,23 @@ final class ProtosCommandLineModuleTest {
                         .call(prelude.newModuleActivation());
 
         assertSame(ProtosBooleanValue.TRUE, result, fixture);
+    }
+
+    private static void assertRootTaskFixture(String fixture) throws Exception {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        ProtosExecutionOutcome outcome =
+                ProtosRootTaskExecution.execute(
+                        new ProtosSourceCompiler()
+                                .compile(
+                                        Files.readString(
+                                                CASE_ROOT.resolve(fixture),
+                                                StandardCharsets.UTF_8)),
+                        prelude.newModuleActivation());
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), fixture);
+        assertSame(ProtosBooleanValue.TRUE, outcome.value(), fixture);
     }
 }

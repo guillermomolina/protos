@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C CLOSED — D115 Candidate C′; LIB011-D CLOSED — D118 F′ + D119 A′; LIB011-E CLOSED; LIB011-F READY**
+Status: **CLOSED — initial LIB011 scope complete; LIB011-0 C′ RATIFIED; A–F CLOSED**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1334,11 +1334,66 @@ architecture, no Core/native boundary and no Protos language specification.
 
 ### LIB011-F — adversarial/conformance closure
 
-**READY.**
+**CLOSED — initial LIB011 conformance and integrated validation complete.**
 
-Exercise malformed specs, duplicate occurrences, missing values, negative-looking
-values, `--`, clusters, nested commands, large specs and isolation/concurrency
-properties; reconcile documentation and close the initial LIB011 scope.
+F adds no parser/help behavior and changes no public Standard Library surface.
+It closes the initial scope by making the already-ratified A–E contract pass one
+integrated adversarial/conformance gate.
+
+The retained executable Protos corpus covers:
+
+| Closure concern | Authoritative evidence |
+| --- | --- |
+| malformed/cyclic/duplicate specification data | `specification-invalid.protos`, `adversarial.protos`, `valuename-d119.protos` |
+| duplicate option occurrences and missing values | `parse-options.protos`, `parse-failures.protos` |
+| negative-/option-looking literal values | `parse-delimiter.protos`, `parse-subcommand-options.protos` |
+| structural current-scope `--` | `parse-delimiter.protos`, `parse-subcommand-delimiter.protos` |
+| zero-arity short clusters and cluster rejection | `parse-options.protos`, `parse-failures.protos` |
+| D111 positional allocation | `parse-positionals-d111.protos` |
+| D115 nested-command traversal and scope ownership | `parse-subcommands-d115.protos`, `parse-subcommand-options.protos`, `parse-subcommand-deep.protos` |
+| D118 deterministic pure help | `help-rendering-d118.protos`, `help-rendering-path-d118.protos` |
+| large specification / large argv / deterministic help | `closure-large-spec.protos` |
+| invocation-local state and concurrent independent parses/renders | `closure-isolation-concurrency.protos` |
+| real consumer policy separation | `tool002-lib011-options-adoption.protos` |
+
+`closure-large-spec.protos` uses one frozen command with 128 distinct value-taking
+options and a 256-token argument vector. It checks ordered lossless provenance,
+deterministic complete help rendering and a later re-parse of the same spec with
+no retained occurrence state.
+
+`closure-isolation-concurrency.protos` executes simultaneous Task-backed parses of
+the same frozen spec, checks distinct frozen argv/result/occurrence objects, then
+uses separate specs that intentionally reuse one long spelling with different
+logical keys. It also renders help concurrently and re-parses afterward. This is
+direct evidence that LIB011 requires no global parser registry, shared occurrence
+counter or mutable cross-invocation index.
+
+The closure launcher runs the focal CommandLine harness first and then the
+complete Maven suite, explicitly including Tool-owned suites rather than relying
+on the temporary PERF007 non-Tool validation quarantine. Successful publication
+therefore reconciles LIB011-E's real Test Tool adoption with the Standard Library
+conformance corpus on one immutable candidate.
+
+No public structured error taxonomy, typed decoder, forwarding/remainder mode,
+completion API, automatic help/version action, terminal integration, localization,
+environment/config acquisition or command execution framework is added by F.
+Those remain additive future work requiring their own evidence and, where
+substantive, the normal decision gate.
+
+LIB011's initial public surface remains exactly:
+
+```text
+std:cli/CommandLine
+
+option(descriptor)
+positional(descriptor)
+command(descriptor)
+parse(spec, arguments)
+renderHelp(rootSpec, commandPath)
+```
+
+No specification, Core, native-boundary or implementation-version change is
+required for F itself.
 
 ## Publication boundary of this ratification
 
