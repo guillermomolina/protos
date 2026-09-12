@@ -29,6 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -410,24 +411,204 @@ final class ProtosMatchBytecodeExecutionTest {
         }
     }
 
+
     @Test
-    void mapPatternRemainsExplicitlyDeferredToD7C() throws Exception {
+    void mapMatchCorpusHasBytecodeParity() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                UnsupportedOperationException deferred =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        compileBytecode(
-                                                language,
-                                                source("map-open-exact.protos"),
-                                                "map-open-exact.protos"));
-                assertTrue(
-                        deferred.getMessage().contains("I038-D7B"),
-                        deferred.getMessage());
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+
+                for (String name : List.of(
+                        "map-open-exact.protos",
+                        "map-key-order-stable-snapshot.protos",
+                        "map-all-keys-before-children.protos",
+                        "map-repeated-requirements.protos",
+                        "map-exact-residue-before-children.protos",
+                        "map-ineligible.protos",
+                        "map-remainder-bindings.protos",
+                        "map-nested-dynamic-terminal.protos")) {
+                    assertSame(
+                            ProtosBooleanValue.TRUE,
+                            executeFixture(language, prelude, name),
+                            name);
+                }
+
+                ProtosArrayValue result =
+                        (ProtosArrayValue)
+                                executeFixture(
+                                        language,
+                                        prelude,
+                                        "map-remainder-identity.protos");
+                List<Object> values = result.indexedSnapshot();
+                assertEquals(2, values.size());
+                ProtosMapValue first = (ProtosMapValue) values.get(0);
+                ProtosMapValue second = (ProtosMapValue) values.get(1);
+                assertTrue(first.isFrozen());
+                assertTrue(second.isFrozen());
+                assertSame(prelude.mapPrototype(), first.parent().orElseThrow());
+                assertSame(prelude.mapPrototype(), second.parent().orElseThrow());
+                assertNotSame(first, second);
+
+                List<ProtosMapValue.Entry> firstEntries = first.keyedSnapshot();
+                List<ProtosMapValue.Entry> secondEntries = second.keyedSnapshot();
+                assertEquals(1, firstEntries.size());
+                assertEquals(1, secondEntries.size());
+                assertSame(firstEntries.get(0).key(), secondEntries.get(0).key());
+                assertSame(firstEntries.get(0).value(), secondEntries.get(0).value());
+                assertEquals(
+                        firstEntries.get(0).recordedHash(),
+                        secondEntries.get(0).recordedHash());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void mapSnapshotAndCPrimeSurviveSuspendingQueryHashEqualityAndChild()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosActivation module = prelude.newModuleActivation();
+                ProtosActorExecutionDomain domain = module.executionDomain();
+
+                Dependency queryDependency = new Dependency();
+                Dependency hashDependency = new Dependency();
+                Dependency equalityDependency = new Dependency();
+                Dependency childDependency = new Dependency();
+                AtomicInteger queryCalls = new AtomicInteger();
+                AtomicInteger hashCalls = new AtomicInteger();
+                AtomicInteger equalityCalls = new AtomicInteger();
+                AtomicInteger childCalls = new AtomicInteger();
+
+                ProtosObjectValue storedKey =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue oldValue =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue secondKey =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue secondValue =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue replacementValue =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue lateKey =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue lateValue =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+                ProtosMapValue subject = prelude.newMap();
+                subject.append(storedKey, BigInteger.ONE, oldValue);
+                subject.append(secondKey, BigInteger.valueOf(2), secondValue);
+                module.context().createLocalSlot("subject", subject);
+
+                ProtosObjectValue queryKey =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                queryKey.createLocalSlot(
+                        "hash",
+                        controlledSuspendingLeaf(
+                                hashDependency,
+                                new ProtosIntegerValue(BigInteger.ONE),
+                                0,
+                                hashCalls));
+                queryKey.createLocalSlot(
+                        "==",
+                        controlledSuspendingLeaf(
+                                equalityDependency,
+                                ProtosBooleanValue.TRUE,
+                                1,
+                                equalityCalls));
+                module.context().createLocalSlot(
+                        "queryFactory",
+                        controlledSuspendingLeaf(
+                                queryDependency,
+                                queryKey,
+                                0,
+                                queryCalls));
+
+                ProtosObjectValue childPattern =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                childPattern.createLocalSlot(
+                        "match",
+                        controlledSuspendingMatcher(
+                                childDependency,
+                                oldValue,
+                                childCalls));
+                module.context().createLocalSlot("childPattern", childPattern);
+
+                String characters =
+                        "subject match {\n"
+                                + "    case %{ queryFactory(): childPattern, ...@rest } =>\n"
+                                + "        rest.size() == 1\n"
+                                + "    case _ => false\n"
+                                + "}\n";
+                RootCallTarget target =
+                        compileBytecode(
+                                language,
+                                characters,
+                                "i038-d7c-map-cprime-snapshot.protos");
+                ProtosTask task =
+                        domain.createTask(
+                                null,
+                                current ->
+                                        ProtosBytecodeTaskExecution.execute(
+                                                current,
+                                                target,
+                                                module));
+
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state());
+                assertEquals(1, queryCalls.get());
+                assertEquals(0, hashCalls.get());
+                assertEquals(0, equalityCalls.get());
+                assertEquals(0, childCalls.get());
+                assertEquals(false, subject.comparisonActive());
+
+                ProtosMapValue.Entry firstAssociation = subject.keyedSnapshot().get(0);
+                subject.replaceValue(firstAssociation, replacementValue);
+                subject.append(lateKey, BigInteger.valueOf(3), lateValue);
+
+                assertTrue(queryDependency.complete());
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state());
+                assertEquals(1, queryCalls.get(), "query expression must not replay");
+                assertEquals(1, hashCalls.get());
+                assertEquals(0, equalityCalls.get());
+                assertEquals(0, childCalls.get());
+                assertTrue(subject.comparisonActive());
+
+                assertTrue(hashDependency.complete());
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state());
+                assertEquals(1, queryCalls.get());
+                assertEquals(1, hashCalls.get(), "hash must not replay");
+                assertEquals(1, equalityCalls.get());
+                assertEquals(0, childCalls.get());
+                assertTrue(subject.comparisonActive());
+
+                assertTrue(equalityDependency.complete());
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.SUSPENDED, task.state());
+                assertEquals(1, queryCalls.get());
+                assertEquals(1, hashCalls.get());
+                assertEquals(1, equalityCalls.get(), "equality must not replay");
+                assertEquals(1, childCalls.get());
+                assertEquals(false, subject.comparisonActive());
+
+                assertTrue(childDependency.complete());
+                assertTrue(domain.dispatchOne());
+                assertEquals(ProtosTask.State.COMPLETED, task.state());
+                assertSame(ProtosBooleanValue.TRUE, task.result().orElseThrow());
+                assertEquals(1, queryCalls.get());
+                assertEquals(1, hashCalls.get());
+                assertEquals(1, equalityCalls.get());
+                assertEquals(1, childCalls.get(), "mapped-value child must not replay");
             } finally {
                 context.leave();
             }
@@ -491,6 +672,28 @@ final class ProtosMatchBytecodeExecutionTest {
                     return ProtosNativeSuspension.pending(
                             dependency,
                             () -> resumedResult);
+                });
+    }
+
+
+    private static ProtosClosureValue controlledSuspendingMatcher(
+            Dependency dependency,
+            Object expectedSubject,
+            AtomicInteger calls) {
+        return ProtosClosureValue.suspensionCapableNativeClosure(
+                (activation, supplied) -> {
+                    throw new AssertionError(
+                            "I038 matching suspension evidence escaped the C-prime native path");
+                },
+                (activation, supplied) -> {
+                    assertEquals(1, supplied.size());
+                    assertSame(expectedSubject, supplied.get(0));
+                    calls.incrementAndGet();
+                    ProtosTask task = activation.task().orElseThrow();
+                    dependency.register(task);
+                    return ProtosNativeSuspension.pending(
+                            dependency,
+                            () -> ProtosBooleanValue.TRUE);
                 });
     }
 

@@ -212,9 +212,14 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
-        if (pattern instanceof CanonicalMatchPattern.MapPattern) {
-            throw new UnsupportedOperationException(
-                    "I038-D7B intentionally defers Map structural match patterns to I038-D7C");
+        if (pattern instanceof CanonicalMatchPattern.MapPattern map) {
+            for (CanonicalMatchPattern.MapEntry entry : map.entries()) {
+                appendMatchParameters(entry.valuePattern(), parameters);
+            }
+            map.remainder()
+                    .flatMap(CanonicalMatchPattern.Remainder::pattern)
+                    .ifPresent(item -> appendMatchParameters(item, parameters));
+            return;
         }
         throw new AssertionError(
                 "unknown canonical match pattern: "
@@ -318,9 +323,15 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
-        if (pattern instanceof CanonicalMatchPattern.MapPattern) {
-            throw new UnsupportedOperationException(
-                    "I038-D7B intentionally defers Map structural match patterns to I038-D7C");
+        if (pattern instanceof CanonicalMatchPattern.MapPattern map) {
+            for (CanonicalMatchPattern.MapEntry entry : map.entries()) {
+                expressionValidator.accept(entry.key());
+                validateSupportedMatchPattern(entry.valuePattern(), expressionValidator);
+            }
+            map.remainder()
+                    .flatMap(CanonicalMatchPattern.Remainder::pattern)
+                    .ifPresent(item -> validateSupportedMatchPattern(item, expressionValidator));
+            return;
         }
         throw new AssertionError(
                 "unknown canonical match pattern: "
@@ -1534,15 +1545,329 @@ final class CanonicalToBytecodeLowerer {
             builder.endIfThenElse();
             return;
         }
-        if (pattern instanceof CanonicalMatchPattern.MapPattern) {
-            throw new AssertionError(
-                    "I038-D7B Map structural match pattern escaped validation");
+        if (pattern instanceof CanonicalMatchPattern.MapPattern map) {
+            BytecodeLocal attempt = builder.createLocal("matchMapAttempt", null);
+            BytecodeLocal queryKey = builder.createLocal("matchMapQueryKey", null);
+            BytecodeLocal keyLookup = builder.createLocal("matchMapKeyLookup", null);
+            BytecodeLocal mappedValue = builder.createLocal("matchMapSelectedValue", null);
+            BytecodeLocal childCaptures = builder.createLocal("matchMapChildCaptures", null);
+
+            builder.beginStoreLocal(attempt);
+            builder.beginPrepareMapMatchAttempt();
+            builder.emitLoadLocal(subject);
+            builder.emitLoadConstant(map.exact());
+            builder.emitLoadConstant(map.entries().size());
+            builder.emitLoadArgument(0);
+            builder.endPrepareMapMatchAttempt();
+            builder.endStoreLocal();
+
+            builder.beginIfThenElse();
+            builder.beginMapMatchAttemptSucceeded();
+            builder.emitLoadLocal(attempt);
+            builder.endMapMatchAttemptSucceeded();
+
+            builder.beginBlock();
+            for (int index = 0; index < map.entries().size(); index++) {
+                emitMapMatchKeyResolution(
+                        builder,
+                        map.entries().get(index),
+                        index,
+                        attempt,
+                        queryKey,
+                        keyLookup,
+                        preparedCall,
+                        childResult,
+                        resumeValue,
+                        defaultContext);
+            }
+
+            builder.beginStoreLocal(attempt);
+            builder.beginFinishMapMatchResolution();
+            builder.emitLoadLocal(attempt);
+            builder.endFinishMapMatchResolution();
+            builder.endStoreLocal();
+
+            builder.beginIfThenElse();
+            builder.beginMapMatchAttemptSucceeded();
+            builder.emitLoadLocal(attempt);
+            builder.endMapMatchAttemptSucceeded();
+
+            builder.beginBlock();
+            builder.beginStoreLocal(result);
+            builder.emitCreateSuppliedArgumentVector();
+            builder.endStoreLocal();
+
+            for (int index = 0; index < map.entries().size(); index++) {
+                emitMapMatchValueChild(
+                        builder,
+                        map.entries().get(index).valuePattern(),
+                        attempt,
+                        index,
+                        result,
+                        mappedValue,
+                        childCaptures,
+                        preparedCall,
+                        childResult,
+                        resumeValue,
+                        defaultContext);
+            }
+
+            if (map.remainder()
+                    .flatMap(CanonicalMatchPattern.Remainder::pattern)
+                    .isPresent()) {
+                emitMapMatchRemainderChild(
+                        builder,
+                        map.remainder().orElseThrow().pattern().orElseThrow(),
+                        attempt,
+                        result,
+                        mappedValue,
+                        childCaptures,
+                        preparedCall,
+                        childResult,
+                        resumeValue,
+                        defaultContext);
+            }
+            builder.endBlock();
+
+            builder.beginBlock();
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(attempt);
+            builder.endStoreLocal();
+            builder.endBlock();
+
+            builder.endIfThenElse();
+            builder.endBlock();
+
+            builder.beginBlock();
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(attempt);
+            builder.endStoreLocal();
+            builder.endBlock();
+
+            builder.endIfThenElse();
+            return;
         }
         throw new AssertionError(
                 "unknown canonical match pattern: "
                         + pattern.getClass().getSimpleName());
     }
 
+
+
+    private void emitMapMatchKeyResolution(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMatchPattern.MapEntry entry,
+            int requirementIndex,
+            BytecodeLocal mapAttempt,
+            BytecodeLocal queryKey,
+            BytecodeLocal keyLookup,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean defaultContext) {
+        builder.beginIfThenElse();
+        builder.beginMapMatchResolutionOpen();
+        builder.emitLoadLocal(mapAttempt);
+        builder.endMapMatchResolutionOpen();
+
+        builder.beginBlock();
+        emitMatchExpressionToLocal(
+                builder,
+                entry.key(),
+                queryKey,
+                preparedCall,
+                childResult,
+                resumeValue,
+                defaultContext);
+
+        builder.beginStoreLocal(keyLookup);
+        builder.beginPrepareMapMatchKeyLookup();
+        builder.emitLoadLocal(mapAttempt);
+        builder.emitLoadConstant(requirementIndex);
+        builder.emitLoadLocal(queryKey);
+        builder.emitLoadArgument(0);
+        builder.endPrepareMapMatchKeyLookup();
+        builder.endStoreLocal();
+
+        /* D086: hash callback is ordinary guest behavior inside comparison scope. */
+        builder.beginEnterMapMatchComparison();
+        builder.emitLoadLocal(keyLookup);
+        builder.endEnterMapMatchComparison();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveMapMatchComparison();
+                    builder.emitLoadLocal(keyLookup);
+                    builder.endLeaveMapMatchComparison();
+                });
+        builder.beginBlock();
+        builder.beginStoreLocal(preparedCall);
+        builder.beginPrepareMapMatchHashCall();
+        builder.emitLoadLocal(keyLookup);
+        builder.endPrepareMapMatchHashCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptMapMatchHashResult();
+        builder.emitLoadLocal(keyLookup);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptMapMatchHashResult();
+
+        /* Equal-hash candidates are compared in stable snapshot insertion order. */
+        builder.beginWhile();
+        builder.beginMapMatchKeyNeedsEquality();
+        builder.emitLoadLocal(keyLookup);
+        builder.endMapMatchKeyNeedsEquality();
+
+        builder.beginBlock();
+        builder.beginEnterMapMatchComparison();
+        builder.emitLoadLocal(keyLookup);
+        builder.endEnterMapMatchComparison();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveMapMatchComparison();
+                    builder.emitLoadLocal(keyLookup);
+                    builder.endLeaveMapMatchComparison();
+                });
+        builder.beginBlock();
+        builder.beginStoreLocal(preparedCall);
+        builder.beginPrepareMapMatchEqualityCall();
+        builder.emitLoadLocal(keyLookup);
+        builder.endPrepareMapMatchEqualityCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptMapMatchEqualityResult();
+        builder.emitLoadLocal(keyLookup);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptMapMatchEqualityResult();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginFinishMapMatchKeyLookup();
+        builder.emitLoadLocal(keyLookup);
+        builder.endFinishMapMatchKeyLookup();
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitLocalNoop(builder, mapAttempt);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    private void emitMapMatchValueChild(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMatchPattern childPattern,
+            BytecodeLocal mapAttempt,
+            int index,
+            BytecodeLocal aggregateCaptures,
+            BytecodeLocal childSubject,
+            BytecodeLocal childCaptures,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean defaultContext) {
+        builder.beginIfThenElse();
+        builder.beginMatchAttemptSucceeded();
+        builder.emitLoadLocal(aggregateCaptures);
+        builder.endMatchAttemptSucceeded();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(childSubject);
+        builder.beginMapMatchSelectedValue();
+        builder.emitLoadLocal(mapAttempt);
+        builder.emitLoadConstant(index);
+        builder.endMapMatchSelectedValue();
+        builder.endStoreLocal();
+
+        emitMatchPatternAttempt(
+                builder,
+                childPattern,
+                childSubject,
+                childCaptures,
+                preparedCall,
+                childResult,
+                resumeValue,
+                defaultContext);
+
+        builder.beginStoreLocal(aggregateCaptures);
+        builder.beginMergeMatchCaptures();
+        builder.emitLoadLocal(aggregateCaptures);
+        builder.emitLoadLocal(childCaptures);
+        builder.endMergeMatchCaptures();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitLocalNoop(builder, aggregateCaptures);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    private void emitMapMatchRemainderChild(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMatchPattern childPattern,
+            BytecodeLocal mapAttempt,
+            BytecodeLocal aggregateCaptures,
+            BytecodeLocal childSubject,
+            BytecodeLocal childCaptures,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean defaultContext) {
+        builder.beginIfThenElse();
+        builder.beginMatchAttemptSucceeded();
+        builder.emitLoadLocal(aggregateCaptures);
+        builder.endMatchAttemptSucceeded();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(childSubject);
+        builder.beginMaterializeMapMatchRemainder();
+        builder.emitLoadLocal(mapAttempt);
+        builder.emitLoadArgument(0);
+        builder.endMaterializeMapMatchRemainder();
+        builder.endStoreLocal();
+
+        emitMatchPatternAttempt(
+                builder,
+                childPattern,
+                childSubject,
+                childCaptures,
+                preparedCall,
+                childResult,
+                resumeValue,
+                defaultContext);
+
+        builder.beginStoreLocal(aggregateCaptures);
+        builder.beginMergeMatchCaptures();
+        builder.emitLoadLocal(aggregateCaptures);
+        builder.emitLoadLocal(childCaptures);
+        builder.endMergeMatchCaptures();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitLocalNoop(builder, aggregateCaptures);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
 
     private void emitArrayMatchChild(
             ProtosBytecodeRootNodeGen.Builder builder,

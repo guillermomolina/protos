@@ -2788,6 +2788,456 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
 
+
+    /**
+     * Inert D086 Map-pattern attempt state. One stable shallow association
+     * snapshot is captured before any query-key expression, hash/equality send,
+     * or mapped-value child matcher runs.
+     */
+    static final class PreparedMapMatchAttempt {
+        private final ProtosMapValue map;
+        private final List<ProtosStandardMapProtocol.StableAssociation> snapshot;
+        private final boolean exact;
+        private final Object[] selectedValues;
+        private final boolean[] resolvedRequirements;
+        private final boolean[] selectedAssociations;
+        private boolean failed;
+        private boolean resolutionFinished;
+        private ProtosMapValue remainder;
+
+        PreparedMapMatchAttempt(
+                ProtosMapValue map,
+                boolean exact,
+                int requirementCount) {
+            this.map = java.util.Objects.requireNonNull(map, "map");
+            this.snapshot = ProtosStandardMapProtocol.stableSnapshot(map);
+            this.exact = exact;
+            this.selectedValues = new Object[requirementCount];
+            this.resolvedRequirements = new boolean[requirementCount];
+            this.selectedAssociations = new boolean[snapshot.size()];
+        }
+
+        boolean resolutionOpen() {
+            return !failed && !resolutionFinished;
+        }
+
+        void select(int requirementIndex, int associationIndex) {
+            if (!resolutionOpen()) {
+                throw new IllegalStateException(
+                        "Map match selection recorded after resolution closed");
+            }
+            if (requirementIndex < 0 || requirementIndex >= selectedValues.length) {
+                throw new IllegalArgumentException(
+                        "Map match requirement index out of range: " + requirementIndex);
+            }
+            if (resolvedRequirements[requirementIndex]) {
+                throw new IllegalStateException(
+                        "Map match requirement resolved twice");
+            }
+            if (associationIndex < 0 || associationIndex >= snapshot.size()) {
+                throw new IllegalArgumentException(
+                        "Map match association index out of range: " + associationIndex);
+            }
+            selectedValues[requirementIndex] = snapshot.get(associationIndex).value();
+            resolvedRequirements[requirementIndex] = true;
+            selectedAssociations[associationIndex] = true;
+        }
+
+        void fail() {
+            if (!resolutionFinished) {
+                failed = true;
+            }
+        }
+
+        boolean finishResolution() {
+            if (resolutionFinished) {
+                throw new IllegalStateException(
+                        "Map match resolution finished twice");
+            }
+            resolutionFinished = true;
+            if (failed) {
+                return false;
+            }
+            for (boolean resolved : resolvedRequirements) {
+                if (!resolved) {
+                    throw new IllegalStateException(
+                            "Map match resolution finished with unresolved requirement");
+                }
+            }
+            if (exact) {
+                for (boolean selected : selectedAssociations) {
+                    if (!selected) {
+                        failed = true;
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+
+        Object selectedValue(int index) {
+            requireSuccessfulResolution();
+            if (index < 0 || index >= selectedValues.length) {
+                throw new IllegalArgumentException(
+                        "Map match selected-value index out of range: " + index);
+            }
+            return selectedValues[index];
+        }
+
+        ProtosMapValue materializeRemainder(ProtosActivation activation) {
+            requireSuccessfulResolution();
+            if (remainder != null) {
+                return remainder;
+            }
+            ProtosMapValue result =
+                    activation.prelude()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "Map matching requires an owning Core prelude"))
+                            .newMap();
+            for (int index = 0; index < snapshot.size(); index++) {
+                if (selectedAssociations[index]) {
+                    continue;
+                }
+                ProtosStandardMapProtocol.StableAssociation association = snapshot.get(index);
+                result.append(
+                        association.key(),
+                        association.recordedHash(),
+                        association.value());
+            }
+            result.freeze();
+            remainder = result;
+            return result;
+        }
+
+        private void requireSuccessfulResolution() {
+            if (!resolutionFinished || failed) {
+                throw new IllegalStateException(
+                        "Map match child access before successful structural resolution");
+            }
+        }
+    }
+
+    static final class PreparedMapMatchKeyLookup {
+        private final PreparedMapMatchAttempt attempt;
+        private final int requirementIndex;
+        private final Object queryKey;
+        private final ProtosActivation activation;
+        private BigInteger queryHash;
+        private int candidateIndex;
+        private int selectedIndex = -1;
+        private boolean hashAccepted;
+        private boolean comparisonEntered;
+        private boolean finished;
+
+        PreparedMapMatchKeyLookup(
+                PreparedMapMatchAttempt attempt,
+                int requirementIndex,
+                Object queryKey,
+                ProtosActivation activation) {
+            this.attempt = java.util.Objects.requireNonNull(attempt, "attempt");
+            this.requirementIndex = requirementIndex;
+            this.queryKey = java.util.Objects.requireNonNull(queryKey, "queryKey");
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            if (!attempt.resolutionOpen()) {
+                throw new IllegalStateException(
+                        "Map match key lookup prepared after resolution closed");
+            }
+        }
+
+        void enterComparison() {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map match attempted to nest its own comparison scope");
+            }
+            attempt.map.enterComparison();
+            comparisonEntered = true;
+        }
+
+        void leaveComparison() {
+            if (!comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map match comparison scope left without entry");
+            }
+            attempt.map.leaveComparison();
+            comparisonEntered = false;
+        }
+
+        PreparedClosureCall prepareHash() {
+            if (hashAccepted || finished) {
+                throw new IllegalStateException(
+                        "Map match hash callback prepared after hash/lookup completion");
+            }
+            return prepareSend(queryKey, "hash", activation, List.of());
+        }
+
+        void acceptHash(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map match hash result accepted before comparison-scope exit");
+            }
+            if (hashAccepted || finished) {
+                throw new IllegalStateException(
+                        "Map match hash result accepted twice");
+            }
+            queryHash =
+                    ProtosStandardMapProtocol.requireHashResultForStructured(
+                            result,
+                            activation);
+            hashAccepted = true;
+        }
+
+        boolean needsEquality() {
+            requireHashAccepted();
+            if (selectedIndex >= 0 || finished) {
+                return false;
+            }
+            while (candidateIndex < attempt.snapshot.size()
+                    && !attempt.snapshot.get(candidateIndex).recordedHash().equals(queryHash)) {
+                candidateIndex++;
+            }
+            return candidateIndex < attempt.snapshot.size();
+        }
+
+        PreparedClosureCall prepareEquality() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map match equality callback requested without a candidate");
+            }
+            return prepareSend(
+                    queryKey,
+                    "==",
+                    activation,
+                    List.of(attempt.snapshot.get(candidateIndex).key()));
+        }
+
+        void acceptEquality(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map match equality result accepted before comparison-scope exit");
+            }
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map match equality result accepted without a candidate");
+            }
+            boolean equal =
+                    ProtosStandardMapProtocol.requireEqualityResultForStructured(
+                            result,
+                            activation);
+            if (equal) {
+                selectedIndex = candidateIndex;
+            } else {
+                candidateIndex++;
+            }
+        }
+
+        void finish() {
+            requireHashAccepted();
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map match key lookup finished with active comparison scope");
+            }
+            if (finished) {
+                throw new IllegalStateException(
+                        "Map match key lookup finished twice");
+            }
+            if (needsEquality()) {
+                throw new IllegalStateException(
+                        "Map match key lookup finished before candidate exhaustion");
+            }
+            finished = true;
+            if (selectedIndex < 0) {
+                attempt.fail();
+            } else {
+                attempt.select(requirementIndex, selectedIndex);
+            }
+        }
+
+        private void requireHashAccepted() {
+            if (!hashAccepted) {
+                throw new IllegalStateException(
+                        "Map match key lookup used before hash acceptance");
+            }
+        }
+    }
+
+    @Operation
+    public static final class PrepareMapMatchAttempt {
+        @Specialization
+        public static Object perform(
+                Object subject,
+                boolean exact,
+                int requirementCount,
+                ProtosActivation activation) {
+            java.util.Objects.requireNonNull(activation, "activation");
+            if (!(subject instanceof ProtosMapValue map)) {
+                return MATCH_PATTERN_FAILED;
+            }
+            return new PreparedMapMatchAttempt(map, exact, requirementCount);
+        }
+    }
+
+    @Operation
+    public static final class MapMatchAttemptSucceeded {
+        @Specialization
+        public static boolean perform(Object attempt) {
+            if (attempt == MATCH_PATTERN_FAILED) {
+                return false;
+            }
+            if (attempt instanceof PreparedMapMatchAttempt) {
+                return true;
+            }
+            throw new IllegalStateException(
+                    "Map match attempt produced an invalid carrier");
+        }
+    }
+
+    @Operation
+    public static final class MapMatchResolutionOpen {
+        @Specialization
+        public static boolean perform(Object attempt) {
+            if (attempt == MATCH_PATTERN_FAILED) {
+                return false;
+            }
+            if (attempt instanceof PreparedMapMatchAttempt prepared) {
+                return prepared.resolutionOpen();
+            }
+            throw new IllegalStateException(
+                    "Map match resolution received an invalid carrier");
+        }
+    }
+
+    @Operation
+    public static final class PrepareMapMatchKeyLookup {
+        @Specialization
+        public static PreparedMapMatchKeyLookup perform(
+                Object attempt,
+                int requirementIndex,
+                Object queryKey,
+                ProtosActivation activation) {
+            if (!(attempt instanceof PreparedMapMatchAttempt prepared)) {
+                throw new IllegalStateException(
+                        "Map match key lookup requested from a failed/invalid attempt");
+            }
+            return new PreparedMapMatchKeyLookup(
+                    prepared,
+                    requirementIndex,
+                    queryKey,
+                    activation);
+        }
+    }
+
+    @Operation
+    public static final class EnterMapMatchComparison {
+        @Specialization
+        public static void perform(PreparedMapMatchKeyLookup prepared) {
+            prepared.enterComparison();
+        }
+    }
+
+    @Operation
+    public static final class LeaveMapMatchComparison {
+        @Specialization
+        public static void perform(PreparedMapMatchKeyLookup prepared) {
+            prepared.leaveComparison();
+        }
+    }
+
+    @Operation
+    public static final class PrepareMapMatchHashCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedMapMatchKeyLookup prepared) {
+            return prepared.prepareHash();
+        }
+    }
+
+    @Operation
+    public static final class AcceptMapMatchHashResult {
+        @Specialization
+        public static void perform(
+                PreparedMapMatchKeyLookup prepared,
+                Object result) {
+            prepared.acceptHash(result);
+        }
+    }
+
+    @Operation
+    public static final class MapMatchKeyNeedsEquality {
+        @Specialization
+        public static boolean perform(PreparedMapMatchKeyLookup prepared) {
+            return prepared.needsEquality();
+        }
+    }
+
+    @Operation
+    public static final class PrepareMapMatchEqualityCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedMapMatchKeyLookup prepared) {
+            return prepared.prepareEquality();
+        }
+    }
+
+    @Operation
+    public static final class AcceptMapMatchEqualityResult {
+        @Specialization
+        public static void perform(
+                PreparedMapMatchKeyLookup prepared,
+                Object result) {
+            prepared.acceptEquality(result);
+        }
+    }
+
+    @Operation
+    public static final class FinishMapMatchKeyLookup {
+        @Specialization
+        public static void perform(PreparedMapMatchKeyLookup prepared) {
+            prepared.finish();
+        }
+    }
+
+    @Operation
+    public static final class FinishMapMatchResolution {
+        @Specialization
+        public static Object perform(Object attempt) {
+            if (!(attempt instanceof PreparedMapMatchAttempt prepared)) {
+                throw new IllegalStateException(
+                        "Map match resolution finish requested from invalid carrier");
+            }
+            return prepared.finishResolution()
+                    ? prepared
+                    : MATCH_PATTERN_FAILED;
+        }
+    }
+
+    @Operation
+    public static final class MapMatchSelectedValue {
+        @Specialization
+        public static Object perform(
+                Object attempt,
+                int index) {
+            if (!(attempt instanceof PreparedMapMatchAttempt prepared)) {
+                throw new IllegalStateException(
+                        "Map match selected value requested from failed/invalid attempt");
+            }
+            return prepared.selectedValue(index);
+        }
+    }
+
+    @Operation
+    public static final class MaterializeMapMatchRemainder {
+        @Specialization
+        public static Object perform(
+                Object attempt,
+                ProtosActivation activation) {
+            if (!(attempt instanceof PreparedMapMatchAttempt prepared)) {
+                throw new IllegalStateException(
+                        "Map match remainder requested from failed/invalid attempt");
+            }
+            return prepared.materializeRemainder(activation);
+        }
+    }
+
     /**
      * Inert D084 Array-pattern attempt state. The carrier snapshots ordinary
      * element references once before child matching and may materialize the one
