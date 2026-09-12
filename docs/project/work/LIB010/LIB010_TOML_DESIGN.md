@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-A CLOSED — semantic model published; LIB010-B parser READY**
+Status: **LIB010-A CLOSED; D104 RATIFIED; LIB010-A/D104 alignment READY; LIB010-B parser BLOCKED_BY_D104_ALIGNMENT**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -245,6 +245,36 @@ The durable rules selected here are:
 A future general `std:datetime` facility may provide calendar/time operations or
 explicit conversion helpers. LIB010 does not make its TOML records Core datetime
 families merely to anticipate that work.
+
+### D104 leap-second clarification
+
+D104 is **RATIFIED — Candidate B′ selected**.
+
+For TOML 1.1 format fidelity, the time-bearing semantic records use an ordinary
+Integer `second` component whose domain is `0..60`:
+
+```text
+localTime.second       = 0..60
+localDateTime.second   = 0..60
+offsetDateTime.second  = 0..60
+```
+
+A value with `second = 60` is TOML semantic data. `std:toml/TOML` does not
+thereby claim that a corresponding real UTC leap-second event exists.
+
+Real-event validation, UTC/TAI conversion, leap-second schedules, tzdb and other
+time-scale authority remain outside TOML. A future explicit datetime/time-scale
+facility may validate or convert a TOML temporal record without changing whether
+the TOML layer can represent it.
+
+For TOML 1.1 partial times whose seconds are omitted, the semantic TOML value has
+`second = 0`. Whether `:00` was lexically present is source-representation data
+and belongs to a future source-preserving Document layer.
+
+D104 ratification itself changes no executable code. The already-published
+LIB010-A constructors still enforce `0..59` until the bounded D104 alignment
+slice updates them and retained tests. LIB010-B must not publish complete TOML
+1.1 temporal parsing before that alignment closes.
 
 ### Array
 
@@ -1009,7 +1039,13 @@ binding, generic serializer hierarchy, Java/native operation or Core semantic
 family. D087 private TOOL001/TOOL002 TOML 1.0 bootstrap ownership remains
 unchanged.
 
-Next bounded slice: **LIB010-B — strict TOML 1.1 parser**.
+D104 follow-up before LIB010-B publication:
+**LIB010-A/D104 alignment — extend the three time-bearing constructors from
+`second = 0..59` to `second = 0..60`, retain `61` rejection, and add focal
+evidence.**
+
+After that bounded alignment closes, the next main implementation slice is:
+**LIB010-B — strict TOML 1.1 parser**.
 
 ## Deliberately deferred
 
