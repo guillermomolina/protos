@@ -1,0 +1,175 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+
+// TOOL002-I7A: pure D077/D097/D098 resource-catalog v1 schema parser.
+//
+// This module parses already-acquired TOML 1.0 text into inert private catalog
+// records only. D099 host-path/CLI acquisition, D076 reservation, provider
+// resolution/provisioning and public std:toml remain outside this slice.
+Document: import("tool-shared:Toml10/TomlDocument")
+Manifest: import("self:Manifest")
+
+fail: () => {
+    Error().signal()
+}
+
+frozenTuple: (...items) => {
+    items
+}
+
+tableEntries: (node) => {
+    (node.kind == "table").ifFalse(() => {
+        fail()
+    })
+    node.value
+}
+
+requiredNode: (entries, name) => {
+    entries.containsKey(name).ifFalse(() => {
+        fail()
+    })
+    entries[name]
+}
+
+stringValue: (node) => {
+    (node.kind == "string").ifFalse(() => {
+        fail()
+    })
+    node.value
+}
+
+positiveIntegerValue: (node) => {
+    (node.kind == "integer").ifFalse(() => {
+        fail()
+    })
+    value: node.value
+    // Reuse the ordinary unbounded-Integer receiver-domain check already used
+    // by Requirement units; no numeric coercion is permitted.
+    value.div(1)
+    (value <= 0).ifTrue(() => {
+        fail()
+    })
+    value
+}
+
+checkAllowed: (entries, allowed) => {
+    entries.each((name, ignoredValue) => {
+        allowed.containsKey(name).ifFalse(() => {
+            fail()
+        })
+    })
+}
+
+logicalIdentityValue: (node) => {
+    // D098 selects the same canonical segment[/segment...] lexical grammar for
+    // resource keys, provider IDs and provider-scoped profile IDs while keeping
+    // those values in distinct semantic namespaces.
+    Manifest.resourceKeyValue(stringValue(node))
+}
+
+catalogEntry: (key, capacity, scope, provider, profile) => {
+    frozenTuple(key, capacity, scope, provider, profile)
+}
+
+entryKey: (entryValue) => {
+    entryValue[0]
+}
+
+entryCapacity: (entryValue) => {
+    entryValue[1]
+}
+
+entryScope: (entryValue) => {
+    entryValue[2]
+}
+
+entryProvider: (entryValue) => {
+    entryValue[3]
+}
+
+entryProfile: (entryValue) => {
+    entryValue[4]
+}
+
+parse: (text) => {
+    rootEntries: tableEntries(Document.table(text))
+
+    rootAllowed: Map()
+    rootAllowed["resource-catalog-version"] = true
+    rootAllowed["resource"] = true
+    checkAllowed(rootEntries, rootAllowed)
+
+    versionNode: requiredNode(rootEntries, "resource-catalog-version")
+    (versionNode.kind == "integer").ifFalse(() => {
+        fail()
+    })
+    (versionNode.value == 1).ifFalse(() => {
+        fail()
+    })
+
+    catalogEntries: Array()
+    seenKeys: Map()
+
+    rootEntries.containsKey("resource").ifTrue(() => {
+        resourceNodes: rootEntries["resource"]
+        (resourceNodes.kind == "array").ifFalse(() => {
+            fail()
+        })
+
+        resourceNodes.value.each((resourceNode) => {
+            entries: tableEntries(resourceNode)
+
+            allowed: Map()
+            allowed["key"] = true
+            allowed["capacity"] = true
+            allowed["scope"] = true
+            allowed["provider"] = true
+            allowed["profile"] = true
+            checkAllowed(entries, allowed)
+
+            key: logicalIdentityValue(requiredNode(entries, "key"))
+            capacity: positiveIntegerValue(requiredNode(entries, "capacity"))
+            scope: stringValue(requiredNode(entries, "scope"))
+
+            knownScope: scope == "placement"
+            (scope == "run").ifTrue(() => {
+                knownScope = true
+            })
+            knownScope.ifFalse(() => {
+                fail()
+            })
+
+            provider: logicalIdentityValue(requiredNode(entries, "provider"))
+
+            profile: null
+            entries.containsKey("profile").ifTrue(() => {
+                profile = logicalIdentityValue(entries["profile"])
+            })
+
+            seenKeys.containsKey(key).ifTrue(() => {
+                fail()
+            })
+            seenKeys[key] = true
+
+            catalogEntries = Array(
+                ...catalogEntries,
+                catalogEntry(key, capacity, scope, provider, profile)
+            )
+        })
+    })
+
+    frozenTuple(...catalogEntries)
+}
