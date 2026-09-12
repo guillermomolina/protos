@@ -20,29 +20,50 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 
+/** Private D108 terminal-lifecycle owner for already-provisioned resourceful attempts. */
 final class ProtosTestResourceAttemptTerminalizer {
     private ProtosTestResourceAttemptTerminalizer() {}
 
     static CompletionStage<ProtosTestResourceAttemptCompletion> finishStarted(
             ProtosProcessRuntime process,
-            ProtosExecutionOutcome guestObservation,
+            ProtosCapturedProcessExecution.Result guestObservation,
+            ProtosTestResourceProviderTransaction transaction) {
+        return finishCreated(process, guestObservation, List.of(), transaction);
+    }
+
+    /**
+     * Finishes an attempt for which a semantic Process exists.
+     *
+     * <p>Initial infrastructure evidence (for example an execution failure) does not by itself make
+     * capacity unsafe. Reuse safety is decided by terminal Process/host disposition plus provider
+     * cleanup. This preserves the D108 separation between infrastructure failure and capacity
+     * disposition.
+     */
+    static CompletionStage<ProtosTestResourceAttemptCompletion> finishCreated(
+            ProtosProcessRuntime process,
+            ProtosCapturedProcessExecution.Result guestObservation,
+            List<? extends Throwable> initialInfrastructureFailures,
             ProtosTestResourceProviderTransaction transaction) {
         Objects.requireNonNull(process, "process");
-        Objects.requireNonNull(guestObservation, "guestObservation");
+        Objects.requireNonNull(initialInfrastructureFailures, "initialInfrastructureFailures");
         Objects.requireNonNull(transaction, "transaction");
 
-        ArrayList<Throwable> infrastructureFailures = new ArrayList<>();
+        ArrayList<Throwable> failures =
+                new ArrayList<>(List.copyOf(initialInfrastructureFailures));
+        boolean[] unsafe = {false};
 
         try {
             process.requestTerminationForRuntime();
             process.awaitTerminationForRuntime();
         } catch (RuntimeException | Error failure) {
-            infrastructureFailures.add(failure);
+            failures.add(failure);
+            unsafe[0] = true;
         }
 
         try {
@@ -52,9 +73,36 @@ final class ProtosTestResourceAttemptTerminalizer {
                 host.awaitTerminalDispositionForRuntime();
             }
         } catch (RuntimeException | Error failure) {
-            infrastructureFailures.add(failure);
+            failures.add(failure);
+            unsafe[0] = true;
         }
 
+        return cleanupAndComplete(guestObservation, failures, unsafe[0], transaction);
+    }
+
+    /**
+     * Cleans a successful provider transaction when no semantic child Process was created.
+     *
+     * <p>The triggering infrastructure failure is preserved, while capacity remains SAFE when
+     * provider cleanup succeeds.
+     */
+    static CompletionStage<ProtosTestResourceAttemptCompletion> finishUnstarted(
+            Throwable initialInfrastructureFailure,
+            ProtosTestResourceProviderTransaction transaction) {
+        Objects.requireNonNull(initialInfrastructureFailure, "initialInfrastructureFailure");
+        Objects.requireNonNull(transaction, "transaction");
+        return cleanupAndComplete(
+                null,
+                new ArrayList<>(List.of(initialInfrastructureFailure)),
+                false,
+                transaction);
+    }
+
+    private static CompletionStage<ProtosTestResourceAttemptCompletion> cleanupAndComplete(
+            ProtosCapturedProcessExecution.Result guestObservation,
+            ArrayList<Throwable> failures,
+            boolean unsafeBeforeCleanup,
+            ProtosTestResourceProviderTransaction transaction) {
         final CompletionStage<Void> cleanupStage;
         try {
             cleanupStage =
@@ -62,30 +110,45 @@ final class ProtosTestResourceAttemptTerminalizer {
                             transaction.cleanup(),
                             "provider transaction cleanup stage");
         } catch (RuntimeException | Error failure) {
-            infrastructureFailures.add(failure);
+            failures.add(failure);
             return CompletableFuture.completedFuture(
-                    completion(guestObservation, infrastructureFailures));
+                    completion(guestObservation, failures, true));
         }
 
         return cleanupStage.handle(
                 (ignored, cleanupFailure) -> {
+                    boolean unsafe = unsafeBeforeCleanup;
                     if (cleanupFailure != null) {
-                        infrastructureFailures.add(
-                                unwrapCompletionFailure(cleanupFailure));
+                        failures.add(unwrapCompletionFailure(cleanupFailure));
+                        unsafe = true;
                     }
-                    return completion(guestObservation, infrastructureFailures);
+                    return completion(guestObservation, failures, unsafe);
                 });
     }
 
+    static ProtosTestResourceAttemptCompletion provisioningFailure(
+            Throwable provisioningFailure) {
+        Throwable primary = unwrapCompletionFailure(
+                Objects.requireNonNull(provisioningFailure, "provisioningFailure"));
+        ArrayList<Throwable> failures = new ArrayList<>();
+        failures.add(primary);
+        for (Throwable suppressed : primary.getSuppressed()) {
+            failures.add(Objects.requireNonNull(suppressed, "suppressed cleanup failure"));
+        }
+        boolean unsafe = primary.getSuppressed().length != 0;
+        return completion(null, failures, unsafe);
+    }
+
     private static ProtosTestResourceAttemptCompletion completion(
-            ProtosExecutionOutcome guestObservation,
-            ArrayList<Throwable> infrastructureFailures) {
+            ProtosCapturedProcessExecution.Result guestObservation,
+            ArrayList<Throwable> failures,
+            boolean unsafe) {
         return new ProtosTestResourceAttemptCompletion(
                 guestObservation,
-                infrastructureFailures,
-                infrastructureFailures.isEmpty()
-                        ? ProtosTestResourceAttemptCompletion.CapacityDisposition.SAFE
-                        : ProtosTestResourceAttemptCompletion.CapacityDisposition.UNSAFE);
+                failures,
+                unsafe
+                        ? ProtosTestResourceAttemptCompletion.CapacityDisposition.UNSAFE
+                        : ProtosTestResourceAttemptCompletion.CapacityDisposition.SAFE);
     }
 
     private static Throwable unwrapCompletionFailure(Throwable failure) {

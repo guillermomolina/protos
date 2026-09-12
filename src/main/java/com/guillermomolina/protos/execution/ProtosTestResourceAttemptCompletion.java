@@ -21,15 +21,21 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * Private TOOL002/D108 terminal attempt evidence.
+ *
+ * <p>The guest lane carries the complete existing detached execution input: semantic outcome plus
+ * captured stdout/stderr. Infrastructure evidence and capacity safety remain independent.
+ */
 final class ProtosTestResourceAttemptCompletion {
     enum CapacityDisposition { SAFE, UNSAFE }
 
-    private final ProtosExecutionOutcome guestObservation;
+    private final ProtosCapturedProcessExecution.Result guestObservation;
     private final List<Throwable> infrastructureFailures;
     private final CapacityDisposition capacityDisposition;
 
     ProtosTestResourceAttemptCompletion(
-            ProtosExecutionOutcome guestObservation,
+            ProtosCapturedProcessExecution.Result guestObservation,
             List<? extends Throwable> infrastructureFailures,
             CapacityDisposition capacityDisposition) {
         Objects.requireNonNull(infrastructureFailures, "infrastructureFailures");
@@ -47,7 +53,7 @@ final class ProtosTestResourceAttemptCompletion {
         }
     }
 
-    Optional<ProtosExecutionOutcome> guestObservation() {
+    Optional<ProtosCapturedProcessExecution.Result> guestObservation() {
         return Optional.ofNullable(guestObservation);
     }
 

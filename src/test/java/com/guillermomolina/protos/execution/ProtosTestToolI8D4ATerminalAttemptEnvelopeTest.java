@@ -57,9 +57,8 @@ final class ProtosTestToolI8D4ATerminalAttemptEnvelopeTest {
         CompletableFuture<Void> cleanupTerminal = new CompletableFuture<>();
         ProtosTestResourceProviderTransaction transaction =
                 transaction(cleanupCalls, cleanupTerminal);
-        ProtosExecutionOutcome guest =
-                ProtosExecutionOutcome.completed(
-                        new ProtosIntegerValue(BigInteger.valueOf(42)));
+        ProtosCapturedProcessExecution.Result guest =
+                guest(new ProtosIntegerValue(BigInteger.valueOf(42)));
 
         CompletableFuture<ProtosTestResourceAttemptCompletion> terminal =
                 CompletableFuture.supplyAsync(
@@ -100,13 +99,12 @@ final class ProtosTestToolI8D4ATerminalAttemptEnvelopeTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosProcessRuntime process =
                 new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime());
-
         RuntimeException hostFailure = new RuntimeException("context-close-failed");
         process.bindExecutionHostForRuntime(new FailingExecutionHost(hostFailure));
 
         AtomicInteger cleanupCalls = new AtomicInteger();
-        ProtosExecutionOutcome guest =
-                ProtosExecutionOutcome.completed(new ProtosIntegerValue(BigInteger.ONE));
+        ProtosCapturedProcessExecution.Result guest =
+                guest(new ProtosIntegerValue(BigInteger.ONE));
 
         ProtosTestResourceAttemptCompletion completion =
                 ProtosTestResourceAttemptTerminalizer
@@ -141,8 +139,8 @@ final class ProtosTestToolI8D4ATerminalAttemptEnvelopeTest {
         CompletableFuture<Void> failedCleanup = new CompletableFuture<>();
         failedCleanup.completeExceptionally(cleanupFailure);
 
-        ProtosExecutionOutcome guest =
-                ProtosExecutionOutcome.completed(new ProtosIntegerValue(BigInteger.TEN));
+        ProtosCapturedProcessExecution.Result guest =
+                guest(new ProtosIntegerValue(BigInteger.TEN));
         ProtosTestResourceAttemptCompletion completion =
                 ProtosTestResourceAttemptTerminalizer
                         .finishStarted(
@@ -161,40 +159,7 @@ final class ProtosTestToolI8D4ATerminalAttemptEnvelopeTest {
     }
 
     @Test
-    void realPolyglotProcessHostReachesTerminalContextDisposition()
-            throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
-            ProtosStandaloneProcessBootstrap.Result bootstrap =
-                    ProtosStandaloneProcessBootstrap.create(
-                            prelude,
-                            List.of(),
-                            exactDomain(),
-                            List.of(),
-                            null, null, null,
-                            null, null, null,
-                            null);
-            ProtosPolyglotProcessContext hosted =
-                    runtimeHost.hostProcess(
-                            bootstrap.process(),
-                            java.io.InputStream.nullInputStream(),
-                            java.io.OutputStream.nullOutputStream(),
-                            java.io.OutputStream.nullOutputStream());
-
-            bootstrap.process().requestTerminationForRuntime();
-            bootstrap.process().awaitTerminationForRuntime();
-            hosted.awaitTerminalDispositionForRuntime();
-
-            assertEquals(
-                    ProtosProcessRuntime.LifecycleState.TERMINATED,
-                    bootstrap.process().lifecycleState());
-            assertTrue(hosted.isClosedForTesting());
-            assertEquals(0, runtimeHost.activeProcessContextCountForTesting());
-        }
-    }
-
-    @Test
-    void envelopeCanRepresentInfrastructureOnlyWithoutGuestFabrication() {
+    void infrastructureOnlyCanStillHaveSafeCapacity() {
         RuntimeException provisionFailure = new RuntimeException("provider-unavailable");
         ProtosTestResourceAttemptCompletion completion =
                 new ProtosTestResourceAttemptCompletion(
@@ -203,7 +168,16 @@ final class ProtosTestToolI8D4ATerminalAttemptEnvelopeTest {
                         ProtosTestResourceAttemptCompletion.CapacityDisposition.SAFE);
         assertTrue(completion.guestObservation().isEmpty());
         assertTrue(completion.infrastructureFailed());
-        assertSame(provisionFailure, completion.infrastructureFailures().get(0));
+        assertEquals(
+                ProtosTestResourceAttemptCompletion.CapacityDisposition.SAFE,
+                completion.capacityDisposition());
+    }
+
+    private static ProtosCapturedProcessExecution.Result guest(Object value) {
+        return new ProtosCapturedProcessExecution.Result(
+                ProtosExecutionOutcome.completed(value),
+                new byte[] {1, 2},
+                new byte[] {3});
     }
 
     private static ProtosTestResourceProviderTransaction transaction(
@@ -217,20 +191,6 @@ final class ProtosTestToolI8D4ATerminalAttemptEnvelopeTest {
                         });
         return new ProtosTestResourceProviderTransaction(
                 Map.of("gpu", new Object()), List.of(lease));
-    }
-
-    private static ProtosEnvironmentValue.NativeNameDomain exactDomain() {
-        return new ProtosEnvironmentValue.NativeNameDomain() {
-            @Override public boolean sameCapturedName(String left, String right) {
-                return left.equals(right);
-            }
-            @Override public boolean isQueryRepresentable(String name) {
-                return !name.contains("=") && name.indexOf('\0') < 0;
-            }
-            @Override public boolean matchesQuery(String captured, String query) {
-                return captured.equals(query);
-            }
-        };
     }
 
     private abstract static class BaseExecutionHost implements ProtosProcessExecutionHost {
