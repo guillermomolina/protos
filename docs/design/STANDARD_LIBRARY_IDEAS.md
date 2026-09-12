@@ -302,8 +302,10 @@ A future `std:random/...` design is therefore preferable to placing randomness i
 
 ## Candidate Standard Library portfolio
 
-The following are exploratory ideas only. No `LIBxxx` identifiers are reserved.
-Existing LIB001-LIB004 work remains independent and is not renamed by this list.
+This portfolio began as exploratory design. Entries remain exploratory unless an
+explicit work item promotes them; promoted entries are marked in the table rather
+than being silently treated as still-unallocated ideas. Existing earlier LIB work
+remains independent and is not renamed by this list.
 
 ### Mostly ordinary-library candidates
 
@@ -316,7 +318,7 @@ before requiring a new runtime boundary:
 | `statistics` | descriptive statistics and simple relations | accepted collection/input surface; numeric result rules |
 | `csv` | CSV parser/encoder | dialect policy, streaming composition, malformed-input errors |
 | `uri` | URI parsing, normalization, resolution | exact standards/profile and Unicode/percent-encoding rules |
-| `cli` | argument/option parsing and help generation | policy versus mechanism; no hidden Process authority |
+| `cli` | **Promoted: LIB011 / #428.** argument/option parsing and help generation | Candidate C′ ratified: explicit arguments + inspectable command spec -> lossless result; no hidden Process authority |
 | `toml` | TOML parser/encoder and explicit data model | datetime/numeric mapping and duplicate-key rules |
 
 ### Candidates needing a deeper semantic/API audit
