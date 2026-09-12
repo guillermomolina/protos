@@ -249,13 +249,29 @@ class ProtosParserMatchTest {
     }
 
     @Test
-    void permitsDynamicOpaqueCaptureInterfaceWithoutInventingFixedOrMetadata() {
+    void validatesDynamicOrLogicalBindingInterfacesWithoutRuntimeMetadata() {
         SurfaceMatch match =
                 match(
                         "x match {\n"
                                 + "case left captures(first, ...rest) | right captures(first, ...rest) => first\n"
                                 + "}");
         assertInstanceOf(SurfaceMatchPattern.Or.class, match.arms().get(0).pattern());
+
+        assertThrows(
+                ParseError.class,
+                () ->
+                        only(
+                                "x match { case left captures(first, ...rest) | right captures(other, ...rest) => first }"));
+        assertThrows(
+                ParseError.class,
+                () ->
+                        only(
+                                "x match { case left captures(first, ...rest) | right captures(first, ...tail) => first }"));
+        assertThrows(
+                ParseError.class,
+                () ->
+                        only(
+                                "x match { case left captures(first, ...rest) | right captures(first, rest) => first }"));
     }
 
     @Test

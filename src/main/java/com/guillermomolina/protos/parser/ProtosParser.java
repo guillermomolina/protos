@@ -788,110 +788,102 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
         }
     }
 
-    private Optional<List<String>> fixedBindingInterface(
+    private PatternBindingInterface logicalBindingInterface(
             SurfaceMatchPattern pattern) {
         if (pattern instanceof SurfaceMatchPattern.Binder binder) {
-            return Optional.of(List.of(binder.name()));
+            return new PatternBindingInterface(List.of(binder.name()), Optional.empty());
         }
         if (pattern instanceof SurfaceMatchPattern.Wildcard) {
-            return Optional.of(List.of());
+            return new PatternBindingInterface(List.of(), Optional.empty());
         }
         if (pattern instanceof SurfaceMatchPattern.Value value) {
             if (value.captureInterface().isEmpty()) {
-                return Optional.of(List.of());
+                return new PatternBindingInterface(List.of(), Optional.empty());
             }
             SurfaceMatchPattern.CaptureInterface capture =
                     value.captureInterface().orElseThrow();
-            return capture.variableArity()
-                    ? Optional.empty()
-                    : Optional.of(capture.requiredNames());
+            return new PatternBindingInterface(
+                    capture.requiredNames(),
+                    capture.restName());
         }
         if (pattern instanceof SurfaceMatchPattern.Group group) {
-            return fixedBindingInterface(group.pattern());
+            return logicalBindingInterface(group.pattern());
         }
         if (pattern instanceof SurfaceMatchPattern.Alias alias) {
-            Optional<List<String>> nested = fixedBindingInterface(alias.pattern());
-            if (nested.isEmpty()) {
-                return Optional.empty();
-            }
-            ArrayList<String> names = new ArrayList<>();
-            names.add(alias.name());
-            names.addAll(nested.orElseThrow());
-            return Optional.of(List.copyOf(names));
+            PatternBindingInterface nested = logicalBindingInterface(alias.pattern());
+            ArrayList<String> required = new ArrayList<>();
+            required.add(alias.name());
+            required.addAll(nested.requiredNames());
+            return new PatternBindingInterface(
+                    List.copyOf(required),
+                    nested.restName());
         }
         if (pattern instanceof SurfaceMatchPattern.Or orPattern) {
-            List<String> common = null;
+            PatternBindingInterface common = null;
             for (SurfaceMatchPattern alternative : orPattern.alternatives()) {
-                Optional<List<String>> candidate = fixedBindingInterface(alternative);
-                if (candidate.isEmpty()) {
-                    return Optional.empty();
-                }
+                PatternBindingInterface candidate =
+                        logicalBindingInterface(alternative);
                 if (common == null) {
-                    common = candidate.orElseThrow();
-                } else if (!common.equals(candidate.orElseThrow())) {
+                    common = candidate;
+                } else if (!common.equals(candidate)) {
                     throw new ParseError(
-                            "Fixed OR alternatives must expose the same ordered binder-name interface",
+                            "OR alternatives must expose the same ordered logical binding interface",
                             orPattern.span());
                 }
             }
-            return Optional.of(common == null ? List.of() : common);
+            return common == null
+                    ? new PatternBindingInterface(List.of(), Optional.empty())
+                    : common;
         }
         if (pattern instanceof SurfaceMatchPattern.ArrayPattern array) {
-            ArrayList<String> names = new ArrayList<>();
-            for (SurfaceMatchPattern item : array.prefix()) {
-                if (!appendFixedBindingInterface(names, item)) {
-                    return Optional.empty();
-                }
-            }
-            if (array.remainder().flatMap(SurfaceMatchPattern.Remainder::pattern).isPresent()
-                    && !appendFixedBindingInterface(
-                            names,
-                            array.remainder()
-                                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
-                                    .orElseThrow())) {
-                return Optional.empty();
-            }
-            for (SurfaceMatchPattern item : array.suffix()) {
-                if (!appendFixedBindingInterface(names, item)) {
-                    return Optional.empty();
-                }
-            }
-            return Optional.of(List.copyOf(names));
+            ArrayList<SurfaceMatchPattern> ordered = new ArrayList<>();
+            ordered.addAll(array.prefix());
+            array.remainder()
+                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                    .ifPresent(ordered::add);
+            ordered.addAll(array.suffix());
+            return sequentialLogicalBindingInterface(ordered);
         }
         if (pattern instanceof SurfaceMatchPattern.MapPattern map) {
-            ArrayList<String> names = new ArrayList<>();
+            ArrayList<SurfaceMatchPattern> ordered = new ArrayList<>();
             for (SurfaceMatchPattern.MapEntry entry : map.entries()) {
-                if (!appendFixedBindingInterface(names, entry.valuePattern())) {
-                    return Optional.empty();
-                }
+                ordered.add(entry.valuePattern());
             }
-            if (map.remainder().flatMap(SurfaceMatchPattern.Remainder::pattern).isPresent()
-                    && !appendFixedBindingInterface(
-                            names,
-                            map.remainder()
-                                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
-                                    .orElseThrow())) {
-                return Optional.empty();
-            }
-            return Optional.of(List.copyOf(names));
+            map.remainder()
+                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                    .ifPresent(ordered::add);
+            return sequentialLogicalBindingInterface(ordered);
         }
         throw new IllegalStateException(
                 "Unknown SurfaceMatchPattern: " + pattern.getClass().getName());
     }
 
-    private boolean appendFixedBindingInterface(
-            List<String> accumulated, SurfaceMatchPattern nested) {
-        Optional<List<String>> names = fixedBindingInterface(nested);
-        if (names.isEmpty()) {
-            return false;
+    private PatternBindingInterface sequentialLogicalBindingInterface(
+            List<SurfaceMatchPattern> ordered) {
+        ArrayList<String> required = new ArrayList<>();
+        Optional<String> restName = Optional.empty();
+
+        for (SurfaceMatchPattern nested : ordered) {
+            PatternBindingInterface child = logicalBindingInterface(nested);
+            boolean childHasBindings =
+                    !child.requiredNames().isEmpty() || child.restName().isPresent();
+            if (restName.isPresent() && childHasBindings) {
+                throw new ParseError(
+                        "A variable-arity capture segment must be terminal in the final ordered arm-binding interface",
+                        nested.span());
+            }
+            required.addAll(child.requiredNames());
+            if (child.restName().isPresent()) {
+                restName = child.restName();
+            }
         }
-        accumulated.addAll(names.orElseThrow());
-        return true;
+
+        return new PatternBindingInterface(List.copyOf(required), restName);
     }
 
     private void validateFixedOrBindingInterface(
             SurfaceMatchPattern.Or pattern) {
-        fixedBindingInterface(pattern);
+        logicalBindingInterface(pattern);
     }
 
     private boolean isSyntacticallyIrrefutable(SurfaceMatchPattern pattern) {
@@ -934,6 +926,14 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
     private record PatternBindingShape(
             boolean hasBindings,
             boolean dynamicTail) {}
+
+    private record PatternBindingInterface(
+            List<String> requiredNames,
+            Optional<String> restName) {
+        PatternBindingInterface {
+            requiredNames = List.copyOf(requiredNames);
+        }
+    }
 
     private record ParsedMatchBody(
             SurfaceSequence body,

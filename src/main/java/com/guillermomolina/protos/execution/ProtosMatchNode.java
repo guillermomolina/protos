@@ -147,6 +147,39 @@ public final class ProtosMatchNode extends ProtosExpressionNode {
         }
     }
 
+    static final class OrPatternNode extends PatternNode {
+        @Children private final PatternNode[] alternatives;
+
+        OrPatternNode(PatternNode[] alternatives) {
+            Objects.requireNonNull(alternatives, "alternatives");
+            if (alternatives.length < 2) {
+                throw new IllegalArgumentException(
+                        "OR pattern requires at least two alternatives");
+            }
+            this.alternatives = alternatives.clone();
+            for (PatternNode alternative : this.alternatives) {
+                Objects.requireNonNull(alternative, "alternatives contains null");
+            }
+        }
+
+        @ExplodeLoop
+        @Override
+        List<Object> attempt(
+                VirtualFrame frame,
+                Object subject,
+                ProtosActivation activation) {
+            CompilerAsserts.compilationConstant(alternatives.length);
+            for (PatternNode alternative : alternatives) {
+                List<Object> captures =
+                        alternative.attempt(frame, subject, activation);
+                if (captures != null) {
+                    return captures;
+                }
+            }
+            return null;
+        }
+    }
+
     static final class ArrayPatternNode extends PatternNode {
         @Children private final PatternNode[] prefix;
         private final boolean hasRemainder;

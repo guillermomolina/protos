@@ -174,7 +174,7 @@ public final class CanonicalToTruffleLowerer {
     private ProtosMatchNode.ArmNode lowerBasicMatchArm(CanonicalMatch.Arm arm) {
         if (arm.guard().isPresent()) {
             throw new UnsupportedOperationException(
-                    "I038-D3 does not yet lower guarded match arms");
+                    "I038-D4 does not yet lower guarded match arms");
         }
 
         ProtosMatchNode.PatternNode patternNode =
@@ -206,6 +206,13 @@ public final class CanonicalToTruffleLowerer {
         if (pattern instanceof CanonicalMatchPattern.Alias alias) {
             return new ProtosMatchNode.AliasPatternNode(
                     lowerExecutableMatchPattern(alias.pattern()));
+        }
+        if (pattern instanceof CanonicalMatchPattern.Or orPattern) {
+            ProtosMatchNode.PatternNode[] alternatives =
+                    orPattern.alternatives().stream()
+                            .map(this::lowerExecutableMatchPattern)
+                            .toArray(ProtosMatchNode.PatternNode[]::new);
+            return new ProtosMatchNode.OrPatternNode(alternatives);
         }
         if (pattern instanceof CanonicalMatchPattern.ArrayPattern array) {
             ProtosMatchNode.PatternNode[] prefix =
@@ -262,7 +269,7 @@ public final class CanonicalToTruffleLowerer {
         }
 
         throw new UnsupportedOperationException(
-                "I038-D3 does not yet lower "
+                "I038-D4 does not yet lower "
                         + pattern.getClass().getSimpleName()
                         + " match patterns");
     }
@@ -303,6 +310,26 @@ public final class CanonicalToTruffleLowerer {
             appendMatchParameters(alias.pattern(), parameters);
             return;
         }
+        if (pattern instanceof CanonicalMatchPattern.Or orPattern) {
+            java.util.List<CanonicalParameter> common =
+                    parametersForMatchPattern(orPattern.alternatives().get(0));
+            for (int index = 1; index < orPattern.alternatives().size(); index++) {
+                java.util.List<CanonicalParameter> candidate =
+                        parametersForMatchPattern(orPattern.alternatives().get(index));
+                if (!sameMatchParameterInterface(common, candidate)) {
+                    throw new IllegalStateException(
+                            "D090 OR binding-interface mismatch escaped parser validation");
+                }
+            }
+            for (CanonicalParameter parameter : common) {
+                if (parameter.rest()) {
+                    parameters.addRest(parameter.name(), parameter.span());
+                } else {
+                    parameters.addRequired(parameter.name(), parameter.span());
+                }
+            }
+            return;
+        }
         if (pattern instanceof CanonicalMatchPattern.ArrayPattern array) {
             for (CanonicalMatchPattern item : array.prefix()) {
                 appendMatchParameters(item, parameters);
@@ -326,9 +353,26 @@ public final class CanonicalToTruffleLowerer {
         }
 
         throw new UnsupportedOperationException(
-                "I038-D3 does not yet build arm parameters for "
+                "I038-D4 does not yet build arm parameters for "
                         + pattern.getClass().getSimpleName()
                         + " match patterns");
+    }
+
+    private static boolean sameMatchParameterInterface(
+            java.util.List<CanonicalParameter> left,
+            java.util.List<CanonicalParameter> right) {
+        if (left.size() != right.size()) {
+            return false;
+        }
+        for (int index = 0; index < left.size(); index++) {
+            CanonicalParameter leftParameter = left.get(index);
+            CanonicalParameter rightParameter = right.get(index);
+            if (!leftParameter.name().equals(rightParameter.name())
+                    || leftParameter.rest() != rightParameter.rest()) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static final class MatchParameterAccumulator {

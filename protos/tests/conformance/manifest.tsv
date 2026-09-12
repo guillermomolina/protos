@@ -156,6 +156,12 @@ matching/map-open-exact.protos	boolean	true
 matching/map-key-order-stable-snapshot.protos	boolean	true
 matching/map-all-keys-before-children.protos	boolean	true
 matching/map-repeated-requirements.protos	boolean	true
+matching/or-ordered-effects-first-success.protos	boolean	true
+matching/or-same-subject.protos	boolean	true
+matching/or-structural-bindings.protos	boolean	true
+matching/or-nested-attempt-order.protos	boolean	true
+matching/or-subject-evaluated-once.protos	boolean	true
+matching/or-dynamic-captures.protos	boolean	true
 matching/map-exact-residue-before-children.protos	boolean	true
 matching/map-ineligible.protos	boolean	true
 matching/map-remainder-bindings.protos	boolean	true
