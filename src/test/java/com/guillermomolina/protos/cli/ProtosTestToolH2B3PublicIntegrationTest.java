@@ -188,7 +188,8 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         String main = Files.readString(TOOL_ROOT.resolve("Main.protos"), StandardCharsets.UTF_8);
 
         assertTrue(main.contains("Options: import(\"self:Options\")"));
-        assertTrue(main.contains("jobs: Options.jobs(process.args())"));
+        assertTrue(main.contains("arguments: process.args()"));
+        assertTrue(main.contains("jobs: Options.jobs(arguments)"));
         assertEquals(4, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));
         assertTrue(main.contains("executionAsync"));

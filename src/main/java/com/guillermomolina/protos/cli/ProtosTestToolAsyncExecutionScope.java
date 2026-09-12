@@ -18,6 +18,7 @@ package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.execution.ProtosAsyncExactExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
+import com.guillermomolina.protos.execution.ProtosTestResourceExecutionScope;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.util.ArrayList;
@@ -39,13 +40,17 @@ import java.util.concurrent.atomic.AtomicLong;
 final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
     private final PlatformThreadPerTaskSubmission submission;
     private final List<ProtosAsyncExactExecutionFacility> facilities;
+    private final ProtosTestResourceExecutionScope resourceExecutionScope;
     private boolean closed;
 
     private ProtosTestToolAsyncExecutionScope(
             PlatformThreadPerTaskSubmission submission,
-            List<ProtosAsyncExactExecutionFacility> facilities) {
+            List<ProtosAsyncExactExecutionFacility> facilities,
+            ProtosTestResourceExecutionScope resourceExecutionScope) {
         this.submission = Objects.requireNonNull(submission, "submission");
         this.facilities = List.copyOf(facilities);
+        this.resourceExecutionScope =
+                Objects.requireNonNull(resourceExecutionScope, "resourceExecutionScope");
     }
 
     static ProtosTestToolAsyncExecutionScope install(
@@ -62,6 +67,7 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
 
         PlatformThreadPerTaskSubmission submission = new PlatformThreadPerTaskSubmission();
         ArrayList<ProtosAsyncExactExecutionFacility> facilities = new ArrayList<>();
+        ProtosTestResourceExecutionScope resourceExecutionScope = null;
         try {
             facilities.add(
                     ProtosAsyncExactExecutionFacility.install(
@@ -104,8 +110,19 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                             packagePrelude,
                             runtimeHost,
                             submission));
-            return new ProtosTestToolAsyncExecutionScope(submission, facilities);
-        } catch (RuntimeException failure) {
+            resourceExecutionScope =
+                    ProtosTestResourceExecutionScope.installEmpty(
+                            activation,
+                            runtimeHost,
+                            submission);
+            return new ProtosTestToolAsyncExecutionScope(
+                    submission,
+                    facilities,
+                    resourceExecutionScope);
+        } catch (RuntimeException | Error failure) {
+            if (resourceExecutionScope != null) {
+                resourceExecutionScope.close();
+            }
             closeFacilities(facilities);
             submission.close();
             throw failure;
@@ -124,6 +141,7 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             return;
         }
         closed = true;
+        resourceExecutionScope.close();
         closeFacilities(facilities);
         submission.close();
     }
