@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C CLOSED — D115 Candidate C′; LIB011-D READY**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C CLOSED — D115 Candidate C′; LIB011-D READY — D118 RATIFIED (Candidate F′)**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1249,10 +1249,45 @@ The governing durable traversal decision is
 
 ### LIB011-D — pure help rendering
 
-**READY.**
+**READY — D118 RATIFIED (Candidate F′).**
 
-Render deterministic help String data from the same command specification with
-no terminal or output authority.
+Implement the canonical pure help renderer as:
+
+```text
+CommandLine.renderHelp(rootSpec, commandPath) -> String
+```
+
+`commandPath` is an exact `Array(String)` path relative to the canonical frozen
+`rootSpec`. The renderer resolves that path without re-canonicalizing the tree and
+renders only the selected command plus its immediate children.
+
+D118 / #445 fixes the baseline output as deterministic unwrapped plain text. It
+preserves canonical declaration order for positionals, options and child commands;
+performs no alphabetical/locale sorting; accepts no width parameter; probes no
+terminal/TTY; and creates no render-options descriptor, template language or public
+HelpModel.
+
+Present blocks are ordered `Usage`, optional command help, `Arguments`, `Options`,
+`Commands`, omitting empty sections. Usage explicitly renders required options,
+summarizes any optional-option set as `[OPTIONS]`, mechanically renders the
+already-ratified positional cardinalities, and appends `[COMMAND]` when immediate
+children exist. Option rows derive spellings/value names/cardinality annotations
+from their canonical `OptionSpec`; logical keys are never presentation spellings.
+
+Descriptions use next-line indentation rather than width-sensitive aligned
+columns. Renderer-generated separators are `\n` and the returned String has no
+final newline. Output destination/newline behavior remains caller-owned.
+
+The renderer has no Process, stdout/stderr, exit, environment, filesystem,
+network, terminal-width, TTY, ANSI/style, pager, locale, shell, callback or global
+registry authority. Future wrapped, Markdown, manpage, structured or localized
+renderers remain additive decisions rather than changing this baseline.
+
+The target is `O(Svisited + Sscope + H)` time and `O(H)` memory, with no complete
+command-tree flattening or recursive help dump.
+
+The durable decision is recorded in
+`docs/project/decisions/language/D118_COMMAND_LINE_HELP_RENDERING_CONTRACT.md`.
 
 ### LIB011-E — Test Tool adoption
 
