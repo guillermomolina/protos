@@ -32,63 +32,60 @@ parsePositiveInteger: (text) => {
     value
 }
 
-// D069: --jobs is one positive logical Test Tool capacity value. Unknown
-// arguments remain outside this bounded slice so H2B3 does not invent a second
-// Test Tool option policy.
-jobs: (arguments) => {
-    result: 1
-    seen: false
-    expectingValue: false
+// TOOL002-I7B3A: D069/D099 coordinated Test Tool option traversal.
+//
+// Both public selectors derive from one parser contract that recognizes both
+// value-bearing options. A consumed value token is literal and is never
+// reinterpreted by the other option merely because it begins with "-".
+parse: (arguments) => {
+    jobsValue: 1
+    jobsSeen: false
+    resourceCatalogPathValue: null
+    resourceCatalogSeen: false
 
-    // process.args() is an ordinary canonical Array snapshot. Traverse it with
-    // the retained Array.each contract instead of adding an index/while parser.
-    arguments.each((argument) => {
-        expectingValue.ifTrue(() => {
-            result = parsePositiveInteger(argument)
-            expectingValue = false
-        })
-
-        expectingValue.ifFalse(() => {
-            (argument === "--jobs").ifTrue(() => {
-                seen.ifTrue(() => { optionError() })
-                seen = true
-                expectingValue = true
-            })
-        })
-    })
-
-    expectingValue.ifTrue(() => { optionError() })
-    result
-}
-
-// TOOL002-I7B1: D099/D101 bundled-Protos ownership of the optional resource
-// catalog source selector. This slice owns only option spelling/cardinality and
-// exact PATH selection. Host acquisition authority remains I7B2.
-resourceCatalogPath: (arguments) => {
-    result: null
-    seen: false
-    expectingValue: false
+    // 0 = no pending value, 1 = --jobs value, 2 = --resource-catalog PATH.
+    expectingValue: 0
 
     arguments.each((argument) => {
-        // Snapshot the parser state before mutating it so the PATH token is
-        // consumed literally and is not reinterpreted as another option even
-        // when it begins with "-".
         wasExpectingValue: expectingValue
 
-        wasExpectingValue.ifTrue(() => {
-            result = argument
-            expectingValue = false
+        (wasExpectingValue == 1).ifTrue(() => {
+            jobsValue = parsePositiveInteger(argument)
+            expectingValue = 0
         })
 
-        wasExpectingValue.ifFalse(() => {
+        (wasExpectingValue == 2).ifTrue(() => {
+            resourceCatalogPathValue = argument
+            expectingValue = 0
+        })
+
+        (wasExpectingValue == 0).ifTrue(() => {
+            (argument === "--jobs").ifTrue(() => {
+                jobsSeen.ifTrue(() => { optionError() })
+                jobsSeen = true
+                expectingValue = 1
+            })
+
             (argument === "--resource-catalog").ifTrue(() => {
-                seen.ifTrue(() => { optionError() })
-                seen = true
-                expectingValue = true
+                resourceCatalogSeen.ifTrue(() => { optionError() })
+                resourceCatalogSeen = true
+                expectingValue = 2
             })
         })
     })
 
-    expectingValue.ifTrue(() => { optionError() })
-    result
+    (expectingValue == 0).ifFalse(() => { optionError() })
+    Array(jobsValue, resourceCatalogPathValue)
+}
+
+// D069: one positive logical Test Tool capacity value, defaulting to one.
+// Unknown arguments remain ignored exactly as before.
+jobs: (arguments) => {
+    parse(arguments)[0]
+}
+
+// D099/D101: zero or one explicit --resource-catalog PATH selection.
+// PATH is returned verbatim; host path interpretation stays behind catalogAcquirer.
+resourceCatalogPath: (arguments) => {
+    parse(arguments)[1]
 }

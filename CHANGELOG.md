@@ -1,5 +1,8 @@
-## 0.2.410-SNAPSHOT
+## 0.2.411-SNAPSHOT
 
+- Implement `TOOL002-I7B3A — coordinated D069/D099 Test Tool option traversal`. Replace the two independent private option scans with one parser contract while retaining `jobs(arguments)` and `resourceCatalogPath(arguments)`. A token consumed as a catalog PATH cannot be reinterpreted as `--jobs` or another catalog flag merely because it starts with `-`. Preserve D069 jobs defaults/validation, D099 zero-or-one source cardinality and unknown-argument behavior. Add focal regressions for flag-looking PATH values. No host acquisition, Main composition, D076 reservation or provider implementation change. Implementation version becomes `0.2.411-SNAPSHOT`.
+
+## 0.2.410-SNAPSHOT
 - Implement `LIB010-A — TOML semantic model and constructors` under the ratified Candidate C architecture. Publish exact-case `std:toml/TOML` with ten explicit ordinary TOML semantic constructors: String, unbounded Integer, binary64 Float, canonical Boolean, four TOML temporal categories, heterogeneous Array, and String-keyed Table. Validate scalar families through existing Core receiver domains rather than `typeOf`, reflection, host datetime classes, or a generic serializer. Represent fractional seconds exactly as ordinary Integer `coefficient` + decimal `digits`, validate Gregorian dates/year 0001..9999, local clock ranges and numeric UTC offsets, preserve signed-zero Float payload identity, duplicate-free deterministic Map table insertion order, and Actor-local module behavior with transferable ordinary data. Parser, encoder, source-preserving Document, streaming/events, I/O authority, schema/object binding and D087 private TOML 1.0 consumers remain unchanged and deferred. Implementation version becomes `0.2.410-SNAPSHOT`.
 
 ## 0.2.409-SNAPSHOT

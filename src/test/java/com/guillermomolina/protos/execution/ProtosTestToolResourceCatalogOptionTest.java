@@ -126,6 +126,66 @@ final class ProtosTestToolResourceCatalogOptionTest {
                         .value());
     }
 
+    @Test
+    void catalogPathThatLooksLikeJobsIsNotReinterpretedByTheJobsSelector()
+            throws Exception {
+        ProtosExecutionOutcome outcome =
+                execute(
+                        "Options: import(\"self:Options\")\n"
+                                + "arguments: Array("
+                                + "\"test\", "
+                                + "\"--resource-catalog\", \"--jobs\")\n"
+                                + "Array("
+                                + "Options.jobs(arguments), "
+                                + "Options.resourceCatalogPath(arguments))\n");
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        ProtosArrayValue observed =
+                assertInstanceOf(ProtosArrayValue.class, outcome.value());
+        assertEquals(
+                BigInteger.ONE,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                observed.indexedAt(BigInteger.ZERO))
+                        .value());
+        assertEquals(
+                "--jobs",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(BigInteger.ONE))
+                        .value());
+    }
+
+    @Test
+    void catalogPathThatLooksLikeCatalogFlagIsStillOneLiteralValue()
+            throws Exception {
+        ProtosExecutionOutcome outcome =
+                execute(
+                        "Options: import(\"self:Options\")\n"
+                                + "arguments: Array("
+                                + "\"test\", "
+                                + "\"--resource-catalog\", \"--resource-catalog\")\n"
+                                + "Array("
+                                + "Options.jobs(arguments), "
+                                + "Options.resourceCatalogPath(arguments))\n");
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        ProtosArrayValue observed =
+                assertInstanceOf(ProtosArrayValue.class, outcome.value());
+        assertEquals(
+                BigInteger.ONE,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                observed.indexedAt(BigInteger.ZERO))
+                        .value());
+        assertEquals(
+                "--resource-catalog",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                observed.indexedAt(BigInteger.ONE))
+                        .value());
+    }
+
     private static ProtosExecutionOutcome execute(String source) throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
