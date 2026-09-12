@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-B CLOSED — strict TOML 1.1 parser functional and adversarial hardening complete; LIB010-C Float-formatting audit READY**
+Status: **LIB010-B CLOSED; D109 Candidate C RATIFIED; LIB010-C encoder implementation READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -412,14 +412,41 @@ source choices that are semantically irrelevant, such as quoting/radix/table
 presentation. That style is not a claim of byte-for-byte source preservation and
 is not a universal TOML canonicalization standard.
 
-The Float emission implementation requires a focused current-main audit before
-the encoder slice is materialized. Protos Core intentionally does not define a
-general Float-to-decimal String protocol merely for host convenience. LIB010
-must therefore not expose JVM `Double.toString` accidentally as portable TOML
-semantics. A portable library algorithm or an explicitly approved reusable
-numeric-formatting prerequisite may be used. If implementation discovers that
-new Core/runtime semantics are required, the encoder slice must stop and route
-that prerequisite through the normal decision/blocker process.
+### D109 Float encoding contract
+
+D109 is **RATIFIED — Candidate C selected**.
+
+`TOML.encode` uses a host-independent canonical shortest-round-trip binary64
+decimal contract for semantic TOML Float values, followed only by TOML lexical
+normalization:
+
+```text
++0.0       -> 0.0
+-0.0       -> -0.0
++infinity  -> inf
+-infinity  -> -inf
+NaN        -> nan
+```
+
+Every finite non-zero Float is rendered as the deterministic shortest decimal
+that reparses to the same binary64 value under round-to-nearest/ties-to-even.
+The spelling uses ASCII decimal syntax, lowercase `e` when scientific notation
+is selected, no redundant leading `+`, no underscore grouping and no redundant
+exponent leading zeroes. If the shortest finite representation contains neither
+`.` nor an exponent, `.0` is appended so the TOML token remains a Float rather
+than reparsing as Integer.
+
+The observable contract is independent from JVM `Double.toString`,
+diagnostic/display formatting and any particular Ryū/Schubfach implementation.
+A host helper may be used only if it is proven equivalent to D109's contract.
+
+If implementing this contract requires a new privileged runtime or binary64
+bit-decomposition capability, LIB010-C must stop and route that mechanism through
+the normal Dxxx/PLATxxx decision gate rather than introducing a hidden JVM-only
+boundary.
+
+Source float spelling remains outside the semantic encoder and belongs to a
+future source-preserving `std:toml/Document` layer.
 
 ## Round-trip guarantee
 
