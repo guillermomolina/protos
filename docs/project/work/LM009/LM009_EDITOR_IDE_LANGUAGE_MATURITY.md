@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106/D110 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 READY FOR IMPLEMENTATION AUDIT)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106/D110 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 IMPLEMENTATION AUDIT CLOSED; G4-A1 READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1628,3 +1628,20 @@ URI overlay and provides no semantic identity shortcut.
 This ratification changes no Core semantics and implements no G4 code. G4 may now
 audit the current parser/static-analysis surface and publish only the exact proof
 subset supported without crossing a new substantive decision boundary.
+
+## LM009-G4 implementation audit — generation-1 proof release
+
+The bounded implementation audit following ratified D110 is CLOSED. Its durable
+record is [`LM009_G4_IMPLEMENTATION_AUDIT.md`](LM009_G4_IMPLEMENTATION_AUDIT.md).
+
+The audit found no new semantic or durable architecture decision. It releases
+`LM009-G4-A1` as an editor-neutral, singleton-first exact proof engine for the
+small same-activation parameter / match-binder subset that remains mechanically
+provable under Protos's mutable execution-context semantics. Unknown effects
+invalidate proof rather than allowing Java-like lexical-declaration guessing.
+
+`LM009-G4-A2` remains mechanically blocked by A1 and will wire the standard LSP
+`textDocument/definition` capability only after the editor-neutral proof core is
+published. Local slot flow, outer Closure captures, per-name opaque capture
+interfaces, branch-multiple OR provenance, modules and receiver/delegation cases
+remain later exact-proof work and return no result meanwhile.
