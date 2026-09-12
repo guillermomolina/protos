@@ -32,6 +32,31 @@
       "migration_ref": "TEST001-D2"
     },
     {
+      "id": "language.match.fundamentals",
+      "classification": "PROTOS_SEMANTIC",
+      "state": "RECONCILED",
+      "primary": {
+        "owner": "TOOL002",
+        "evidence": [
+          "protos/tests/conformance/manifest.tsv",
+          "protos/tests/conformance/matching/binder-wildcard.protos",
+          "protos/tests/conformance/matching/opaque-captures-fixed-rest.protos",
+          "protos/tests/conformance/matching/value-order-subject-matcher-once.protos"
+        ]
+      },
+      "secondary": [
+        {
+          "owner": "JUNIT",
+          "role": "HOST_RUNTIME",
+          "evidence": [
+            "src/test/java/com/guillermomolina/protos/execution/ProtosMatchBytecodeExecutionTest.java"
+          ],
+          "reason": "Retains Bytecode backend parity and runtime execution invariants for the same successful matching fixtures rather than primary Match semantic policy."
+        }
+      ],
+      "migration_ref": "TEST001-D5"
+    },
+    {
       "id": "language.match.guard-patterns",
       "classification": "PROTOS_SEMANTIC",
       "state": "RECONCILED",

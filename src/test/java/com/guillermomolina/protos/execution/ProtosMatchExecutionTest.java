@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -34,6 +33,10 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Host/runtime matching-error coverage retained after TEST001-D5 moved
+ * successful fundamental Match semantics to TOOL002.
+ */
 class ProtosMatchExecutionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path MATCHING =
@@ -44,28 +47,6 @@ class ProtosMatchExecutionTest {
     @BeforeAll
     static void bootstrapCore() throws Exception {
         prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-    }
-
-    @Test
-    void subjectArmOrderMatcherAndBodyAreExactlyOnceAndLazy() throws Exception {
-        assertSame(
-                ProtosBooleanValue.TRUE,
-                execute("value-order-subject-matcher-once.protos"));
-    }
-
-    @Test
-    void binderAndWildcardUseTheRatifiedZeroAndOneCaptureAbi() throws Exception {
-        assertSame(
-                ProtosBooleanValue.TRUE,
-                execute("binder-wildcard.protos"));
-    }
-
-    @Test
-    void opaqueMatcherCaptureInterfacesUseOrdinaryFixedAndRestParameters()
-            throws Exception {
-        assertSame(
-                ProtosBooleanValue.TRUE,
-                execute("opaque-captures-fixed-rest.protos"));
     }
 
     @Test
@@ -128,12 +109,6 @@ class ProtosMatchExecutionTest {
                                         .compile(source(name))
                                         .call(prelude.newModuleActivation()));
         assertSame(prelude.errorPrototype(), signalled.error().parent().orElseThrow());
-    }
-
-    private static Object execute(String name) throws Exception {
-        return new ProtosSourceCompiler()
-                .compile(source(name))
-                .call(prelude.newModuleActivation());
     }
 
     private static String source(String name) throws Exception {

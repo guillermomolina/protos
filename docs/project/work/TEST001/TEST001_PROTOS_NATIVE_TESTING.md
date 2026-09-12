@@ -495,6 +495,58 @@ implementation, TOOL002 behavior or implementation version.
 No full Maven suite, full TOOL002 corpus, Bytecode suite, Tool suite or CLI suite
 is required for this bounded mixed-owner reduction.
 
+### TEST001-D5 — fundamental Match semantic ownership
+
+Status: CLOSED
+
+D5 reconciles the successful fundamental Match contracts that were still
+duplicated in `ProtosMatchExecutionTest`.
+
+The three retired Java methods only re-executed ordinary `.protos` fixtures and
+asserted their final `true` result:
+
+- subject/arm order, matcher/body exactly-once and laziness;
+- binder/wildcard zero/one-capture ABI;
+- opaque matcher fixed/rest capture ABI.
+
+Each fixture already self-checks the detailed behavior internally and each is
+already selected exactly once by the TOOL002 main manifest. D5 therefore removes
+those three Java wrapper methods and their now-unused execution helper.
+
+The registered semantic contract is `language.match.fundamentals` with TOOL002 as
+primary owner.
+
+`ProtosMatchBytecodeExecutionTest` remains `HOST_RUNTIME` secondary evidence for
+Bytecode backend parity/runtime behavior over the same fixtures. It is not
+rerun by D5 because D5 does not modify it.
+
+D5 deliberately does NOT reconcile the remaining Match error tests yet.
+`noMatchSignalsFreshGenericErrors`,
+`invalidAndEmptyMatcherOutcomesSignalGenericError`, and
+`selectedArmArityFailureDoesNotRetryLaterArm` retain stronger Java-observed
+properties such as Error parent/freshness and activation-state no-retry. Those
+remain for a separate bounded audit rather than being weakened to the manifest's
+plain `error` carrier.
+
+D5 changes no Match semantics, grammar, fixture, manifest row, runtime
+implementation, TOOL002 behavior or implementation version.
+
+#### TEST001-D5 focal validation profile
+
+1. baseline `ProtosMatchExecutionTest` proves the mixed owner before editing;
+2. structural guards prove all three TOOL002 manifest rows remain present exactly
+   once and the three semantic wrapper methods are absent after editing;
+3. `scripts/test_ownership_guard.py` validates the reconciled ownership record;
+4. post-edit `ProtosMatchExecutionTest` alone validates the modified retained
+   Match error host/runtime checks;
+5. `scripts/source_style_guard.py` validates the candidate delta;
+6. unmodified Bytecode, Tool and CLI tests are not rerun;
+7. TEST001-D top-level closure retains responsibility for broader integrated
+   validation.
+
+No full Maven suite or full TOOL002 corpus run is required for this bounded
+mixed-owner reduction.
+
 ## Migration order established by A
 
 The dependency/order for remaining slices is:
@@ -555,7 +607,7 @@ Dxxx/LIBxxx/TOOLxxx/PLATxxx approval gate.
 | TEST001-A | CLOSED | Current suite classified at durable ownership-family level; per-test retirement rule fixed. |
 | TEST001-B | CLOSED | CI invokes packaged checkout `bin/protos test --jobs 2` directly; JUnit retains only a pre-corpus bundled-tool bootstrap floor. |
 | TEST001-C | CLOSED | Machine-readable semantic ownership ledger and fail-closed no-duplicate-primary-owner guard are active in publication validation. |
-| TEST001-D | IN_PROGRESS | Core/language semantic migration under the C ownership guard; D1 OR-pattern, D2 Array-pattern, D3 Map-pattern and D4 Guard-pattern ownership closed. |
+| TEST001-D | IN_PROGRESS | Core/language semantic migration under the C ownership guard; D1 OR-pattern, D2 Array-pattern, D3 Map-pattern, D4 Guard-pattern and D5 Match-fundamentals ownership closed. |
 | TEST001-E | BLOCKED_BY_D | Concurrency/execution-model semantic migration. |
 | TEST001-F | BLOCKED_BY_E | Standard Library migration. |
 | TEST001-G | BLOCKED_BY_F | Package/modules/I/O integration migration. |
@@ -627,5 +679,16 @@ implementation version.
 
 D4 narrows one mixed Java test to host/runtime ownership and registers the
 existing TOOL002 Guard-pattern semantic owner. It changes no fixture, manifest
+row, specification, public behavior, runtime implementation, CI configuration or
+implementation version.
+
+
+## TEST001-D5 publication classification
+
+`VALIDATION_CLASS=TEST_IMPACT`
+`VALIDATION_IMPACT=FOCAL_BOUNDED`
+
+D5 removes three Java semantic wrappers already owned by TOOL002 while retaining
+the stronger Java Match-error tests unchanged. It changes no fixture, manifest
 row, specification, public behavior, runtime implementation, CI configuration or
 implementation version.
