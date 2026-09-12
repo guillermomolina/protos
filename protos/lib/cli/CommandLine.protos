@@ -1,0 +1,388 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Canonical inert command-line specification records.
+
+/// Canonicalizes one option descriptor into a fresh frozen OptionSpec record.
+option: (descriptor) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    required: (name) => {
+        descriptor.hasSlot(name).ifFalse(() => {
+            fail()
+        })
+        descriptor.slotValue(name)
+    }
+
+    validateString: (value) => {
+        validated: "" + value
+        (validated === value).ifFalse(() => {
+            fail()
+        })
+        value
+    }
+
+    validateNonEmptyString: (value) => {
+        validateString(value)
+        (value == "").ifTrue(() => {
+            fail()
+        })
+        value
+    }
+
+    validateOptionalString: (value) => {
+        (value === null).ifFalse(() => {
+            validateString(value)
+        })
+        value
+    }
+
+    isAlpha: (octet) => {
+        ((octet >= 65) && (octet <= 90)) ||
+            ((octet >= 97) && (octet <= 122))
+    }
+
+    isDigit: (octet) => {
+        (octet >= 48) && (octet <= 57)
+    }
+
+    validateLongName: (value) => {
+        validateString(value)
+        source: Encoding.UTF8.encode(value)
+        (source.size() == 0).ifTrue(() => {
+            fail()
+        })
+        isAlpha(source[0]).ifFalse(() => {
+            fail()
+        })
+        index: 1
+        (() => index < source.size()).while() {
+            octet: source[index]
+            allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
+            allowed.ifFalse(() => {
+                fail()
+            })
+            index = index + 1
+        }
+        value
+    }
+
+    validateShortName: (value) => {
+        validateString(value)
+        source: Encoding.UTF8.encode(value)
+        (source.size() == 1).ifFalse(() => {
+            fail()
+        })
+        (isAlpha(source[0]) || isDigit(source[0])).ifFalse(() => {
+            fail()
+        })
+        value
+    }
+
+    validateInteger: (value) => {
+        ignoredValidation: value.div(1)
+        value
+    }
+
+    keyValue: validateNonEmptyString(required("key"))
+    longValue: required("long")
+    shortValue: required("short")
+    minValuesValue: validateInteger(required("minValues"))
+    maxValuesValue: validateInteger(required("maxValues"))
+    minOccurrencesValue: validateInteger(required("minOccurrences"))
+    maxOccurrencesValue: required("maxOccurrences")
+    valueNameValue: validateOptionalString(required("valueName"))
+    helpValue: validateOptionalString(required("help"))
+
+    (longValue === null).ifFalse(() => {
+        validateLongName(longValue)
+    })
+    (shortValue === null).ifFalse(() => {
+        validateShortName(shortValue)
+    })
+    ((longValue === null) && (shortValue === null)).ifTrue(() => {
+        fail()
+    })
+
+    validValueCardinality: ((minValuesValue == 0) && (maxValuesValue == 0)) ||
+        ((minValuesValue == 1) && (maxValuesValue == 1))
+    validValueCardinality.ifFalse(() => {
+        fail()
+    })
+
+    ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
+        fail()
+    })
+    (maxOccurrencesValue === null).ifFalse(() => {
+        validateInteger(maxOccurrencesValue)
+        (maxOccurrencesValue == 1).ifFalse(() => {
+            fail()
+        })
+    })
+
+    canonical: {
+        kind: "option"
+        key: keyValue
+        long: longValue
+        short: shortValue
+        minValues: minValuesValue
+        maxValues: maxValuesValue
+        minOccurrences: minOccurrencesValue
+        maxOccurrences: maxOccurrencesValue
+        valueName: valueNameValue
+        help: helpValue
+    }
+
+    canonical.freeze()
+}
+
+/// Canonicalizes one positional descriptor into a fresh frozen PositionalSpec record.
+positional: (descriptor) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    required: (name) => {
+        descriptor.hasSlot(name).ifFalse(() => {
+            fail()
+        })
+        descriptor.slotValue(name)
+    }
+
+    validateString: (value) => {
+        validated: "" + value
+        (validated === value).ifFalse(() => {
+            fail()
+        })
+        value
+    }
+
+    validateNonEmptyString: (value) => {
+        validateString(value)
+        (value == "").ifTrue(() => {
+            fail()
+        })
+        value
+    }
+
+    validateOptionalString: (value) => {
+        (value === null).ifFalse(() => {
+            validateString(value)
+        })
+        value
+    }
+
+    validateInteger: (value) => {
+        ignoredValidation: value.div(1)
+        value
+    }
+
+    keyValue: validateNonEmptyString(required("key"))
+    minOccurrencesValue: validateInteger(required("minOccurrences"))
+    maxOccurrencesValue: required("maxOccurrences")
+    valueNameValue: validateOptionalString(required("valueName"))
+    helpValue: validateOptionalString(required("help"))
+
+    ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
+        fail()
+    })
+    (maxOccurrencesValue === null).ifFalse(() => {
+        validateInteger(maxOccurrencesValue)
+        (maxOccurrencesValue == 1).ifFalse(() => {
+            fail()
+        })
+    })
+
+    canonical: {
+        kind: "positional"
+        key: keyValue
+        minOccurrences: minOccurrencesValue
+        maxOccurrences: maxOccurrencesValue
+        valueName: valueNameValue
+        help: helpValue
+    }
+
+    canonical.freeze()
+}
+
+/// Canonicalizes one command descriptor and its complete nested specification graph.
+command: (descriptor) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    validateString: (value) => {
+        validated: "" + value
+        (validated === value).ifFalse(() => {
+            fail()
+        })
+        value
+    }
+
+    validateOptionalString: (value) => {
+        (value === null).ifFalse(() => {
+            validateString(value)
+        })
+        value
+    }
+
+    isAlpha: (octet) => {
+        ((octet >= 65) && (octet <= 90)) ||
+            ((octet >= 97) && (octet <= 122))
+    }
+
+    isDigit: (octet) => {
+        (octet >= 48) && (octet <= 57)
+    }
+
+    validateCommandName: (value) => {
+        validateString(value)
+        source: Encoding.UTF8.encode(value)
+        (source.size() == 0).ifTrue(() => {
+            fail()
+        })
+        isAlpha(source[0]).ifFalse(() => {
+            fail()
+        })
+        index: 1
+        (() => index < source.size()).while() {
+            octet: source[index]
+            allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
+            allowed.ifFalse(() => {
+                fail()
+            })
+            index = index + 1
+        }
+        value
+    }
+
+    validateArray: (value) => {
+        (value.parent() === Array).ifFalse(() => {
+            fail()
+        })
+        value
+    }
+
+    visiting: IdentityMap()
+    canonicalizeCommand: null
+
+    canonicalizeCommand = (candidate) => {
+        visiting.containsKey(candidate).ifTrue(() => {
+            fail()
+        })
+        visiting[candidate] = true
+
+        required: (name) => {
+            candidate.hasSlot(name).ifFalse(() => {
+                fail()
+            })
+            candidate.slotValue(name)
+        }
+
+        nameValue: validateCommandName(required("name"))
+        helpValue: validateOptionalString(required("help"))
+        optionDescriptors: validateArray(required("options"))
+        positionalDescriptors: validateArray(required("positionals"))
+        subcommandDescriptors: validateArray(required("subcommands"))
+
+        canonicalOptions: Array(...optionDescriptors)
+        optionKeys: Map()
+        longNames: Map()
+        shortNames: Map()
+
+        optionIndex: 0
+        optionDescriptors.each((entry) => {
+            spec: option(entry)
+
+            optionKeys.containsKey(spec.key).ifTrue(() => {
+                fail()
+            })
+            optionKeys[spec.key] = true
+
+            (spec.long === null).ifFalse(() => {
+                longNames.containsKey(spec.long).ifTrue(() => {
+                    fail()
+                })
+                longNames[spec.long] = true
+            })
+
+            (spec.short === null).ifFalse(() => {
+                shortNames.containsKey(spec.short).ifTrue(() => {
+                    fail()
+                })
+                shortNames[spec.short] = true
+            })
+
+            canonicalOptions[optionIndex] = spec
+            optionIndex = optionIndex + 1
+        })
+        canonicalOptions.freeze()
+
+        canonicalPositionals: Array(...positionalDescriptors)
+        positionalKeys: Map()
+        positionalIndex: 0
+        positionalDescriptors.each((entry) => {
+            spec: positional(entry)
+
+            positionalKeys.containsKey(spec.key).ifTrue(() => {
+                fail()
+            })
+            positionalKeys[spec.key] = true
+
+            (spec.maxOccurrences === null).ifTrue(() => {
+                ((positionalIndex + 1) == positionalDescriptors.size()).ifFalse(() => {
+                    fail()
+                })
+            })
+
+            canonicalPositionals[positionalIndex] = spec
+            positionalIndex = positionalIndex + 1
+        })
+        canonicalPositionals.freeze()
+
+        canonicalSubcommands: Array(...subcommandDescriptors)
+        subcommandNames: Map()
+        subcommandIndex: 0
+        subcommandDescriptors.each((entry) => {
+            spec: canonicalizeCommand(entry)
+
+            subcommandNames.containsKey(spec.name).ifTrue(() => {
+                fail()
+            })
+            subcommandNames[spec.name] = true
+
+            canonicalSubcommands[subcommandIndex] = spec
+            subcommandIndex = subcommandIndex + 1
+        })
+        canonicalSubcommands.freeze()
+
+        visiting.remove(candidate)
+
+        canonical: {
+            kind: "command"
+            name: nameValue
+            help: helpValue
+            options: canonicalOptions
+            positionals: canonicalPositionals
+            subcommands: canonicalSubcommands
+        }
+
+        canonical.freeze()
+    }
+
+    canonicalizeCommand(descriptor)
+}

@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A RATIFIED — Candidate E′ selected; LIB011-A1 READY**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A RATIFIED — Candidate E′ selected; LIB011-A1 CLOSED; LIB011-A2 READY**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1031,6 +1031,21 @@ publication slices before LIB011-B may begin:
 
 #### LIB011-A1 — specification model
 
+**CLOSED — implementation version `0.2.450-SNAPSHOT`.**
+
+Public module exports exactly `option`, `positional`, and `command`. The three
+constructors implement the approved E-prime specification model as ordinary
+structural data: fresh canonical records, exact logical keys separate from
+option spellings, portable ASCII external-name validation, explicit cardinality
+bounds, per-command uniqueness, ordered positional validation, nested command
+canonicalization, recursive-cycle rejection, fresh retained Arrays, and
+node-by-node freezing of the complete canonical specification graph. Descriptor
+records and their aggregate Arrays are never mutated or retained.
+
+No result model, token parser, command traversal policy, help rendering, typed
+decoding/defaults, authority-bearing integration or public Error taxonomy is
+introduced by A1.
+
 Publish descriptor-based constructors plus canonical, fresh, tagged and
 node-by-node-frozen `CommandSpec`, `OptionSpec` and `PositionalSpec` structural
 records. Validate only the approved naming, logical-key, cardinality, ordering,
@@ -1038,6 +1053,8 @@ uniqueness and graph-snapshot invariants. No token parser, command traversal or
 help renderer is included.
 
 #### LIB011-A2 — result model
+
+**READY.**
 
 Publish or internally establish, as required by the future parser surface, the
 recursive lossless result representation: exact frozen arguments snapshot,
