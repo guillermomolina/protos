@@ -53,7 +53,7 @@ import org.junit.jupiter.api.Timeout;
 class ProtosLanguageServerFoundationTest {
 
     @Test
-    void initializeWithoutHierarchySupportAdvertisesFullSyncAndWorkspaceSymbols() {
+    void initializeWithoutHierarchySupportAdvertisesFullSyncWorkspaceSymbolsAndDefinition() {
         ProtosLanguageServer server = new ProtosLanguageServer(code -> {});
         InitializeResult result = server.initialize(new InitializeParams()).join();
 
@@ -63,7 +63,9 @@ class ProtosLanguageServerFoundationTest {
         assertEquals(Boolean.TRUE, sync.getOpenClose());
         assertEquals(TextDocumentSyncKind.Full, sync.getChange());
 
-        assertNull(result.getCapabilities().getDefinitionProvider());
+        assertEquals(
+                Boolean.TRUE,
+                result.getCapabilities().getDefinitionProvider().getLeft());
         assertNull(result.getCapabilities().getReferencesProvider());
         assertNull(result.getCapabilities().getHoverProvider());
         assertNull(result.getCapabilities().getCompletionProvider());
@@ -90,7 +92,9 @@ class ProtosLanguageServerFoundationTest {
         assertEquals(
                 Boolean.TRUE,
                 result.getCapabilities().getWorkspaceSymbolProvider().getLeft());
-        assertNull(result.getCapabilities().getDefinitionProvider());
+        assertEquals(
+                Boolean.TRUE,
+                result.getCapabilities().getDefinitionProvider().getLeft());
         assertNull(result.getCapabilities().getReferencesProvider());
     }
 

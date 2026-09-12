@@ -19,6 +19,7 @@ package com.guillermomolina.protos.lsp;
 
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.Objects;
+import java.util.OptionalInt;
 import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.Range;
 
@@ -35,6 +36,52 @@ final class ProtosLspSourcePositions {
         return new Range(
                 position(source, span.startOffset()),
                 position(source, span.endOffset()));
+    }
+
+
+    static OptionalInt offset(String source, Position position) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(position, "position");
+        if (position.getLine() < 0 || position.getCharacter() < 0) {
+            return OptionalInt.empty();
+        }
+
+        int currentLine = 0;
+        int lineStart = 0;
+        int index = 0;
+        while (true) {
+            if (currentLine == position.getLine()) {
+                int lineEnd = lineStart;
+                while (lineEnd < source.length()) {
+                    char current = source.charAt(lineEnd);
+                    if (current == '\r' || current == '\n') {
+                        break;
+                    }
+                    lineEnd++;
+                }
+                int offset = lineStart + position.getCharacter();
+                if (offset > lineEnd) {
+                    return OptionalInt.empty();
+                }
+                return OptionalInt.of(offset);
+            }
+
+            if (index >= source.length()) {
+                return OptionalInt.empty();
+            }
+
+            char current = source.charAt(index++);
+            if (current == '\r') {
+                if (index < source.length() && source.charAt(index) == '\n') {
+                    index++;
+                }
+                currentLine++;
+                lineStart = index;
+            } else if (current == '\n') {
+                currentLine++;
+                lineStart = index;
+            }
+        }
     }
 
     static Position position(String source, int offset) {

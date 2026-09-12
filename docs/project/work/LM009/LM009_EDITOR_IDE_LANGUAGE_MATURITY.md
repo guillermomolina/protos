@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106/D110 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 IMPLEMENTATION AUDIT CLOSED; G4-A1 CLOSED; G4-A2 READY)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106/D110 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 IMPLEMENTATION AUDIT CLOSED; G4-A1 CLOSED; G4-A2 CLOSED)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1684,3 +1684,36 @@ and session snapshot staleness.
 
 `LM009-G4-A2` is READY to wire this exact editor-neutral proof to standard
 `textDocument/definition` using canonical ProjectBinding/open-document custody.
+
+## LM009-G4-A2 — standard LSP definition wiring
+
+`LM009-G4-A2` is CLOSED.
+
+The language server now advertises standard `textDocument/definition` and wires
+the generation-1 D110 proof core without widening its proof domain.
+
+A request is eligible only when the exact open-document URI is owned by exactly
+one current canonical `ProjectBinding.Source`, the UTF-16 LSP position maps into
+the captured immutable snapshot, G4-A1 returns a complete proof, the snapshot is
+still current, and canonical source authority still exists at publication time.
+
+The adapter performs no URI/path normalization or discovery. Loose documents,
+noncanonical URI spellings, stale/invalid ProjectBinding acquisition and
+unproven references return an ordinary empty definition result.
+
+G4-A1 currently emits only same-snapshot singleton targets. A2 maps those
+targets to standard LSP `Location` values and deliberately fails closed if a
+future proof-core revision starts returning cross-document targets before
+canonical target-source custody is separately wired.
+
+There is no workspace-symbol/name fallback, D106 ranking, filesystem guessing,
+runtime/guest assistance, live Truffle Context, or TypeScript semantic model.
+Ordinary runtime execution remains unaffected.
+
+Focused validation covers capability advertisement, canonical open-overlay
+navigation, authority loss, loose/noncanonical-document rejection, invalid
+positions and D110 no-result behavior.
+
+LM009-G4 implementation is complete for the current generation. LM009-G remains
+open for integrated/full validation and real VS Code S5 navigation evidence
+before closure.

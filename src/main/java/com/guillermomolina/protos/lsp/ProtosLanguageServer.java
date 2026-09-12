@@ -40,8 +40,9 @@ import org.eclipse.lsp4j.services.WorkspaceService;
  *
  * <p>This class retains the LM009-F full document-synchronization boundary.
  * LM009-G1 adds parser-derived push diagnostics, G2 adds D079-ratified
- * hierarchical document symbols, and G3 adds D082/D106 workspace symbols.
- * Later G4/H slices own definition, completion, hover, signature help and references.</p>
+ * hierarchical document symbols, G3 adds D082/D106 workspace symbols, and G4
+ * adds D110 exact fail-closed go-to-definition. Later H slices own completion,
+ * hover, signature help and references.</p>
  */
 public final class ProtosLanguageServer implements LanguageServer, LanguageClientAware {
     private final ProtosStaticAnalysisSession analysisSession;
@@ -62,6 +63,8 @@ public final class ProtosLanguageServer implements LanguageServer, LanguageClien
         this.workspaceService = new ProtosWorkspaceService(
                 textDocumentService,
                 Objects.requireNonNull(projectBindingProvider, "projectBindingProvider"));
+        this.textDocumentService.setDefinitionSourceAuthority(
+                workspaceService::ownsCanonicalSourceUri);
         this.exitHandler = Objects.requireNonNull(exitHandler, "exitHandler");
     }
 
@@ -83,6 +86,7 @@ public final class ProtosLanguageServer implements LanguageServer, LanguageClien
             capabilities.setDocumentSymbolProvider(Boolean.TRUE);
         }
         capabilities.setWorkspaceSymbolProvider(Boolean.TRUE);
+        capabilities.setDefinitionProvider(Boolean.TRUE);
 
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));
     }

@@ -113,7 +113,52 @@ final class ProtosWorkspaceService implements WorkspaceService {
         // becomes source/project authority, and no background index work is introduced.
     }
 
+
+    /**
+     * Returns whether the supplied URI is exactly one current canonical
+     * ProjectBinding source identity.
+     *
+     * <p>No URI normalization, parent/child discovery, workspace-symbol lookup,
+     * or filesystem guessing is performed.</p>
+     */
+    boolean ownsCanonicalSourceUri(String sourceUri) {
+        Objects.requireNonNull(sourceUri, "sourceUri");
+        int matches = 0;
+        for (ProtosProjectBinding binding : currentBindings()) {
+            for (ProtosProjectBinding.Source source : binding.sources()) {
+                if (source.source().toUri().toString().equals(sourceUri)) {
+                    matches++;
+                    if (matches > 1) {
+                        return false;
+                    }
+                }
+            }
+        }
+        return matches == 1;
+    }
+
     private List<ProtosWorkspaceSymbolSearch.Candidate> currentCandidates() {
+        List<ProtosProjectBinding> bindings = currentBindings();
+        Set<Path> activeRoots = bindings.stream()
+                .map(binding -> binding.projection().canonicalProjectRoot())
+                .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        indexes.keySet().removeIf(root -> !activeRoots.contains(root));
+
+        ArrayList<ProtosWorkspaceSymbolSearch.Candidate> candidates = new ArrayList<>();
+        for (ProtosProjectBinding binding : bindings) {
+            Path root = binding.projection().canonicalProjectRoot();
+            ProtosWorkspaceSymbolIndex index =
+                    indexes.computeIfAbsent(root, ProtosWorkspaceSymbolIndex::new);
+            try {
+                candidates.addAll(index.snapshot(binding, documents::currentSnapshot));
+            } catch (RuntimeException rejected) {
+                indexes.remove(root, index);
+            }
+        }
+        return List.copyOf(candidates);
+    }
+
+    private List<ProtosProjectBinding> currentBindings() {
         Map<Path, ProtosProjectBinding> byCanonicalRoot = new HashMap<>();
         Set<Path> conflictingRoots = new HashSet<>();
         for (Path candidateRoot : candidateRoots) {
@@ -128,28 +173,14 @@ final class ProtosWorkspaceService implements WorkspaceService {
             }
             ProtosProjectBinding binding = acquired.get();
             Path canonicalRoot = binding.projection().canonicalProjectRoot();
-            ProtosProjectBinding previous = byCanonicalRoot.putIfAbsent(canonicalRoot, binding);
+            ProtosProjectBinding previous =
+                    byCanonicalRoot.putIfAbsent(canonicalRoot, binding);
             if (previous != null && !previous.equals(binding)) {
                 conflictingRoots.add(canonicalRoot);
             }
         }
         conflictingRoots.forEach(byCanonicalRoot::remove);
-
-        Set<Path> activeRoots = Set.copyOf(byCanonicalRoot.keySet());
-        indexes.keySet().removeIf(root -> !activeRoots.contains(root));
-
-        ArrayList<ProtosWorkspaceSymbolSearch.Candidate> candidates = new ArrayList<>();
-        for (ProtosProjectBinding binding : byCanonicalRoot.values()) {
-            Path root = binding.projection().canonicalProjectRoot();
-            ProtosWorkspaceSymbolIndex index =
-                    indexes.computeIfAbsent(root, ProtosWorkspaceSymbolIndex::new);
-            try {
-                candidates.addAll(index.snapshot(binding, documents::currentSnapshot));
-            } catch (RuntimeException rejected) {
-                indexes.remove(root, index);
-            }
-        }
-        return List.copyOf(candidates);
+        return List.copyOf(byCanonicalRoot.values());
     }
 
     private static SymbolInformation toSymbolInformation(

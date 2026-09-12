@@ -21,19 +21,25 @@ import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.analysis.ProtosDocumentSymbol;
 import com.guillermomolina.protos.analysis.ProtosDocumentSymbols;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
+import com.guillermomolina.protos.analysis.ProtosStaticDefinitionResult;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.OptionalInt;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Predicate;
 import org.eclipse.lsp4j.DidChangeTextDocumentParams;
 import org.eclipse.lsp4j.DidCloseTextDocumentParams;
 import org.eclipse.lsp4j.DidOpenTextDocumentParams;
 import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticSeverity;
+import org.eclipse.lsp4j.DefinitionParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
+import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.SymbolKind;
@@ -50,9 +56,10 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * <p>The adapter keeps all currently open editor buffers in one server-local
  * custody domain. G1 parses only each exact immutable buffer snapshot and emits
  * parser-derived diagnostics. G2 derives D079 document symbols from the same
- * current parser-authoritative snapshot. The domain is still not a Protos
- * workspace/package/module authority; later G slices may introduce mapping only
- * through canonical Protos resolution authorities.</p>
+ * current parser-authoritative snapshot. G4 definition queries consume only
+ * D110 proof results after the workspace edge confirms exact canonical
+ * ProjectBinding source ownership; the open-document domain itself never
+ * becomes project/package/module authority.</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
@@ -60,6 +67,7 @@ final class ProtosTextDocumentService implements TextDocumentService {
     private final ProtosStaticAnalysisSession session;
     private volatile LanguageClient client;
     private volatile boolean hierarchicalDocumentSymbolsEnabled;
+    private volatile Predicate<String> definitionSourceAuthority = ignored -> false;
 
     ProtosTextDocumentService(ProtosStaticAnalysisSession session) {
         this.session = Objects.requireNonNull(session, "session");
@@ -153,6 +161,68 @@ final class ProtosTextDocumentService implements TextDocumentService {
                 .toList());
     }
 
+
+    @Override
+    public CompletableFuture<
+                    Either<List<? extends Location>, List<? extends LocationLink>>>
+            definition(DefinitionParams params) {
+        Objects.requireNonNull(params, "params");
+        String uri = Objects.requireNonNull(
+                Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
+                "textDocument.uri");
+
+        Predicate<String> authority = definitionSourceAuthority;
+        if (!authority.test(uri)) {
+            return noDefinition();
+        }
+
+        Optional<ProtosDocumentSnapshot> current =
+                session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
+        if (current.isEmpty()) {
+            return noDefinition();
+        }
+        OptionalInt sourceOffset =
+                ProtosLspSourcePositions.offset(
+                        current.get().characters(),
+                        Objects.requireNonNull(params.getPosition(), "position"));
+        if (sourceOffset.isEmpty()) {
+            return noDefinition();
+        }
+
+        Optional<ProtosStaticDefinitionResult> definition =
+                session.definitionCurrent(
+                        OPEN_DOCUMENTS_DOMAIN,
+                        uri,
+                        sourceOffset.getAsInt());
+        if (definition.isEmpty()) {
+            return noDefinition();
+        }
+
+        ProtosStaticDefinitionResult proven = definition.get();
+        if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, proven)
+                || !authority.test(uri)
+                || !proven.referenceSnapshot().documentId().equals(uri)) {
+            return noDefinition();
+        }
+
+        for (ProtosStaticDefinitionResult.Target target : proven.targets()) {
+            if (!target.snapshot().equals(proven.referenceSnapshot())
+                    || !target.snapshot().documentId().equals(uri)) {
+                return noDefinition();
+            }
+        }
+
+        List<Location> locations = proven.targets().stream()
+                .map(target -> new Location(
+                        target.snapshot().documentId(),
+                        ProtosLspSourcePositions.range(
+                                target.snapshot().characters(),
+                                target.span())))
+                .toList();
+        List<? extends Location> left = locations;
+        return CompletableFuture.completedFuture(Either.forLeft(left));
+    }
+
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
         Objects.requireNonNull(params, "params");
@@ -166,6 +236,19 @@ final class ProtosTextDocumentService implements TextDocumentService {
 
     void setHierarchicalDocumentSymbolsEnabled(boolean enabled) {
         hierarchicalDocumentSymbolsEnabled = enabled;
+    }
+
+
+    void setDefinitionSourceAuthority(Predicate<String> authority) {
+        definitionSourceAuthority =
+                Objects.requireNonNull(authority, "authority");
+    }
+
+    private static CompletableFuture<
+                    Either<List<? extends Location>, List<? extends LocationLink>>>
+            noDefinition() {
+        List<? extends Location> empty = List.of();
+        return CompletableFuture.completedFuture(Either.forLeft(empty));
     }
 
     private static DocumentSymbol toLspDocumentSymbol(
