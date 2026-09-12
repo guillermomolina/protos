@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -58,7 +59,11 @@ final class ProtosTestToolSimpleExpectationsTest {
         ProtosExecutionOutcome outcome =
                 executeFixture(POSITIVE_FIXTURE, fixture.activation());
 
-        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "Simple expectations "
+                        + guestErrorDiagnostic(outcome, fixture.prelude()));
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
 
@@ -107,8 +112,48 @@ final class ProtosTestToolSimpleExpectationsTest {
                 new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosExactExecutionFacility.install(activation);
-        return new Fixture(activation);
+        return new Fixture(activation, prelude);
     }
 
-    private record Fixture(ProtosActivation activation) {}
+    private static String guestErrorDiagnostic(
+            ProtosExecutionOutcome outcome, ProtosPrelude prelude) {
+        if (outcome.error() == null) {
+            return "state=" + outcome.state() + ", guestError=<none>";
+        }
+
+        ProtosObjectValue error = outcome.error();
+        Object parent = error.parent().orElse(null);
+        return "state="
+                + outcome.state()
+                + ", errorClass="
+                + error.getClass().getName()
+                + ", errorSlots="
+                + error.localSlotsSnapshot()
+                + ", parentBinding="
+                + preludeBindingName(parent, prelude)
+                + ", parentClass="
+                + (parent == null ? "<none>" : parent.getClass().getName())
+                + ", parentSlots="
+                + objectSlots(parent);
+    }
+
+    private static String preludeBindingName(Object value, ProtosPrelude prelude) {
+        if (value == null) {
+            return "<none>";
+        }
+        for (var entry : prelude.bindings().localSlotsSnapshot().entrySet()) {
+            if (entry.getValue() == value) {
+                return entry.getKey();
+            }
+        }
+        return "<unbound>";
+    }
+
+    private static Object objectSlots(Object value) {
+        return value instanceof ProtosObjectValue object
+                ? object.localSlotsSnapshot()
+                : "<not-object>";
+    }
+
+    private record Fixture(ProtosActivation activation, ProtosPrelude prelude) {}
 }
