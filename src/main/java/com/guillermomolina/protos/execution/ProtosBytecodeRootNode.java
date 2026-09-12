@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosProcessArgumentsValue;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
@@ -567,6 +568,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean;
         private final boolean structuredArrayEach;
         private final boolean structuredBytesEach;
+        private final boolean structuredProcessArgumentsEach;
         private final boolean directControlNative;
         private final ProtosModuleRuntime.PreparedModuleInitialization moduleInitialization;
 
@@ -580,6 +582,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     false,
                     false,
                     null,
+                    false,
                     false,
                     false,
                     false);
@@ -596,6 +599,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean,
                 boolean structuredArrayEach,
                 boolean structuredBytesEach,
+                boolean structuredProcessArgumentsEach,
                 boolean directControlNative) {
             this.bodyTarget = bodyTarget;
             this.nativeBody = nativeBody;
@@ -610,6 +614,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredBoolean = structuredBoolean;
             this.structuredArrayEach = structuredArrayEach;
             this.structuredBytesEach = structuredBytesEach;
+            this.structuredProcessArgumentsEach = structuredProcessArgumentsEach;
             this.directControlNative = directControlNative;
             this.moduleInitialization = null;
             int controlCapabilities =
@@ -619,6 +624,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             + (structuredBoolean != null ? 1 : 0)
                             + (structuredArrayEach ? 1 : 0)
                             + (structuredBytesEach ? 1 : 0)
+                            + (structuredProcessArgumentsEach ? 1 : 0)
                             + (directControlNative ? 1 : 0);
             if (controlCapabilities > 1) {
                 throw new IllegalArgumentException(
@@ -636,6 +642,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean,
                 boolean structuredArrayEach,
                 boolean structuredBytesEach,
+                boolean structuredProcessArgumentsEach,
                 boolean directControlNative) {
             return new PreparedClosureCall(
                     null,
@@ -648,6 +655,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredBoolean,
                     structuredArrayEach,
                     structuredBytesEach,
+                    structuredProcessArgumentsEach,
                     directControlNative);
         }
 
@@ -665,6 +673,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredBoolean = null;
             this.structuredArrayEach = false;
             this.structuredBytesEach = false;
+            this.structuredProcessArgumentsEach = false;
             this.directControlNative = false;
             this.moduleInitialization =
                     java.util.Objects.requireNonNull(
@@ -695,6 +704,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         boolean isStructuredBoolean() { return structuredBoolean != null; }
         boolean isStructuredArrayEach() { return structuredArrayEach; }
         boolean isStructuredBytesEach() { return structuredBytesEach; }
+        boolean isStructuredProcessArgumentsEach() { return structuredProcessArgumentsEach; }
 
         PreparedEnsureCall prepareStructuredEnsure() {
             if (!structuredEnsure) {
@@ -796,6 +806,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
+        PreparedProcessArgumentsEachCall prepareStructuredProcessArgumentsEach() {
+            if (!structuredProcessArgumentsEach) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured ProcessArguments.each capability");
+            }
+            return new PreparedProcessArgumentsEachCall(
+                    activation.receiver(),
+                    supplied,
+                    activation);
+        }
+
         Object enterNative() {
             if (nativeBody == null) {
                 throw new IllegalStateException(
@@ -806,7 +827,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || structuredWhile
                     || structuredBoolean != null
                     || structuredArrayEach
-                    || structuredBytesEach) {
+                    || structuredBytesEach
+                    || structuredProcessArgumentsEach) {
                 throw new IllegalStateException(
                         "structured control native must execute through Bytecode control operations");
             }
@@ -1329,6 +1351,112 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    static final class PreparedProcessArgumentsEachCall {
+        private final ProtosProcessArgumentsValue arguments;
+        private final List<?> snapshot;
+        private final Object block;
+        private final ProtosActivation activation;
+        private int index;
+
+        PreparedProcessArgumentsEachCall(
+                Object receiver,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            if (!(receiver instanceof ProtosProcessArgumentsValue value)
+                    || supplied.size() != 1) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            this.arguments = value;
+            this.block = supplied.get(0);
+            ProtosStandardProcessArgumentsProtocol.requireInvokableForStructured(
+                    block,
+                    activation);
+            this.snapshot = List.copyOf(value.valuesForRuntime());
+        }
+
+        boolean hasNext() {
+            return index < snapshot.size();
+        }
+
+        PreparedClosureCall prepareCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "ProcessArguments.each callback requested after snapshot exhaustion");
+            }
+            return prepareClosureCall(
+                    block,
+                    List.of(snapshot.get(index)),
+                    activation);
+        }
+
+        void advance() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "ProcessArguments.each cursor advanced after snapshot exhaustion");
+            }
+            index++;
+        }
+
+        Object finish() {
+            if (hasNext()) {
+                throw new IllegalStateException(
+                        "ProcessArguments.each finished before snapshot exhaustion");
+            }
+            return arguments;
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredProcessArgumentsEachCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredProcessArgumentsEach();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredProcessArgumentsEachCall {
+        @Specialization
+        public static PreparedProcessArgumentsEachCall perform(PreparedClosureCall prepared) {
+            return prepared.prepareStructuredProcessArgumentsEach();
+        }
+    }
+
+    @Operation
+    public static final class StructuredProcessArgumentsEachHasNext {
+        @Specialization
+        public static boolean perform(PreparedProcessArgumentsEachCall prepared) {
+            return prepared.hasNext();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredProcessArgumentsEachElementCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedProcessArgumentsEachCall prepared) {
+            return prepared.prepareCurrent();
+        }
+    }
+
+    @Operation
+    public static final class AdvanceStructuredProcessArgumentsEach {
+        @Specialization
+        public static void perform(PreparedProcessArgumentsEachCall prepared) {
+            prepared.advance();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredProcessArgumentsEach {
+        @Specialization
+        public static Object perform(PreparedProcessArgumentsEachCall prepared) {
+            return prepared.finish();
+        }
+    }
+
     @Operation
     public static final class IsStructuredBooleanCall {
         @Specialization
@@ -1758,6 +1886,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         targetClosure),
                 ProtosStandardArrayProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardBytesProtocol.isStandardEachImplementation(targetClosure),
+                ProtosStandardProcessArgumentsProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardErrorProtocol.isStandardSignalImplementation(targetClosure));
     }
 
@@ -1956,6 +2085,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         closure,
                         methodHome,
                         caller),
+                ProtosStandardProcessArgumentsProtocol.isCanonicalStandardEachSelection(
+                        closure,
+                        receiver,
+                        methodHome),
                 ProtosStandardErrorProtocol.isCanonicalStandardSignalSelection(
                         closure,
                         methodHome,
@@ -1994,6 +2127,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 null,
                 false,
                 false,
+                false,
                 false);
     }
 
@@ -2027,6 +2161,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean,
             boolean structuredArrayEach,
             boolean structuredBytesEach,
+            boolean structuredProcessArgumentsEach,
             boolean directControlNative) {
         if (closure.nativeBody().isPresent()) {
             ProtosNativeClosureBody nativeBody =
@@ -2048,6 +2183,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredBoolean,
                     structuredArrayEach,
                     structuredBytesEach,
+                    structuredProcessArgumentsEach,
                     directControlNative);
         }
         if (structuredEnsure
@@ -2056,6 +2192,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 || structuredBoolean != null
                 || structuredArrayEach
                 || structuredBytesEach
+                || structuredProcessArgumentsEach
                 || directControlNative) {
             throw new IllegalStateException(
                     "structured control capability requires the canonical native implementation");

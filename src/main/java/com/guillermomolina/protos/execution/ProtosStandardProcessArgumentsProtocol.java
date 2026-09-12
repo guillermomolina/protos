@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosProcessArgumentsValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -38,11 +39,35 @@ import java.util.List;
  * polymorphic callback validation.
  */
 public final class ProtosStandardProcessArgumentsProtocol {
+    private static final class StandardPrototype extends ProtosObjectValue {
+        StandardPrototype() {
+            super(ProtosObjectValue.rootObject());
+        }
+    }
+
+    private static final ProtosNativeClosureBody STANDARD_EACH_BODY =
+            ProtosStandardProcessArgumentsProtocol::each;
+    private static final ProtosClosureValue STANDARD_EACH =
+            ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
+
     private ProtosStandardProcessArgumentsProtocol() {}
 
+    static boolean isStandardEachImplementation(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
+    }
+
+    static boolean isCanonicalStandardEachSelection(
+            ProtosClosureValue behavior,
+            Object receiver,
+            ProtosObjectValue home) {
+        return behavior == STANDARD_EACH
+                && home instanceof StandardPrototype
+                && receiver instanceof ProtosProcessArgumentsValue arguments
+                && arguments.prototypeForRuntime() == home;
+    }
+
     public static ProtosObjectValue createPrototype() {
-        ProtosObjectValue prototype =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue prototype = new StandardPrototype();
 
         prototype.createLocalSlot(
                 "size",
@@ -78,25 +103,22 @@ public final class ProtosStandardProcessArgumentsProtocol {
                             return arguments.indexedAtForRuntime(value);
                         }));
 
-        prototype.createLocalSlot(
-                "each",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosProcessArgumentsValue arguments =
-                                    requireReceiver(activation);
-                            if (supplied.size() != 1) {
-                                throw error(activation);
-                            }
-                            Object block = supplied.get(0);
-                            requireInvokable(block, activation);
-                            for (Object argument : arguments.valuesForRuntime()) {
-                                ProtosInvocation.invoke(
-                                        block, List.of(argument), activation);
-                            }
-                            return arguments;
-                        }));
+        prototype.createLocalSlot("each", STANDARD_EACH);
 
         return prototype.freeze();
+    }
+
+    private static Object each(ProtosActivation activation, List<?> supplied) {
+        ProtosProcessArgumentsValue arguments = requireReceiver(activation);
+        if (supplied.size() != 1) {
+            throw error(activation);
+        }
+        Object block = supplied.get(0);
+        requireInvokableForStructured(block, activation);
+        for (Object argument : arguments.valuesForRuntime()) {
+            ProtosInvocation.invoke(block, List.of(argument), activation);
+        }
+        return arguments;
     }
 
     private static ProtosProcessArgumentsValue requireReceiver(
@@ -108,7 +130,7 @@ public final class ProtosStandardProcessArgumentsProtocol {
         return arguments;
     }
 
-    private static void requireInvokable(
+    static void requireInvokableForStructured(
             Object candidate, ProtosActivation activation) {
         var prelude =
                 activation.prelude()

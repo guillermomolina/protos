@@ -86,6 +86,11 @@ public final class ProtosProcessArgumentsValue implements ProtosRepresentedValue
         return arguments;
     }
 
+    /** Runtime-only exact construction prototype used for standard-method provenance. */
+    public ProtosObjectValue prototypeForRuntime() {
+        return prototype;
+    }
+
     /** Ordinary Actor value transfer gives the destination snapshot a fresh semantic identity. */
     ProtosProcessArgumentsValue rematerializeForActorTransfer() {
         return new ProtosProcessArgumentsValue(prototype, arguments);
