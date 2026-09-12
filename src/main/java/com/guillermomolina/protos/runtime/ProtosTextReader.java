@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.execution.ProtosInvocation;
+import com.guillermomolina.protos.execution.ProtosTextReaderCPrimeExecution;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -69,7 +70,18 @@ public final class ProtosTextReader {
         return enqueue(
                 Objects.requireNonNull(activation, "activation"),
                 RequestKind.READ_TEXT,
+                null,
                 null);
+    }
+
+    public ProtosFutureValue readTextForCPrimeRuntime(
+            ProtosActivation activation,
+            ProtosTextReaderCPrimeExecution.Plan plan) {
+        return enqueue(
+                Objects.requireNonNull(activation, "activation"),
+                RequestKind.READ_TEXT,
+                null,
+                Objects.requireNonNull(plan, "plan"));
     }
 
     public ProtosFutureValue readLine(ProtosActivation activation, BigInteger maxBytes) {
@@ -77,16 +89,34 @@ public final class ProtosTextReader {
         if (maxBytes != null && maxBytes.signum() <= 0) {
             throw new IllegalArgumentException("readLine maxBytes must be positive");
         }
-        return enqueue(activation, RequestKind.READ_LINE, maxBytes);
+        return enqueue(activation, RequestKind.READ_LINE, maxBytes, null);
+    }
+
+    public ProtosFutureValue readLineForCPrimeRuntime(
+            ProtosActivation activation,
+            BigInteger maxBytes,
+            ProtosTextReaderCPrimeExecution.Plan plan) {
+        Objects.requireNonNull(activation, "activation");
+        if (maxBytes != null && maxBytes.signum() <= 0) {
+            throw new IllegalArgumentException("readLine maxBytes must be positive");
+        }
+        return enqueue(
+                activation,
+                RequestKind.READ_LINE,
+                maxBytes,
+                Objects.requireNonNull(plan, "plan"));
     }
 
     private ProtosFutureValue enqueue(
-            ProtosActivation activation, RequestKind kind, BigInteger maxBytes) {
+            ProtosActivation activation,
+            RequestKind kind,
+            BigInteger maxBytes,
+            ProtosTextReaderCPrimeExecution.Plan cPrimePlan) {
         ProtosIoOperation operation = lifecycle.beginOperation(activation);
         ProtosFutureValue future = operation.future();
         if (operation.terminal()) return future;
 
-        Request request = new Request(activation, operation, kind, maxBytes);
+        Request request = new Request(activation, operation, kind, maxBytes, cPrimePlan);
         operation.onCancellation(() -> cancel(request));
         synchronized (this) {
             queue.addLast(request);
@@ -114,7 +144,9 @@ public final class ProtosTextReader {
         final ProtosIoOperation operation;
         final RequestKind kind;
         final BigInteger maxBytes;
+        final ProtosTextReaderCPrimeExecution.Plan cPrimePlan;
         ProtosFutureValue lower;
+        ProtosFutureValue.Observer lowerObserver;
         ProtosObjectValue lowerFailure;
         boolean driving;
         boolean driveRequested;
@@ -123,11 +155,13 @@ public final class ProtosTextReader {
                 ProtosActivation activation,
                 ProtosIoOperation operation,
                 RequestKind kind,
-                BigInteger maxBytes) {
+                BigInteger maxBytes,
+                ProtosTextReaderCPrimeExecution.Plan cPrimePlan) {
             this.activation = activation;
             this.operation = operation;
             this.kind = kind;
             this.maxBytes = maxBytes;
+            this.cPrimePlan = cPrimePlan;
         }
     }
 
@@ -168,7 +202,18 @@ public final class ProtosTextReader {
                 break;
             }
         }
-        if (next != null) drive(next);
+        if (next == null) return;
+        if (next.cPrimePlan != null) {
+            if (advanceUntilInputOrTerminal(next)) {
+                ProtosTextReaderCPrimeExecution.schedule(
+                        next.cPrimePlan,
+                        next.operation,
+                        this,
+                        source);
+            }
+            return;
+        }
+        drive(next);
     }
 
     /** Prevent already-terminal lower Futures from creating recursive drive stack growth. */
@@ -193,7 +238,18 @@ public final class ProtosTextReader {
     }
 
     private void driveOnce(Request request) {
-        if (!isActive(request)) return;
+        if (advanceUntilInputOrTerminal(request)) {
+            startLowerRead(request);
+        }
+    }
+
+    /**
+     * Runs only native/codec/queue leaf work. Returning true means the same outer operation
+     * needs another ordinary source.read callback. The caller owns how that callback is
+     * sequenced: the compatibility path calls Java directly; the PLAT029 path loops in C-prime.
+     */
+    private boolean advanceUntilInputOrTerminal(Request request) {
+        if (!isActive(request)) return false;
 
         if (request.operation.terminal()) {
             ProtosFutureValue lower;
@@ -204,7 +260,7 @@ public final class ProtosTextReader {
             if (lower == null || lifecycleState != ProtosIoLifecycle.State.OPEN) {
                 finishQueueRequest(request);
             }
-            return;
+            return false;
         }
 
         ProtosObjectValue permanent;
@@ -224,7 +280,7 @@ public final class ProtosTextReader {
 
         if (permanent != null) {
             failAndFinish(request, permanent, false, false);
-            return;
+            return false;
         }
 
         if (foldLf && deferred == null && sourceFailure == null) {
@@ -233,15 +289,14 @@ public final class ProtosTextReader {
                 fold = resolvePendingLf(snapshot, eof);
             } catch (ProtosEncodingValue.ConversionFailure failure) {
                 failEncoding(request);
-                return;
+                return false;
             }
             if (fold.kind() == FoldKind.NEED_INPUT) {
-                startLowerRead(request);
-                return;
+                return true;
             }
             if (fold.kind() == FoldKind.ERROR) {
                 failEncoding(request);
-                return;
+                return false;
             }
             synchronized (this) {
                 pendingLfAfterCr = false;
@@ -260,11 +315,11 @@ public final class ProtosTextReader {
 
         if (deferred != null) {
             failAndFinish(request, deferred, true, false);
-            return;
+            return false;
         }
         if (sourceFailure != null) {
             failAndFinish(request, sourceFailure, false, true);
-            return;
+            return false;
         }
 
         final ProtosEncodingValue.DecodePreview preview;
@@ -272,7 +327,7 @@ public final class ProtosTextReader {
             preview = decoder.preview(snapshot, eof);
         } catch (ProtosEncodingValue.ConversionFailure failure) {
             failEncoding(request);
-            return;
+            return false;
         }
 
         if (request.kind == RequestKind.READ_TEXT) {
@@ -281,9 +336,11 @@ public final class ProtosTextReader {
                 case TEXT -> completeText(request, result);
                 case EOF -> completeEof(request, result);
                 case ERROR -> failEncoding(request);
-                case NEED_INPUT -> startLowerRead(request);
+                case NEED_INPUT -> {
+                    return true;
+                }
             }
-            return;
+            return false;
         }
 
         LineResult line = scanLine(preview, request.maxBytes);
@@ -298,8 +355,11 @@ public final class ProtosTextReader {
                                     ProtosCoreErrors.StandardError.LINE_TOO_LONG),
                             false,
                             true);
-            case NEED_INPUT -> startLowerRead(request);
+            case NEED_INPUT -> {
+                return true;
+            }
         }
+        return false;
     }
 
     private FoldResult resolvePendingLf(byte[] bytes, boolean eof)
@@ -508,6 +568,242 @@ public final class ProtosTextReader {
         finishQueueRequest(request);
     }
 
+    /** PLAT029 leaf arguments for one source.read callback. */
+    public List<?> sourceReadArgumentsForCPrimeRuntime() {
+        return List.of(new ProtosIntegerValue(BigInteger.valueOf(SOURCE_READ_AHEAD)));
+    }
+
+    /**
+     * Publishes one lower Future to the reader before the operation-owned C-prime wait is
+     * retained. A second observer records only terminal evidence needed for the historical
+     * late-read-ahead rule; it never schedules or executes guest code.
+     */
+    public boolean observeLowerForCPrimeRuntime(
+            ProtosIoOperation operation,
+            ProtosFutureValue lower) {
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(lower, "lower");
+
+        Request request;
+        ProtosFutureValue.Observer observer;
+        boolean terminalWithoutRequest = false;
+        synchronized (this) {
+            request = active;
+            if (request == null
+                    || request.operation != operation
+                    || request.cPrimePlan == null
+                    || queue.peekFirst() != request) {
+                if (!operation.terminal()) {
+                    throw new IllegalStateException(
+                            "TextReader C-prime lower Future has no active owning request");
+                }
+                terminalWithoutRequest = true;
+                observer = null;
+            } else {
+                if (request.lower != null || request.lowerObserver != null) {
+                    throw new IllegalStateException(
+                            "TextReader C-prime request already owns a lower Future");
+                }
+                request.lower = lower;
+                observer = ignored -> cPrimeLowerTerminalObserved(request, lower);
+                request.lowerObserver = observer;
+            }
+        }
+
+        if (terminalWithoutRequest) {
+            lower.cancelRequest();
+            return false;
+        }
+
+        lower.observe(observer);
+        if (operation.terminal()) {
+            lower.cancelRequest();
+            if (!lower.isPending()) {
+                consumeLowerForCPrimeRuntime(operation, lower);
+            }
+            return false;
+        }
+        return true;
+    }
+
+    /** Consumes one terminal lower Future on the Actor-domain C-prime segment. */
+    public boolean consumeLowerForCPrimeRuntime(
+            ProtosIoOperation operation,
+            ProtosFutureValue lower) {
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(lower, "lower");
+        if (lower.isPending()) {
+            throw new IllegalStateException(
+                    "TextReader C-prime attempted to consume a pending lower Future");
+        }
+
+        ProtosFutureValue.State state = lower.state();
+        Object resolved =
+                state == ProtosFutureValue.State.RESOLVED
+                        ? lower.resolvedValue().orElseThrow()
+                        : null;
+        ProtosObjectValue lowerError =
+                state == ProtosFutureValue.State.FAILED
+                        ? lower.failedError().orElseThrow()
+                        : null;
+        boolean invalidResolved = false;
+        byte[] data = null;
+        boolean eof = false;
+        if (state == ProtosFutureValue.State.RESOLVED) {
+            if (resolved == ProtosNullValue.INSTANCE) {
+                eof = true;
+            } else if (resolved instanceof ProtosBytesValue bytes) {
+                data = snapshotBytes(bytes);
+                invalidResolved = data == null || data.length == 0;
+            } else {
+                invalidResolved = true;
+            }
+        }
+
+        Request request;
+        ProtosFutureValue.Observer observer;
+        boolean outerTerminal;
+        boolean closing;
+        synchronized (this) {
+            request = active;
+            if (request == null
+                    || request.operation != operation
+                    || request.cPrimePlan == null
+                    || request.lower != lower) {
+                return false;
+            }
+            observer = request.lowerObserver;
+            request.lowerObserver = null;
+            request.lower = null;
+            outerTerminal = operation.terminal();
+            closing = lifecycle.state() != ProtosIoLifecycle.State.OPEN;
+
+            if (outerTerminal) {
+                if (!closing) {
+                    switch (state) {
+                        case RESOLVED -> {
+                            if (invalidResolved) {
+                                if (deferredError == null) {
+                                    deferredError = ioError(request.activation);
+                                }
+                            } else if (eof) {
+                                sourceEof = true;
+                            } else {
+                                appendRetained(data);
+                            }
+                        }
+                        case FAILED -> {
+                            if (deferredError == null) deferredError = lowerError;
+                        }
+                        case CANCELLED, PENDING -> { }
+                    }
+                }
+            } else {
+                switch (state) {
+                    case RESOLVED -> {
+                        if (invalidResolved) request.lowerFailure = ioError(request.activation);
+                        else if (eof) sourceEof = true;
+                        else appendRetained(data);
+                    }
+                    case FAILED -> request.lowerFailure = lowerError;
+                    case CANCELLED, PENDING -> { }
+                }
+            }
+        }
+
+        if (observer != null) {
+            lower.removeObserver(observer);
+        }
+
+        if (outerTerminal) {
+            finishQueueRequest(request);
+            return false;
+        }
+        if (state == ProtosFutureValue.State.CANCELLED) {
+            operation.requestCancellation();
+            return false;
+        }
+        return advanceUntilInputOrTerminal(request);
+    }
+
+    /** Invalid source.read result is the historical permanent TextReader IOError lane. */
+    public boolean invalidLowerForCPrimeRuntime(ProtosIoOperation operation) {
+        return recordCPrimeSourceFailure(operation, null);
+    }
+
+    /** Preserve an exact guest Error from source.read; non-Error control is mapped to IOError. */
+    public boolean invocationFailedForCPrimeRuntime(
+            ProtosIoOperation operation,
+            ProtosObjectValue exactError) {
+        return recordCPrimeSourceFailure(operation, exactError);
+    }
+
+    /** Defensive driver-failure lane: preserve the exact Protos Error and terminalize. */
+    public void cPrimeDriverFailedForRuntime(
+            ProtosIoOperation operation,
+            ProtosObjectValue error) {
+        boolean needsInput = recordCPrimeSourceFailure(operation, error);
+        if (needsInput) {
+            throw new IllegalStateException(
+                    "TextReader C-prime failure unexpectedly requested additional input");
+        }
+    }
+
+    /** The synthetic root may only return normally after the outer operation is terminal. */
+    public void unexpectedCPrimeCompletionForRuntime(ProtosIoOperation operation) {
+        Objects.requireNonNull(operation, "operation");
+        Request request;
+        synchronized (this) {
+            request = active;
+            if (request == null || request.operation != operation || request.cPrimePlan == null) {
+                return;
+            }
+        }
+        failAndFinish(request, ioError(request.activation), false, true);
+    }
+
+    private boolean recordCPrimeSourceFailure(
+            ProtosIoOperation operation,
+            ProtosObjectValue exactError) {
+        Objects.requireNonNull(operation, "operation");
+        Request request;
+        boolean terminal;
+        synchronized (this) {
+            request = active;
+            if (request == null
+                    || request.operation != operation
+                    || request.cPrimePlan == null
+                    || queue.peekFirst() != request) {
+                return false;
+            }
+            terminal = operation.terminal();
+            if (!terminal) {
+                request.lowerFailure =
+                        exactError != null ? exactError : ioError(request.activation);
+            }
+        }
+        if (terminal) {
+            finishQueueRequest(request);
+            return false;
+        }
+        return advanceUntilInputOrTerminal(request);
+    }
+
+    private void cPrimeLowerTerminalObserved(
+            Request request,
+            ProtosFutureValue lower) {
+        boolean applyLate;
+        synchronized (this) {
+            if (request.lower != lower || request.lowerObserver == null) {
+                return;
+            }
+            applyLate = request.operation.terminal();
+        }
+        if (applyLate) {
+            consumeLowerForCPrimeRuntime(request.operation, lower);
+        }
+    }
+
     private void startLowerRead(Request request) {
         synchronized (this) {
             if (!isActiveLocked(request) || request.lower != null || request.operation.terminal()) {
@@ -621,9 +917,23 @@ public final class ProtosTextReader {
             if (active == request) lower = request.lower;
             else if (queue.remove(request)) removed = true;
         }
-        if (lower != null) lower.cancelRequest();
-        if (removed) pump();
-        else if (lower == null) drive(request);
+        if (lower != null) {
+            lower.cancelRequest();
+            if (request.cPrimePlan != null
+                    && request.operation.terminal()
+                    && !lower.isPending()) {
+                consumeLowerForCPrimeRuntime(request.operation, lower);
+            }
+        }
+        if (removed) {
+            pump();
+        } else if (lower == null) {
+            if (request.cPrimePlan != null && request.operation.terminal()) {
+                finishQueueRequest(request);
+            } else {
+                drive(request);
+            }
+        }
     }
 
     private void finishCancelledIfNoLower(Request request) {

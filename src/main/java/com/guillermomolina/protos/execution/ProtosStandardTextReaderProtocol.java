@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTextReader;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
@@ -102,35 +103,76 @@ public final class ProtosStandardTextReaderProtocol {
             ProtosTextReader reader,
             ProtosObjectValue wrapper,
             Operation operation) {
-        return ProtosClosureValue.nativeClosure(
-                (activation, supplied) -> {
-                    if (activation.receiver() != wrapper) {
-                        return invalidFuture(activation);
-                    }
+        ProtosNativeClosureBody ordinary =
+                (activation, supplied) ->
+                        invokeOperation(
+                                reader,
+                                wrapper,
+                                operation,
+                                activation,
+                                supplied,
+                                false);
+        if (operation == Operation.CLOSE) {
+            return ProtosClosureValue.nativeClosure(ordinary);
+        }
+        ProtosNativeClosureBody cPrime =
+                (activation, supplied) ->
+                        invokeOperation(
+                                reader,
+                                wrapper,
+                                operation,
+                                activation,
+                                supplied,
+                                true);
+        return ProtosClosureValue.suspensionCapableNativeClosure(ordinary, cPrime);
+    }
 
-                    return switch (operation) {
-                        case READ_TEXT ->
-                                supplied.isEmpty()
-                                        ? reader.readText(activation)
-                                        : invalidFuture(activation);
-                        case CLOSE ->
-                                supplied.isEmpty()
-                                        ? reader.close(activation)
-                                        : invalidFuture(activation);
-                        case READ_LINE -> {
-                            if (supplied.isEmpty()) {
-                                yield reader.readLine(activation, null);
-                            }
-                            if (supplied.size() == 1) {
-                                BigInteger maxBytes = integer(supplied.get(0));
-                                if (maxBytes != null && maxBytes.signum() > 0) {
-                                    yield reader.readLine(activation, maxBytes);
-                                }
-                            }
-                            yield invalidFuture(activation);
-                        }
-                    };
-                });
+    private static Object invokeOperation(
+            ProtosTextReader reader,
+            ProtosObjectValue wrapper,
+            Operation operation,
+            ProtosActivation activation,
+            List<?> supplied,
+            boolean cPrime) {
+        if (activation.receiver() != wrapper) {
+            return invalidFuture(activation);
+        }
+
+        return switch (operation) {
+            case READ_TEXT -> {
+                if (!supplied.isEmpty()) {
+                    yield invalidFuture(activation);
+                }
+                if (cPrime || ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+                    yield reader.readTextForCPrimeRuntime(
+                            activation,
+                            ProtosTextReaderCPrimeExecution.planForEnteredContext());
+                }
+                yield reader.readText(activation);
+            }
+            case READ_LINE -> {
+                BigInteger maxBytes = null;
+                if (supplied.size() == 1) {
+                    maxBytes = integer(supplied.get(0));
+                    if (maxBytes == null || maxBytes.signum() <= 0) {
+                        yield invalidFuture(activation);
+                    }
+                } else if (!supplied.isEmpty()) {
+                    yield invalidFuture(activation);
+                }
+                if (cPrime || ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+                    yield reader.readLineForCPrimeRuntime(
+                            activation,
+                            maxBytes,
+                            ProtosTextReaderCPrimeExecution.planForEnteredContext());
+                }
+                yield reader.readLine(activation, maxBytes);
+            }
+            case CLOSE ->
+                    supplied.isEmpty()
+                            ? reader.close(activation)
+                            : invalidFuture(activation);
+        };
     }
 
     private static BigInteger integer(Object value) {

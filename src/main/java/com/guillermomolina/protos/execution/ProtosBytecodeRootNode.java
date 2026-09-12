@@ -3949,6 +3949,118 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class PrepareTextReaderSourceCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                ProtosTextReaderCPrimeExecution.CallState state,
+                ProtosActivation activation) {
+            return prepareSend(
+                    state.source(),
+                    "read",
+                    activation,
+                    state.arguments());
+        }
+    }
+
+    @Operation
+    public static final class WrapTextReaderSourceInvocation {
+        @Specialization
+        public static Object perform(
+                ProtosTextReaderCPrimeExecution.CallState state,
+                Object result) {
+            return state.invocationSucceeded(result);
+        }
+    }
+
+    @Operation
+    public static final class TextReaderSourceInvocationFailed {
+        @Specialization
+        public static Object perform(
+                ProtosTextReaderCPrimeExecution.CallState state,
+                AbstractTruffleException failure) {
+            return state.invocationFailed(failure);
+        }
+    }
+
+    @Operation
+    public static final class AwaitTextReaderSourceFuture {
+        @Specialization
+        public static Object perform(
+                ProtosTextReaderCPrimeExecution.CallState state,
+                Object invocation) {
+            if (!(invocation
+                    instanceof ProtosTextReaderCPrimeExecution.SourceInvocation sourceInvocation)) {
+                throw new IllegalStateException(
+                        "TextReader C-prime invocation produced an invalid carrier");
+            }
+            return state.awaitSourceFuture(sourceInvocation);
+        }
+    }
+
+    @Operation
+    public static final class ResumeTextReaderSourceFutureWait {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                Object yielded,
+                Object resumeValue) {
+            if (!(yielded instanceof ProtosIoOperationSuspension suspension)) {
+                throw new IllegalStateException(
+                        "TextReader lower-Future wait yielded an invalid carrier");
+            }
+            ProtosIoOperation operation =
+                    activation.deferredCPrimeOperationForRuntime()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "TextReader lower-Future wait requires an operation-owned activation"));
+            if (suspension.operation() != operation) {
+                throw new IllegalStateException(
+                        "TextReader lower-Future wait belongs to another operation");
+            }
+            if (resumeValue != ProtosNullValue.INSTANCE) {
+                throw new IllegalStateException(
+                        "TextReader lower-Future wait received unsupported resume transport");
+            }
+            return suspension.resume();
+        }
+    }
+
+    @Operation
+    public static final class TextReaderInitialNeedInput {
+        @Specialization
+        public static Object perform() {
+            return ProtosTextReaderCPrimeExecution.Advance.needInput();
+        }
+    }
+
+    @Operation
+    public static final class IsTextReaderNeedInput {
+        @Specialization
+        public static boolean perform(Object advance) {
+            if (!(advance instanceof ProtosTextReaderCPrimeExecution.Advance state)) {
+                throw new IllegalStateException(
+                        "TextReader C-prime advance produced an invalid carrier");
+            }
+            return state.needsInput();
+        }
+    }
+
+    @Operation
+    public static final class ApplyTextReaderLowerOutcome {
+        @Specialization
+        public static Object perform(
+                ProtosTextReaderCPrimeExecution.CallState state,
+                Object outcome) {
+            if (!(outcome instanceof ProtosTextReaderCPrimeExecution.LowerOutcome lowerOutcome)) {
+                throw new IllegalStateException(
+                        "TextReader C-prime lower wait produced an invalid carrier");
+            }
+            return state.applyLowerOutcome(lowerOutcome);
+        }
+    }
+
+    @Operation
     public static final class PrepareSuperSendArguments {
         @Specialization
         public static PreparedClosureCall perform(
