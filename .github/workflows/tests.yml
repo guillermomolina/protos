@@ -136,9 +136,12 @@ jobs:
     name: Build and validate portable distribution
     if: ${{ github.event_name != 'pull_request' }}
     needs: test
+    # Do not cancel an executing distribution gate when main advances.
+    # With the default single pending slot, newer pushes coalesce to the latest
+    # pending distribution while the current validation is allowed to finish.
     concurrency:
       group: distribution-snapshot-${{ github.ref }}
-      cancel-in-progress: true
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825
