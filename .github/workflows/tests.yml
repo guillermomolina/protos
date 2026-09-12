@@ -377,7 +377,7 @@ jobs:
               else:
                   message = "%d passed" % passed
                   color = "brightgreen"
-              render_badge(output / "tests.svg", "tests", message, color)
+              render_badge(output / "tests.svg", "TESTS", message, color)
               print(
                   "TEST_BADGE: total=%d passed=%d failed=%d skipped=%d"
                   % (total, passed, failed, skipped)
@@ -385,7 +385,7 @@ jobs:
           elif test_result != "success":
               render_badge(
                   output / "tests.svg",
-                  "tests",
+                  "TESTS",
                   "CI failed before results",
                   "red" if test_result == "failure" else "orange",
               )
@@ -406,6 +406,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
+          # Only the run for the current main HEAD may publish README badges.
+          # Older runs can legitimately finish later after distribution
+          # cancellation/concurrency, but must never replace current status.
+          git fetch --no-tags origin main
+          current_main="$(git rev-parse refs/remotes/origin/main)"
+          if [[ "$GITHUB_SHA" != "$current_main" ]]; then
+            echo "STATUS_BADGES: SUPERSEDED_RUN_SKIPPED current=$GITHUB_SHA main=$current_main"
+            exit 0
+          fi
 
           badge_tree="$(mktemp -d)"
           rmdir "$badge_tree"
@@ -464,6 +474,15 @@ jobs:
 
           if git -C "$badge_tree" diff --cached --quiet; then
             echo "STATUS_BADGES: NO_CHANGE"
+            exit 0
+          fi
+
+          # Re-check main immediately before publication. This closes the
+          # ordinary race where main advances while SVGs are being prepared.
+          git fetch --no-tags origin main
+          publish_main="$(git rev-parse refs/remotes/origin/main)"
+          if [[ "$GITHUB_SHA" != "$publish_main" ]]; then
+            echo "STATUS_BADGES: SUPERSEDED_BEFORE_PUSH_SKIPPED current=$GITHUB_SHA main=$publish_main"
             exit 0
           fi
 
