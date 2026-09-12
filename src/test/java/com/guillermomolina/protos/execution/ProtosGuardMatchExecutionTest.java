@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -31,10 +30,13 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.math.BigInteger;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Host/runtime guard-error coverage retained after TEST001-D4 moved ordinary
+ * Guard-pattern observable semantics to TOOL002.
+ */
 class ProtosGuardMatchExecutionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path MATCHING = Path.of("protos", "tests", "conformance", "matching");
@@ -43,20 +45,6 @@ class ProtosGuardMatchExecutionTest {
     @BeforeAll
     static void bootstrapCore() throws Exception {
         prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-    }
-
-    @Test
-    void retainedProtosCasesCoverD092GuardSemantics() throws Exception {
-        for (String name : List.of(
-                "guard-bindings-shared-with-body.protos",
-                "guard-false-next-arm-effects.protos",
-                "guard-pattern-mismatch-skips-guard.protos",
-                "guard-or-success-not-reopened.protos",
-                "guard-dynamic-rest-visible.protos",
-                "guard-non-local-return.protos",
-                "guard-true-body-once.protos")) {
-            assertSame(ProtosBooleanValue.TRUE, execute(name), name);
-        }
     }
 
     @Test
@@ -85,10 +73,6 @@ class ProtosGuardMatchExecutionTest {
         assertSame(prelude.errorPrototype(), first.error().parent().orElseThrow());
         assertSame(prelude.errorPrototype(), second.error().parent().orElseThrow());
         assertNotSame(first.error(), second.error());
-    }
-
-    private static Object execute(String name) throws Exception {
-        return new ProtosSourceCompiler().compile(source(name)).call(prelude.newModuleActivation());
     }
 
     private static String source(String name) throws Exception {

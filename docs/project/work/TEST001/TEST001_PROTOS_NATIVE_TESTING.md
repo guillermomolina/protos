@@ -445,6 +445,56 @@ implementation, TOOL002 behavior or implementation version.
 No full Maven suite or full TOOL002 corpus run is required for this bounded
 mixed-owner reduction.
 
+### TEST001-D4 — Guard-pattern semantic ownership
+
+Status: CLOSED
+
+D4 reconciles Guard-pattern semantics while retaining the Java checks that
+observe host/runtime properties stronger than the ordinary TOOL002 result
+carrier.
+
+Before D4, `ProtosGuardMatchExecutionTest` contained:
+
+- one wrapper that directly re-executed seven ordinary successful Guard-pattern
+  fixtures already present in the TOOL002 main manifest;
+- an invalid-guard test that observes both the Error family and activation state
+  to prove that a later arm was not retried;
+- a terminal-no-match test that executes twice and proves fresh Error object
+  identity in addition to the public Error outcome.
+
+The TOOL002 main manifest already owns all nine public outcomes: seven successful
+boolean cases and the two Error cases. D4 therefore removes only the seven-case
+semantic wrapper and its private execution helper.
+
+The registered semantic contract is `language.match.guard-patterns` with TOOL002
+as primary owner for all nine observable results.
+
+`ProtosGuardMatchExecutionTest` remains as `HOST_RUNTIME` secondary evidence for
+exact Error parent/freshness and activation-state no-retry inspection.
+`ProtosMatchBytecodeExecutionTest` remains separately as host/runtime evidence
+for Bytecode backend and continuation behavior, but D4 does not rerun it because
+D4 does not modify that owner.
+
+D4 changes no Guard-pattern semantics, grammar, fixture, manifest row, runtime
+implementation, TOOL002 behavior or implementation version.
+
+#### TEST001-D4 focal validation profile
+
+1. baseline `ProtosGuardMatchExecutionTest` proves the mixed owner before editing;
+2. structural guards prove all nine TOOL002 manifest rows remain present exactly
+   once and the seven-case semantic wrapper is absent after editing;
+3. `scripts/test_ownership_guard.py` validates the reconciled ownership record;
+4. post-edit `ProtosGuardMatchExecutionTest` alone validates the modified retained
+   host/runtime owner;
+5. `scripts/source_style_guard.py` validates the candidate delta;
+6. unmodified secondary owners are not mechanically rerun merely because they
+   are recorded as evidence;
+7. TEST001-D top-level closure retains responsibility for broader integrated
+   validation.
+
+No full Maven suite, full TOOL002 corpus, Bytecode suite, Tool suite or CLI suite
+is required for this bounded mixed-owner reduction.
+
 ## Migration order established by A
 
 The dependency/order for remaining slices is:
@@ -505,7 +555,7 @@ Dxxx/LIBxxx/TOOLxxx/PLATxxx approval gate.
 | TEST001-A | CLOSED | Current suite classified at durable ownership-family level; per-test retirement rule fixed. |
 | TEST001-B | CLOSED | CI invokes packaged checkout `bin/protos test --jobs 2` directly; JUnit retains only a pre-corpus bundled-tool bootstrap floor. |
 | TEST001-C | CLOSED | Machine-readable semantic ownership ledger and fail-closed no-duplicate-primary-owner guard are active in publication validation. |
-| TEST001-D | IN_PROGRESS | Core/language semantic migration under the C ownership guard; D1 OR-pattern, D2 Array-pattern and D3 Map-pattern ownership closed. |
+| TEST001-D | IN_PROGRESS | Core/language semantic migration under the C ownership guard; D1 OR-pattern, D2 Array-pattern, D3 Map-pattern and D4 Guard-pattern ownership closed. |
 | TEST001-E | BLOCKED_BY_D | Concurrency/execution-model semantic migration. |
 | TEST001-F | BLOCKED_BY_E | Standard Library migration. |
 | TEST001-G | BLOCKED_BY_F | Package/modules/I/O integration migration. |
@@ -567,4 +617,15 @@ implementation version.
 D3 narrows one mixed Java test to host/runtime ownership and registers the
 existing TOOL002 Map-pattern semantic owner. It changes no fixture, manifest row,
 specification, public behavior, runtime implementation, CI configuration or
+implementation version.
+
+
+## TEST001-D4 publication classification
+
+`VALIDATION_CLASS=TEST_IMPACT`
+`VALIDATION_IMPACT=FOCAL_BOUNDED`
+
+D4 narrows one mixed Java test to host/runtime ownership and registers the
+existing TOOL002 Guard-pattern semantic owner. It changes no fixture, manifest
+row, specification, public behavior, runtime implementation, CI configuration or
 implementation version.

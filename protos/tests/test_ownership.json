@@ -32,6 +32,38 @@
       "migration_ref": "TEST001-D2"
     },
     {
+      "id": "language.match.guard-patterns",
+      "classification": "PROTOS_SEMANTIC",
+      "state": "RECONCILED",
+      "primary": {
+        "owner": "TOOL002",
+        "evidence": [
+          "protos/tests/conformance/manifest.tsv",
+          "protos/tests/conformance/matching/guard-bindings-shared-with-body.protos",
+          "protos/tests/conformance/matching/guard-dynamic-rest-visible.protos",
+          "protos/tests/conformance/matching/guard-false-next-arm-effects.protos",
+          "protos/tests/conformance/matching/guard-invalid-no-retry-error.protos",
+          "protos/tests/conformance/matching/guard-non-local-return.protos",
+          "protos/tests/conformance/matching/guard-or-success-not-reopened.protos",
+          "protos/tests/conformance/matching/guard-pattern-mismatch-skips-guard.protos",
+          "protos/tests/conformance/matching/guard-terminal-no-match-error.protos",
+          "protos/tests/conformance/matching/guard-true-body-once.protos"
+        ]
+      },
+      "secondary": [
+        {
+          "owner": "JUNIT",
+          "role": "HOST_RUNTIME",
+          "evidence": [
+            "src/test/java/com/guillermomolina/protos/execution/ProtosGuardMatchExecutionTest.java",
+            "src/test/java/com/guillermomolina/protos/execution/ProtosMatchBytecodeExecutionTest.java"
+          ],
+          "reason": "Retains host-visible exact Error parent/freshness and no-retry state inspection plus Bytecode backend/continuation invariants rather than primary Guard-pattern observable semantic policy."
+        }
+      ],
+      "migration_ref": "TEST001-D4"
+    },
+    {
       "id": "language.match.map-patterns",
       "classification": "PROTOS_SEMANTIC",
       "state": "RECONCILED",
