@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 READY FOR IMPLEMENTATION)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 READY FOR DECISION AUDIT)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1552,3 +1552,47 @@ This ratification changes no production implementation and does not itself publi
 `workspace/symbol`. The next LM009-G3 executable slice may implement the already-approved
 D082 + D106 contract. G4 definition and LM009-H semantics remain separate.
 
+
+
+## LM009-G3 canonical workspace-symbol implementation
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED; G4 READY FOR DECISION AUDIT**
+
+Coordination: GitHub #360
+Authority: D079 Candidate A′ + D082 Candidate A′ + D085 Candidate F′ + D089 Candidate A″ + D102 Candidate A′ + D106 Candidate C′
+
+G3 publishes the standard LSP `workspace/symbol` capability over the already-closed
+ProjectBinding prerequisite. Initialization records only exact file-backed LSP workspace
+folder candidates (or the legacy `rootUri` candidate when no workspace-folder list is
+supplied); candidate paths never become Protos project identity and no parent/child,
+manifest, source-extension or current-working-directory discovery is introduced. Each
+non-empty query reacquires the exact canonical ProjectBinding through the replaceable
+D085 provider, partitions session-local index state by canonical project root and indexes
+only the binding's authorized workspace sources. Dependencies, `std:` and loose open
+documents remain outside the baseline.
+
+Each project index keeps per-source parse results keyed by exact disk content or by the
+exact current canonical open-document snapshot. Disk source bytes are stability-checked
+and SHA-256 keyed so unchanged files reuse D079 parser-derived declarations while source
+changes are reparsed; an exact open buffer replaces only the matching canonical source
+and a current parse failure yields no stale disk declarations. Binding/source membership
+is revalidated on each query while ordinary runtime execution and sessions that never
+request workspace symbols pay no index-construction/background-worker cost.
+
+D106 C′ is implemented directly over the combined session candidate stream: empty query
+returns no results; comparison uses NFC plus ICU locale-independent Unicode Default Case
+Folding; eligibility is ordered code-point subsequence; ranking is folded exact > prefix
+> contiguous substring > other subsequence, then same-class original-NFC relation,
+shorter original name and the ratified deterministic canonical identity tie key. The
+implementation retains only the best global 100 candidates with a bounded Top-K heap;
+there is no camel/separator/path/package/project/open-buffer relevance heuristic and no
+configuration surface. Returned source spelling stays exact and every declaration is an
+LSP `Property` under D079.
+
+This is an intermediate `FOCAL_BOUNDED` LM009 publication. Focused validation owns the
+D106 matcher, LSP G3 integration and retained G1/G2 foundation/document-symbol regressions.
+The broader integrated/static-language-service and real VS Code S5 validation debt remains
+with LM009-G/#360 before G can close. G4 go-to-definition identity/resolution is not
+implemented by this slice and must cross its independent decision audit before code.
+
+Implementation version after publication: `0.2.439-SNAPSHOT`.

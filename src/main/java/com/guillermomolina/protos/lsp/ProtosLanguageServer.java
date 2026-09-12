@@ -17,7 +17,9 @@
 
 package com.guillermomolina.protos.lsp;
 
+import com.guillermomolina.protos.analysis.ProtosProjectBindingProvider;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
+import com.guillermomolina.protos.execution.ProtosProjectFileBindingProvider;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -37,9 +39,9 @@ import org.eclipse.lsp4j.services.WorkspaceService;
  * Thin LSP lifecycle/protocol edge over the editor-neutral static-analysis core.
  *
  * <p>This class retains the LM009-F full document-synchronization boundary.
- * LM009-G1 adds parser-derived push diagnostics and G2 adds D079-ratified
- * hierarchical document symbols; later LM009-G/H slices own workspace symbols,
- * definition, completion, hover, signature help and references.</p>
+ * LM009-G1 adds parser-derived push diagnostics, G2 adds D079-ratified
+ * hierarchical document symbols, and G3 adds D082/D106 workspace symbols.
+ * Later G4/H slices own definition, completion, hover, signature help and references.</p>
  */
 public final class ProtosLanguageServer implements LanguageServer, LanguageClientAware {
     private final ProtosStaticAnalysisSession analysisSession;
@@ -49,15 +51,24 @@ public final class ProtosLanguageServer implements LanguageServer, LanguageClien
     private final AtomicBoolean shutdownRequested = new AtomicBoolean();
 
     ProtosLanguageServer(IntConsumer exitHandler) {
+        this(exitHandler, new ProtosProjectFileBindingProvider());
+    }
+
+    ProtosLanguageServer(
+            IntConsumer exitHandler,
+            ProtosProjectBindingProvider projectBindingProvider) {
         this.analysisSession = new ProtosStaticAnalysisSession();
         this.textDocumentService = new ProtosTextDocumentService(analysisSession);
-        this.workspaceService = new ProtosWorkspaceService();
+        this.workspaceService = new ProtosWorkspaceService(
+                textDocumentService,
+                Objects.requireNonNull(projectBindingProvider, "projectBindingProvider"));
         this.exitHandler = Objects.requireNonNull(exitHandler, "exitHandler");
     }
 
     @Override
     public CompletableFuture<InitializeResult> initialize(InitializeParams params) {
         Objects.requireNonNull(params, "params");
+        workspaceService.configure(params);
 
         TextDocumentSyncOptions sync = new TextDocumentSyncOptions();
         sync.setOpenClose(Boolean.TRUE);
@@ -71,6 +82,7 @@ public final class ProtosLanguageServer implements LanguageServer, LanguageClien
         if (hierarchicalDocumentSymbols) {
             capabilities.setDocumentSymbolProvider(Boolean.TRUE);
         }
+        capabilities.setWorkspaceSymbolProvider(Boolean.TRUE);
 
         return CompletableFuture.completedFuture(new InitializeResult(capabilities));
     }

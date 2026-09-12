@@ -17,18 +17,90 @@
 
 package com.guillermomolina.protos.lsp;
 
+import com.guillermomolina.protos.analysis.ProtosProjectBinding;
+import com.guillermomolina.protos.analysis.ProtosProjectBindingProvider;
+import java.net.URI;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import org.eclipse.lsp4j.DidChangeConfigurationParams;
 import org.eclipse.lsp4j.DidChangeWatchedFilesParams;
+import org.eclipse.lsp4j.InitializeParams;
+import org.eclipse.lsp4j.Location;
+import org.eclipse.lsp4j.SymbolInformation;
+import org.eclipse.lsp4j.SymbolKind;
+import org.eclipse.lsp4j.WorkspaceFolder;
+import org.eclipse.lsp4j.WorkspaceSymbol;
+import org.eclipse.lsp4j.WorkspaceSymbolParams;
+import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.WorkspaceService;
 
 /**
- * Intentionally feature-empty F3 workspace protocol edge.
+ * D082/D106 workspace-symbol protocol edge over exact canonical ProjectBinding domains.
  *
- * <p>No workspace configuration, watched-file, symbol, package or module
- * capability is advertised by F3.</p>
+ * <p>Editor workspace roots are only exact acquisition candidates. They never become
+ * Protos project identity, trigger parent/child discovery or authorize loose files.</p>
  */
 final class ProtosWorkspaceService implements WorkspaceService {
+    private final ProtosTextDocumentService documents;
+    private final ProtosProjectBindingProvider bindingProvider;
+    private final ConcurrentMap<Path, ProtosWorkspaceSymbolIndex> indexes =
+            new ConcurrentHashMap<>();
+    private volatile List<Path> candidateRoots = List.of();
+
+    ProtosWorkspaceService(
+            ProtosTextDocumentService documents,
+            ProtosProjectBindingProvider bindingProvider) {
+        this.documents = Objects.requireNonNull(documents, "documents");
+        this.bindingProvider = Objects.requireNonNull(bindingProvider, "bindingProvider");
+    }
+
+    void configure(InitializeParams params) {
+        Objects.requireNonNull(params, "params");
+        LinkedHashSet<Path> candidates = new LinkedHashSet<>();
+        List<WorkspaceFolder> folders = params.getWorkspaceFolders();
+        if (folders != null) {
+            for (WorkspaceFolder folder : folders) {
+                candidatePath(folder.getUri()).ifPresent(candidates::add);
+            }
+        } else {
+            candidatePath(params.getRootUri()).ifPresent(candidates::add);
+        }
+        candidateRoots = List.copyOf(candidates);
+        indexes.clear();
+    }
+
+    @Override
+    public CompletableFuture<
+                    Either<List<? extends SymbolInformation>, List<? extends WorkspaceSymbol>>>
+            symbol(WorkspaceSymbolParams params) {
+        Objects.requireNonNull(params, "params");
+        String query = Objects.requireNonNull(params.getQuery(), "query");
+        if (query.isEmpty()) {
+            return CompletableFuture.completedFuture(Either.forLeft(List.of()));
+        }
+
+        List<ProtosWorkspaceSymbolSearch.Candidate> candidates = currentCandidates();
+        List<SymbolInformation> result = ProtosWorkspaceSymbolSearch.search(query, candidates)
+                .stream()
+                .map(ProtosWorkspaceService::toSymbolInformation)
+                .toList();
+        List<? extends SymbolInformation> left = result;
+        Either<List<? extends SymbolInformation>, List<? extends WorkspaceSymbol>> response =
+                Either.forLeft(left);
+        return CompletableFuture.completedFuture(response);
+    }
+
     @Override
     public void didChangeConfiguration(DidChangeConfigurationParams params) {
         Objects.requireNonNull(params, "params");
@@ -37,5 +109,75 @@ final class ProtosWorkspaceService implements WorkspaceService {
     @Override
     public void didChangeWatchedFiles(DidChangeWatchedFilesParams params) {
         Objects.requireNonNull(params, "params");
+        // G3 validates binding/source state on the next query. No editor watch registration
+        // becomes source/project authority, and no background index work is introduced.
+    }
+
+    private List<ProtosWorkspaceSymbolSearch.Candidate> currentCandidates() {
+        Map<Path, ProtosProjectBinding> byCanonicalRoot = new HashMap<>();
+        Set<Path> conflictingRoots = new HashSet<>();
+        for (Path candidateRoot : candidateRoots) {
+            Optional<ProtosProjectBinding> acquired;
+            try {
+                acquired = bindingProvider.acquire(candidateRoot);
+            } catch (RuntimeException rejected) {
+                continue;
+            }
+            if (acquired.isEmpty()) {
+                continue;
+            }
+            ProtosProjectBinding binding = acquired.get();
+            Path canonicalRoot = binding.projection().canonicalProjectRoot();
+            ProtosProjectBinding previous = byCanonicalRoot.putIfAbsent(canonicalRoot, binding);
+            if (previous != null && !previous.equals(binding)) {
+                conflictingRoots.add(canonicalRoot);
+            }
+        }
+        conflictingRoots.forEach(byCanonicalRoot::remove);
+
+        Set<Path> activeRoots = Set.copyOf(byCanonicalRoot.keySet());
+        indexes.keySet().removeIf(root -> !activeRoots.contains(root));
+
+        ArrayList<ProtosWorkspaceSymbolSearch.Candidate> candidates = new ArrayList<>();
+        for (ProtosProjectBinding binding : byCanonicalRoot.values()) {
+            Path root = binding.projection().canonicalProjectRoot();
+            ProtosWorkspaceSymbolIndex index =
+                    indexes.computeIfAbsent(root, ProtosWorkspaceSymbolIndex::new);
+            try {
+                candidates.addAll(index.snapshot(binding, documents::currentSnapshot));
+            } catch (RuntimeException rejected) {
+                indexes.remove(root, index);
+            }
+        }
+        return List.copyOf(candidates);
+    }
+
+    private static SymbolInformation toSymbolInformation(
+            ProtosWorkspaceSymbolSearch.Candidate candidate) {
+        Location location = new Location();
+        location.setUri(candidate.sourceUri());
+        location.setRange(ProtosLspSourcePositions.range(
+                candidate.sourceCharacters(), candidate.selectionRange()));
+
+        SymbolInformation result = new SymbolInformation();
+        result.setName(candidate.name());
+        result.setKind(SymbolKind.Property);
+        result.setLocation(location);
+        return result;
+    }
+
+    private static Optional<Path> candidatePath(String uriText) {
+        if (uriText == null || uriText.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            URI uri = URI.create(uriText);
+            if (!"file".equalsIgnoreCase(uri.getScheme())) {
+                return Optional.empty();
+            }
+            return Optional.of(Path.of(uri).toAbsolutePath().normalize());
+        } catch (IllegalArgumentException rejected) {
+            return Optional.empty();
+        }
     }
 }
