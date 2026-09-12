@@ -70,11 +70,26 @@ public final class ProtosTask {
         void resume(ProtosTask task);
     }
 
+    /**
+     * PERF006-B6A6A2 / PLAT027 backend-private one-shot notification for true Task
+     * terminalization. This is host lifecycle state, not a guest continuation or Protos value.
+     */
+    @FunctionalInterface
+    interface TerminalLifecycle {
+        void terminalized(ProtosTask task, State terminalState, Object outcome);
+    }
+
     private final ProtosActorExecutionDomain owner;
     private ProtosTask parent;
     private final Set<ProtosTask> children = new LinkedHashSet<>();
     private final Object associatedFuture;
     private final Continuation continuation;
+
+    /*
+     * PLAT027 pay-only-when-used state. Ordinary Tasks retain only this null reference and
+     * allocate no lifecycle carrier merely because terminal finalization is supported.
+     */
+    private TerminalLifecycle terminalLifecycle;
 
     private State state = State.RUNNABLE;
     private boolean queued;
@@ -157,6 +172,24 @@ public final class ProtosTask {
 
     public synchronized Optional<Object> failure() {
         return Optional.ofNullable(failure);
+    }
+
+    /**
+     * Installs the single PLAT027 terminal lifecycle boundary before its owning guest
+     * computation starts. The caller owns that precondition; Task enforces only bounded
+     * cardinality and rejects installation after terminalization.
+     */
+    synchronized void installTerminalLifecycleForRuntime(TerminalLifecycle lifecycle) {
+        Objects.requireNonNull(lifecycle, "lifecycle");
+        if (isTerminal()) {
+            throw new IllegalStateException(
+                    "terminal Task cannot acquire a terminal lifecycle boundary");
+        }
+        if (terminalLifecycle != null) {
+            throw new IllegalStateException(
+                    "Task already owns a terminal lifecycle boundary");
+        }
+        terminalLifecycle = lifecycle;
     }
 
     public ProtosEvaluatorContinuation evaluatorContinuation() {
@@ -685,8 +718,7 @@ public final class ProtosTask {
     }
 
     private void publishCancellationTerminal() {
-        owner.terminal(this);
-        terminalizeAssociatedFuture(State.CANCELLED, null);
+        publishTerminal(State.CANCELLED, null);
     }
 
     public void complete(Object value) {
@@ -707,8 +739,7 @@ public final class ProtosTask {
             pendingCompletion = null;
             result = completed;
         }
-        owner.terminal(this);
-        terminalizeAssociatedFuture(State.COMPLETED, completed);
+        publishTerminal(State.COMPLETED, completed);
     }
 
     public void fail(Object error) {
@@ -742,8 +773,39 @@ public final class ProtosTask {
             }
             failure = error;
         }
+        publishTerminal(State.FAILED, error);
+    }
+
+    /**
+     * Publishes already-established true terminal state through the existing Task bookkeeping
+     * first, then consumes the optional PLAT027 finalizer exactly once on the same execution
+     * path. An escaping Java failure from that finalizer is deliberately not translated into a
+     * second guest outcome.
+     */
+    private void publishTerminal(State terminal, Object outcome) {
+        TerminalLifecycle lifecycle;
+        synchronized (this) {
+            if (!isTerminal() || state != terminal) {
+                throw new IllegalStateException(
+                        "terminal lifecycle publication requires matching terminal Task state");
+            }
+        }
+
+        /*
+         * Preserve the historical externally observable ordering: the domain first releases the
+         * Task (including structured-parent child removal), then the associated Future publishes
+         * its terminal state. Existing host post-processing ran only after both steps returned.
+         */
         owner.terminal(this);
-        terminalizeAssociatedFuture(State.FAILED, error);
+        terminalizeAssociatedFuture(terminal, outcome);
+
+        synchronized (this) {
+            lifecycle = terminalLifecycle;
+            terminalLifecycle = null;
+        }
+        if (lifecycle != null) {
+            lifecycle.terminalized(this, terminal, outcome);
+        }
     }
 
     private void terminalizeAssociatedFuture(State terminal, Object outcome) {
