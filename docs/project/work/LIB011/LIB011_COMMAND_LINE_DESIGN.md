@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C READY**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C READY — D115 RATIFIED (Candidate C′)**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1208,10 +1208,41 @@ The durable D111 decision remains
 
 ### LIB011-C — subcommand traversal and composition
 
-**READY.**
+**READY — D115 RATIFIED (Candidate C′).**
 
-Implement nested command-path selection and reusable specification composition,
+Implement nested command-path selection and reusable specification composition
 without execution callbacks or global/persistent flag semantics.
+
+D115 / #441 fixes traversal as the **earliest feasible exact-child boundary with
+parent-minimum reservation, structural current-scope `--` escape, and irreversible
+child scope transfer**.
+
+For each command scope, an exact child-name token before that scope's structural
+`--` selects the child at the earliest point where the positional prefix already
+admits satisfaction of every required parent `minOccurrences`. Exact child names
+therefore outrank only optional/surplus parent positional capacity; required
+parent capacity remains authoritative. The parent prefix is finalized exactly
+once under D111 B′.
+
+A recognized value-taking option consumes its required value literally before
+child recognition. Structural `--` disables both option and child recognition for
+the current scope, making later child-name Strings ordinary parent positional
+data. After child selection, scope transfer is irreversible and remaining tokens
+belong only to the child. Parent-only options do not leak across that boundary;
+shared options use ordinary explicit `OptionSpec` composition into every accepting
+command node.
+
+The same law recurses uniformly at every command level. No typed probing,
+callbacks, environment/filesystem lookup, fuzzy matching, speculative guest
+execution, parse scoring, backtracking, command registry or persistent/global
+option institution is introduced.
+
+The target remains `O(T + Svisited)` time and `O(result + Svisited)` memory, where
+`Svisited` is only the specification material required by the actually selected
+command path.
+
+The durable decision is recorded in
+`docs/project/decisions/language/D115_COMMAND_LINE_SUBCOMMAND_TRAVERSAL_SEMANTICS.md`.
 
 ### LIB011-D — pure help rendering
 
