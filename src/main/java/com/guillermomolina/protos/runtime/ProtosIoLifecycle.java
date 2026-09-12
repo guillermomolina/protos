@@ -79,13 +79,14 @@ public final class ProtosIoLifecycle {
                     closeActivation=activation;
                     closeFollowers.add(follower);
                     for (ProtosIoOperation operation : List.copyOf(operations)) {
-                        ProtosObjectValue error=operation.closeCutoverLocked();
-                        if (error != null) {
+                        ProtosIoOperation.CloseCutoverAction action =
+                                operation.closeCutoverLocked();
+                        if (action != null) {
                             cutover.add(
                                     new CloseFailure(
                                             operation,
-                                            error,
-                                            operation.closeCutoverCancellationHandlerLocked()));
+                                            action.error(),
+                                            action.cancellationHandler()));
                         }
                     }
                     start=readyToReleaseLocked();
@@ -101,7 +102,9 @@ public final class ProtosIoLifecycle {
                     // It cannot rewrite the required IOLifecycleError terminal outcome.
                 }
             }
-            failure.operation.failAtCloseCutover(failure.error);
+            if (failure.error != null) {
+                failure.operation.failAtCloseCutover(failure.error);
+            }
         }
         if (start) startRelease();
         else maybeStartRelease();

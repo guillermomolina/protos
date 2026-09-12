@@ -93,12 +93,15 @@ class ProtosIoLifecycleTest {
     void closeDuringFirstEffectAttemptWaitsForZeroEffectThenUsesExistingLifecycleError() throws Exception {
         var x=fixture();
         var operation=x.lifecycle.beginOperation(x.activation);
+        var cancellations=new AtomicInteger();
+        operation.onCancellation(cancellations::incrementAndGet);
         assertTrue(operation.beginFirstEffectAttempt());
 
         var close=x.lifecycle.close(x.activation);
         assertEquals(ProtosFutureValue.State.PENDING,operation.future().state());
         assertEquals(ProtosFutureValue.State.PENDING,close.state());
         assertEquals(0,x.releaseStarts.get());
+        assertEquals(1,cancellations.get());
 
         assertFalse(operation.finishFirstEffectAttempt(false));
         assertEquals(ProtosFutureValue.State.FAILED,operation.future().state());
@@ -110,7 +113,6 @@ class ProtosIoLifecycleTest {
         x.completion.get().succeeded();
         assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
     }
-
     @Test
     void positiveFirstEffectAfterCloseCommitsAndCloseWaitsForTerminalOperation() throws Exception {
         var x=fixture();
@@ -127,6 +129,51 @@ class ProtosIoLifecycleTest {
 
         assertTrue(operation.resolve(ProtosNullValue.INSTANCE));
         assertEquals(1,x.releaseStarts.get());
+        x.completion.get().succeeded();
+        assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
+    }
+
+    @Test
+    void unknownEffectFailureBeatsCancellationRequestedDuringFirstEffectAttempt() throws Exception {
+        var x=fixture();
+        var operation=x.lifecycle.beginOperation(x.activation);
+        var cancellations=new AtomicInteger();
+        operation.onCancellation(cancellations::incrementAndGet);
+        var failure=ProtosCoreErrors.newOccurrence(
+                x.activation,ProtosCoreErrors.StandardError.I_O_ERROR);
+
+        assertTrue(operation.beginFirstEffectAttempt());
+        assertTrue(operation.future().cancelRequest());
+        assertEquals(1,cancellations.get());
+        assertEquals(ProtosFutureValue.State.PENDING,operation.future().state());
+
+        assertTrue(operation.failFirstEffectAttemptWithUnknownEffect(failure));
+        assertEquals(ProtosFutureValue.State.FAILED,operation.future().state());
+        assertSame(failure,operation.future().failedError().orElseThrow());
+        assertTrue(operation.terminal());
+        assertFalse(operation.committed());
+    }
+
+    @Test
+    void unknownEffectFailureBeatsDeferredCloseAndThenReleasesLifecycle() throws Exception {
+        var x=fixture();
+        var operation=x.lifecycle.beginOperation(x.activation);
+        var cancellations=new AtomicInteger();
+        operation.onCancellation(cancellations::incrementAndGet);
+        var failure=ProtosCoreErrors.newOccurrence(
+                x.activation,ProtosCoreErrors.StandardError.I_O_ERROR);
+
+        assertTrue(operation.beginFirstEffectAttempt());
+        var close=x.lifecycle.close(x.activation);
+        assertEquals(1,cancellations.get());
+        assertEquals(ProtosFutureValue.State.PENDING,operation.future().state());
+        assertEquals(ProtosFutureValue.State.PENDING,close.state());
+
+        assertTrue(operation.failFirstEffectAttemptWithUnknownEffect(failure));
+        assertEquals(ProtosFutureValue.State.FAILED,operation.future().state());
+        assertSame(failure,operation.future().failedError().orElseThrow());
+        assertEquals(1,x.releaseStarts.get());
+
         x.completion.get().succeeded();
         assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
     }

@@ -21,6 +21,8 @@ public final class ProtosIoOperation {
 
     private enum DeferredCutover { NONE, CANCELLATION, CLOSE }
 
+    record CloseCutoverAction(ProtosObjectValue error, Runnable cancellationHandler) {}
+
     private final ProtosIoLifecycle lifecycle;
     private final ProtosActivation origin;
     private final ProtosFutureValue future;
@@ -301,9 +303,37 @@ public final class ProtosIoOperation {
         return true;
     }
 
+    /**
+     * D117 settlement for a delegated first-effect attempt whose lower operation failed while
+     * its standard contract permits an irreversible effect but does not expose whether one
+     * occurred. Competing zero-effect cancellation/close cannot replace this failure.
+     */
+    public boolean failFirstEffectAttemptWithUnknownEffect(ProtosObjectValue error) {
+        Objects.requireNonNull(error, "error");
+        synchronized(lifecycle) {
+            if (phase != Phase.ATTEMPTING_FIRST_EFFECT) {
+                throw new IllegalStateException("no first-effect attempt is in flight");
+            }
+            phase = Phase.TERMINAL;
+            deferredCutover = DeferredCutover.NONE;
+            deferredCloseError = null;
+        }
+        boolean won = future.fail(error);
+        finishTerminal();
+        return won;
+    }
+
     boolean firstEffectAttemptInFlight() {
         synchronized(lifecycle) {
             return phase == Phase.ATTEMPTING_FIRST_EFFECT;
+        }
+    }
+
+    boolean backendCancellationRequested() {
+        synchronized(lifecycle) {
+            return cancellationRequested
+                    || deferredCutover == DeferredCutover.CLOSE
+                    || phase == Phase.TERMINAL;
         }
     }
 
@@ -378,23 +408,22 @@ public final class ProtosIoOperation {
         return won;
     }
 
-    ProtosObjectValue closeCutoverLocked() {
+    CloseCutoverAction closeCutoverLocked() {
         if (phase == Phase.UNCOMMITTED) {
             phase=Phase.TERMINAL;
-            return ProtosCoreErrors.newOccurrence(
-                    origin,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR);
+            return new CloseCutoverAction(
+                    ProtosCoreErrors.newOccurrence(
+                            origin,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR),
+                    cancellationHandler);
         }
         if (phase == Phase.ATTEMPTING_FIRST_EFFECT
                 && deferredCutover == DeferredCutover.NONE) {
             deferredCutover=DeferredCutover.CLOSE;
             deferredCloseError=ProtosCoreErrors.newOccurrence(
                     origin,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR);
+            return new CloseCutoverAction(null, cancellationHandler);
         }
         return null;
-    }
-
-    Runnable closeCutoverCancellationHandlerLocked() {
-        return cancellationHandler;
     }
 
     void failAtCloseCutover(ProtosObjectValue error) {

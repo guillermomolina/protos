@@ -309,7 +309,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
     }
 
     @Test
-    void closeCutoverTerminatesAcceptedUncommittedReadsAndKeepsCloseIrreversible()
+    void closeCutoverTerminatesUncommittedReadsWithoutWaitingForDiscardedLowerAftermath()
             throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();
@@ -336,9 +336,9 @@ class ProtosStandardBufferedByteIoProtocolTest {
 
         assertEquals(ProtosFutureValue.State.FAILED, first.state());
         assertEquals(ProtosFutureValue.State.FAILED, second.state());
-        assertEquals(ProtosFutureValue.State.PENDING, close.state());
-        assertTrue(close.cancelRequest());
-        assertEquals(ProtosFutureValue.State.PENDING, close.state());
+        assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
+        assertSame(reader, close.resolvedValue().orElseThrow());
+        assertEquals(1, pending.cancelRequests);
 
         ProtosBytesValue result =
                 bytes(new ProtosObjectValue(ProtosObjectValue.rootObject()), 41);
@@ -346,9 +346,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
 
         assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
         assertSame(reader, close.resolvedValue().orElseThrow());
-        assertEquals(1, pending.cancelRequests);
     }
-
     @Test
     void cancellingActiveReadPropagatesToLowerFutureAndPreservesCancelledOutcome()
             throws Exception {
@@ -401,18 +399,20 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosFutureValue close =
                 (ProtosFutureValue)
                         call(writer, "close", List.of(), activation);
-        assertEquals(ProtosFutureValue.State.FAILED, flush.state());
+
+        assertEquals(ProtosFutureValue.State.PENDING, flush.state());
         assertEquals(ProtosFutureValue.State.PENDING, close.state());
         assertEquals(1, pending.counter.writes);
+        assertEquals(1, pending.cancelRequests);
 
         pending.lowerWrite.resolve(pending.target, activation);
 
+        assertEquals(ProtosFutureValue.State.RESOLVED, flush.state());
+        assertSame(writer, flush.resolvedValue().orElseThrow());
         assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
         assertEquals(1, pending.counter.writes);
         assertEquals(1, pending.counter.flushes);
-        assertEquals(1, pending.cancelRequests);
     }
-
     @Test
     void owningCloseWaitsForOwnedTargetCloseEvenWhenWrapperFinalizationFailed()
             throws Exception {
@@ -449,6 +449,125 @@ class ProtosStandardBufferedByteIoProtocolTest {
         target.lowerClose.resolve(target.target, activation);
 
         assertEquals(ProtosFutureValue.State.FAILED, close.state());
+    }
+
+    @Test
+    void lowerCancelledWithoutOuterCutoverIsBufferedFlushFailureNotOuterCancellation()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        PendingWriteTarget pending = pendingWriteTarget(activation);
+        ProtosObjectValue factory =
+                (ProtosObjectValue)
+                        prelude.bindings()
+                                .readLocalSlot("BufferedWriter")
+                                .orElseThrow();
+        ProtosObjectValue writer =
+                (ProtosObjectValue)
+                        call(factory, "call", List.of(pending.target), activation);
+
+        call(
+                writer,
+                "write",
+                List.of(bytes(pending.bytesPrototype, 7, 8)),
+                activation);
+        ProtosFutureValue flush =
+                (ProtosFutureValue)
+                        call(writer, "flush", List.of(), activation);
+
+        pending.lowerWrite.cancelTerminal();
+
+        assertEquals(ProtosFutureValue.State.FAILED, flush.state());
+        assertSame(
+                prelude.bindings().readLocalSlot("IOError").orElseThrow(),
+                flush.failedError().orElseThrow().parent().orElseThrow());
+        assertEquals(1, pending.counter.writes);
+        assertEquals(0, pending.counter.flushes);
+    }
+
+    @Test
+    void closeCutoverRetriesBufferedReleaseOnlyAfterLowerProvesZeroEffect()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        PendingWriteTarget pending = pendingWriteTarget(activation);
+        ProtosObjectValue factory =
+                (ProtosObjectValue)
+                        prelude.bindings()
+                                .readLocalSlot("BufferedWriter")
+                                .orElseThrow();
+        ProtosObjectValue writer =
+                (ProtosObjectValue)
+                        call(factory, "call", List.of(pending.target), activation);
+
+        call(
+                writer,
+                "write",
+                List.of(bytes(pending.bytesPrototype, 1, 2, 3)),
+                activation);
+        ProtosFutureValue flush =
+                (ProtosFutureValue)
+                        call(writer, "flush", List.of(), activation);
+        ProtosFutureValue firstLower = pending.lowerWrite;
+        ProtosFutureValue close =
+                (ProtosFutureValue)
+                        call(writer, "close", List.of(), activation);
+
+        firstLower.cancelTerminal();
+
+        assertEquals(ProtosFutureValue.State.FAILED, flush.state());
+        assertSame(
+                prelude.bindings().readLocalSlot("IOLifecycleError").orElseThrow(),
+                flush.failedError().orElseThrow().parent().orElseThrow());
+        assertEquals(2, pending.counter.writes);
+        assertNotSame(firstLower, pending.lowerWrite);
+        assertEquals(ProtosFutureValue.State.PENDING, close.state());
+
+        pending.lowerWrite.resolve(pending.target, activation);
+
+        assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
+        assertEquals(1, pending.counter.flushes);
+    }
+
+    @Test
+    void unknownLowerWriteFailureBeatsCloseCutoverAndPoisonsWithoutReplay()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        PendingWriteTarget pending = pendingWriteTarget(activation);
+        ProtosObjectValue factory =
+                (ProtosObjectValue)
+                        prelude.bindings()
+                                .readLocalSlot("BufferedWriter")
+                                .orElseThrow();
+        ProtosObjectValue writer =
+                (ProtosObjectValue)
+                        call(factory, "call", List.of(pending.target), activation);
+
+        call(
+                writer,
+                "write",
+                List.of(bytes(pending.bytesPrototype, 4, 5, 6)),
+                activation);
+        ProtosFutureValue flush =
+                (ProtosFutureValue)
+                        call(writer, "flush", List.of(), activation);
+        ProtosFutureValue close =
+                (ProtosFutureValue)
+                        call(writer, "close", List.of(), activation);
+        ProtosObjectValue failure =
+                ProtosCoreErrors.newOccurrence(
+                        activation, ProtosCoreErrors.StandardError.I_O_ERROR);
+
+        pending.lowerWrite.fail(failure);
+
+        assertEquals(ProtosFutureValue.State.FAILED, flush.state());
+        assertSame(failure, flush.failedError().orElseThrow());
+        assertEquals(ProtosFutureValue.State.FAILED, close.state());
+        assertSame(failure, close.failedError().orElseThrow());
+        assertEquals(1, pending.counter.writes);
+        assertEquals(0, pending.counter.flushes);
+        assertEquals(1, pending.cancelRequests);
     }
 
     private static final class Counter {
