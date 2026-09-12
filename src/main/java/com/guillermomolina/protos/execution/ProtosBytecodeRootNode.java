@@ -3872,6 +3872,84 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class PrepareBufferedByteReaderTargetCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                ProtosBufferedByteReaderCPrimeExecution.CallState state,
+                ProtosActivation activation) {
+            return prepareSend(
+                    state.target(),
+                    "read",
+                    activation,
+                    state.arguments());
+        }
+    }
+
+    @Operation
+    public static final class WrapBufferedByteReaderTargetInvocation {
+        @Specialization
+        public static Object perform(
+                ProtosBufferedByteReaderCPrimeExecution.CallState state,
+                Object result) {
+            return state.invocationSucceeded(result);
+        }
+    }
+
+    @Operation
+    public static final class BufferedByteReaderTargetInvocationFailed {
+        @Specialization
+        public static Object perform(
+                ProtosBufferedByteReaderCPrimeExecution.CallState state) {
+            return state.invocationFailed();
+        }
+    }
+
+    @Operation
+    public static final class AwaitBufferedByteReaderTargetFuture {
+        @Specialization
+        public static Object perform(
+                ProtosBufferedByteReaderCPrimeExecution.CallState state,
+                Object invocation) {
+            if (!(invocation
+                    instanceof ProtosBufferedByteReaderCPrimeExecution.TargetInvocation
+                            targetInvocation)) {
+                throw new IllegalStateException(
+                        "BufferedReader C-prime invocation produced an invalid carrier");
+            }
+            return state.awaitTargetFuture(targetInvocation);
+        }
+    }
+
+    @Operation
+    public static final class ResumeBufferedByteReaderTargetFutureWait {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                Object yielded,
+                Object resumeValue) {
+            if (!(yielded instanceof ProtosIoOperationSuspension suspension)) {
+                throw new IllegalStateException(
+                        "BufferedReader lower-Future wait yielded an invalid carrier");
+            }
+            ProtosIoOperation operation =
+                    activation.deferredCPrimeOperationForRuntime()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "BufferedReader lower-Future wait requires an operation-owned activation"));
+            if (suspension.operation() != operation) {
+                throw new IllegalStateException(
+                        "BufferedReader lower-Future wait belongs to another operation");
+            }
+            if (resumeValue != ProtosNullValue.INSTANCE) {
+                throw new IllegalStateException(
+                        "BufferedReader lower-Future wait received unsupported resume transport");
+            }
+            return suspension.resume();
+        }
+    }
+
+    @Operation
     public static final class PrepareTextWriterTargetCall {
         @Specialization
         public static PreparedClosureCall perform(

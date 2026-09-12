@@ -75,7 +75,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardActorProtocol.java", 9),
                     Map.entry("execution/ProtosStandardIdentityMapProtocol.java", 7),
                     Map.entry("execution/ProtosStandardStringProtocol.java", 3),
-                    Map.entry("execution/ProtosStandardBufferedByteIoProtocol.java", 6),
+                    Map.entry("execution/ProtosStandardBufferedByteIoProtocol.java", 5),
                     Map.entry("execution/ProtosStandardErrorProtocol.java", 2),
                     Map.entry("execution/ProtosStandardImportProtocol.java", 1),
                     Map.entry("execution/ProtosStandardIntegerProtocol.java", 3),
@@ -124,7 +124,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(36, actualCore.size());
-        assertEquals(140, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(139, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
         String inventory =

@@ -1,6 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.execution.ProtosBufferedByteReaderCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosInvocation;
 import java.math.BigInteger;
 import java.util.*;
@@ -71,6 +72,23 @@ public final class ProtosBufferedByteIo {
     }
 
     public ProtosFutureValue read(ProtosActivation activation, Object maximum) {
+        return read(activation, maximum, null);
+    }
+
+    public ProtosFutureValue readForCPrimeRuntime(
+            ProtosActivation activation,
+            Object maximum,
+            ProtosBufferedByteReaderCPrimeExecution.Plan plan) {
+        return read(
+                activation,
+                maximum,
+                Objects.requireNonNull(plan, "plan"));
+    }
+
+    private ProtosFutureValue read(
+            ProtosActivation activation,
+            Object maximum,
+            ProtosBufferedByteReaderCPrimeExecution.Plan cPrimePlan) {
         check(activation);
         BigInteger n = integer(maximum);
         if (n == null
@@ -89,7 +107,8 @@ public final class ProtosBufferedByteIo {
                         operation,
                         Kind.READ,
                         n.intValue(),
-                        null));
+                        null,
+                        cPrimePlan));
     }
 
     public ProtosFutureValue write(ProtosActivation activation, Object value) {
@@ -166,7 +185,9 @@ public final class ProtosBufferedByteIo {
         final Kind kind;
         final int maximum;
         final byte[] bytes;
+        final ProtosBufferedByteReaderCPrimeExecution.Plan readCPrimePlan;
         ProtosFutureValue lower;
+        ProtosFutureValue.Observer lowerObserver;
 
         Req(
                 ProtosActivation activation,
@@ -174,11 +195,22 @@ public final class ProtosBufferedByteIo {
                 Kind kind,
                 int maximum,
                 byte[] bytes) {
+            this(activation, operation, kind, maximum, bytes, null);
+        }
+
+        Req(
+                ProtosActivation activation,
+                ProtosIoOperation operation,
+                Kind kind,
+                int maximum,
+                byte[] bytes,
+                ProtosBufferedByteReaderCPrimeExecution.Plan readCPrimePlan) {
             this.a = activation;
             this.operation = operation;
             this.kind = kind;
             this.maximum = maximum;
             this.bytes = bytes;
+            this.readCPrimePlan = readCPrimePlan;
         }
     }
 
@@ -222,7 +254,10 @@ public final class ProtosBufferedByteIo {
         if (req == null) return;
 
         switch (req.kind) {
-            case READ -> doRead(req);
+            case READ -> {
+                if (req.readCPrimePlan == null) doRead(req);
+                else doReadCPrime(req);
+            }
             case WRITE -> doWrite(req);
             case FLUSH -> doFlush(req, false);
         }
@@ -263,33 +298,13 @@ public final class ProtosBufferedByteIo {
 
     private void doRead(Req req) {
         if (stopBeforeLowerWork(req)) return;
-
-        int bufferedCount;
-        synchronized (this) {
-            bufferedCount = Math.min(req.maximum, input.size());
-        }
-        if (bufferedCount > 0) {
-            if (!req.operation.commit()) {
-                done(req);
-                return;
-            }
-            byte[] buffered;
-            synchronized (this) {
-                buffered = takeInput(req.maximum);
-            }
-            req.operation.resolve(bytes(buffered));
-            done(req);
-            return;
-        }
+        if (completeBufferedReadIfAvailable(req)) return;
 
         ProtosFutureValue lower =
                 invokeFuture(
                         target,
                         "read",
-                        List.of(
-                                new ProtosIntegerValue(
-                                        BigInteger.valueOf(
-                                                Math.max(req.maximum, READ_AHEAD)))),
+                        readArguments(req),
                         req.a);
         if (lower == null) {
             if (!req.operation.terminal()) req.operation.fail(ioError(req.a));
@@ -301,53 +316,257 @@ public final class ProtosBufferedByteIo {
         lower.observe(
                 terminal -> {
                     clearLower(req, lower);
-                    if (req.operation.terminal()) {
-                        done(req);
-                        return;
-                    }
-
-                    switch (terminal.state()) {
-                        case RESOLVED -> {
-                            Object value = terminal.resolvedValue().orElseThrow();
-                            if (value == ProtosNullValue.INSTANCE) {
-                                if (req.operation.commit()) {
-                                    req.operation.resolve(value);
-                                }
-                                done(req);
-                            } else if (value instanceof ProtosBytesValue bytes) {
-                                byte[] obtained = snapshot(bytes);
-                                if (obtained.length == 0) {
-                                    req.operation.fail(ioError(req.a));
-                                    done(req);
-                                    return;
-                                }
-                                if (!req.operation.commit()) {
-                                    done(req);
-                                    return;
-                                }
-                                byte[] first;
-                                synchronized (this) {
-                                    for (byte b : obtained) input.addLast(b);
-                                    first = takeInput(req.maximum);
-                                }
-                                req.operation.resolve(this.bytes(first));
-                                done(req);
-                            } else {
-                                req.operation.fail(ioError(req.a));
-                                done(req);
-                            }
-                        }
-                        case FAILED -> {
-                            req.operation.fail(terminal.failedError().orElseThrow());
-                            done(req);
-                        }
-                        case CANCELLED -> {
-                            req.operation.requestCancellation();
-                            done(req);
-                        }
-                        case PENDING -> { }
-                    }
+                    settleReadLower(req, terminal);
                 });
+    }
+
+    private void doReadCPrime(Req req) {
+        if (stopBeforeLowerWork(req)) return;
+        if (completeBufferedReadIfAvailable(req)) return;
+
+        ProtosBufferedByteReaderCPrimeExecution.schedule(
+                req.readCPrimePlan,
+                req.operation,
+                this,
+                target,
+                readArguments(req));
+    }
+
+    private List<?> readArguments(Req req) {
+        return List.of(
+                new ProtosIntegerValue(
+                        BigInteger.valueOf(
+                                Math.max(req.maximum, READ_AHEAD))));
+    }
+
+    private boolean completeBufferedReadIfAvailable(Req req) {
+        int bufferedCount;
+        synchronized (this) {
+            bufferedCount = Math.min(req.maximum, input.size());
+        }
+        if (bufferedCount == 0) return false;
+
+        if (!req.operation.commit()) {
+            done(req);
+            return true;
+        }
+        byte[] buffered;
+        synchronized (this) {
+            buffered = takeInput(req.maximum);
+        }
+        req.operation.resolve(bytes(buffered));
+        done(req);
+        return true;
+    }
+
+    private void settleReadLower(Req req, ProtosFutureValue terminal) {
+        if (req.operation.terminal()) {
+            done(req);
+            return;
+        }
+
+        switch (terminal.state()) {
+            case RESOLVED -> settleResolvedRead(req, terminal.resolvedValue().orElseThrow());
+            case FAILED -> {
+                req.operation.fail(terminal.failedError().orElseThrow());
+                done(req);
+            }
+            case CANCELLED -> {
+                req.operation.requestCancellation();
+                done(req);
+            }
+            case PENDING -> throw new IllegalStateException(
+                    "BufferedReader attempted to settle a pending lower Future");
+        }
+    }
+
+    private void settleResolvedRead(Req req, Object value) {
+        if (value == ProtosNullValue.INSTANCE) {
+            if (req.operation.commit()) {
+                req.operation.resolve(value);
+            }
+            done(req);
+            return;
+        }
+
+        if (!(value instanceof ProtosBytesValue bytes)) {
+            req.operation.fail(ioError(req.a));
+            done(req);
+            return;
+        }
+
+        byte[] obtained = snapshot(bytes);
+        if (obtained.length == 0) {
+            req.operation.fail(ioError(req.a));
+            done(req);
+            return;
+        }
+        if (!req.operation.commit()) {
+            done(req);
+            return;
+        }
+
+        byte[] first;
+        synchronized (this) {
+            for (byte b : obtained) input.addLast(b);
+            first = takeInput(req.maximum);
+        }
+        req.operation.resolve(this.bytes(first));
+        done(req);
+    }
+
+    /**
+     * Publishes the lower Future before the operation-owned C-prime wait is retained.
+     * The passive observer exists only to clean up a late lower completion after the
+     * outer read was already cancelled/closed; it never executes guest code.
+     */
+    public boolean observeReadLowerForCPrimeRuntime(
+            ProtosIoOperation operation,
+            ProtosFutureValue lower) {
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(lower, "lower");
+
+        Req req;
+        ProtosFutureValue.Observer observer;
+        boolean terminalWithoutRequest = false;
+        synchronized (this) {
+            req = activeReq;
+            if (req == null
+                    || req.operation != operation
+                    || req.kind != Kind.READ
+                    || req.readCPrimePlan == null
+                    || q.peekFirst() != req) {
+                if (!operation.terminal()) {
+                    throw new IllegalStateException(
+                            "BufferedReader C-prime lower Future has no active owning request");
+                }
+                terminalWithoutRequest = true;
+                observer = null;
+            } else {
+                if (req.lower != null || req.lowerObserver != null) {
+                    throw new IllegalStateException(
+                            "BufferedReader C-prime request already owns a lower Future");
+                }
+                req.lower = lower;
+                observer = ignored -> cPrimeReadLowerTerminalObserved(req, lower);
+                req.lowerObserver = observer;
+            }
+        }
+
+        if (terminalWithoutRequest) {
+            lower.cancelRequest();
+            return false;
+        }
+
+        lower.observe(observer);
+        if (operation.terminal()) {
+            lower.cancelRequest();
+            if (!lower.isPending()) {
+                consumeReadLowerForCPrimeRuntime(operation, lower);
+            }
+            return false;
+        }
+        return true;
+    }
+
+    /** Applies one already-terminal lower Future on the Actor-domain C-prime segment. */
+    public void consumeReadLowerForCPrimeRuntime(
+            ProtosIoOperation operation,
+            ProtosFutureValue lower) {
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(lower, "lower");
+        if (lower.isPending()) {
+            throw new IllegalStateException(
+                    "BufferedReader C-prime attempted to consume a pending lower Future");
+        }
+
+        Req req;
+        ProtosFutureValue.Observer observer;
+        synchronized (this) {
+            req = activeReq;
+            if (req == null
+                    || req.operation != operation
+                    || req.kind != Kind.READ
+                    || req.readCPrimePlan == null
+                    || req.lower != lower) {
+                return;
+            }
+            observer = req.lowerObserver;
+            req.lowerObserver = null;
+            req.lower = null;
+        }
+
+        if (observer != null) {
+            lower.removeObserver(observer);
+        }
+        settleReadLower(req, lower);
+    }
+
+    public void invalidReadLowerForCPrimeRuntime(ProtosIoOperation operation) {
+        failReadCPrime(operation);
+    }
+
+    public void readInvocationFailedForCPrimeRuntime(ProtosIoOperation operation) {
+        failReadCPrime(operation);
+    }
+
+    public void readCPrimeDriverFailedForRuntime(
+            ProtosIoOperation operation,
+            ProtosObjectValue ignoredExactError) {
+        failReadCPrime(operation);
+    }
+
+    public void unexpectedReadCPrimeCompletionForRuntime(
+            ProtosIoOperation operation) {
+        failReadCPrime(operation);
+    }
+
+    private void failReadCPrime(ProtosIoOperation operation) {
+        Objects.requireNonNull(operation, "operation");
+
+        Req req;
+        ProtosFutureValue lower;
+        ProtosFutureValue.Observer observer;
+        synchronized (this) {
+            req = activeReq;
+            if (req == null
+                    || req.operation != operation
+                    || req.kind != Kind.READ
+                    || req.readCPrimePlan == null
+                    || q.peekFirst() != req) {
+                return;
+            }
+            lower = req.lower;
+            observer = req.lowerObserver;
+            req.lower = null;
+            req.lowerObserver = null;
+        }
+
+        if (observer != null && lower != null) {
+            lower.removeObserver(observer);
+        }
+        if (lower != null && lower.isPending()) {
+            lower.cancelRequest();
+        }
+        if (!operation.terminal()) {
+            operation.fail(ioError(req.a));
+        }
+        done(req);
+    }
+
+    private void cPrimeReadLowerTerminalObserved(
+            Req req,
+            ProtosFutureValue lower) {
+        boolean applyLate;
+        synchronized (this) {
+            if (req.lower != lower || req.lowerObserver == null) {
+                return;
+            }
+            applyLate = req.operation.terminal();
+        }
+        if (applyLate) {
+            consumeReadLowerForCPrimeRuntime(req.operation, lower);
+        }
     }
 
     private void doWrite(Req req) {

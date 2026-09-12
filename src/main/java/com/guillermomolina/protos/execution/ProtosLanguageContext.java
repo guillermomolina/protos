@@ -46,6 +46,7 @@ final class ProtosLanguageContext {
             sharedBytecodeExecutionPlans = new ConcurrentHashMap<>();
     private volatile ProtosTextWriterCPrimeExecution.Plan textWriterCPrimePlan;
     private volatile ProtosTextReaderCPrimeExecution.Plan textReaderCPrimePlan;
+    private volatile ProtosBufferedByteReaderCPrimeExecution.Plan bufferedByteReaderCPrimePlan;
 
     ProtosLanguageContext(ProtosLanguage language, TruffleLanguage.Env env) {
         this.language = Objects.requireNonNull(language, "language");
@@ -90,6 +91,21 @@ final class ProtosLanguageContext {
                         ProtosTextReaderCPrimeExecution.createPlan(language);
             }
             return textReaderCPrimePlan;
+        }
+    }
+
+    ProtosBufferedByteReaderCPrimeExecution.Plan bufferedByteReaderCPrimePlanForRuntime() {
+        ProtosBufferedByteReaderCPrimeExecution.Plan existing =
+                bufferedByteReaderCPrimePlan;
+        if (existing != null) {
+            return existing;
+        }
+        synchronized (this) {
+            if (bufferedByteReaderCPrimePlan == null) {
+                bufferedByteReaderCPrimePlan =
+                        ProtosBufferedByteReaderCPrimeExecution.createPlan(language);
+            }
+            return bufferedByteReaderCPrimePlan;
         }
     }
 

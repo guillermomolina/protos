@@ -1,3 +1,22 @@
+## PERF006-B / PLAT031 — BufferedReader read C-prime boundary reconciliation
+
+The PLAT029/PLAT031 migration of standard `BufferedReader.read` changes the
+already-audited wrapper operation from an ordinary
+`ProtosClosureValue.nativeClosure(...)` construction to the explicit
+`ProtosClosureValue.suspensionCapableNativeClosure(...)` lane required for its
+operation-owned C-prime callback extent. No public selector, Core provider,
+resource authority, representation family or native semantic capability is
+added or removed.
+
+The executable I018 source guard counts only literal ordinary `nativeClosure`
+construction sites. Its ordinary-constructor inventory therefore moves from
+**140 to 139 sites across the same 36 Core providers**, with
+`ProtosStandardBufferedByteIoProtocol.java` moving from 6 to 5 ordinary sites.
+`BufferedReader.read` remains Java-native behavior, now classified by the
+separately explicit suspension-capable constructor. This is a boundary
+classification reconciliation implied by the already-ratified PLAT029/PLAT031
+C-prime migration, not a new language or architecture decision.
+
 ## TOOL002-I7B2 — Test Tool catalog acquisition non-Core boundary reconciliation
 
 TOOL002-I7B2 adds one D101-ratified bootstrap-local native Closure provider,

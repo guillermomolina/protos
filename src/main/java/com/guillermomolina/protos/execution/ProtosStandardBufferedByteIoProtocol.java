@@ -84,7 +84,7 @@ public final class ProtosStandardBufferedByteIoProtocol {
             throw new ProtosSignalException(ProtosCoreErrors.newOccurrence(a,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT));
         ProtosObjectValue wrapper=new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosBufferedByteIo io=reader?ProtosBufferedByteIo.reader(wrapper,target,bp,a,owning):ProtosBufferedByteIo.writer(wrapper,target,bp,a,owning);
-        if(reader) wrapper.createLocalSlot("read",ProtosClosureValue.nativeClosure((x,xs)->xs.size()==1&&x.receiver()==wrapper?io.read(x,xs.get(0)):invalid(x)));
+        if(reader) wrapper.createLocalSlot("read",readerReadClosure(io,wrapper));
         else {
             wrapper.createLocalSlot("write",ProtosClosureValue.nativeClosure((x,xs)->xs.size()==1&&x.receiver()==wrapper?io.write(x,xs.get(0)):invalid(x)));
             wrapper.createLocalSlot("flush",ProtosClosureValue.nativeClosure((x,xs)->xs.isEmpty()&&x.receiver()==wrapper?io.flush(x):invalid(x)));
@@ -92,6 +92,46 @@ public final class ProtosStandardBufferedByteIoProtocol {
         wrapper.createLocalSlot("close",ProtosClosureValue.nativeClosure((x,xs)->xs.isEmpty()&&x.receiver()==wrapper?io.close(x):invalid(x)));
         return wrapper;
     }
+    private static ProtosClosureValue readerReadClosure(
+            ProtosBufferedByteIo io,
+            ProtosObjectValue wrapper) {
+        ProtosNativeClosureBody ordinary =
+                (activation, supplied) ->
+                        invokeReaderRead(
+                                io,
+                                wrapper,
+                                activation,
+                                supplied,
+                                false);
+        ProtosNativeClosureBody cPrime =
+                (activation, supplied) ->
+                        invokeReaderRead(
+                                io,
+                                wrapper,
+                                activation,
+                                supplied,
+                                true);
+        return ProtosClosureValue.suspensionCapableNativeClosure(ordinary, cPrime);
+    }
+
+    private static Object invokeReaderRead(
+            ProtosBufferedByteIo io,
+            ProtosObjectValue wrapper,
+            ProtosActivation activation,
+            List<?> supplied,
+            boolean cPrime) {
+        if (supplied.size() != 1 || activation.receiver() != wrapper) {
+            return invalid(activation);
+        }
+        if (cPrime || ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+            return io.readForCPrimeRuntime(
+                    activation,
+                    supplied.get(0),
+                    ProtosBufferedByteReaderCPrimeExecution.planForEnteredContext());
+        }
+        return io.read(activation, supplied.get(0));
+    }
+
     private static boolean hasResourceCloseCapability(
             ProtosObjectValue target, ProtosActivation activation) {
         return ProtosValueLookup.lookup(
