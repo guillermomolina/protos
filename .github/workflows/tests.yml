@@ -117,6 +117,16 @@ jobs:
             --base "$base_sha" \
             --head "$head_sha"
 
+      - name: Run Protos Test Tool checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mvn \
+            -Dprotos.testToolCheckpoint=true \
+            '-Dtest=ProtosCliTest#testSubcommandRunsBundledProtosToolThroughCommonBootstrap' \
+            test
+          echo "CI_PROTOS_TEST_TOOL_SECOND_STAGE: PASS"
+
       # The badge is observability only. Keep the JUnit XML even when the test
       # step fails so a later least-privilege job can publish the failure count.
       - name: Upload JUnit reports for test badge
