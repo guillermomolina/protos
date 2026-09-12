@@ -1842,6 +1842,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredMapEachCall", null);
         BytecodeLocal structuredMapEachChild =
                 builder.createLocal("structuredMapEachChildCall", null);
+        BytecodeLocal structuredMapReadLookup =
+                builder.createLocal("structuredMapReadLookupCall", null);
+        BytecodeLocal structuredMapReadLookupChild =
+                builder.createLocal("structuredMapReadLookupChildCall", null);
 
         builder.beginIfThenElse();
 
@@ -2486,12 +2490,116 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredMapReadLookupCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredMapReadLookupCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredMapReadLookup);
+        builder.beginPrepareStructuredMapReadLookupCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredMapReadLookupCall();
+        builder.endStoreLocal();
+
+        /* Hash callback: comparison scope spans suspension but not result validation. */
+        builder.beginEnterStructuredMapReadLookupComparison();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.endEnterStructuredMapReadLookupComparison();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveStructuredMapReadLookupComparison();
+                    builder.emitLoadLocal(structuredMapReadLookup);
+                    builder.endLeaveStructuredMapReadLookupComparison();
+                });
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredMapReadLookupChild);
+        builder.beginPrepareStructuredMapReadLookupHashCall();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.endPrepareStructuredMapReadLookupHashCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapReadLookupChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptStructuredMapReadLookupHashResult();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredMapReadLookupHashResult();
+
+        /* Candidate equality callbacks repeat in insertion order over the hash-filtered snapshot. */
+        builder.beginWhile();
+        builder.beginStructuredMapReadLookupNeedsEquality();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.endStructuredMapReadLookupNeedsEquality();
+
+        builder.beginBlock();
+        builder.beginEnterStructuredMapReadLookupComparison();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.endEnterStructuredMapReadLookupComparison();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveStructuredMapReadLookupComparison();
+                    builder.emitLoadLocal(structuredMapReadLookup);
+                    builder.endLeaveStructuredMapReadLookupComparison();
+                });
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredMapReadLookupChild);
+        builder.beginPrepareStructuredMapReadLookupEqualityCall();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.endPrepareStructuredMapReadLookupEqualityCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapReadLookupChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptStructuredMapReadLookupEqualityResult();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredMapReadLookupEqualityResult();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredMapReadLookup();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.endFinishStructuredMapReadLookup();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

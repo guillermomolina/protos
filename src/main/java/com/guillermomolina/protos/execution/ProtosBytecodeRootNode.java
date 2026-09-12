@@ -575,6 +575,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final boolean structuredEnvironmentEach;
         private final boolean structuredIdentityMapEach;
         private final boolean structuredMapEach;
+        private final ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup;
         private final boolean directControlNative;
         private final ProtosModuleRuntime.PreparedModuleInitialization moduleInitialization;
 
@@ -594,6 +595,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     false,
                     false,
                     false,
+                    null,
                     false);
         }
 
@@ -612,6 +614,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean structuredEnvironmentEach,
                 boolean structuredIdentityMapEach,
                 boolean structuredMapEach,
+                ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
                 boolean directControlNative) {
             this.bodyTarget = bodyTarget;
             this.nativeBody = nativeBody;
@@ -630,6 +633,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredEnvironmentEach = structuredEnvironmentEach;
             this.structuredIdentityMapEach = structuredIdentityMapEach;
             this.structuredMapEach = structuredMapEach;
+            this.structuredMapReadLookup = structuredMapReadLookup;
             this.directControlNative = directControlNative;
             this.moduleInitialization = null;
             int controlCapabilities =
@@ -643,6 +647,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             + (structuredEnvironmentEach ? 1 : 0)
                             + (structuredIdentityMapEach ? 1 : 0)
                             + (structuredMapEach ? 1 : 0)
+                            + (structuredMapReadLookup != null ? 1 : 0)
                             + (directControlNative ? 1 : 0);
             if (controlCapabilities > 1) {
                 throw new IllegalArgumentException(
@@ -664,6 +669,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean structuredEnvironmentEach,
                 boolean structuredIdentityMapEach,
                 boolean structuredMapEach,
+                ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
                 boolean directControlNative) {
             return new PreparedClosureCall(
                     null,
@@ -680,6 +686,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredEnvironmentEach,
                     structuredIdentityMapEach,
                     structuredMapEach,
+                    structuredMapReadLookup,
                     directControlNative);
         }
 
@@ -701,6 +708,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredEnvironmentEach = false;
             this.structuredIdentityMapEach = false;
             this.structuredMapEach = false;
+            this.structuredMapReadLookup = null;
             this.directControlNative = false;
             this.moduleInitialization =
                     java.util.Objects.requireNonNull(
@@ -735,6 +743,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         boolean isStructuredEnvironmentEach() { return structuredEnvironmentEach; }
         boolean isStructuredIdentityMapEach() { return structuredIdentityMapEach; }
         boolean isStructuredMapEach() { return structuredMapEach; }
+        boolean isStructuredMapReadLookup() { return structuredMapReadLookup != null; }
 
         PreparedEnsureCall prepareStructuredEnsure() {
             if (!structuredEnsure) {
@@ -880,6 +889,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
+        PreparedMapReadLookupCall prepareStructuredMapReadLookup() {
+            if (structuredMapReadLookup == null) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured Map read-lookup capability");
+            }
+            return new PreparedMapReadLookupCall(
+                    structuredMapReadLookup,
+                    activation.receiver(),
+                    supplied,
+                    activation);
+        }
+
         Object enterNative() {
             if (nativeBody == null) {
                 throw new IllegalStateException(
@@ -894,7 +915,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || structuredProcessArgumentsEach
                     || structuredEnvironmentEach
                     || structuredIdentityMapEach
-                    || structuredMapEach) {
+                    || structuredMapEach
+                    || structuredMapReadLookup != null) {
                 throw new IllegalStateException(
                         "structured control native must execute through Bytecode control operations");
             }
@@ -1748,6 +1770,241 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
 
+
+    static final class PreparedMapReadLookupCall {
+        private final ProtosStandardMapProtocol.StructuredReadLookupKind kind;
+        private final ProtosMapValue map;
+        private final Object key;
+        private final ProtosActivation activation;
+        private BigInteger queryHash;
+        private List<ProtosStandardMapProtocol.StableAssociation> snapshot;
+        private int index;
+        private ProtosStandardMapProtocol.StableAssociation match;
+        private boolean hashAccepted;
+        private boolean comparisonEntered;
+
+        PreparedMapReadLookupCall(
+                ProtosStandardMapProtocol.StructuredReadLookupKind kind,
+                Object receiver,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.kind = java.util.Objects.requireNonNull(kind, "kind");
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            if (!(receiver instanceof ProtosMapValue value)
+                    || supplied.size() != 1) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            this.map = value;
+            this.key = supplied.get(0);
+        }
+
+        void enterComparison() {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map read lookup attempted to nest its own comparison scope");
+            }
+            map.enterComparison();
+            comparisonEntered = true;
+        }
+
+        void leaveComparison() {
+            if (!comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map read lookup comparison scope left without entry");
+            }
+            map.leaveComparison();
+            comparisonEntered = false;
+        }
+
+        PreparedClosureCall prepareHash() {
+            if (hashAccepted) {
+                throw new IllegalStateException(
+                        "Map read lookup hash callback prepared after hash acceptance");
+            }
+            return prepareSend(
+                    key,
+                    "hash",
+                    activation,
+                    List.of());
+        }
+
+        void acceptHash(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map read lookup hash result accepted before comparison-scope exit");
+            }
+            if (hashAccepted) {
+                throw new IllegalStateException(
+                        "Map read lookup hash result accepted twice");
+            }
+            queryHash =
+                    ProtosStandardMapProtocol.requireHashResultForStructured(
+                            result,
+                            activation);
+            snapshot = ProtosStandardMapProtocol.stableSnapshot(map);
+            hashAccepted = true;
+        }
+
+        boolean needsEquality() {
+            requireHashAccepted();
+            if (match != null) {
+                return false;
+            }
+            while (index < snapshot.size()
+                    && !snapshot.get(index).recordedHash().equals(queryHash)) {
+                index++;
+            }
+            return index < snapshot.size();
+        }
+
+        PreparedClosureCall prepareEquality() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map read lookup equality callback requested without a candidate");
+            }
+            return prepareSend(
+                    key,
+                    "==",
+                    activation,
+                    List.of(snapshot.get(index).key()));
+        }
+
+        void acceptEquality(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map read lookup equality result accepted before comparison-scope exit");
+            }
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map read lookup equality result accepted without a candidate");
+            }
+            boolean equal =
+                    ProtosStandardMapProtocol.requireEqualityResultForStructured(
+                            result,
+                            activation);
+            if (equal) {
+                match = snapshot.get(index);
+            } else {
+                index++;
+            }
+        }
+
+        Object finish() {
+            requireHashAccepted();
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map read lookup finished with an active comparison scope");
+            }
+            if (needsEquality()) {
+                throw new IllegalStateException(
+                        "Map read lookup finished before candidate exhaustion");
+            }
+            return switch (kind) {
+                case AT -> {
+                    if (match == null) {
+                        throw ProtosCoreErrors.signal(
+                                activation,
+                                ProtosCoreErrors.newError(activation));
+                    }
+                    yield match.value();
+                }
+                case CONTAINS_KEY ->
+                        match == null
+                                ? ProtosBooleanValue.FALSE
+                                : ProtosBooleanValue.TRUE;
+            };
+        }
+
+        private void requireHashAccepted() {
+            if (!hashAccepted) {
+                throw new IllegalStateException(
+                        "Map read lookup used before hash acceptance");
+            }
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredMapReadLookupCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredMapReadLookup();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapReadLookupCall {
+        @Specialization
+        public static PreparedMapReadLookupCall perform(PreparedClosureCall prepared) {
+            return prepared.prepareStructuredMapReadLookup();
+        }
+    }
+
+    @Operation
+    public static final class EnterStructuredMapReadLookupComparison {
+        @Specialization
+        public static void perform(PreparedMapReadLookupCall prepared) {
+            prepared.enterComparison();
+        }
+    }
+
+    @Operation
+    public static final class LeaveStructuredMapReadLookupComparison {
+        @Specialization
+        public static void perform(PreparedMapReadLookupCall prepared) {
+            prepared.leaveComparison();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapReadLookupHashCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedMapReadLookupCall prepared) {
+            return prepared.prepareHash();
+        }
+    }
+
+    @Operation
+    public static final class AcceptStructuredMapReadLookupHashResult {
+        @Specialization
+        public static void perform(PreparedMapReadLookupCall prepared, Object result) {
+            prepared.acceptHash(result);
+        }
+    }
+
+    @Operation
+    public static final class StructuredMapReadLookupNeedsEquality {
+        @Specialization
+        public static boolean perform(PreparedMapReadLookupCall prepared) {
+            return prepared.needsEquality();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapReadLookupEqualityCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedMapReadLookupCall prepared) {
+            return prepared.prepareEquality();
+        }
+    }
+
+    @Operation
+    public static final class AcceptStructuredMapReadLookupEqualityResult {
+        @Specialization
+        public static void perform(PreparedMapReadLookupCall prepared, Object result) {
+            prepared.acceptEquality(result);
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredMapReadLookup {
+        @Specialization
+        public static Object perform(PreparedMapReadLookupCall prepared) {
+            return prepared.finish();
+        }
+    }
+
     static final class PreparedMapEachCall {
         private final ProtosMapValue map;
         private final List<java.util.Map.Entry<Object, Object>> snapshot;
@@ -2288,6 +2545,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardEnvironmentProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardIdentityMapProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardMapProtocol.isStandardEachImplementation(targetClosure),
+                ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(targetClosure),
                 ProtosStandardErrorProtocol.isStandardSignalImplementation(targetClosure));
     }
 
@@ -2502,6 +2760,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         closure,
                         methodHome,
                         caller),
+                ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
+                        closure,
+                        methodHome,
+                        caller),
                 ProtosStandardErrorProtocol.isCanonicalStandardSignalSelection(
                         closure,
                         methodHome,
@@ -2544,6 +2806,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 false,
                 false,
                 false,
+                null,
                 false);
     }
 
@@ -2581,6 +2844,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             boolean structuredEnvironmentEach,
             boolean structuredIdentityMapEach,
             boolean structuredMapEach,
+            ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
             boolean directControlNative) {
         if (closure.nativeBody().isPresent()) {
             ProtosNativeClosureBody nativeBody =
@@ -2606,6 +2870,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredEnvironmentEach,
                     structuredIdentityMapEach,
                     structuredMapEach,
+                    structuredMapReadLookup,
                     directControlNative);
         }
         if (structuredEnsure
@@ -2618,6 +2883,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 || structuredEnvironmentEach
                 || structuredIdentityMapEach
                 || structuredMapEach
+                || structuredMapReadLookup != null
                 || directControlNative) {
             throw new IllegalStateException(
                     "structured control capability requires the canonical native implementation");
