@@ -9,6 +9,20 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.409] - 2026-09-12
+
+### D103 — Dynamic capture rest composition and arm-binding interface
+- Ratifies D103-A: a variable-arity segment introduced by `captures(...rest)` is valid in a composed pattern only when that segment is terminal in the final ordered arm-binding interface.
+- Terminality is evaluated over the whole logical binding order, not merely within the local `captures(...)` spelling.
+- A standard structural remainder binding such as Array `...@middle` contributes one ordinary capture whose value is the D084 fresh frozen remainder Array; it is not a D103 variable-arity segment. The analogous D086 Map remainder remains one Map capture.
+- Non-terminal dynamic segments are static source/interface errors. Core does not repartition captures from both ends, silently aggregate the segment, pad/drop captures, or introduce a richer binding carrier.
+- D072 remains the outcome carrier, D083 remains the shallow ordered composition rule, and D088 remains the ordinary positional selected-arm Closure/callable ABI.
+
+### Compatibility and implementation state
+- Existing top-level/terminal `captures(required..., ...rest)` remains valid.
+- Existing fixed structural binder, alias, Array/Map remainder and fixed-capture interfaces retain their ratified meaning.
+- No matcher-result carrier, Pattern hierarchy, CaptureFrame/Signature, named-argument mechanism, runtime implementation or Maven implementation-version change is introduced by this ratification slice.
+
 ## [0.1.408] - 2026-09-12
 
 ### D100 — Match-arm guard / Closure-arrow disambiguation

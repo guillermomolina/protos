@@ -855,6 +855,19 @@ name, if present, is final. `captures()` is not admitted.
 Fixed binder names are unique and linear. Every successful D090 OR branch used
 with a fixed interface must expose the same ordered logical binder-name sequence.
 
+Under D103, a variable-arity capture segment introduced by
+`captures(required..., ...rest)` may occur in a composed pattern only when that
+segment is terminal in the **final ordered arm-binding interface**. Terminality
+is evaluated after applying the complete source binding order of aliases,
+structural children and opaque matcher capture interfaces; a later source
+binding position makes the dynamic segment non-terminal and the source invalid.
+
+A structural remainder binder such as Array `...@middle` is not a D103 dynamic
+segment: it contributes exactly one ordinary binding position whose value is the
+D084 fresh frozen remainder Array. The analogous D086 Map remainder likewise
+contributes one Map value. D103 therefore does not prohibit fixed source
+bindings after such an aggregate remainder binding.
+
 #### Expression activation
 
 With D095 the normative executable expression grammar is:

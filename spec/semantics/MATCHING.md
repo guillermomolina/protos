@@ -2,14 +2,14 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-11
+Last updated: 2026-09-12
 
 This document is the primary normative owner of the ratified matching-protocol
 semantics introduced by D071-D075 and D078. D075 ratifies the exact named
 structural-projection request/result/failure contract, while D078 ratifies
 open/subset named-object matching and declines a generic complete-view/remainder
 protocol in Core v0.1. The latest matching specification revision is
-`0.1.407`.
+`0.1.409`.
 D093 now fixes the outer postfix matching-expression/arm/guard envelope in
 `PROTOS_GRAMMAR.md` and §3.7 fixes its lowering onto this semantic model. D095 now defines the Core v0.1 internal match-pattern grammar, binder/discard,
 Array/Map/remainder, OR, alias and opaque-matcher capture-interface source forms
@@ -728,6 +728,25 @@ A consumer that intentionally accepts a variable number of captures may use the
 already-standard ordinary Closure rest-parameter semantics. Excess positional
 capture actuals then participate in the same ordinary rest binding used by any
 other Closure invocation, including its fresh frozen rest Array contract.
+
+D103 fixes the composition boundary for such variable interfaces. When an opaque
+matcher source interface contains `...rest`, the variable-arity segment that it
+contributes may appear in a composed pattern only when that segment is
+**terminal in the final ordered arm-binding interface**. A later binding
+position after that segment is a static source/interface error.
+
+Terminality is determined over the complete logical source binding order, not
+merely over the local `captures(...)` list. Implementations must not make a
+non-terminal dynamic segment work by reserving a fixed suffix and partitioning
+from both ends, by converting that segment into one aggregate capture, by
+padding/dropping captures, or by introducing a hidden richer carrier. The
+D072/D083 positional sequence remains authoritative and the selected arm remains
+an ordinary D088 invocation.
+
+This restriction does not apply to D084/D086 structural remainder values. A
+captured Array or Map remainder is one ordinary aggregate capture under the
+existing shallow composition rule, so it contributes one fixed binding position
+even when the source spelling uses `...`.
 
 If a candidate pattern has already succeeded but ordinary selected-arm
 invocation cannot accept the supplied capture arity, the resulting callable
