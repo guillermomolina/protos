@@ -78,6 +78,9 @@ import java.util.List;
         enableRootBodyTagging = false,
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
+    private static final Object MATCH_PATTERN_FAILED = new Object();
+    private static final Object MATCH_GUARD_REJECTED = new Object();
+
     protected ProtosBytecodeRootNode(
             ProtosLanguage language,
             FrameDescriptor frameDescriptor) {
@@ -2779,6 +2782,155 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         List<Object> snapshot() {
             return List.copyOf(values);
+        }
+    }
+
+
+    @Operation
+    public static final class DecodeMatchOutcome {
+        @Specialization
+        public static Object perform(
+                Object outcome,
+                ProtosActivation activation) {
+            if (outcome == ProtosBooleanValue.FALSE) {
+                return MATCH_PATTERN_FAILED;
+            }
+            if (outcome == ProtosBooleanValue.TRUE) {
+                return new PreparedArgumentVector();
+            }
+            if (outcome instanceof ProtosArrayValue captures) {
+                List<Object> observed = captures.indexedSnapshot();
+                if (observed.isEmpty()) {
+                    throw new ProtosSignalException(
+                            ProtosCoreErrors.newError(activation));
+                }
+                PreparedArgumentVector vector = new PreparedArgumentVector();
+                for (Object value : observed) {
+                    vector.append(value);
+                }
+                return vector;
+            }
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    @Operation
+    public static final class PrefixMatchAlias {
+        @Specialization
+        public static Object perform(
+                Object subject,
+                Object nested) {
+            if (nested == MATCH_PATTERN_FAILED) {
+                return MATCH_PATTERN_FAILED;
+            }
+            if (!(nested instanceof PreparedArgumentVector captures)) {
+                throw new IllegalStateException(
+                        "match alias received an invalid capture carrier");
+            }
+            PreparedArgumentVector prefixed = new PreparedArgumentVector();
+            prefixed.append(subject);
+            for (Object value : captures.snapshot()) {
+                prefixed.append(value);
+            }
+            return prefixed;
+        }
+    }
+
+    @Operation
+    public static final class MatchAttemptSucceeded {
+        @Specialization
+        public static boolean perform(Object attempt) {
+            if (attempt == MATCH_PATTERN_FAILED) {
+                return false;
+            }
+            if (attempt instanceof PreparedArgumentVector) {
+                return true;
+            }
+            throw new IllegalStateException(
+                    "match attempt produced an invalid capture carrier");
+        }
+    }
+
+    @Operation
+    public static final class MatchAttemptFailed {
+        @Specialization
+        public static boolean perform(Object attempt) {
+            if (attempt == MATCH_PATTERN_FAILED) {
+                return true;
+            }
+            if (attempt instanceof PreparedArgumentVector) {
+                return false;
+            }
+            throw new IllegalStateException(
+                    "match attempt produced an invalid capture carrier");
+        }
+    }
+
+    @Operation
+    public static final class MatchStillOpen {
+        @Specialization
+        public static boolean perform(Object completed) {
+            if (completed == Boolean.FALSE) {
+                return true;
+            }
+            if (completed == Boolean.TRUE) {
+                return false;
+            }
+            throw new IllegalStateException(
+                    "match completion state is not boolean");
+        }
+    }
+
+    @Operation
+    public static final class MatchGuardCondition {
+        @Specialization
+        public static boolean perform(
+                Object result,
+                ProtosActivation activation) {
+            if (result == ProtosBooleanValue.TRUE) {
+                return true;
+            }
+            if (result == ProtosBooleanValue.FALSE) {
+                return false;
+            }
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    @Operation
+    public static final class MatchGuardRejected {
+        @Specialization
+        public static Object perform() {
+            return MATCH_GUARD_REJECTED;
+        }
+    }
+
+    @Operation
+    public static final class IsMatchGuardRejected {
+        @Specialization
+        public static boolean perform(Object result) {
+            return result == MATCH_GUARD_REJECTED;
+        }
+    }
+
+    @Operation
+    public static final class FinishMatch {
+        @Specialization
+        public static Object perform(
+                Object completed,
+                Object result,
+                ProtosActivation activation) {
+            if (completed == Boolean.TRUE) {
+                return result;
+            }
+            if (completed == Boolean.FALSE) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            throw new IllegalStateException(
+                    "match completion state is not boolean");
         }
     }
 

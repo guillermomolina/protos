@@ -28,11 +28,14 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
+import com.guillermomolina.protos.semantic.ast.CanonicalGuardedArmBody;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMatch;
+import com.guillermomolina.protos.semantic.ast.CanonicalMatchPattern;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
@@ -84,6 +87,8 @@ final class CanonicalToBytecodeLowerer {
     private final Source source;
     private final java.util.IdentityHashMap<CanonicalClosure, ProtosClosureExecutionPlan>
             bytecodeClosurePlans = new java.util.IdentityHashMap<>();
+    private final java.util.IdentityHashMap<CanonicalMatch.Arm, CanonicalClosure>
+            bytecodeMatchArmDefinitions = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalObject, RootCallTarget>
             bytecodeObjectBodyTargets = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalCompose, java.util.Set<String>>
@@ -104,6 +109,200 @@ final class CanonicalToBytecodeLowerer {
                 ProtosClosureExecutionPlan.bytecode(definition, language, source);
         bytecodeClosurePlans.put(definition, plan);
         return plan;
+    }
+
+
+    private CanonicalClosure bytecodeMatchArmDefinition(CanonicalMatch.Arm arm) {
+        CanonicalClosure existing = bytecodeMatchArmDefinitions.get(arm);
+        if (existing != null) {
+            return existing;
+        }
+
+        CanonicalSequence invocationBody = arm.body();
+        if (arm.guard().isPresent()) {
+            CanonicalExpression guard = arm.guard().orElseThrow();
+            SourceSpan guardedSpan =
+                    new SourceSpan(
+                            guard.span().startOffset(),
+                            arm.body().span().endOffset());
+            CanonicalGuardedArmBody guardedBody =
+                    new CanonicalGuardedArmBody(
+                            guard,
+                            arm.body(),
+                            guardedSpan);
+            invocationBody =
+                    new CanonicalSequence(
+                            java.util.List.of(guardedBody),
+                            guardedSpan);
+        }
+
+        CanonicalClosure definition =
+                new CanonicalClosure(
+                        parametersForMatchPattern(arm.pattern()),
+                        invocationBody,
+                        invocationBody.span());
+        bytecodeMatchArmDefinitions.put(arm, definition);
+        return definition;
+    }
+
+    private java.util.List<CanonicalParameter> parametersForMatchPattern(
+            CanonicalMatchPattern pattern) {
+        MatchParameterAccumulator parameters = new MatchParameterAccumulator();
+        appendMatchParameters(pattern, parameters);
+        return parameters.snapshot();
+    }
+
+    private void appendMatchParameters(
+            CanonicalMatchPattern pattern,
+            MatchParameterAccumulator parameters) {
+        if (pattern instanceof CanonicalMatchPattern.Wildcard) {
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Binder binder) {
+            parameters.addRequired(binder.name(), binder.span());
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Value value) {
+            if (value.captureInterface().isEmpty()) {
+                return;
+            }
+            CanonicalMatchPattern.CaptureInterface capture =
+                    value.captureInterface().orElseThrow();
+            for (String name : capture.requiredNames()) {
+                parameters.addRequired(name, capture.span());
+            }
+            capture.restName()
+                    .ifPresent(name -> parameters.addRest(name, capture.span()));
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Alias alias) {
+            parameters.addRequired(alias.name(), alias.span());
+            appendMatchParameters(alias.pattern(), parameters);
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Or alternatives) {
+            java.util.List<CanonicalParameter> common =
+                    parametersForMatchPattern(alternatives.alternatives().get(0));
+            for (int index = 1; index < alternatives.alternatives().size(); index++) {
+                java.util.List<CanonicalParameter> candidate =
+                        parametersForMatchPattern(alternatives.alternatives().get(index));
+                if (!sameMatchParameterInterface(common, candidate)) {
+                    throw new IllegalStateException(
+                            "D090 OR binding-interface mismatch escaped parser validation");
+                }
+            }
+            for (CanonicalParameter parameter : common) {
+                if (parameter.rest()) {
+                    parameters.addRest(parameter.name(), parameter.span());
+                } else {
+                    parameters.addRequired(parameter.name(), parameter.span());
+                }
+            }
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.ArrayPattern
+                || pattern instanceof CanonicalMatchPattern.MapPattern) {
+            throw new UnsupportedOperationException(
+                    "I038-D7A intentionally excludes structural Array/Map match patterns");
+        }
+        throw new AssertionError(
+                "unknown canonical match pattern: "
+                        + pattern.getClass().getSimpleName());
+    }
+
+    private static boolean sameMatchParameterInterface(
+            java.util.List<CanonicalParameter> left,
+            java.util.List<CanonicalParameter> right) {
+        if (left.size() != right.size()) {
+            return false;
+        }
+        for (int index = 0; index < left.size(); index++) {
+            CanonicalParameter leftParameter = left.get(index);
+            CanonicalParameter rightParameter = right.get(index);
+            if (!leftParameter.name().equals(rightParameter.name())
+                    || leftParameter.rest() != rightParameter.rest()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static final class MatchParameterAccumulator {
+        private final java.util.ArrayList<CanonicalParameter> parameters =
+                new java.util.ArrayList<>();
+        private boolean dynamicTail;
+
+        void addRequired(String name, SourceSpan span) {
+            if (dynamicTail) {
+                throw new IllegalStateException(
+                        "D103 non-terminal dynamic capture segment escaped parser validation");
+            }
+            parameters.add(
+                    new CanonicalParameter(
+                            name,
+                            java.util.Optional.empty(),
+                            false,
+                            span));
+        }
+
+        void addRest(String name, SourceSpan span) {
+            if (dynamicTail) {
+                throw new IllegalStateException(
+                        "multiple dynamic capture tails escaped D103 validation");
+            }
+            parameters.add(
+                    new CanonicalParameter(
+                            name,
+                            java.util.Optional.empty(),
+                            true,
+                            span));
+            dynamicTail = true;
+        }
+
+        java.util.List<CanonicalParameter> snapshot() {
+            return java.util.List.copyOf(parameters);
+        }
+    }
+
+    private void validateSupportedMatch(
+            CanonicalMatch match,
+            java.util.function.Consumer<CanonicalExpression> expressionValidator) {
+        expressionValidator.accept(match.subject());
+        for (CanonicalMatch.Arm arm : match.arms()) {
+            validateSupportedMatchPattern(arm.pattern(), expressionValidator);
+            bytecodeClosurePlan(bytecodeMatchArmDefinition(arm));
+        }
+    }
+
+    private void validateSupportedMatchPattern(
+            CanonicalMatchPattern pattern,
+            java.util.function.Consumer<CanonicalExpression> expressionValidator) {
+        if (pattern instanceof CanonicalMatchPattern.Wildcard
+                || pattern instanceof CanonicalMatchPattern.Binder) {
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Value value) {
+            expressionValidator.accept(value.matcher());
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Alias alias) {
+            validateSupportedMatchPattern(alias.pattern(), expressionValidator);
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Or alternatives) {
+            for (CanonicalMatchPattern alternative : alternatives.alternatives()) {
+                validateSupportedMatchPattern(alternative, expressionValidator);
+            }
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.ArrayPattern
+                || pattern instanceof CanonicalMatchPattern.MapPattern) {
+            throw new UnsupportedOperationException(
+                    "I038-D7A intentionally excludes structural Array/Map match patterns");
+        }
+        throw new AssertionError(
+                "unknown canonical match pattern: "
+                        + pattern.getClass().getSimpleName());
     }
 
     private RootCallTarget bytecodeObjectBodyTarget(
@@ -292,6 +491,10 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalLiteral
                 || expression instanceof CanonicalLookup
                 || expression instanceof CanonicalIntrinsic) {
+            return;
+        }
+        if (expression instanceof CanonicalMatch match) {
+            validateSupportedMatch(match, this::validateSupportedDefaultExpression);
             return;
         }
         if (expression instanceof CanonicalClosure closure) {
@@ -510,7 +713,9 @@ final class CanonicalToBytecodeLowerer {
                 || expression instanceof CanonicalSuperSend
                 || expression instanceof CanonicalReturn
                 || expression instanceof CanonicalObject
-                || expression instanceof CanonicalCompose) {
+                || expression instanceof CanonicalCompose
+                || expression instanceof CanonicalMatch
+                || expression instanceof CanonicalGuardedArmBody) {
             return true;
         }
         if (expression instanceof CanonicalMember member) {
@@ -639,6 +844,26 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalMatch match) {
+            emitBodyMatch(
+                    builder,
+                    match,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalGuardedArmBody guarded) {
+            emitBodyGuardedArmBody(
+                    builder,
+                    guarded,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
         if (expression instanceof CanonicalCall call) {
             builder.beginSourceSection(
                     call.span().startOffset(),
@@ -787,6 +1012,16 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalMatch match) {
+            emitDefaultMatch(
+                    builder,
+                    match,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
         if (expression instanceof CanonicalCall call) {
             emitComposedDefaultCall(
                     builder,
@@ -903,6 +1138,403 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.beginStoreLocal(target);
         emitExpression(builder, expression);
+        builder.endStoreLocal();
+    }
+
+
+    private void emitBodyMatch(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMatch match,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        emitMatch(
+                builder,
+                match,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue,
+                false);
+    }
+
+    private void emitDefaultMatch(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMatch match,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        emitMatch(
+                builder,
+                match,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue,
+                true);
+    }
+
+    private void emitMatch(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMatch match,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean defaultContext) {
+        requireDefaultScratch(
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        BytecodeLocal subject = builder.createLocal("matchSubject", null);
+        BytecodeLocal completed = builder.createLocal("matchCompleted", null);
+
+        emitMatchExpressionToLocal(
+                builder,
+                match.subject(),
+                subject,
+                preparedCall,
+                childResult,
+                resumeValue,
+                defaultContext);
+
+        builder.beginStoreLocal(completed);
+        builder.emitLoadConstant(Boolean.FALSE);
+        builder.endStoreLocal();
+        builder.beginStoreLocal(result);
+        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+        builder.endStoreLocal();
+
+        for (CanonicalMatch.Arm arm : match.arms()) {
+            BytecodeLocal captures = builder.createLocal("matchCaptures", null);
+            BytecodeLocal armClosure = builder.createLocal("matchArmClosure", null);
+            BytecodeLocal armResult = builder.createLocal("matchArmResult", null);
+
+            builder.beginIfThenElse();
+            builder.beginMatchStillOpen();
+            builder.emitLoadLocal(completed);
+            builder.endMatchStillOpen();
+
+            builder.beginBlock();
+            emitMatchPatternAttempt(
+                    builder,
+                    arm.pattern(),
+                    subject,
+                    captures,
+                    preparedCall,
+                    childResult,
+                    resumeValue,
+                    defaultContext);
+
+            builder.beginIfThenElse();
+            builder.beginMatchAttemptSucceeded();
+            builder.emitLoadLocal(captures);
+            builder.endMatchAttemptSucceeded();
+
+            builder.beginBlock();
+            builder.beginStoreLocal(armClosure);
+            emitExpression(builder, bytecodeMatchArmDefinition(arm));
+            builder.endStoreLocal();
+
+            builder.beginStoreLocal(preparedCall);
+            builder.beginPrepareClosureCallVector();
+            builder.emitLoadLocal(armClosure);
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(captures);
+            builder.endPrepareClosureCallVector();
+            builder.endStoreLocal();
+
+            emitPreparedInvocation(
+                    builder,
+                    armResult,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+
+            builder.beginIfThenElse();
+            builder.beginIsMatchGuardRejected();
+            builder.emitLoadLocal(armResult);
+            builder.endIsMatchGuardRejected();
+
+            builder.beginBlock();
+            emitLocalNoop(builder, result);
+            builder.endBlock();
+
+            builder.beginBlock();
+            builder.beginStoreLocal(result);
+            builder.emitLoadLocal(armResult);
+            builder.endStoreLocal();
+            builder.beginStoreLocal(completed);
+            builder.emitLoadConstant(Boolean.TRUE);
+            builder.endStoreLocal();
+            builder.endBlock();
+
+            builder.endIfThenElse();
+            builder.endBlock();
+
+            builder.beginBlock();
+            emitLocalNoop(builder, result);
+            builder.endBlock();
+
+            builder.endIfThenElse();
+            builder.endBlock();
+
+            builder.beginBlock();
+            emitLocalNoop(builder, result);
+            builder.endBlock();
+
+            builder.endIfThenElse();
+        }
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishMatch();
+        builder.emitLoadLocal(completed);
+        builder.emitLoadLocal(result);
+        builder.emitLoadArgument(0);
+        builder.endFinishMatch();
+        builder.endStoreLocal();
+    }
+
+    private void emitMatchPatternAttempt(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMatchPattern pattern,
+            BytecodeLocal subject,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean defaultContext) {
+        if (pattern instanceof CanonicalMatchPattern.Wildcard) {
+            builder.beginStoreLocal(result);
+            builder.emitCreateSuppliedArgumentVector();
+            builder.endStoreLocal();
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Binder) {
+            builder.beginStoreLocal(result);
+            builder.emitCreateSuppliedArgumentVector();
+            builder.endStoreLocal();
+            builder.beginAppendSuppliedArgument();
+            builder.emitLoadLocal(result);
+            builder.emitLoadLocal(subject);
+            builder.endAppendSuppliedArgument();
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Value value) {
+            BytecodeLocal matcher = builder.createLocal("matchMatcher", null);
+            BytecodeLocal matcherOutcome = builder.createLocal("matchMatcherOutcome", null);
+
+            emitMatchExpressionToLocal(
+                    builder,
+                    value.matcher(),
+                    matcher,
+                    preparedCall,
+                    childResult,
+                    resumeValue,
+                    defaultContext);
+
+            builder.beginStoreLocal(preparedCall);
+            builder.beginPrepareSendArguments();
+            builder.emitLoadLocal(matcher);
+            builder.emitLoadConstant("match");
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(subject);
+            builder.endPrepareSendArguments();
+            builder.endStoreLocal();
+
+            emitPreparedInvocation(
+                    builder,
+                    matcherOutcome,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+
+            builder.beginStoreLocal(result);
+            builder.beginDecodeMatchOutcome();
+            builder.emitLoadLocal(matcherOutcome);
+            builder.emitLoadArgument(0);
+            builder.endDecodeMatchOutcome();
+            builder.endStoreLocal();
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Alias alias) {
+            BytecodeLocal nested = builder.createLocal("matchAliasNested", null);
+            emitMatchPatternAttempt(
+                    builder,
+                    alias.pattern(),
+                    subject,
+                    nested,
+                    preparedCall,
+                    childResult,
+                    resumeValue,
+                    defaultContext);
+            builder.beginStoreLocal(result);
+            builder.beginPrefixMatchAlias();
+            builder.emitLoadLocal(subject);
+            builder.emitLoadLocal(nested);
+            builder.endPrefixMatchAlias();
+            builder.endStoreLocal();
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Or alternatives) {
+            if (alternatives.alternatives().size() < 2) {
+                throw new AssertionError(
+                        "D089 OR pattern with fewer than two alternatives escaped validation");
+            }
+            emitMatchPatternAttempt(
+                    builder,
+                    alternatives.alternatives().get(0),
+                    subject,
+                    result,
+                    preparedCall,
+                    childResult,
+                    resumeValue,
+                    defaultContext);
+            for (int index = 1; index < alternatives.alternatives().size(); index++) {
+                builder.beginIfThenElse();
+                builder.beginMatchAttemptFailed();
+                builder.emitLoadLocal(result);
+                builder.endMatchAttemptFailed();
+
+                builder.beginBlock();
+                emitMatchPatternAttempt(
+                        builder,
+                        alternatives.alternatives().get(index),
+                        subject,
+                        result,
+                        preparedCall,
+                        childResult,
+                        resumeValue,
+                        defaultContext);
+                builder.endBlock();
+
+                builder.beginBlock();
+                emitLocalNoop(builder, result);
+                builder.endBlock();
+
+                builder.endIfThenElse();
+            }
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.ArrayPattern
+                || pattern instanceof CanonicalMatchPattern.MapPattern) {
+            throw new AssertionError(
+                    "I038-D7A structural match pattern escaped validation");
+        }
+        throw new AssertionError(
+                "unknown canonical match pattern: "
+                        + pattern.getClass().getSimpleName());
+    }
+
+    private void emitMatchExpressionToLocal(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean defaultContext) {
+        if (defaultContext) {
+            emitDefaultExpressionToLocal(
+                    builder,
+                    expression,
+                    result,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+        } else {
+            emitBodyExpressionToLocal(
+                    builder,
+                    expression,
+                    result,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+        }
+    }
+
+    private void emitBodyGuardedArmBody(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalGuardedArmBody guarded,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal guard = builder.createLocal("matchGuard", null);
+        emitBodyExpressionToLocal(
+                builder,
+                guarded.guard(),
+                guard,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginIfThenElse();
+        builder.beginMatchGuardCondition();
+        builder.emitLoadLocal(guard);
+        builder.emitLoadArgument(0);
+        builder.endMatchGuardCondition();
+
+        builder.beginBlock();
+        emitBodySequenceToLocal(
+                builder,
+                guarded.body(),
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        builder.emitMatchGuardRejected();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    private void emitBodySequenceToLocal(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSequence sequence,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (sequence.expressions().isEmpty()) {
+            builder.beginStoreLocal(result);
+            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+            builder.endStoreLocal();
+            return;
+        }
+
+        for (CanonicalExpression expression : sequence.expressions()) {
+            SourceSpan span = expression.span();
+            builder.beginSourceSection(span.startOffset(), span.length());
+            builder.beginTag(StandardTags.StatementTag.class);
+            builder.beginBlock();
+            emitBodyExpressionToLocal(
+                    builder,
+                    expression,
+                    result,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            builder.endBlock();
+            builder.endTag(StandardTags.StatementTag.class);
+            builder.endSourceSection();
+        }
+    }
+
+    private static void emitLocalNoop(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal local) {
+        builder.beginStoreLocal(local);
+        builder.emitLoadLocal(local);
         builder.endStoreLocal();
     }
 
@@ -2943,6 +3575,15 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalLiteral
                 || expression instanceof CanonicalLookup
                 || expression instanceof CanonicalIntrinsic) {
+            return;
+        }
+        if (expression instanceof CanonicalMatch match) {
+            validateSupportedMatch(match, this::validateSupportedExpression);
+            return;
+        }
+        if (expression instanceof CanonicalGuardedArmBody guarded) {
+            validateSupportedExpression(guarded.guard());
+            validateSupported(guarded.body());
             return;
         }
         if (expression instanceof CanonicalClosure closure) {
