@@ -20,6 +20,7 @@ package com.guillermomolina.protos.analysis;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.parser.ProtosParser;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Editor-neutral static source-analysis entry point.
@@ -44,5 +45,24 @@ public final class ProtosStaticAnalysisCore {
                     error.span(),
                     error.isUnexpectedEndOfSource());
         }
+    }
+
+    /**
+     * Resolves the complete generation-1 D110 definition proof for one source
+     * offset in the supplied immutable snapshot.
+     *
+     * <p>Parse failure, a non-reference offset, or an unproven definition is an
+     * ordinary empty result.</p>
+     */
+    public Optional<ProtosStaticDefinitionResult> definition(
+            ProtosDocumentSnapshot snapshot,
+            int sourceOffset) {
+        Objects.requireNonNull(snapshot, "snapshot");
+
+        ProtosStaticParseResult parsed = parse(snapshot);
+        if (!(parsed instanceof ProtosStaticParseResult.Parsed successful)) {
+            return Optional.empty();
+        }
+        return ProtosStaticDefinitions.resolve(successful, sourceOffset);
     }
 }

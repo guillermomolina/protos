@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106/D110 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 IMPLEMENTATION AUDIT CLOSED; G4-A1 READY)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106/D110 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 IMPLEMENTATION AUDIT CLOSED; G4-A1 CLOSED; G4-A2 READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1645,3 +1645,42 @@ invalidate proof rather than allowing Java-like lexical-declaration guessing.
 published. Local slot flow, outer Closure captures, per-name opaque capture
 interfaces, branch-multiple OR provenance, modules and receiver/delegation cases
 remain later exact-proof work and return no result meanwhile.
+
+## LM009-G4-A1 — generation-1 exact static definition proof core
+
+`LM009-G4-A1` is CLOSED.
+
+The editor-neutral analysis core now implements the first executable subset of
+ratified D110 B-prime. A successful result carries the exact immutable reference
+snapshot/range and a non-empty complete target set; A1 currently emits only
+singletons.
+
+Generation-1 proof covers:
+
+- same-activation Closure parameters after their exact left-to-right installation;
+- earlier parameter reads inside later defaults when every successful binding
+  path preserves the origin;
+- singleton-proven match Binder/Alias logical bindings in their arm activation;
+- evaluation-order-sensitive references before an opaque invocation barrier; and
+- existing exact origins across pure assignment/creation writes, while the write
+  target itself remains outside A1 definition navigation.
+
+The resolver deliberately fails closed for outer lexical captures, including the
+synthetic lazy Closure introduced by `&&`/`||`; per-name opaque capture-interface
+origins; multi-source OR provenance; local `:`/`=` targets as definition
+queries; module/cross-source lookup; receiver/member/delegation/super/composition
+resolution; and any name/workspace/runtime heuristic.
+
+`ProtosStaticAnalysisSession` exposes the query over the exact current immutable
+snapshot and a matching freshness check. No LSP capability is advertised in A1,
+no workspace-symbol query participates, no guest code executes, and ordinary
+runtime execution pays no cost for this analysis.
+
+Focused validation covers exact parameter/default timing, opaque-call
+invalidation, write-target exclusion, lazy-boolean outer-capture exclusion,
+nested-Closure capture refusal, match Binder/Alias singleton provenance,
+guard-effect invalidation, OR multi-origin refusal, capture-interface refusal,
+and session snapshot staleness.
+
+`LM009-G4-A2` is READY to wire this exact editor-neutral proof to standard
+`textDocument/definition` using canonical ProjectBinding/open-document custody.
