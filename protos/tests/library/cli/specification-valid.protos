@@ -1,0 +1,114 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+CommandLine: import("std:cli/CommandLine")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+optionDescriptor: {
+    key: "jobs"
+    long: "jobs"
+    short: "j"
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "COUNT"
+    help: "Number of workers"
+}
+
+positionalDescriptor: {
+    key: "files"
+    minOccurrences: 1
+    maxOccurrences: null
+    valueName: "FILE"
+    help: "Input files"
+}
+
+childDescriptor: {
+    name: "run"
+    help: "Run a target"
+    options: Array({
+        key: "force"
+        long: "force"
+        short: "f"
+        minValues: 0
+        maxValues: 0
+        minOccurrences: 0
+        maxOccurrences: 1
+        valueName: null
+        help: null
+    })
+    positionals: Array()
+    subcommands: Array()
+}
+
+first: CommandLine.option(optionDescriptor)
+second: CommandLine.option(optionDescriptor)
+positional: CommandLine.positional(positionalDescriptor)
+command: CommandLine.command({
+    name: "tool"
+    help: "Tool root"
+    options: Array(optionDescriptor)
+    positionals: Array(positionalDescriptor)
+    subcommands: Array(childDescriptor)
+})
+
+require(first !== second)
+require(first !== optionDescriptor)
+require(first.kind == "option")
+require(first.key == "jobs")
+require(first.long == "jobs")
+require(first.short == "j")
+require(first.minValues == 1)
+require(first.maxValues == 1)
+require(first.minOccurrences == 0)
+require(first.maxOccurrences == 1)
+require(first.valueName == "COUNT")
+require(first.help == "Number of workers")
+
+require(positional !== positionalDescriptor)
+require(positional.kind == "positional")
+require(positional.key == "files")
+require(positional.minOccurrences == 1)
+require(positional.maxOccurrences === null)
+require(positional.valueName == "FILE")
+require(positional.help == "Input files")
+
+require(command.kind == "command")
+require(command.name == "tool")
+require(command.options.size() == 1)
+require(command.options[0] !== optionDescriptor)
+require(command.options[0].key == "jobs")
+require(command.positionals.size() == 1)
+require(command.positionals[0] !== positionalDescriptor)
+require(command.positionals[0].key == "files")
+require(command.subcommands.size() == 1)
+require(command.subcommands[0] !== childDescriptor)
+require(command.subcommands[0].name == "run")
+require(command.subcommands[0].options.size() == 1)
+require(command.subcommands[0].options[0].key == "force")
+
+require(CommandLine.hasSlot("option"))
+require(CommandLine.hasSlot("positional"))
+require(CommandLine.hasSlot("command"))
+require(CommandLine.hasSlot("parse") === false)
+require(CommandLine.hasSlot("renderHelp") === false)
+
+true

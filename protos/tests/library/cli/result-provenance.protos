@@ -1,0 +1,139 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+arguments: Array(
+    "--output=value",
+    "-abc",
+    "--output",
+    "--",
+    "--",
+    "tail"
+)
+arguments.freeze()
+
+attached: {
+    kind: "optionOccurrence"
+    key: "output"
+    spelling: "--output"
+    tokenIndex: 0
+    value: "value"
+    valueTokenIndex: 0
+}
+attached.freeze()
+
+clusterA: {
+    kind: "optionOccurrence"
+    key: "all"
+    spelling: "-a"
+    tokenIndex: 1
+    value: null
+    valueTokenIndex: null
+}
+clusterA.freeze()
+
+clusterB: {
+    kind: "optionOccurrence"
+    key: "brief"
+    spelling: "-b"
+    tokenIndex: 1
+    value: null
+    valueTokenIndex: null
+}
+clusterB.freeze()
+
+clusterC: {
+    kind: "optionOccurrence"
+    key: "check"
+    spelling: "-c"
+    tokenIndex: 1
+    value: null
+    valueTokenIndex: null
+}
+clusterC.freeze()
+
+literalDoubleDash: {
+    kind: "optionOccurrence"
+    key: "output"
+    spelling: "--output"
+    tokenIndex: 2
+    value: "--"
+    valueTokenIndex: 3
+}
+literalDoubleDash.freeze()
+
+tail: {
+    kind: "positionalOccurrence"
+    key: "tail"
+    value: "tail"
+    tokenIndex: 5
+}
+tail.freeze()
+
+options: Array(
+    attached,
+    clusterA,
+    clusterB,
+    clusterC,
+    literalDoubleDash
+)
+options.freeze()
+
+positionals: Array(tail)
+positionals.freeze()
+
+command: {
+    kind: "commandResult"
+    name: "tool"
+    tokenIndex: null
+    endOfOptionsIndex: 4
+    options: options
+    positionals: positionals
+    subcommand: null
+}
+command.freeze()
+
+parsed: {
+    kind: "parseResult"
+    arguments: arguments
+    command: command
+}
+parsed.freeze()
+
+require(parsed.command.options[0].spelling == "--output")
+require(parsed.command.options[0].tokenIndex == 0)
+require(parsed.command.options[0].value == "value")
+require(parsed.command.options[0].valueTokenIndex == 0)
+
+require(parsed.command.options[1].spelling == "-a")
+require(parsed.command.options[1].tokenIndex == 1)
+require(parsed.command.options[2].spelling == "-b")
+require(parsed.command.options[2].tokenIndex == 1)
+require(parsed.command.options[3].spelling == "-c")
+require(parsed.command.options[3].tokenIndex == 1)
+
+require(parsed.arguments[3] == "--")
+require(parsed.arguments[4] == "--")
+require(parsed.command.options[4].value == "--")
+require(parsed.command.options[4].valueTokenIndex == 3)
+require(parsed.command.endOfOptionsIndex == 4)
+require(parsed.command.positionals[0].tokenIndex == 5)
+
+true

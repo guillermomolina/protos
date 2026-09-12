@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A RATIFIED — Candidate E′ selected; LIB011-A1 CLOSED; LIB011-A2 CLOSED; LIB011-A3 READY**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B READY**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1017,8 +1017,8 @@ LIB011-A does **not** select or implement:
 - a public structured parse-error taxonomy;
 - a public compiled-spec/cache abstraction.
 
-Those remain later bounded work. LIB011-B is not released by this ratification;
-A1/A2/A3 must first publish and close the approved public model.
+Those remain later bounded work. LIB011-A1/A2/A3 are now closed; LIB011-B is
+released for bounded implementation under the already-ratified token laws.
 
 ## Implementation sequence
 
@@ -1026,8 +1026,9 @@ The ratified architecture releases this bounded sequence:
 
 ### LIB011-A — public specification/result model
 
-**RATIFIED — Candidate E′ selected.** LIB011-A is decomposed into these bounded
-publication slices before LIB011-B may begin:
+**CLOSED — Candidate E′ implemented and model-closed.** A1/A2/A3 are closed and
+the approved public model is complete; LIB011-B is released for bounded token-parser
+implementation.
 
 #### LIB011-A1 — specification model
 
@@ -1112,12 +1113,14 @@ Ordered option and positional occurrence Arrays are scoped to their containing
 scope. A2 therefore does not flatten repeated keys across command levels and does
 not retain parent backlinks.
 
-`ProtosCommandLineResultModelTest` provides executable shape evidence entirely in
-test-local ordinary Protos data: exact slot sets, fresh argument snapshot,
-node-by-node freezing, recursive command scoping, direct indices and the
-literal-`--` versus structural-delimiter distinction. It also asserts that A2
-adds no `CommandLine` export. No production parser or hidden native helper is
-introduced by this slice.
+A2 initially published complementary JUnit shape evidence through
+`ProtosCommandLineResultModelTest`. Before closing LIB011-A, A3 adds the
+authoritative Protos-language semantic corpus under `protos/tests/library/cli/**`
+for this same result contract: fresh argument snapshot, node-by-node freezing,
+recursive command scoping, direct indices and the literal-`--` versus structural
+delimiter distinction. The JUnit evidence remains complementary and continues to
+assert exact host-visible slot sets. No production parser or hidden native helper
+is introduced by A2 or A3.
 
 A2 deliberately does not validate parent-positionals/subcommand allocation,
 recognize tokens, select options, define parse failures, or expose a public Error
@@ -1125,18 +1128,47 @@ taxonomy. Those remain outside this bounded result-model closure.
 
 #### LIB011-A3 — adversarial model closure
 
-**READY.**
+**CLOSED — Protos-language semantic closure; implementation version unchanged.**
 
-Exercise malformed descriptors and model invariants, including duplicate logical
-keys/spellings, shallow-freeze alias attacks, invalid cardinalities, invalid
-external names and invalid nested specifications. Reconcile the durable design
-record and release LIB011-B only when the public model is closed.
+A3 closes Candidate E′ without changing production `CommandLine.protos` or
+widening `std:cli/CommandLine`. In accordance with the repository testing policy,
+observable Standard Library semantics are now primarily exercised by executable
+Protos fixtures under:
 
-If A1/A2/A3 exposes parent-positionals/subcommand allocation semantics, a public
-error taxonomy or another substantive public choice not already approved, stop
-the affected slice at the ordinary decision gate.
+```text
+protos/tests/library/cli/
+```
+
+The corpus covers the already-published A1 constructors and invariants, snapshot
+and node-by-node freeze behavior, the A2 recursive lossless result shape,
+zero-based direct provenance, literal `--` versus structural delimiter,
+attached-value provenance, shared short-cluster token indices, duplicate short
+spellings, duplicate positional logical keys, wrong-family descriptor fields,
+portable external-name rejection, malformed nested specifications and recursive
+descriptor cycles.
+
+`ProtosCommandLineModuleTest` is the thin Java harness that loads those Protos
+fixtures. The previously published `ProtosCommandLineSpecModuleTest` and
+`ProtosCommandLineResultModelTest` remain complementary implementation/shape
+evidence; they are not treated as the sole semantic authority.
+
+The bounded LIB011 focal runs only those three LIB011 harnesses. A3 is an
+intermediate child closure: the owning top-level LIB011 work item remains open,
+and this slice changes no specification, public API, production runtime/library
+implementation, implementation version, or semantic/platform decision. Its
+definitive affected-test dependency closure is therefore the three LIB011
+harnesses above. Broader integrated validation remains the responsibility of the
+top-level LIB011 executable/conformance closure, as required by the repository
+impact-aware publication policy.
+
+No parent-positionals/subcommand allocation rule, public parse-error taxonomy,
+new result field, parser behavior, authority surface or other durable semantic
+choice was required. The explicit decision gate therefore remains untriggered,
+LIB011-A is closed, and LIB011-B is READY.
 
 ### LIB011-B — token parser
+
+**READY.**
 
 Implement strict explicit-argument parsing for the ratified long/short option,
 value, cardinality, positional and `--` laws with lossless results.
