@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-A CLOSED; D104 RATIFIED; LIB010-A/D104 alignment READY; LIB010-B parser BLOCKED_BY_D104_ALIGNMENT**
+Status: **LIB010-A/D104 ALIGNMENT CLOSED; LIB010-B parser READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -271,10 +271,15 @@ For TOML 1.1 partial times whose seconds are omitted, the semantic TOML value ha
 `second = 0`. Whether `:00` was lexically present is source-representation data
 and belongs to a future source-preserving Document layer.
 
-D104 ratification itself changes no executable code. The already-published
-LIB010-A constructors still enforce `0..59` until the bounded D104 alignment
-slice updates them and retained tests. LIB010-B must not publish complete TOML
-1.1 temporal parsing before that alignment closes.
+The bounded LIB010-A/D104 executable alignment is **CLOSED** at implementation
+version `0.2.417-SNAPSHOT`. The three time-bearing constructors now accept `second` in
+`0..60`; retained focal evidence preserves `60` for `localTime`,
+`localDateTime`, and `offsetDateTime`, while `61` remains rejected for all three.
+
+No leap-second schedule, tzdb, clock, host datetime representation, parser,
+encoder, Document, streaming surface or D087 private-tool TOML behavior was
+introduced by the alignment. LIB010-B is therefore released to implement strict
+TOML 1.1 parsing under D104.
 
 ### Array
 
@@ -1039,12 +1044,9 @@ binding, generic serializer hierarchy, Java/native operation or Core semantic
 family. D087 private TOOL001/TOOL002 TOML 1.0 bootstrap ownership remains
 unchanged.
 
-D104 follow-up before LIB010-B publication:
-**LIB010-A/D104 alignment — extend the three time-bearing constructors from
-`second = 0..59` to `second = 0..60`, retain `61` rejection, and add focal
-evidence.**
+D104 alignment status: **CLOSED**.
 
-After that bounded alignment closes, the next main implementation slice is:
+Next bounded implementation slice:
 **LIB010-B — strict TOML 1.1 parser**.
 
 ## Deliberately deferred

@@ -116,7 +116,7 @@ localTime: (hour, minute, second, fractionCoefficient, fractionDigits) => {
     ((minute < 0) || (minute > 59)).ifTrue(() => {
         Error().signal()
     })
-    ((second < 0) || (second > 59)).ifTrue(() => {
+    ((second < 0) || (second > 60)).ifTrue(() => {
         Error().signal()
     })
     (fractionCoefficient < 0).ifTrue(() => {
@@ -216,7 +216,7 @@ localDateTime: (
     ((minute < 0) || (minute > 59)).ifTrue(() => {
         Error().signal()
     })
-    ((second < 0) || (second > 59)).ifTrue(() => {
+    ((second < 0) || (second > 60)).ifTrue(() => {
         Error().signal()
     })
     (fractionCoefficient < 0).ifTrue(() => {
@@ -321,7 +321,7 @@ offsetDateTime: (
     ((minute < 0) || (minute > 59)).ifTrue(() => {
         Error().signal()
     })
-    ((second < 0) || (second > 59)).ifTrue(() => {
+    ((second < 0) || (second > 60)).ifTrue(() => {
         Error().signal()
     })
     (fractionCoefficient < 0).ifTrue(() => {

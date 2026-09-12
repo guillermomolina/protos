@@ -138,7 +138,9 @@ final class ProtosTomlDataModelModuleTest {
         assertSignals("TOML.localDate(2024, 4, 31)");
         assertSignals("TOML.localTime(24, 0, 0, 0, 0)");
         assertSignals("TOML.localTime(0, 60, 0, 0, 0)");
-        assertSignals("TOML.localTime(0, 0, 60, 0, 0)");
+        assertSignals("TOML.localTime(0, 0, 61, 0, 0)");
+        assertSignals("TOML.localDateTime(2026, 1, 1, 0, 0, 61, 0, 0)");
+        assertSignals("TOML.offsetDateTime(2026, 1, 1, 0, 0, 61, 0, 0, 0)");
         assertSignals("TOML.localTime(0, 0, 0, 1, 0)");
         assertSignals("TOML.localTime(0, 0, 0, 10, 1)");
         assertSignals("TOML.offsetDateTime(2024, 1, 1, 0, 0, 0, 0, 0, 1440)");
@@ -149,6 +151,33 @@ final class ProtosTomlDataModelModuleTest {
         assertSignals("TOML.table(\"x\", TOML.integer(1), \"x\", TOML.integer(2))");
         assertSignals("TOML.table(\"dangling\")");
         assertSignals("TOML.table(1, TOML.integer(1))");
+    }
+
+    @Test
+    void d104PreservesSecondSixtyAsTomlSemanticDataWithoutEventValidation() throws Exception {
+        Object result =
+                evaluate(
+                        """
+                        TOML: import("std:toml/TOML")
+
+                        time: TOML.localTime(12, 34, 60, 0, 0)
+                        local: TOML.localDateTime(2025, 2, 3, 4, 5, 60, 0, 0)
+                        offset: TOML.offsetDateTime(
+                            2025, 2, 3, 4, 5, 60, 123, 3, 137
+                        )
+
+                        (time.kind === "localTime") &&
+                            (time.value.second == 60) &&
+                            (local.kind === "localDateTime") &&
+                            (local.value.second == 60) &&
+                            (offset.kind === "offsetDateTime") &&
+                            (offset.value.second == 60) &&
+                            (offset.value.offsetMinutes == 137) &&
+                            (offset.value.fraction.coefficient == 123) &&
+                            (offset.value.fraction.digits == 3)
+                        """);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
     }
 
     @Test
