@@ -91,7 +91,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
     private static final Map<String, Integer> EXPECTED_NON_CORE_NATIVE_PROVIDERS =
             Map.ofEntries(
                     Map.entry("cli/ProtosCliPrintFacility.java", 1),
-                    Map.entry("execution/ProtosExactExecutionFacility.java", 2));
+                    Map.entry("execution/ProtosExactExecutionFacility.java", 2),
+                    Map.entry("execution/ProtosTestToolCatalogAcquisitionFacility.java", 1));
 
     @Test
     void javaNativeClosureProvidersMatchTheAuditedBoundaryExactly() throws IOException {
@@ -106,7 +107,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             JAVA_ROOT.relativize(file).toString().replace('\\', '/');
                     if (relative.startsWith("cli/")
                             || relative.equals(
-                                    "execution/ProtosExactExecutionFacility.java")) {
+                                    "execution/ProtosExactExecutionFacility.java")
+                            || relative.equals(
+                                    "execution/ProtosTestToolCatalogAcquisitionFacility.java")) {
                         actualNonCore.put(relative, count);
                     } else {
                         actualCore.put(relative, count);

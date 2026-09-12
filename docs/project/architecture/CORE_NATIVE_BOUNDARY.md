@@ -1,3 +1,24 @@
+## TOOL002-I7B2 — Test Tool catalog acquisition non-Core boundary reconciliation
+
+TOOL002-I7B2 adds one D101-ratified bootstrap-local native Closure provider,
+`ProtosTestToolCatalogAcquisitionFacility`, for the bundled Test Tool's one-shot
+`catalogAcquirer` capability. This facility is deliberately **not Core**: it is
+installed only into the initial Test Tool module activation, is never a
+Core/prelude binding, and does not enlarge the standard-language native
+representation surface.
+
+The executable native-boundary guard therefore classifies the facility beside
+the other explicitly non-Core native providers rather than counting it in the
+Core provider map. The audited Core boundary remains **140 native Closure
+construction sites across 36 Core providers**. The separately guarded non-Core
+inventory becomes **4 native Closure construction sites across 3 providers**:
+`ProtosCliPrintFacility` (1), `ProtosExactExecutionFacility` (2), and
+`ProtosTestToolCatalogAcquisitionFacility` (1).
+
+This is an inventory/classification reconciliation for the already-published
+I7B2 capability. It changes no production implementation, no D101 semantics,
+no Test Tool authority, no specification, and no implementation version.
+
 ## I031-D — standard structural `Object.freeze()` publication
 
 I031-D publishes the already-normative inherited structural `Object.freeze()` operation through the
