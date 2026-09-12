@@ -621,7 +621,7 @@ transport-selection API. The current boundary is therefore **103 sites across
 I018 specifically prevents the following ordinary derived behavior from
 regressing to Java-only implementation:
 
-- `Object.init`, default `Object.==`, and `Object.!=`;
+- `Object.init`, default `Object.==`, `Object.!=`, and `Object.match`;
 - `Integer.negated` and `Integer.%`;
 - `Float.negated`.
 

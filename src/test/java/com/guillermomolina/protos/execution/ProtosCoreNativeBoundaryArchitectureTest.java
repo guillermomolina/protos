@@ -174,6 +174,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertSourceBacked(ProtosObjectValue.rootObject(), "init");
         assertSourceBacked(ProtosObjectValue.rootObject(), "==");
         assertSourceBacked(ProtosObjectValue.rootObject(), "!=");
+        assertSourceBacked(ProtosObjectValue.rootObject(), "match");
 
         assertNativeSelectors(
                 "Number",

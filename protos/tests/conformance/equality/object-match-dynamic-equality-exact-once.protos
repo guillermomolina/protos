@@ -13,24 +13,20 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-_coreObjectInit: () => {
-    this
+calls: {
+    count: 0
 }
+marker: {}
 
-_coreObjectEquals: (other) => {
-    this === other
-}
-
-_coreObjectMatch: (subject) => {
-    this == subject
-}
-
-_coreObjectNotEquals: (other) => {
-    result: true
-
-    (this == other).ifTrue() {
-        result = false
+source: {
+    equals: (other) => {
+        calls.count = calls.count + 1
+        marker
     }
-
-    result
 }
+view: source.alias("equals", "==")
+pattern: view {}
+
+result: pattern.match(pattern)
+
+(result === marker) && (calls.count == 1)

@@ -55,6 +55,7 @@ class ProtosAPlusExecutionProjectionTest {
         assertTrue(init.requiresContextLocalExecutionProjectionForRuntime());
         assertTrue(rootClosure("==").requiresContextLocalExecutionProjectionForRuntime());
         assertTrue(rootClosure("!=").requiresContextLocalExecutionProjectionForRuntime());
+        assertTrue(rootClosure("match").requiresContextLocalExecutionProjectionForRuntime());
         ProtosClosureValue boundInit =
                 (ProtosClosureValue)
                         ProtosValueLookup.readMember(receiver, "init", prelude).orElseThrow();

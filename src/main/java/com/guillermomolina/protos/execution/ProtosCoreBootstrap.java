@@ -465,6 +465,7 @@ public final class ProtosCoreBootstrap {
             requireContextLocalRootExecutionProjection(object, "init");
             requireContextLocalRootExecutionProjection(object, "==");
             requireContextLocalRootExecutionProjection(object, "!=");
+            requireContextLocalRootExecutionProjection(object, "match");
             freezeSharedStandardGraph(object);
             validatePublishedRoot(object);
         }
@@ -489,7 +490,8 @@ public final class ProtosCoreBootstrap {
                         "while",
                         "init",
                         "==",
-                        "!=");
+                        "!=",
+                        "match");
         if (!object.localSlotsSnapshot().keySet().containsAll(expected)) {
             throw new IllegalStateException(
                     "standard Object root publication surface is incomplete");
@@ -497,6 +499,7 @@ public final class ProtosCoreBootstrap {
         validateExistingSourceBackedClosure(object, "init");
         validateExistingSourceBackedClosure(object, "==");
         validateExistingSourceBackedClosure(object, "!=");
+        validateExistingSourceBackedClosure(object, "match");
     }
 
     private static void requireContextLocalRootExecutionProjection(
@@ -537,6 +540,7 @@ public final class ProtosCoreBootstrap {
         validateContextLocalRootExecutionProjection(object, "init");
         validateContextLocalRootExecutionProjection(object, "==");
         validateContextLocalRootExecutionProjection(object, "!=");
+        validateContextLocalRootExecutionProjection(object, "match");
         for (Object value : object.localSlotsSnapshot().values()) {
             if (!(value instanceof ProtosClosureValue closure) || !closure.isFrozen()) {
                 throw new IllegalStateException(
@@ -625,12 +629,15 @@ public final class ProtosCoreBootstrap {
                 requireSourceBackedClosure(sourceContext, "_coreObjectInit");
         ProtosClosureValue equals =
                 requireSourceBackedClosure(sourceContext, "_coreObjectEquals");
+        ProtosClosureValue match =
+                requireSourceBackedClosure(sourceContext, "_coreObjectMatch");
         ProtosClosureValue notEquals =
                 requireSourceBackedClosure(
                         sourceContext, "_coreObjectNotEquals");
 
         sourceContext.removeLocalSlot("_coreObjectInit");
         sourceContext.removeLocalSlot("_coreObjectEquals");
+        sourceContext.removeLocalSlot("_coreObjectMatch");
         sourceContext.removeLocalSlot("_coreObjectNotEquals");
         if (!sourceContext.localSlotsSnapshot().isEmpty()) {
             throw new IllegalStateException(
@@ -643,6 +650,7 @@ public final class ProtosCoreBootstrap {
             validateExistingSourceBackedClosure(object, "init");
             validateExistingSourceBackedClosure(object, "==");
             validateExistingSourceBackedClosure(object, "!=");
+            validateExistingSourceBackedClosure(object, "match");
             if (!object.hasLocalSlot("init")) {
                 object.createLocalSlot("init", init);
             }
@@ -651,6 +659,9 @@ public final class ProtosCoreBootstrap {
             }
             if (!object.hasLocalSlot("!=")) {
                 object.createLocalSlot("!=", notEquals);
+            }
+            if (!object.hasLocalSlot("match")) {
+                object.createLocalSlot("match", match);
             }
         }
     }
