@@ -258,8 +258,10 @@ final class ProtosTestToolI8D4BResourcefulAttemptBridgeTest {
         String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
 
-        assertTrue(runner.contains("resourceExecutionAsync"));
+        assertFalse(runner.contains("resourceExecutionAsync"));
+        assertTrue(runner.contains("resourceExecutorAsync"));
         assertTrue(main.contains("resourceExecutionAsync"));
+        assertFalse(main.contains("resourceExecutorAsync"));
         assertFalse(runner.contains("ProtosTestResourcefulAttemptBridge"));
         assertFalse(main.contains("ProtosTestResourcefulAttemptBridge"));
     }
