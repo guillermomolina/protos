@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-C CLOSED — deterministic semantic encoder complete; LIB010-D conformance/stress/baseline closure READY**
+Status: **CLOSED — LIB010 initial public TOML 1.1 semantic baseline complete**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -1029,15 +1029,84 @@ Ratification releases bounded implementation work in this order.
 
 ### LIB010-D — conformance, stress and baseline closure
 
-- official TOML/toml-test-oriented retained conformance as feasible in the
-  project harness;
-- large/deep/adversarial input tests;
-- semantic parse/encode round-trip;
-- independent-module/Actor/isolation checks;
-- confirm D087 bootstrap boundary remains unchanged;
-- confirm no source-preserving API, generic serializer, hidden I/O authority or
-  global mutable parser state entered the baseline;
-- close the bounded initial LIB010 surface.
+Status: **CLOSED**
+
+Closure evidence composes the retained A/B/C suite rather than duplicating it:
+
+- the public parser retains TOML 1.1-oriented positive and negative conformance
+  for Strings/escapes, unbounded Integer, binary64 Float, booleans, heterogeneous
+  Arrays, all four temporal kinds, dotted keys, multiline inline tables,
+  arrays-of-tables and strict ownership/conflict rejection;
+- retained parser stress covers 2,048 nested Arrays, 1,024 nested inline Tables,
+  4,096 flat assignments, 1,536-component dotted/header paths, long
+  4,096/8,192-character text/whitespace, 2,048-digit numeric/temporal tokens and
+  2,048 array-of-tables elements;
+- retained encoder evidence covers all ten semantic kinds, D104 `second = 60`,
+  D109 shortest-round-trip binary64 spelling, cycles, shared acyclic containers,
+  2,048 nested Arrays and 1,024 nested Tables;
+- the D closure test adds one official-example/toml-test-oriented TOML 1.1
+  document spanning tables, arrays-of-tables, multiline inline tables, temporal
+  data and TOML 1.1 escapes and proves parse -> encode -> parse semantic
+  round-trip;
+- two fresh Standard Library/Core bootstraps prove parser/result state is not
+  shared across module instances;
+- a retained architecture guard proves the public `std:toml/TOML` source does
+  not import `tool-shared:Toml10`, expose JVM Float formatting/bit access, or add
+  file-loading/saving authority;
+- exact publication scope leaves the D087 private TOML 1.0 sources unchanged.
+
+#### Reused repository-wide validation evidence
+
+The accumulated full-suite debt from the intermediate `FOCAL_BOUNDED`
+publications is discharged by a previously completed isolated repository-wide
+validation at exact commit:
+
+```text
+FULL_SUITE_EVIDENCE_SHA=e9c560db697565d82d6f51e5aad329b821daf378
+command=make test
+effective=mvn clean test
+tests=1893
+failures=0
+errors=0
+skipped=1
+build=SUCCESS
+MAVEN_WORKTREE_INTEGRITY=PASS
+```
+
+This evidence is reused only under a strict publication-time compatibility gate:
+the evidence commit must remain an ancestor of the publication base; every changed path after that evidence must remain inside the V9 reviewed LIB011/TOOL002/PLAT031/version allowlist; `pom.xml` may differ only by the project implementation
+version; no LIB010, D087, TOML execution/compiler/parser/Core surface may have
+changed in that reviewed interval; and the current candidate must pass both the exact integrated TOML focal set and the bounded focal suites for every executable post-evidence surface (LIB011/TOOL002/PLAT031), plus the retained public Test Tool CLI checkpoint. Any further `main` movement outside that reviewed
+interval invalidates reuse and aborts publication.
+
+This avoids rerunning an 18-minute full suite without weakening the closure
+contract: historical repository-wide evidence proves the inherited global
+baseline, while current focal validation proves the newly materialized D closure
+test and the complete retained TOML surface against the actual publication base.
+
+The initial bounded public surface is therefore closed at implementation version
+`0.2.467-SNAPSHOT` with:
+
+```text
+std:toml/TOML
+
+string
+integer
+float
+boolean
+offsetDateTime
+localDateTime
+localDate
+localTime
+array
+table
+parse
+encode
+```
+
+The baseline remains whole-document, synchronous, semantic rather than
+source-preserving, authority-free, free of a generic serializer hierarchy and
+independent from D087 persisted-tool dialect ownership.
 
 `Document`, public streaming/events, richer diagnostics, TextReader/TextWriter
 adapters, object binding, general datetime conversion, schema facilities and
