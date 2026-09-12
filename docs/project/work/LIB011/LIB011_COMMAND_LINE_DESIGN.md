@@ -1168,10 +1168,23 @@ LIB011-A is closed, and LIB011-B is READY.
 
 ### LIB011-B — token parser
 
-**READY.**
+**READY — D111 RATIFIED (Candidate B′).**
 
 Implement strict explicit-argument parsing for the ratified long/short option,
 value, cardinality, positional and `--` laws with lossless results.
+
+D111 / #437 fixes command-local positional allocation as **maximal feasible
+left-biased allocation with suffix-minimum reservation**. For an already-selected
+command scope, an earlier positional consumes as much as its cardinality permits
+only when enough tokens remain to satisfy every later `minOccurrences`; surplus
+therefore stays left-biased, but required later positionals are never starved by
+an optional earlier positional. The current A1 invariant that any unbounded
+positional is unique and last keeps this allocation linear and backtracking-free.
+
+D111 deliberately does not decide parent-positionals versus nested-subcommand
+selection. `LIB011-C` remains the owner of traversal and cross-command
+allocation. The durable decision is recorded in
+`docs/project/decisions/language/D111_COMMAND_LINE_POSITIONAL_ALLOCATION_SEMANTICS.md`.
 
 ### LIB011-C — subcommand traversal and composition
 
