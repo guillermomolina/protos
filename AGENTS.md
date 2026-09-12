@@ -3101,3 +3101,41 @@ When a design decision becomes language semantics:
 - update or annotate the design note so it no longer appears unresolved.
 
 Never implement observable behavior directly from `docs/design/CONCURRENCY_DESIGN.md`.
+
+
+## Repository semantic-test ownership
+<!-- TEST001 SEMANTIC-TEST-OWNERSHIP -->
+
+Observable Protos/Core and public Standard Library semantics MUST NOT have
+permanent duplicate primary policy owners in TOOL002 and Java/JUnit.
+
+`scripts/test_ownership_guard.py` and `protos/tests/test_ownership.json` are the
+machine-readable enforcement boundary for semantic contracts reconciled by the
+TEST001 migration program.
+
+For every semantic contract reconciled by TEST001-D/E/F/G or later equivalent
+work:
+
+- use one stable canonical `id` for that semantic contract;
+- record exactly one primary owner;
+- a `RECONCILED` public semantic contract has TOOL002 as primary owner;
+- a retained Java/JUnit or shell test is allowed only as explicitly distinct
+  `HOST_RUNTIME` or `INTEGRATION_BOOTSTRAP` evidence with a meaningful reason;
+- temporary duplicate semantic policy may be recorded only as
+  `MIGRATION_OVERLAP`, tied to its bounded migration work, and MUST NOT be
+  represented as reconciled;
+- if TOOL002 is genuinely inappropriate for an otherwise public semantic
+  contract, record an explicit `EXCEPTION` with JUnit as primary and a meaningful
+  reason rather than silently retaining dual authority;
+- do not infer semantic equivalence from filenames or class names. The migration
+  slice must first prove equivalent or stronger observable-contract coverage,
+  then update the ownership registry and retire or reclassify the Java owner in
+  the same bounded publication where practical.
+
+The registry is an ownership ledger, not a test inventory. HOST_RUNTIME and
+INTEGRATION_BOOTSTRAP tests that do not overlap a migrated public semantic
+contract do not need registry entries merely because they exist.
+
+Publication validation MUST fail closed if the ownership guard or registry is
+missing or malformed. TEST001 may not close while any known duplicate semantic
+policy remains unrecorded or while any `MIGRATION_OVERLAP` entry remains.

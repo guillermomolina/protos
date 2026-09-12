@@ -31,6 +31,8 @@ HERE = Path(__file__).resolve().parent
 HELPER_PATH = HERE / "publication_validation.py"
 SELECTOR_PATH = HERE / "validation_impact.py"
 STYLE_GUARD_PATH = HERE / "source_style_guard.py"
+OWNERSHIP_GUARD_PATH = HERE / "test_ownership_guard.py"
+OWNERSHIP_REGISTRY_PATH = HERE.parent / "protos" / "tests" / "test_ownership.json"
 STYLE_EXCEPTIONS_PATH = HERE / "source_style_exceptions.json"
 
 SPEC = importlib.util.spec_from_file_location(
@@ -75,6 +77,10 @@ class PublicationValidationTest(unittest.TestCase):
         shutil.copyfile(str(SELECTOR_PATH), str(scripts / "validation_impact.py"))
         shutil.copyfile(str(STYLE_GUARD_PATH), str(scripts / "source_style_guard.py"))
         shutil.copyfile(str(STYLE_EXCEPTIONS_PATH), str(scripts / "source_style_exceptions.json"))
+        shutil.copyfile(str(OWNERSHIP_GUARD_PATH), str(scripts / "test_ownership_guard.py"))
+        ownership_registry = self.repo / "protos" / "tests" / "test_ownership.json"
+        ownership_registry.parent.mkdir(parents=True)
+        shutil.copyfile(str(OWNERSHIP_REGISTRY_PATH), str(ownership_registry))
         (self.repo / "tracked.txt").write_text("base\n", encoding="utf-8")
 
         subprocess.run(
@@ -225,6 +231,18 @@ class PublicationValidationTest(unittest.TestCase):
     def test_source_style_regression_fails_before_maven(self):
         candidate = self.commit_files({
             "protos/tools/package/Probe.protos": 'm: Map()\nm.at("x")\n',
+        })
+        self.assertEqual(2, self.run_helper(candidate))
+        self.assertEqual([], self.maven_calls())
+
+    def test_missing_test_ownership_guard_fails_before_maven(self):
+        candidate = self.commit_files({"scripts/test_ownership_guard.py": None})
+        self.assertEqual(2, self.run_helper(candidate))
+        self.assertEqual([], self.maven_calls())
+
+    def test_invalid_test_ownership_registry_fails_before_maven(self):
+        candidate = self.commit_files({
+            "protos/tests/test_ownership.json": '{"version": 1, "contracts": "bad"}\n',
         })
         self.assertEqual(2, self.run_helper(candidate))
         self.assertEqual([], self.maven_calls())

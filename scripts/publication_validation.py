@@ -139,6 +139,25 @@ def parse_selector_result(text):
     )
 
 
+def invoke_test_ownership_guard(repo):
+    guard = Path(repo) / "scripts" / "test_ownership_guard.py"
+    if not guard.is_file():
+        raise PublicationValidationError(
+            "repository test-ownership guard is missing: " + str(guard)
+        )
+    completed = subprocess.run(
+        [sys.executable, str(guard), "--repo", str(repo)],
+        cwd=str(repo), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise PublicationValidationError(
+            "repository test-ownership guard failed"
+            + ((": " + detail) if detail else "")
+        )
+    return completed.stdout.strip()
+
+
 def invoke_source_style_guard(repo, base, head):
     guard = Path(repo) / "scripts" / "source_style_guard.py"
     if not guard.is_file():
@@ -215,6 +234,7 @@ def run(repo, base, head, top_level_closure=False):
 
     try:
         candidate = verify_candidate_state(repo, head)
+        ownership_output = invoke_test_ownership_guard(repo)
         source_style_output = invoke_source_style_guard(repo, base, candidate)
         selection = invoke_selector(
             repo,

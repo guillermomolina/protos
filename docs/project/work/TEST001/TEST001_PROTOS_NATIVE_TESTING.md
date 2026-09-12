@@ -236,18 +236,87 @@ B is test/CI-impacting and must prove all three layers on the integrated state:
 The direct Test Tool command is therefore validated before publication, not only
 after GitHub Actions receives the commit.
 
+## TEST001-C — semantic-test ownership and no-duplication guard
+
+Status: CLOSED
+
+TEST001-C turns the duplicate-primary-owner rule into an executable repository
+invariant without pretending that semantic equivalence can be inferred from Java
+class names or Protos fixture filenames.
+
+The durable mechanism is:
+
+- `protos/tests/test_ownership.json` — machine-readable ownership ledger for
+  public semantic contracts that TEST001 reconciles;
+- `scripts/test_ownership_guard.py` — fail-closed validator for that ledger;
+- `scripts/publication_validation.py` — invokes the ownership guard before test
+  selection or Maven execution;
+- `AGENTS.md` — requires later migration slices to prove equivalence before
+  registering and retiring/reclassifying an owner.
+
+The registry is intentionally empty at C closure. A and C identify the migration
+families and establish the enforcement mechanism; D/E/F/G populate exact
+contract records only after each bounded slice has proved which assertions are
+actually equivalent. Pre-populating guessed mappings in C would recreate the
+name-based ownership inference that TEST001 explicitly rejects.
+
+### Ownership states
+
+A registered semantic contract has one structural primary owner and one state:
+
+- `RECONCILED` — TOOL002 is the primary owner. Any retained JUnit/shell evidence
+  must be explicitly `HOST_RUNTIME` or `INTEGRATION_BOOTSTRAP`;
+- `MIGRATION_OVERLAP` — TOOL002 has been selected as primary, but an explicitly
+  identified duplicate semantic-policy owner temporarily remains during bounded
+  migration work;
+- `EXCEPTION` — JUnit remains primary because TOOL002 is genuinely inappropriate
+  for that public contract; the registry requires an explicit reason.
+
+A `RECONCILED` entry cannot contain `MIGRATION_OVERLAP`. Contract identifiers are
+unique and canonical, evidence paths are exact existing repository files, and
+the registry is sorted to keep review diffs deterministic.
+
+### What the guard deliberately does not do
+
+The guard does not compare names and declare tests equivalent. Whether two tests
+own the same observable contract is a semantic audit result produced by the
+responsible TEST001-D/E/F/G slice. Once that result is recorded under one stable
+contract id, the guard prevents the repository from representing two primary
+owners or disguising semantic overlap as reconciled host evidence.
+
+This keeps legitimate Java implementation coverage beside Protos conformance
+without allowing permanent dual semantic authority.
+
+### TEST001-C validation
+
+C changes repository validation machinery, so it is `TEST_IMPACT`, but its
+executable impact is confined to Python repository-validation helpers:
+
+1. focused ownership-guard unit tests exercise valid ownership, duplicate ids,
+   invalid primary ownership, legitimate host secondaries, overlap rejection and
+   explicit exceptions;
+2. focused publication-validator integration tests prove that a missing ownership
+   guard or malformed registry fails closed before Maven;
+3. the real repository ownership registry is validated directly.
+
+C does not change Java/runtime code, Protos executable corpus, Test Tool code or
+CI execution wiring, so it does not mechanically rerun the Java suite or direct
+Test Tool corpus. Broader validation remains impact-driven rather than automatic.
+
+No Protos specification, runtime implementation, Standard Library behavior,
+TOOL002 public behavior or implementation version changes in C.
+
 ## Migration order established by A
 
 The dependency/order for remaining slices is:
 
-1. `TEST001-C` — establish the durable no-duplicate-primary-owner guard/rule;
-2. `TEST001-D` — reconcile Core/language semantic Java owners against existing or
+1. `TEST001-D` — reconcile Core/language semantic Java owners against existing or
    newly required TOOL002 fixtures;
-3. `TEST001-E` — Process/Task/Future/Actor/Group/cancellation public semantics;
-4. `TEST001-F` — Standard Library public behavior;
-5. `TEST001-G` — package/module/I/O higher-level integration;
-6. `TEST001-H` — extracted portable-distribution Test Tool validation;
-7. `TEST001-I` — final duplicate-owner retirement, bootstrap-floor audit,
+2. `TEST001-E` — Process/Task/Future/Actor/Group/cancellation public semantics;
+3. `TEST001-F` — Standard Library public behavior;
+4. `TEST001-G` — package/module/I/O higher-level integration;
+5. `TEST001-H` — extracted portable-distribution Test Tool validation;
+6. `TEST001-I` — final duplicate-owner retirement, bootstrap-floor audit,
    reporting/documentation reconciliation and closure.
 
 B now precedes broad owner retirement in the published history: the repository
@@ -296,8 +365,8 @@ Dxxx/LIBxxx/TOOLxxx/PLATxxx approval gate.
 |---|---|---|
 | TEST001-A | CLOSED | Current suite classified at durable ownership-family level; per-test retirement rule fixed. |
 | TEST001-B | CLOSED | CI invokes packaged checkout `bin/protos test --jobs 2` directly; JUnit retains only a pre-corpus bundled-tool bootstrap floor. |
-| TEST001-C | READY | No-duplicate-primary-owner enforcement after direct CI ownership exists. |
-| TEST001-D | BLOCKED_BY_C | Core/language semantic migration. |
+| TEST001-C | CLOSED | Machine-readable semantic ownership ledger and fail-closed no-duplicate-primary-owner guard are active in publication validation. |
+| TEST001-D | READY | Core/language semantic migration under the C ownership guard. |
 | TEST001-E | BLOCKED_BY_D | Concurrency/execution-model semantic migration. |
 | TEST001-F | BLOCKED_BY_E | Standard Library migration. |
 | TEST001-G | BLOCKED_BY_F | Package/modules/I/O integration migration. |
@@ -318,3 +387,12 @@ implementation version or public compatibility contract changes in A.
 CI configuration and Java bootstrap/architecture-test behavior change. Protos
 specification, runtime implementation, Test Tool semantics, public compatibility
 and Maven implementation version do not change.
+
+
+## TEST001-C publication classification
+
+`VALIDATION_CLASS=TEST_IMPACT`
+
+Repository validation machinery, validation tests and ownership governance
+change. Protos specification, executable runtime implementation, Standard
+Library/Test Tool public behavior and Maven implementation version do not change.
