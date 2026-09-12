@@ -117,6 +117,183 @@ jobs:
             --base "$base_sha" \
             --head "$head_sha"
 
+      # The badge is observability only. Keep the JUnit XML even when the test
+      # step fails so a later least-privilege job can publish the failure count.
+      - name: Upload JUnit reports for test badge
+        if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: junit-reports-${{ github.run_attempt }}
+          path: |
+            **/target/surefire-reports/TEST-*.xml
+          if-no-files-found: ignore
+          retention-days: 1
+          compression-level: 6
+
+  test-badge:
+    name: Publish test-count badge
+    needs: test
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+    concurrency:
+      group: protos-test-badge-main
+      cancel-in-progress: false
+
+    steps:
+      - name: Check out repository for badge publication
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Download JUnit reports
+        id: reports
+        continue-on-error: true
+        uses: actions/download-artifact@v7
+        with:
+          name: junit-reports-${{ github.run_attempt }}
+          path: junit-reports
+
+      - name: Build Shields endpoint payload
+        id: badge
+        shell: bash
+        env:
+          TEST_JOB_RESULT: ${{ needs.test.result }}
+        run: |
+          set -euo pipefail
+          mkdir -p target/ci-badge
+
+          set +e
+          python3 - "$TEST_JOB_RESULT" target/ci-badge/tests.json <<'PY_BADGE'
+          from __future__ import print_function
+
+          import json
+          from pathlib import Path
+          import sys
+          import xml.etree.ElementTree as ET
+
+          job_result = sys.argv[1]
+          output = Path(sys.argv[2])
+          reports_root = Path("junit-reports")
+          reports = sorted(reports_root.rglob("TEST-*.xml")) if reports_root.exists() else []
+
+          total = 0
+          failed = 0
+          skipped = 0
+
+          for report in reports:
+              root = ET.parse(str(report)).getroot()
+              tag = root.tag.rsplit("}", 1)[-1]
+              if tag != "testsuite":
+                  raise SystemExit("unexpected JUnit root in %s: %s" % (report, tag))
+              total += int(root.attrib.get("tests", "0"))
+              failed += int(root.attrib.get("failures", "0"))
+              failed += int(root.attrib.get("errors", "0"))
+              skipped += int(root.attrib.get("skipped", "0"))
+
+          if total > 0:
+              payload = {
+                  "schemaVersion": 1,
+                  "label": "tests",
+                  "message": "%d failed / %d run" % (failed, total),
+                  "color": "brightgreen" if failed == 0 else "red",
+                  "cacheSeconds": 300,
+              }
+          elif job_result != "success":
+              payload = {
+                  "schemaVersion": 1,
+                  "label": "tests",
+                  "message": "run %s before results" % job_result,
+                  "color": "red" if job_result == "failure" else "orange",
+                  "cacheSeconds": 300,
+              }
+          else:
+              # A successful impact-aware CI run may intentionally execute no
+              # Maven tests. Preserve the previous badge instead of replacing
+              # useful test evidence with "0 run".
+              raise SystemExit(10)
+
+          output.write_text(
+              json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          print(
+              "TEST_BADGE_PAYLOAD: total=%d failed=%d skipped=%d result=%s"
+              % (total, failed, skipped, job_result)
+          )
+          PY_BADGE
+          rc=$?
+          set -e
+
+          if [[ "$rc" -eq 0 ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$rc" -eq 10 ]]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "TEST_BADGE: PRESERVE_PREVIOUS_NO_TESTS_EXECUTED"
+          else
+            exit "$rc"
+          fi
+
+      - name: Publish test badge branch
+        if: ${{ steps.badge.outputs.publish == 'true' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          badge_tree="$(mktemp -d)"
+          rmdir "$badge_tree"
+
+          cleanup_badge_tree() {
+            if git worktree list --porcelain | grep -Fqx "worktree $badge_tree"; then
+              git worktree remove --force "$badge_tree" >/dev/null 2>&1 || true
+            fi
+          }
+          trap cleanup_badge_tree EXIT
+
+          if git ls-remote --exit-code --heads origin refs/heads/badges >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/badges:refs/remotes/origin/badges
+            git worktree add --detach "$badge_tree" refs/remotes/origin/badges
+            git -C "$badge_tree" switch -C badges
+
+            if [[ -f "$badge_tree/source.sha" ]]; then
+              previous_sha="$(tr -d '[:space:]' < "$badge_tree/source.sha")"
+              if [[ -n "$previous_sha" ]] && git cat-file -e "${previous_sha}^{commit}" 2>/dev/null; then
+                if git merge-base --is-ancestor "$GITHUB_SHA" "$previous_sha"; then
+                  echo "TEST_BADGE: STALE_RESULT_SKIPPED current=$GITHUB_SHA published=$previous_sha"
+                  exit 0
+                fi
+                if ! git merge-base --is-ancestor "$previous_sha" "$GITHUB_SHA"; then
+                  echo "TEST_BADGE: UNRELATED_HISTORY_SKIPPED current=$GITHUB_SHA published=$previous_sha"
+                  exit 0
+                fi
+              fi
+            fi
+          else
+            git worktree add --detach "$badge_tree" HEAD
+            git -C "$badge_tree" switch --orphan badges
+            git -C "$badge_tree" rm -rf . >/dev/null 2>&1 || true
+          fi
+
+          cp target/ci-badge/tests.json "$badge_tree/tests.json"
+          printf '%s
+' "$GITHUB_SHA" > "$badge_tree/source.sha"
+
+          git -C "$badge_tree" config user.name "github-actions[bot]"
+          git -C "$badge_tree" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C "$badge_tree" add -- tests.json source.sha
+
+          if git -C "$badge_tree" diff --cached --quiet; then
+            echo "TEST_BADGE: NO_CHANGE"
+            exit 0
+          fi
+
+          git -C "$badge_tree" commit -m "Update test badge [skip ci]"
+          git -C "$badge_tree" push origin HEAD:refs/heads/badges
+          echo "TEST_BADGE: PUBLISHED source=$GITHUB_SHA"
+
   # PERF007: the test job is the single owner of repository JUnit validation.
   # This job consumes that success and validates only the built distribution artifact.
   distribution:
