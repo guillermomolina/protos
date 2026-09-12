@@ -104,6 +104,26 @@ final class ProtosCommandLineModuleTest {
         assertFixture("parse-failures.protos");
     }
 
+    @Test
+    void d115SubcommandBoundaryConformsInProtos() throws Exception {
+        assertFixture("parse-subcommands-d115.protos");
+    }
+
+    @Test
+    void currentScopeDelimiterDisablesChildRecognitionInProtos() throws Exception {
+        assertFixture("parse-subcommand-delimiter.protos");
+    }
+
+    @Test
+    void optionOwnershipAndValuePrecedenceConformAcrossScopesInProtos() throws Exception {
+        assertFixture("parse-subcommand-options.protos");
+    }
+
+    @Test
+    void deepRecursiveCommandResultsAndFreezeConformInProtos() throws Exception {
+        assertFixture("parse-subcommand-deep.protos");
+    }
+
     private static void assertFixture(String fixture) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);

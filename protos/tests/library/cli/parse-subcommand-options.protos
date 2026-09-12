@@ -1,0 +1,116 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+CommandLine: import("std:cli/CommandLine")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+flag: (key, longName) => {
+    CommandLine.option({
+        key: key
+        long: longName
+        short: null
+        minValues: 0
+        maxValues: 0
+        minOccurrences: 0
+        maxOccurrences: 1
+        valueName: null
+        help: null
+    })
+}
+
+valued: (key, longName) => {
+    CommandLine.option({
+        key: key
+        long: longName
+        short: null
+        minValues: 1
+        maxValues: 1
+        minOccurrences: 0
+        maxOccurrences: 1
+        valueName: "VALUE"
+        help: null
+    })
+}
+
+rootOnly: flag("root", "root")
+childOnly: flag("child", "child")
+shared: flag("verbose", "verbose")
+output: valued("output", "output")
+
+run: CommandLine.command({
+    name: "run"
+    help: null
+    options: Array(childOnly, shared)
+    positionals: Array()
+    subcommands: Array()
+})
+
+root: CommandLine.command({
+    name: "tool"
+    help: null
+    options: Array(rootOnly, shared, output)
+    positionals: Array()
+    subcommands: Array(run)
+})
+
+scoped: CommandLine.parse(
+    root,
+    Array("--root", "--verbose", "run", "--child", "--verbose")
+)
+
+require(scoped.command.options.size() == 2)
+require(scoped.command.options[0].key == "root")
+require(scoped.command.options[0].tokenIndex == 0)
+require(scoped.command.options[1].key == "verbose")
+require(scoped.command.options[1].tokenIndex == 1)
+
+require(scoped.command.subcommand.name == "run")
+require(scoped.command.subcommand.tokenIndex == 2)
+require(scoped.command.subcommand.options.size() == 2)
+require(scoped.command.subcommand.options[0].key == "child")
+require(scoped.command.subcommand.options[0].tokenIndex == 3)
+require(scoped.command.subcommand.options[1].key == "verbose")
+require(scoped.command.subcommand.options[1].tokenIndex == 4)
+
+require(reject(() => {
+    CommandLine.parse(root, Array("run", "--root"))
+}))
+
+valueWins: CommandLine.parse(root, Array("--output", "run"))
+require(valueWins.command.subcommand === null)
+require(valueWins.command.options.size() == 1)
+require(valueWins.command.options[0].key == "output")
+require(valueWins.command.options[0].value == "run")
+require(valueWins.command.options[0].tokenIndex == 0)
+require(valueWins.command.options[0].valueTokenIndex == 1)
+
+true
