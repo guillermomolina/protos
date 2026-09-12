@@ -60,3 +60,35 @@ jobs: (arguments) => {
     expectingValue.ifTrue(() => { optionError() })
     result
 }
+
+// TOOL002-I7B1: D099/D101 bundled-Protos ownership of the optional resource
+// catalog source selector. This slice owns only option spelling/cardinality and
+// exact PATH selection. Host acquisition authority remains I7B2.
+resourceCatalogPath: (arguments) => {
+    result: null
+    seen: false
+    expectingValue: false
+
+    arguments.each((argument) => {
+        // Snapshot the parser state before mutating it so the PATH token is
+        // consumed literally and is not reinterpreted as another option even
+        // when it begins with "-".
+        wasExpectingValue: expectingValue
+
+        wasExpectingValue.ifTrue(() => {
+            result = argument
+            expectingValue = false
+        })
+
+        wasExpectingValue.ifFalse(() => {
+            (argument === "--resource-catalog").ifTrue(() => {
+                seen.ifTrue(() => { optionError() })
+                seen = true
+                expectingValue = true
+            })
+        })
+    })
+
+    expectingValue.ifTrue(() => { optionError() })
+    result
+}
