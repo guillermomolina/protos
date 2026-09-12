@@ -79,8 +79,20 @@ public final class ProtosStandardFutureProtocol {
                 SourceDependency dep=new SourceDependency(source,current);
                 observation[0]=dep;
                 source.observe(dep);
-                if(source.isPending()) { current.suspend(dep); return; }
-                source.removeObserver(dep);
+                if(source.isPending()) {
+                    /*
+                     * The source may terminalize after the pending check/observer registration
+                     * but before suspend(). SourceDependency then becomes ready while the Task
+                     * is still RUNNING. ProtosTask.suspend() deliberately returns false for that
+                     * ready-before-suspend race and leaves the Task RUNNING; only a true
+                     * suspension may return from this continuation here.
+                     */
+                    if(current.suspend(dep)) return;
+                    source.removeObserver(dep);
+                    if(current.state()!=ProtosTask.State.RUNNING) return;
+                } else {
+                    source.removeObserver(dep);
+                }
             }
             switch(source.state()) {
                 case RESOLVED -> ProtosInvocation.executeInTaskForRuntime(

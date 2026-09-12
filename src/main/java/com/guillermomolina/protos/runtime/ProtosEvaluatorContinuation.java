@@ -4,10 +4,12 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.execution.ProtosClosureExecutionPlan;
 import com.guillermomolina.protos.execution.ProtosExpressionNode;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -33,6 +35,8 @@ public final class ProtosEvaluatorContinuation {
     private final ArrayList<Event> events = new ArrayList<>();
     private final ArrayDeque<Active> active = new ArrayDeque<>();
     private final Map<InvocationKey, ProtosActivation> invocationActivations = new HashMap<>();
+    private final IdentityHashMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
+            legacyAstFallbackPlans = new IdentityHashMap<>();
     private ProtosActivation rootInvocationActivation;
     private int cursor;
     private boolean segmentActive;
@@ -198,6 +202,34 @@ public final class ProtosEvaluatorContinuation {
      * its lexical execution context and ReturnHome while the event tape reconstructs only
      * the host stack.
      */
+    /**
+     * Task-local stable AST projection for the temporary B6B replay fallback.
+     *
+     * <p>Replay compares exact ProtosExpressionNode identity across evaluator segments.
+     * Rebuilding a fallback AST on resume would therefore diverge even with identical
+     * canonical source. This cache belongs only to one Task's evaluator continuation.
+     */
+    public ProtosClosureExecutionPlan replayStableLegacyAstPlan(
+            ProtosClosureExecutionPlan template,
+            Supplier<ProtosClosureExecutionPlan> factory) {
+        Objects.requireNonNull(template, "template");
+        Objects.requireNonNull(factory, "factory");
+        if (!segmentActive) {
+            throw new IllegalStateException(
+                    "legacy AST replay projection requested outside an evaluator segment");
+        }
+        return legacyAstFallbackPlans.computeIfAbsent(
+                template,
+                ignored ->
+                        Objects.requireNonNull(
+                                factory.get(),
+                                "legacy AST replay projection"));
+    }
+
+    public int retainedLegacyAstFallbackPlanCountForTesting() {
+        return legacyAstFallbackPlans.size();
+    }
+
     public ProtosActivation rootInvocationActivation(Supplier<ProtosActivation> factory) {
         Objects.requireNonNull(factory, "factory");
         if (!segmentActive) {

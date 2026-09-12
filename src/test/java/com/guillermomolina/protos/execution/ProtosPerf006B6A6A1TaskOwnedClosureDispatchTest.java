@@ -7,6 +7,8 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -23,6 +25,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
 import org.junit.jupiter.api.Test;
 
 final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
@@ -154,6 +157,265 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
         System.out.println("PERF006_B6A6A1_AST_TEMPLATE_BYTECODE_PROJECTION=PASS");
         System.out.println("PERF006_B6A6A1_TASK_CPRIME_SUSPENSION=PASS");
         System.out.println("PERF006_B6A6A1_COMPLETED_PREFIX_REPLAY=NO");
+    }
+
+    @Test
+    void noEnteredContextLegacyFallbackIsReplayStableButTaskLocal()
+            throws Exception {
+        final ProtosClosureValue[] captured = new ProtosClosureValue[1];
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                ProtosActivation module = prelude.newModuleActivation();
+                captured[0] =
+                        parsedClosure(
+                                "() => { 40 + 2 }",
+                                "perf006-b6a6a1r-no-context-fallback.protos",
+                                module);
+            } finally {
+                context.leave();
+            }
+        }
+
+        ProtosClosureValue closure = captured[0];
+        ProtosClosureExecutionPlan template =
+                closure.executionPlan().orElseThrow();
+
+        com.guillermomolina.protos.runtime.ProtosEvaluatorContinuation firstTask =
+                new com.guillermomolina.protos.runtime.ProtosEvaluatorContinuation();
+        firstTask.beginSegment();
+        ProtosClosureExecutionPlan firstPlan;
+        try {
+            firstPlan =
+                    firstTask.replayStableLegacyAstPlan(
+                            template,
+                            () ->
+                                    template.rebuildAstForLegacyFallback(
+                                            closure.definition()));
+        } finally {
+            firstTask.endSegment();
+        }
+
+        firstTask.beginSegment();
+        ProtosClosureExecutionPlan resumedPlan;
+        try {
+            resumedPlan =
+                    firstTask.replayStableLegacyAstPlan(
+                            template,
+                            () ->
+                                    template.rebuildAstForLegacyFallback(
+                                            closure.definition()));
+        } finally {
+            firstTask.endSegment();
+        }
+
+        com.guillermomolina.protos.runtime.ProtosEvaluatorContinuation secondTask =
+                new com.guillermomolina.protos.runtime.ProtosEvaluatorContinuation();
+        secondTask.beginSegment();
+        ProtosClosureExecutionPlan otherTaskPlan;
+        try {
+            otherTaskPlan =
+                    secondTask.replayStableLegacyAstPlan(
+                            template,
+                            () ->
+                                    template.rebuildAstForLegacyFallback(
+                                            closure.definition()));
+        } finally {
+            secondTask.endSegment();
+        }
+
+        assertSame(
+                firstPlan,
+                resumedPlan,
+                "one Task must replay through identical fallback AST nodes");
+        assertNotSame(
+                firstPlan,
+                otherTaskPlan,
+                "fallback AST must never be shared across Tasks");
+        assertTrue(firstPlan.language().isEmpty());
+        assertTrue(otherTaskPlan.language().isEmpty());
+        assertEquals(1, firstTask.retainedLegacyAstFallbackPlanCountForTesting());
+        assertEquals(1, secondTask.retainedLegacyAstFallbackPlanCountForTesting());
+
+        System.out.println(
+                "PERF006_B6A6A1R_NO_CONTEXT_AST_REPLAY_STABLE=PASS");
+        System.out.println(
+                "PERF006_B6A6A1R_NO_CONTEXT_AST_CROSS_TASK_SHARING=NO");
+    }
+
+    @Test
+    void foreignContextAstTemplateReprojectsBeforeLegacyInvocation() throws Exception {
+        try (Engine engine = Engine.create(ProtosLanguage.ID);
+                ProtosPolyglotExecutionContext firstContext =
+                        ProtosPolyglotExecutionContext.open(
+                                engine,
+                                java.io.InputStream.nullInputStream(),
+                                java.io.OutputStream.nullOutputStream(),
+                                java.io.OutputStream.nullOutputStream(),
+                                () -> {});
+                ProtosPolyglotExecutionContext secondContext =
+                        ProtosPolyglotExecutionContext.open(
+                                engine,
+                                java.io.InputStream.nullInputStream(),
+                                java.io.OutputStream.nullOutputStream(),
+                                java.io.OutputStream.nullOutputStream(),
+                                () -> {})) {
+            final ProtosClosureValue[] firstClosure = new ProtosClosureValue[1];
+            final ProtosClosureExecutionPlan[] foreignTemplate =
+                    new ProtosClosureExecutionPlan[1];
+
+            firstContext.callEntered(
+                    () -> {
+                        ProtosPrelude prelude;
+                        try {
+                            prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                        } catch (java.io.IOException failure) {
+                            throw new java.io.UncheckedIOException(failure);
+                        }
+                        ProtosActivation module = prelude.newModuleActivation();
+                        ProtosClosureValue closure =
+                                parsedClosure(
+                                        "() => { 40 + 2 }",
+                                        "perf006-b6a6a1r-foreign-ast-template.protos",
+                                        module);
+                        ProtosClosureExecutionPlan template =
+                                closure.executionPlan().orElseThrow();
+                        assertFalse(template.isBytecodeBackendForRuntime());
+
+                        assertEquals(
+                                BigInteger.valueOf(42),
+                                assertInstanceOf(
+                                                ProtosIntegerValue.class,
+                                                ProtosClosureInvoker.invoke(
+                                                        closure,
+                                                        List.of(),
+                                                        module))
+                                        .value());
+                        firstClosure[0] = closure;
+                        foreignTemplate[0] = template;
+                        return null;
+                    });
+
+            secondContext.callEntered(
+                    () -> {
+                        ProtosPrelude prelude;
+                        try {
+                            prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                        } catch (java.io.IOException failure) {
+                            throw new java.io.UncheckedIOException(failure);
+                        }
+                        ProtosActivation module = prelude.newModuleActivation();
+                        ProtosClosureValue source = firstClosure[0];
+                        ProtosClosureExecutionPlan template = foreignTemplate[0];
+                        ProtosClosureValue rebound =
+                                new ProtosClosureValue(
+                                        source.definition(),
+                                        module.lexicalContextsForClosureCapture(),
+                                        module.receiver(),
+                                        module.methodHome().orElse(null),
+                                        module.returnHome().orElse(null),
+                                        prelude,
+                                        template);
+                        rebound.requireContextLocalExecutionProjectionForRuntime();
+
+                        assertEquals(
+                                BigInteger.valueOf(42),
+                                assertInstanceOf(
+                                                ProtosIntegerValue.class,
+                                                ProtosClosureInvoker.invoke(
+                                                        rebound,
+                                                        List.of(),
+                                                        module))
+                                        .value());
+
+                        ProtosClosureExecutionPlan projected =
+                                ProtosLanguageContext.current()
+                                        .projectedExecutionPlanForTesting(rebound);
+                        assertNotSame(template, projected);
+                        assertSame(
+                                ProtosLanguageContext.current().languageForTesting(),
+                                projected.language().orElseThrow(),
+                                "entered-Context AST fallback must be owned by that Context language");
+                        assertSame(
+                                template.source().orElse(null),
+                                projected.source().orElse(null),
+                                "entered-Context AST fallback must preserve exact Source identity");
+                        return null;
+                    });
+        }
+
+        System.out.println(
+                "PERF006_B6A6A1R_CONTEXT_OWNED_AST_PROJECTION=PASS");
+        System.out.println(
+                "PERF006_B6A6A1R_TRUFFLE_SHARING_LAYER_REUSE=NO");
+    }
+
+    @Test
+    void bytecodeTemplateUsesEnteredContextLegacyAstFallback() throws Exception {
+        Source source =
+                Source.newBuilder(
+                                ProtosLanguage.ID,
+                                "() => { 40 + 2 }",
+                                "perf006-b6a6a1r-bytecode-template.protos")
+                        .mimeType(ProtosLanguage.MIME_TYPE)
+                        .build();
+        try (ProtosPolyglotExecutionContext context =
+                ProtosPolyglotExecutionContext.open(
+                        java.io.InputStream.nullInputStream(),
+                        java.io.OutputStream.nullOutputStream(),
+                        java.io.OutputStream.nullOutputStream())) {
+            context.callEntered(
+                    () -> {
+                        ProtosPrelude prelude;
+                        try {
+                            prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                        } catch (java.io.IOException failure) {
+                            throw new java.io.UncheckedIOException(failure);
+                        }
+                        ProtosActivation module = prelude.newModuleActivation();
+                        CallTarget bytecodeRoot =
+                                new ProtosSourceCompiler()
+                                        .compileBytecode(
+                                                source,
+                                                ProtosLanguageContext.current()
+                                                        .languageForTesting());
+                        ProtosClosureValue closure =
+                                assertInstanceOf(
+                                        ProtosClosureValue.class,
+                                        bytecodeRoot.call(module));
+                        assertTrue(
+                                closure.executionPlan()
+                                        .orElseThrow()
+                                        .isBytecodeBackendForRuntime());
+
+                        Object value =
+                                ProtosClosureInvoker.invoke(
+                                        closure,
+                                        List.of(),
+                                        module);
+
+                        assertEquals(
+                                BigInteger.valueOf(42),
+                                assertInstanceOf(ProtosIntegerValue.class, value).value());
+                        ProtosClosureExecutionPlan projected =
+                                ProtosLanguageContext.current()
+                                        .projectedExecutionPlanForTesting(closure);
+                        assertTrue(projected != null);
+                        assertFalse(
+                                projected.isBytecodeBackendForRuntime(),
+                                "legacy synchronous caller must receive the temporary AST fallback");
+                        assertTrue(
+                                closure.executionPlan()
+                                        .orElseThrow()
+                                        .isBytecodeBackendForRuntime(),
+                                "semantic/template Closure stays Bytecode-backed");
+                        return null;
+                    });
+        }
+
+        System.out.println("PERF006_B6A6A1R_LEGACY_AST_FALLBACK=PASS");
     }
 
     @Test

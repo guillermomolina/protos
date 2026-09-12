@@ -81,6 +81,7 @@ public final class ProtosTask {
     private boolean cancellationRequestRecorded;
     private CancellationPhase cancellationPhase = CancellationPhase.NONE;
     private boolean continuationStarted;
+    private int cPrimeExecutionSegmentDepth;
     private WaitDependency waitDependency;
 
     /*
@@ -160,6 +161,29 @@ public final class ProtosTask {
 
     public ProtosEvaluatorContinuation evaluatorContinuation() {
         return evaluatorContinuation;
+    }
+
+    /**
+     * Marks host execution of one Task-owned C-prime segment.
+     *
+     * <p>This is backend-private routing state only. It owns no continuation and is used solely
+     * so legacy evaluator suspension boundaries reached from within C-prime select the existing
+     * continuation-cancellation unwind path instead of terminalizing through legacy observation.
+     */
+    public synchronized void enterCPrimeExecutionSegmentForRuntime() {
+        requireState(State.RUNNING, "enter C-prime execution segment");
+        cPrimeExecutionSegmentDepth++;
+    }
+
+    public synchronized void leaveCPrimeExecutionSegmentForRuntime() {
+        if (cPrimeExecutionSegmentDepth <= 0) {
+            throw new IllegalStateException("no active C-prime execution segment");
+        }
+        cPrimeExecutionSegmentDepth--;
+    }
+
+    public synchronized boolean cPrimeExecutionSegmentActiveForRuntime() {
+        return cPrimeExecutionSegmentDepth > 0;
     }
 
     /** Internal lazy task-local handler/cleanup state; never inherited by child tasks. */

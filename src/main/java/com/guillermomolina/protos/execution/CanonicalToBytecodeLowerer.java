@@ -1800,6 +1800,8 @@ final class CanonicalToBytecodeLowerer {
 
         BytecodeLocal structuredEnsure =
                 builder.createLocal("structuredEnsureCall", null);
+        BytecodeLocal structuredEnsureCancellationWasUnwinding =
+                builder.createLocal("structuredEnsureCancellationWasUnwinding", null);
         BytecodeLocal structuredChild =
                 builder.createLocal("structuredEnsureChildCall", null);
         BytecodeLocal structuredHandler =
@@ -1812,6 +1814,14 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredWhileChildCall", null);
         BytecodeLocal structuredWhileConditionResult =
                 builder.createLocal("structuredWhileConditionResult", null);
+        BytecodeLocal structuredBoolean =
+                builder.createLocal("structuredBooleanCall", null);
+        BytecodeLocal structuredBooleanChild =
+                builder.createLocal("structuredBooleanChildCall", null);
+        BytecodeLocal structuredArrayEach =
+                builder.createLocal("structuredArrayEachCall", null);
+        BytecodeLocal structuredArrayEachChild =
+                builder.createLocal("structuredArrayEachChildCall", null);
 
         builder.beginIfThenElse();
 
@@ -1838,11 +1848,25 @@ final class CanonicalToBytecodeLowerer {
         builder.beginTryFinally(
                 () -> {
                     /*
+                     * Snapshot cancellation ownership before cleanup runs.
+                     * A cancellation initiated by cleanup is itself the later
+                     * transfer and must supersede the body's pending
+                     * error/return/normal outcome. Only cancellation that was
+                     * already UNWINDING on entry to cleanup may be superseded
+                     * by a still-later cleanup transfer.
+                     */
+                    builder.beginStoreLocal(
+                            structuredEnsureCancellationWasUnwinding);
+                    builder.beginIsCancellationUnwindActive();
+                    builder.emitLoadArgument(0);
+                    builder.endIsCancellationUnwindActive();
+                    builder.endStoreLocal();
+
+                    /*
                      * TryCatch is deliberately inside the generated finally.
                      * It sees only a later transfer escaping cleanup; the
-                     * original pending cancellation is rethrown by the outer
-                     * TryFinally after this generator returns and therefore is
-                     * not mistaken for a superseding cleanup transfer.
+                     * original pending transfer is rethrown by the outer
+                     * TryFinally after this generator returns.
                      */
                     builder.beginTryCatch();
 
@@ -1863,6 +1887,8 @@ final class CanonicalToBytecodeLowerer {
                     builder.beginBlock();
                     builder.beginSupersedeCancellationUnwindIfActive();
                     builder.emitLoadArgument(0);
+                    builder.emitLoadLocal(
+                            structuredEnsureCancellationWasUnwinding);
                     builder.endSupersedeCancellationUnwindIfActive();
                     builder.beginRethrowTruffleException();
                     builder.emitLoadException();
@@ -2044,12 +2070,134 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredBooleanCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredBooleanCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredBoolean);
+        builder.beginPrepareStructuredBooleanCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredBooleanCall();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginStructuredBooleanHasCallback();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.endStructuredBooleanHasCallback();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredBooleanChild);
+        builder.beginPrepareStructuredBooleanCallbackCall();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.endPrepareStructuredBooleanCallbackCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredBooleanChild,
+                childResult,
+                resumeValue);
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredBooleanCallback();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.emitLoadLocal(childResult);
+        builder.endFinishStructuredBooleanCallback();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        builder.beginStructuredBooleanImmediateResult();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.endStructuredBooleanImmediateResult();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.endIfThenElse();
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredArrayEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredArrayEachCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredArrayEach);
+        builder.beginPrepareStructuredArrayEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredArrayEachCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+        builder.beginStructuredArrayEachHasNext();
+        builder.emitLoadLocal(structuredArrayEach);
+        builder.endStructuredArrayEachHasNext();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredArrayEachChild);
+        builder.beginPrepareStructuredArrayEachElementCall();
+        builder.emitLoadLocal(structuredArrayEach);
+        builder.endPrepareStructuredArrayEachElementCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredArrayEachChild,
+                childResult,
+                resumeValue);
+        builder.beginAdvanceStructuredArrayEach();
+        builder.emitLoadLocal(structuredArrayEach);
+        builder.endAdvanceStructuredArrayEach();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredArrayEach();
+        builder.emitLoadLocal(structuredArrayEach);
+        builder.endFinishStructuredArrayEach();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

@@ -213,7 +213,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
     }
 
     @Test
-    void legacyClosureInvokerFailsClosedForBytecodePlanUntilDispatchCutover()
+    void legacyClosureInvokerUsesTemporaryAstFallbackAfterDispatchCutover()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -238,23 +238,29 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                 ProtosClosureValue closure =
                         semanticClosure(definition, plan, module);
 
-                IllegalStateException failure =
-                        assertThrows(
-                                IllegalStateException.class,
-                                () ->
-                                        ProtosClosureInvoker.invoke(
-                                                closure,
-                                                List.of(),
-                                                module));
-                assertTrue(
-                        failure.getMessage()
-                                .contains("composed Bytecode invocation"));
+                Object result =
+                        ProtosClosureInvoker.invoke(
+                                closure,
+                                List.of(),
+                                module);
+
+                assertSame(
+                        com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
+                        result);
+                assertSame(
+                        plan,
+                        closure.executionPlan().orElseThrow(),
+                        "temporary AST fallback must not replace the semantic Bytecode plan");
+                assertTrue(plan.isBytecodeBackendForRuntime());
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2B_LEGACY_DISPATCH_FAILS_CLOSED=PASS");
+        System.out.println(
+                "PERF006_B2B_LEGACY_DISPATCH_TEMPORARY_AST_FALLBACK=PASS");
+        System.out.println(
+                "PERF006_B2B_SEMANTIC_BYTECODE_PLAN_PRESERVED=PASS");
     }
 
     @Test

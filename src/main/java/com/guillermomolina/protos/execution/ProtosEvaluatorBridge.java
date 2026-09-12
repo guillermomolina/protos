@@ -54,7 +54,11 @@ public final class ProtosEvaluatorBridge {
                 () -> new IllegalStateException("suspension requires an Actor-local Protos task"));
 
         if (task.cancellationRequested()) {
-            if (!task.observeCancellation()) {
+            boolean observed =
+                    task.cPrimeExecutionSegmentActiveForRuntime()
+                            ? task.beginContinuationCancellationUnwindForRuntime()
+                            : task.observeCancellation();
+            if (!observed) {
                 throw new IllegalStateException("pending cancellation was not observable");
             }
             task.evaluatorContinuation().markControlUnwind();

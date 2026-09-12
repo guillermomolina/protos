@@ -43,7 +43,14 @@ public final class ProtosSourceCompiler {
 
     public CallTarget compile(String source) {
         Objects.requireNonNull(source, "source");
-        return compileCharacters(source, lowerer, lowerer.rootFactory());
+        Source exactSource =
+                Source.newBuilder(ProtosLanguage.ID, source, "<direct>")
+                        .mimeType(ProtosLanguage.MIME_TYPE)
+                        .build();
+        ProtosRootFactory roots = ProtosRootFactory.sourceOnly(exactSource);
+        CanonicalToTruffleLowerer sourceLowerer =
+                lowerer.withRootFactory(roots);
+        return compileCharacters(source, sourceLowerer, roots);
     }
 
     public CallTarget compile(ProtosModuleSource moduleSource) {

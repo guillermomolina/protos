@@ -297,6 +297,89 @@ final class ProtosPerf006B4ECancellationUnwindTest {
     }
 
     @Test
+    void cleanupCancellationSupersedesSelectedErrorBeforeOuterHandlerRuns()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosObjectValue selectedError = ProtosCoreErrors.newError(module);
+            ProtosFutureValue cleanupWait =
+                    new ProtosFutureValue(prelude.futurePrototype(), domain);
+            AtomicInteger handlerCalls = new AtomicInteger();
+
+            module.context().createLocalSlot("selectedError", selectedError);
+            module.context().createLocalSlot("cleanupWait", cleanupWait);
+            module.context().createLocalSlot(
+                    "requestCancel",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                if (!activation.task().orElseThrow().requestCancellation()) {
+                                    throw new IllegalStateException(
+                                            "cleanup cancellation request was not recorded");
+                                }
+                                return ProtosNullValue.INSTANCE;
+                            }));
+            module.context().createLocalSlot(
+                    "body",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => selectedError.signal()",
+                            "perf006-b4e-selected-error-body.protos"));
+            module.context().createLocalSlot(
+                    "cleanup",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => { requestCancel()\ncleanupWait.value()\nnull }",
+                            "perf006-b4e-selected-error-cleanup-cancel.protos"));
+            module.context().createLocalSlot(
+                    "guarded",
+                    sourceClosure(
+                            scope.language(),
+                            module,
+                            "() => body.ensure(cleanup)",
+                            "perf006-b4e-selected-error-guarded.protos"));
+            module.context().createLocalSlot(
+                    "handler",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                handlerCalls.incrementAndGet();
+                                return ProtosNullValue.INSTANCE;
+                            }));
+
+            Execution execution =
+                    executeWithFuture(
+                            domain,
+                            prelude,
+                            module,
+                            lowerRoot(
+                                    scope.language(),
+                                    "Error.handle(guarded, handler)",
+                                    "perf006-b4e-selected-error-cleanup-cancel-top.protos"));
+
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(ProtosTask.State.CANCELLED, execution.task().state());
+            assertEquals(
+                    ProtosTask.CancellationPhase.TERMINAL,
+                    execution.task().cancellationPhase());
+            assertEquals(ProtosFutureValue.State.CANCELLED, execution.future().state());
+            assertEquals(
+                    0,
+                    handlerCalls.get(),
+                    "cleanup cancellation must replace the already-selected error before its handler");
+            assertEquals(ProtosFutureValue.State.PENDING, cleanupWait.state());
+        }
+
+        System.out.println(
+                "PERF006_B4E_CLEANUP_CANCELLATION_SUPERSEDES_SELECTED_ERROR=PASS");
+        System.out.println(
+                "PERF006_B4E_SELECTED_ERROR_HANDLER_AFTER_CLEANUP_CANCELLATION=NO");
+    }
+
+    @Test
     void nestedEnsuresRunInLifoOrderDuringCancellationUnwind()
             throws Exception {
         try (LanguageScope scope = languageScope()) {
@@ -450,6 +533,67 @@ final class ProtosPerf006B4ECancellationUnwindTest {
 
         System.out.println("PERF006_B4E_CLEANUP_BEFORE_CHILD_DRAIN=PASS");
         System.out.println("PERF006_B4E_STRUCTURED_CHILD_DRAIN=PASS");
+    }
+
+    @Test
+    void legacyAwaitInsideActiveCPrimeUsesContinuationCancellationUnwind()
+            throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosTask.WaitDependency neverReady = new ProtosTask.WaitDependency() {};
+            AtomicInteger cleanups = new AtomicInteger();
+
+            module.context().createLocalSlot(
+                    "requestCancel",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                if (!activation.task().orElseThrow().requestCancellation()) {
+                                    throw new IllegalStateException(
+                                            "test cancellation request was not recorded");
+                                }
+                                return ProtosNullValue.INSTANCE;
+                            }));
+            module.context().createLocalSlot(
+                    "legacyAwait",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                ProtosEvaluatorBridge.await(activation, neverReady);
+                                return ProtosNullValue.INSTANCE;
+                            }));
+            module.context().createLocalSlot(
+                    "cleanup",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                cleanups.incrementAndGet();
+                                return ProtosNullValue.INSTANCE;
+                            }));
+
+            Execution execution =
+                    executeWithFuture(
+                            domain,
+                            prelude,
+                            module,
+                            lowerRoot(
+                                    scope.language(),
+                                    "(() => { requestCancel()\nlegacyAwait() }).ensure(cleanup)",
+                                    "perf006-b4e-legacy-await-cprime-cancel.protos"));
+
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(ProtosTask.State.CANCELLED, execution.task().state());
+            assertEquals(
+                    ProtosTask.CancellationPhase.TERMINAL,
+                    execution.task().cancellationPhase());
+            assertEquals(ProtosFutureValue.State.CANCELLED, execution.future().state());
+            assertEquals(1, cleanups.get());
+        }
+
+        System.out.println(
+                "PERF006_B4E_LEGACY_AWAIT_INSIDE_CPRIME_CANCEL_UNWIND=PASS");
+        System.out.println(
+                "PERF006_B4E_LEGACY_AWAIT_CPRIME_ENSURE_CLEANUP=PASS");
     }
 
     private static ProtosClosureValue nativeClosure(

@@ -199,19 +199,56 @@ public final class ProtosClosureInvoker {
             }
             ProtosClosureExecutionPlan template =
                     closure.executionPlanForRuntimeInvocation();
+            /*
+             * Entered-Context projection remains selective. The durable A+ contract marks semantic
+             * Closures that may cross Contexts through requiresContextLocalExecutionProjection;
+             * language-unbound templates also require projection, and Bytecode templates reaching
+             * this still-legacy synchronous path require the temporary AST fallback. Do not project
+             * every ordinary source Closure merely because a Context is entered: that would widen
+             * the executable-projection cache and violate the established one-template/one-projection
+             * A+ boundary.
+             *
+             * The no-entered-Context cooperative Task case is separate below: its temporary AST
+             * fallback is replay-stable and Task-owned by ProtosEvaluatorContinuation.
+             */
+            ProtosLanguageContext enteredContext =
+                    ProtosLanguageContext.currentIfEnteredForRuntime();
+            boolean hostedEnteredContext =
+                    enteredContext != null
+                            && ProtosPolyglotExecutionContext.hasEnteredContextForRuntime();
             boolean needsEnteredContextProjection =
                     closure.requiresContextLocalExecutionProjectionForRuntime()
-                            || template.language().isEmpty();
-            ProtosClosureExecutionPlan plan =
-                    ProtosPolyglotExecutionContext.hasEnteredContextForRuntime()
-                                    && needsEnteredContextProjection
-                            ? ProtosLanguageContext.current()
-                                    .executionPlanForEnteredClosure(closure, template)
-                            : template;
+                            || template.language().isEmpty()
+                            || template.isBytecodeBackendForRuntime();
+            ProtosClosureExecutionPlan plan;
+            if (hostedEnteredContext && needsEnteredContextProjection) {
+                plan = enteredContext.executionPlanForEnteredClosure(closure, template);
+            } else if (hostedEnteredContext
+                    || (enteredContext != null
+                            && !template.isBytecodeBackendForRuntime())) {
+                plan = template;
+            } else if (activation.task().isPresent()) {
+                com.guillermomolina.protos.runtime.ProtosTask task =
+                        activation.task().orElseThrow();
+                plan =
+                        task.evaluatorContinuation()
+                                .replayStableLegacyAstPlan(
+                                        template,
+                                        () ->
+                                                template.rebuildAstForLegacyFallback(
+                                                        Objects.requireNonNull(
+                                                                closure.definition(),
+                                                                "legacy fallback Closure definition")));
+            } else {
+                plan =
+                        template.rebuildAstForLegacyFallback(
+                                Objects.requireNonNull(
+                                        closure.definition(),
+                                        "legacy fallback Closure definition"));
+            }
             if (plan.isBytecodeBackendForRuntime()) {
                 throw new IllegalStateException(
-                        "Bytecode Closure plan requires composed Bytecode invocation "
-                                + "until PERF006-B2 normal dispatch cutover");
+                        "temporary B6B fallback must materialize an AST execution plan");
             }
             plan.bind(activation);
             return plan.executeBody(activation);

@@ -70,7 +70,7 @@ final class ProtosLanguageContext {
         return sharedExecutionPlans.computeIfAbsent(
                 template,
                 ignored ->
-                        template.rebuildForLanguage(
+                        template.rebuildAstForLanguage(
                                 Objects.requireNonNull(
                                         closure.definition(),
                                         "entered Closure definition"),

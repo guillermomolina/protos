@@ -17,20 +17,42 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import java.math.BigInteger;
+import java.util.List;
 import java.util.Objects;
 
 public final class ProtosStandardArrayProtocol {
+    private static final ProtosNativeClosureBody STANDARD_EACH_BODY =
+            ProtosStandardArrayProtocol::each;
+    private static final ProtosClosureValue STANDARD_EACH =
+            ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
+
     private ProtosStandardArrayProtocol() {}
+
+    static boolean isStandardEachImplementation(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
+    }
+
+    static boolean isCanonicalStandardEachSelection(
+            ProtosClosureValue behavior,
+            ProtosObjectValue home,
+            ProtosActivation caller) {
+        return behavior == STANDARD_EACH
+                && caller.prelude()
+                        .map(prelude -> prelude.arrayPrototype() == home)
+                        .orElse(false);
+    }
 
     public static void install(ProtosObjectValue arrayPrototype) {
         Objects.requireNonNull(arrayPrototype, "arrayPrototype");
@@ -46,8 +68,7 @@ public final class ProtosStandardArrayProtocol {
                             Object receiver = activation.receiver();
                             if (!(receiver instanceof ProtosObjectValue prototype)
                                     || !delegatesTo(prototype, arrayPrototype)) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
+                                throw invalid(activation);
                             }
                             return new ProtosArrayValue(prototype, supplied);
                         }));
@@ -56,17 +77,14 @@ public final class ProtosStandardArrayProtocol {
                 "at",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
-                            ProtosArrayValue array =
-                                    requireArrayReceiver(activation);
+                            ProtosArrayValue array = requireArrayReceiver(activation);
                             if (supplied.size() != 1) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
+                                throw invalid(activation);
                             }
                             BigInteger value = requireInteger(activation, supplied.get(0));
                             if (value.signum() < 0
                                     || value.compareTo(array.indexedSize()) >= 0) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
+                                throw invalid(activation);
                             }
                             return array.indexedAt(value);
                         }));
@@ -75,21 +93,17 @@ public final class ProtosStandardArrayProtocol {
                 "atPut",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
-                            ProtosArrayValue array =
-                                    requireArrayReceiver(activation);
+                            ProtosArrayValue array = requireArrayReceiver(activation);
                             if (array.isFrozen()) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
+                                throw invalid(activation);
                             }
                             if (supplied.size() != 2) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
+                                throw invalid(activation);
                             }
                             BigInteger value = requireInteger(activation, supplied.get(0));
                             if (value.signum() < 0
                                     || value.compareTo(array.indexedSize()) >= 0) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
+                                throw invalid(activation);
                             }
                             return array.indexedPut(value, supplied.get(1));
                         }));
@@ -100,37 +114,31 @@ public final class ProtosStandardArrayProtocol {
                         (activation, supplied) -> {
                             ProtosArrayValue array = requireArrayReceiver(activation);
                             if (!supplied.isEmpty()) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
+                                throw invalid(activation);
                             }
                             return new ProtosIntegerValue(array.indexedSize());
                         }));
 
-        arrayPrototype.createLocalSlot(
-                "each",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosArrayValue array = requireArrayReceiver(activation);
-                            if (supplied.size() != 1) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            Object block = supplied.get(0);
-                            requireInvokable(block, activation);
-                            java.util.List<Object> snapshot = array.indexedSnapshot();
-                            for (Object element : snapshot) {
-                                ProtosInvocation.invoke(
-                                        block,
-                                        java.util.List.of(element),
-                                        activation);
-                            }
-                            return array;
-                        }));
+        arrayPrototype.createLocalSlot("each", STANDARD_EACH);
     }
 
-    private static void requireInvokable(
+    private static Object each(ProtosActivation activation, List<?> supplied) {
+        ProtosArrayValue array = requireArrayReceiver(activation);
+        if (supplied.size() != 1) {
+            throw invalid(activation);
+        }
+        Object block = supplied.get(0);
+        requireInvokableForStructured(block, activation);
+        List<Object> snapshot = array.indexedSnapshot();
+        for (Object element : snapshot) {
+            ProtosInvocation.invoke(block, List.of(element), activation);
+        }
+        return array;
+    }
+
+    static void requireInvokableForStructured(
             Object candidate,
-            com.guillermomolina.protos.runtime.ProtosActivation activation) {
+            ProtosActivation activation) {
         com.guillermomolina.protos.runtime.ProtosPrelude prelude =
                 activation.prelude()
                         .orElseThrow(
@@ -141,20 +149,17 @@ public final class ProtosStandardArrayProtocol {
         try {
             selected =
                     ProtosValueLookup.lookup(candidate, "call", prelude)
-                            .orElseThrow(
-                                    () ->
-                                            new ProtosSignalException(
-                                                    ProtosCoreErrors.newError(activation)));
+                            .orElseThrow(() -> invalid(activation));
         } catch (UnsupportedOperationException unsupportedRepresentation) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            throw invalid(activation);
         }
         if (!(selected.value() instanceof ProtosClosureValue)) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            throw invalid(activation);
         }
     }
 
     private static BigInteger requireInteger(
-            com.guillermomolina.protos.runtime.ProtosActivation activation,
+            ProtosActivation activation,
             Object value) {
         if (value instanceof ProtosIntegerValue integer) {
             return integer.value();
@@ -162,13 +167,13 @@ public final class ProtosStandardArrayProtocol {
         if (value instanceof ProtosFixedIntegerValue integer) {
             return integer.value();
         }
-        throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        throw invalid(activation);
     }
 
     private static ProtosArrayValue requireArrayReceiver(
-            com.guillermomolina.protos.runtime.ProtosActivation activation) {
+            ProtosActivation activation) {
         if (!(activation.receiver() instanceof ProtosArrayValue array)) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            throw invalid(activation);
         }
         return array;
     }
@@ -184,5 +189,9 @@ public final class ProtosStandardArrayProtocol {
             current = ordinary.parent().orElse(null);
         }
         return false;
+    }
+
+    private static ProtosSignalException invalid(ProtosActivation activation) {
+        return new ProtosSignalException(ProtosCoreErrors.newError(activation));
     }
 }
