@@ -12,6 +12,7 @@ RUN microdnf install -y \
         unzip \
         xz \
         python39 \
+        procps \
     && microdnf clean all
 
 ARG MAVEN_VERSION=3.9.9
