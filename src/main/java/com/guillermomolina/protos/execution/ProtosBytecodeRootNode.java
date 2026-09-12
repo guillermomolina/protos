@@ -3950,6 +3950,151 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class BeginBufferedByteWriterFirstEffect {
+        @Specialization
+        public static boolean perform(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state) {
+            return state.beginFirstEffectAttempt();
+        }
+    }
+
+    @Operation
+    public static final class IsBufferedByteWriterStepRequired {
+        @Specialization
+        public static boolean perform(Object value) {
+            if (!(value instanceof Boolean required)) {
+                throw new IllegalStateException(
+                        "BufferedWriter C-prime step gate produced a non-Boolean value");
+            }
+            return required;
+        }
+    }
+
+    @Operation
+    public static final class PrepareBufferedByteWriterFirstCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state,
+                ProtosActivation activation) {
+            return prepareSend(
+                    state.target(),
+                    state.firstSelector(),
+                    activation,
+                    state.firstArguments());
+        }
+    }
+
+    @Operation
+    public static final class PrepareBufferedByteWriterFlushCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state,
+                ProtosActivation activation) {
+            return prepareSend(
+                    state.target(),
+                    "flush",
+                    activation,
+                    List.of());
+        }
+    }
+
+    @Operation
+    public static final class WrapBufferedByteWriterTargetInvocation {
+        @Specialization
+        public static Object perform(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state,
+                Object result) {
+            return state.invocationSucceeded(result);
+        }
+    }
+
+    @Operation
+    public static final class BufferedByteWriterTargetInvocationFailed {
+        @Specialization
+        public static Object perform(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state) {
+            return state.invocationFailed();
+        }
+    }
+
+    @Operation
+    public static final class AwaitBufferedByteWriterTargetFuture {
+        @Specialization
+        public static Object perform(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state,
+                Object invocation) {
+            if (!(invocation
+                    instanceof ProtosBufferedByteWriterCPrimeExecution.TargetInvocation
+                            targetInvocation)) {
+                throw new IllegalStateException(
+                        "BufferedWriter C-prime invocation produced an invalid carrier");
+            }
+            return state.awaitTargetFuture(targetInvocation);
+        }
+    }
+
+    @Operation
+    public static final class ResumeBufferedByteWriterTargetFutureWait {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                Object yielded,
+                Object resumeValue) {
+            if (!(yielded instanceof ProtosIoOperationSuspension suspension)) {
+                throw new IllegalStateException(
+                        "BufferedWriter lower-Future wait yielded an invalid carrier");
+            }
+            ProtosIoOperation operation =
+                    activation.deferredCPrimeOperationForRuntime()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "BufferedWriter lower-Future wait requires an operation-owned activation"));
+            if (suspension.operation() != operation) {
+                throw new IllegalStateException(
+                        "BufferedWriter lower-Future wait belongs to another operation");
+            }
+            if (resumeValue != ProtosNullValue.INSTANCE) {
+                throw new IllegalStateException(
+                        "BufferedWriter lower-Future wait received unsupported resume transport");
+            }
+            return suspension.resume();
+        }
+    }
+
+    @Operation
+    public static final class ApplyBufferedByteWriterFirstOutcome {
+        @Specialization
+        public static boolean perform(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state,
+                Object outcome) {
+            if (!(outcome
+                    instanceof ProtosBufferedByteWriterCPrimeExecution.LowerOutcome
+                            lowerOutcome)) {
+                throw new IllegalStateException(
+                        "BufferedWriter first lower wait produced an invalid carrier");
+            }
+            return state.applyFirstOutcome(lowerOutcome);
+        }
+    }
+
+    @Operation
+    public static final class ApplyBufferedByteWriterFollowupOutcome {
+        @Specialization
+        public static boolean perform(
+                ProtosBufferedByteWriterCPrimeExecution.CallState state,
+                Object outcome) {
+            if (!(outcome
+                    instanceof ProtosBufferedByteWriterCPrimeExecution.LowerOutcome
+                            lowerOutcome)) {
+                throw new IllegalStateException(
+                        "BufferedWriter followup lower wait produced an invalid carrier");
+            }
+            return state.applyFollowupFlushOutcome(lowerOutcome);
+        }
+    }
+
+    @Operation
     public static final class PrepareTextWriterTargetCall {
         @Specialization
         public static PreparedClosureCall perform(

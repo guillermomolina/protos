@@ -87,11 +87,50 @@ public final class ProtosStandardBufferedByteIoProtocol {
         if(reader) wrapper.createLocalSlot("read",readerReadClosure(io,wrapper));
         else {
             wrapper.createLocalSlot("write",ProtosClosureValue.nativeClosure((x,xs)->xs.size()==1&&x.receiver()==wrapper?io.write(x,xs.get(0)):invalid(x)));
-            wrapper.createLocalSlot("flush",ProtosClosureValue.nativeClosure((x,xs)->xs.isEmpty()&&x.receiver()==wrapper?io.flush(x):invalid(x)));
+            wrapper.createLocalSlot("flush",writerFlushClosure(io,wrapper));
         }
         wrapper.createLocalSlot("close",ProtosClosureValue.nativeClosure((x,xs)->xs.isEmpty()&&x.receiver()==wrapper?io.close(x):invalid(x)));
         return wrapper;
     }
+    private static ProtosClosureValue writerFlushClosure(
+            ProtosBufferedByteIo io,
+            ProtosObjectValue wrapper) {
+        ProtosNativeClosureBody ordinary =
+                (activation, supplied) ->
+                        invokeWriterFlush(
+                                io,
+                                wrapper,
+                                activation,
+                                supplied,
+                                false);
+        ProtosNativeClosureBody cPrime =
+                (activation, supplied) ->
+                        invokeWriterFlush(
+                                io,
+                                wrapper,
+                                activation,
+                                supplied,
+                                true);
+        return ProtosClosureValue.suspensionCapableNativeClosure(ordinary, cPrime);
+    }
+
+    private static Object invokeWriterFlush(
+            ProtosBufferedByteIo io,
+            ProtosObjectValue wrapper,
+            ProtosActivation activation,
+            List<?> supplied,
+            boolean cPrime) {
+        if (!supplied.isEmpty() || activation.receiver() != wrapper) {
+            return invalid(activation);
+        }
+        if (cPrime || ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+            return io.flushForCPrimeRuntime(
+                    activation,
+                    ProtosBufferedByteWriterCPrimeExecution.planForEnteredContext());
+        }
+        return io.flush(activation);
+    }
+
     private static ProtosClosureValue readerReadClosure(
             ProtosBufferedByteIo io,
             ProtosObjectValue wrapper) {

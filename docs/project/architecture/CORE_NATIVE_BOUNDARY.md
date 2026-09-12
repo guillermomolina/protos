@@ -1,3 +1,20 @@
+## PERF006-B / PLAT031 — BufferedWriter flush C-prime boundary reconciliation
+
+The PLAT029/PLAT031 migration of standard `BufferedWriter.flush` moves that
+already-audited native wrapper operation from the ordinary
+`ProtosClosureValue.nativeClosure(...)` constructor lane to
+`ProtosClosureValue.suspensionCapableNativeClosure(...)`. The public selector,
+provider set, output semantics and native authority are unchanged; only the
+execution capability classification changes so the complete delegated
+`write -> await -> flush -> await` extent can be owned by the real
+`ProtosIoOperation` C-prime continuation.
+
+The I018 ordinary-constructor inventory therefore moves from **139 to 138 sites
+across the same 36 Core providers**, with
+`ProtosStandardBufferedByteIoProtocol.java` moving from 5 to 4 ordinary sites.
+`BufferedWriter.write` remains the local non-suspending buffering leaf and
+`BufferedWriter.close` remains outside this migration pending D112/PLAT030.
+
 ## PERF006-B / PLAT031 — BufferedReader read C-prime boundary reconciliation
 
 The PLAT029/PLAT031 migration of standard `BufferedReader.read` changes the

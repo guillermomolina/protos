@@ -2,6 +2,7 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.execution.ProtosBufferedByteReaderCPrimeExecution;
+import com.guillermomolina.protos.execution.ProtosBufferedByteWriterCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosInvocation;
 import java.math.BigInteger;
 import java.util.*;
@@ -148,6 +149,20 @@ public final class ProtosBufferedByteIo {
     }
 
     public ProtosFutureValue flush(ProtosActivation activation) {
+        return flush(activation, null);
+    }
+
+    public ProtosFutureValue flushForCPrimeRuntime(
+            ProtosActivation activation,
+            ProtosBufferedByteWriterCPrimeExecution.Plan plan) {
+        return flush(
+                activation,
+                Objects.requireNonNull(plan, "plan"));
+    }
+
+    private ProtosFutureValue flush(
+            ProtosActivation activation,
+            ProtosBufferedByteWriterCPrimeExecution.Plan cPrimePlan) {
         check(activation);
 
         ProtosIoOperation operation = lifecycle.beginOperation(activation);
@@ -168,7 +183,9 @@ public final class ProtosBufferedByteIo {
                         operation,
                         Kind.FLUSH,
                         0,
-                        null));
+                        null,
+                        null,
+                        cPrimePlan));
     }
 
     public ProtosFutureValue close(ProtosActivation activation) {
@@ -186,6 +203,7 @@ public final class ProtosBufferedByteIo {
         final int maximum;
         final byte[] bytes;
         final ProtosBufferedByteReaderCPrimeExecution.Plan readCPrimePlan;
+        final ProtosBufferedByteWriterCPrimeExecution.Plan flushCPrimePlan;
         ProtosFutureValue lower;
         ProtosFutureValue.Observer lowerObserver;
 
@@ -195,7 +213,7 @@ public final class ProtosBufferedByteIo {
                 Kind kind,
                 int maximum,
                 byte[] bytes) {
-            this(activation, operation, kind, maximum, bytes, null);
+            this(activation, operation, kind, maximum, bytes, null, null);
         }
 
         Req(
@@ -205,12 +223,24 @@ public final class ProtosBufferedByteIo {
                 int maximum,
                 byte[] bytes,
                 ProtosBufferedByteReaderCPrimeExecution.Plan readCPrimePlan) {
+            this(activation, operation, kind, maximum, bytes, readCPrimePlan, null);
+        }
+
+        Req(
+                ProtosActivation activation,
+                ProtosIoOperation operation,
+                Kind kind,
+                int maximum,
+                byte[] bytes,
+                ProtosBufferedByteReaderCPrimeExecution.Plan readCPrimePlan,
+                ProtosBufferedByteWriterCPrimeExecution.Plan flushCPrimePlan) {
             this.a = activation;
             this.operation = operation;
             this.kind = kind;
             this.maximum = maximum;
             this.bytes = bytes;
             this.readCPrimePlan = readCPrimePlan;
+            this.flushCPrimePlan = flushCPrimePlan;
         }
     }
 
@@ -259,7 +289,10 @@ public final class ProtosBufferedByteIo {
                 else doReadCPrime(req);
             }
             case WRITE -> doWrite(req);
-            case FLUSH -> doFlush(req, false);
+            case FLUSH -> {
+                if (req.flushCPrimePlan == null) doFlush(req, false);
+                else doFlushCPrime(req);
+            }
         }
     }
 
@@ -587,6 +620,205 @@ public final class ProtosBufferedByteIo {
 
         req.operation.resolve(receiver);
         done(req);
+    }
+
+    private void doFlushCPrime(Req req) {
+        if (stopBeforeLowerWork(req)) return;
+
+        byte[] pending;
+        synchronized (this) {
+            pending = output.clone();
+        }
+
+        if (pending.length == 0 && target.lookupSlot("flush").isEmpty()) {
+            if (!req.operation.commit()) {
+                done(req);
+                return;
+            }
+            req.operation.resolve(receiver);
+            done(req);
+            return;
+        }
+
+        Object payload = pending.length == 0 ? null : bytes(pending);
+        ProtosBufferedByteWriterCPrimeExecution.schedule(
+                req.flushCPrimePlan,
+                req.operation,
+                this,
+                target,
+                pending,
+                payload);
+    }
+
+    public boolean beginFlushFirstEffectForCPrimeRuntime(
+            ProtosIoOperation operation) {
+        Req req = activeFlushCPrimeReq(operation);
+        if (operation.beginFirstEffectAttempt()) {
+            return true;
+        }
+        if (operation.terminal()) {
+            done(req);
+            return false;
+        }
+        throw new IllegalStateException(
+                "BufferedWriter C-prime first-effect attempt could not start");
+    }
+
+    public void installFlushLowerForCPrimeRuntime(
+            ProtosIoOperation operation,
+            ProtosFutureValue lower) {
+        Objects.requireNonNull(lower, "lower");
+        Req req = activeFlushCPrimeReq(operation);
+        synchronized (this) {
+            if (req.lower != null) {
+                throw new IllegalStateException(
+                        "BufferedWriter C-prime request already owns a lower Future");
+            }
+            req.lower = lower;
+        }
+        if (operation.backendCancellationRequested()) {
+            lower.cancelRequest();
+        }
+    }
+
+    public void clearFlushLowerForCPrimeRuntime(
+            ProtosIoOperation operation,
+            ProtosFutureValue lower) {
+        Objects.requireNonNull(lower, "lower");
+        synchronized (this) {
+            Req req = activeReq;
+            if (req != null
+                    && req.operation == operation
+                    && req.kind == Kind.FLUSH
+                    && req.flushCPrimePlan != null
+                    && req.lower == lower) {
+                req.lower = null;
+            }
+        }
+    }
+
+    public boolean flushFirstLowerResolvedForCPrimeRuntime(
+            ProtosIoOperation operation,
+            boolean writeFirst,
+            int pendingLength) {
+        Req req = activeFlushCPrimeReq(operation);
+        if (!operation.finishFirstEffectAttempt(true)) {
+            done(req);
+            return false;
+        }
+
+        if (writeFirst) {
+            synchronized (this) {
+                if (output.length < pendingLength) {
+                    throw new IllegalStateException(
+                            "BufferedWriter output frontier shrank during active flush");
+                }
+                output = Arrays.copyOfRange(output, pendingLength, output.length);
+            }
+            if (target.lookupSlot("flush").isPresent()) {
+                return true;
+            }
+        }
+
+        operation.resolve(receiver);
+        done(req);
+        return false;
+    }
+
+    public void flushFirstLowerFailedForCPrimeRuntime(
+            ProtosIoOperation operation,
+            ProtosObjectValue error) {
+        Req req = activeFlushCPrimeReq(operation);
+        failUnknownFirstEffect(req, Objects.requireNonNull(error, "error"));
+    }
+
+    public void flushFirstLowerCancelledForCPrimeRuntime(
+            ProtosIoOperation operation) {
+        Req req = activeFlushCPrimeReq(operation);
+        if (!operation.finishFirstEffectAttempt(false)) {
+            done(req);
+            return;
+        }
+        poison(req, false);
+    }
+
+    public void flushFirstLowerUnknownFailureForCPrimeRuntime(
+            ProtosIoOperation operation) {
+        Req req = activeFlushCPrimeReq(operation);
+        failUnknownFirstEffect(req, ioError(req.a));
+    }
+
+    public void flushFollowupResolvedForCPrimeRuntime(
+            ProtosIoOperation operation) {
+        Req req = activeFlushCPrimeReq(operation);
+        operation.resolve(receiver);
+        done(req);
+    }
+
+    public void flushFollowupFailedForCPrimeRuntime(
+            ProtosIoOperation operation,
+            ProtosObjectValue error) {
+        Req req = activeFlushCPrimeReq(operation);
+        poisonWith(req, Objects.requireNonNull(error, "error"), false);
+    }
+
+    public void flushFollowupUnknownFailureForCPrimeRuntime(
+            ProtosIoOperation operation) {
+        Req req = activeFlushCPrimeReq(operation);
+        poison(req, false);
+    }
+
+    public void unexpectedFlushCPrimeCompletionForRuntime(
+            ProtosIoOperation operation) {
+        failFlushCPrimeDriver(operation);
+    }
+
+    public void flushCPrimeDriverFailedForRuntime(
+            ProtosIoOperation operation,
+            ProtosObjectValue ignoredExactError) {
+        failFlushCPrimeDriver(operation);
+    }
+
+    private void failFlushCPrimeDriver(ProtosIoOperation operation) {
+        Objects.requireNonNull(operation, "operation");
+        Req req;
+        synchronized (this) {
+            req = activeReq;
+            if (req == null
+                    || req.operation != operation
+                    || req.kind != Kind.FLUSH
+                    || req.flushCPrimePlan == null) {
+                return;
+            }
+            req.lower = null;
+        }
+
+        if (operation.terminal()) {
+            done(req);
+        } else if (operation.firstEffectAttemptInFlight()) {
+            failUnknownFirstEffect(req, ioError(req.a));
+        } else if (operation.committed()) {
+            poison(req, false);
+        } else {
+            operation.fail(ioError(req.a));
+            done(req);
+        }
+    }
+
+    private Req activeFlushCPrimeReq(ProtosIoOperation operation) {
+        Objects.requireNonNull(operation, "operation");
+        synchronized (this) {
+            Req req = activeReq;
+            if (req == null
+                    || req.operation != operation
+                    || req.kind != Kind.FLUSH
+                    || req.flushCPrimePlan == null
+                    || q.peekFirst() != req) {
+                throw new IllegalStateException(
+                        "BufferedWriter C-prime operation has no active owning request");
+            }
+            return req;
+        }
     }
 
     private void doFlush(Req req, boolean closePath) {

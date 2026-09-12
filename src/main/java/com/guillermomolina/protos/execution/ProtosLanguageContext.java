@@ -47,6 +47,7 @@ final class ProtosLanguageContext {
     private volatile ProtosTextWriterCPrimeExecution.Plan textWriterCPrimePlan;
     private volatile ProtosTextReaderCPrimeExecution.Plan textReaderCPrimePlan;
     private volatile ProtosBufferedByteReaderCPrimeExecution.Plan bufferedByteReaderCPrimePlan;
+    private volatile ProtosBufferedByteWriterCPrimeExecution.Plan bufferedByteWriterCPrimePlan;
 
     ProtosLanguageContext(ProtosLanguage language, TruffleLanguage.Env env) {
         this.language = Objects.requireNonNull(language, "language");
@@ -106,6 +107,21 @@ final class ProtosLanguageContext {
                         ProtosBufferedByteReaderCPrimeExecution.createPlan(language);
             }
             return bufferedByteReaderCPrimePlan;
+        }
+    }
+
+    ProtosBufferedByteWriterCPrimeExecution.Plan bufferedByteWriterCPrimePlanForRuntime() {
+        ProtosBufferedByteWriterCPrimeExecution.Plan existing =
+                bufferedByteWriterCPrimePlan;
+        if (existing != null) {
+            return existing;
+        }
+        synchronized (this) {
+            if (bufferedByteWriterCPrimePlan == null) {
+                bufferedByteWriterCPrimePlan =
+                        ProtosBufferedByteWriterCPrimeExecution.createPlan(language);
+            }
+            return bufferedByteWriterCPrimePlan;
         }
     }
 
