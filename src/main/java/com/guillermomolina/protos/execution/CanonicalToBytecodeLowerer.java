@@ -1830,6 +1830,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredProcessArgumentsEachCall", null);
         BytecodeLocal structuredProcessArgumentsEachChild =
                 builder.createLocal("structuredProcessArgumentsEachChildCall", null);
+        BytecodeLocal structuredEnvironmentEach =
+                builder.createLocal("structuredEnvironmentEachCall", null);
+        BytecodeLocal structuredEnvironmentEachChild =
+                builder.createLocal("structuredEnvironmentEachChildCall", null);
 
         builder.beginIfThenElse();
 
@@ -2306,12 +2310,71 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredEnvironmentEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredEnvironmentEachCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredEnvironmentEach);
+        builder.beginPrepareStructuredEnvironmentEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredEnvironmentEachCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+        builder.beginStructuredEnvironmentEachHasNext();
+        builder.emitLoadLocal(structuredEnvironmentEach);
+        builder.endStructuredEnvironmentEachHasNext();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredEnvironmentEachChild);
+        builder.beginPrepareStructuredEnvironmentEachEntryCall();
+        builder.emitLoadLocal(structuredEnvironmentEach);
+        builder.endPrepareStructuredEnvironmentEachEntryCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredEnvironmentEachChild,
+                childResult,
+                resumeValue);
+        builder.beginAdvanceStructuredEnvironmentEach();
+        builder.emitLoadLocal(structuredEnvironmentEach);
+        builder.endAdvanceStructuredEnvironmentEach();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredEnvironmentEach();
+        builder.emitLoadLocal(structuredEnvironmentEach);
+        builder.endFinishStructuredEnvironmentEach();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

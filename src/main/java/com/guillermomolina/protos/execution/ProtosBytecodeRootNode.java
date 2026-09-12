@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
+import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -569,6 +570,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final boolean structuredArrayEach;
         private final boolean structuredBytesEach;
         private final boolean structuredProcessArgumentsEach;
+        private final boolean structuredEnvironmentEach;
         private final boolean directControlNative;
         private final ProtosModuleRuntime.PreparedModuleInitialization moduleInitialization;
 
@@ -582,6 +584,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     false,
                     false,
                     null,
+                    false,
                     false,
                     false,
                     false,
@@ -600,6 +603,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean structuredArrayEach,
                 boolean structuredBytesEach,
                 boolean structuredProcessArgumentsEach,
+                boolean structuredEnvironmentEach,
                 boolean directControlNative) {
             this.bodyTarget = bodyTarget;
             this.nativeBody = nativeBody;
@@ -615,6 +619,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredArrayEach = structuredArrayEach;
             this.structuredBytesEach = structuredBytesEach;
             this.structuredProcessArgumentsEach = structuredProcessArgumentsEach;
+            this.structuredEnvironmentEach = structuredEnvironmentEach;
             this.directControlNative = directControlNative;
             this.moduleInitialization = null;
             int controlCapabilities =
@@ -625,6 +630,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             + (structuredArrayEach ? 1 : 0)
                             + (structuredBytesEach ? 1 : 0)
                             + (structuredProcessArgumentsEach ? 1 : 0)
+                            + (structuredEnvironmentEach ? 1 : 0)
                             + (directControlNative ? 1 : 0);
             if (controlCapabilities > 1) {
                 throw new IllegalArgumentException(
@@ -643,6 +649,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean structuredArrayEach,
                 boolean structuredBytesEach,
                 boolean structuredProcessArgumentsEach,
+                boolean structuredEnvironmentEach,
                 boolean directControlNative) {
             return new PreparedClosureCall(
                     null,
@@ -656,6 +663,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredArrayEach,
                     structuredBytesEach,
                     structuredProcessArgumentsEach,
+                    structuredEnvironmentEach,
                     directControlNative);
         }
 
@@ -674,6 +682,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredArrayEach = false;
             this.structuredBytesEach = false;
             this.structuredProcessArgumentsEach = false;
+            this.structuredEnvironmentEach = false;
             this.directControlNative = false;
             this.moduleInitialization =
                     java.util.Objects.requireNonNull(
@@ -705,6 +714,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         boolean isStructuredArrayEach() { return structuredArrayEach; }
         boolean isStructuredBytesEach() { return structuredBytesEach; }
         boolean isStructuredProcessArgumentsEach() { return structuredProcessArgumentsEach; }
+        boolean isStructuredEnvironmentEach() { return structuredEnvironmentEach; }
 
         PreparedEnsureCall prepareStructuredEnsure() {
             if (!structuredEnsure) {
@@ -817,6 +827,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
+        PreparedEnvironmentEachCall prepareStructuredEnvironmentEach() {
+            if (!structuredEnvironmentEach) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured Environment.each capability");
+            }
+            return new PreparedEnvironmentEachCall(
+                    activation.receiver(),
+                    supplied,
+                    activation);
+        }
+
         Object enterNative() {
             if (nativeBody == null) {
                 throw new IllegalStateException(
@@ -828,7 +849,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || structuredBoolean != null
                     || structuredArrayEach
                     || structuredBytesEach
-                    || structuredProcessArgumentsEach) {
+                    || structuredProcessArgumentsEach
+                    || structuredEnvironmentEach) {
                 throw new IllegalStateException(
                         "structured control native must execute through Bytecode control operations");
             }
@@ -1457,6 +1479,122 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    static final class PreparedEnvironmentEachCall {
+        private final ProtosEnvironmentValue environment;
+        private final List<ProtosEnvironmentValue.PortableEntry> snapshot;
+        private final Object block;
+        private final ProtosActivation activation;
+        private int index;
+
+        PreparedEnvironmentEachCall(
+                Object receiver,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            if (!(receiver instanceof ProtosEnvironmentValue value)
+                    || supplied.size() != 1) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            this.environment = value;
+            this.block = supplied.get(0);
+            ProtosStandardEnvironmentProtocol.requireInvokableForStructured(
+                    block,
+                    activation);
+            /*
+             * PLAT028 Environment.each must preserve the historical eager
+             * portable-representation cutover. This call validates/converts
+             * the complete environment before callback #1 can be prepared.
+             */
+            this.snapshot =
+                    List.copyOf(
+                            ProtosStandardEnvironmentProtocol.portableEntriesForStructured(
+                                    value,
+                                    activation));
+        }
+
+        boolean hasNext() {
+            return index < snapshot.size();
+        }
+
+        PreparedClosureCall prepareCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Environment.each callback requested after snapshot exhaustion");
+            }
+            ProtosEnvironmentValue.PortableEntry entry = snapshot.get(index);
+            return prepareClosureCall(
+                    block,
+                    List.of(entry.name(), entry.value()),
+                    activation);
+        }
+
+        void advance() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Environment.each cursor advanced after snapshot exhaustion");
+            }
+            index++;
+        }
+
+        Object finish() {
+            if (hasNext()) {
+                throw new IllegalStateException(
+                        "Environment.each finished before snapshot exhaustion");
+            }
+            return environment;
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredEnvironmentEachCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredEnvironmentEach();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredEnvironmentEachCall {
+        @Specialization
+        public static PreparedEnvironmentEachCall perform(PreparedClosureCall prepared) {
+            return prepared.prepareStructuredEnvironmentEach();
+        }
+    }
+
+    @Operation
+    public static final class StructuredEnvironmentEachHasNext {
+        @Specialization
+        public static boolean perform(PreparedEnvironmentEachCall prepared) {
+            return prepared.hasNext();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredEnvironmentEachEntryCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedEnvironmentEachCall prepared) {
+            return prepared.prepareCurrent();
+        }
+    }
+
+    @Operation
+    public static final class AdvanceStructuredEnvironmentEach {
+        @Specialization
+        public static void perform(PreparedEnvironmentEachCall prepared) {
+            prepared.advance();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredEnvironmentEach {
+        @Specialization
+        public static Object perform(PreparedEnvironmentEachCall prepared) {
+            return prepared.finish();
+        }
+    }
+
     @Operation
     public static final class IsStructuredBooleanCall {
         @Specialization
@@ -1887,6 +2025,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardArrayProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardBytesProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardProcessArgumentsProtocol.isStandardEachImplementation(targetClosure),
+                ProtosStandardEnvironmentProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardErrorProtocol.isStandardSignalImplementation(targetClosure));
     }
 
@@ -2089,6 +2228,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         closure,
                         receiver,
                         methodHome),
+                ProtosStandardEnvironmentProtocol.isCanonicalStandardEachSelection(
+                        closure,
+                        receiver,
+                        methodHome),
                 ProtosStandardErrorProtocol.isCanonicalStandardSignalSelection(
                         closure,
                         methodHome,
@@ -2128,6 +2271,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 false,
                 false,
                 false,
+                false,
                 false);
     }
 
@@ -2162,6 +2306,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             boolean structuredArrayEach,
             boolean structuredBytesEach,
             boolean structuredProcessArgumentsEach,
+            boolean structuredEnvironmentEach,
             boolean directControlNative) {
         if (closure.nativeBody().isPresent()) {
             ProtosNativeClosureBody nativeBody =
@@ -2184,6 +2329,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredArrayEach,
                     structuredBytesEach,
                     structuredProcessArgumentsEach,
+                    structuredEnvironmentEach,
                     directControlNative);
         }
         if (structuredEnsure
@@ -2193,6 +2339,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 || structuredArrayEach
                 || structuredBytesEach
                 || structuredProcessArgumentsEach
+                || structuredEnvironmentEach
                 || directControlNative) {
             throw new IllegalStateException(
                     "structured control capability requires the canonical native implementation");

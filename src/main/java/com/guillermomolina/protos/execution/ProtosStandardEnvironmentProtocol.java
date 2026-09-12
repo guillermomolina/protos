@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -32,11 +33,35 @@ import java.util.List;
 
 /** Representation bridge for the immutable standardized Process Environment snapshot. */
 public final class ProtosStandardEnvironmentProtocol {
+    private static final class StandardPrototype extends ProtosObjectValue {
+        StandardPrototype() {
+            super(ProtosObjectValue.rootObject());
+        }
+    }
+
+    private static final ProtosNativeClosureBody STANDARD_EACH_BODY =
+            ProtosStandardEnvironmentProtocol::each;
+    private static final ProtosClosureValue STANDARD_EACH =
+            ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
+
     private ProtosStandardEnvironmentProtocol() {}
 
+    static boolean isStandardEachImplementation(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
+    }
+
+    static boolean isCanonicalStandardEachSelection(
+            ProtosClosureValue behavior,
+            Object receiver,
+            ProtosObjectValue home) {
+        return behavior == STANDARD_EACH
+                && home instanceof StandardPrototype
+                && receiver instanceof ProtosEnvironmentValue environment
+                && environment.prototypeForRuntime() == home;
+    }
+
     public static ProtosObjectValue createPrototype() {
-        ProtosObjectValue prototype =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue prototype = new StandardPrototype();
 
         prototype.createLocalSlot(
                 "get",
@@ -69,34 +94,27 @@ public final class ProtosStandardEnvironmentProtocol {
                             return present ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE;
                         }));
 
-        prototype.createLocalSlot(
-                "each",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosEnvironmentValue environment = requireReceiver(activation);
-                            if (supplied.size() != 1) {
-                                throw error(activation);
-                            }
-                            Object block = supplied.get(0);
-                            requireInvokable(block, activation);
-
-                            final List<ProtosEnvironmentValue.PortableEntry> entries;
-                            try {
-                                entries = environment.portableEntriesForRuntime();
-                            } catch (IllegalArgumentException invalidRepresentation) {
-                                throw error(activation);
-                            }
-
-                            for (ProtosEnvironmentValue.PortableEntry entry : entries) {
-                                ProtosInvocation.invoke(
-                                        block,
-                                        List.of(entry.name(), entry.value()),
-                                        activation);
-                            }
-                            return environment;
-                        }));
+        prototype.createLocalSlot("each", STANDARD_EACH);
 
         return prototype.freeze();
+    }
+
+    private static Object each(ProtosActivation activation, List<?> supplied) {
+        ProtosEnvironmentValue environment = requireReceiver(activation);
+        if (supplied.size() != 1) {
+            throw error(activation);
+        }
+        Object block = supplied.get(0);
+        requireInvokableForStructured(block, activation);
+        List<ProtosEnvironmentValue.PortableEntry> entries =
+                portableEntriesForStructured(environment, activation);
+        for (ProtosEnvironmentValue.PortableEntry entry : entries) {
+            ProtosInvocation.invoke(
+                    block,
+                    List.of(entry.name(), entry.value()),
+                    activation);
+        }
+        return environment;
     }
 
     private static ProtosEnvironmentValue requireReceiver(ProtosActivation activation) {
@@ -115,7 +133,9 @@ public final class ProtosStandardEnvironmentProtocol {
         return name;
     }
 
-    private static void requireInvokable(Object candidate, ProtosActivation activation) {
+    static void requireInvokableForStructured(
+            Object candidate,
+            ProtosActivation activation) {
         var prelude =
                 activation.prelude()
                         .orElseThrow(
@@ -131,6 +151,21 @@ public final class ProtosStandardEnvironmentProtocol {
             throw error(activation);
         }
         if (!(selected.value() instanceof ProtosClosureValue)) {
+            throw error(activation);
+        }
+    }
+
+    static List<ProtosEnvironmentValue.PortableEntry> portableEntriesForStructured(
+            ProtosEnvironmentValue environment,
+            ProtosActivation activation) {
+        try {
+            /*
+             * Preserve the existing whole-snapshot cutover: every native
+             * name/value pair is converted, validated and sorted before the
+             * first guest callback is prepared.
+             */
+            return environment.portableEntriesForRuntime();
+        } catch (IllegalArgumentException invalidRepresentation) {
             throw error(activation);
         }
     }

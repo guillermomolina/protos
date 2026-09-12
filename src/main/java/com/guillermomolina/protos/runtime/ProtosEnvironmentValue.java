@@ -123,6 +123,11 @@ public final class ProtosEnvironmentValue implements ProtosRepresentedValue {
         return findForRuntime(portableName) != null;
     }
 
+    /** Runtime-only exact construction prototype used for standard-method provenance. */
+    public ProtosObjectValue prototypeForRuntime() {
+        return prototype;
+    }
+
     public List<PortableEntry> portableEntriesForRuntime() {
         List<PortableEntry> cached = portableEntries;
         if (cached != null) {
