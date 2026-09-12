@@ -68,6 +68,82 @@ final class ProtosTestToolSimpleExpectationsTest {
     }
 
     @Test
+    void diagnosticManifestCaseSpecAndPlanBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "Manifest.caseSpec/planCases",
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
+                        + "plan: Manifest.frozenTuple(Manifest.frozenTuple(spec))\n"
+                        + "cases: Manifest.planCases(plan)\n"
+                        + "(cases.size() == 1) &&\n"
+                        + "(Manifest.caseId(cases[0]) === \"diagnostic/one.protos\") &&\n"
+                        + "(Manifest.caseExpectation(cases[0]) === \"integer\") &&\n"
+                        + "(Manifest.caseExpected(cases[0]) === \"1\")\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticSimpleExpectationClassifierBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "Runner.isSimpleExpectation",
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Runner: import(\"self:Runner\")\n"
+                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
+                        + "Runner.isSimpleExpectation(spec)\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticMapConstructionBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "Map construction",
+                "values: Map()\n"
+                        + "(values.size() == 0) && (values.containsKey(\"missing\") === false)\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticExactExecutionBindingBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "execution(\"true\")",
+                "observation: execution(\"true\")\n"
+                        + "(observation.state === \"completed\") &&\n"
+                        + "(observation.error === null) &&\n"
+                        + "(observation.value === true)\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticEvaluateSimpleBooleanBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "Runner.evaluateSimple boolean",
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Runner: import(\"self:Runner\")\n"
+                        + "spec: Manifest.caseSpec(Array(\"diagnostic/true.protos\", \"boolean\", \"true\"))\n"
+                        + "result: Runner.evaluateSimple(spec, \"true\", execution)\n"
+                        + "Runner.resultPassed(result)\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticEvaluateSimpleIntegerBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "Runner.evaluateSimple integer",
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Runner: import(\"self:Runner\")\n"
+                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
+                        + "result: Runner.evaluateSimple(spec, \"1\", execution)\n"
+                        + "Runner.resultPassed(result)\n",
+                fixture);
+    }
+
+    @Test
     void unsupportedExpectationKindFailsClosedAsToolPolicyError()
             throws Exception {
         Fixture fixture = fixture();
@@ -87,6 +163,26 @@ final class ProtosTestToolSimpleExpectationsTest {
                 executeFixture(MALFORMED_FIXTURE, fixture.activation());
 
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+    }
+
+    private static void assertDiagnosticCompletedTrue(
+            String boundary,
+            String source,
+            Fixture fixture)
+            throws Exception {
+        ProtosExecutionOutcome outcome =
+                ProtosRootTaskExecution.execute(
+                        new ProtosSourceCompiler().compile(source),
+                        fixture.activation());
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> boundary + " " + guestErrorDiagnostic(outcome, fixture.prelude()));
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                outcome.value(),
+                () -> boundary + " completed with unexpected value: " + outcome.value());
     }
 
     private static ProtosExecutionOutcome executeFixture(
