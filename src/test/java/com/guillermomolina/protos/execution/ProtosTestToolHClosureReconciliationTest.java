@@ -41,11 +41,12 @@ final class ProtosTestToolHClosureReconciliationTest {
                                 "cli",
                                 "ProtosTestToolAsyncExecutionScope.java"));
 
-        assertTrue(main.contains("jobs: Options.jobs(process.args())"));
+        assertTrue(main.contains("arguments: process.args()"));
+        assertTrue(main.contains("jobs: Options.jobs(arguments)"));
         assertEquals(4, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));
         assertTrue(options.contains("jobs: (arguments) => {"));
-        assertTrue(options.contains("result: 1"));
+        assertTrue(options.contains("jobsValue: 1"));
         assertTrue(carrier.contains("Thread.ofPlatform()"));
     }
 

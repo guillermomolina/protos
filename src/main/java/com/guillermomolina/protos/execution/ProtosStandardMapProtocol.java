@@ -88,11 +88,19 @@ public final class ProtosStandardMapProtocol {
   return null;
  }
 
+ private static boolean isCanonicalMapHome(
+         ProtosObjectValue home,
+         ProtosActivation caller) {
+  return caller.prelude()
+          .map(prelude -> prelude.bindings().readLocalSlot("Map").orElse(null) == home)
+          .orElse(false);
+ }
+
  static StructuredReadLookupKind structuredReadLookupKindForCanonicalSelection(
          ProtosClosureValue behavior,
          ProtosObjectValue home,
          ProtosActivation caller) {
-  if (!caller.prelude().map(prelude -> prelude.mapPrototype() == home).orElse(false)) {
+  if (!isCanonicalMapHome(home, caller)) {
    return null;
   }
   if (behavior == STANDARD_AT) {
@@ -113,9 +121,7 @@ public final class ProtosStandardMapProtocol {
          ProtosObjectValue home,
          ProtosActivation caller) {
   return behavior == STANDARD_AT_PUT
-          && caller.prelude()
-                  .map(prelude -> prelude.mapPrototype() == home)
-                  .orElse(false);
+          && isCanonicalMapHome(home, caller);
  }
 
  static boolean isStandardRemoveImplementation(ProtosClosureValue closure) {
@@ -127,9 +133,7 @@ public final class ProtosStandardMapProtocol {
          ProtosObjectValue home,
          ProtosActivation caller) {
   return behavior == STANDARD_REMOVE
-          && caller.prelude()
-                  .map(prelude -> prelude.mapPrototype() == home)
-                  .orElse(false);
+          && isCanonicalMapHome(home, caller);
  }
 
  static boolean isStandardEachImplementation(ProtosClosureValue closure) {
@@ -141,9 +145,7 @@ public final class ProtosStandardMapProtocol {
          ProtosObjectValue home,
          ProtosActivation caller) {
   return behavior == STANDARD_EACH
-          && caller.prelude()
-                  .map(prelude -> prelude.mapPrototype() == home)
-                  .orElse(false);
+          && isCanonicalMapHome(home, caller);
  }
  public static void install(ProtosObjectValue p){
   for(String s:List.of("call","at","atPut","containsKey","remove","size","each"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core Map already defines "+s);
