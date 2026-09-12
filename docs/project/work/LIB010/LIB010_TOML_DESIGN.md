@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-B IN_PROGRESS — B1 functional parser published; B2 nesting/stress hardening READY**
+Status: **LIB010-B2 IN_PROGRESS — B2A iterative value nesting CLOSED; B2B document/path scaling + parser closure READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -1058,14 +1058,18 @@ LIB010-B implementation is deliberately split into two publications:
   `tool-shared:Toml10`; the private engine is used only as execution-time source
   material for proven parser mechanics while adapting the public dialect/model.
 
-- **LIB010-B2 — nesting/adversarial hardening + parser closure: READY.**
-  Replace or bound recursive nested-container paths as required by the approved
-  large/adversarial-input contract, retain large/deep stress evidence, and close
-  LIB010-B without adding encoder/Document/streaming behavior.
+- **LIB010-B2 — nesting/adversarial hardening + parser closure: IN_PROGRESS.**
+  - **B2A — iterative nested-value parser: CLOSED.** Arrays and TOML 1.1 inline
+    tables use explicit heap frames rather than recursive value descent. Deep
+    nesting therefore does not use host/JVM call depth as the resource boundary,
+    and no public or tunable nesting limit is introduced.
+  - **B2B — document/path scaling + parser closure: READY.** Remove the remaining
+    input-proportional recursive scans/path walks and quadratic document/table
+    accumulation hotspots relevant to large flat documents, add retained large
+    input evidence, and close LIB010-B.
 
-B1 is an intermediate `FOCAL_BOUNDED` publication. Integrated full validation is
-deferred to the owning `LIB010` closure; B1 does not claim LIB010 or LIB010-B
-closure.
+B1 and B2A are intermediate `FOCAL_BOUNDED` publications. Integrated full
+validation remains deferred to the owning `LIB010` closure.
 
 ## Deliberately deferred
 

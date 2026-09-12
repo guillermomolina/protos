@@ -1440,63 +1440,65 @@ parse: (text) => {
             parts
         }
 
-        putPath: null
-        putPath = (map, parts, position, valueNode) => {
-            name: parts[position]
-            last: position == parts.size() - 1
+        putPath: (map, parts, ignoredPosition, valueNode) => {
+            current: map
+            position: 0
 
-            last.ifTrue(() => {
-                map.containsKey(name).ifTrue(() => {
-                    fail()
-                })
-                map[name] = valueNode
-            })
+            (() => position < parts.size()).while(() => {
+                name: parts[position]
+                last: position == parts.size() - 1
 
-            last.ifFalse(() => {
-                child: null
-                map.containsKey(name).ifTrue(() => {
-                    child = map[name]
-                    (child.kind == "table").ifFalse(() => {
+                last.ifTrue(() => {
+                    current.containsKey(name).ifTrue(() => {
                         fail()
                     })
+                    current[name] = valueNode
+                    position = parts.size()
                 })
-                map.containsKey(name).ifFalse(() => {
-                    child = syntaxNode("table", Map())
-                    map[name] = child
+
+                last.ifFalse(() => {
+                    child: null
+                    current.containsKey(name).ifTrue(() => {
+                        child = current[name]
+                        (child.kind == "table").ifFalse(() => {
+                            fail()
+                        })
+                    })
+                    current.containsKey(name).ifFalse(() => {
+                        child = syntaxNode("table", Map())
+                        current[name] = child
+                    })
+                    current = child.value
+                    position = position + 1
                 })
-                putPath(child.value, parts, position + 1, valueNode)
             })
         }
 
-        maxChunkLevel: -1
-
-        carryChunk: null
-        carryChunk = (chunks, chunk, level) => {
-            present: chunks.containsKey(level)
-
+        carryFrameChunk: null
+        carryFrameChunk = (frame, chunk, level) => {
+            present: frame.chunks.containsKey(level)
             present.ifTrue(() => {
-                left: chunks[level]
-                chunks.remove(level)
-                carryChunk(chunks, Array(...left, ...chunk), level + 1)
+                left: frame.chunks[level]
+                frame.chunks.remove(level)
+                carryFrameChunk(frame, Array(...left, ...chunk), level + 1)
             })
-
             present.ifFalse(() => {
-                chunks[level] = chunk
-                (level > maxChunkLevel).ifTrue(() => {
-                    maxChunkLevel = level
+                frame.chunks[level] = chunk
+                (level > frame.maxLevel).ifTrue(() => {
+                    frame.maxLevel = level
                 })
             })
         }
 
-        collectChunks: null
-        collectChunks = (chunks, level, result) => {
+        collectFrameChunks: null
+        collectFrameChunks = (frame, level, result) => {
             finalResult: result
             (level >= 0).ifTrue(() => {
                 nextResult: result
-                chunks.containsKey(level).ifTrue(() => {
-                    nextResult = Array(...result, ...chunks[level])
+                frame.chunks.containsKey(level).ifTrue(() => {
+                    nextResult = Array(...result, ...frame.chunks[level])
                 })
-                finalResult = collectChunks(chunks, level - 1, nextResult)
+                finalResult = collectFrameChunks(frame, level - 1, nextResult)
             })
             finalResult
         }
@@ -2376,185 +2378,258 @@ parse: (text) => {
             result
         }
 
-        parseValue: null
+        topFrame: null
+        depth: 0
+        rootValue: null
+        rootDone: false
 
-        parseArray: () => {
-            (take() == 91).ifFalse(() => {
-                fail()
+        pushArrayFrame: () => {
+            frame: {
+                parent: topFrame
+                kind: "array"
+                phase: "valueOrEnd"
+                chunks: Map()
+                maxLevel: -1
+            }
+            topFrame = frame
+            depth = depth + 1
+        }
+
+        pushInlineTableFrame: () => {
+            frame: {
+                parent: topFrame
+                kind: "inlineTable"
+                phase: "keyOrEnd"
+                entries: Map()
+                pendingPath: null
+            }
+            topFrame = frame
+            depth = depth + 1
+        }
+
+        appendArrayValue: (frame, valueNode) => {
+            carryFrameChunk(frame, Array(valueNode), 0)
+            frame.phase = "commaOrEnd"
+        }
+
+        acceptValue: (valueNode) => {
+            (depth == 0).ifTrue(() => {
+                rootDone.ifTrue(() => { fail() })
+                rootValue = valueNode
+                rootDone = true
             })
-            skipArrayTrivia()
 
-            chunks: Map()
-            oldMax: maxChunkLevel
-            maxChunkLevel = -1
-            done: false
+            (depth > 0).ifTrue(() => {
+                frame: topFrame
 
-            loop: null
-            loop = () => {
-                done.ifFalse(() => {
+                (frame.kind == "array").ifTrue(() => {
+                    (frame.phase == "awaitValue").ifFalse(() => { fail() })
+                    appendArrayValue(frame, valueNode)
+                })
+
+                (frame.kind == "inlineTable").ifTrue(() => {
+                    (frame.phase == "awaitValue").ifFalse(() => { fail() })
+                    putPath(frame.entries, frame.pendingPath, 0, valueNode)
+                    frame.pendingPath = null
+                    frame.phase = "commaOrEnd"
+                })
+            })
+        }
+
+        closeArrayFrame: () => {
+            frame: topFrame
+            (frame.kind == "array").ifFalse(() => { fail() })
+            validPhase: frame.phase == "valueOrEnd"
+            (frame.phase == "commaOrEnd").ifTrue(() => { validPhase = true })
+            validPhase.ifFalse(() => { fail() })
+
+            materialized: collectFrameChunks(frame, frame.maxLevel, Array())
+            valueNode: syntaxNode("array", materialized)
+            topFrame = frame.parent
+            depth = depth - 1
+            acceptValue(valueNode)
+        }
+
+        closeInlineTableFrame: () => {
+            frame: topFrame
+            (frame.kind == "inlineTable").ifFalse(() => { fail() })
+            validPhase: frame.phase == "keyOrEnd"
+            (frame.phase == "commaOrEnd").ifTrue(() => { validPhase = true })
+            validPhase.ifFalse(() => { fail() })
+
+            valueNode: syntaxNode("table", frame.entries)
+            topFrame = frame.parent
+            depth = depth - 1
+            acceptValue(valueNode)
+        }
+
+        startValue: () => {
+            skipSpaces()
+            first: peek()
+            (first < 0).ifTrue(() => { fail() })
+            handled: false
+
+            (first == 91).ifTrue(() => {
+                index = index + 1
+                pushArrayFrame()
+                handled = true
+            })
+            (first == 123).ifTrue(() => {
+                index = index + 1
+                pushInlineTableFrame()
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                result: null
+                (first == 34).ifTrue(() => {
+                    multiline: false
+                    (index + 2 < length).ifTrue(() => {
+                        ((source[index + 1] == 34) &&
+                            (source[index + 2] == 34)).ifTrue(() => {
+                            multiline = true
+                        })
+                    })
+                    result = syntaxNode("string", parseBasicString(multiline))
+                })
+                (first == 39).ifTrue(() => {
+                    multiline: false
+                    (index + 2 < length).ifTrue(() => {
+                        ((source[index + 1] == 39) &&
+                            (source[index + 2] == 39)).ifTrue(() => {
+                            multiline = true
+                        })
+                    })
+                    result = syntaxNode("string", parseLiteralString(multiline))
+                })
+                (result === null).ifTrue(() => {
+                    result = parseBareValue()
+                })
+                acceptValue(result)
+            })
+        }
+
+        running: true
+        (() => running).while(() => {
+            wasTopLevel: depth == 0
+
+            wasTopLevel.ifTrue(() => {
+                rootDone.ifTrue(() => {
+                    running = false
+                })
+                rootDone.ifFalse(() => {
+                    startValue()
+                })
+            })
+
+            wasTopLevel.ifFalse(() => {
+                frame: topFrame
+                phase: frame.phase
+
+                (frame.kind == "array").ifTrue(() => {
                     skipArrayTrivia()
 
-                    (peek() == 93).ifTrue(() => {
-                        index = index + 1
-                        done = true
+                    (phase == "valueOrEnd").ifTrue(() => {
+                        (peek() == 93).ifTrue(() => {
+                            index = index + 1
+                            closeArrayFrame()
+                        })
+                        (peek() == 93).ifFalse(() => {
+                            frame.phase = "awaitValue"
+                            startValue()
+                        })
                     })
 
-                    done.ifFalse(() => {
-                        item: parseValue()
-                        carryChunk(chunks, Array(item), 0)
-                        skipArrayTrivia()
+                    (phase == "value").ifTrue(() => {
+                        frame.phase = "awaitValue"
+                        startValue()
+                    })
 
+                    (phase == "commaOrEnd").ifTrue(() => {
                         comma: peek() == 44
-
+                        closing: peek() == 93
                         comma.ifTrue(() => {
                             index = index + 1
                             skipArrayTrivia()
                             (peek() == 93).ifTrue(() => {
                                 index = index + 1
-                                done = true
+                                closeArrayFrame()
                             })
-                            done.ifFalse(() => {
-                                loop()
+                            (peek() == 93).ifFalse(() => {
+                                frame.phase = "value"
                             })
                         })
-
                         comma.ifFalse(() => {
-                            (peek() == 93).ifFalse(() => {
-                                fail()
+                            closing.ifTrue(() => {
+                                index = index + 1
+                                closeArrayFrame()
                             })
-                            index = index + 1
-                            done = true
+                            closing.ifFalse(() => { fail() })
                         })
                     })
                 })
-            }
 
-            loop()
-            materialized: collectChunks(chunks, maxChunkLevel, Array())
-            maxChunkLevel = oldMax
-            syntaxNode("array", materialized)
-        }
+                (frame.kind == "inlineTable").ifTrue(() => {
+                    skipArrayTrivia()
 
-        parseInlineTable: () => {
-            (take() == 123).ifFalse(() => {
-                fail()
-            })
-            skipArrayTrivia()
-
-            entries: Map()
-            done: false
-
-            (peek() == 125).ifTrue(() => {
-                index = index + 1
-                done = true
-            })
-
-            loop: null
-            loop = () => {
-                done.ifFalse(() => {
-                    path: parseKeyPath()
-                    skipSpaces()
-                    (take() == 61).ifFalse(() => {
-                        fail()
-                    })
-                    skipSpaces()
-                    parsed: parseValue()
-                    putPath(entries, path, 0, parsed)
-                    skipSpaces()
-
-                    (peek() == 125).ifTrue(() => {
-                        index = index + 1
-                        done = true
-                    })
-
-                    done.ifFalse(() => {
-                        (peek() == 44).ifFalse(() => {
-                            fail()
-                        })
-                        index = index + 1
-                        skipArrayTrivia()
-
+                    (phase == "keyOrEnd").ifTrue(() => {
                         (peek() == 125).ifTrue(() => {
                             index = index + 1
-                            done = true
+                            closeInlineTableFrame()
                         })
+                        (peek() == 125).ifFalse(() => {
+                            frame.pendingPath = parseKeyPath()
+                            skipSpaces()
+                            (take() == 61).ifFalse(() => { fail() })
+                            skipSpaces()
+                            frame.phase = "value"
+                        })
+                    })
 
-                        done.ifFalse(() => {
-                            loop()
+                    (phase == "value").ifTrue(() => {
+                        frame.phase = "awaitValue"
+                        startValue()
+                    })
+
+                    (phase == "commaOrEnd").ifTrue(() => {
+                        comma: peek() == 44
+                        closing: peek() == 125
+                        comma.ifTrue(() => {
+                            index = index + 1
+                            skipArrayTrivia()
+                            (peek() == 125).ifTrue(() => {
+                                index = index + 1
+                                closeInlineTableFrame()
+                            })
+                            (peek() == 125).ifFalse(() => {
+                                frame.phase = "keyOrEnd"
+                            })
+                        })
+                        comma.ifFalse(() => {
+                            closing.ifTrue(() => {
+                                index = index + 1
+                                closeInlineTableFrame()
+                            })
+                            closing.ifFalse(() => { fail() })
                         })
                     })
                 })
-            }
-
-            loop()
-            syntaxNode("table", entries)
-        }
-
-        parseValue = () => {
-            skipSpaces()
-            first: peek()
-            (first < 0).ifTrue(() => {
-                fail()
             })
+        })
 
-            result: null
-
-            (first == 34).ifTrue(() => {
-                multiline: false
-                (index + 2 < length).ifTrue(() => {
-                    (source[index + 1] == 34).ifTrue(() => {
-                        (source[index + 2] == 34).ifTrue(() => {
-                            multiline = true
-                        })
-                    })
-                })
-                result = syntaxNode("string", parseBasicString(multiline))
-            })
-
-            (first == 39).ifTrue(() => {
-                multiline: false
-                (index + 2 < length).ifTrue(() => {
-                    (source[index + 1] == 39).ifTrue(() => {
-                        (source[index + 2] == 39).ifTrue(() => {
-                            multiline = true
-                        })
-                    })
-                })
-                result = syntaxNode("string", parseLiteralString(multiline))
-            })
-            (first == 91).ifTrue(() => {
-                result = parseArray()
-            })
-            (first == 123).ifTrue(() => {
-                result = parseInlineTable()
-            })
-            (result === null).ifTrue(() => {
-                result = parseBareValue()
-            })
-
-            result
-        }
-
-        result: parseValue()
+        result: rootValue
         skipSpaces()
-
         (peek() == 35).ifTrue(() => {
             index = index + 1
             skipComment()
         })
-
         (index < length).ifTrue(() => {
-            isNewlineStart(peek()).ifTrue(() => {
-                consumeNewline()
-            })
+            isNewlineStart(peek()).ifTrue(() => { consumeNewline() })
         })
-
         skipSpaces()
-        (index == length).ifFalse(() => {
-            fail()
-        })
-
+        (index == length).ifFalse(() => { fail() })
         result
+
     }
 
     documentStatements: (text) => {
@@ -2895,17 +2970,10 @@ parse: (text) => {
         decodeRange: (source, start, end) => {
             buffer: Encoding.UTF8.encode("")
             position: start
-
-            copy: null
-            copy = () => {
-                (position < end).ifTrue(() => {
-                    buffer.add(source[position])
-                    position = position + 1
-                    copy()
-                })
-            }
-
-            copy()
+            (() => position < end).while(() => {
+                buffer.add(source[position])
+                position = position + 1
+            })
             Encoding.UTF8.decode(buffer)
         }
 
