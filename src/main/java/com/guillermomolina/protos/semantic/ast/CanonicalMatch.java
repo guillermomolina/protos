@@ -26,6 +26,7 @@ import java.util.Optional;
 public record CanonicalMatch(
         CanonicalExpression subject,
         List<Arm> arms,
+        MatchCoverage coverage,
         SourceSpan span)
         implements CanonicalExpression {
     public CanonicalMatch {
@@ -34,6 +35,7 @@ public record CanonicalMatch(
         if (arms.isEmpty()) {
             throw new IllegalArgumentException("canonical match requires at least one arm");
         }
+        Objects.requireNonNull(coverage, "coverage");
         Objects.requireNonNull(span, "span");
     }
 

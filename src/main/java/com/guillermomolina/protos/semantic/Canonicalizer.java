@@ -99,6 +99,7 @@ public final class Canonicalizer {
         return new CanonicalMatch(
                 canonicalize(match.subject()),
                 match.arms().stream().map(this::canonicalizeMatchArm).toList(),
+                MatchCoverageAnalyzer.analyze(match),
                 match.span());
     }
 
