@@ -1,0 +1,96 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+CommandLine: import("std:cli/CommandLine")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+positional: (key, minimum, maximum) => {
+    CommandLine.positional({
+        key: key
+        minOccurrences: minimum
+        maxOccurrences: maximum
+        valueName: key
+        help: null
+    })
+}
+
+specFor: (leftMinimum, leftMaximum, rightMinimum, rightMaximum) => {
+    CommandLine.command({
+        name: "tool"
+        help: null
+        options: Array()
+        positionals: Array(
+            positional("A", leftMinimum, leftMaximum),
+            positional("B", rightMinimum, rightMaximum)
+        )
+        subcommands: Array()
+    })
+}
+
+requiredTail: specFor(0, 1, 1, 1)
+
+one: CommandLine.parse(requiredTail, Array("x"))
+require(one.command.positionals.size() == 1)
+require(one.command.positionals[0].key == "B")
+require(one.command.positionals[0].value == "x")
+require(one.command.positionals[0].tokenIndex == 0)
+
+two: CommandLine.parse(requiredTail, Array("x", "y"))
+require(two.command.positionals.size() == 2)
+require(two.command.positionals[0].key == "A")
+require(two.command.positionals[0].value == "x")
+require(two.command.positionals[0].tokenIndex == 0)
+require(two.command.positionals[1].key == "B")
+require(two.command.positionals[1].value == "y")
+require(two.command.positionals[1].tokenIndex == 1)
+
+optionalTail: specFor(0, 1, 0, 1)
+optionalOne: CommandLine.parse(optionalTail, Array("x"))
+require(optionalOne.command.positionals.size() == 1)
+require(optionalOne.command.positionals[0].key == "A")
+require(optionalOne.command.positionals[0].value == "x")
+
+requiredRest: specFor(0, 1, 1, null)
+requiredRestOne: CommandLine.parse(requiredRest, Array("x"))
+require(requiredRestOne.command.positionals.size() == 1)
+require(requiredRestOne.command.positionals[0].key == "B")
+require(requiredRestOne.command.positionals[0].value == "x")
+
+requiredRestTwo: CommandLine.parse(requiredRest, Array("x", "y"))
+require(requiredRestTwo.command.positionals.size() == 2)
+require(requiredRestTwo.command.positionals[0].key == "A")
+require(requiredRestTwo.command.positionals[0].value == "x")
+require(requiredRestTwo.command.positionals[1].key == "B")
+require(requiredRestTwo.command.positionals[1].value == "y")
+
+optionalRest: specFor(0, 1, 0, null)
+optionalRestOne: CommandLine.parse(optionalRest, Array("x"))
+require(optionalRestOne.command.positionals.size() == 1)
+require(optionalRestOne.command.positionals[0].key == "A")
+require(optionalRestOne.command.positionals[0].value == "x")
+
+optionalRestTwo: CommandLine.parse(optionalRest, Array("x", "y"))
+require(optionalRestTwo.command.positionals.size() == 2)
+require(optionalRestTwo.command.positionals[0].key == "A")
+require(optionalRestTwo.command.positionals[0].value == "x")
+require(optionalRestTwo.command.positionals[1].key == "B")
+require(optionalRestTwo.command.positionals[1].value == "y")
+
+true

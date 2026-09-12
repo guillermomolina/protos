@@ -1,0 +1,129 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+CommandLine: import("std:cli/CommandLine")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+flag: (key, longName, shortName, maxOccurrences) => {
+    CommandLine.option({
+        key: key
+        long: longName
+        short: shortName
+        minValues: 0
+        maxValues: 0
+        minOccurrences: 0
+        maxOccurrences: maxOccurrences
+        valueName: null
+        help: null
+    })
+}
+
+valued: (key, longName, shortName, minOccurrences, maxOccurrences) => {
+    CommandLine.option({
+        key: key
+        long: longName
+        short: shortName
+        minValues: 1
+        maxValues: 1
+        minOccurrences: minOccurrences
+        maxOccurrences: maxOccurrences
+        valueName: "VALUE"
+        help: null
+    })
+}
+
+spec: CommandLine.command({
+    name: "tool"
+    help: null
+    options: Array(
+        flag("verbose", "verbose", "v", 1),
+        valued("output", "output", "o", 1, 1),
+        valued("define", "define", "D", 0, null),
+        flag("all", null, "a", 1),
+        flag("brief", null, "b", 1),
+        flag("check", null, "c", 1)
+    )
+    positionals: Array()
+    subcommands: Array()
+})
+
+input: Array(
+    "--verbose",
+    "--output=result.txt",
+    "-abc",
+    "--define",
+    "--literal",
+    "-D",
+    "x=y"
+)
+
+parsed: CommandLine.parse(spec, input)
+
+input[0] = "changed-after-parse"
+
+require(parsed.kind == "parseResult")
+require(parsed.arguments.size() == 7)
+require(parsed.arguments[0] == "--verbose")
+require(parsed.command.kind == "commandResult")
+require(parsed.command.name == "tool")
+require(parsed.command.tokenIndex === null)
+require(parsed.command.endOfOptionsIndex === null)
+require(parsed.command.subcommand === null)
+require(parsed.command.positionals.size() == 0)
+
+options: parsed.command.options
+require(options.size() == 7)
+
+require(options[0].kind == "optionOccurrence")
+require(options[0].key == "verbose")
+require(options[0].spelling == "--verbose")
+require(options[0].tokenIndex == 0)
+require(options[0].value === null)
+require(options[0].valueTokenIndex === null)
+
+require(options[1].key == "output")
+require(options[1].spelling == "--output")
+require(options[1].tokenIndex == 1)
+require(options[1].value == "result.txt")
+require(options[1].valueTokenIndex == 1)
+
+require(options[2].key == "all")
+require(options[2].spelling == "-a")
+require(options[2].tokenIndex == 2)
+require(options[3].key == "brief")
+require(options[3].spelling == "-b")
+require(options[3].tokenIndex == 2)
+require(options[4].key == "check")
+require(options[4].spelling == "-c")
+require(options[4].tokenIndex == 2)
+
+require(options[5].key == "define")
+require(options[5].spelling == "--define")
+require(options[5].tokenIndex == 3)
+require(options[5].value == "--literal")
+require(options[5].valueTokenIndex == 4)
+
+require(options[6].key == "define")
+require(options[6].spelling == "-D")
+require(options[6].tokenIndex == 5)
+require(options[6].value == "x=y")
+require(options[6].valueTokenIndex == 6)
+
+true

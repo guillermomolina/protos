@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B READY**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C READY**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1168,25 +1168,47 @@ LIB011-A is closed, and LIB011-B is READY.
 
 ### LIB011-B — token parser
 
-**READY — D111 RATIFIED (Candidate B′).**
+**CLOSED — deterministic single-command parser published under D111 B′.**
 
-Implement strict explicit-argument parsing for the ratified long/short option,
-value, cardinality, positional and `--` laws with lossless results.
+`CommandLine.parse(spec, arguments)` now snapshots the explicit argument Array
+and parses one already-selected command scope in ordinary Protos. It recognizes
+exact long options, attached long values, separate option values, one-character
+short options, zero-arity short clusters and the structural `--` delimiter.
+Recognized value-taking options consume the next token literally even when it
+begins with `-`; attached values preserve the same direct token index for option
+and value. Unknown option-like tokens, missing values, duplicate/surplus
+occurrences, missing required options/positionals and unexpected positionals
+fail with ordinary `Error`, without publishing a structured error taxonomy.
 
-D111 / #437 fixes command-local positional allocation as **maximal feasible
-left-biased allocation with suffix-minimum reservation**. For an already-selected
-command scope, an earlier positional consumes as much as its cardinality permits
-only when enough tokens remain to satisfy every later `minOccurrences`; surplus
-therefore stays left-biased, but required later positionals are never starved by
-an optional earlier positional. The current A1 invariant that any unbounded
-positional is unique and last keeps this allocation linear and backtracking-free.
+Option lookup indexes are invocation-local Maps built once from the frozen
+CommandSpec. Result accumulation uses the same invocation-local balanced Array
+chunk technique already used by portable JSON/TOML/Test Tool code rather than
+quadratic whole-Array rebuilding per token. Every public result node and retained
+Array is freshly materialized and frozen. No environment, process arguments,
+filesystem, terminal, callback, native parser bridge or global cache is touched.
 
-D111 deliberately does not decide parent-positionals versus nested-subcommand
-selection. `LIB011-C` remains the owner of traversal and cross-command
-allocation. The durable decision is recorded in
+D111 / #437 is implemented command-locally as **maximal feasible left-biased
+allocation with suffix-minimum reservation**. The parser reserves every later
+`minOccurrences` before an earlier optional positional may consume a token; the
+allocation itself remains one pass over positional specs/tokens with no semantic
+backtracking.
+
+This B-stage parser intentionally rejects a CommandSpec containing subcommands:
+parent/subcommand token ownership and traversal remain exactly the deferred
+LIB011-C concern ratified by the existing design boundary. This staged rejection
+does not select a traversal rule.
+
+Semantic authority is the Protos corpus under `protos/tests/library/cli/**`;
+JUnit remains only the execution harness and complementary structural evidence.
+Publication is impact-aware `FOCAL_BOUNDED`; broader integrated validation remains
+deferred to the owning top-level LIB011 closure.
+
+The durable D111 decision remains
 `docs/project/decisions/language/D111_COMMAND_LINE_POSITIONAL_ALLOCATION_SEMANTICS.md`.
 
 ### LIB011-C — subcommand traversal and composition
+
+**READY.**
 
 Implement nested command-path selection and reusable specification composition,
 without execution callbacks or global/persistent flag semantics.

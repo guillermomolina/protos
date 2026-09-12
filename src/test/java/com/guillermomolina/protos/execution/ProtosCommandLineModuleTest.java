@@ -30,7 +30,7 @@ import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-/** Protos-language semantic harness for the closed LIB011-A command-line model. */
+/** Protos-language semantic harness for the LIB011 command-line model. */
 final class ProtosCommandLineModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
@@ -38,7 +38,7 @@ final class ProtosCommandLineModuleTest {
             Path.of("protos", "tests", "library", "cli");
 
     @Test
-    void importedModuleExportsExactlyClosedAStageSurface() throws Exception {
+    void importedModuleExportsCurrentCommandLineSurface() throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -50,7 +50,7 @@ final class ProtosCommandLineModuleTest {
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
         assertEquals(
-                Set.of("option", "positional", "command"),
+                Set.of("option", "positional", "command", "parse"),
                 module.localSlotsSnapshot().keySet());
     }
 
@@ -82,6 +82,26 @@ final class ProtosCommandLineModuleTest {
     @Test
     void remainingApprovedAdversarialFamiliesFailClosedInProtos() throws Exception {
         assertFixture("adversarial.protos");
+    }
+
+    @Test
+    void deterministicOptionParsingConformsInProtos() throws Exception {
+        assertFixture("parse-options.protos");
+    }
+
+    @Test
+    void d111PositionalAllocationConformsInProtos() throws Exception {
+        assertFixture("parse-positionals-d111.protos");
+    }
+
+    @Test
+    void delimiterAndLiteralValueProvenanceConformInProtos() throws Exception {
+        assertFixture("parse-delimiter.protos");
+    }
+
+    @Test
+    void parserFailureFamiliesFailClosedInProtos() throws Exception {
+        assertFixture("parse-failures.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {

@@ -108,7 +108,7 @@ require(command.subcommands[0].options[0].key == "force")
 require(CommandLine.hasSlot("option"))
 require(CommandLine.hasSlot("positional"))
 require(CommandLine.hasSlot("command"))
-require(CommandLine.hasSlot("parse") === false)
+require(CommandLine.hasSlot("parse"))
 require(CommandLine.hasSlot("renderHelp") === false)
 
 true

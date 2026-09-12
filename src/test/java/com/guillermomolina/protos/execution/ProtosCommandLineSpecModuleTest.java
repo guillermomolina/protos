@@ -50,7 +50,7 @@ final class ProtosCommandLineSpecModuleTest {
                         .call(prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
-        assertEquals(Set.of("option", "positional", "command"), module.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("option", "positional", "command", "parse"), module.localSlotsSnapshot().keySet());
     }
 
     @Test
