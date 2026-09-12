@@ -33,8 +33,11 @@ import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMatch;
+import com.guillermomolina.protos.semantic.ast.CanonicalMatchPattern;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
+import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
@@ -81,6 +84,9 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalSequence sequence) {
             return lowerSequence(sequence);
+        }
+        if (expression instanceof CanonicalMatch match) {
+            return lowerBasicMatch(match);
         }
         if (expression instanceof CanonicalObject object) {
             ProtosExpressionNode parentNode =
@@ -155,6 +161,90 @@ public final class CanonicalToTruffleLowerer {
         throw new UnsupportedOperationException(
                 "Canonical expression is not supported by this Truffle lowering slice: "
                         + expression.getClass().getSimpleName());
+    }
+
+    private ProtosExpressionNode lowerBasicMatch(CanonicalMatch match) {
+        ProtosMatchNode.ArmNode[] arms =
+                match.arms().stream()
+                        .map(this::lowerBasicMatchArm)
+                        .toArray(ProtosMatchNode.ArmNode[]::new);
+        return new ProtosMatchNode(match.span(), lower(match.subject()), arms);
+    }
+
+    private ProtosMatchNode.ArmNode lowerBasicMatchArm(CanonicalMatch.Arm arm) {
+        if (arm.guard().isPresent()) {
+            throw new UnsupportedOperationException(
+                    "I038-D1 does not yet lower guarded match arms");
+        }
+
+        CanonicalMatchPattern pattern = arm.pattern();
+        ProtosExpressionNode matcher = null;
+        ProtosMatchNode.ArmNode.Kind kind;
+        java.util.List<CanonicalParameter> parameters;
+
+        if (pattern instanceof CanonicalMatchPattern.Wildcard) {
+            kind = ProtosMatchNode.ArmNode.Kind.WILDCARD;
+            parameters = java.util.List.of();
+        } else if (pattern instanceof CanonicalMatchPattern.Binder binder) {
+            kind = ProtosMatchNode.ArmNode.Kind.BINDER;
+            parameters =
+                    java.util.List.of(
+                            new CanonicalParameter(
+                                    binder.name(),
+                                    java.util.Optional.empty(),
+                                    false,
+                                    binder.span()));
+        } else if (pattern instanceof CanonicalMatchPattern.Value value) {
+            kind = ProtosMatchNode.ArmNode.Kind.VALUE;
+            matcher = lower(value.matcher());
+            parameters = parametersForValuePattern(value);
+        } else {
+            throw new UnsupportedOperationException(
+                    "I038-D1 does not yet lower "
+                            + pattern.getClass().getSimpleName()
+                            + " match patterns");
+        }
+
+        CanonicalClosure bodyDefinition =
+                new CanonicalClosure(parameters, arm.body(), arm.body().span());
+        ProtosExpressionNode body =
+                new ProtosClosureLiteralNode(
+                        arm.body().span(),
+                        bodyDefinition,
+                        lowerClosurePlan(bodyDefinition));
+        return new ProtosMatchNode.ArmNode(kind, matcher, body);
+    }
+
+    private java.util.List<CanonicalParameter> parametersForValuePattern(
+            CanonicalMatchPattern.Value value) {
+        if (value.captureInterface().isEmpty()) {
+            return java.util.List.of();
+        }
+
+        CanonicalMatchPattern.CaptureInterface capture =
+                value.captureInterface().orElseThrow();
+        java.util.ArrayList<CanonicalParameter> parameters =
+                new java.util.ArrayList<>(
+                        capture.requiredNames().size()
+                                + (capture.restName().isPresent() ? 1 : 0));
+        for (String name : capture.requiredNames()) {
+            parameters.add(
+                    new CanonicalParameter(
+                            name,
+                            java.util.Optional.empty(),
+                            false,
+                            capture.span()));
+        }
+        capture.restName()
+                .ifPresent(
+                        name ->
+                                parameters.add(
+                                        new CanonicalParameter(
+                                                name,
+                                                java.util.Optional.empty(),
+                                                true,
+                                                capture.span())));
+        return java.util.List.copyOf(parameters);
     }
 
     public ProtosClosureExecutionPlan lowerClosurePlan(CanonicalClosure closure) {

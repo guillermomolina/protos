@@ -138,6 +138,13 @@ equality/nonidentity-distinct-objects.protos	boolean	true
 equality/canonical-null-booleans-identity.protos	boolean	true
 equality/invalid-custom-equality-default-inequality-error.protos	error	-
 equality/object-match-dynamic-equality-exact-once.protos	boolean	true
+matching/value-order-subject-matcher-once.protos	boolean	true
+matching/binder-wildcard.protos	boolean	true
+matching/opaque-captures-fixed-rest.protos	boolean	true
+matching/no-match-error.protos	error	-
+matching/invalid-outcome-error.protos	error	-
+matching/empty-capture-array-error.protos	error	-
+matching/capture-arity-no-retry-error.protos	error	-
 collections/map-replacement-keeps-size.protos	integer	2
 collections/map-remove-and-reinsert.protos	integer	3
 collections/identity-map-distinct-objects.protos	integer	2
