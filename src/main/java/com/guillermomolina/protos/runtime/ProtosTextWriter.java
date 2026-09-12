@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.execution.ProtosInvocation;
+import com.guillermomolina.protos.execution.ProtosTextWriterCPrimeExecution;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -65,6 +66,30 @@ public final class ProtosTextWriter {
 
     public ProtosFutureValue writeText(
             ProtosActivation activation, String text, boolean appendLf) {
+        return enqueueWrite(
+                activation,
+                text,
+                appendLf,
+                null);
+    }
+
+    public ProtosFutureValue writeTextForCPrimeRuntime(
+            ProtosActivation activation,
+            String text,
+            boolean appendLf,
+            ProtosTextWriterCPrimeExecution.Plan plan) {
+        return enqueueWrite(
+                activation,
+                text,
+                appendLf,
+                Objects.requireNonNull(plan, "plan"));
+    }
+
+    private ProtosFutureValue enqueueWrite(
+            ProtosActivation activation,
+            String text,
+            boolean appendLf,
+            ProtosTextWriterCPrimeExecution.Plan plan) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(text, "text");
         ProtosIoOperation operation = lifecycle.beginOperation(activation);
@@ -75,7 +100,8 @@ public final class ProtosTextWriter {
                         activation,
                         operation,
                         Kind.WRITE,
-                        appendLf ? text + "\n" : text);
+                        appendLf ? text + "\n" : text,
+                        plan);
         operation.onCancellation(() -> cancel(request));
         synchronized (this) { queue.addLast(request); }
         pump();
@@ -83,10 +109,30 @@ public final class ProtosTextWriter {
     }
 
     public ProtosFutureValue flush(ProtosActivation activation) {
+        return enqueueFlush(activation, null);
+    }
+
+    public ProtosFutureValue flushForCPrimeRuntime(
+            ProtosActivation activation,
+            ProtosTextWriterCPrimeExecution.Plan plan) {
+        return enqueueFlush(
+                activation,
+                Objects.requireNonNull(plan, "plan"));
+    }
+
+    private ProtosFutureValue enqueueFlush(
+            ProtosActivation activation,
+            ProtosTextWriterCPrimeExecution.Plan plan) {
         Objects.requireNonNull(activation, "activation");
         ProtosIoOperation operation = lifecycle.beginOperation(activation);
         if (operation.terminal()) return operation.future();
-        Request request = new Request(activation, operation, Kind.FLUSH, null);
+        Request request =
+                new Request(
+                        activation,
+                        operation,
+                        Kind.FLUSH,
+                        null,
+                        plan);
         operation.onCancellation(() -> cancel(request));
         synchronized (this) { queue.addLast(request); }
         pump();
@@ -111,17 +157,20 @@ public final class ProtosTextWriter {
         final ProtosIoOperation operation;
         final Kind kind;
         final String text;
+        final ProtosTextWriterCPrimeExecution.Plan cPrimePlan;
         ProtosFutureValue lower;
 
         Request(
                 ProtosActivation activation,
                 ProtosIoOperation operation,
                 Kind kind,
-                String text) {
+                String text,
+                ProtosTextWriterCPrimeExecution.Plan cPrimePlan) {
             this.activation = activation;
             this.operation = operation;
             this.kind = kind;
             this.text = text;
+            this.cPrimePlan = cPrimePlan;
         }
     }
 
@@ -194,11 +243,20 @@ public final class ProtosTextWriter {
             return;
         }
 
+        ProtosBytesValue payload = bytes(bytes, request.activation);
+        if (request.cPrimePlan != null) {
+            startCPrimeTarget(
+                    request,
+                    "write",
+                    List.of(payload));
+            return;
+        }
+
         ProtosFutureValue lower =
                 invokeFuture(
                         target,
                         "write",
-                        List.of(bytes(bytes, request.activation)),
+                        List.of(payload),
                         request.activation);
         if (lower == null) {
             failCommittedOutput(request, ioError(request.activation));
@@ -206,6 +264,51 @@ public final class ProtosTextWriter {
         }
         synchronized (this) { request.lower = lower; }
         lower.observe(terminal -> lowerWriteTerminal(request, lower, terminal));
+    }
+
+    private void startCPrimeTarget(
+            Request request,
+            String selector,
+            List<?> arguments) {
+        ProtosTextWriterCPrimeExecution.schedule(
+                Objects.requireNonNull(request.cPrimePlan, "request.cPrimePlan"),
+                request.operation,
+                target,
+                selector,
+                arguments,
+                new ProtosTextWriterCPrimeExecution.Completion() {
+                    @Override
+                    public void lowerResolved() {
+                        request.operation.resolve(receiver);
+                        finish(request);
+                    }
+
+                    @Override
+                    public void lowerFailed(ProtosObjectValue error) {
+                        failCommittedOutput(request, error);
+                    }
+
+                    @Override
+                    public void lowerCancelled() {
+                        failCommittedOutput(
+                                request,
+                                ioError(request.activation));
+                    }
+
+                    @Override
+                    public void invalidLowerFuture() {
+                        failCommittedOutput(
+                                request,
+                                ioError(request.activation));
+                    }
+
+                    @Override
+                    public void invocationFailed() {
+                        failCommittedOutput(
+                                request,
+                                ioError(request.activation));
+                    }
+                });
     }
 
     private void lowerWriteTerminal(
@@ -247,6 +350,14 @@ public final class ProtosTextWriter {
         if (!targetFlushable) {
             request.operation.resolve(receiver);
             finish(request);
+            return;
+        }
+
+        if (request.cPrimePlan != null) {
+            startCPrimeTarget(
+                    request,
+                    "flush",
+                    List.of());
             return;
         }
 

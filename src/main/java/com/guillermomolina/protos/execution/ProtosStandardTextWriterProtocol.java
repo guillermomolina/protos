@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosTextWriter;
@@ -114,33 +115,77 @@ public final class ProtosStandardTextWriterProtocol {
             ProtosTextWriter writer,
             ProtosObjectValue wrapper,
             Operation operation) {
-        return ProtosClosureValue.nativeClosure(
-                (activation, supplied) -> {
-                    if (activation.receiver() != wrapper) {
-                        return invalidFuture(activation);
-                    }
-                    return switch (operation) {
-                        case WRITE_TEXT, WRITE_LINE -> {
-                            if (supplied.size() != 1
-                                    || !(supplied.get(0)
-                                            instanceof ProtosStringValue text)) {
-                                yield invalidFuture(activation);
-                            }
-                            yield writer.writeText(
-                                    activation,
-                                    text.value(),
-                                    operation == Operation.WRITE_LINE);
-                        }
-                        case FLUSH ->
-                                supplied.isEmpty()
-                                        ? writer.flush(activation)
-                                        : invalidFuture(activation);
-                        case CLOSE ->
-                                supplied.isEmpty()
-                                        ? writer.close(activation)
-                                        : invalidFuture(activation);
-                    };
-                });
+        ProtosNativeClosureBody ordinary =
+                (activation, supplied) ->
+                        invokeOperation(
+                                writer,
+                                wrapper,
+                                operation,
+                                activation,
+                                supplied,
+                                false);
+        if (operation == Operation.CLOSE) {
+            return ProtosClosureValue.nativeClosure(ordinary);
+        }
+        ProtosNativeClosureBody cPrime =
+                (activation, supplied) ->
+                        invokeOperation(
+                                writer,
+                                wrapper,
+                                operation,
+                                activation,
+                                supplied,
+                                true);
+        return ProtosClosureValue.suspensionCapableNativeClosure(
+                ordinary,
+                cPrime);
+    }
+
+    private static Object invokeOperation(
+            ProtosTextWriter writer,
+            ProtosObjectValue wrapper,
+            Operation operation,
+            ProtosActivation activation,
+            List<?> supplied,
+            boolean cPrime) {
+        if (activation.receiver() != wrapper) {
+            return invalidFuture(activation);
+        }
+        return switch (operation) {
+            case WRITE_TEXT, WRITE_LINE -> {
+                if (supplied.size() != 1
+                        || !(supplied.get(0)
+                                instanceof ProtosStringValue text)) {
+                    yield invalidFuture(activation);
+                }
+                if (cPrime || ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+                    yield writer.writeTextForCPrimeRuntime(
+                            activation,
+                            text.value(),
+                            operation == Operation.WRITE_LINE,
+                            ProtosTextWriterCPrimeExecution.planForEnteredContext());
+                }
+                yield writer.writeText(
+                        activation,
+                        text.value(),
+                        operation == Operation.WRITE_LINE);
+            }
+            case FLUSH -> {
+                if (!supplied.isEmpty()) {
+                    yield invalidFuture(activation);
+                }
+                if (cPrime || ProtosLanguageContext.currentIfEnteredForRuntime() != null) {
+                    yield writer.flushForCPrimeRuntime(
+                            activation,
+                            ProtosTextWriterCPrimeExecution.planForEnteredContext());
+                }
+                yield writer.flush(activation);
+            }
+            case CLOSE ->
+                    supplied.isEmpty()
+                            ? writer.close(activation)
+                            : invalidFuture(activation);
+        };
     }
 
     private static boolean hasCallableCapability(

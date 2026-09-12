@@ -44,6 +44,7 @@ final class ProtosLanguageContext {
      */
     private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
             sharedBytecodeExecutionPlans = new ConcurrentHashMap<>();
+    private volatile ProtosTextWriterCPrimeExecution.Plan textWriterCPrimePlan;
 
     ProtosLanguageContext(ProtosLanguage language, TruffleLanguage.Env env) {
         this.language = Objects.requireNonNull(language, "language");
@@ -61,6 +62,20 @@ final class ProtosLanguageContext {
             return null;
         }
         return REFERENCE.get(null);
+    }
+
+    ProtosTextWriterCPrimeExecution.Plan textWriterCPrimePlanForRuntime() {
+        ProtosTextWriterCPrimeExecution.Plan existing = textWriterCPrimePlan;
+        if (existing != null) {
+            return existing;
+        }
+        synchronized (this) {
+            if (textWriterCPrimePlan == null) {
+                textWriterCPrimePlan =
+                        ProtosTextWriterCPrimeExecution.createPlan(language);
+            }
+            return textWriterCPrimePlan;
+        }
     }
 
     ProtosClosureExecutionPlan executionPlanForEnteredClosure(

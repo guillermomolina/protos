@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosIoOperation;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -3868,6 +3869,83 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 selected.home(),
                 supplied,
                 caller);
+    }
+
+    @Operation
+    public static final class PrepareTextWriterTargetCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                ProtosTextWriterCPrimeExecution.CallState state,
+                ProtosActivation activation) {
+            return prepareSend(
+                    state.target(),
+                    state.selector(),
+                    activation,
+                    state.arguments());
+        }
+    }
+
+    @Operation
+    public static final class WrapTextWriterTargetInvocation {
+        @Specialization
+        public static Object perform(
+                ProtosTextWriterCPrimeExecution.CallState state,
+                Object result) {
+            return state.invocationSucceeded(result);
+        }
+    }
+
+    @Operation
+    public static final class TextWriterTargetInvocationFailed {
+        @Specialization
+        public static Object perform(
+                ProtosTextWriterCPrimeExecution.CallState state) {
+            return state.invocationFailed();
+        }
+    }
+
+    @Operation
+    public static final class AwaitTextWriterTargetFuture {
+        @Specialization
+        public static Object perform(
+                ProtosTextWriterCPrimeExecution.CallState state,
+                Object invocation) {
+            if (!(invocation
+                    instanceof ProtosTextWriterCPrimeExecution.TargetInvocation targetInvocation)) {
+                throw new IllegalStateException(
+                        "TextWriter C-prime invocation produced an invalid carrier");
+            }
+            return state.awaitTargetFuture(targetInvocation);
+        }
+    }
+
+    @Operation
+    public static final class ResumeTextWriterTargetFutureWait {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                Object yielded,
+                Object resumeValue) {
+            if (!(yielded instanceof ProtosIoOperationSuspension suspension)) {
+                throw new IllegalStateException(
+                        "TextWriter lower-Future wait yielded an invalid carrier");
+            }
+            ProtosIoOperation operation =
+                    activation.deferredCPrimeOperationForRuntime()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "TextWriter lower-Future wait requires an operation-owned activation"));
+            if (suspension.operation() != operation) {
+                throw new IllegalStateException(
+                        "TextWriter lower-Future wait belongs to another operation");
+            }
+            if (resumeValue != ProtosNullValue.INSTANCE) {
+                throw new IllegalStateException(
+                        "TextWriter lower-Future wait received unsupported resume transport");
+            }
+            return suspension.resume();
+        }
     }
 
     @Operation

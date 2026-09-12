@@ -17,6 +17,8 @@ final class ProtosBytecodeIoOperationExecution
     private final ProtosIoOperation operation;
     private final CallTarget target;
     private final ProtosActivation activation;
+    private final Object entryState;
+    private final boolean statefulEntry;
     private final BiConsumer<ProtosIoOperation, Object> completion;
     private final BiConsumer<ProtosIoOperation, ProtosObjectValue> failure;
     private final Object stateLock = new Object();
@@ -30,11 +32,15 @@ final class ProtosBytecodeIoOperationExecution
             ProtosIoOperation operation,
             CallTarget target,
             ProtosActivation activation,
+            Object entryState,
+            boolean statefulEntry,
             BiConsumer<ProtosIoOperation, Object> completion,
             BiConsumer<ProtosIoOperation, ProtosObjectValue> failure) {
         this.operation = Objects.requireNonNull(operation, "operation");
         this.target = Objects.requireNonNull(target, "target");
         this.activation = Objects.requireNonNull(activation, "activation");
+        this.entryState = entryState;
+        this.statefulEntry = statefulEntry;
         this.completion = Objects.requireNonNull(completion, "completion");
         this.failure = Objects.requireNonNull(failure, "failure");
         if (activation.task().isPresent()) {
@@ -57,9 +63,50 @@ final class ProtosBytecodeIoOperationExecution
             ProtosActivation activation,
             BiConsumer<ProtosIoOperation, Object> completion,
             BiConsumer<ProtosIoOperation, ProtosObjectValue> failure) {
+        installAndScheduleInternal(
+                operation,
+                target,
+                activation,
+                null,
+                false,
+                completion,
+                failure);
+    }
+
+    static void installAndScheduleWithEntryState(
+            ProtosIoOperation operation,
+            CallTarget target,
+            ProtosActivation activation,
+            Object entryState,
+            BiConsumer<ProtosIoOperation, Object> completion,
+            BiConsumer<ProtosIoOperation, ProtosObjectValue> failure) {
+        installAndScheduleInternal(
+                operation,
+                target,
+                activation,
+                Objects.requireNonNull(entryState, "entryState"),
+                true,
+                completion,
+                failure);
+    }
+
+    private static void installAndScheduleInternal(
+            ProtosIoOperation operation,
+            CallTarget target,
+            ProtosActivation activation,
+            Object entryState,
+            boolean statefulEntry,
+            BiConsumer<ProtosIoOperation, Object> completion,
+            BiConsumer<ProtosIoOperation, ProtosObjectValue> failure) {
         ProtosBytecodeIoOperationExecution execution =
                 new ProtosBytecodeIoOperationExecution(
-                        operation, target, activation, completion, failure);
+                        operation,
+                        target,
+                        activation,
+                        entryState,
+                        statefulEntry,
+                        completion,
+                        failure);
         operation.installDeferredCPrimeExecutionForRuntime(execution);
         if (!operation.requestDeferredCPrimeRunForRuntime()) {
             throw new IllegalStateException(
@@ -103,7 +150,9 @@ final class ProtosBytecodeIoOperationExecution
             Object outcome;
             if (initial) {
                 outcome = Objects.requireNonNull(
-                        target.call(activation),
+                        statefulEntry
+                                ? target.call(activation, entryState)
+                                : target.call(activation),
                         "operation-owned C-prime entry returned null");
             } else {
                 resumeSuspension.releaseWait();

@@ -20,6 +20,7 @@ import com.guillermomolina.protos.runtime.*;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Supplier;
 
 /** Ordinary Core Future protocol plus the standard Object.future Closure behavior. */
 public final class ProtosStandardFutureProtocol {
@@ -131,16 +132,34 @@ public final class ProtosStandardFutureProtocol {
             ProtosActivation activation,
             ProtosFutureValue observed,
             ProtosIoOperation operation) {
+        return awaitFutureForIoOperationContinuationForRuntime(
+                observed,
+                operation,
+                () -> observed.observeValue(activation));
+    }
+
+    static Object awaitFutureForIoOperationContinuationForRuntime(
+            ProtosFutureValue observed,
+            ProtosIoOperation operation,
+            Supplier<Object> terminalProjection) {
+        Objects.requireNonNull(observed, "observed");
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(terminalProjection, "terminalProjection");
         FutureOperationDependency dependency =
                 new FutureOperationDependency(observed, operation);
         observed.observe(dependency);
         if (dependency.isReady()) {
-            return observed.observeValue(activation);
+            return Objects.requireNonNull(
+                    terminalProjection.get(),
+                    "operation-owned Future terminal projection returned null");
         }
         return ProtosIoOperationSuspension.pending(
                 operation,
                 dependency,
-                () -> observed.observeValue(activation));
+                () ->
+                        Objects.requireNonNull(
+                                terminalProjection.get(),
+                                "operation-owned Future terminal projection returned null"));
     }
 
     private static final class FutureOperationDependency
