@@ -35,6 +35,7 @@ public final class ProtosActivation {
     private final ProtosModuleKey currentModuleKey;
     private final ProtosActorExecutionDomain executionDomain;
     private ProtosTask task;
+    private ProtosIoOperation deferredCPrimeOperation;
     private ProtosDynamicControlState directDynamicControlState;
 
     public ProtosActivation(
@@ -300,9 +301,17 @@ public final class ProtosActivation {
         return Optional.ofNullable(task);
     }
 
+    /** PLAT029 private owner for non-Task deferred C-prime operation execution. */
+    public Optional<ProtosIoOperation> deferredCPrimeOperationForRuntime() {
+        return Optional.ofNullable(deferredCPrimeOperation);
+    }
+
     public synchronized ProtosDynamicControlState dynamicControlState() {
         if (task != null) {
             return task.dynamicControlState();
+        }
+        if (deferredCPrimeOperation != null) {
+            return deferredCPrimeOperation.deferredCPrimeDynamicControlStateForRuntime();
         }
         if (directDynamicControlState == null) {
             directDynamicControlState = new ProtosDynamicControlState();
@@ -314,11 +323,20 @@ public final class ProtosActivation {
         if (task != null) {
             return task.dynamicControlStateIfPresent();
         }
+        if (deferredCPrimeOperation != null) {
+            return deferredCPrimeOperation.deferredCPrimeDynamicControlStateIfPresentForRuntime();
+        }
         return Optional.ofNullable(directDynamicControlState);
     }
 
     public void inheritDynamicControlState(ProtosActivation enclosing) {
         Objects.requireNonNull(enclosing, "enclosing");
+        Optional<ProtosIoOperation> inheritedOperation =
+                enclosing.deferredCPrimeOperationForRuntime();
+        if (inheritedOperation.isPresent()) {
+            attachDeferredCPrimeOperationForRuntime(inheritedOperation.orElseThrow());
+            return;
+        }
         Optional<ProtosDynamicControlState> inherited =
                 enclosing.dynamicControlStateIfPresent();
         if (inherited.isEmpty()) {
@@ -340,10 +358,36 @@ public final class ProtosActivation {
     /** Attaches this activation to exactly one Actor-local task. */
     public void attachTask(ProtosTask task) {
         Objects.requireNonNull(task, "task");
+        if (deferredCPrimeOperation != null) {
+            throw new IllegalStateException(
+                    "operation-owned C-prime activation cannot acquire Task identity");
+        }
         if (this.task != null && this.task != task) {
             throw new IllegalStateException("activation already belongs to another task");
         }
         this.task = task;
+    }
+
+    /** Attaches this activation to exactly one non-Task PLAT029 I/O operation. */
+    public void attachDeferredCPrimeOperationForRuntime(ProtosIoOperation operation) {
+        Objects.requireNonNull(operation, "operation");
+        if (task != null) {
+            throw new IllegalStateException(
+                    "Task-owned activation cannot acquire operation C-prime identity");
+        }
+        if (operation.origin().executionDomain() != executionDomain) {
+            throw new IllegalArgumentException(
+                    "deferred C-prime operation belongs to another Actor execution domain");
+        }
+        if (deferredCPrimeOperation != null && deferredCPrimeOperation != operation) {
+            throw new IllegalStateException(
+                    "activation already belongs to another deferred C-prime operation");
+        }
+        if (directDynamicControlState != null) {
+            throw new IllegalStateException(
+                    "direct dynamic-control activation cannot become operation-owned");
+        }
+        deferredCPrimeOperation = operation;
     }
 
     public Optional<ProtosArrayValue> arguments() {

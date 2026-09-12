@@ -965,7 +965,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw new IllegalStateException(
                         "structured control native must execute through Bytecode control operations");
             }
-            if (activation.task().isPresent()
+            if ((activation.task().isPresent()
+                            || activation.deferredCPrimeOperationForRuntime().isPresent())
                     && nativeBody
                             instanceof ProtosSuspensionCapableNativeClosureBody
                                     suspensionCapable) {
@@ -3783,7 +3784,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * then continue to see only ordinary nested ContinuationResults.
              */
             return value instanceof ContinuationResult
-                    || value instanceof ProtosNativeSuspension;
+                    || value instanceof ProtosNativeSuspension
+                    || value instanceof ProtosIoOperationSuspension;
         }
     }
 
@@ -3815,6 +3817,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             "C-prime cancellation resume requires UNWINDING phase");
                 }
                 throw cancellation;
+            }
+            return suspension.resume();
+        }
+
+        @Specialization
+        public static Object ioOperationSuspension(
+                PreparedClosureCall prepared,
+                ProtosIoOperationSuspension suspension,
+                Object resumeValue) {
+            if (prepared.activation().task().isPresent()) {
+                throw new IllegalStateException(
+                        "operation-owned suspension cannot resume through a Task activation");
+            }
+            if (prepared.activation().deferredCPrimeOperationForRuntime().orElse(null)
+                    != suspension.operation()) {
+                throw new IllegalStateException(
+                        "operation-owned suspension resumed through another I/O operation");
+            }
+            if (resumeValue != ProtosNullValue.INSTANCE) {
+                throw new IllegalStateException(
+                        "operation-owned suspension received an unsupported resume transport");
             }
             return suspension.resume();
         }

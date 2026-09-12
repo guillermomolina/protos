@@ -12,6 +12,9 @@ public final class ProtosIoOperation {
     @FunctionalInterface
     public interface DeferredCPrimeExecutionForRuntime {
         void runSegment(ProtosIoOperation operation);
+
+        /** Releases any retained C-prime/dependency state after operation terminality. */
+        default void operationTerminalized(ProtosIoOperation operation) {}
     }
 
     enum Phase { UNCOMMITTED, ATTEMPTING_FIRST_EFFECT, COMMITTED, TERMINAL }
@@ -31,6 +34,8 @@ public final class ProtosIoOperation {
     private boolean deferredCPrimeQueued;
     private boolean deferredCPrimeRunning;
     private boolean deferredCPrimeRescheduleRequested;
+    private ProtosActivation deferredCPrimeActivation;
+    private ProtosDynamicControlState deferredCPrimeDynamicControlState;
 
     ProtosIoOperation(ProtosIoLifecycle lifecycle, ProtosActivation origin, ProtosFutureValue future) {
         this.lifecycle=Objects.requireNonNull(lifecycle,"lifecycle");
@@ -42,6 +47,57 @@ public final class ProtosIoOperation {
 
     public ProtosFutureValue future() { return future; }
     public ProtosActivation origin() { return origin; }
+
+    /**
+     * Returns the private non-Task caller activation for this operation-owned C-prime execution.
+     * It owns a fresh internal execution Context while sharing the origin Actor/module/Prelude
+     * authority; it never copies origin Task identity or caller lexical activation state.
+     */
+    public ProtosActivation deferredCPrimeActivationForRuntime() {
+        synchronized (deferredCPrimeLock) {
+            if (terminal()) {
+                throw new IllegalStateException(
+                        "terminal I/O operation has no deferred C-prime activation");
+            }
+            if (deferredCPrimeActivation == null) {
+                ProtosPrelude prelude =
+                        origin.prelude()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "deferred I/O C-prime execution requires an owning Core prelude"));
+                ProtosActivation created =
+                        ProtosActivation.withPreludeAndModuleState(
+                                prelude.newExecutionContext(),
+                                java.util.List.of(),
+                                origin.receiver(),
+                                prelude,
+                                origin.actorModuleState(),
+                                origin.currentModuleKey().orElse(null),
+                                origin.executionDomain());
+                created.attachDeferredCPrimeOperationForRuntime(this);
+                deferredCPrimeActivation = created;
+            }
+            return deferredCPrimeActivation;
+        }
+    }
+
+    ProtosDynamicControlState deferredCPrimeDynamicControlStateForRuntime() {
+        synchronized (deferredCPrimeLock) {
+            if (deferredCPrimeDynamicControlState == null) {
+                deferredCPrimeDynamicControlState = new ProtosDynamicControlState();
+            }
+            return deferredCPrimeDynamicControlState;
+        }
+    }
+
+    java.util.Optional<ProtosDynamicControlState>
+            deferredCPrimeDynamicControlStateIfPresentForRuntime() {
+        synchronized (deferredCPrimeLock) {
+            return java.util.Optional.ofNullable(deferredCPrimeDynamicControlState);
+        }
+    }
+
     public boolean committed() { synchronized(lifecycle) { return phase == Phase.COMMITTED; } }
     public boolean terminal() { synchronized(lifecycle) { return phase == Phase.TERMINAL; } }
 
@@ -148,6 +204,8 @@ public final class ProtosIoOperation {
                     deferredCPrimeRescheduleRequested = false;
                     if (terminal()) {
                         deferredCPrimeExecution = null;
+                        deferredCPrimeActivation = null;
+                        deferredCPrimeDynamicControlState = null;
                     }
                 }
             }
@@ -345,12 +403,19 @@ public final class ProtosIoOperation {
     }
 
     private void finishTerminal() {
+        DeferredCPrimeExecutionForRuntime terminalizedExecution;
         synchronized (deferredCPrimeLock) {
             deferredCPrimeQueued = false;
             deferredCPrimeRescheduleRequested = false;
+            terminalizedExecution = deferredCPrimeExecution;
             if (!deferredCPrimeRunning) {
                 deferredCPrimeExecution = null;
+                deferredCPrimeActivation = null;
+                deferredCPrimeDynamicControlState = null;
             }
+        }
+        if (terminalizedExecution != null) {
+            terminalizedExecution.operationTerminalized(this);
         }
         origin.executionDomain().terminalActorIoOperation(this);
         lifecycle.operationTerminal(this);
