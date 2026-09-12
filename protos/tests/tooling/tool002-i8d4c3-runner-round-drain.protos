@@ -1,0 +1,511 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the LICENSE.
+
+
+Manifest: import("self:Manifest")
+Runner: import("self:Runner")
+Catalog: import("self:ResourceCatalog")
+
+completedObservation: (value) => {
+    {
+        state: "completed"
+        value: value
+        error: null
+    }
+}
+
+completion: (guestObservation, infrastructureFailed, capacitySafe, message = null) => {
+    failures: Array()
+    (message === null).ifFalse(() => {
+        failures = Array(message)
+    })
+
+    {
+        guestObservation: guestObservation
+        infrastructureFailed: infrastructureFailed
+        infrastructureFailures: failures
+        capacitySafe: capacitySafe
+    }
+}
+
+baseSpec: (path, expectation, expected) => {
+    Manifest.caseSpec(Array(path, expectation, expected))
+}
+
+withExclusive: (spec, key) => {
+    Manifest.caseSpecWithRequirements(
+        spec,
+        Array(Manifest.requirement(key, "exclusive", null))
+    )
+}
+
+healthyFirst: withExclusive(
+    baseSpec("i8d4c3/healthy-first.protos", "integer", "10"),
+    "gpu"
+)
+healthyFuture: withExclusive(
+    baseSpec("i8d4c3/healthy-future.protos", "future-integer", "20"),
+    "db/integration"
+)
+healthyFree: baseSpec(
+    "i8d4c3/healthy-free.protos",
+    "integer",
+    "30"
+)
+
+healthyPlan: Manifest.frozenTuple(
+    Manifest.frozenTuple(
+        healthyFirst,
+        healthyFuture,
+        healthyFree
+    )
+)
+
+failedFirst: withExclusive(
+    baseSpec("i8d4c3/failed-first.protos", "integer", "10"),
+    "gpu"
+)
+failedBlocked: withExclusive(
+    baseSpec("i8d4c3/failed-blocked.protos", "integer", "20"),
+    "gpu"
+)
+failedInfrastructure: withExclusive(
+    baseSpec("i8d4c3/failed-infrastructure.protos", "integer", "30"),
+    "db/integration"
+)
+failedLaterFree: baseSpec(
+    "i8d4c3/failed-later-free.protos",
+    "integer",
+    "40"
+)
+
+failedPlan: Manifest.frozenTuple(
+    Manifest.frozenTuple(
+        failedFirst,
+        failedBlocked,
+        failedInfrastructure,
+        failedLaterFree
+    )
+)
+
+catalog: Catalog.parse(
+    "resource-catalog-version = 1\n" +
+    "[[resource]]\n" +
+    "key = \"gpu\"\n" +
+    "capacity = 1\n" +
+    "scope = \"placement\"\n" +
+    "provider = \"device/gpu\"\n" +
+    "profile = \"primary\"\n" +
+    "[[resource]]\n" +
+    "key = \"db/integration\"\n" +
+    "capacity = 1\n" +
+    "scope = \"run\"\n" +
+    "provider = \"service/db\"\n"
+)
+
+sourceLoader: (spec) => {
+    id: Manifest.caseId(spec)
+    source: null
+
+    (id === "i8d4c3/healthy-first.protos").ifTrue(() => { source = "10" })
+    (id === "i8d4c3/healthy-future.protos").ifTrue(() => { source = "20" })
+    (id === "i8d4c3/healthy-free.protos").ifTrue(() => { source = "30" })
+
+    (id === "i8d4c3/failed-first.protos").ifTrue(() => { source = "10" })
+    (id === "i8d4c3/failed-blocked.protos").ifTrue(() => { source = "20" })
+    (id === "i8d4c3/failed-infrastructure.protos").ifTrue(() => { source = "30" })
+    (id === "i8d4c3/failed-later-free.protos").ifTrue(() => { source = "40" })
+
+    (source === null).ifTrue(() => { Error().signal() })
+    source
+}
+
+admissionOrder: Array()
+bindingProjectionPassed: true
+failureMode: "none"
+
+bindingRowMatches: (
+    bindings,
+    key,
+    mode,
+    units,
+    scope,
+    provider,
+    profile
+) => {
+    passed: bindings.size() == 1
+
+    passed.ifTrue(() => {
+        row: bindings[0]
+        passed = row.size() == 6
+        passed.ifTrue(() => { passed = row[0] === key })
+        passed.ifTrue(() => { passed = row[1] === mode })
+        passed.ifTrue(() => { passed = row[2] === units })
+        passed.ifTrue(() => { passed = row[3] === scope })
+        passed.ifTrue(() => { passed = row[4] === provider })
+        passed.ifTrue(() => { passed = row[5] === profile })
+    })
+
+    passed
+}
+
+ordinaryExecutorAsync: (source) => {
+    admissionOrder = Array(...admissionOrder, "ordinary:" + source)
+
+    value: null
+    (source === "30").ifTrue(() => { value = 30 })
+    (source === "40").ifTrue(() => { value = 40 })
+    (value === null).ifTrue(() => { Error().signal() })
+
+    (() => { completedObservation(value) }).future()
+}
+
+ordinaryInspectorAsync: (source, inspectorSource) => {
+    admissionOrder = Array(...admissionOrder, "ordinary-inspect:" + source)
+    (() => { completedObservation(true) }).future()
+}
+
+resourceExecutorAsync: (source, bindings) => {
+    admissionOrder = Array(...admissionOrder, "resource:" + source)
+
+    (source === "10").ifTrue(() => {
+        bindingProjectionPassed =
+            bindingProjectionPassed &&
+            bindingRowMatches(
+                bindings,
+                "gpu",
+                "exclusive",
+                null,
+                "placement",
+                "device/gpu",
+                "primary"
+            )
+    })
+
+    (source === "30").ifTrue(() => {
+        bindingProjectionPassed =
+            bindingProjectionPassed &&
+            bindingRowMatches(
+                bindings,
+                "db/integration",
+                "exclusive",
+                null,
+                "run",
+                "service/db",
+                null
+            )
+    })
+
+    result: null
+
+    (source === "10").ifTrue(() => {
+        result = completion(
+            completedObservation(10),
+            false,
+            true
+        )
+    })
+
+    (source === "30").ifTrue(() => {
+        (failureMode === "safe").ifTrue(() => {
+            result = completion(
+                null,
+                true,
+                true,
+                "provider-unavailable"
+            )
+        })
+
+        (failureMode === "unsafe").ifTrue(() => {
+            result = completion(
+                completedObservation(30),
+                true,
+                false,
+                "provider-cleanup-failed"
+            )
+        })
+    })
+
+    (result === null).ifTrue(() => { Error().signal() })
+    (() => { result }).future()
+}
+
+resourceInspectorAsync: (source, inspectorSource, bindings) => {
+    admissionOrder = Array(...admissionOrder, "resource-inspect:" + source)
+
+    bindingProjectionPassed =
+        bindingProjectionPassed &&
+        bindingRowMatches(
+            bindings,
+            "db/integration",
+            "exclusive",
+            null,
+            "run",
+            "service/db",
+            null
+        )
+
+    (source === "20").ifFalse(() => { Error().signal() })
+
+    // C2 owns live-inspection mechanics. C3 proves Runner routes this expectation
+    // through the resourceful inspection callback and consumes its D108 completion.
+    (() => {
+        completion(
+            completedObservation(true),
+            false,
+            true
+        )
+    }).future()
+}
+
+caseResultsInOrder: (caseResults, expectedIds) => {
+    ordered: caseResults.size() == expectedIds.size()
+
+    index: 0
+    (() => ordered && (index < expectedIds.size())).while(() => {
+        ordered =
+            Manifest.caseId(
+                Runner.caseRunSpec(caseResults[index])
+            ) === expectedIds[index]
+        index = index + 1
+    })
+
+    ordered
+}
+
+cutoverInOrder: (cutoverCases, expectedIds) => {
+    ordered: cutoverCases.size() == expectedIds.size()
+
+    index: 0
+    (() => ordered && (index < expectedIds.size())).while(() => {
+        ordered =
+            Manifest.caseId(cutoverCases[index]) === expectedIds[index]
+        index = index + 1
+    })
+
+    ordered
+}
+
+// Healthy mixed window:
+// - resourceful ordinary -> resourceExecutionAsync shape
+// - resourceful Future -> resourceExecutionInspectAsync shape
+// - resource-free -> unchanged H fast path
+admissionOrder = Array()
+bindingProjectionPassed = true
+failureMode = "none"
+
+healthyEnvelope: Runner.runD108WithResourcesWithLoader(
+    healthyPlan,
+    catalog,
+    sourceLoader,
+    ordinaryExecutorAsync,
+    ordinaryInspectorAsync,
+    resourceExecutorAsync,
+    resourceInspectorAsync,
+    3
+)
+
+healthyPassed: Runner.d108RunInfrastructureFailed(healthyEnvelope).not()
+healthyPassed =
+    healthyPassed &&
+    (Runner.d108RunRetainedReservationCount(healthyEnvelope) == 0)
+healthyPassed =
+    healthyPassed &&
+    (Runner.d108RunInfrastructureAttempts(healthyEnvelope).size() == 0)
+healthyPassed =
+    healthyPassed &&
+    (Runner.d108RunCutoverCases(healthyEnvelope).size() == 0)
+healthyPassed = healthyPassed && bindingProjectionPassed
+healthyPassed.ifTrue(() => {
+    healthyRun: Runner.d108RunHealthyRun(healthyEnvelope)
+    healthyPassed = Runner.runSelectedCount(healthyRun) == 3
+    healthyPassed =
+        healthyPassed &&
+        (Runner.runPassedCount(healthyRun) == 3)
+    healthyPassed =
+        healthyPassed &&
+        (Runner.runSkippedCount(healthyRun) == 0)
+    healthyPassed =
+        healthyPassed &&
+        caseResultsInOrder(
+            Runner.runCaseResults(healthyRun),
+            Array(
+                "i8d4c3/healthy-first.protos",
+                "i8d4c3/healthy-future.protos",
+                "i8d4c3/healthy-free.protos"
+            )
+        )
+})
+healthyPassed =
+    healthyPassed &&
+    (admissionOrder.size() == 3)
+healthyPassed.ifTrue(() => {
+    healthyPassed = admissionOrder[0] === "resource:10"
+})
+healthyPassed.ifTrue(() => {
+    healthyPassed = admissionOrder[1] === "resource-inspect:20"
+})
+healthyPassed.ifTrue(() => {
+    healthyPassed = admissionOrder[2] === "ordinary:30"
+})
+
+// SAFE infrastructure failure:
+// first(gpu) and third(db) admit in the first fixed H window;
+// second(gpu) is blocked and fourth(resource-free) belongs to the next window.
+// The db provisioning failure has no guest observation but capacity is SAFE.
+// C3 must drain both admitted attempts, release both reservations, preserve only
+// first's guest CaseRun, never rescan second, never start fourth, and not fabricate
+// a guest failure for third.
+admissionOrder = Array()
+bindingProjectionPassed = true
+failureMode = "safe"
+
+safeEnvelope: Runner.runD108WithResourcesWithLoader(
+    failedPlan,
+    catalog,
+    sourceLoader,
+    ordinaryExecutorAsync,
+    ordinaryInspectorAsync,
+    resourceExecutorAsync,
+    resourceInspectorAsync,
+    3
+)
+
+safePassed: Runner.d108RunInfrastructureFailed(safeEnvelope)
+safePassed =
+    safePassed &&
+    (Runner.d108RunRetainedReservationCount(safeEnvelope) == 0)
+safePassed = safePassed && bindingProjectionPassed
+safePassed =
+    safePassed &&
+    caseResultsInOrder(
+        Runner.d108RunCaseResults(safeEnvelope),
+        Array("i8d4c3/failed-first.protos")
+    )
+safePassed =
+    safePassed &&
+    cutoverInOrder(
+        Runner.d108RunCutoverCases(safeEnvelope),
+        Array(
+            "i8d4c3/failed-blocked.protos",
+            "i8d4c3/failed-later-free.protos"
+        )
+    )
+safePassed =
+    safePassed &&
+    (Runner.d108RunInfrastructureAttempts(safeEnvelope).size() == 1)
+
+safePassed.ifTrue(() => {
+    attempt:
+        Runner.d108RunInfrastructureAttempts(safeEnvelope)[0]
+    safePassed =
+        Manifest.caseId(
+            Runner.d108InfrastructureAttemptSpec(attempt)
+        ) === "i8d4c3/failed-infrastructure.protos"
+    safePassed.ifTrue(() => {
+        completionValue:
+            Runner.d108InfrastructureAttemptCompletion(attempt)
+        safePassed = completionValue.infrastructureFailed
+        safePassed =
+            safePassed &&
+            completionValue.capacitySafe
+        safePassed =
+            safePassed &&
+            (completionValue.guestObservation === null)
+    })
+})
+
+safePassed =
+    safePassed &&
+    (admissionOrder.size() == 2)
+safePassed.ifTrue(() => {
+    safePassed = admissionOrder[0] === "resource:10"
+})
+safePassed.ifTrue(() => {
+    safePassed = admissionOrder[1] === "resource:30"
+})
+
+// UNSAFE cleanup failure:
+// same admission cutover, but third produced a guest success before cleanup failed.
+// Its guest evidence remains a CaseRun in TestPlan order, its infrastructure attempt
+// is retained separately, and one I8B reservation remains held.
+admissionOrder = Array()
+bindingProjectionPassed = true
+failureMode = "unsafe"
+
+unsafeEnvelope: Runner.runD108WithResourcesWithLoader(
+    failedPlan,
+    catalog,
+    sourceLoader,
+    ordinaryExecutorAsync,
+    ordinaryInspectorAsync,
+    resourceExecutorAsync,
+    resourceInspectorAsync,
+    3
+)
+
+unsafePassed: Runner.d108RunInfrastructureFailed(unsafeEnvelope)
+unsafePassed =
+    unsafePassed &&
+    (Runner.d108RunRetainedReservationCount(unsafeEnvelope) == 1)
+unsafePassed = unsafePassed && bindingProjectionPassed
+unsafePassed =
+    unsafePassed &&
+    caseResultsInOrder(
+        Runner.d108RunCaseResults(unsafeEnvelope),
+        Array(
+            "i8d4c3/failed-first.protos",
+            "i8d4c3/failed-infrastructure.protos"
+        )
+    )
+unsafePassed =
+    unsafePassed &&
+    cutoverInOrder(
+        Runner.d108RunCutoverCases(unsafeEnvelope),
+        Array(
+            "i8d4c3/failed-blocked.protos",
+            "i8d4c3/failed-later-free.protos"
+        )
+    )
+unsafePassed =
+    unsafePassed &&
+    (Runner.d108RunInfrastructureAttempts(unsafeEnvelope).size() == 1)
+
+unsafePassed.ifTrue(() => {
+    attempt:
+        Runner.d108RunInfrastructureAttempts(unsafeEnvelope)[0]
+    completionValue:
+        Runner.d108InfrastructureAttemptCompletion(attempt)
+
+    unsafePassed = completionValue.infrastructureFailed
+    unsafePassed =
+        unsafePassed &&
+        completionValue.capacitySafe.not()
+    unsafePassed =
+        unsafePassed &&
+        (completionValue.guestObservation === null).not()
+})
+
+unsafePassed =
+    unsafePassed &&
+    (admissionOrder.size() == 2)
+unsafePassed.ifTrue(() => {
+    unsafePassed = admissionOrder[0] === "resource:10"
+})
+unsafePassed.ifTrue(() => {
+    unsafePassed = admissionOrder[1] === "resource:30"
+})
+
+healthyPassed && safePassed && unsafePassed

@@ -122,3 +122,41 @@ bindRequirements: (requirements, catalog) => {
 bindCase: (spec, catalog) => {
     bindRequirements(Manifest.caseRequirements(spec), catalog)
 }
+
+
+// TOOL002-I8D4C3: exact inert projection from already-bound D077/D097/D098
+// Requirement+CatalogEntry facts to the private C1/C2 host protocol.
+//
+// Each row is:
+//   [key, mode, units-or-null, scope, provider, profile-or-null]
+//
+// No identity is inferred, discovered or renamed here.
+providerRequestBinding: (bindingValue) => {
+    requirementValue:
+        bindingRequirement(bindingValue)
+    entry:
+        bindingCatalogEntry(bindingValue)
+
+    frozenTuple(
+        Manifest.requirementKey(requirementValue),
+        Manifest.requirementMode(requirementValue),
+        Manifest.requirementUnits(requirementValue),
+        ResourceCatalog.entryScope(entry),
+        ResourceCatalog.entryProvider(entry),
+        ResourceCatalog.entryProfile(entry)
+    )
+}
+
+providerRequestSnapshot: (bindings) => {
+    rows: Array()
+
+    bindings.each((bindingValue) => {
+        rows =
+            Array(
+                ...rows,
+                providerRequestBinding(bindingValue)
+            )
+    })
+
+    frozenTuple(...rows)
+}

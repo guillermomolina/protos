@@ -16,6 +16,7 @@
 Manifest: import("self:Manifest")
 ResourceBinding: import("self:ResourceBinding")
 ResourceReservation: import("self:ResourceReservation")
+ResourceCatalog: import("self:ResourceCatalog")
 
 readSource: (spec, filesystem) => {
     file: filesystem.open(Manifest.pathValue(Manifest.casePath(spec))).value()
@@ -1788,6 +1789,518 @@ runBoundedWithResources: (
         (spec) => { readSource(spec, filesystem) },
         executorAsync,
         inspectorExecutorAsync,
+        maxInFlight
+    )
+}
+
+// TOOL002-I8D4C3: private D108 terminal-completion resource scheduler.
+//
+// This is intentionally a new private Runner entrypoint rather than a mutation
+// of I8C's historical runBoundedWithResourcesWithLoader contract. It composes:
+// - H's unchanged resource-free async fast path;
+// - C1 resourceful ordinary callback for non-empty bindings;
+// - C2 resourceful live-inspection callback for non-empty bindings;
+// - I8B release only after D108 reports capacitySafe;
+// - complete admitted-round drain before infrastructure cutover;
+// - no same-window rescan and no later fixed-H window after infrastructure failure.
+//
+// The returned carrier is an internal preservation envelope, not final CLI
+// reporting policy. D108 explicitly leaves final reporting wording/carrier to a
+// later bounded integration.
+//
+// envelope:
+//   [ordered guest CaseRuns,
+//    ordinary unsupported/skipped count,
+//    ordered [CaseSpec, AttemptCompletion] infrastructure evidence,
+//    ordered selected CaseSpecs never admitted because of cutover,
+//    active I8B reservation count retained after terminal drain]
+d108RunEnvelope: (...items) => {
+    items
+}
+
+d108RunCaseResults: (run) => {
+    run[0]
+}
+
+d108RunSkippedCount: (run) => {
+    run[1]
+}
+
+d108RunInfrastructureAttempts: (run) => {
+    run[2]
+}
+
+d108RunCutoverCases: (run) => {
+    run[3]
+}
+
+d108RunRetainedReservationCount: (run) => {
+    run[4]
+}
+
+d108RunInfrastructureFailed: (run) => {
+    d108RunInfrastructureAttempts(run).size() > 0
+}
+
+d108InfrastructureAttempt: (...items) => {
+    items
+}
+
+d108InfrastructureAttemptSpec: (attempt) => {
+    attempt[0]
+}
+
+d108InfrastructureAttemptCompletion: (attempt) => {
+    attempt[1]
+}
+
+// Only a completely healthy D108 envelope may project back into the historical
+// ordinary runTuple. Infrastructure-aborted partial evidence is deliberately
+// not coerced into passed/failed/skipped guest semantics.
+d108RunHealthyRun: (run) => {
+    d108RunInfrastructureFailed(run).ifTrue(() => {
+        policyError()
+    })
+    (d108RunCutoverCases(run).size() == 0).ifFalse(() => {
+        policyError()
+    })
+    (d108RunRetainedReservationCount(run) == 0).ifFalse(() => {
+        policyError()
+    })
+
+    caseResults: d108RunCaseResults(run)
+    passedCount: 0
+    caseResults.each((caseRun) => {
+        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+            passedCount = passedCount + 1
+        })
+    })
+
+    runTuple(
+        caseResults,
+        caseResults.size(),
+        passedCount,
+        d108RunSkippedCount(run)
+    )
+}
+
+d108Scheduled: (...items) => {
+    items
+}
+
+d108ScheduledFuture: (scheduled) => {
+    scheduled[0]
+}
+
+d108ScheduledResourceful: (scheduled) => {
+    scheduled[1]
+}
+
+scheduleD108CaseAsync: (
+    spec,
+    source,
+    bindings,
+    executorAsync,
+    inspectorExecutorAsync,
+    resourceExecutorAsync,
+    resourceInspectorExecutorAsync
+) => {
+    resourceful: bindings.size() > 0
+    pending: null
+
+    resourceful.ifTrue(() => {
+        (resourceExecutorAsync === null).ifTrue(() => {
+            policyError()
+        })
+
+        providerBindings:
+            ResourceBinding.providerRequestSnapshot(bindings)
+
+        resourceInspector: null
+        (resourceInspectorExecutorAsync === null).ifFalse(() => {
+            resourceInspector = (executionSource, inspectorSource) => {
+                resourceInspectorExecutorAsync(
+                    executionSource,
+                    inspectorSource,
+                    providerBindings
+                )
+            }
+        })
+
+        pending = scheduleDCaseAsync(
+            spec,
+            source,
+            (executionSource) => {
+                resourceExecutorAsync(
+                    executionSource,
+                    providerBindings
+                )
+            },
+            resourceInspector
+        )
+    })
+
+    resourceful.ifFalse(() => {
+        pending = scheduleDCaseAsync(
+            spec,
+            source,
+            executorAsync,
+            inspectorExecutorAsync
+        )
+    })
+
+    d108Scheduled(pending, resourceful)
+}
+
+runD108WithResourcesWithLoader: (
+    plan,
+    resourceCatalog,
+    sourceLoader,
+    executorAsync,
+    inspectorExecutorAsync,
+    resourceExecutorAsync,
+    resourceInspectorExecutorAsync,
+    maxInFlight
+) => {
+    maxInFlight.div(1)
+    (maxInFlight > 0).ifFalse(() => {
+        policyError()
+    })
+
+    cases: Manifest.planCases(plan)
+    selectedCases: Array()
+    cases.each((spec) => {
+        isDExpectation(spec).ifTrue(() => {
+            selectedCases = Array(...selectedCases, spec)
+        })
+    })
+
+    resultChunks: Map()
+    maxChunkLevel: -1
+
+    carryChunk: null
+    carryChunk = (chunk, level) => {
+        present: resultChunks.containsKey(level)
+        present.ifTrue(() => {
+            left: resultChunks[level]
+            resultChunks.remove(level)
+            carryChunk(Array(...left, ...chunk), level + 1)
+        })
+        present.ifFalse(() => {
+            resultChunks[level] = chunk
+            (level > maxChunkLevel).ifTrue(() => {
+                maxChunkLevel = level
+            })
+        })
+    }
+
+    collectChunks: null
+    collectChunks = (level, result) => {
+        finalResult: result
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            resultChunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...resultChunks[level])
+            })
+            finalResult = collectChunks(level - 1, nextResult)
+        })
+        finalResult
+    }
+
+    reservationState:
+        ResourceReservation.newState(resourceCatalog)
+
+    infrastructureAttempts: Array()
+    cutoverCases: Array()
+    invocationInfrastructureFailed: false
+
+    nextIndex: 0
+    (() =>
+        (nextIndex < selectedCases.size()) &&
+        invocationInfrastructureFailed.not()
+    ).while(() => {
+        // D105 immutable fixed H window.
+        windowSpecs: Array()
+        windowSources: Array()
+        windowBindings: Array()
+        windowResults: Array()
+        windowAttempted: Array()
+        windowCount: 0
+
+        (() =>
+            (windowCount < maxInFlight) &&
+            (nextIndex < selectedCases.size())
+        ).while(() => {
+            spec: selectedCases[nextIndex]
+            source: sourceLoader(spec)
+            bindings:
+                ResourceBinding.bindCase(spec, resourceCatalog)
+
+            windowSpecs = Array(...windowSpecs, spec)
+            windowSources = Array(...windowSources, source)
+            windowBindings = Array(...windowBindings, bindings)
+            windowResults = Array(...windowResults, null)
+            windowAttempted = Array(...windowAttempted, false)
+
+            windowCount = windowCount + 1
+            nextIndex = nextIndex + 1
+        })
+
+        remainingInWindow: windowCount
+
+        (() =>
+            (remainingInWindow > 0) &&
+            invocationInfrastructureFailed.not()
+        ).while(() => {
+            roundIndexes: Array()
+            roundReservations: Array()
+            roundResourceful: Array()
+            pending: Array()
+
+            // Stable TestPlan-order scan with same-window backfill.
+            windowIndex: 0
+            (() => windowIndex < windowCount).while(() => {
+                (windowResults[windowIndex] === null).ifTrue(() => {
+                    reservation:
+                        ResourceReservation.tryReserve(
+                            windowBindings[windowIndex],
+                            reservationState
+                        )
+
+                    (reservation === null).ifFalse(() => {
+                        spec: windowSpecs[windowIndex]
+                        source: windowSources[windowIndex]
+                        scheduled:
+                            scheduleD108CaseAsync(
+                                spec,
+                                source,
+                                windowBindings[windowIndex],
+                                executorAsync,
+                                inspectorExecutorAsync,
+                                resourceExecutorAsync,
+                                resourceInspectorExecutorAsync
+                            )
+
+                        windowAttempted[windowIndex] = true
+                        roundIndexes =
+                            Array(...roundIndexes, windowIndex)
+                        roundReservations =
+                            Array(...roundReservations, reservation)
+                        roundResourceful =
+                            Array(
+                                ...roundResourceful,
+                                d108ScheduledResourceful(scheduled)
+                            )
+                        pending =
+                            Array(
+                                ...pending,
+                                d108ScheduledFuture(scheduled)
+                            )
+                    })
+                })
+
+                windowIndex = windowIndex + 1
+            })
+
+            // I8A feasibility + D105 prior release must guarantee progress while
+            // the invocation is still healthy.
+            (pending.size() == 0).ifTrue(() => {
+                policyError()
+            })
+
+            // D108 terminal barrier: C1/C2 resourceful Futures resolve only after
+            // Process/host/provider lifecycle terminality. Future.all therefore
+            // drains every already-admitted sibling before any release/cutover.
+            observations: Future.all(...pending).value()
+
+            roundInfrastructureFailed: false
+
+            resultIndex: 0
+            (() => resultIndex < observations.size()).while(() => {
+                resultWindowIndex: roundIndexes[resultIndex]
+                spec: windowSpecs[resultWindowIndex]
+                source: windowSources[resultWindowIndex]
+                reservation: roundReservations[resultIndex]
+                resourceful: roundResourceful[resultIndex]
+
+                completionValue: observations[resultIndex]
+                guestObservation: completionValue
+                infrastructureFailed: false
+                capacitySafe: true
+
+                resourceful.ifTrue(() => {
+                    infrastructureFailed =
+                        completionValue.infrastructureFailed
+                    capacitySafe =
+                        completionValue.capacitySafe
+                    guestObservation =
+                        completionValue.guestObservation
+
+                    // UNSAFE without infrastructure evidence is not a valid D108
+                    // terminal disposition.
+                    (
+                        capacitySafe.not() &&
+                        infrastructureFailed.not()
+                    ).ifTrue(() => {
+                        policyError()
+                    })
+
+                    infrastructureFailed.ifTrue(() => {
+                        roundInfrastructureFailed = true
+                        infrastructureAttempts =
+                            Array(
+                                ...infrastructureAttempts,
+                                d108InfrastructureAttempt(
+                                    spec,
+                                    completionValue
+                                )
+                            )
+                    })
+                })
+
+                // I8B release is permitted only after terminal completion proves
+                // reuse safety. Resource-free empty reservations remain no-op.
+                capacitySafe.ifTrue(() => {
+                    ResourceReservation.release(
+                        reservation,
+                        reservationState
+                    )
+                })
+
+                // Preserve guest evidence if it exists, even if cleanup later
+                // produced infrastructure failure. Never fabricate a guest
+                // passed/failed result when no guest observation exists.
+                (guestObservation === null).ifFalse(() => {
+                    evaluation:
+                        evaluateDObservation(
+                            spec,
+                            source,
+                            guestObservation
+                        )
+
+                    windowResults[resultWindowIndex] =
+                        caseRunTuple(spec, evaluation)
+                    remainingInWindow = remainingInWindow - 1
+                })
+
+                (
+                    (guestObservation === null) &&
+                    infrastructureFailed.not()
+                ).ifTrue(() => {
+                    policyError()
+                })
+
+                resultIndex = resultIndex + 1
+            })
+
+            roundInfrastructureFailed.ifTrue(() => {
+                invocationInfrastructureFailed = true
+            })
+
+            // On a healthy round every reservation, including resourceful ones,
+            // must have become safely reusable before the D105 rescan.
+            invocationInfrastructureFailed.not().ifTrue(() => {
+                (
+                    ResourceReservation.activeReservationCount(
+                        reservationState
+                    ) == 0
+                ).ifFalse(() => {
+                    policyError()
+                })
+            })
+        })
+
+        // Preserve every guest CaseRun that really exists, always in logical
+        // TestPlan/window order. In a healthy window every slot must exist.
+        resultWindowIndex: 0
+        (() => resultWindowIndex < windowCount).while(() => {
+            caseRun: windowResults[resultWindowIndex]
+
+            (caseRun === null).ifTrue(() => {
+                invocationInfrastructureFailed.not().ifTrue(() => {
+                    policyError()
+                })
+            })
+
+            (caseRun === null).ifFalse(() => {
+                carryChunk(Array(caseRun), 0)
+            })
+
+            resultWindowIndex = resultWindowIndex + 1
+        })
+
+        invocationInfrastructureFailed.ifTrue(() => {
+            // Only cases never admitted in the affected H window belong to the
+            // cutover set. An admitted provisioning failure is represented by
+            // infrastructureAttempts, not fabricated as a skipped/not-admitted
+            // guest result.
+            cutoverIndex: 0
+            (() => cutoverIndex < windowCount).while(() => {
+                windowAttempted[cutoverIndex].not().ifTrue(() => {
+                    cutoverCases =
+                        Array(
+                            ...cutoverCases,
+                            windowSpecs[cutoverIndex]
+                        )
+                })
+                cutoverIndex = cutoverIndex + 1
+            })
+
+            // D108 whole-invocation fail-stop: no later H window, including
+            // resource-free cases, is started.
+            laterIndex: nextIndex
+            (() => laterIndex < selectedCases.size()).while(() => {
+                cutoverCases =
+                    Array(
+                        ...cutoverCases,
+                        selectedCases[laterIndex]
+                    )
+                laterIndex = laterIndex + 1
+            })
+        })
+    })
+
+    caseResults:
+        resultTuple(...collectChunks(maxChunkLevel, Array()))
+
+    retainedReservationCount:
+        ResourceReservation.activeReservationCount(
+            reservationState
+        )
+
+    invocationInfrastructureFailed.not().ifTrue(() => {
+        (retainedReservationCount == 0).ifFalse(() => {
+            policyError()
+        })
+    })
+
+    d108RunEnvelope(
+        caseResults,
+        cases.size() - selectedCases.size(),
+        resultTuple(...infrastructureAttempts),
+        resultTuple(...cutoverCases),
+        retainedReservationCount
+    )
+}
+
+runD108WithResources: (
+    plan,
+    resourceCatalog,
+    filesystem,
+    executorAsync,
+    inspectorExecutorAsync,
+    resourceExecutorAsync,
+    resourceInspectorExecutorAsync,
+    maxInFlight
+) => {
+    runD108WithResourcesWithLoader(
+        plan,
+        resourceCatalog,
+        (spec) => { readSource(spec, filesystem) },
+        executorAsync,
+        inspectorExecutorAsync,
+        resourceExecutorAsync,
+        resourceInspectorExecutorAsync,
         maxInFlight
     )
 }
