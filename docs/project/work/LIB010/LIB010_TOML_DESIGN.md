@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-B2 IN_PROGRESS — B2A/B2B1/B2B2A CLOSED; B2B2B numeric/AoT parser closure READY**
+Status: **LIB010-B CLOSED — strict TOML 1.1 parser functional and adversarial hardening complete; LIB010-C Float-formatting audit READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -1069,18 +1069,32 @@ LIB010-B implementation is deliberately split into two publications:
     this document path no longer consume host stack proportional to document/path
     size. Retained evidence covers 4,096 flat assignments and 1,536-component
     dotted-assignment/header paths.
-  - **B2B2 — lexical/AoT parser closure: IN_PROGRESS.**
+  - **LIB010-B2B2 — lexical/AoT parser closure: CLOSED.**
     - **B2B2A — textual lexical scaling: CLOSED.** Quoted/bare key, basic/literal
       String, whitespace/trivia and bare-token gather/trim/copy paths no longer
       recurse in proportion to input length. Retained stress evidence covers
       4,096-character keys and 8,192-character Strings/whitespace.
-    - **B2B2B — numeric/AoT scaling + parser closure: READY.** Remove remaining
-      Integer/Float/temporal token recursion and repeated array-of-tables
-      whole-Array rebuilding, retain long numeric/repeated-AoT evidence, perform
-      the final recursion/scaling audit, and close LIB010-B.
+    - **B2B2B — numeric/AoT scaling + parser closure: CLOSED.** Integer, Float and
+      temporal-fraction token scans are iterative; nested-value and document
+      balanced chunk helpers no longer use host recursion; array-of-tables use
+      invocation-local balanced builders and materialize each semantic Array once
+      after parsing rather than rebuilding the whole Array per header. Retained
+      evidence covers 2,048-digit numeric/temporal tokens and 2,048 repeated
+      array-of-tables elements.
 
-B1, B2A, B2B1 and B2B2A are intermediate `FOCAL_BOUNDED` publications.
-Integrated full validation remains deferred to the owning `LIB010` closure.
+**LIB010-B — strict TOML 1.1 parser: CLOSED.** Retained B1/B2 evidence covers
+functional TOML 1.1 parsing, strict conflict rejection, deep nested values, deep
+dotted/header paths, large flat documents, long textual/numeric tokens and
+repeated array-of-tables. Parser state remains invocation-local, D087 private
+TOML remains unchanged, and no public/tunable resource limit is introduced.
+
+Only grammar-bounded helper recursion remains in the parser implementation
+(2/4/8-digit Unicode escape consumption, four-digit year decoding and the
+at-most-three quote append helper); none grows with input size.
+
+B1/B2 used intermediate `FOCAL_BOUNDED` validation. Integrated full validation
+remains deferred to the owning `LIB010` closure. LIB010-C begins with the
+already-required focused Float-formatting audit before encoder implementation.
 
 ## Deliberately deferred
 

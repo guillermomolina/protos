@@ -186,6 +186,61 @@ final class ProtosTomlParserStressTest {
         assertSame(ProtosBooleanValue.TRUE, result);
     }
 
+    @Test
+    void parsesLongNumericAndTemporalTokensWithoutHostRecursiveScanning()
+            throws Exception {
+        String hugeInteger = "1" + "0".repeat(2047);
+        String floatFraction = "0".repeat(2047) + "1";
+        String hugeExponent = "9".repeat(2048);
+        String temporalFraction = "1".repeat(2048);
+
+        String input =
+                "huge = " + hugeInteger + "\n"
+                        + "finite = 1." + floatFraction + "\n"
+                        + "overflow = 1e" + hugeExponent + "\n"
+                        + "time = 12:34:56." + temporalFraction + "\n";
+
+        Object result =
+                evaluate(
+                        input,
+                        """
+                        root: TOML.parse(input)
+                        (root.value["huge"].kind === "integer") &&
+                            (root.value["finite"].kind === "float") &&
+                            (root.value["overflow"].kind === "float") &&
+                            (root.value["overflow"].value == (1.0 / 0.0)) &&
+                            (root.value["time"].kind === "localTime") &&
+                            (root.value["time"].value.fraction.digits == 2048)
+                        """);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void parsesManyArrayOfTablesWithoutQuadraticWholeArrayRebuilding() throws Exception {
+        int entries = 2048;
+        StringBuilder source = new StringBuilder(entries * 32);
+        for (int i = 0; i < entries; i++) {
+            source.append("[[products]]\n");
+            source.append("value = ").append(i).append('\n');
+        }
+
+        Object result =
+                evaluate(
+                        source.toString(),
+                        """
+                        root: TOML.parse(input)
+                        products: root.value["products"]
+                        (products.kind === "array") &&
+                            (products.value.size() == 2048) &&
+                            (products.value[0].value["value"].value == 0) &&
+                            (products.value[1024].value["value"].value == 1024) &&
+                            (products.value[2047].value["value"].value == 2047)
+                        """);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
     private static Object evaluate(String input, String body) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);

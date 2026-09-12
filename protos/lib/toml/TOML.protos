@@ -1478,33 +1478,38 @@ parse: (text) => {
             })
         }
 
-        carryFrameChunk: null
-        carryFrameChunk = (frame, chunk, level) => {
-            present: frame.chunks.containsKey(level)
-            present.ifTrue(() => {
-                left: frame.chunks[level]
-                frame.chunks.remove(level)
-                carryFrameChunk(frame, Array(...left, ...chunk), level + 1)
-            })
-            present.ifFalse(() => {
-                frame.chunks[level] = chunk
-                (level > frame.maxLevel).ifTrue(() => {
-                    frame.maxLevel = level
+        carryFrameChunk: (frame, initialChunk, initialLevel) => {
+            chunk: initialChunk
+            level: initialLevel
+            carrying: true
+            (() => carrying).while(() => {
+                present: frame.chunks.containsKey(level)
+                present.ifTrue(() => {
+                    left: frame.chunks[level]
+                    frame.chunks.remove(level)
+                    chunk = Array(...left, ...chunk)
+                    level = level + 1
+                })
+                present.ifFalse(() => {
+                    frame.chunks[level] = chunk
+                    (level > frame.maxLevel).ifTrue(() => {
+                        frame.maxLevel = level
+                    })
+                    carrying = false
                 })
             })
         }
 
-        collectFrameChunks: null
-        collectFrameChunks = (frame, level, result) => {
-            finalResult: result
-            (level >= 0).ifTrue(() => {
-                nextResult: result
+        collectFrameChunks: (frame, initialLevel, initialResult) => {
+            level: initialLevel
+            result: initialResult
+            (() => level >= 0).while(() => {
                 frame.chunks.containsKey(level).ifTrue(() => {
-                    nextResult = Array(...result, ...frame.chunks[level])
+                    result = Array(...result, ...frame.chunks[level])
                 })
-                finalResult = collectFrameChunks(frame, level - 1, nextResult)
+                level = level - 1
             })
-            finalResult
+            result
         }
 
         decimalDigit: (octet) => {
@@ -1600,9 +1605,8 @@ parse: (text) => {
             previousUnderscore: false
             leadingZero: false
 
-            scan: null
-            scan = () => {
-                (position < tokenLength).ifTrue(() => {
+            valid.ifTrue(() => {
+                (() => position < tokenLength).while(() => {
                     octet: token[position]
 
                     (octet == 95).ifTrue(() => {
@@ -1641,12 +1645,7 @@ parse: (text) => {
                     })
 
                     position = position + 1
-                    scan()
                 })
-            }
-
-            valid.ifTrue(() => {
-                scan()
             })
 
             (digits == 0).ifTrue(() => {
@@ -1740,9 +1739,9 @@ parse: (text) => {
                 firstIntegerZero: false
                 previousDigit: false
 
-                scanInteger: null
-                scanInteger = () => {
-                    (position < tokenLength).ifTrue(() => {
+                valid.ifTrue(() => {
+                    scanningInteger: true
+                    (() => scanningInteger && (position < tokenLength)).while(() => {
                         octet: token[position]
                         digit: decimalDigit(octet)
 
@@ -1755,7 +1754,6 @@ parse: (text) => {
                             ((integerDigits > 0) && firstIntegerZero).ifTrue(() => {
                                 valid = false
                             })
-
                             coefficient = coefficient * 10 + digit
                             integerDigits = integerDigits + 1
                             totalDigits = totalDigits + 1
@@ -1769,11 +1767,11 @@ parse: (text) => {
                             })
                             previousDigit = true
                             position = position + 1
-                            scanInteger()
                         })
 
                         (digit < 0).ifTrue(() => {
-                            (octet == 95).ifTrue(() => {
+                            underscore: octet == 95
+                            underscore.ifTrue(() => {
                                 nextValid: false
                                 (position + 1 < tokenLength).ifTrue(() => {
                                     (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
@@ -1785,14 +1783,12 @@ parse: (text) => {
                                 })
                                 previousDigit = false
                                 position = position + 1
-                                scanInteger()
+                            })
+                            underscore.ifFalse(() => {
+                                scanningInteger = false
                             })
                         })
                     })
-                }
-
-                valid.ifTrue(() => {
-                    scanInteger()
                 })
                 (integerDigits == 0).ifTrue(() => {
                     valid = false
@@ -1809,49 +1805,47 @@ parse: (text) => {
                             position = position + 1
                             previousDigit = false
 
-                            scanFraction: null
-                            scanFraction = () => {
-                                (position < tokenLength).ifTrue(() => {
-                                    octet: token[position]
-                                    digit: decimalDigit(octet)
+                            scanningFraction: true
+                            (() => scanningFraction && (position < tokenLength)).while(() => {
+                                octet: token[position]
+                                digit: decimalDigit(octet)
 
-                                    (digit >= 0).ifTrue(() => {
-                                        coefficient = coefficient * 10 + digit
-                                        fractionDigits = fractionDigits + 1
-                                        totalDigits = totalDigits + 1
-                                        significant.ifFalse(() => {
-                                            (digit == 0).ifTrue(() => {
-                                                leadingZeros = leadingZeros + 1
-                                            })
-                                            (digit != 0).ifTrue(() => {
-                                                significant = true
-                                            })
+                                (digit >= 0).ifTrue(() => {
+                                    coefficient = coefficient * 10 + digit
+                                    fractionDigits = fractionDigits + 1
+                                    totalDigits = totalDigits + 1
+                                    significant.ifFalse(() => {
+                                        (digit == 0).ifTrue(() => {
+                                            leadingZeros = leadingZeros + 1
                                         })
-                                        previousDigit = true
-                                        position = position + 1
-                                        scanFraction()
+                                        (digit != 0).ifTrue(() => {
+                                            significant = true
+                                        })
                                     })
+                                    previousDigit = true
+                                    position = position + 1
+                                })
 
-                                    (digit < 0).ifTrue(() => {
-                                        (octet == 95).ifTrue(() => {
-                                            nextValid: false
-                                            (position + 1 < tokenLength).ifTrue(() => {
-                                                (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
-                                                    nextValid = true
-                                                })
+                                (digit < 0).ifTrue(() => {
+                                    underscore: octet == 95
+                                    underscore.ifTrue(() => {
+                                        nextValid: false
+                                        (position + 1 < tokenLength).ifTrue(() => {
+                                            (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
+                                                nextValid = true
                                             })
-                                            (previousDigit && nextValid).ifFalse(() => {
-                                                valid = false
-                                            })
-                                            previousDigit = false
-                                            position = position + 1
-                                            scanFraction()
                                         })
+                                        (previousDigit && nextValid).ifFalse(() => {
+                                            valid = false
+                                        })
+                                        previousDigit = false
+                                        position = position + 1
+                                    })
+                                    underscore.ifFalse(() => {
+                                        scanningFraction = false
                                     })
                                 })
-                            }
-
-                            scanFraction()
+                            })
                             (fractionDigits == 0).ifTrue(() => {
                                 valid = false
                             })
@@ -1891,40 +1885,38 @@ parse: (text) => {
                             })
 
                             previousDigit = false
-                            scanExponent: null
-                            scanExponent = () => {
-                                (position < tokenLength).ifTrue(() => {
-                                    octet: token[position]
-                                    digit: decimalDigit(octet)
+                            scanningExponent: true
+                            (() => scanningExponent && (position < tokenLength)).while(() => {
+                                octet: token[position]
+                                digit: decimalDigit(octet)
 
-                                    (digit >= 0).ifTrue(() => {
-                                        exponentValue = exponentValue * 10 + digit
-                                        exponentDigits = exponentDigits + 1
-                                        previousDigit = true
-                                        position = position + 1
-                                        scanExponent()
-                                    })
+                                (digit >= 0).ifTrue(() => {
+                                    exponentValue = exponentValue * 10 + digit
+                                    exponentDigits = exponentDigits + 1
+                                    previousDigit = true
+                                    position = position + 1
+                                })
 
-                                    (digit < 0).ifTrue(() => {
-                                        (octet == 95).ifTrue(() => {
-                                            nextValid: false
-                                            (position + 1 < tokenLength).ifTrue(() => {
-                                                (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
-                                                    nextValid = true
-                                                })
+                                (digit < 0).ifTrue(() => {
+                                    underscore: octet == 95
+                                    underscore.ifTrue(() => {
+                                        nextValid: false
+                                        (position + 1 < tokenLength).ifTrue(() => {
+                                            (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
+                                                nextValid = true
                                             })
-                                            (previousDigit && nextValid).ifFalse(() => {
-                                                valid = false
-                                            })
-                                            previousDigit = false
-                                            position = position + 1
-                                            scanExponent()
                                         })
+                                        (previousDigit && nextValid).ifFalse(() => {
+                                            valid = false
+                                        })
+                                        previousDigit = false
+                                        position = position + 1
+                                    })
+                                    underscore.ifFalse(() => {
+                                        scanningExponent = false
                                     })
                                 })
-                            }
-
-                            scanExponent()
+                            })
                             (exponentDigits == 0).ifTrue(() => {
                                 valid = false
                             })
@@ -2104,21 +2096,19 @@ parse: (text) => {
                                     position = position + 1
                                     fractionStart: position
 
-                                    scanFraction: null
-                                    scanFraction = () => {
-                                        (position < tokenLength).ifTrue(() => {
-                                            digit: decimalDigit(token[position])
-                                            (digit >= 0).ifTrue(() => {
-                                                fractionCoefficient =
-                                                    fractionCoefficient * 10 + digit
-                                                fractionDigits = fractionDigits + 1
-                                                position = position + 1
-                                                scanFraction()
-                                            })
+                                    scanningFraction: true
+                                    (() => scanningFraction && (position < tokenLength)).while(() => {
+                                        digit: decimalDigit(token[position])
+                                        (digit >= 0).ifTrue(() => {
+                                            fractionCoefficient =
+                                                fractionCoefficient * 10 + digit
+                                            fractionDigits = fractionDigits + 1
+                                            position = position + 1
                                         })
-                                    }
-
-                                    scanFraction()
+                                        (digit < 0).ifTrue(() => {
+                                            scanningFraction = false
+                                        })
+                                    })
                                     (position == fractionStart).ifTrue(() => {
                                         valid = false
                                     })
@@ -2642,33 +2632,38 @@ parse: (text) => {
         buffer: Encoding.UTF8.encode("")
         significant: false
 
-        carryStatementChunk: null
-        carryStatementChunk = (chunk, level) => {
-            present: statementChunks.containsKey(level)
-            present.ifTrue(() => {
-                left: statementChunks[level]
-                statementChunks.remove(level)
-                carryStatementChunk(Array(...left, ...chunk), level + 1)
-            })
-            present.ifFalse(() => {
-                statementChunks[level] = chunk
-                (level > statementMaxLevel).ifTrue(() => {
-                    statementMaxLevel = level
+        carryStatementChunk: (initialChunk, initialLevel) => {
+            chunk: initialChunk
+            level: initialLevel
+            carrying: true
+            (() => carrying).while(() => {
+                present: statementChunks.containsKey(level)
+                present.ifTrue(() => {
+                    left: statementChunks[level]
+                    statementChunks.remove(level)
+                    chunk = Array(...left, ...chunk)
+                    level = level + 1
+                })
+                present.ifFalse(() => {
+                    statementChunks[level] = chunk
+                    (level > statementMaxLevel).ifTrue(() => {
+                        statementMaxLevel = level
+                    })
+                    carrying = false
                 })
             })
         }
 
-        collectStatementChunks: null
-        collectStatementChunks = (level, result) => {
-            finalResult: result
-            (level >= 0).ifTrue(() => {
-                nextResult: result
+        collectStatementChunks: (initialLevel, initialResult) => {
+            level: initialLevel
+            result: initialResult
+            (() => level >= 0).while(() => {
                 statementChunks.containsKey(level).ifTrue(() => {
-                    nextResult = Array(...result, ...statementChunks[level])
+                    result = Array(...result, ...statementChunks[level])
                 })
-                finalResult = collectStatementChunks(level - 1, nextResult)
+                level = level - 1
             })
-            finalResult
+            result
         }
         squareDepth: 0
         braceDepth: 0
@@ -2988,6 +2983,61 @@ parse: (text) => {
         states[root] = "root"
         current: root
 
+        arrayTableBuilders: IdentityMap()
+        arrayTableBuilderEntries: Map()
+        arrayTableBuilderCount: 0
+
+        appendArrayTableElement: (arrayNode, element) => {
+            builder: null
+            arrayTableBuilders.containsKey(arrayNode).ifTrue(() => {
+                builder = arrayTableBuilders[arrayNode]
+            })
+            arrayTableBuilders.containsKey(arrayNode).ifFalse(() => {
+                builder = {
+                    arrayNode: arrayNode
+                    chunks: Map()
+                    maxLevel: -1
+                    last: null
+                }
+                arrayTableBuilders[arrayNode] = builder
+                arrayTableBuilderEntries[arrayTableBuilderCount] = builder
+                arrayTableBuilderCount = arrayTableBuilderCount + 1
+            })
+
+            chunk: Array(element)
+            level: 0
+            carrying: true
+            (() => carrying).while(() => {
+                present: builder.chunks.containsKey(level)
+                present.ifTrue(() => {
+                    left: builder.chunks[level]
+                    builder.chunks.remove(level)
+                    chunk = Array(...left, ...chunk)
+                    level = level + 1
+                })
+                present.ifFalse(() => {
+                    builder.chunks[level] = chunk
+                    (level > builder.maxLevel).ifTrue(() => {
+                        builder.maxLevel = level
+                    })
+                    carrying = false
+                })
+            })
+            builder.last = element
+        }
+
+        materializeArrayTableBuilder: (builder) => {
+            result: Array()
+            level: builder.maxLevel
+            (() => level >= 0).while(() => {
+                builder.chunks.containsKey(level).ifTrue(() => {
+                    result = Array(...result, ...builder.chunks[level])
+                })
+                level = level - 1
+            })
+            result
+        }
+
         isSpace: (octet) => {
             result: octet == 32
             (octet == 9).ifTrue(() => {
@@ -3106,11 +3156,14 @@ parse: (text) => {
             (states[arrayNode] == "array-table").ifFalse(() => {
                 fail()
             })
-            elements: arrayNode.value
-            (elements.size() == 0).ifTrue(() => {
+            arrayTableBuilders.containsKey(arrayNode).ifFalse(() => {
                 fail()
             })
-            selected: elements[elements.size() - 1]
+            builder: arrayTableBuilders[arrayNode]
+            selected: builder.last
+            (selected === null).ifTrue(() => {
+                fail()
+            })
             (selected.kind == "table").ifFalse(() => {
                 fail()
             })
@@ -3219,15 +3272,15 @@ parse: (text) => {
                         (states[child] == "array-table").ifFalse(() => {
                             fail()
                         })
-                        child.value = Array(...child.value, element)
                     })
 
                     entries.containsKey(name).ifFalse(() => {
-                        child = node("array", Array(element))
+                        child = node("array", Array())
                         entries[name] = child
                         states[child] = "array-table"
                     })
 
+                    appendArrayTableElement(child, element)
                     created = element
                 })
 
@@ -3388,6 +3441,14 @@ parse: (text) => {
                 putDotted(current, assignment.path, 0, assignment.value)
             })
         })
+
+        builderIndex: 0
+        (() => builderIndex < arrayTableBuilderCount).while(() => {
+            builder: arrayTableBuilderEntries[builderIndex]
+            builder.arrayNode.value = materializeArrayTableBuilder(builder)
+            builderIndex = builderIndex + 1
+        })
+
         root
     }
 
