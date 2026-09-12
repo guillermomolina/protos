@@ -244,6 +244,8 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws Exception {
+        Path invocationWorkingDirectory =
+                Path.of("").toAbsolutePath().normalize();
         Path core = core();
         Path distributionRoot = core.getParent().getParent();
         Path testsRoot = distributionRoot.resolve("tests");
@@ -322,6 +324,9 @@ public final class ProtosCli {
                                     session,
                                     "packageTomlFilesystem",
                                     packageTomlFilesystemBackend);
+                            ProtosTestToolCatalogAcquisitionFacility.install(
+                                    session.activation,
+                                    invocationWorkingDirectory);
                             provisioned = true;
                             return executionScope::close;
                         } finally {
