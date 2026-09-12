@@ -413,6 +413,7 @@ public final class ProtosCli {
                 new ProtosBundledToolModuleResolver(
                         toolName,
                         toolRoot,
+                        toolRoot.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(core.getParent()));
         Session session =
                 session(
