@@ -208,6 +208,56 @@ final class ProtosTestToolSimpleExpectationsTest {
     }
 
     @Test
+    void diagnosticManifestImportOnlyBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "import self:Manifest",
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Manifest === Manifest\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticResourceCatalogImportOnlyBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "import self:ResourceCatalog",
+                "ResourceCatalog: import(\"self:ResourceCatalog\")\n"
+                        + "ResourceCatalog === ResourceCatalog\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticResourceBindingImportOnlyBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "import self:ResourceBinding",
+                "ResourceBinding: import(\"self:ResourceBinding\")\n"
+                        + "ResourceBinding === ResourceBinding\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticResourceReservationImportOnlyBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "import self:ResourceReservation",
+                "ResourceReservation: import(\"self:ResourceReservation\")\n"
+                        + "ResourceReservation === ResourceReservation\n",
+                fixture);
+    }
+
+    @Test
+    void diagnosticRunnerImportOnlyBoundary() throws Exception {
+        Fixture fixture = fixture();
+        assertDiagnosticCompletedTrue(
+                "import self:Runner",
+                "Runner: import(\"self:Runner\")\n"
+                        + "Runner === Runner\n",
+                fixture);
+    }
+
+    @Test
     void unsupportedExpectationKindFailsClosedAsToolPolicyError()
             throws Exception {
         Fixture fixture = fixture();
