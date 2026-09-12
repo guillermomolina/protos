@@ -6,8 +6,8 @@
   <a href="https://github.com/guillermomolina/protos/actions/workflows/tests.yml">
     <img src="https://github.com/guillermomolina/protos/actions/workflows/tests.yml/badge.svg?branch=main" alt="CI">
   </a>
-  <a href="https://github.com/guillermomolina/protos/actions/workflows/tests.yml">
-    <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fguillermomolina%2Fprotos%2Fbadges%2Ftests.json" alt="Tests">
+  <a href="https://github.com/guillermomolina/protos/actions?query=workflow%3ACI+branch%3Amain">
+    <img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fguillermomolina%2Fprotos%2Fbadges%2Ftests.json" alt="Test suite status" title="Latest test suite result on main">
   </a>
 </p>
 

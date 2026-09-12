@@ -195,19 +195,40 @@ jobs:
               skipped += int(root.attrib.get("skipped", "0"))
 
           if total > 0:
+              passed = total - failed - skipped
+              if failed:
+                  message = "%d failed / %d" % (failed, total)
+                  color = "red"
+              elif skipped:
+                  message = "%d passed · %d skipped" % (passed, skipped)
+                  color = "brightgreen"
+              else:
+                  message = "%d passed" % passed
+                  color = "brightgreen"
+
               payload = {
                   "schemaVersion": 1,
                   "label": "tests",
-                  "message": "%d failed / %d run" % (failed, total),
-                  "color": "brightgreen" if failed == 0 else "red",
+                  "message": message,
+                  "color": color,
                   "cacheSeconds": 300,
               }
           elif job_result != "success":
+              if job_result == "failure":
+                  message = "CI failed before tests"
+                  color = "red"
+              elif job_result == "cancelled":
+                  message = "CI cancelled"
+                  color = "orange"
+              else:
+                  message = "CI %s" % job_result
+                  color = "orange"
+
               payload = {
                   "schemaVersion": 1,
                   "label": "tests",
-                  "message": "run %s before results" % job_result,
-                  "color": "red" if job_result == "failure" else "orange",
+                  "message": message,
+                  "color": color,
                   "cacheSeconds": 300,
               }
           else:
