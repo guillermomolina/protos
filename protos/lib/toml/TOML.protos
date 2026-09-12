@@ -1,0 +1,456 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+string: (value) => {
+    ignoredValidation: "" + value
+
+    {
+        kind: "string"
+        value: value
+    }
+}
+
+integer: (value) => {
+    ignoredValidation: 0 + value
+
+    {
+        kind: "integer"
+        value: value
+    }
+}
+
+float: (value) => {
+    ignoredValidation: 0.0 + value
+
+    {
+        kind: "float"
+        value: value
+    }
+}
+
+boolean: (value) => {
+    valid: value === true
+    (value === false).ifTrue(() => {
+        valid = true
+    })
+    valid.ifFalse(() => {
+        Error().signal()
+    })
+
+    {
+        kind: "boolean"
+        value: value
+    }
+}
+
+localDate: (year, month, day) => {
+    ignoredYearValidation: 0 + year
+    ignoredMonthValidation: 0 + month
+    ignoredDayValidation: 0 + day
+
+    ((year < 1) || (year > 9999)).ifTrue(() => {
+        Error().signal()
+    })
+    ((month < 1) || (month > 12)).ifTrue(() => {
+        Error().signal()
+    })
+
+    maxDay: 31
+    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+        maxDay = 30
+    })
+    (month == 2).ifTrue(() => {
+        leap: false
+        (year.mod(4) == 0).ifTrue(() => {
+            leap = true
+        })
+        (year.mod(100) == 0).ifTrue(() => {
+            leap = false
+        })
+        (year.mod(400) == 0).ifTrue(() => {
+            leap = true
+        })
+        maxDay = 28
+        leap.ifTrue(() => {
+            maxDay = 29
+        })
+    })
+
+    ((day < 1) || (day > maxDay)).ifTrue(() => {
+        Error().signal()
+    })
+
+    date: {
+        year: year
+        month: month
+        day: day
+    }
+
+    {
+        kind: "localDate"
+        value: date
+    }
+}
+
+localTime: (hour, minute, second, fractionCoefficient, fractionDigits) => {
+    ignoredHourValidation: 0 + hour
+    ignoredMinuteValidation: 0 + minute
+    ignoredSecondValidation: 0 + second
+    ignoredFractionCoefficientValidation: 0 + fractionCoefficient
+    ignoredFractionDigitsValidation: 0 + fractionDigits
+
+    ((hour < 0) || (hour > 23)).ifTrue(() => {
+        Error().signal()
+    })
+    ((minute < 0) || (minute > 59)).ifTrue(() => {
+        Error().signal()
+    })
+    ((second < 0) || (second > 59)).ifTrue(() => {
+        Error().signal()
+    })
+    (fractionCoefficient < 0).ifTrue(() => {
+        Error().signal()
+    })
+    (fractionDigits < 0).ifTrue(() => {
+        Error().signal()
+    })
+
+    (fractionDigits == 0).ifTrue(() => {
+        (fractionCoefficient != 0).ifTrue(() => {
+            Error().signal()
+        })
+    })
+    (fractionDigits > 0).ifTrue(() => {
+        limit: 1
+        index: 0
+        (() => index < fractionDigits).while(() => {
+            limit = limit * 10
+            index = index + 1
+        })
+        (fractionCoefficient >= limit).ifTrue(() => {
+            Error().signal()
+        })
+    })
+
+    fraction: {
+        coefficient: fractionCoefficient
+        digits: fractionDigits
+    }
+    time: {
+        hour: hour
+        minute: minute
+        second: second
+        fraction: fraction
+    }
+
+    {
+        kind: "localTime"
+        value: time
+    }
+}
+
+localDateTime: (
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    fractionCoefficient,
+    fractionDigits
+) => {
+    ignoredYearValidation: 0 + year
+    ignoredMonthValidation: 0 + month
+    ignoredDayValidation: 0 + day
+    ignoredHourValidation: 0 + hour
+    ignoredMinuteValidation: 0 + minute
+    ignoredSecondValidation: 0 + second
+    ignoredFractionCoefficientValidation: 0 + fractionCoefficient
+    ignoredFractionDigitsValidation: 0 + fractionDigits
+
+    ((year < 1) || (year > 9999)).ifTrue(() => {
+        Error().signal()
+    })
+    ((month < 1) || (month > 12)).ifTrue(() => {
+        Error().signal()
+    })
+
+    maxDay: 31
+    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+        maxDay = 30
+    })
+    (month == 2).ifTrue(() => {
+        leap: false
+        (year.mod(4) == 0).ifTrue(() => {
+            leap = true
+        })
+        (year.mod(100) == 0).ifTrue(() => {
+            leap = false
+        })
+        (year.mod(400) == 0).ifTrue(() => {
+            leap = true
+        })
+        maxDay = 28
+        leap.ifTrue(() => {
+            maxDay = 29
+        })
+    })
+    ((day < 1) || (day > maxDay)).ifTrue(() => {
+        Error().signal()
+    })
+
+    ((hour < 0) || (hour > 23)).ifTrue(() => {
+        Error().signal()
+    })
+    ((minute < 0) || (minute > 59)).ifTrue(() => {
+        Error().signal()
+    })
+    ((second < 0) || (second > 59)).ifTrue(() => {
+        Error().signal()
+    })
+    (fractionCoefficient < 0).ifTrue(() => {
+        Error().signal()
+    })
+    (fractionDigits < 0).ifTrue(() => {
+        Error().signal()
+    })
+
+    (fractionDigits == 0).ifTrue(() => {
+        (fractionCoefficient != 0).ifTrue(() => {
+            Error().signal()
+        })
+    })
+    (fractionDigits > 0).ifTrue(() => {
+        limit: 1
+        index: 0
+        (() => index < fractionDigits).while(() => {
+            limit = limit * 10
+            index = index + 1
+        })
+        (fractionCoefficient >= limit).ifTrue(() => {
+            Error().signal()
+        })
+    })
+
+    fraction: {
+        coefficient: fractionCoefficient
+        digits: fractionDigits
+    }
+    dateTime: {
+        year: year
+        month: month
+        day: day
+        hour: hour
+        minute: minute
+        second: second
+        fraction: fraction
+    }
+
+    {
+        kind: "localDateTime"
+        value: dateTime
+    }
+}
+
+offsetDateTime: (
+    year,
+    month,
+    day,
+    hour,
+    minute,
+    second,
+    fractionCoefficient,
+    fractionDigits,
+    offsetMinutes
+) => {
+    ignoredYearValidation: 0 + year
+    ignoredMonthValidation: 0 + month
+    ignoredDayValidation: 0 + day
+    ignoredHourValidation: 0 + hour
+    ignoredMinuteValidation: 0 + minute
+    ignoredSecondValidation: 0 + second
+    ignoredFractionCoefficientValidation: 0 + fractionCoefficient
+    ignoredFractionDigitsValidation: 0 + fractionDigits
+    ignoredOffsetValidation: 0 + offsetMinutes
+
+    ((year < 1) || (year > 9999)).ifTrue(() => {
+        Error().signal()
+    })
+    ((month < 1) || (month > 12)).ifTrue(() => {
+        Error().signal()
+    })
+
+    maxDay: 31
+    ((month == 4) || (month == 6) || (month == 9) || (month == 11)).ifTrue(() => {
+        maxDay = 30
+    })
+    (month == 2).ifTrue(() => {
+        leap: false
+        (year.mod(4) == 0).ifTrue(() => {
+            leap = true
+        })
+        (year.mod(100) == 0).ifTrue(() => {
+            leap = false
+        })
+        (year.mod(400) == 0).ifTrue(() => {
+            leap = true
+        })
+        maxDay = 28
+        leap.ifTrue(() => {
+            maxDay = 29
+        })
+    })
+    ((day < 1) || (day > maxDay)).ifTrue(() => {
+        Error().signal()
+    })
+
+    ((hour < 0) || (hour > 23)).ifTrue(() => {
+        Error().signal()
+    })
+    ((minute < 0) || (minute > 59)).ifTrue(() => {
+        Error().signal()
+    })
+    ((second < 0) || (second > 59)).ifTrue(() => {
+        Error().signal()
+    })
+    (fractionCoefficient < 0).ifTrue(() => {
+        Error().signal()
+    })
+    (fractionDigits < 0).ifTrue(() => {
+        Error().signal()
+    })
+
+    (fractionDigits == 0).ifTrue(() => {
+        (fractionCoefficient != 0).ifTrue(() => {
+            Error().signal()
+        })
+    })
+    (fractionDigits > 0).ifTrue(() => {
+        limit: 1
+        index: 0
+        (() => index < fractionDigits).while(() => {
+            limit = limit * 10
+            index = index + 1
+        })
+        (fractionCoefficient >= limit).ifTrue(() => {
+            Error().signal()
+        })
+    })
+
+    ((offsetMinutes < -1439) || (offsetMinutes > 1439)).ifTrue(() => {
+        Error().signal()
+    })
+
+    fraction: {
+        coefficient: fractionCoefficient
+        digits: fractionDigits
+    }
+    dateTime: {
+        year: year
+        month: month
+        day: day
+        hour: hour
+        minute: minute
+        second: second
+        fraction: fraction
+        offsetMinutes: offsetMinutes
+    }
+
+    {
+        kind: "offsetDateTime"
+        value: dateTime
+    }
+}
+
+array: (...nodes) => {
+    validateNode: (node) => {
+        kind: node.kind
+        valid: kind === "string"
+        (kind === "integer").ifTrue(() => { valid = true })
+        (kind === "float").ifTrue(() => { valid = true })
+        (kind === "boolean").ifTrue(() => { valid = true })
+        (kind === "offsetDateTime").ifTrue(() => { valid = true })
+        (kind === "localDateTime").ifTrue(() => { valid = true })
+        (kind === "localDate").ifTrue(() => { valid = true })
+        (kind === "localTime").ifTrue(() => { valid = true })
+        (kind === "array").ifTrue(() => { valid = true })
+        (kind === "table").ifTrue(() => { valid = true })
+        valid.ifFalse(() => {
+            Error().signal()
+        })
+        ignoredValue: node.value
+    }
+
+    nodes.each((node) => {
+        validateNode(node)
+    })
+
+    {
+        kind: "array"
+        value: nodes
+    }
+}
+
+table: (...nameNodePairs) => {
+    validateNode: (node) => {
+        kind: node.kind
+        valid: kind === "string"
+        (kind === "integer").ifTrue(() => { valid = true })
+        (kind === "float").ifTrue(() => { valid = true })
+        (kind === "boolean").ifTrue(() => { valid = true })
+        (kind === "offsetDateTime").ifTrue(() => { valid = true })
+        (kind === "localDateTime").ifTrue(() => { valid = true })
+        (kind === "localDate").ifTrue(() => { valid = true })
+        (kind === "localTime").ifTrue(() => { valid = true })
+        (kind === "array").ifTrue(() => { valid = true })
+        (kind === "table").ifTrue(() => { valid = true })
+        valid.ifFalse(() => {
+            Error().signal()
+        })
+        ignoredValue: node.value
+    }
+
+    result: Map()
+    pendingName: null
+    expectingName: true
+
+    nameNodePairs.each((entry) => {
+        wasExpectingName: expectingName
+
+        wasExpectingName.ifTrue(() => {
+            ignoredNameValidation: "" + entry
+            pendingName = entry
+            expectingName = false
+        })
+
+        wasExpectingName.ifFalse(() => {
+            validateNode(entry)
+            result.containsKey(pendingName).ifTrue(() => {
+                Error().signal()
+            })
+            result[pendingName] = entry
+            pendingName = null
+            expectingName = true
+        })
+    })
+
+    expectingName.ifFalse(() => {
+        Error().signal()
+    })
+
+    {
+        kind: "table"
+        value: result
+    }
+}

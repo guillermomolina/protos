@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-0 RATIFIED — Candidate C selected; implementation slices released**
+Status: **LIB010-A CLOSED — semantic model published; LIB010-B parser READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -947,6 +947,69 @@ Ratification releases bounded implementation work in this order.
 `Document`, public streaming/events, richer diagnostics, TextReader/TextWriter
 adapters, object binding, general datetime conversion, schema facilities and
 future TOML dialect migrations remain separate extensions.
+
+## LIB010-A implementation result
+
+Status: **CLOSED**
+
+Implementation version: `0.2.410-SNAPSHOT`
+
+Published surface:
+
+```text
+std:toml/TOML
+
+string(value)
+integer(value)
+float(value)
+boolean(value)
+offsetDateTime(year, month, day, hour, minute, second,
+               fractionCoefficient, fractionDigits, offsetMinutes)
+localDateTime(year, month, day, hour, minute, second,
+              fractionCoefficient, fractionDigits)
+localDate(year, month, day)
+localTime(hour, minute, second, fractionCoefficient, fractionDigits)
+array(...nodes)
+table(...nameNodePairs)
+```
+
+The ten constructors materialize the already-ratified explicit TOML semantic
+kinds and no additional exported helper slots. Scalar family validation is
+performed through canonical existing Core receiver domains (`String`,
+unbounded `Integer`, binary64 `Float`, canonical Boolean identity) rather than
+through `typeOf`, reflection, conversion-as-classification or host runtime
+objects.
+
+Temporal values are ordinary behavior-free component records:
+
+- TOML calendar years are `1..9999`;
+- month/day validity uses the proleptic Gregorian leap-year rule;
+- local clock values use hour `0..23`, minute `0..59`, second `0..59`;
+- fractional seconds are exact ordinary Integer decimal components
+  `coefficient` and `digits`, with `0 <= coefficient < 10^digits` and the
+  zero-digit representation requiring coefficient zero;
+- offset date-times use exact numeric `offsetMinutes` in `-1439..1439`;
+- no clock, timezone database, locale, JVM date/time object or ambient authority
+  participates.
+
+`array` retains the frozen rest-capture Array and permits all ten TOML semantic
+kinds. `table` creates a fresh ordinary Map from String/name-node pairs,
+rejects duplicate keys and preserves ordinary Map insertion order without
+making table order a TOML equality rule.
+
+Retained focal evidence covers exact export surface, very large unbounded
+Integer payloads, signed negative-zero Float identity, all four temporal
+categories, nesting, wrong-family rejection, invalid calendar/time/fraction/
+offset data, duplicate/odd table input, Actor-local module identity and
+ordinary Actor transfer of the semantic data graph.
+
+LIB010-A adds no parser, encoder, public Document/CST, event stream,
+TextReader/TextWriter adapter, filesystem/network authority, schema/object
+binding, generic serializer hierarchy, Java/native operation or Core semantic
+family. D087 private TOOL001/TOOL002 TOML 1.0 bootstrap ownership remains
+unchanged.
+
+Next bounded slice: **LIB010-B — strict TOML 1.1 parser**.
 
 ## Deliberately deferred
 
