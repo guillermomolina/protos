@@ -68,6 +68,7 @@ public final class ProtosProcessRuntime {
     private final ProtosActor rootActor;
     private final ProtosFilesystemValue rootFilesystem;
     private final ProtosNetworkCapabilityValue rootNetwork;
+    private final ProtosMapValue rootResources;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private final Set<ProtosActorGroupRuntime> ownedGroups = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
@@ -120,8 +121,24 @@ public final class ProtosProcessRuntime {
             ProtosObjectValue actorRefPrototype,
             ProtosFilesystemValue rootFilesystem,
             ProtosNetworkCapabilityValue rootNetwork) {
+        this(actorRefPrototype, rootFilesystem, rootNetwork, null);
+    }
+
+    /**
+     * Creates one Process incarnation with bootstrap-stable optional default Filesystem, Network
+     * and D107 RootActor resource-bundle grants.
+     *
+     * <p>The resources grant is host-provisioned authority, not Process authority. Null means the
+     * RootActor initial module receives no {@code resources} local.
+     */
+    public ProtosProcessRuntime(
+            ProtosObjectValue actorRefPrototype,
+            ProtosFilesystemValue rootFilesystem,
+            ProtosNetworkCapabilityValue rootNetwork,
+            ProtosMapValue rootResources) {
         this.rootFilesystem = rootFilesystem;
         this.rootNetwork = rootNetwork;
+        this.rootResources = rootResources;
         rootActor =
                 new ProtosActor(
                         Objects.requireNonNull(actorRefPrototype, "actorRefPrototype"),
@@ -188,6 +205,11 @@ public final class ProtosProcessRuntime {
     /** Optional default Network authority granted only to the RootActor initial module. */
     public Optional<ProtosNetworkCapabilityValue> rootNetworkForRuntime() {
         return Optional.ofNullable(rootNetwork);
+    }
+
+    /** Optional frozen D107 resource capability bundle granted only to RootActor bootstrap. */
+    public Optional<ProtosMapValue> rootResourcesForRuntime() {
+        return Optional.ofNullable(rootResources);
     }
 
     /**

@@ -171,6 +171,19 @@ public final class ProtosActorBootstrap {
                             }
                             locals.put("network", network);
                         });
+        process.rootResourcesForRuntime()
+                .ifPresent(
+                        resources -> {
+                            if (!resources.isFrozen()) {
+                                throw new IllegalStateException(
+                                        "RootActor resources grant must be frozen");
+                            }
+                            if (resources.parent().orElse(null) != prelude.mapPrototype()) {
+                                throw new IllegalStateException(
+                                        "RootActor resources grant belongs to another Core prelude");
+                            }
+                            locals.put("resources", resources);
+                        });
         return Map.copyOf(locals);
     }
 

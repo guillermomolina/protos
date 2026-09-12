@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
@@ -88,6 +89,67 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosEncodingValue stderrEncoding,
             ProtosFilesystemValue defaultFilesystem,
             ProtosNetworkCapabilityValue defaultNetwork) {
+        return createInternal(
+                prelude,
+                applicationArguments,
+                environmentNameDomain,
+                environmentEntries,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                stdinEncoding,
+                stdoutEncoding,
+                stderrEncoding,
+                defaultFilesystem,
+                defaultNetwork,
+                null);
+    }
+
+    static Result createWithRootResources(
+            ProtosPrelude prelude,
+            List<String> applicationArguments,
+            ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding,
+            ProtosFilesystemValue defaultFilesystem,
+            ProtosNetworkCapabilityValue defaultNetwork,
+            ProtosMapValue rootResources) {
+        Objects.requireNonNull(rootResources, "rootResources");
+        return createInternal(
+                prelude,
+                applicationArguments,
+                environmentNameDomain,
+                environmentEntries,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                stdinEncoding,
+                stdoutEncoding,
+                stderrEncoding,
+                defaultFilesystem,
+                defaultNetwork,
+                rootResources);
+    }
+
+    private static Result createInternal(
+            ProtosPrelude prelude,
+            List<String> applicationArguments,
+            ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding,
+            ProtosFilesystemValue defaultFilesystem,
+            ProtosNetworkCapabilityValue defaultNetwork,
+            ProtosMapValue rootResources) {
         Objects.requireNonNull(prelude, "prelude");
         Objects.requireNonNull(applicationArguments, "applicationArguments");
         Objects.requireNonNull(environmentNameDomain, "environmentNameDomain");
@@ -97,7 +159,8 @@ public final class ProtosStandaloneProcessBootstrap {
                 new ProtosProcessRuntime(
                         prelude.actorRefPrototypeForRuntime(),
                         defaultFilesystem,
-                        defaultNetwork);
+                        defaultNetwork,
+                        rootResources);
 
         process.establishArgumentsForRuntime(
                 ProtosStandardProcessArgumentsProtocol.createPrototype(),
