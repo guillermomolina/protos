@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082/D085 RATIFIED; G3 BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082/D085/D089 RATIFIED; G3P P1/P2/P3A CLOSED, P3B/P4 pending; G3 BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1294,6 +1294,44 @@ public/durable boundary.
 `LM009-G3` remains **BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION**. P3/P4 under GitHub
 #373 still own exact candidate-root provider/acquisition integration, freshness
 invalidation evidence, multi-root/duplicate-binding behavior and prerequisite closure.
+
+## LM009-G3P P3A canonical ProjectBinding projection producer
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED**
+Coordination: GitHub #413 (parent #373)
+Authority: D082 Candidate A′ + D085 Candidate F′ + D089 Candidate A″
+
+P3A implements only the Package-Tool-owned producer side of the D089 generation-1
+`protos.project` contract. It does not yet let the static language server acquire a
+binding.
+
+Published implementation boundary:
+
+- `self:ProjectDocument` validates and canonically renders generation-1
+  `protos.project`, including the fixed semantic/mechanical witness methods,
+  lowercase SHA-256 spellings, canonical qstrings, unique PackageIds/locations and
+  deterministic workspace-member ordering;
+- `self:ProjectMetadata` computes exactly the ratified
+  `protos-project-metadata-v1` byte framing over root `protos.toml`, ordered member
+  manifests and root `protos.lock`, excluding ordinary `.protos` source bytes;
+- `self:ProjectFile` derives the portable projection only from canonical Package
+  Tool `ResolutionRoot` + `ResolutionInput` + canonical lock authority, rejects a
+  stale or structurally mismatched lock, and provides the bounded
+  `publishCurrent(projectTreeFilesystem, projectMetadataFilesystem)` primitive
+  through the existing atomic metadata-publication substrate;
+- no absolute host path or complete source inventory is serialized;
+- no new public Package Tool command spelling, automatic refresh, project discovery,
+  LSP manifest/lock interpretation, guest execution in static requests, workspace
+  symbol index/query, G4 definition behavior or LM009-H behavior is introduced.
+
+Focused Package Tool conformance covers an exact root-only projection vector,
+canonical member ordering, the binary-safe mechanical metadata digest with ordinary
+source bytes excluded, and stale semantic-lock rejection.
+
+`LM009-G3` remains **BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION**. P3B still owns the
+host/editor-neutral generation-1 reader, exact candidate-root validation and
+ProjectBinding-provider materialization; P4 then owns multi-root/freshness/no-guest
+closure evidence.
 \
 \n## D089 ProjectBinding projection publication/acquisition ratification
 
@@ -1331,3 +1369,4 @@ manifest/lock semantic authority or workspace-symbol indexing.
 `LM009-G3` remains **BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION** until P3/P4 publish and
 GitHub #373 closes. P4 still owns multi-root isolation, duplicate binding rejection,
 freshness invalidation and static no-guest closure evidence.
+

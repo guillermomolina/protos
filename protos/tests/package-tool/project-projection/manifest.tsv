@@ -1,0 +1,5 @@
+# case	fixture	expected
+root-only	build-current.protos	true
+root-only	canonical-document-order.protos	true
+member-bytes	metadata-members.protos	true
+stale	stale-semantic-error.protos	error

@@ -1,0 +1,146 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THIS LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Document: import("self:ProjectDocument")
+Input: import("self:ResolutionInput")
+LockFile: import("self:LockFile")
+Metadata: import("self:ProjectMetadata")
+Publication: import("self:MetadataPublication")
+Root: import("self:ResolutionRoot")
+
+fail: () => {
+    Error().signal()
+}
+
+workspaceRefMatches: (ref, packageId) => {
+    matches: ref.kind == "workspace"
+    matches.ifTrue(() => {
+        matches = ref.packageId == packageId
+    })
+    matches
+}
+
+lockMemberAt: (lock, location) => {
+    found: null
+    count: 0
+
+    lock.workspaceMembers.each((member) => {
+        (member.declaration == location).ifTrue(() => {
+            found = member
+            count = count + 1
+        })
+    })
+
+    (count > 1).ifTrue(() => {
+        fail()
+    })
+
+    found
+}
+
+projectionMembers: (resolutionRoot) => {
+    members: Array()
+
+    resolutionRoot.members.each((member) => {
+        members = Array(
+            ...members,
+            {
+                location: member.location
+                packageId: member.packageId
+            }
+        )
+    })
+
+    Document.normalizeMembers(members)
+}
+
+validateLockProjection: (lock, resolutionRoot) => {
+    workspaceRefMatches(lock.root, resolutionRoot.root.packageId).ifFalse(() => {
+        fail()
+    })
+
+    (lock.workspaceMembers.size() == resolutionRoot.members.size()).ifFalse(() => {
+        fail()
+    })
+
+    resolutionRoot.members.each((member) => {
+        locked: lockMemberAt(lock, member.location)
+        (locked === null).ifTrue(() => {
+            fail()
+        })
+
+        workspaceRefMatches(locked.ref, member.packageId).ifFalse(() => {
+            fail()
+        })
+    })
+
+    lock
+}
+
+validatedResolutionWitness: (lock, resolutionRoot) => {
+    Input.matchesHeader(resolutionRoot, lock.header).ifFalse(() => {
+        fail()
+    })
+
+    {
+        method: lock.header.resolutionMethod
+        algorithm: lock.header.digestAlgorithm
+        hex: lock.header.digestHex
+    }
+}
+
+buildCurrent: (projectTreeFilesystem) => {
+    state: Root.assembleState(projectTreeFilesystem)
+    resolutionRoot: state.resolutionRoot
+    lock: LockFile.load(projectTreeFilesystem)
+    resolutionWitness: validatedResolutionWitness(lock, resolutionRoot)
+    validateLockProjection(lock, resolutionRoot)
+
+    members: projectionMembers(resolutionRoot)
+
+    // Resolve the suspending metadata read/digest before record construction.
+    // ContentIdentity follows the same rule: records are constructed only after
+    // all potentially suspending reads have completed.
+    metadataContent: Metadata.digest(projectTreeFilesystem, members)
+    rootPackageId: resolutionRoot.root.packageId
+
+    Document.normalize(
+        {
+            projectFormat: 1
+            resolutionInput: resolutionWitness
+            metadataContent: metadataContent
+            rootPackageId: rootPackageId
+            members: members
+        }
+    )
+}
+
+renderCurrent: (projectTreeFilesystem) => {
+    Document.write(buildCurrent(projectTreeFilesystem))
+}
+
+publishCurrent: (projectTreeFilesystem, projectMetadataFilesystem) => {
+    model: buildCurrent(projectTreeFilesystem)
+    text: Document.write(model)
+
+    Publication.publish(
+        projectMetadataFilesystem,
+        ".protos.project.stage",
+        "protos.project",
+        text
+    )
+
+    model
+}

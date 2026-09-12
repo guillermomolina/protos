@@ -1,0 +1,129 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THIS LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Document: import("self:ProjectDocument")
+Files: import("std:io/Files")
+Root: import("self:ResolutionRoot")
+SHA256: import("std:crypto/SHA256")
+
+fail: () => {
+    Error().signal()
+}
+
+appendBytes: (target, source) => {
+    source.each((octet) => {
+        target.add(octet)
+    })
+    target
+}
+
+decimalText: (value) => {
+    (value < 0).ifTrue(() => {
+        fail()
+    })
+
+    result: ""
+    (value == 0).ifTrue(() => {
+        result = "0"
+    })
+
+    remaining: value
+    digits: Array("0", "1", "2", "3", "4", "5", "6", "7", "8", "9")
+    (() => remaining > 0).while(() => {
+        result = digits[remaining.mod(10)] + result
+        remaining = remaining.div(10)
+    })
+
+    result
+}
+
+lowerHex: (digestBytes) => {
+    digits: Array(
+        "0", "1", "2", "3",
+        "4", "5", "6", "7",
+        "8", "9", "a", "b",
+        "c", "d", "e", "f"
+    )
+
+    result: ""
+    digestBytes.each((octet) => {
+        result =
+            result +
+            digits[octet.div(16)] +
+            digits[octet.mod(16)]
+    })
+    result
+}
+
+appendRecord: (stream, pathText, content) => {
+    pathBytes: Encoding.UTF8.encode(pathText)
+
+    appendBytes(stream, Encoding.UTF8.encode(decimalText(pathBytes.size())))
+    stream.add(58)
+    appendBytes(stream, pathBytes)
+    stream.add(10)
+
+    appendBytes(stream, Encoding.UTF8.encode(decimalText(content.size())))
+    stream.add(58)
+    appendBytes(stream, content)
+    stream.add(10)
+
+    stream
+}
+
+readBytes: (filesystem, path) => {
+    Files.readAllBytes(filesystem, path).value()
+}
+
+canonicalStream: (projectTreeFilesystem, members) => {
+    canonicalMembers: Document.normalizeMembers(members)
+    stream: Encoding.UTF8.encode("protos-project-metadata-v1\n")
+
+    rootManifestContent:
+        readBytes(
+            projectTreeFilesystem,
+            Path.relative().child("protos.toml")
+        )
+    appendRecord(stream, "protos.toml", rootManifestContent)
+
+    canonicalMembers.each((member) => {
+        pathText: member.location + "/protos.toml"
+        memberManifestContent:
+            readBytes(
+                projectTreeFilesystem,
+                Root.memberManifestPath(member.location)
+            )
+        appendRecord(stream, pathText, memberManifestContent)
+    })
+
+    lockContent:
+        readBytes(
+            projectTreeFilesystem,
+            Path.relative().child("protos.lock")
+        )
+    appendRecord(stream, "protos.lock", lockContent)
+
+    stream
+}
+
+digest: (projectTreeFilesystem, members) => {
+    digestBytes: SHA256.digest(canonicalStream(projectTreeFilesystem, members))
+
+    {
+        method: "protos-project-metadata-v1"
+        algorithm: "sha256"
+        hex: lowerHex(digestBytes)
+    }
+}

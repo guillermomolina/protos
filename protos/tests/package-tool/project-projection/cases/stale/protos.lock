@@ -1,0 +1,5 @@
+lock-format 1
+resolver-version 1
+resolution-input protos-resolution-input-v1 sha256:0000000000000000000000000000000000000000000000000000000000000000
+
+root workspace "root"

@@ -1,0 +1,222 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THIS LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Arrays: import("std:collections/Array")
+Root: import("self:ResolutionRoot")
+Syntax: import("self:LockSyntax")
+
+fail: () => {
+    Error().signal()
+}
+
+nonEmptyQstring: (text) => {
+    bytes: Encoding.UTF8.encode(text)
+    (bytes.size() == 0).ifTrue(() => {
+        fail()
+    })
+    ignoredCanonicalEncoding: Syntax.renderQstring(text)
+    text
+}
+
+lowerHexDigit: (octet) => {
+    digit: octet >= 48
+    (octet > 57).ifTrue(() => {
+        digit = false
+    })
+
+    digit.ifFalse(() => {
+        digit = octet >= 97
+        (octet > 102).ifTrue(() => {
+            digit = false
+        })
+    })
+
+    digit
+}
+
+validateDigest: (digest, expectedMethod) => {
+    (digest.method == expectedMethod).ifFalse(() => {
+        fail()
+    })
+    (digest.algorithm == "sha256").ifFalse(() => {
+        fail()
+    })
+
+    hex: Encoding.UTF8.encode(digest.hex)
+    (hex.size() == 64).ifFalse(() => {
+        fail()
+    })
+    hex.each((octet) => {
+        lowerHexDigit(octet).ifFalse(() => {
+            fail()
+        })
+    })
+
+    {
+        method: digest.method
+        algorithm: digest.algorithm
+        hex: digest.hex
+    }
+}
+
+bytesLess: (left, right) => {
+    index: 0
+    decided: false
+    result: false
+    rightSize: right.size()
+
+    left.each((leftOctet) => {
+        decided.ifFalse(() => {
+            (index < rightSize).ifTrue(() => {
+                rightOctet: right[index]
+
+                (leftOctet < rightOctet).ifTrue(() => {
+                    result = true
+                    decided = true
+                })
+
+                decided.ifFalse(() => {
+                    (leftOctet > rightOctet).ifTrue(() => {
+                        result = false
+                        decided = true
+                    })
+                })
+            })
+        })
+        index = index + 1
+    })
+
+    decided.ifFalse(() => {
+        result = left.size() < right.size()
+    })
+
+    result
+}
+
+qstringLess: (left, right) => {
+    bytesLess(
+        Encoding.UTF8.encode(Syntax.renderQstring(left)),
+        Encoding.UTF8.encode(Syntax.renderQstring(right))
+    )
+}
+
+memberLess: (left, right) => {
+    result: false
+    decided: false
+
+    (left.location == right.location).ifFalse(() => {
+        result = qstringLess(left.location, right.location)
+        decided = true
+    })
+
+    decided.ifFalse(() => {
+        (left.packageId == right.packageId).ifFalse(() => {
+            result = qstringLess(left.packageId, right.packageId)
+        })
+    })
+
+    result
+}
+
+normalizeMembers: (members) => {
+    seenLocations: Map()
+    seenPackageIds: Map()
+    copied: Array()
+
+    members.each((member) => {
+        location: Root.canonicalMemberLocation(member.location)
+        (location == member.location).ifFalse(() => {
+            fail()
+        })
+
+        packageId: nonEmptyQstring(member.packageId)
+
+        seenLocations.containsKey(location).ifTrue(() => {
+            fail()
+        })
+        seenLocations[location] = true
+
+        seenPackageIds.containsKey(packageId).ifTrue(() => {
+            fail()
+        })
+        seenPackageIds[packageId] = true
+
+        copied = Array(
+            ...copied,
+            {
+                location: location
+                packageId: packageId
+            }
+        )
+    })
+
+    Arrays.sort(copied, memberLess)
+}
+
+normalize: (model) => {
+    (model.projectFormat == 1).ifFalse(() => {
+        fail()
+    })
+
+    rootPackageId: nonEmptyQstring(model.rootPackageId)
+    resolutionInput:
+        validateDigest(model.resolutionInput, "protos-resolution-input-v1")
+    metadataContent:
+        validateDigest(model.metadataContent, "protos-project-metadata-v1")
+    members: normalizeMembers(model.members)
+
+    members.each((member) => {
+        (member.packageId == rootPackageId).ifTrue(() => {
+            fail()
+        })
+    })
+
+    {
+        projectFormat: 1
+        resolutionInput: resolutionInput
+        metadataContent: metadataContent
+        rootPackageId: rootPackageId
+        members: members
+    }
+}
+
+write: (model) => {
+    canonical: normalize(model)
+
+    result:
+        "project-format 1\n" +
+        "resolution-input " +
+        canonical.resolutionInput.method + " " +
+        canonical.resolutionInput.algorithm + ":" +
+        canonical.resolutionInput.hex + "\n" +
+        "metadata-content " +
+        canonical.metadataContent.method + " " +
+        canonical.metadataContent.algorithm + ":" +
+        canonical.metadataContent.hex + "\n\n" +
+        "root workspace " +
+        Syntax.renderQstring(canonical.rootPackageId) + "\n"
+
+    canonical.members.each((member) => {
+        result =
+            result +
+            "workspace-member " +
+            Syntax.renderQstring(member.location) +
+            " workspace " +
+            Syntax.renderQstring(member.packageId) +
+            "\n"
+    })
+
+    result
+}

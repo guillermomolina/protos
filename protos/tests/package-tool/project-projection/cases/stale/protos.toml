@@ -1,0 +1,9 @@
+manifest-version = 1
+
+[package]
+id = "root"
+version = "1.0.0"
+
+[exports]
+Main = "app/Main"
+Alias = "app/Main"

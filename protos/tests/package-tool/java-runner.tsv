@@ -4,3 +4,4 @@ plain	lock
 project-tree	resolution-root
 project-tree	execution-plan
 plain	resolution-input
+project-tree	project-projection
