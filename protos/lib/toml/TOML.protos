@@ -455,6 +455,654 @@ table: (...nameNodePairs) => {
     }
 }
 
+encode: (rootTable) => {
+    output: Encoding.UTF8.encode("")
+
+    fail: () => {
+        Error().signal()
+    }
+
+    emitText: (text) => {
+        ignoredStringValidation: text + ""
+        Encoding.UTF8.encode(text).each((octet) => {
+            output.add(octet)
+        })
+    }
+
+    emitHexNibble: (digit) => {
+        (digit < 10).ifTrue(() => {
+            output.add(48 + digit)
+        })
+        (digit >= 10).ifTrue(() => {
+            output.add(55 + digit)
+        })
+    }
+
+    emitBasicString: (text) => {
+        ignoredStringValidation: text + ""
+
+        output.add(34)
+        Encoding.UTF8.encode(text).each((octet) => {
+            handled: false
+
+            (octet == 34).ifTrue(() => {
+                output.add(92)
+                output.add(34)
+                handled = true
+            })
+            (octet == 92).ifTrue(() => {
+                output.add(92)
+                output.add(92)
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                control: octet < 32
+                (octet == 127).ifTrue(() => {
+                    control = true
+                })
+                control.ifTrue(() => {
+                    output.add(92)
+                    output.add(117)
+                    output.add(48)
+                    output.add(48)
+                    emitHexNibble(octet.div(16))
+                    emitHexNibble(octet.mod(16))
+                    handled = true
+                })
+            })
+
+            handled.ifFalse(() => {
+                output.add(octet)
+            })
+        })
+        output.add(34)
+    }
+
+    integerText: (value) => {
+        ignoredIntegerValidation: value.div(1)
+
+        negative: value < 0
+        magnitude: value
+        negative.ifTrue(() => {
+            magnitude = 0 - value
+        })
+
+        reversed: Encoding.UTF8.encode("")
+        (magnitude == 0).ifTrue(() => {
+            reversed.add(48)
+        })
+        (() => magnitude > 0).while(() => {
+            reversed.add(48 + magnitude.mod(10))
+            magnitude = magnitude.div(10)
+        })
+
+        result: Encoding.UTF8.encode("")
+        negative.ifTrue(() => {
+            result.add(45)
+        })
+
+        index: reversed.size() - 1
+        (() => index >= 0).while(() => {
+            result.add(reversed[index])
+            index = index - 1
+        })
+
+        Encoding.UTF8.decode(result)
+    }
+
+    repeatZero: (count) => {
+        result: ""
+        remaining: count
+        (() => remaining > 0).while(() => {
+            result = result + "0"
+            remaining = remaining - 1
+        })
+        result
+    }
+
+    powerInteger: (base, exponent) => {
+        (exponent < 0).ifTrue(() => {
+            fail()
+        })
+
+        result: 1
+        factor: base
+        remaining: exponent
+
+        (() => remaining > 0).while(() => {
+            (remaining.mod(2) == 1).ifTrue(() => {
+                result = result * factor
+            })
+            remaining = remaining.div(2)
+            (remaining > 0).ifTrue(() => {
+                factor = factor * factor
+            })
+        })
+
+        result
+    }
+
+    absoluteInteger: (value) => {
+        result: value
+        (result < 0).ifTrue(() => {
+            result = 0 - result
+        })
+        result
+    }
+
+    decimalToken: (coefficient, decimalExponent) => {
+        digits: integerText(coefficient)
+        digitCount: digits.size()
+
+        fixed: ""
+        (decimalExponent >= 0).ifTrue(() => {
+            fixed = digits + repeatZero(decimalExponent) + ".0"
+        })
+
+        (decimalExponent < 0).ifTrue(() => {
+            point: digitCount + decimalExponent
+
+            (point <= 0).ifTrue(() => {
+                fixed = "0." + repeatZero(0 - point) + digits
+            })
+
+            (point > 0).ifTrue(() => {
+                result: ""
+                index: 0
+                (() => index < digitCount).while(() => {
+                    (index == point).ifTrue(() => {
+                        result = result + "."
+                    })
+                    result = result + digits[index]
+                    index = index + 1
+                })
+                fixed = result
+            })
+        })
+
+        scientificExponent: decimalExponent + digitCount - 1
+        scientific: digits[0]
+
+        (digitCount > 1).ifTrue(() => {
+            scientific = scientific + "."
+            index: 1
+            (() => index < digitCount).while(() => {
+                scientific = scientific + digits[index]
+                index = index + 1
+            })
+        })
+
+        scientific = scientific + "e" + integerText(scientificExponent)
+
+        result: fixed
+        (scientific.size() < fixed.size()).ifTrue(() => {
+            result = scientific
+        })
+        result
+    }
+
+    floatText: (value) => {
+        ignoredFloatValidation: 0.0 + value
+
+        positiveInfinity: 1.0 / 0.0
+        negativeInfinity: 0.0 - positiveInfinity
+
+        result: null
+        handled: false
+
+        (value == value).ifFalse(() => {
+            result = "nan"
+            handled = true
+        })
+
+        handled.ifFalse(() => {
+            (value == positiveInfinity).ifTrue(() => {
+                result = "inf"
+                handled = true
+            })
+        })
+
+        handled.ifFalse(() => {
+            (value == negativeInfinity).ifTrue(() => {
+                result = "-inf"
+                handled = true
+            })
+        })
+
+        handled.ifFalse(() => {
+            (value == 0.0).ifTrue(() => {
+                result = "0.0"
+                ((1.0 / value) == negativeInfinity).ifTrue(() => {
+                    result = "-0.0"
+                })
+                handled = true
+            })
+        })
+
+        handled.ifFalse(() => {
+            negative: value < 0.0
+            magnitude: value
+            negative.ifTrue(() => {
+                magnitude = 0.0 - value
+            })
+
+            normalized: magnitude
+            binaryExponent: 0
+
+            (() => normalized >= 2.0).while(() => {
+                normalized = normalized / 2.0
+                binaryExponent = binaryExponent + 1
+            })
+
+            (() => normalized < 1.0).while(() => {
+                normalized = normalized * 2.0
+                binaryExponent = binaryExponent - 1
+            })
+
+            significand: Integer(normalized * 4503599627370496.0)
+            binaryShift: binaryExponent - 52
+
+            numerator: significand
+            denominator: 1
+
+            (binaryShift >= 0).ifTrue(() => {
+                numerator = numerator * powerInteger(2, binaryShift)
+            })
+
+            (binaryShift < 0).ifTrue(() => {
+                denominator = powerInteger(2, 0 - binaryShift)
+            })
+
+            decimalExponent: 0
+
+            (numerator >= denominator).ifTrue(() => {
+                threshold: denominator * 10
+                (() => numerator >= threshold).while(() => {
+                    decimalExponent = decimalExponent + 1
+                    threshold = threshold * 10
+                })
+            })
+
+            (numerator < denominator).ifTrue(() => {
+                decimalExponent = -1
+                scaledNumerator: numerator * 10
+                (() => scaledNumerator < denominator).while(() => {
+                    decimalExponent = decimalExponent - 1
+                    scaledNumerator = scaledNumerator * 10
+                })
+            })
+
+            coefficient: null
+            coefficientExponent: 0
+            significantDigits: 1
+
+            (() => (coefficient === null) && (significantDigits <= 17)).while(() => {
+                candidateExponent: decimalExponent - significantDigits + 1
+                scaledNumerator: numerator
+                scaledDenominator: denominator
+
+                (candidateExponent >= 0).ifTrue(() => {
+                    scaledDenominator =
+                        scaledDenominator * powerInteger(10, candidateExponent)
+                })
+
+                (candidateExponent < 0).ifTrue(() => {
+                    scaledNumerator =
+                        scaledNumerator * powerInteger(10, 0 - candidateExponent)
+                })
+
+                quotient: scaledNumerator.div(scaledDenominator)
+                remainder: scaledNumerator.mod(scaledDenominator)
+                rounded: quotient
+                twiceRemainder: remainder * 2
+
+                (twiceRemainder > scaledDenominator).ifTrue(() => {
+                    rounded = rounded + 1
+                })
+
+                (twiceRemainder == scaledDenominator).ifTrue(() => {
+                    (rounded.mod(2) == 1).ifTrue(() => {
+                        rounded = rounded + 1
+                    })
+                })
+
+                bestCandidate: null
+                bestDistance: null
+
+                roundTrips: (candidate) => {
+                    candidateFloat: null
+
+                    (candidateExponent >= 0).ifTrue(() => {
+                        candidateFloat =
+                            Float(candidate * powerInteger(10, candidateExponent))
+                    })
+
+                    (candidateExponent < 0).ifTrue(() => {
+                        candidateFloat =
+                            candidate / powerInteger(10, 0 - candidateExponent)
+                    })
+
+                    candidateFloat == magnitude
+                }
+
+                consider: (candidate) => {
+                    (candidate > 0).ifTrue(() => {
+                        roundTrips(candidate).ifTrue(() => {
+                            distance:
+                                absoluteInteger(
+                                    scaledNumerator - candidate * scaledDenominator
+                                )
+
+                            better: bestCandidate === null
+
+                            (bestCandidate === null).ifFalse(() => {
+                                (distance < bestDistance).ifTrue(() => {
+                                    better = true
+                                })
+
+                                (distance == bestDistance).ifTrue(() => {
+                                    candidateEven: candidate.mod(2) == 0
+                                    bestOdd: bestCandidate.mod(2) == 1
+                                    (candidateEven && bestOdd).ifTrue(() => {
+                                        better = true
+                                    })
+                                })
+                            })
+
+                            better.ifTrue(() => {
+                                bestCandidate = candidate
+                                bestDistance = distance
+                            })
+                        })
+                    })
+                }
+
+                consider(rounded)
+                consider(rounded - 1)
+                consider(rounded + 1)
+
+                (bestCandidate === null).ifFalse(() => {
+                    coefficient = bestCandidate
+                    coefficientExponent = candidateExponent
+                })
+
+                significantDigits = significantDigits + 1
+            })
+
+            (coefficient === null).ifTrue(() => {
+                fail()
+            })
+
+            (() => coefficient.mod(10) == 0).while(() => {
+                coefficient = coefficient.div(10)
+                coefficientExponent = coefficientExponent + 1
+            })
+
+            result = decimalToken(coefficient, coefficientExponent)
+            negative.ifTrue(() => {
+                result = "-" + result
+            })
+        })
+
+        result
+    }
+
+    paddedIntegerText: (value, width) => {
+        text: integerText(value)
+        result: text
+        (() => result.size() < width).while(() => {
+            result = "0" + result
+        })
+        result
+    }
+
+    fractionText: (fraction) => {
+        coefficient: fraction.coefficient
+        digits: fraction.digits
+
+        ignoredCoefficientValidation: coefficient.div(1)
+        ignoredDigitsValidation: digits.div(1)
+
+        result: ""
+        (digits > 0).ifTrue(() => {
+            raw: integerText(coefficient)
+            (() => raw.size() < digits).while(() => {
+                raw = "0" + raw
+            })
+            result = "." + raw
+        })
+        result
+    }
+
+    dateText: (value) => {
+        ignoredValidation: localDate(value.year, value.month, value.day)
+        paddedIntegerText(value.year, 4) +
+            "-" +
+            paddedIntegerText(value.month, 2) +
+            "-" +
+            paddedIntegerText(value.day, 2)
+    }
+
+    timeText: (value) => {
+        ignoredValidation:
+            localTime(
+                value.hour,
+                value.minute,
+                value.second,
+                value.fraction.coefficient,
+                value.fraction.digits
+            )
+
+        paddedIntegerText(value.hour, 2) +
+            ":" +
+            paddedIntegerText(value.minute, 2) +
+            ":" +
+            paddedIntegerText(value.second, 2) +
+            fractionText(value.fraction)
+    }
+
+    localDateTimeText: (value) => {
+        ignoredValidation:
+            localDateTime(
+                value.year,
+                value.month,
+                value.day,
+                value.hour,
+                value.minute,
+                value.second,
+                value.fraction.coefficient,
+                value.fraction.digits
+            )
+
+        datePart: {
+            year: value.year
+            month: value.month
+            day: value.day
+        }
+
+        timePart: {
+            hour: value.hour
+            minute: value.minute
+            second: value.second
+            fraction: value.fraction
+        }
+
+        dateText(datePart) + "T" + timeText(timePart)
+    }
+
+    offsetDateTimeText: (value) => {
+        ignoredValidation:
+            offsetDateTime(
+                value.year,
+                value.month,
+                value.day,
+                value.hour,
+                value.minute,
+                value.second,
+                value.fraction.coefficient,
+                value.fraction.digits,
+                value.offsetMinutes
+            )
+
+        datePart: {
+            year: value.year
+            month: value.month
+            day: value.day
+        }
+
+        timePart: {
+            hour: value.hour
+            minute: value.minute
+            second: value.second
+            fraction: value.fraction
+        }
+
+        offsetText: "Z"
+        (value.offsetMinutes == 0).ifFalse(() => {
+            sign: "+"
+            magnitude: value.offsetMinutes
+            (magnitude < 0).ifTrue(() => {
+                sign = "-"
+                magnitude = 0 - magnitude
+            })
+
+            offsetText =
+                sign +
+                paddedIntegerText(magnitude.div(60), 2) +
+                ":" +
+                paddedIntegerText(magnitude.mod(60), 2)
+        })
+
+        dateText(datePart) + "T" + timeText(timePart) + offsetText
+    }
+
+    active: IdentityMap()
+    visit: null
+
+    visit = (node) => {
+        kind: node.kind
+        value: node.value
+        handled: false
+
+        (kind === "string").ifTrue(() => {
+            ignoredValidation: string(value)
+            emitBasicString(value)
+            handled = true
+        })
+
+        (kind === "integer").ifTrue(() => {
+            ignoredValidation: integer(value)
+            emitText(integerText(value))
+            handled = true
+        })
+
+        (kind === "float").ifTrue(() => {
+            ignoredValidation: float(value)
+            emitText(floatText(value))
+            handled = true
+        })
+
+        (kind === "boolean").ifTrue(() => {
+            ignoredValidation: boolean(value)
+            (value === true).ifTrue(() => {
+                emitText("true")
+            })
+            (value === false).ifTrue(() => {
+                emitText("false")
+            })
+            handled = true
+        })
+
+        (kind === "localDate").ifTrue(() => {
+            emitText(dateText(value))
+            handled = true
+        })
+
+        (kind === "localTime").ifTrue(() => {
+            emitText(timeText(value))
+            handled = true
+        })
+
+        (kind === "localDateTime").ifTrue(() => {
+            emitText(localDateTimeText(value))
+            handled = true
+        })
+
+        (kind === "offsetDateTime").ifTrue(() => {
+            emitText(offsetDateTimeText(value))
+            handled = true
+        })
+
+        (kind === "array").ifTrue(() => {
+            active.containsKey(node).ifTrue(() => {
+                fail()
+            })
+            active[node] = true
+
+            output.add(91)
+            first: true
+            value.each((child) => {
+                first.ifFalse(() => {
+                    emitText(", ")
+                })
+                visit(child)
+                first = false
+            })
+            output.add(93)
+
+            active.remove(node)
+            handled = true
+        })
+
+        (kind === "table").ifTrue(() => {
+            active.containsKey(node).ifTrue(() => {
+                fail()
+            })
+            active[node] = true
+
+            output.add(123)
+            first: true
+            value.each((name, child) => {
+                ignoredNameValidation: name + ""
+
+                first.ifFalse(() => {
+                    emitText(", ")
+                })
+                emitBasicString(name)
+                emitText(" = ")
+                visit(child)
+                first = false
+            })
+            output.add(125)
+
+            active.remove(node)
+            handled = true
+        })
+
+        handled.ifFalse(() => {
+            fail()
+        })
+    }
+
+    (rootTable.kind === "table").ifFalse(() => {
+        fail()
+    })
+
+    active[rootTable] = true
+    rootTable.value.each((name, child) => {
+        ignoredNameValidation: name + ""
+        emitBasicString(name)
+        emitText(" = ")
+        visit(child)
+        output.add(10)
+    })
+    active.remove(rootTable)
+
+    Encoding.UTF8.decode(output)
+}
+
+
 parse: (text) => {
     ignoredStringValidation: "" + text
 

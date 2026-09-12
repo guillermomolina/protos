@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-B CLOSED; D109 Candidate C RATIFIED; LIB010-C encoder implementation READY**
+Status: **LIB010-C IN_PROGRESS — C1 functional semantic encoder CLOSED; C2 encoder hardening/conformance READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -447,6 +447,25 @@ boundary.
 
 Source float spelling remains outside the semantic encoder and belongs to a
 future source-preserving `std:toml/Document` layer.
+
+### LIB010-C implementation decomposition
+
+- **C1 — functional semantic encoder: CLOSED.** `TOML.encode(rootTable)` emits
+  deterministic TOML 1.1 for all ten semantic kinds. Root table associations are
+  emitted as top-level assignments; nested tables use inline-table syntax and
+  arrays (including arrays of tables) use ordinary TOML arrays, preserving the
+  semantic tree without pretending to preserve source presentation. Keys and
+  Strings use deterministic basic-string escaping. Temporal values use canonical
+  numeric spellings and `Z` for zero offset while preserving D104 `second = 60`.
+  Float emission implements D109-C in ordinary Protos using exact unbounded
+  Integer arithmetic and existing exact numeric conversions; no new Java/native
+  boundary, host display formatter or binary64 bit-inspection primitive is added.
+- **C2 — encoder hardening/conformance: READY.** Remove input-depth recursion from
+  semantic container traversal, retain adversarial/deep encoder evidence, broaden
+  semantic round-trip/conformance cases, and close LIB010-C.
+
+C1 is an intermediate `FOCAL_BOUNDED` publication. Integrated full validation
+remains debt of top-level LIB010 closure.
 
 ## Round-trip guarantee
 
