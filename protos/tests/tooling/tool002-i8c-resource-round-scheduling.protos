@@ -1,0 +1,199 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Manifest: import("self:Manifest")
+Runner: import("self:Runner")
+Catalog: import("self:ResourceCatalog")
+
+baseFirst: Manifest.caseSpec(Array(
+    "i8c/first.protos",
+    "integer",
+    "10"
+))
+baseSecond: Manifest.caseSpec(Array(
+    "i8c/second.protos",
+    "integer",
+    "20"
+))
+baseThird: Manifest.caseSpec(Array(
+    "i8c/third.protos",
+    "integer",
+    "30"
+))
+
+first: Manifest.caseSpecWithRequirements(
+    baseFirst,
+    Array(Manifest.requirement("gpu", "exclusive", null))
+)
+second: Manifest.caseSpecWithRequirements(
+    baseSecond,
+    Array(Manifest.requirement("gpu", "exclusive", null))
+)
+third: Manifest.caseSpecWithRequirements(
+    baseThird,
+    Array(Manifest.requirement("db/integration", "exclusive", null))
+)
+
+resourcefulPlan: Manifest.frozenTuple(
+    Manifest.frozenTuple(first, second, third)
+)
+resourceFreePlan: Manifest.frozenTuple(
+    Manifest.frozenTuple(baseFirst, baseSecond, baseThird)
+)
+
+catalog: Catalog.parse(
+    "resource-catalog-version = 1\n" +
+    "[[resource]]\n" +
+    "key = \"gpu\"\n" +
+    "capacity = 1\n" +
+    "scope = \"placement\"\n" +
+    "provider = \"device/gpu\"\n" +
+    "[[resource]]\n" +
+    "key = \"db/integration\"\n" +
+    "capacity = 1\n" +
+    "scope = \"run\"\n" +
+    "provider = \"service/db\"\n"
+)
+
+sourceLoader: (spec) => {
+    id: Manifest.caseId(spec)
+    source: null
+
+    (id === "i8c/first.protos").ifTrue(() => { source = "10" })
+    (id === "i8c/second.protos").ifTrue(() => { source = "20" })
+    (id === "i8c/third.protos").ifTrue(() => { source = "30" })
+
+    (source === null).ifTrue(() => { Error().signal() })
+    source
+}
+
+admissionOrder: Array()
+
+executorAsync: (source) => {
+    admissionOrder = Array(...admissionOrder, source)
+
+    observedValue: null
+    (source === "10").ifTrue(() => { observedValue = 10 })
+    (source === "20").ifTrue(() => { observedValue = 20 })
+    (source === "30").ifTrue(() => { observedValue = 30 })
+    (observedValue === null).ifTrue(() => { Error().signal() })
+
+    (() => {
+        {
+            state: "completed"
+            value: observedValue
+            error: null
+        }
+    }).future()
+}
+
+resultsInPlanOrder: (run) => {
+    results: Runner.runCaseResults(run)
+    ordered: results.size() == 3
+
+    ordered.ifTrue(() => {
+        ordered =
+            Manifest.caseId(Runner.caseRunSpec(results[0])) ===
+            "i8c/first.protos"
+    })
+    ordered.ifTrue(() => {
+        ordered =
+            Manifest.caseId(Runner.caseRunSpec(results[1])) ===
+            "i8c/second.protos"
+    })
+    ordered.ifTrue(() => {
+        ordered =
+            Manifest.caseId(Runner.caseRunSpec(results[2])) ===
+            "i8c/third.protos"
+    })
+
+    ordered
+}
+
+runPassed: (run) => {
+    passed: Runner.runSelectedCount(run) == 3
+    passed = passed && (Runner.runPassedCount(run) == 3)
+    passed = passed && (Runner.runSkippedCount(run) == 0)
+    passed = passed && resultsInPlanOrder(run)
+    passed
+}
+
+// Same-window backfill: first(gpu) blocks second(gpu), third(db) may pass second.
+admissionOrder = Array()
+sameWindowRun: Runner.runBoundedWithResourcesWithLoader(
+    resourcefulPlan,
+    catalog,
+    sourceLoader,
+    executorAsync,
+    null,
+    3
+)
+sameWindowPassed: runPassed(sameWindowRun)
+sameWindowPassed = sameWindowPassed && (admissionOrder.size() == 3)
+sameWindowPassed.ifTrue(() => {
+    sameWindowPassed = admissionOrder[0] === "10"
+})
+sameWindowPassed.ifTrue(() => {
+    sameWindowPassed = admissionOrder[1] === "30"
+})
+sameWindowPassed.ifTrue(() => {
+    sameWindowPassed = admissionOrder[2] === "20"
+})
+
+// Cross-window prohibition with jobs=2: third belongs to next fixed H window.
+admissionOrder = Array()
+crossWindowRun: Runner.runBoundedWithResourcesWithLoader(
+    resourcefulPlan,
+    catalog,
+    sourceLoader,
+    executorAsync,
+    null,
+    2
+)
+crossWindowPassed: runPassed(crossWindowRun)
+crossWindowPassed = crossWindowPassed && (admissionOrder.size() == 3)
+crossWindowPassed.ifTrue(() => {
+    crossWindowPassed = admissionOrder[0] === "10"
+})
+crossWindowPassed.ifTrue(() => {
+    crossWindowPassed = admissionOrder[1] === "20"
+})
+crossWindowPassed.ifTrue(() => {
+    crossWindowPassed = admissionOrder[2] === "30"
+})
+
+// Resource-free compatibility: all members of jobs=3 window admit in one round.
+admissionOrder = Array()
+resourceFreeRun: Runner.runBoundedWithResourcesWithLoader(
+    resourceFreePlan,
+    Catalog.empty(),
+    sourceLoader,
+    executorAsync,
+    null,
+    3
+)
+resourceFreePassed: runPassed(resourceFreeRun)
+resourceFreePassed = resourceFreePassed && (admissionOrder.size() == 3)
+resourceFreePassed.ifTrue(() => {
+    resourceFreePassed = admissionOrder[0] === "10"
+})
+resourceFreePassed.ifTrue(() => {
+    resourceFreePassed = admissionOrder[1] === "20"
+})
+resourceFreePassed.ifTrue(() => {
+    resourceFreePassed = admissionOrder[2] === "30"
+})
+
+sameWindowPassed && crossWindowPassed && resourceFreePassed

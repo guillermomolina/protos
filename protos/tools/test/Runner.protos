@@ -14,6 +14,8 @@
 // the specific language governing rights and limitations under the License.
 
 Manifest: import("self:Manifest")
+ResourceBinding: import("self:ResourceBinding")
+ResourceReservation: import("self:ResourceReservation")
 
 readSource: (spec, filesystem) => {
     file: filesystem.open(Manifest.pathValue(Manifest.casePath(spec))).value()
@@ -1576,6 +1578,220 @@ runBoundedWithLoader: (
         cases.size() - selectedCases.size()
     )
 }
+
+
+// TOOL002-I8C: D105 fixed-H-window resource-round composition.
+//
+// Private alternate Runner entrypoint. Public Main remains on the resource-free
+// H path until later D076 provider/capability boundaries are implemented.
+runBoundedWithResourcesWithLoader: (
+    plan,
+    resourceCatalog,
+    sourceLoader,
+    executorAsync,
+    inspectorExecutorAsync,
+    maxInFlight
+) => {
+    maxInFlight.div(1)
+    (maxInFlight > 0).ifFalse(() => {
+        policyError()
+    })
+
+    cases: Manifest.planCases(plan)
+    selectedCases: Array()
+    cases.each((spec) => {
+        isDExpectation(spec).ifTrue(() => {
+            selectedCases = Array(...selectedCases, spec)
+        })
+    })
+
+    resultChunks: Map()
+    maxChunkLevel: -1
+
+    carryChunk: null
+    carryChunk = (chunk, level) => {
+        present: resultChunks.containsKey(level)
+        present.ifTrue(() => {
+            left: resultChunks[level]
+            resultChunks.remove(level)
+            carryChunk(Array(...left, ...chunk), level + 1)
+        })
+        present.ifFalse(() => {
+            resultChunks[level] = chunk
+            (level > maxChunkLevel).ifTrue(() => {
+                maxChunkLevel = level
+            })
+        })
+    }
+
+    collectChunks: null
+    collectChunks = (level, result) => {
+        finalResult: result
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            resultChunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...resultChunks[level])
+            })
+            finalResult = collectChunks(level - 1, nextResult)
+        })
+        finalResult
+    }
+
+    reservationState: ResourceReservation.newState(resourceCatalog)
+
+    nextIndex: 0
+    (() => nextIndex < selectedCases.size()).while(() => {
+        // D105 immutable logical H window.
+        windowSpecs: Array()
+        windowSources: Array()
+        windowBindings: Array()
+        windowResults: Array()
+        windowCount: 0
+
+        (() =>
+            (windowCount < maxInFlight) &&
+            (nextIndex < selectedCases.size())
+        ).while(() => {
+            spec: selectedCases[nextIndex]
+            source: sourceLoader(spec)
+            bindings: ResourceBinding.bindCase(spec, resourceCatalog)
+
+            windowSpecs = Array(...windowSpecs, spec)
+            windowSources = Array(...windowSources, source)
+            windowBindings = Array(...windowBindings, bindings)
+            windowResults = Array(...windowResults, null)
+
+            windowCount = windowCount + 1
+            nextIndex = nextIndex + 1
+        })
+
+        remainingInWindow: windowCount
+
+        (() => remainingInWindow > 0).while(() => {
+            roundIndexes: Array()
+            roundReservations: Array()
+            pending: Array()
+
+            // Stable TestPlan-order scan with same-window backfill.
+            windowIndex: 0
+            (() => windowIndex < windowCount).while(() => {
+                (windowResults[windowIndex] === null).ifTrue(() => {
+                    reservation: ResourceReservation.tryReserve(
+                        windowBindings[windowIndex],
+                        reservationState
+                    )
+
+                    (reservation === null).ifFalse(() => {
+                        spec: windowSpecs[windowIndex]
+                        source: windowSources[windowIndex]
+
+                        roundIndexes = Array(...roundIndexes, windowIndex)
+                        roundReservations = Array(
+                            ...roundReservations,
+                            reservation
+                        )
+                        pending = Array(
+                            ...pending,
+                            scheduleDCaseAsync(
+                                spec,
+                                source,
+                                executorAsync,
+                                inspectorExecutorAsync
+                            )
+                        )
+                    })
+                })
+
+                windowIndex = windowIndex + 1
+            })
+
+            // I8A static feasibility plus an empty prior-round boundary must
+            // make progress. Fail closed rather than spin if invariants regress.
+            (pending.size() == 0).ifTrue(() => {
+                policyError()
+            })
+
+            observations: Future.all(...pending).value()
+
+            // H/D055 async completion is the terminal execution barrier used by
+            // D105. Release the whole round before any rescan.
+            releaseIndex: 0
+            (() => releaseIndex < roundReservations.size()).while(() => {
+                ResourceReservation.release(
+                    roundReservations[releaseIndex],
+                    reservationState
+                )
+                releaseIndex = releaseIndex + 1
+            })
+
+            (
+                ResourceReservation.activeReservationCount(reservationState) == 0
+            ).ifFalse(() => {
+                policyError()
+            })
+
+            resultIndex: 0
+            (() => resultIndex < observations.size()).while(() => {
+                resultWindowIndex: roundIndexes[resultIndex]
+                spec: windowSpecs[resultWindowIndex]
+                source: windowSources[resultWindowIndex]
+                observation: observations[resultIndex]
+                evaluation: evaluateDObservation(spec, source, observation)
+
+                windowResults[resultWindowIndex] =
+                    caseRunTuple(spec, evaluation)
+
+                remainingInWindow = remainingInWindow - 1
+                resultIndex = resultIndex + 1
+            })
+        })
+
+        // Emit only after the whole fixed H window completes, in logical order.
+        resultWindowIndex: 0
+        (() => resultWindowIndex < windowCount).while(() => {
+            caseRun: windowResults[resultWindowIndex]
+            (caseRun === null).ifTrue(() => {
+                policyError()
+            })
+            carryChunk(Array(caseRun), 0)
+            resultWindowIndex = resultWindowIndex + 1
+        })
+    })
+
+    caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
+    passedCount: 0
+    caseResults.each((caseRun) => {
+        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+            passedCount = passedCount + 1
+        })
+    })
+
+    runTuple(
+        caseResults,
+        caseResults.size(),
+        passedCount,
+        cases.size() - selectedCases.size()
+    )
+}
+
+runBoundedWithResources: (
+    plan,
+    resourceCatalog,
+    filesystem,
+    executorAsync,
+    inspectorExecutorAsync,
+    maxInFlight
+) => {
+    runBoundedWithResourcesWithLoader(
+        plan,
+        resourceCatalog,
+        (spec) => { readSource(spec, filesystem) },
+        executorAsync,
+        inspectorExecutorAsync,
+        maxInFlight
+    )
+}
+
 
 runBounded: (
     plan,
