@@ -882,6 +882,92 @@ Do not create a future milestone such as `0.3.0` merely because it is the next
 plausible semantic version. Selecting the next public release target remains an
 explicit project-owner scheduling/release decision.
 
+## GitHub Issue vs implementation-slice boundary
+<!-- ISSUE-SLICE-BOUNDARY -->
+
+GitHub Issues and implementation slices serve different purposes and MUST NOT be
+treated as interchangeable bookkeeping levels.
+
+- A **GitHub Issue/Sub-issue** is a unit of coordination: it has an independently
+  meaningful lifecycle, dependency or scheduling boundary that belongs in the
+  live GitHub work graph.
+- A **slice** is a bounded implementation/publication unit inside one Issue. A
+  slice exists to keep a change reviewable, testable and safely publishable; it
+  does not become an Issue merely because it has a name, commit, patch, retry or
+  validation checkpoint.
+
+### Mechanical promotion rule
+
+Newly decomposed work starts as a slice unless one or more of the following
+objective promotion triggers is true. If **any** trigger is true, the work MUST
+have its own GitHub Issue and, when it is part of a larger tracked item, MUST be
+attached through GitHub's native Parent/Sub-issue relationship:
+
+1. **Independent closure** — the work has acceptance/closure criteria that can
+   be satisfied and closed while its parent remains open.
+2. **Independent blockage** — the work can become `BLOCKED` on a dependency
+   while a sibling under the same parent can validly continue.
+3. **Independent scheduling** — the work can be assigned to a separate
+   agent/worktree and progress in parallel with a sibling without requiring the
+   same ordered publication sequence.
+4. **Issue-to-Issue dependency** — the work must participate directly in a
+   native GitHub `blocked by` / `blocking` relationship with another Issue.
+5. **Decision checkpoint** — the work owns a substantive project-owner approval
+   checkpoint or a dedicated `Dxxx` / `PLATxxx` decision dependency whose
+   resolution is independently tracked.
+6. **Multi-publication scope** — before implementation begins, the work is
+   expected to require **three or more distinct publication slices**. Retry
+   launchers, `v2`/`v3` attempts, CI reruns and repairs of the same bounded slice
+   do not count toward this threshold.
+
+If none of triggers 1-6 is true, the work MUST remain a slice of its existing
+Issue rather than creating another Issue merely to mirror implementation
+decomposition.
+
+If a slice later crosses one of the triggers, promote it at that point: create
+the Issue, attach the native parent, record the already-completed slice evidence
+as history, and continue under the Issue. Do not rewrite historical commits just
+to make the hierarchy look as though it had existed earlier.
+
+### Things that are not Issues by themselves
+
+The following MUST stay inside their owning Issue unless they independently
+cross one of the promotion triggers above:
+
+- one bounded patch or publication slice;
+- a failed publication attempt or environmental retry;
+- `v2`, `v3`, or equivalent launcher revisions;
+- a regression repair whose only purpose is to restore the acceptance criteria
+  of the same slice;
+- focal/full validation checkpoints;
+- commit-only bookkeeping; and
+- purely mechanical subdivision used to limit changed files or test scope.
+
+### Native hierarchy and progress
+
+A textual `Parent: #NNN`, a comment, a work-record heading or a slice name does
+not create GitHub hierarchy. Whenever the promotion rule requires a child Issue,
+agents MUST use GitHub's native Parent/Sub-issue relationship. This keeps
+`Sub-issue progress` and the Project hierarchy meaningful.
+
+`Sub-issue progress` is intentionally **milestone progress, not patch progress**.
+Do not create microscopic child Issues merely to increase the denominator.
+
+### Historical reconciliation
+
+Do not retrospectively create one Issue for every historical slice.
+
+When an existing large Issue predates this rule, backfill only coordination-level
+milestones that satisfy at least one promotion trigger and are useful for making
+the current/future hierarchy truthful. Historical micro-slices remain durable
+repository/comment evidence. Closed milestones MAY be backfilled when they are
+needed to make a parent's native progress representative, but the migration MUST
+not manufacture fake work or alter historical closure evidence.
+
+This rule governs work-item granularity only. Native Issue dependencies remain
+governed by the dependency policy below, and substantive semantic/platform
+choices remain governed by the explicit approval gate.
+
 ## Native GitHub Issue dependencies
 <!-- GITHUB009 NATIVE-ISSUE-DEPENDENCY-AUTHORITY -->
 
