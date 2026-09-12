@@ -306,6 +306,54 @@ Test Tool corpus. Broader validation remains impact-driven rather than automatic
 No Protos specification, runtime implementation, Standard Library behavior,
 TOOL002 public behavior or implementation version changes in C.
 
+## TEST001-D — Core/language semantic migration
+
+Status: IN_PROGRESS
+
+### TEST001-D1 — OR-pattern semantic ownership
+
+Status: CLOSED
+
+D1 reconciles the D090 OR/alternative-pattern conformance family.
+
+The retiring Java class `ProtosOrMatchExecutionTest` directly executed seven
+ordinary conformance fixtures and asserted their public outcomes. Six of those
+fixtures were already authoritative TOOL002 main-manifest cases. D1 adds the
+remaining `matching/or-invalid-outcome-no-retry.protos` case to the same manifest
+with the already-supported `error` expectation, then removes the duplicate Java
+semantic-policy owner.
+
+The registered semantic contract is `language.match.or-alternatives` with
+TOOL002 as the primary owner.
+
+`ProtosMatchBytecodeExecutionTest` remains under JUnit as explicit
+`HOST_RUNTIME` secondary evidence. It tests Bytecode-backend parity,
+continuation/suspension behavior and runtime-transfer invariants; retaining it
+does not create a second semantic-policy owner.
+
+D1 does not change OR-pattern semantics, grammar, runtime implementation,
+TOOL002 behavior, expectation kinds or implementation version.
+
+#### TEST001-D1 focal validation profile
+
+Retained executable evidence and validation dependency closure:
+
+1. before retirement, `ProtosOrMatchExecutionTest` proves all seven fixture
+   outcomes against the publication baseline;
+2. after retirement, the ownership guard proves one registered primary owner;
+3. manifest checks prove all seven fixtures are selected exactly once by the
+   TOOL002 main plan, including the newly retained error case;
+4. `ProtosTestToolManifestPlanTest` validates the retained manifest-plan
+   machinery;
+5. `ProtosMatchBytecodeExecutionTest` validates the retained host/runtime
+   secondary owner;
+6. `scripts/source_style_guard.py` validates the candidate delta;
+7. the owning TEST001-D closure retains responsibility for broader integrated
+   validation before D closes.
+
+No full Maven suite or full TOOL002 corpus run is required for this bounded
+ownership-retirement child.
+
 ## Migration order established by A
 
 The dependency/order for remaining slices is:
@@ -366,7 +414,7 @@ Dxxx/LIBxxx/TOOLxxx/PLATxxx approval gate.
 | TEST001-A | CLOSED | Current suite classified at durable ownership-family level; per-test retirement rule fixed. |
 | TEST001-B | CLOSED | CI invokes packaged checkout `bin/protos test --jobs 2` directly; JUnit retains only a pre-corpus bundled-tool bootstrap floor. |
 | TEST001-C | CLOSED | Machine-readable semantic ownership ledger and fail-closed no-duplicate-primary-owner guard are active in publication validation. |
-| TEST001-D | READY | Core/language semantic migration under the C ownership guard. |
+| TEST001-D | IN_PROGRESS | Core/language semantic migration under the C ownership guard; D1 OR-pattern ownership closed. |
 | TEST001-E | BLOCKED_BY_D | Concurrency/execution-model semantic migration. |
 | TEST001-F | BLOCKED_BY_E | Standard Library migration. |
 | TEST001-G | BLOCKED_BY_F | Package/modules/I/O integration migration. |
@@ -396,3 +444,14 @@ and Maven implementation version do not change.
 Repository validation machinery, validation tests and ownership governance
 change. Protos specification, executable runtime implementation, Standard
 Library/Test Tool public behavior and Maven implementation version do not change.
+
+
+## TEST001-D1 publication classification
+
+`VALIDATION_CLASS=TEST_IMPACT`
+`VALIDATION_IMPACT=FOCAL_BOUNDED`
+
+D1 changes test ownership, one TOOL002 manifest row, the ownership registry and
+the TEST001 migration record. It removes one duplicate Java semantic-policy
+owner. It does not change specification, public behavior, runtime implementation,
+CI configuration or implementation version.

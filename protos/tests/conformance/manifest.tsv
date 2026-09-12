@@ -162,6 +162,7 @@ matching/or-structural-bindings.protos	boolean	true
 matching/or-nested-attempt-order.protos	boolean	true
 matching/or-subject-evaluated-once.protos	boolean	true
 matching/or-dynamic-captures.protos	boolean	true
+matching/or-invalid-outcome-no-retry.protos	error	-
 matching/guard-bindings-shared-with-body.protos	boolean	true
 matching/guard-false-next-arm-effects.protos	boolean	true
 matching/guard-pattern-mismatch-skips-guard.protos	boolean	true

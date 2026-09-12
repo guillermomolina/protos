@@ -1,4 +1,34 @@
 {
   "version": 1,
-  "contracts": []
+  "contracts": [
+    {
+      "id": "language.match.or-alternatives",
+      "classification": "PROTOS_SEMANTIC",
+      "state": "RECONCILED",
+      "primary": {
+        "owner": "TOOL002",
+        "evidence": [
+          "protos/tests/conformance/manifest.tsv",
+          "protos/tests/conformance/matching/or-dynamic-captures.protos",
+          "protos/tests/conformance/matching/or-invalid-outcome-no-retry.protos",
+          "protos/tests/conformance/matching/or-nested-attempt-order.protos",
+          "protos/tests/conformance/matching/or-ordered-effects-first-success.protos",
+          "protos/tests/conformance/matching/or-same-subject.protos",
+          "protos/tests/conformance/matching/or-structural-bindings.protos",
+          "protos/tests/conformance/matching/or-subject-evaluated-once.protos"
+        ]
+      },
+      "secondary": [
+        {
+          "owner": "JUNIT",
+          "role": "HOST_RUNTIME",
+          "evidence": [
+            "src/test/java/com/guillermomolina/protos/execution/ProtosMatchBytecodeExecutionTest.java"
+          ],
+          "reason": "Retains Bytecode backend parity, continuation/suspension and runtime-transfer invariants rather than primary OR-pattern semantic policy."
+        }
+      ],
+      "migration_ref": "TEST001-D1"
+    }
+  ]
 }
