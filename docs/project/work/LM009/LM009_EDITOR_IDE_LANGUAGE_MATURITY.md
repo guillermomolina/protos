@@ -1370,3 +1370,41 @@ manifest/lock semantic authority or workspace-symbol indexing.
 GitHub #373 closes. P4 still owns multi-root isolation, duplicate binding rejection,
 freshness invalidation and static no-guest closure evidence.
 
+## D102 nested workspace package source ownership ratification
+
+Status: **RATIFIED — Candidate A′ selected; P3B BLOCKED_BY_D102_IMPLEMENTATION**
+
+Coordination: GitHub #421; dependent P3 / #413
+
+Authority: D082 Candidate A′ + D085 Candidate F′ + D089 Candidate A″ + D102 Candidate A′
+
+P3B focal validation exposed that the existing shared source authority could assign one
+physical member source both `member:Api` and `root:libs/member/Api` when an authorized
+workspace package root is nested inside another authorized package root. The same source
+lookup is consumed by runtime workspace module resolution, so this was not an LM009-only
+test issue.
+
+D102 ratifies canonical non-overlapping package source domains:
+
+- a strictly-descendant authorized package root is a hard source/module boundary for
+  every ancestor package;
+- the unique most-specific authorized package root owns a contained physical source;
+- distinct PackageIds may not bind to the same canonical physical package root;
+- source inventory, exact source lookup, runtime module resolution and static tooling
+  must apply the same boundary;
+- package boundaries come only from canonical package/project authority and never from
+  nearest-manifest/filesystem discovery; and
+- physical containment cannot make another package's source reachable through parent
+  `self:` lookup; ordinary dependency/export authority remains the cross-package route.
+
+The comparative audit covered Bazel, Buck2, Go modules/workspaces, SwiftPM, Cargo,
+Gradle, Maven, sbt, Mill, Node/npm/Yarn/pnpm, BSP, Pants, MSBuild/.NET, Python/uv and
+CMake. Candidate A′ scored 5/5 on the project-owner focus dimensions of future-option
+resilience, scalability and Protos alignment.
+
+Ratification alone does not resume P3B. The next work must implement D102 once in the
+shared package directory/source authorities so runtime and tooling inherit the same
+ownership rule. Until that implementation is published, `LM009-G3P P3B` / #413 remains
+**BLOCKED_BY_D102_IMPLEMENTATION** and G3 remains
+**BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION**.
+
