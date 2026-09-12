@@ -35,6 +35,12 @@ public final class ProtosStandardFutureProtocol {
                 (a,x)->{
                     arity(a,x,0);
                     ProtosFutureValue observed=future(a);
+                    if (a.deferredCPrimeOperationForRuntime().isPresent()) {
+                        return observeValueForIoOperationContinuation(
+                                a,
+                                observed,
+                                a.deferredCPrimeOperationForRuntime().orElseThrow());
+                    }
                     return observed.observeValueForContinuationForRuntime(
                             a,
                             (dependency,resumer) ->
@@ -118,6 +124,93 @@ public final class ProtosStandardFutureProtocol {
         AggregateObservation observation=new AggregateObservation(aggregate,sources,activation);
         observation.register();
         return aggregate;
+    }
+
+
+    private static Object observeValueForIoOperationContinuation(
+            ProtosActivation activation,
+            ProtosFutureValue observed,
+            ProtosIoOperation operation) {
+        FutureOperationDependency dependency =
+                new FutureOperationDependency(observed, operation);
+        observed.observe(dependency);
+        if (dependency.isReady()) {
+            return observed.observeValue(activation);
+        }
+        return ProtosIoOperationSuspension.pending(
+                operation,
+                dependency,
+                () -> observed.observeValue(activation));
+    }
+
+    private static final class FutureOperationDependency
+            implements ProtosFutureValue.Observer, ProtosIoOperationSuspension.Dependency {
+        private final ProtosFutureValue source;
+        private final ProtosIoOperation operation;
+        private boolean ready;
+        private boolean retained;
+        private boolean released;
+
+        FutureOperationDependency(ProtosFutureValue source, ProtosIoOperation operation) {
+            this.source = Objects.requireNonNull(source, "source");
+            this.operation = Objects.requireNonNull(operation, "operation");
+        }
+
+        @Override
+        public synchronized boolean isReady() {
+            return ready;
+        }
+
+        @Override
+        public void terminal(ProtosFutureValue terminalSource) {
+            boolean schedule;
+            synchronized (this) {
+                if (terminalSource != source || released) {
+                    return;
+                }
+                ready = true;
+                schedule = retained;
+            }
+            if (schedule) {
+                operation.requestDeferredCPrimeRunForRuntime();
+            }
+        }
+
+        @Override
+        public void waitingOperationRetained(ProtosIoOperation retainedOperation) {
+            boolean schedule;
+            synchronized (this) {
+                requireOwner(retainedOperation);
+                if (released) {
+                    return;
+                }
+                retained = true;
+                schedule = ready;
+            }
+            if (schedule) {
+                operation.requestDeferredCPrimeRunForRuntime();
+            }
+        }
+
+        @Override
+        public void waitingOperationReleased(ProtosIoOperation releasedOperation) {
+            synchronized (this) {
+                requireOwner(releasedOperation);
+                if (released) {
+                    return;
+                }
+                released = true;
+                retained = false;
+            }
+            source.removeObserver(this);
+        }
+
+        private void requireOwner(ProtosIoOperation candidate) {
+            if (candidate != operation) {
+                throw new IllegalArgumentException(
+                        "Future.value operation waiter belongs to another I/O operation");
+            }
+        }
     }
 
     private static final class SourceDependency implements ProtosTask.WaitDependency, ProtosFutureValue.Observer {

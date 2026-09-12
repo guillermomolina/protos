@@ -10,6 +10,9 @@ final class ProtosIoOperationSuspension {
     interface Dependency {
         boolean isReady();
 
+        /** Called only after C-prime has actually retained this exact wait. */
+        default void waitingOperationRetained(ProtosIoOperation operation) {}
+
         /** Removes only this operation's waiting relationship; it never cancels the dependency. */
         default void waitingOperationReleased(ProtosIoOperation operation) {}
     }
@@ -17,6 +20,7 @@ final class ProtosIoOperationSuspension {
     private final ProtosIoOperation operation;
     private final Dependency dependency;
     private final Supplier<Object> resumer;
+    private boolean waitRetained;
     private boolean waitReleased;
     private boolean resumed;
 
@@ -42,6 +46,19 @@ final class ProtosIoOperationSuspension {
 
     Dependency dependency() {
         return dependency;
+    }
+
+    void retainWait() {
+        boolean notify;
+        synchronized (this) {
+            notify = !waitReleased && !waitRetained;
+            if (notify) {
+                waitRetained = true;
+            }
+        }
+        if (notify) {
+            dependency.waitingOperationRetained(operation);
+        }
     }
 
     void releaseWait() {

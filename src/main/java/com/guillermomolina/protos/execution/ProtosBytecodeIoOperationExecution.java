@@ -175,6 +175,7 @@ final class ProtosBytecodeIoOperationExecution
                 leaf.releaseWait();
                 return;
             }
+            leaf.retainWait();
             if (leaf.dependency().isReady()) {
                 operation.requestDeferredCPrimeRunForRuntime();
             }
