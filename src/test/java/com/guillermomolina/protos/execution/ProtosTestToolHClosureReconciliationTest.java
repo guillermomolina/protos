@@ -26,7 +26,7 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosTestToolHClosureReconciliationTest {
     @Test
-    void publishedH2B3CutoverRemainsMaterializedAtClosure() throws Exception {
+    void publishedH2B3SchedulingContractRemainsMaterializedAfterI8D5CCutover() throws Exception {
         String main = Files.readString(Path.of("protos", "tools", "test", "Main.protos"));
         String options = Files.readString(Path.of("protos", "tools", "test", "Options.protos"));
         String carrier =
@@ -43,8 +43,12 @@ final class ProtosTestToolHClosureReconciliationTest {
 
         assertTrue(main.contains("arguments: process.args()"));
         assertTrue(main.contains("jobs: Options.jobs(arguments)"));
-        assertEquals(4, occurrences(main, "Runner.runBounded("));
+        assertEquals(4, occurrences(main, "Runner.runD108WithResources("));
+        assertEquals(0, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));
+        assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
+        assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertTrue(main.trim().endsWith("finalOutcome"));
         assertTrue(options.contains("jobs: (arguments) => {"));
         assertTrue(options.contains("jobsValue: 1"));
         assertTrue(carrier.contains("Thread.ofPlatform()"));

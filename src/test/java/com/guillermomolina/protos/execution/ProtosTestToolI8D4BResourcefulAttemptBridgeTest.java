@@ -253,11 +253,13 @@ final class ProtosTestToolI8D4BResourcefulAttemptBridgeTest {
     }
 
     @Test
-    void i8d4bDoesNotWireRunnerOrPublicMain() throws Exception {
+    void publicCutoverKeepsJavaResourcefulAttemptBridgeBehindGuestFacilityBoundary()
+            throws Exception {
         String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
-        assertFalse(runner.contains("resourceExecutionAsync"));
-        assertFalse(main.contains("resourceExecutionAsync"));
+
+        assertTrue(runner.contains("resourceExecutionAsync"));
+        assertTrue(main.contains("resourceExecutionAsync"));
         assertFalse(runner.contains("ProtosTestResourcefulAttemptBridge"));
         assertFalse(main.contains("ProtosTestResourcefulAttemptBridge"));
     }
