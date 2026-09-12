@@ -454,3 +454,2855 @@ table: (...nameNodePairs) => {
         value: result
     }
 }
+
+parse: (text) => {
+    ignoredStringValidation: "" + text
+
+    publicLocalDate: localDate
+    publicLocalTime: localTime
+    publicLocalDateTime: localDateTime
+    publicOffsetDateTime: offsetDateTime
+
+    syntaxNode: (kind, value) => {
+        result: {
+            kind: kind
+            value: value
+        }
+        result
+    }
+
+    syntaxKeyPath: (text) => {
+        ignoredStringValidation: text + ""
+        source: Encoding.UTF8.encode(text)
+        index: 0
+        length: source.size()
+
+        fail: () => {
+            Error().signal()
+        }
+
+        peek: () => {
+            result: -1
+            (index < length).ifTrue(() => {
+                result = source[index]
+            })
+            result
+        }
+
+        take: () => {
+            (index >= length).ifTrue(() => {
+                fail()
+            })
+            result: source[index]
+            index = index + 1
+            result
+        }
+
+        skipSpaces: null
+        skipSpaces = () => {
+            (index < length).ifTrue(() => {
+                octet: source[index]
+                whitespace: octet == 32
+                (octet == 9).ifTrue(() => {
+                    whitespace = true
+                })
+                whitespace.ifTrue(() => {
+                    index = index + 1
+                    skipSpaces()
+                })
+            })
+        }
+
+        hexDigit: (octet) => {
+            result: -1
+            (octet >= 48).ifTrue(() => {
+                (octet <= 57).ifTrue(() => {
+                    result = octet - 48
+                })
+            })
+            (result < 0).ifTrue(() => {
+                (octet >= 65).ifTrue(() => {
+                    (octet <= 70).ifTrue(() => {
+                        result = octet - 55
+                    })
+                })
+            })
+            (result < 0).ifTrue(() => {
+                (octet >= 97).ifTrue(() => {
+                    (octet <= 102).ifTrue(() => {
+                        result = octet - 87
+                    })
+                })
+            })
+            result
+        }
+
+        appendScalarUtf8: (buffer, scalar) => {
+            invalid: scalar < 0
+            (scalar > 1114111).ifTrue(() => {
+                invalid = true
+            })
+            (scalar >= 55296).ifTrue(() => {
+                (scalar <= 57343).ifTrue(() => {
+                    invalid = true
+                })
+            })
+            invalid.ifTrue(() => {
+                fail()
+            })
+
+            handled: false
+            (scalar <= 127).ifTrue(() => {
+                buffer.add(scalar)
+                handled = true
+            })
+            handled.ifFalse(() => {
+                (scalar <= 2047).ifTrue(() => {
+                    buffer.add(192 + scalar.div(64))
+                    buffer.add(128 + scalar.mod(64))
+                    handled = true
+                })
+            })
+            handled.ifFalse(() => {
+                (scalar <= 65535).ifTrue(() => {
+                    buffer.add(224 + scalar.div(4096))
+                    buffer.add(128 + scalar.div(64).mod(64))
+                    buffer.add(128 + scalar.mod(64))
+                    handled = true
+                })
+            })
+            handled.ifFalse(() => {
+                buffer.add(240 + scalar.div(262144))
+                buffer.add(128 + scalar.div(4096).mod(64))
+                buffer.add(128 + scalar.div(64).mod(64))
+                buffer.add(128 + scalar.mod(64))
+            })
+        }
+
+        parseUnicodeEscape: (digits, buffer) => {
+            scalar: 0
+            remaining: digits
+
+            consume: null
+            consume = () => {
+                (remaining > 0).ifTrue(() => {
+                    digit: hexDigit(take())
+                    (digit < 0).ifTrue(() => {
+                        fail()
+                    })
+                    scalar = scalar * 16 + digit
+                    remaining = remaining - 1
+                    consume()
+                })
+            }
+
+            consume()
+            appendScalarUtf8(buffer, scalar)
+        }
+
+        parseBasicKey: () => {
+            (take() == 34).ifFalse(() => {
+                fail()
+            })
+            buffer: Encoding.UTF8.encode("")
+            done: false
+
+            scan: null
+            scan = () => {
+                done.ifFalse(() => {
+                    octet: take()
+                    (octet == 34).ifTrue(() => {
+                        done = true
+                    })
+
+                    done.ifFalse(() => {
+                        (octet == 92).ifTrue(() => {
+                            escape: take()
+                            handled: false
+                            (escape == 98).ifTrue(() => {
+                                buffer.add(8)
+                                handled = true
+                            })
+                            (escape == 116).ifTrue(() => {
+                                buffer.add(9)
+                                handled = true
+                            })
+                            (escape == 110).ifTrue(() => {
+                                buffer.add(10)
+                                handled = true
+                            })
+                            (escape == 102).ifTrue(() => {
+                                buffer.add(12)
+                                handled = true
+                            })
+                            (escape == 114).ifTrue(() => {
+                                buffer.add(13)
+                                handled = true
+                            })
+                            (escape == 101).ifTrue(() => {
+                                buffer.add(27)
+                                handled = true
+                            })
+                            (escape == 120).ifTrue(() => {
+                                parseUnicodeEscape(2, buffer)
+                                handled = true
+                            })
+                            (escape == 34).ifTrue(() => {
+                                buffer.add(34)
+                                handled = true
+                            })
+                            (escape == 92).ifTrue(() => {
+                                buffer.add(92)
+                                handled = true
+                            })
+                            (escape == 117).ifTrue(() => {
+                                parseUnicodeEscape(4, buffer)
+                                handled = true
+                            })
+                            (escape == 85).ifTrue(() => {
+                                parseUnicodeEscape(8, buffer)
+                                handled = true
+                            })
+                            handled.ifFalse(() => {
+                                fail()
+                            })
+                        })
+
+                        (octet == 92).ifFalse(() => {
+                            invalidControl: octet < 32
+                            (octet == 127).ifTrue(() => {
+                                invalidControl = true
+                            })
+                            (octet == 9).ifTrue(() => {
+                                invalidControl = false
+                            })
+                            invalidControl.ifTrue(() => {
+                                fail()
+                            })
+                            buffer.add(octet)
+                        })
+                        scan()
+                    })
+                })
+            }
+
+            scan()
+            Encoding.UTF8.decode(buffer)
+        }
+
+        parseLiteralKey: () => {
+            (take() == 39).ifFalse(() => {
+                fail()
+            })
+            buffer: Encoding.UTF8.encode("")
+            done: false
+
+            scan: null
+            scan = () => {
+                done.ifFalse(() => {
+                    octet: take()
+                    (octet == 39).ifTrue(() => {
+                        done = true
+                    })
+                    done.ifFalse(() => {
+                        invalidControl: octet < 32
+                        (octet == 127).ifTrue(() => {
+                            invalidControl = true
+                        })
+                        (octet == 9).ifTrue(() => {
+                            invalidControl = false
+                        })
+                        invalidControl.ifTrue(() => {
+                            fail()
+                        })
+                        buffer.add(octet)
+                        scan()
+                    })
+                })
+            }
+
+            scan()
+            Encoding.UTF8.decode(buffer)
+        }
+
+        isBareKeyOctet: (octet) => {
+            result: false
+            (octet >= 48).ifTrue(() => {
+                (octet <= 57).ifTrue(() => { result = true })
+            })
+            (octet >= 65).ifTrue(() => {
+                (octet <= 90).ifTrue(() => { result = true })
+            })
+            (octet >= 97).ifTrue(() => {
+                (octet <= 122).ifTrue(() => { result = true })
+            })
+            (octet == 95).ifTrue(() => { result = true })
+            (octet == 45).ifTrue(() => { result = true })
+            result
+        }
+
+        parseBareKey: () => {
+            buffer: Encoding.UTF8.encode("")
+
+            scan: null
+            scan = () => {
+                (index < length).ifTrue(() => {
+                    octet: source[index]
+                    isBareKeyOctet(octet).ifTrue(() => {
+                        buffer.add(octet)
+                        index = index + 1
+                        scan()
+                    })
+                })
+            }
+
+            scan()
+            (buffer.size() == 0).ifTrue(() => {
+                fail()
+            })
+            Encoding.UTF8.decode(buffer)
+        }
+
+        parsePart: () => {
+            skipSpaces()
+            first: peek()
+            result: null
+
+            (first == 34).ifTrue(() => {
+                result = parseBasicKey()
+            })
+            (first == 39).ifTrue(() => {
+                result = parseLiteralKey()
+            })
+            (first == 34).ifFalse(() => {
+                (first == 39).ifFalse(() => {
+                    result = parseBareKey()
+                })
+            })
+
+            result
+        }
+
+        parts: Array(parsePart())
+        more: true
+
+        continuePath: null
+        continuePath = () => {
+            more.ifTrue(() => {
+                skipSpaces()
+                (index < length).ifTrue(() => {
+                    (source[index] == 46).ifFalse(() => {
+                        fail()
+                    })
+                    index = index + 1
+                    parts = Array(...parts, parsePart())
+                    continuePath()
+                })
+                (index >= length).ifTrue(() => {
+                    more = false
+                })
+            })
+        }
+
+        continuePath()
+        skipSpaces()
+        (index == length).ifFalse(() => {
+            fail()
+        })
+        parts
+    }
+
+    syntaxValue: (text) => {
+        ignoredStringValidation: text + ""
+        source: Encoding.UTF8.encode(text)
+        index: 0
+        length: source.size()
+
+        fail: () => {
+            Error().signal()
+        }
+
+        peek: () => {
+            result: -1
+            (index < length).ifTrue(() => {
+                result = source[index]
+            })
+            result
+        }
+
+        take: () => {
+            (index >= length).ifTrue(() => {
+                fail()
+            })
+            result: source[index]
+            index = index + 1
+            result
+        }
+
+        isSpace: (octet) => {
+            result: octet == 32
+            (octet == 9).ifTrue(() => {
+                result = true
+            })
+            result
+        }
+
+        isNewlineStart: (octet) => {
+            result: octet == 10
+            (octet == 13).ifTrue(() => {
+                result = true
+            })
+            result
+        }
+
+        consumeNewline: () => {
+            octet: take()
+            valid: octet == 10
+            (octet == 13).ifTrue(() => {
+                valid = true
+                (peek() == 10).ifFalse(() => {
+                    fail()
+                })
+                take()
+            })
+            valid.ifFalse(() => {
+                fail()
+            })
+        }
+
+        skipSpaces: null
+        skipSpaces = () => {
+            (index < length).ifTrue(() => {
+                isSpace(source[index]).ifTrue(() => {
+                    index = index + 1
+                    skipSpaces()
+                })
+            })
+        }
+
+        skipComment: null
+        skipComment = () => {
+            (index < length).ifTrue(() => {
+                octet: source[index]
+                isNewlineStart(octet).ifFalse(() => {
+                    invalidControl: octet < 32
+                    (octet == 127).ifTrue(() => {
+                        invalidControl = true
+                    })
+                    (octet == 9).ifTrue(() => {
+                        invalidControl = false
+                    })
+                    invalidControl.ifTrue(() => {
+                        fail()
+                    })
+                    index = index + 1
+                    skipComment()
+                })
+            })
+        }
+
+        skipArrayTrivia: null
+        skipArrayTrivia = () => {
+            progressed: false
+            (index < length).ifTrue(() => {
+                octet: source[index]
+                isSpace(octet).ifTrue(() => {
+                    index = index + 1
+                    progressed = true
+                })
+                isNewlineStart(octet).ifTrue(() => {
+                    consumeNewline()
+                    progressed = true
+                })
+                (octet == 35).ifTrue(() => {
+                    index = index + 1
+                    skipComment()
+                    progressed = true
+                })
+            })
+            progressed.ifTrue(() => {
+                skipArrayTrivia()
+            })
+        }
+
+        hexDigit: (octet) => {
+            result: -1
+            (octet >= 48).ifTrue(() => {
+                (octet <= 57).ifTrue(() => {
+                    result = octet - 48
+                })
+            })
+            (result < 0).ifTrue(() => {
+                (octet >= 65).ifTrue(() => {
+                    (octet <= 70).ifTrue(() => {
+                        result = octet - 55
+                    })
+                })
+            })
+            (result < 0).ifTrue(() => {
+                (octet >= 97).ifTrue(() => {
+                    (octet <= 102).ifTrue(() => {
+                        result = octet - 87
+                    })
+                })
+            })
+            result
+        }
+
+        appendScalarUtf8: (buffer, scalar) => {
+            invalid: scalar < 0
+            (scalar > 1114111).ifTrue(() => {
+                invalid = true
+            })
+            (scalar >= 55296).ifTrue(() => {
+                (scalar <= 57343).ifTrue(() => {
+                    invalid = true
+                })
+            })
+            invalid.ifTrue(() => {
+                fail()
+            })
+
+            handled: false
+            (scalar <= 127).ifTrue(() => {
+                buffer.add(scalar)
+                handled = true
+            })
+            handled.ifFalse(() => {
+                (scalar <= 2047).ifTrue(() => {
+                    buffer.add(192 + scalar.div(64))
+                    buffer.add(128 + scalar.mod(64))
+                    handled = true
+                })
+            })
+            handled.ifFalse(() => {
+                (scalar <= 65535).ifTrue(() => {
+                    buffer.add(224 + scalar.div(4096))
+                    buffer.add(128 + scalar.div(64).mod(64))
+                    buffer.add(128 + scalar.mod(64))
+                    handled = true
+                })
+            })
+            handled.ifFalse(() => {
+                buffer.add(240 + scalar.div(262144))
+                buffer.add(128 + scalar.div(4096).mod(64))
+                buffer.add(128 + scalar.div(64).mod(64))
+                buffer.add(128 + scalar.mod(64))
+            })
+        }
+
+        parseUnicodeEscape: (digits, buffer) => {
+            scalar: 0
+            remaining: digits
+
+            consume: null
+            consume = () => {
+                (remaining > 0).ifTrue(() => {
+                    digit: hexDigit(take())
+                    (digit < 0).ifTrue(() => {
+                        fail()
+                    })
+                    scalar = scalar * 16 + digit
+                    remaining = remaining - 1
+                    consume()
+                })
+            }
+
+            consume()
+            appendScalarUtf8(buffer, scalar)
+        }
+
+        parseBasicString: (multiline) => {
+            multiline.ifFalse(() => {
+                (take() == 34).ifFalse(() => {
+                    fail()
+                })
+            })
+
+            multiline.ifTrue(() => {
+                (take() == 34).ifFalse(() => { fail() })
+                (take() == 34).ifFalse(() => { fail() })
+                (take() == 34).ifFalse(() => { fail() })
+                isNewlineStart(peek()).ifTrue(() => {
+                    consumeNewline()
+                })
+            })
+
+            buffer: Encoding.UTF8.encode("")
+            done: false
+
+            countQuotes: null
+            countQuotes = (count) => {
+                result: count
+                (peek() == 34).ifTrue(() => {
+                    index = index + 1
+                    result = countQuotes(count + 1)
+                })
+                result
+            }
+
+            skipContinuationWhitespace: null
+            skipContinuationWhitespace = () => {
+                (index < length).ifTrue(() => {
+                    octet: source[index]
+                    whitespace: isSpace(octet)
+                    isNewlineStart(octet).ifTrue(() => {
+                        whitespace = true
+                    })
+
+                    whitespace.ifTrue(() => {
+                        isNewlineStart(octet).ifTrue(() => {
+                            consumeNewline()
+                        })
+                        isNewlineStart(octet).ifFalse(() => {
+                            index = index + 1
+                        })
+                        skipContinuationWhitespace()
+                    })
+                })
+            }
+
+            scan: null
+            scan = () => {
+                done.ifFalse(() => {
+                    octet: take()
+                    ordinaryOctet: true
+
+                    multiline.ifFalse(() => {
+                        (octet == 34).ifTrue(() => {
+                            done = true
+                        })
+                    })
+
+                    multiline.ifTrue(() => {
+                        (octet == 34).ifTrue(() => {
+                            ordinaryOctet = false
+                            quoteCount: countQuotes(1)
+
+                            (quoteCount >= 3).ifTrue(() => {
+                                (quoteCount > 5).ifTrue(() => {
+                                    fail()
+                                })
+                                extra: quoteCount - 3
+                                (extra > 0).ifTrue(() => {
+                                    buffer.add(34)
+                                })
+                                (extra > 1).ifTrue(() => {
+                                    buffer.add(34)
+                                })
+                                done = true
+                            })
+
+                            (quoteCount < 3).ifTrue(() => {
+                                buffer.add(34)
+                                (quoteCount == 2).ifTrue(() => {
+                                    buffer.add(34)
+                                })
+                            })
+                        })
+                    })
+
+                    done.ifFalse(() => {
+                        ordinaryOctet.ifTrue(() => {
+                            (octet == 92).ifTrue(() => {
+                                continuation: false
+
+                                multiline.ifTrue(() => {
+                                    look: index
+                                    seeking: true
+                                    sawNewline: false
+
+                                    inspect: null
+                                    inspect = () => {
+                                        seeking.ifTrue(() => {
+                                            (look < length).ifTrue(() => {
+                                                candidate: source[look]
+
+                                                isSpace(candidate).ifTrue(() => {
+                                                    look = look + 1
+                                                    inspect()
+                                                })
+
+                                                isNewlineStart(candidate).ifTrue(() => {
+                                                    sawNewline = true
+                                                    seeking = false
+                                                })
+
+                                                isSpace(candidate).ifFalse(() => {
+                                                    isNewlineStart(candidate).ifFalse(() => {
+                                                        seeking = false
+                                                    })
+                                                })
+                                            })
+
+                                            (look >= length).ifTrue(() => {
+                                                seeking = false
+                                            })
+                                        })
+                                    }
+
+                                    inspect()
+                                    sawNewline.ifTrue(() => {
+                                        continuation = true
+                                    })
+                                })
+
+                                continuation.ifTrue(() => {
+                                    skipBeforeNewline: null
+                                    skipBeforeNewline = () => {
+                                        isSpace(peek()).ifTrue(() => {
+                                            index = index + 1
+                                            skipBeforeNewline()
+                                        })
+                                    }
+
+                                    skipBeforeNewline()
+                                    isNewlineStart(peek()).ifFalse(() => {
+                                        fail()
+                                    })
+                                    consumeNewline()
+                                    skipContinuationWhitespace()
+                                })
+
+                                continuation.ifFalse(() => {
+                                    escape: take()
+                                    handled: false
+
+                                    (escape == 98).ifTrue(() => {
+                                        buffer.add(8)
+                                        handled = true
+                                    })
+                                    (escape == 116).ifTrue(() => {
+                                        buffer.add(9)
+                                        handled = true
+                                    })
+                                    (escape == 110).ifTrue(() => {
+                                        buffer.add(10)
+                                        handled = true
+                                    })
+                                    (escape == 102).ifTrue(() => {
+                                        buffer.add(12)
+                                        handled = true
+                                    })
+                                    (escape == 114).ifTrue(() => {
+                                        buffer.add(13)
+                                        handled = true
+                                    })
+                                    (escape == 101).ifTrue(() => {
+                                        buffer.add(27)
+                                        handled = true
+                                    })
+                                    (escape == 120).ifTrue(() => {
+                                        parseUnicodeEscape(2, buffer)
+                                        handled = true
+                                    })
+                                    (escape == 34).ifTrue(() => {
+                                        buffer.add(34)
+                                        handled = true
+                                    })
+                                    (escape == 92).ifTrue(() => {
+                                        buffer.add(92)
+                                        handled = true
+                                    })
+                                    (escape == 117).ifTrue(() => {
+                                        parseUnicodeEscape(4, buffer)
+                                        handled = true
+                                    })
+                                    (escape == 85).ifTrue(() => {
+                                        parseUnicodeEscape(8, buffer)
+                                        handled = true
+                                    })
+
+                                    handled.ifFalse(() => {
+                                        fail()
+                                    })
+                                })
+                            })
+
+                            (octet == 92).ifFalse(() => {
+                                newline: isNewlineStart(octet)
+
+                                newline.ifTrue(() => {
+                                    multiline.ifFalse(() => {
+                                        fail()
+                                    })
+                                    index = index - 1
+                                    consumeNewline()
+                                    buffer.add(10)
+                                })
+
+                                newline.ifFalse(() => {
+                                    invalidControl: octet < 32
+                                    (octet == 127).ifTrue(() => {
+                                        invalidControl = true
+                                    })
+                                    (octet == 9).ifTrue(() => {
+                                        invalidControl = false
+                                    })
+                                    invalidControl.ifTrue(() => {
+                                        fail()
+                                    })
+                                    buffer.add(octet)
+                                })
+                            })
+                        })
+
+                        scan()
+                    })
+                })
+            }
+
+            scan()
+            Encoding.UTF8.decode(buffer)
+        }
+
+        parseLiteralString: (multiline) => {
+            multiline.ifFalse(() => {
+                (take() == 39).ifFalse(() => {
+                    fail()
+                })
+            })
+
+            multiline.ifTrue(() => {
+                (take() == 39).ifFalse(() => { fail() })
+                (take() == 39).ifFalse(() => { fail() })
+                (take() == 39).ifFalse(() => { fail() })
+                isNewlineStart(peek()).ifTrue(() => {
+                    consumeNewline()
+                })
+            })
+
+            buffer: Encoding.UTF8.encode("")
+            done: false
+
+            countQuotes: null
+            countQuotes = (count) => {
+                result: count
+                (peek() == 39).ifTrue(() => {
+                    index = index + 1
+                    result = countQuotes(count + 1)
+                })
+                result
+            }
+
+            scan: null
+            scan = () => {
+                done.ifFalse(() => {
+                    octet: take()
+                    ordinaryOctet: true
+
+                    multiline.ifFalse(() => {
+                        (octet == 39).ifTrue(() => {
+                            done = true
+                        })
+                    })
+
+                    multiline.ifTrue(() => {
+                        (octet == 39).ifTrue(() => {
+                            ordinaryOctet = false
+                            quoteCount: countQuotes(1)
+
+                            (quoteCount >= 3).ifTrue(() => {
+                                (quoteCount > 5).ifTrue(() => {
+                                    fail()
+                                })
+                                extra: quoteCount - 3
+                                (extra > 0).ifTrue(() => {
+                                    buffer.add(39)
+                                })
+                                (extra > 1).ifTrue(() => {
+                                    buffer.add(39)
+                                })
+                                done = true
+                            })
+
+                            (quoteCount < 3).ifTrue(() => {
+                                buffer.add(39)
+                                (quoteCount == 2).ifTrue(() => {
+                                    buffer.add(39)
+                                })
+                            })
+                        })
+                    })
+
+                    done.ifFalse(() => {
+                        ordinaryOctet.ifTrue(() => {
+                            newline: isNewlineStart(octet)
+
+                            newline.ifTrue(() => {
+                                multiline.ifFalse(() => {
+                                    fail()
+                                })
+                                index = index - 1
+                                consumeNewline()
+                                buffer.add(10)
+                            })
+
+                            newline.ifFalse(() => {
+                                invalidControl: octet < 32
+                                (octet == 127).ifTrue(() => {
+                                    invalidControl = true
+                                })
+                                (octet == 9).ifTrue(() => {
+                                    invalidControl = false
+                                })
+                                invalidControl.ifTrue(() => {
+                                    fail()
+                                })
+                                buffer.add(octet)
+                            })
+                        })
+
+                        scan()
+                    })
+                })
+            }
+
+            scan()
+            Encoding.UTF8.decode(buffer)
+        }
+
+        isBareKeyOctet: (octet) => {
+            result: false
+            (octet >= 48).ifTrue(() => {
+                (octet <= 57).ifTrue(() => { result = true })
+            })
+            (octet >= 65).ifTrue(() => {
+                (octet <= 90).ifTrue(() => { result = true })
+            })
+            (octet >= 97).ifTrue(() => {
+                (octet <= 122).ifTrue(() => { result = true })
+            })
+            (octet == 95).ifTrue(() => { result = true })
+            (octet == 45).ifTrue(() => { result = true })
+            result
+        }
+
+        parseKeyPart: () => {
+            skipSpaces()
+            first: peek()
+            result: null
+
+            (first == 34).ifTrue(() => {
+                result = parseBasicString(false)
+            })
+            (first == 39).ifTrue(() => {
+                result = parseLiteralString(false)
+            })
+
+            (first == 34).ifFalse(() => {
+                (first == 39).ifFalse(() => {
+                    buffer: Encoding.UTF8.encode("")
+
+                    gather: null
+                    gather = () => {
+                        (index < length).ifTrue(() => {
+                            octet: source[index]
+                            isBareKeyOctet(octet).ifTrue(() => {
+                                buffer.add(octet)
+                                index = index + 1
+                                gather()
+                            })
+                        })
+                    }
+
+                    gather()
+                    (buffer.size() == 0).ifTrue(() => {
+                        fail()
+                    })
+                    result = Encoding.UTF8.decode(buffer)
+                })
+            })
+
+            result
+        }
+
+        parseKeyPath: () => {
+            parts: Array(parseKeyPart())
+            more: true
+
+            continuePath: null
+            continuePath = () => {
+                more.ifTrue(() => {
+                    skipSpaces()
+                    (peek() == 46).ifTrue(() => {
+                        index = index + 1
+                        parts = Array(...parts, parseKeyPart())
+                        continuePath()
+                    })
+                    (peek() == 46).ifFalse(() => {
+                        more = false
+                    })
+                })
+            }
+
+            continuePath()
+            parts
+        }
+
+        putPath: null
+        putPath = (map, parts, position, valueNode) => {
+            name: parts[position]
+            last: position == parts.size() - 1
+
+            last.ifTrue(() => {
+                map.containsKey(name).ifTrue(() => {
+                    fail()
+                })
+                map[name] = valueNode
+            })
+
+            last.ifFalse(() => {
+                child: null
+                map.containsKey(name).ifTrue(() => {
+                    child = map[name]
+                    (child.kind == "table").ifFalse(() => {
+                        fail()
+                    })
+                })
+                map.containsKey(name).ifFalse(() => {
+                    child = syntaxNode("table", Map())
+                    map[name] = child
+                })
+                putPath(child.value, parts, position + 1, valueNode)
+            })
+        }
+
+        maxChunkLevel: -1
+
+        carryChunk: null
+        carryChunk = (chunks, chunk, level) => {
+            present: chunks.containsKey(level)
+
+            present.ifTrue(() => {
+                left: chunks[level]
+                chunks.remove(level)
+                carryChunk(chunks, Array(...left, ...chunk), level + 1)
+            })
+
+            present.ifFalse(() => {
+                chunks[level] = chunk
+                (level > maxChunkLevel).ifTrue(() => {
+                    maxChunkLevel = level
+                })
+            })
+        }
+
+        collectChunks: null
+        collectChunks = (chunks, level, result) => {
+            finalResult: result
+            (level >= 0).ifTrue(() => {
+                nextResult: result
+                chunks.containsKey(level).ifTrue(() => {
+                    nextResult = Array(...result, ...chunks[level])
+                })
+                finalResult = collectChunks(chunks, level - 1, nextResult)
+            })
+            finalResult
+        }
+
+        decimalDigit: (octet) => {
+            result: -1
+            (octet >= 48).ifTrue(() => {
+                (octet <= 57).ifTrue(() => {
+                    result = octet - 48
+                })
+            })
+            result
+        }
+
+        radixDigit: (octet, base) => {
+            result: -1
+            (base == 16).ifTrue(() => {
+                result = hexDigit(octet)
+            })
+            (base == 10).ifTrue(() => {
+                result = decimalDigit(octet)
+            })
+            (base == 8).ifTrue(() => {
+                digit: decimalDigit(octet)
+                (digit >= 0).ifTrue(() => {
+                    (digit <= 7).ifTrue(() => {
+                        result = digit
+                    })
+                })
+            })
+            (base == 2).ifTrue(() => {
+                (octet == 48).ifTrue(() => { result = 0 })
+                (octet == 49).ifTrue(() => { result = 1 })
+            })
+            result
+        }
+
+        integerFromToken: (token) => {
+            tokenLength: token.size()
+            position: 0
+            negative: false
+            signed: false
+            valid: true
+            base: 10
+
+            (position < tokenLength).ifTrue(() => {
+                first: token[position]
+                (first == 43).ifTrue(() => {
+                    signed = true
+                    position = position + 1
+                })
+                (first == 45).ifTrue(() => {
+                    signed = true
+                    negative = true
+                    position = position + 1
+                })
+            })
+
+            (position >= tokenLength).ifTrue(() => {
+                valid = false
+            })
+
+            valid.ifTrue(() => {
+                (position + 1 < tokenLength).ifTrue(() => {
+                    (token[position] == 48).ifTrue(() => {
+                        prefix: token[position + 1]
+                        (prefix == 120).ifTrue(() => {
+                            base = 16
+                            position = position + 2
+                        })
+                        (prefix == 111).ifTrue(() => {
+                            base = 8
+                            position = position + 2
+                        })
+                        (prefix == 98).ifTrue(() => {
+                            base = 2
+                            position = position + 2
+                        })
+                    })
+                })
+            })
+
+            (base != 10).ifTrue(() => {
+                signed.ifTrue(() => {
+                    valid = false
+                })
+            })
+
+            (position >= tokenLength).ifTrue(() => {
+                valid = false
+            })
+
+            resultValue: 0
+            digits: 0
+            previousUnderscore: false
+            leadingZero: false
+
+            scan: null
+            scan = () => {
+                (position < tokenLength).ifTrue(() => {
+                    octet: token[position]
+
+                    (octet == 95).ifTrue(() => {
+                        invalidUnderscore: digits == 0
+                        previousUnderscore.ifTrue(() => {
+                            invalidUnderscore = true
+                        })
+                        invalidUnderscore.ifTrue(() => {
+                            valid = false
+                        })
+                        previousUnderscore = true
+                    })
+
+                    (octet == 95).ifFalse(() => {
+                        digit: radixDigit(octet, base)
+                        (digit < 0).ifTrue(() => {
+                            valid = false
+                        })
+                        (digit >= 0).ifTrue(() => {
+                            (digits == 0).ifTrue(() => {
+                                (digit == 0).ifTrue(() => {
+                                    leadingZero = true
+                                })
+                            })
+                            (base == 10).ifTrue(() => {
+                                leadingZero.ifTrue(() => {
+                                    (digits > 0).ifTrue(() => {
+                                        valid = false
+                                    })
+                                })
+                            })
+                            resultValue = resultValue * base + digit
+                            digits = digits + 1
+                            previousUnderscore = false
+                        })
+                    })
+
+                    position = position + 1
+                    scan()
+                })
+            }
+
+            valid.ifTrue(() => {
+                scan()
+            })
+
+            (digits == 0).ifTrue(() => {
+                valid = false
+            })
+            previousUnderscore.ifTrue(() => {
+                valid = false
+            })
+
+            negative.ifTrue(() => {
+                resultValue = 0 - resultValue
+            })
+
+
+            result: {
+                valid: valid
+                value: resultValue
+            }
+            result
+        }
+
+
+        powerOfTen: (power) => {
+            ignoredPowerValidation: 0 + power
+            (power < 0).ifTrue(() => {
+                fail()
+            })
+
+            resultValue: 1
+            factor: 10
+            remaining: power
+
+            (() => remaining > 0).while(() => {
+                (remaining.mod(2) == 1).ifTrue(() => {
+                    resultValue = resultValue * factor
+                })
+                remaining = remaining.div(2)
+                (remaining > 0).ifTrue(() => {
+                    factor = factor * factor
+                })
+            })
+
+            resultValue
+        }
+
+        floatFromToken: (token) => {
+            decoded: Encoding.UTF8.decode(token)
+            special: null
+
+            ((decoded == "inf") || (decoded == "+inf")).ifTrue(() => {
+                special = 1.0 / 0.0
+            })
+            (decoded == "-inf").ifTrue(() => {
+                special = -1.0 / 0.0
+            })
+            ((decoded == "nan") || (decoded == "+nan") || (decoded == "-nan")).ifTrue(() => {
+                special = 0.0 / 0.0
+            })
+
+            result: {
+                valid: special !== null
+                value: special
+            }
+
+            (special === null).ifTrue(() => {
+                tokenLength: token.size()
+                position: 0
+                negative: false
+                valid: true
+
+                (position < tokenLength).ifTrue(() => {
+                    first: token[position]
+                    (first == 43).ifTrue(() => {
+                        position = position + 1
+                    })
+                    (first == 45).ifTrue(() => {
+                        negative = true
+                        position = position + 1
+                    })
+                })
+                (position >= tokenLength).ifTrue(() => {
+                    valid = false
+                })
+
+                coefficient: 0
+                integerDigits: 0
+                fractionDigits: 0
+                totalDigits: 0
+                leadingZeros: 0
+                significant: false
+                firstIntegerZero: false
+                previousDigit: false
+
+                scanInteger: null
+                scanInteger = () => {
+                    (position < tokenLength).ifTrue(() => {
+                        octet: token[position]
+                        digit: decimalDigit(octet)
+
+                        (digit >= 0).ifTrue(() => {
+                            (integerDigits == 0).ifTrue(() => {
+                                (digit == 0).ifTrue(() => {
+                                    firstIntegerZero = true
+                                })
+                            })
+                            ((integerDigits > 0) && firstIntegerZero).ifTrue(() => {
+                                valid = false
+                            })
+
+                            coefficient = coefficient * 10 + digit
+                            integerDigits = integerDigits + 1
+                            totalDigits = totalDigits + 1
+                            significant.ifFalse(() => {
+                                (digit == 0).ifTrue(() => {
+                                    leadingZeros = leadingZeros + 1
+                                })
+                                (digit != 0).ifTrue(() => {
+                                    significant = true
+                                })
+                            })
+                            previousDigit = true
+                            position = position + 1
+                            scanInteger()
+                        })
+
+                        (digit < 0).ifTrue(() => {
+                            (octet == 95).ifTrue(() => {
+                                nextValid: false
+                                (position + 1 < tokenLength).ifTrue(() => {
+                                    (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
+                                        nextValid = true
+                                    })
+                                })
+                                (previousDigit && nextValid).ifFalse(() => {
+                                    valid = false
+                                })
+                                previousDigit = false
+                                position = position + 1
+                                scanInteger()
+                            })
+                        })
+                    })
+                }
+
+                valid.ifTrue(() => {
+                    scanInteger()
+                })
+                (integerDigits == 0).ifTrue(() => {
+                    valid = false
+                })
+                previousDigit.ifFalse(() => {
+                    valid = false
+                })
+
+                hasFraction: false
+                valid.ifTrue(() => {
+                    (position < tokenLength).ifTrue(() => {
+                        (token[position] == 46).ifTrue(() => {
+                            hasFraction = true
+                            position = position + 1
+                            previousDigit = false
+
+                            scanFraction: null
+                            scanFraction = () => {
+                                (position < tokenLength).ifTrue(() => {
+                                    octet: token[position]
+                                    digit: decimalDigit(octet)
+
+                                    (digit >= 0).ifTrue(() => {
+                                        coefficient = coefficient * 10 + digit
+                                        fractionDigits = fractionDigits + 1
+                                        totalDigits = totalDigits + 1
+                                        significant.ifFalse(() => {
+                                            (digit == 0).ifTrue(() => {
+                                                leadingZeros = leadingZeros + 1
+                                            })
+                                            (digit != 0).ifTrue(() => {
+                                                significant = true
+                                            })
+                                        })
+                                        previousDigit = true
+                                        position = position + 1
+                                        scanFraction()
+                                    })
+
+                                    (digit < 0).ifTrue(() => {
+                                        (octet == 95).ifTrue(() => {
+                                            nextValid: false
+                                            (position + 1 < tokenLength).ifTrue(() => {
+                                                (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
+                                                    nextValid = true
+                                                })
+                                            })
+                                            (previousDigit && nextValid).ifFalse(() => {
+                                                valid = false
+                                            })
+                                            previousDigit = false
+                                            position = position + 1
+                                            scanFraction()
+                                        })
+                                    })
+                                })
+                            }
+
+                            scanFraction()
+                            (fractionDigits == 0).ifTrue(() => {
+                                valid = false
+                            })
+                            previousDigit.ifFalse(() => {
+                                valid = false
+                            })
+                        })
+                    })
+                })
+
+                exponentValue: 0
+                exponentNegative: false
+                exponentDigits: 0
+                hasExponent: false
+
+                valid.ifTrue(() => {
+                    (position < tokenLength).ifTrue(() => {
+                        exponentMarker: token[position] == 101
+                        (token[position] == 69).ifTrue(() => {
+                            exponentMarker = true
+                        })
+
+                        exponentMarker.ifTrue(() => {
+                            hasExponent = true
+                            position = position + 1
+
+                            (position < tokenLength).ifTrue(() => {
+                                (token[position] == 43).ifTrue(() => {
+                                    position = position + 1
+                                })
+                                (position < tokenLength).ifTrue(() => {
+                                    (token[position] == 45).ifTrue(() => {
+                                        exponentNegative = true
+                                        position = position + 1
+                                    })
+                                })
+                            })
+
+                            previousDigit = false
+                            scanExponent: null
+                            scanExponent = () => {
+                                (position < tokenLength).ifTrue(() => {
+                                    octet: token[position]
+                                    digit: decimalDigit(octet)
+
+                                    (digit >= 0).ifTrue(() => {
+                                        exponentValue = exponentValue * 10 + digit
+                                        exponentDigits = exponentDigits + 1
+                                        previousDigit = true
+                                        position = position + 1
+                                        scanExponent()
+                                    })
+
+                                    (digit < 0).ifTrue(() => {
+                                        (octet == 95).ifTrue(() => {
+                                            nextValid: false
+                                            (position + 1 < tokenLength).ifTrue(() => {
+                                                (decimalDigit(token[position + 1]) >= 0).ifTrue(() => {
+                                                    nextValid = true
+                                                })
+                                            })
+                                            (previousDigit && nextValid).ifFalse(() => {
+                                                valid = false
+                                            })
+                                            previousDigit = false
+                                            position = position + 1
+                                            scanExponent()
+                                        })
+                                    })
+                                })
+                            }
+
+                            scanExponent()
+                            (exponentDigits == 0).ifTrue(() => {
+                                valid = false
+                            })
+                            previousDigit.ifFalse(() => {
+                                valid = false
+                            })
+                        })
+                    })
+                })
+
+                ((hasFraction || hasExponent) === false).ifTrue(() => {
+                    valid = false
+                })
+                (position != tokenLength).ifTrue(() => {
+                    valid = false
+                })
+
+                valid.ifTrue(() => {
+                    decimalExponent: exponentValue
+                    exponentNegative.ifTrue(() => {
+                        decimalExponent = 0 - exponentValue
+                    })
+                    decimalExponent = decimalExponent - fractionDigits
+
+                    negative.ifTrue(() => {
+                        coefficient = 0 - coefficient
+                    })
+
+                    floating: null
+
+                    (coefficient == 0).ifTrue(() => {
+                        negative.ifTrue(() => {
+                            floating = -0.0
+                        })
+                        negative.ifFalse(() => {
+                            floating = 0.0
+                        })
+                    })
+
+                    (coefficient != 0).ifTrue(() => {
+                        significantDigits: totalDigits - leadingZeros
+                        adjustedExponent: decimalExponent + significantDigits - 1
+
+                        (adjustedExponent > 400).ifTrue(() => {
+                            negative.ifTrue(() => {
+                                floating = -1.0 / 0.0
+                            })
+                            negative.ifFalse(() => {
+                                floating = 1.0 / 0.0
+                            })
+                        })
+
+                        (adjustedExponent < -400).ifTrue(() => {
+                            negative.ifTrue(() => {
+                                floating = -0.0
+                            })
+                            negative.ifFalse(() => {
+                                floating = 0.0
+                            })
+                        })
+
+                        (floating === null).ifTrue(() => {
+                            (decimalExponent >= 0).ifTrue(() => {
+                                numerator: coefficient * powerOfTen(decimalExponent)
+                                floating = numerator / 1
+                            })
+                            (decimalExponent < 0).ifTrue(() => {
+                                denominator: powerOfTen(0 - decimalExponent)
+                                floating = coefficient / denominator
+                            })
+                        })
+                    })
+
+                    result.valid = true
+                    result.value = floating
+                })
+            })
+
+            result
+        }
+
+        twoDigitsAt: (token, position) => {
+            valid: position + 1 < token.size()
+            value: 0
+
+            valid.ifTrue(() => {
+                first: decimalDigit(token[position])
+                second: decimalDigit(token[position + 1])
+                ((first < 0) || (second < 0)).ifTrue(() => {
+                    valid = false
+                })
+                valid.ifTrue(() => {
+                    value = first * 10 + second
+                })
+            })
+
+            {
+                valid: valid
+                value: value
+            }
+        }
+
+        fourDigitsAt: (token, position) => {
+            valid: position + 3 < token.size()
+            value: 0
+            offset: 0
+
+            scan: null
+            scan = () => {
+                (offset < 4).ifTrue(() => {
+                    valid.ifTrue(() => {
+                        digit: decimalDigit(token[position + offset])
+                        (digit < 0).ifTrue(() => {
+                            valid = false
+                        })
+                        (digit >= 0).ifTrue(() => {
+                            value = value * 10 + digit
+                        })
+                    })
+                    offset = offset + 1
+                    scan()
+                })
+            }
+
+            valid.ifTrue(() => {
+                scan()
+            })
+
+            {
+                valid: valid
+                value: value
+            }
+        }
+
+        timeAt: (token, start) => {
+            tokenLength: token.size()
+            valid: start + 4 < tokenLength
+
+            hour: 0
+            minute: 0
+            second: 0
+            fractionCoefficient: 0
+            fractionDigits: 0
+            position: start
+
+            valid.ifTrue(() => {
+                hourPart: twoDigitsAt(token, start)
+                minutePart: twoDigitsAt(token, start + 3)
+
+                (token[start + 2] == 58).ifFalse(() => {
+                    valid = false
+                })
+                (hourPart.valid && minutePart.valid).ifFalse(() => {
+                    valid = false
+                })
+
+                valid.ifTrue(() => {
+                    hour = hourPart.value
+                    minute = minutePart.value
+                    position = start + 5
+                })
+            })
+
+            valid.ifTrue(() => {
+                (position < tokenLength).ifTrue(() => {
+                    (token[position] == 58).ifTrue(() => {
+                        secondPart: twoDigitsAt(token, position + 1)
+                        secondPart.valid.ifFalse(() => {
+                            valid = false
+                        })
+                        secondPart.valid.ifTrue(() => {
+                            second = secondPart.value
+                            position = position + 3
+
+                            (position < tokenLength).ifTrue(() => {
+                                (token[position] == 46).ifTrue(() => {
+                                    position = position + 1
+                                    fractionStart: position
+
+                                    scanFraction: null
+                                    scanFraction = () => {
+                                        (position < tokenLength).ifTrue(() => {
+                                            digit: decimalDigit(token[position])
+                                            (digit >= 0).ifTrue(() => {
+                                                fractionCoefficient =
+                                                    fractionCoefficient * 10 + digit
+                                                fractionDigits = fractionDigits + 1
+                                                position = position + 1
+                                                scanFraction()
+                                            })
+                                        })
+                                    }
+
+                                    scanFraction()
+                                    (position == fractionStart).ifTrue(() => {
+                                        valid = false
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+
+            {
+                valid: valid
+                hour: hour
+                minute: minute
+                second: second
+                fractionCoefficient: fractionCoefficient
+                fractionDigits: fractionDigits
+                position: position
+            }
+        }
+
+        temporalFromToken: (token) => {
+            tokenLength: token.size()
+            result: {
+                valid: false
+                value: null
+            }
+
+            dateShape: tokenLength >= 10
+            dateShape.ifTrue(() => {
+                ((token[4] == 45) && (token[7] == 45)).ifFalse(() => {
+                    dateShape = false
+                })
+            })
+
+            dateShape.ifTrue(() => {
+                yearPart: fourDigitsAt(token, 0)
+                monthPart: twoDigitsAt(token, 5)
+                dayPart: twoDigitsAt(token, 8)
+                (yearPart.valid && monthPart.valid && dayPart.valid).ifFalse(() => {
+                    dateShape = false
+                })
+
+                dateShape.ifTrue(() => {
+                    (tokenLength == 10).ifTrue(() => {
+                        result.value =
+                            publicLocalDate(yearPart.value, monthPart.value, dayPart.value)
+                        result.valid = true
+                    })
+
+                    (tokenLength > 10).ifTrue(() => {
+                        delimiter: token[10]
+                        validDelimiter: delimiter == 84
+                        (delimiter == 116).ifTrue(() => { validDelimiter = true })
+                        (delimiter == 32).ifTrue(() => { validDelimiter = true })
+
+                        validDelimiter.ifTrue(() => {
+                            parsedTime: timeAt(token, 11)
+                            parsedTime.valid.ifTrue(() => {
+                                position: parsedTime.position
+
+                                (position == tokenLength).ifTrue(() => {
+                                    result.value =
+                                        publicLocalDateTime(
+                                            yearPart.value,
+                                            monthPart.value,
+                                            dayPart.value,
+                                            parsedTime.hour,
+                                            parsedTime.minute,
+                                            parsedTime.second,
+                                            parsedTime.fractionCoefficient,
+                                            parsedTime.fractionDigits
+                                        )
+                                    result.valid = true
+                                })
+
+                                (position < tokenLength).ifTrue(() => {
+                                    offsetMinutes: 0
+                                    offsetValid: false
+                                    offsetEnd: position
+
+                                    ((token[position] == 90) ||
+                                        (token[position] == 122)).ifTrue(() => {
+                                        offsetValid = true
+                                        offsetEnd = position + 1
+                                    })
+
+                                    ((token[position] == 43) ||
+                                        (token[position] == 45)).ifTrue(() => {
+                                        (position + 5 < tokenLength).ifTrue(() => {
+                                            (token[position + 3] == 58).ifTrue(() => {
+                                                offsetHour: twoDigitsAt(token, position + 1)
+                                                offsetMinute: twoDigitsAt(token, position + 4)
+
+                                                (offsetHour.valid && offsetMinute.valid).ifTrue(() => {
+                                                    ((offsetHour.value <= 23) &&
+                                                        (offsetMinute.value <= 59)).ifTrue(() => {
+                                                        offsetMinutes =
+                                                            offsetHour.value * 60 +
+                                                            offsetMinute.value
+                                                        (token[position] == 45).ifTrue(() => {
+                                                            offsetMinutes =
+                                                                0 - offsetMinutes
+                                                        })
+                                                        offsetEnd = position + 6
+                                                        offsetValid = true
+                                                    })
+                                                })
+                                            })
+                                        })
+                                    })
+
+                                    (offsetValid && (offsetEnd == tokenLength)).ifTrue(() => {
+                                        result.value =
+                                            publicOffsetDateTime(
+                                                yearPart.value,
+                                                monthPart.value,
+                                                dayPart.value,
+                                                parsedTime.hour,
+                                                parsedTime.minute,
+                                                parsedTime.second,
+                                                parsedTime.fractionCoefficient,
+                                                parsedTime.fractionDigits,
+                                                offsetMinutes
+                                            )
+                                        result.valid = true
+                                    })
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+
+            dateShape.ifFalse(() => {
+                parsedTime: timeAt(token, 0)
+                (parsedTime.valid && (parsedTime.position == tokenLength)).ifTrue(() => {
+                    result.value =
+                        publicLocalTime(
+                            parsedTime.hour,
+                            parsedTime.minute,
+                            parsedTime.second,
+                            parsedTime.fractionCoefficient,
+                            parsedTime.fractionDigits
+                        )
+                    result.valid = true
+                })
+            })
+
+            result
+        }
+
+        isBareTerminator: (octet) => {
+            result: octet < 0
+            isSpace(octet).ifTrue(() => { result = true })
+            isNewlineStart(octet).ifTrue(() => { result = true })
+            (octet == 35).ifTrue(() => { result = true })
+            (octet == 44).ifTrue(() => { result = true })
+            (octet == 93).ifTrue(() => { result = true })
+            (octet == 125).ifTrue(() => { result = true })
+            result
+        }
+
+        parseBareValue: () => {
+            token: Encoding.UTF8.encode("")
+
+            gather: null
+            gather = () => {
+                octet: peek()
+                terminator: octet < 0
+                isNewlineStart(octet).ifTrue(() => { terminator = true })
+                (octet == 35).ifTrue(() => { terminator = true })
+                (octet == 44).ifTrue(() => { terminator = true })
+                (octet == 93).ifTrue(() => { terminator = true })
+                (octet == 125).ifTrue(() => { terminator = true })
+
+                terminator.ifFalse(() => {
+                    invalidControl: octet < 32
+                    (octet == 9).ifTrue(() => {
+                        invalidControl = false
+                    })
+                    (octet == 127).ifTrue(() => {
+                        invalidControl = true
+                    })
+                    invalidControl.ifTrue(() => {
+                        fail()
+                    })
+                    token.add(take())
+                    gather()
+                })
+            }
+
+            gather()
+            (token.size() == 0).ifTrue(() => {
+                fail()
+            })
+
+            right: token.size()
+            trimRight: null
+            trimRight = () => {
+                (right > 0).ifTrue(() => {
+                    isSpace(token[right - 1]).ifTrue(() => {
+                        right = right - 1
+                        trimRight()
+                    })
+                })
+            }
+            trimRight()
+
+            trimmed: Encoding.UTF8.encode("")
+            copyIndex: 0
+            copyTrimmed: null
+            copyTrimmed = () => {
+                (copyIndex < right).ifTrue(() => {
+                    trimmed.add(token[copyIndex])
+                    copyIndex = copyIndex + 1
+                    copyTrimmed()
+                })
+            }
+            copyTrimmed()
+
+            (trimmed.size() == 0).ifTrue(() => {
+                fail()
+            })
+
+            decoded: Encoding.UTF8.decode(trimmed)
+            result: null
+
+            (decoded == "true").ifTrue(() => {
+                result = syntaxNode("boolean", true)
+            })
+            (decoded == "false").ifTrue(() => {
+                result = syntaxNode("boolean", false)
+            })
+
+            (result === null).ifTrue(() => {
+                integer: integerFromToken(trimmed)
+                integer.valid.ifTrue(() => {
+                    result = syntaxNode("integer", integer.value)
+                })
+            })
+
+            (result === null).ifTrue(() => {
+                temporal: temporalFromToken(trimmed)
+                temporal.valid.ifTrue(() => {
+                    result = temporal.value
+                })
+            })
+
+            (result === null).ifTrue(() => {
+                floating: floatFromToken(trimmed)
+                floating.valid.ifTrue(() => {
+                    result = syntaxNode("float", floating.value)
+                })
+            })
+
+            (result === null).ifTrue(() => {
+                fail()
+            })
+
+            result
+        }
+
+        parseValue: null
+
+        parseArray: () => {
+            (take() == 91).ifFalse(() => {
+                fail()
+            })
+            skipArrayTrivia()
+
+            chunks: Map()
+            oldMax: maxChunkLevel
+            maxChunkLevel = -1
+            done: false
+
+            loop: null
+            loop = () => {
+                done.ifFalse(() => {
+                    skipArrayTrivia()
+
+                    (peek() == 93).ifTrue(() => {
+                        index = index + 1
+                        done = true
+                    })
+
+                    done.ifFalse(() => {
+                        item: parseValue()
+                        carryChunk(chunks, Array(item), 0)
+                        skipArrayTrivia()
+
+                        comma: peek() == 44
+
+                        comma.ifTrue(() => {
+                            index = index + 1
+                            skipArrayTrivia()
+                            (peek() == 93).ifTrue(() => {
+                                index = index + 1
+                                done = true
+                            })
+                            done.ifFalse(() => {
+                                loop()
+                            })
+                        })
+
+                        comma.ifFalse(() => {
+                            (peek() == 93).ifFalse(() => {
+                                fail()
+                            })
+                            index = index + 1
+                            done = true
+                        })
+                    })
+                })
+            }
+
+            loop()
+            materialized: collectChunks(chunks, maxChunkLevel, Array())
+            maxChunkLevel = oldMax
+            syntaxNode("array", materialized)
+        }
+
+        parseInlineTable: () => {
+            (take() == 123).ifFalse(() => {
+                fail()
+            })
+            skipArrayTrivia()
+
+            entries: Map()
+            done: false
+
+            (peek() == 125).ifTrue(() => {
+                index = index + 1
+                done = true
+            })
+
+            loop: null
+            loop = () => {
+                done.ifFalse(() => {
+                    path: parseKeyPath()
+                    skipSpaces()
+                    (take() == 61).ifFalse(() => {
+                        fail()
+                    })
+                    skipSpaces()
+                    parsed: parseValue()
+                    putPath(entries, path, 0, parsed)
+                    skipSpaces()
+
+                    (peek() == 125).ifTrue(() => {
+                        index = index + 1
+                        done = true
+                    })
+
+                    done.ifFalse(() => {
+                        (peek() == 44).ifFalse(() => {
+                            fail()
+                        })
+                        index = index + 1
+                        skipArrayTrivia()
+
+                        (peek() == 125).ifTrue(() => {
+                            index = index + 1
+                            done = true
+                        })
+
+                        done.ifFalse(() => {
+                            loop()
+                        })
+                    })
+                })
+            }
+
+            loop()
+            syntaxNode("table", entries)
+        }
+
+        parseValue = () => {
+            skipSpaces()
+            first: peek()
+            (first < 0).ifTrue(() => {
+                fail()
+            })
+
+            result: null
+
+            (first == 34).ifTrue(() => {
+                multiline: false
+                (index + 2 < length).ifTrue(() => {
+                    (source[index + 1] == 34).ifTrue(() => {
+                        (source[index + 2] == 34).ifTrue(() => {
+                            multiline = true
+                        })
+                    })
+                })
+                result = syntaxNode("string", parseBasicString(multiline))
+            })
+
+            (first == 39).ifTrue(() => {
+                multiline: false
+                (index + 2 < length).ifTrue(() => {
+                    (source[index + 1] == 39).ifTrue(() => {
+                        (source[index + 2] == 39).ifTrue(() => {
+                            multiline = true
+                        })
+                    })
+                })
+                result = syntaxNode("string", parseLiteralString(multiline))
+            })
+            (first == 91).ifTrue(() => {
+                result = parseArray()
+            })
+            (first == 123).ifTrue(() => {
+                result = parseInlineTable()
+            })
+            (result === null).ifTrue(() => {
+                result = parseBareValue()
+            })
+
+            result
+        }
+
+        result: parseValue()
+        skipSpaces()
+
+        (peek() == 35).ifTrue(() => {
+            index = index + 1
+            skipComment()
+        })
+
+        (index < length).ifTrue(() => {
+            isNewlineStart(peek()).ifTrue(() => {
+                consumeNewline()
+            })
+        })
+
+        skipSpaces()
+        (index == length).ifFalse(() => {
+            fail()
+        })
+
+        result
+    }
+
+    documentStatements: (text) => {
+        ignoredStringValidation: text + ""
+        source: Encoding.UTF8.encode(text)
+        index: 0
+        length: source.size()
+
+        result: Array()
+        buffer: Encoding.UTF8.encode("")
+        significant: false
+        squareDepth: 0
+        braceDepth: 0
+        stringQuote: -1
+        multiline: false
+        comment: false
+
+        fail: () => {
+            Error().signal()
+        }
+
+        peek: () => {
+            value: -1
+            (index < length).ifTrue(() => {
+                value = source[index]
+            })
+            value
+        }
+
+        take: () => {
+            (index >= length).ifTrue(() => {
+                fail()
+            })
+            value: source[index]
+            index = index + 1
+            value
+        }
+
+        append: (octet) => {
+            buffer.add(octet)
+            (octet == 32).ifFalse(() => {
+                (octet == 9).ifFalse(() => {
+                    significant = true
+                })
+            })
+        }
+
+        appendQuotes: null
+        appendQuotes = (quote, remaining) => {
+            (remaining > 0).ifTrue(() => {
+                append(quote)
+                appendQuotes(quote, remaining - 1)
+            })
+        }
+
+        quoteRun: (quote) => {
+            look: index
+            count: 0
+
+            scan: null
+            scan = () => {
+                (look < length).ifTrue(() => {
+                    (source[look] == quote).ifTrue(() => {
+                        count = count + 1
+                        look = look + 1
+                        scan()
+                    })
+                })
+            }
+
+            scan()
+            count
+        }
+
+        finish: () => {
+            significant.ifTrue(() => {
+                result = Array(...result, Encoding.UTF8.decode(buffer))
+            })
+            buffer = Encoding.UTF8.encode("")
+            significant = false
+        }
+
+        appendNewline: (include) => {
+            first: take()
+            (first == 10).ifTrue(() => {
+                include.ifTrue(() => { append(10) })
+            })
+            (first == 13).ifTrue(() => {
+                (peek() == 10).ifFalse(() => {
+                    fail()
+                })
+                second: take()
+                include.ifTrue(() => {
+                    append(13)
+                    append(second)
+                })
+            })
+            (first == 10).ifFalse(() => {
+                (first == 13).ifFalse(() => {
+                    fail()
+                })
+            })
+        }
+
+        step: () => {
+            octet: peek()
+
+            wasComment: comment
+            wasComment.ifTrue(() => {
+                isNewline: octet == 10
+                (octet == 13).ifTrue(() => { isNewline = true })
+
+                isNewline.ifTrue(() => {
+                    comment = false
+                    nested: squareDepth > 0
+                    (braceDepth > 0).ifTrue(() => { nested = true })
+                    nested.ifTrue(() => {
+                        appendNewline(true)
+                    })
+                    nested.ifFalse(() => {
+                        appendNewline(false)
+                        finish()
+                    })
+                })
+
+                isNewline.ifFalse(() => {
+                    index = index + 1
+                })
+            })
+
+            wasComment.ifFalse(() => {
+                wasString: stringQuote >= 0
+                wasString.ifTrue(() => {
+                    wasMultiline: multiline
+                    wasMultiline.ifTrue(() => {
+                        // Snapshot this before closing mutates stringQuote.
+                        quoteOctet: octet == stringQuote
+                        quoteOctet.ifTrue(() => {
+                            run: quoteRun(stringQuote)
+                            (run >= 3).ifTrue(() => {
+                                (run > 5).ifTrue(() => {
+                                    fail()
+                                })
+                                appendQuotes(stringQuote, run)
+                                index = index + run
+                                stringQuote = -1
+                                multiline = false
+                            })
+                            (run < 3).ifTrue(() => {
+                                append(take())
+                            })
+                        })
+
+                        quoteOctet.ifFalse(() => {
+                            escapedBasic: stringQuote == 34
+                            (octet == 92).ifFalse(() => {
+                                escapedBasic = false
+                            })
+
+                            escapedBasic.ifTrue(() => {
+                                append(take())
+                                (index >= length).ifTrue(() => {
+                                    fail()
+                                })
+                                append(take())
+                            })
+
+                            escapedBasic.ifFalse(() => {
+                                append(take())
+                            })
+                        })
+                    })
+
+                    wasMultiline.ifFalse(() => {
+                        isNewline: octet == 10
+                        (octet == 13).ifTrue(() => { isNewline = true })
+                        isNewline.ifTrue(() => {
+                            fail()
+                        })
+
+                        escapedBasic: stringQuote == 34
+                        (octet == 92).ifFalse(() => {
+                            escapedBasic = false
+                        })
+
+                        escapedBasic.ifTrue(() => {
+                            append(take())
+                            (index >= length).ifTrue(() => {
+                                fail()
+                            })
+                            append(take())
+                        })
+
+                        escapedBasic.ifFalse(() => {
+                            append(take())
+                            (octet == stringQuote).ifTrue(() => {
+                                stringQuote = -1
+                            })
+                        })
+                    })
+                })
+
+                wasString.ifFalse(() => {
+                    (octet == 35).ifTrue(() => {
+                        comment = true
+                        index = index + 1
+                    })
+
+                    (octet == 35).ifFalse(() => {
+                        isQuote: octet == 34
+                        (octet == 39).ifTrue(() => { isQuote = true })
+
+                        isQuote.ifTrue(() => {
+                            run: quoteRun(octet)
+                            (run >= 3).ifTrue(() => {
+                                appendQuotes(octet, 3)
+                                index = index + 3
+                                stringQuote = octet
+                                multiline = true
+                            })
+                            (run < 3).ifTrue(() => {
+                                append(take())
+                                stringQuote = octet
+                                multiline = false
+                            })
+                        })
+
+                        isQuote.ifFalse(() => {
+                            (octet == 91).ifTrue(() => {
+                                squareDepth = squareDepth + 1
+                                append(take())
+                            })
+                            (octet == 93).ifTrue(() => {
+                                (squareDepth == 0).ifTrue(() => {
+                                    fail()
+                                })
+                                squareDepth = squareDepth - 1
+                                append(take())
+                            })
+                            (octet == 123).ifTrue(() => {
+                                braceDepth = braceDepth + 1
+                                append(take())
+                            })
+                            (octet == 125).ifTrue(() => {
+                                (braceDepth == 0).ifTrue(() => {
+                                    fail()
+                                })
+                                braceDepth = braceDepth - 1
+                                append(take())
+                            })
+
+                            structural: octet == 91
+                            (octet == 93).ifTrue(() => { structural = true })
+                            (octet == 123).ifTrue(() => { structural = true })
+                            (octet == 125).ifTrue(() => { structural = true })
+
+                            structural.ifFalse(() => {
+                                isNewline: octet == 10
+                                (octet == 13).ifTrue(() => { isNewline = true })
+
+                                isNewline.ifTrue(() => {
+                                    nested: squareDepth > 0
+                                    (braceDepth > 0).ifTrue(() => { nested = true })
+                                    nested.ifTrue(() => {
+                                        appendNewline(true)
+                                    })
+                                    nested.ifFalse(() => {
+                                        appendNewline(false)
+                                        finish()
+                                    })
+                                })
+
+                                isNewline.ifFalse(() => {
+                                    append(take())
+                                })
+                            })
+                        })
+                    })
+                })
+            })
+
+        }
+
+        visitIndex: 0
+        source.each((ignoredOctet) => {
+            (visitIndex == index).ifTrue(() => {
+                step()
+            })
+            visitIndex = visitIndex + 1
+        })
+
+        (index == length).ifFalse(() => {
+            fail()
+        })
+
+        (stringQuote >= 0).ifTrue(() => {
+            fail()
+        })
+        (squareDepth != 0).ifTrue(() => {
+            fail()
+        })
+        (braceDepth != 0).ifTrue(() => {
+            fail()
+        })
+
+        finish()
+        result
+    }
+
+    documentTable: (text) => {
+        items: documentStatements(text)
+
+        fail: () => {
+            Error().signal()
+        }
+
+        node: (kind, value) => {
+            result: {
+                kind: kind
+                value: value
+            }
+            result
+        }
+
+        root: node("table", Map())
+        states: IdentityMap()
+        states[root] = "root"
+        current: root
+
+        isSpace: (octet) => {
+            result: octet == 32
+            (octet == 9).ifTrue(() => {
+                result = true
+            })
+            result
+        }
+
+        decodeRange: (source, start, end) => {
+            buffer: Encoding.UTF8.encode("")
+            position: start
+
+            copy: null
+            copy = () => {
+                (position < end).ifTrue(() => {
+                    buffer.add(source[position])
+                    position = position + 1
+                    copy()
+                })
+            }
+
+            copy()
+            Encoding.UTF8.decode(buffer)
+        }
+
+        trimBounds: (source) => {
+            left: 0
+            right: source.size()
+
+            trimLeft: null
+            trimLeft = () => {
+                (left < right).ifTrue(() => {
+                    isSpace(source[left]).ifTrue(() => {
+                        left = left + 1
+                        trimLeft()
+                    })
+                })
+            }
+
+            trimRight: null
+            trimRight = () => {
+                (right > left).ifTrue(() => {
+                    isSpace(source[right - 1]).ifTrue(() => {
+                        right = right - 1
+                        trimRight()
+                    })
+                })
+            }
+
+            trimLeft()
+            trimRight()
+            {
+                left: left
+                right: right
+            }
+        }
+
+        markInlineTable: (valueNode) => {
+            (valueNode.kind == "table").ifTrue(() => {
+                states[valueNode] = "inline"
+            })
+        }
+
+        putDotted: null
+        putDotted = (tableNode, parts, position, valueNode) => {
+            name: parts[position]
+            last: position == parts.size() - 1
+            entries: tableNode.value
+
+            last.ifTrue(() => {
+                entries.containsKey(name).ifTrue(() => {
+                    fail()
+                })
+                entries[name] = valueNode
+                markInlineTable(valueNode)
+            })
+
+            last.ifFalse(() => {
+                child: null
+                entries.containsKey(name).ifTrue(() => {
+                    child = entries[name]
+                    (child.kind == "table").ifFalse(() => {
+                        fail()
+                    })
+                    states.containsKey(child).ifFalse(() => {
+                        fail()
+                    })
+                    state: states[child]
+                    (state == "header").ifTrue(() => {
+                        fail()
+                    })
+                    (state == "inline").ifTrue(() => {
+                        fail()
+                    })
+                    (state == "implicit").ifTrue(() => {
+                        states[child] = "dotted"
+                    })
+                })
+
+                entries.containsKey(name).ifFalse(() => {
+                    child = node("table", Map())
+                    entries[name] = child
+                    states[child] = "dotted"
+                })
+
+                putDotted(child, parts, position + 1, valueNode)
+            })
+        }
+
+        latestArrayTable: (arrayNode) => {
+            (arrayNode.kind == "array").ifFalse(() => {
+                fail()
+            })
+            states.containsKey(arrayNode).ifFalse(() => {
+                fail()
+            })
+            (states[arrayNode] == "array-table").ifFalse(() => {
+                fail()
+            })
+            elements: arrayNode.value
+            (elements.size() == 0).ifTrue(() => {
+                fail()
+            })
+            selected: elements[elements.size() - 1]
+            (selected.kind == "table").ifFalse(() => {
+                fail()
+            })
+            selected
+        }
+
+        existingParent: (child) => {
+            selected: null
+
+            (child.kind == "table").ifTrue(() => {
+                states.containsKey(child).ifFalse(() => {
+                    fail()
+                })
+                (states[child] == "inline").ifTrue(() => {
+                    fail()
+                })
+                selected = child
+            })
+
+            (child.kind == "array").ifTrue(() => {
+                selected = latestArrayTable(child)
+            })
+
+            (selected === null).ifTrue(() => {
+                fail()
+            })
+            selected
+        }
+
+        selectHeader: (parts) => {
+            selected: root
+            position: 0
+
+            walk: null
+            walk = () => {
+                name: parts[position]
+                last: position == parts.size() - 1
+                entries: selected.value
+                child: null
+
+                entries.containsKey(name).ifTrue(() => {
+                    child = entries[name]
+
+                    last.ifTrue(() => {
+                        (child.kind == "table").ifFalse(() => {
+                            fail()
+                        })
+                        states.containsKey(child).ifFalse(() => {
+                            fail()
+                        })
+                        state: states[child]
+                        (state == "implicit").ifTrue(() => {
+                            states[child] = "header"
+                        })
+                        (state == "implicit").ifFalse(() => {
+                            fail()
+                        })
+                        selected = child
+                    })
+
+                    last.ifFalse(() => {
+                        selected = existingParent(child)
+                    })
+                })
+
+                entries.containsKey(name).ifFalse(() => {
+                    child = node("table", Map())
+                    entries[name] = child
+                    last.ifTrue(() => {
+                        states[child] = "header"
+                    })
+                    last.ifFalse(() => {
+                        states[child] = "implicit"
+                    })
+                    selected = child
+                })
+
+                last.ifFalse(() => {
+                    position = position + 1
+                    walk()
+                })
+            }
+
+            walk()
+            selected
+        }
+
+        selectArrayHeader: (parts) => {
+            selected: root
+            position: 0
+            created: null
+
+            walk: null
+            walk = () => {
+                name: parts[position]
+                last: position == parts.size() - 1
+                entries: selected.value
+                child: null
+
+                last.ifTrue(() => {
+                    element: node("table", Map())
+                    states[element] = "array-element"
+
+                    entries.containsKey(name).ifTrue(() => {
+                        child = entries[name]
+                        (child.kind == "array").ifFalse(() => {
+                            fail()
+                        })
+                        states.containsKey(child).ifFalse(() => {
+                            fail()
+                        })
+                        (states[child] == "array-table").ifFalse(() => {
+                            fail()
+                        })
+                        child.value = Array(...child.value, element)
+                    })
+
+                    entries.containsKey(name).ifFalse(() => {
+                        child = node("array", Array(element))
+                        entries[name] = child
+                        states[child] = "array-table"
+                    })
+
+                    created = element
+                })
+
+                last.ifFalse(() => {
+                    entries.containsKey(name).ifTrue(() => {
+                        child = entries[name]
+                        selected = existingParent(child)
+                    })
+
+                    entries.containsKey(name).ifFalse(() => {
+                        child = node("table", Map())
+                        entries[name] = child
+                        states[child] = "implicit"
+                        selected = child
+                    })
+
+                    position = position + 1
+                    walk()
+                })
+            }
+
+            walk()
+            created
+        }
+
+        parseHeader: (statement) => {
+            source: Encoding.UTF8.encode(statement)
+            bounds: trimBounds(source)
+            (bounds.left >= bounds.right).ifTrue(() => {
+                fail()
+            })
+            (source[bounds.left] == 91).ifFalse(() => {
+                fail()
+            })
+            (source[bounds.right - 1] == 93).ifFalse(() => {
+                fail()
+            })
+
+            arrayHeader: false
+            keyStart: bounds.left + 1
+            keyEnd: bounds.right - 1
+
+            (keyStart < keyEnd).ifTrue(() => {
+                (source[keyStart] == 91).ifTrue(() => {
+                    arrayHeader = true
+                    (keyStart + 1 >= keyEnd).ifTrue(() => {
+                        fail()
+                    })
+                    (source[keyEnd - 1] == 93).ifFalse(() => {
+                        fail()
+                    })
+                    keyStart = keyStart + 1
+                    keyEnd = keyEnd - 1
+                })
+            })
+
+            keyText: decodeRange(source, keyStart, keyEnd)
+            {
+                array: arrayHeader
+                path: syntaxKeyPath(keyText)
+            }
+        }
+
+        parseAssignment: (statement) => {
+            source: Encoding.UTF8.encode(statement)
+            length: source.size()
+            position: 0
+            quote: -1
+            separator: -1
+
+            scan: null
+            scan = () => {
+                (position < length).ifTrue(() => {
+                    (separator < 0).ifTrue(() => {
+                        octet: source[position]
+                        inQuote: quote >= 0
+
+                        inQuote.ifTrue(() => {
+                            escaped: quote == 34
+                            (octet == 92).ifFalse(() => {
+                                escaped = false
+                            })
+
+                            escaped.ifTrue(() => {
+                                position = position + 1
+                                (position >= length).ifTrue(() => {
+                                    fail()
+                                })
+                                position = position + 1
+                            })
+
+                            escaped.ifFalse(() => {
+                                (octet == quote).ifTrue(() => {
+                                    quote = -1
+                                })
+                                position = position + 1
+                            })
+                        })
+
+                        inQuote.ifFalse(() => {
+                            isQuote: octet == 34
+                            (octet == 39).ifTrue(() => {
+                                isQuote = true
+                            })
+
+                            isQuote.ifTrue(() => {
+                                quote = octet
+                                position = position + 1
+                            })
+
+                            isQuote.ifFalse(() => {
+                                isNewline: octet == 10
+                                (octet == 13).ifTrue(() => {
+                                    isNewline = true
+                                })
+                                isNewline.ifTrue(() => {
+                                    fail()
+                                })
+
+                                (octet == 61).ifTrue(() => {
+                                    separator = position
+                                })
+                                position = position + 1
+                            })
+                        })
+
+                        scan()
+                    })
+                })
+            }
+
+            scan()
+            (quote >= 0).ifTrue(() => {
+                fail()
+            })
+            (separator < 0).ifTrue(() => {
+                fail()
+            })
+
+            keyText: decodeRange(source, 0, separator)
+            valueText: decodeRange(source, separator + 1, length)
+            {
+                path: syntaxKeyPath(keyText)
+                value: syntaxValue(valueText)
+            }
+        }
+
+        items.each((statement) => {
+            source: Encoding.UTF8.encode(statement)
+            bounds: trimBounds(source)
+            (bounds.left >= bounds.right).ifTrue(() => {
+                fail()
+            })
+
+            header: source[bounds.left] == 91
+            header.ifTrue(() => {
+                parsedHeader: parseHeader(statement)
+                parsedHeader.array.ifTrue(() => {
+                    current = selectArrayHeader(parsedHeader.path)
+                })
+                parsedHeader.array.ifFalse(() => {
+                    current = selectHeader(parsedHeader.path)
+                })
+            })
+
+            header.ifFalse(() => {
+                assignment: parseAssignment(statement)
+                putDotted(current, assignment.path, 0, assignment.value)
+            })
+        })
+        root
+    }
+
+    documentTable(text)
+}

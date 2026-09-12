@@ -60,7 +60,8 @@ final class ProtosTomlDataModelModuleTest {
                         "localDate",
                         "localTime",
                         "array",
-                        "table"),
+                        "table",
+                        "parse"),
                 module.localSlotsSnapshot().keySet());
     }
 

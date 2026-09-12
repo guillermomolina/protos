@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-A/D104 ALIGNMENT CLOSED; LIB010-B parser READY**
+Status: **LIB010-B IN_PROGRESS — B1 functional parser published; B2 nesting/stress hardening READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -1046,8 +1046,26 @@ unchanged.
 
 D104 alignment status: **CLOSED**.
 
-Next bounded implementation slice:
-**LIB010-B — strict TOML 1.1 parser**.
+LIB010-B implementation is deliberately split into two publications:
+
+- **LIB010-B1 — functional strict TOML 1.1 parser: CLOSED in this publication.**
+  `TOML.parse(text)` covers TOML 1.1 strings (including `\e` and `\xHH`),
+  booleans, unbounded Integer, binary64 Float including signed zero/infinity/NaN,
+  all four temporal categories including omitted seconds and D104 `second = 60`,
+  heterogeneous arrays, dotted keys, TOML 1.1 multiline/trailing-comma inline
+  tables, ordinary tables, and arrays-of-tables with strict conflict rejection.
+  The implementation is public-library owned and has no runtime dependency on
+  `tool-shared:Toml10`; the private engine is used only as execution-time source
+  material for proven parser mechanics while adapting the public dialect/model.
+
+- **LIB010-B2 — nesting/adversarial hardening + parser closure: READY.**
+  Replace or bound recursive nested-container paths as required by the approved
+  large/adversarial-input contract, retain large/deep stress evidence, and close
+  LIB010-B without adding encoder/Document/streaming behavior.
+
+B1 is an intermediate `FOCAL_BOUNDED` publication. Integrated full validation is
+deferred to the owning `LIB010` closure; B1 does not claim LIB010 or LIB010-B
+closure.
 
 ## Deliberately deferred
 
