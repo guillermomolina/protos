@@ -29,6 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
+import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -573,6 +574,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final boolean structuredProcessArgumentsEach;
         private final boolean structuredEnvironmentEach;
         private final boolean structuredIdentityMapEach;
+        private final boolean structuredMapEach;
         private final boolean directControlNative;
         private final ProtosModuleRuntime.PreparedModuleInitialization moduleInitialization;
 
@@ -586,6 +588,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     false,
                     false,
                     null,
+                    false,
                     false,
                     false,
                     false,
@@ -608,6 +611,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean structuredProcessArgumentsEach,
                 boolean structuredEnvironmentEach,
                 boolean structuredIdentityMapEach,
+                boolean structuredMapEach,
                 boolean directControlNative) {
             this.bodyTarget = bodyTarget;
             this.nativeBody = nativeBody;
@@ -625,6 +629,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredProcessArgumentsEach = structuredProcessArgumentsEach;
             this.structuredEnvironmentEach = structuredEnvironmentEach;
             this.structuredIdentityMapEach = structuredIdentityMapEach;
+            this.structuredMapEach = structuredMapEach;
             this.directControlNative = directControlNative;
             this.moduleInitialization = null;
             int controlCapabilities =
@@ -637,6 +642,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             + (structuredProcessArgumentsEach ? 1 : 0)
                             + (structuredEnvironmentEach ? 1 : 0)
                             + (structuredIdentityMapEach ? 1 : 0)
+                            + (structuredMapEach ? 1 : 0)
                             + (directControlNative ? 1 : 0);
             if (controlCapabilities > 1) {
                 throw new IllegalArgumentException(
@@ -657,6 +663,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 boolean structuredProcessArgumentsEach,
                 boolean structuredEnvironmentEach,
                 boolean structuredIdentityMapEach,
+                boolean structuredMapEach,
                 boolean directControlNative) {
             return new PreparedClosureCall(
                     null,
@@ -672,6 +679,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredProcessArgumentsEach,
                     structuredEnvironmentEach,
                     structuredIdentityMapEach,
+                    structuredMapEach,
                     directControlNative);
         }
 
@@ -692,6 +700,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredProcessArgumentsEach = false;
             this.structuredEnvironmentEach = false;
             this.structuredIdentityMapEach = false;
+            this.structuredMapEach = false;
             this.directControlNative = false;
             this.moduleInitialization =
                     java.util.Objects.requireNonNull(
@@ -725,6 +734,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         boolean isStructuredProcessArgumentsEach() { return structuredProcessArgumentsEach; }
         boolean isStructuredEnvironmentEach() { return structuredEnvironmentEach; }
         boolean isStructuredIdentityMapEach() { return structuredIdentityMapEach; }
+        boolean isStructuredMapEach() { return structuredMapEach; }
 
         PreparedEnsureCall prepareStructuredEnsure() {
             if (!structuredEnsure) {
@@ -859,6 +869,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
+        PreparedMapEachCall prepareStructuredMapEach() {
+            if (!structuredMapEach) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured Map.each capability");
+            }
+            return new PreparedMapEachCall(
+                    activation.receiver(),
+                    supplied,
+                    activation);
+        }
+
         Object enterNative() {
             if (nativeBody == null) {
                 throw new IllegalStateException(
@@ -872,7 +893,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || structuredBytesEach
                     || structuredProcessArgumentsEach
                     || structuredEnvironmentEach
-                    || structuredIdentityMapEach) {
+                    || structuredIdentityMapEach
+                    || structuredMapEach) {
                 throw new IllegalStateException(
                         "structured control native must execute through Bytecode control operations");
             }
@@ -1725,6 +1747,114 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+
+    static final class PreparedMapEachCall {
+        private final ProtosMapValue map;
+        private final List<java.util.Map.Entry<Object, Object>> snapshot;
+        private final Object block;
+        private final ProtosActivation activation;
+        private int index;
+
+        PreparedMapEachCall(
+                Object receiver,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            if (!(receiver instanceof ProtosMapValue value)
+                    || supplied.size() != 1) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+            this.map = value;
+            this.block = supplied.get(0);
+            ProtosStandardMapProtocol.requireInvokableForStructured(
+                    block,
+                    activation);
+            this.snapshot = List.copyOf(value.associationSnapshot());
+        }
+
+        boolean hasNext() {
+            return index < snapshot.size();
+        }
+
+        PreparedClosureCall prepareCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Map.each callback requested after snapshot exhaustion");
+            }
+            java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
+            return prepareClosureCall(
+                    block,
+                    List.of(entry.getKey(), entry.getValue()),
+                    activation);
+        }
+
+        void advance() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Map.each cursor advanced after snapshot exhaustion");
+            }
+            index++;
+        }
+
+        Object finish() {
+            if (hasNext()) {
+                throw new IllegalStateException(
+                        "Map.each finished before snapshot exhaustion");
+            }
+            return map;
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredMapEachCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredMapEach();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapEachCall {
+        @Specialization
+        public static PreparedMapEachCall perform(PreparedClosureCall prepared) {
+            return prepared.prepareStructuredMapEach();
+        }
+    }
+
+    @Operation
+    public static final class StructuredMapEachHasNext {
+        @Specialization
+        public static boolean perform(PreparedMapEachCall prepared) {
+            return prepared.hasNext();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapEachEntryCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedMapEachCall prepared) {
+            return prepared.prepareCurrent();
+        }
+    }
+
+    @Operation
+    public static final class AdvanceStructuredMapEach {
+        @Specialization
+        public static void perform(PreparedMapEachCall prepared) {
+            prepared.advance();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredMapEach {
+        @Specialization
+        public static Object perform(PreparedMapEachCall prepared) {
+            return prepared.finish();
+        }
+    }
+
     @Operation
     public static final class IsStructuredBooleanCall {
         @Specialization
@@ -2157,6 +2287,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardProcessArgumentsProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardEnvironmentProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardIdentityMapProtocol.isStandardEachImplementation(targetClosure),
+                ProtosStandardMapProtocol.isStandardEachImplementation(targetClosure),
                 ProtosStandardErrorProtocol.isStandardSignalImplementation(targetClosure));
     }
 
@@ -2367,6 +2498,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         closure,
                         methodHome,
                         caller),
+                ProtosStandardMapProtocol.isCanonicalStandardEachSelection(
+                        closure,
+                        methodHome,
+                        caller),
                 ProtosStandardErrorProtocol.isCanonicalStandardSignalSelection(
                         closure,
                         methodHome,
@@ -2408,6 +2543,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 false,
                 false,
                 false,
+                false,
                 false);
     }
 
@@ -2444,6 +2580,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             boolean structuredProcessArgumentsEach,
             boolean structuredEnvironmentEach,
             boolean structuredIdentityMapEach,
+            boolean structuredMapEach,
             boolean directControlNative) {
         if (closure.nativeBody().isPresent()) {
             ProtosNativeClosureBody nativeBody =
@@ -2468,6 +2605,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredProcessArgumentsEach,
                     structuredEnvironmentEach,
                     structuredIdentityMapEach,
+                    structuredMapEach,
                     directControlNative);
         }
         if (structuredEnsure
@@ -2479,6 +2617,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 || structuredProcessArgumentsEach
                 || structuredEnvironmentEach
                 || structuredIdentityMapEach
+                || structuredMapEach
                 || directControlNative) {
             throw new IllegalStateException(
                     "structured control capability requires the canonical native implementation");

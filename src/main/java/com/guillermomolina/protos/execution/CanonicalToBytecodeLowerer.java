@@ -1838,6 +1838,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredIdentityMapEachCall", null);
         BytecodeLocal structuredIdentityMapEachChild =
                 builder.createLocal("structuredIdentityMapEachChildCall", null);
+        BytecodeLocal structuredMapEach =
+                builder.createLocal("structuredMapEachCall", null);
+        BytecodeLocal structuredMapEachChild =
+                builder.createLocal("structuredMapEachChildCall", null);
 
         builder.beginIfThenElse();
 
@@ -2426,12 +2430,71 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredMapEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredMapEachCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredMapEach);
+        builder.beginPrepareStructuredMapEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredMapEachCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+        builder.beginStructuredMapEachHasNext();
+        builder.emitLoadLocal(structuredMapEach);
+        builder.endStructuredMapEachHasNext();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredMapEachChild);
+        builder.beginPrepareStructuredMapEachEntryCall();
+        builder.emitLoadLocal(structuredMapEach);
+        builder.endPrepareStructuredMapEachEntryCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapEachChild,
+                childResult,
+                resumeValue);
+        builder.beginAdvanceStructuredMapEach();
+        builder.emitLoadLocal(structuredMapEach);
+        builder.endAdvanceStructuredMapEach();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredMapEach();
+        builder.emitLoadLocal(structuredMapEach);
+        builder.endFinishStructuredMapEach();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();
