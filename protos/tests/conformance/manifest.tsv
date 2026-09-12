@@ -152,6 +152,14 @@ matching/array-remainder-bindings.protos	boolean	true
 matching/array-empty-remainder.protos	boolean	true
 matching/array-nested-dynamic-terminal.protos	boolean	true
 matching/array-effects-retained-on-mismatch.protos	boolean	true
+matching/map-open-exact.protos	boolean	true
+matching/map-key-order-stable-snapshot.protos	boolean	true
+matching/map-all-keys-before-children.protos	boolean	true
+matching/map-repeated-requirements.protos	boolean	true
+matching/map-exact-residue-before-children.protos	boolean	true
+matching/map-ineligible.protos	boolean	true
+matching/map-remainder-bindings.protos	boolean	true
+matching/map-nested-dynamic-terminal.protos	boolean	true
 collections/map-replacement-keeps-size.protos	integer	2
 collections/map-remove-and-reinsert.protos	integer	3
 collections/identity-map-distinct-objects.protos	integer	2

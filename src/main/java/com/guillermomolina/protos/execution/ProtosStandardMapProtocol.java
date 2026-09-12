@@ -9,6 +9,55 @@ public final class ProtosStandardMapProtocol {
 
  private ProtosStandardMapProtocol(){}
 
+ static record StableAssociation(
+         Object key,
+         BigInteger recordedHash,
+         Object value) {
+  StableAssociation {
+   Objects.requireNonNull(key, "key");
+   Objects.requireNonNull(recordedHash, "recordedHash");
+   Objects.requireNonNull(value, "value");
+  }
+ }
+
+ static List<StableAssociation> stableSnapshot(ProtosMapValue map) {
+  Objects.requireNonNull(map, "map");
+  return map.keyedSnapshot().stream()
+          .map(entry -> new StableAssociation(
+                  entry.key(),
+                  entry.recordedHash(),
+                  entry.value()))
+          .toList();
+ }
+
+ static BigInteger queryHash(
+         ProtosMapValue map,
+         Object queryKey,
+         ProtosActivation activation) {
+  return hash(map, queryKey, activation);
+ }
+
+ static int findStableAssociationIndex(
+         ProtosMapValue map,
+         List<StableAssociation> snapshot,
+         Object queryKey,
+         BigInteger queryHash,
+         ProtosActivation activation) {
+  for (int index = 0; index < snapshot.size(); index++) {
+   StableAssociation association = snapshot.get(index);
+   if (matchesStoredKey(
+           map,
+           queryKey,
+           queryHash,
+           association.key(),
+           association.recordedHash(),
+           activation)) {
+    return index;
+   }
+  }
+  return -1;
+ }
+
  static boolean isStandardEachImplementation(ProtosClosureValue closure) {
   return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
  }
@@ -42,8 +91,38 @@ public final class ProtosStandardMapProtocol {
   }
   return m;
  }
- private static ProtosMapValue.Entry find(ProtosMapValue m,Object k,ProtosActivation a){return find(m,k,hash(m,k,a),a);}
- private static ProtosMapValue.Entry find(ProtosMapValue m,Object k,BigInteger h,ProtosActivation a){for(var e:m.keyedSnapshot()){if(!e.recordedHash().equals(h))continue;m.enterComparison();Object q;try{q=ProtosInvocation.invokeMessage(k,"==",List.of(e.key()),a);}finally{m.leaveComparison();}if(q==ProtosBooleanValue.TRUE)return e;if(q!=ProtosBooleanValue.FALSE)throw err(a);}return null;}
+ private static ProtosMapValue.Entry find(ProtosMapValue m,Object k,ProtosActivation a){
+  return find(m,k,hash(m,k,a),a);
+ }
+ private static ProtosMapValue.Entry find(ProtosMapValue m,Object k,BigInteger h,ProtosActivation a){
+  for(var e:m.keyedSnapshot()){
+   if(matchesStoredKey(m,k,h,e.key(),e.recordedHash(),a))return e;
+  }
+  return null;
+ }
+ private static boolean matchesStoredKey(
+         ProtosMapValue map,
+         Object queryKey,
+         BigInteger queryHash,
+         Object storedKey,
+         BigInteger recordedHash,
+         ProtosActivation activation) {
+  if(!recordedHash.equals(queryHash))return false;
+  map.enterComparison();
+  Object comparison;
+  try{
+   comparison=ProtosInvocation.invokeMessage(
+           queryKey,
+           "==",
+           List.of(storedKey),
+           activation);
+  }finally{
+   map.leaveComparison();
+  }
+  if(comparison==ProtosBooleanValue.TRUE)return true;
+  if(comparison==ProtosBooleanValue.FALSE)return false;
+  throw err(activation);
+ }
  private static BigInteger hash(ProtosMapValue m,Object k,ProtosActivation a){m.enterComparison();Object h;try{h=ProtosInvocation.invokeMessage(k,"hash",List.of(),a);}finally{m.leaveComparison();}if(h instanceof ProtosIntegerValue i)return i.value();if(h instanceof ProtosFixedIntegerValue i)return i.value();throw err(a);}
  private static void mutationEntry(ProtosMapValue m,ProtosActivation a){if(m.comparisonActive()||m.isFrozen())throw err(a);}
  private static ProtosMapValue map(ProtosActivation a){if(!(a.receiver() instanceof ProtosMapValue m))throw err(a);return m;}

@@ -174,7 +174,7 @@ public final class CanonicalToTruffleLowerer {
     private ProtosMatchNode.ArmNode lowerBasicMatchArm(CanonicalMatch.Arm arm) {
         if (arm.guard().isPresent()) {
             throw new UnsupportedOperationException(
-                    "I038-D2 does not yet lower guarded match arms");
+                    "I038-D3 does not yet lower guarded match arms");
         }
 
         ProtosMatchNode.PatternNode patternNode =
@@ -232,9 +232,37 @@ public final class CanonicalToTruffleLowerer {
                     remainder,
                     suffix);
         }
+        if (pattern instanceof CanonicalMatchPattern.MapPattern map) {
+            ProtosExpressionNode[] keyNodes =
+                    map.entries().stream()
+                            .map(CanonicalMatchPattern.MapEntry::key)
+                            .map(this::lower)
+                            .toArray(ProtosExpressionNode[]::new);
+            ProtosMatchNode.PatternNode[] valuePatterns =
+                    map.entries().stream()
+                            .map(CanonicalMatchPattern.MapEntry::valuePattern)
+                            .map(this::lowerExecutableMatchPattern)
+                            .toArray(ProtosMatchNode.PatternNode[]::new);
+            ProtosMatchNode.PatternNode remainder = null;
+            if (map.remainder().isPresent()
+                    && map.remainder().orElseThrow().pattern().isPresent()) {
+                remainder =
+                        lowerExecutableMatchPattern(
+                                map.remainder()
+                                        .orElseThrow()
+                                        .pattern()
+                                        .orElseThrow());
+            }
+            return new ProtosMatchNode.MapPatternNode(
+                    map.exact(),
+                    keyNodes,
+                    valuePatterns,
+                    map.remainder().isPresent(),
+                    remainder);
+        }
 
         throw new UnsupportedOperationException(
-                "I038-D2 does not yet lower "
+                "I038-D3 does not yet lower "
                         + pattern.getClass().getSimpleName()
                         + " match patterns");
     }
@@ -287,9 +315,18 @@ public final class CanonicalToTruffleLowerer {
             }
             return;
         }
+        if (pattern instanceof CanonicalMatchPattern.MapPattern map) {
+            for (CanonicalMatchPattern.MapEntry entry : map.entries()) {
+                appendMatchParameters(entry.valuePattern(), parameters);
+            }
+            map.remainder()
+                    .flatMap(CanonicalMatchPattern.Remainder::pattern)
+                    .ifPresent(item -> appendMatchParameters(item, parameters));
+            return;
+        }
 
         throw new UnsupportedOperationException(
-                "I038-D2 does not yet build arm parameters for "
+                "I038-D3 does not yet build arm parameters for "
                         + pattern.getClass().getSimpleName()
                         + " match patterns");
     }

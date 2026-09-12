@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CompilerAsserts;
@@ -245,6 +246,160 @@ public final class ProtosMatchNode extends ProtosExpressionNode {
             }
 
             return List.copyOf(captures);
+        }
+    }
+
+
+    static final class MapPatternNode extends PatternNode {
+        private final boolean exact;
+        @Children private final ProtosExpressionNode[] keyNodes;
+        @Children private final PatternNode[] valuePatterns;
+        private final boolean hasRemainder;
+        @Child private PatternNode remainder;
+
+        MapPatternNode(
+                boolean exact,
+                ProtosExpressionNode[] keyNodes,
+                PatternNode[] valuePatterns,
+                boolean hasRemainder,
+                PatternNode remainder) {
+            Objects.requireNonNull(keyNodes, "keyNodes");
+            Objects.requireNonNull(valuePatterns, "valuePatterns");
+            if (keyNodes.length != valuePatterns.length) {
+                throw new IllegalArgumentException(
+                        "Map pattern key/value child counts must match");
+            }
+            this.exact = exact;
+            this.keyNodes = keyNodes.clone();
+            this.valuePatterns = valuePatterns.clone();
+            this.hasRemainder = hasRemainder;
+            this.remainder = remainder;
+
+            for (ProtosExpressionNode keyNode : this.keyNodes) {
+                Objects.requireNonNull(keyNode, "keyNodes contains null");
+            }
+            for (PatternNode valuePattern : this.valuePatterns) {
+                Objects.requireNonNull(valuePattern, "valuePatterns contains null");
+            }
+            if (exact && hasRemainder) {
+                throw new IllegalArgumentException(
+                        "exact Map pattern cannot own a remainder");
+            }
+            if (!hasRemainder && remainder != null) {
+                throw new IllegalArgumentException(
+                        "Map pattern without remainder cannot own a remainder child");
+            }
+        }
+
+        @ExplodeLoop
+        @Override
+        List<Object> attempt(
+                VirtualFrame frame,
+                Object subject,
+                ProtosActivation activation) {
+            CompilerAsserts.compilationConstant(keyNodes.length);
+            CompilerAsserts.compilationConstant(valuePatterns.length);
+
+            if (!(subject instanceof ProtosMapValue map)) {
+                return null;
+            }
+
+            List<ProtosStandardMapProtocol.StableAssociation> snapshot =
+                    ProtosStandardMapProtocol.stableSnapshot(map);
+
+            /*
+             * D086/D095 split structural resolution from child matching:
+             * every query expression is evaluated once left-to-right and every
+             * key resolves against the same pre-effect association snapshot
+             * before the first mapped-value child is attempted.
+             */
+            Object[] selectedValues = new Object[keyNodes.length];
+            boolean[] selectedAssociations = new boolean[snapshot.size()];
+
+            for (int index = 0; index < keyNodes.length; index++) {
+                Object queryKey = keyNodes[index].execute(frame);
+                java.math.BigInteger queryHash =
+                        ProtosStandardMapProtocol.queryHash(
+                                map,
+                                queryKey,
+                                activation);
+                int selected =
+                        ProtosStandardMapProtocol.findStableAssociationIndex(
+                                map,
+                                snapshot,
+                                queryKey,
+                                queryHash,
+                                activation);
+                if (selected < 0) {
+                    return null;
+                }
+                selectedValues[index] = snapshot.get(selected).value();
+                selectedAssociations[selected] = true;
+            }
+
+            if (exact) {
+                for (boolean selected : selectedAssociations) {
+                    if (!selected) {
+                        return null;
+                    }
+                }
+            }
+
+            ArrayList<Object> captures = new ArrayList<>();
+            for (int index = 0; index < valuePatterns.length; index++) {
+                List<Object> child =
+                        valuePatterns[index].attempt(
+                                frame,
+                                selectedValues[index],
+                                activation);
+                if (child == null) {
+                    return null;
+                }
+                captures.addAll(child);
+            }
+
+            if (hasRemainder && remainder != null) {
+                ProtosMapValue remainderValue =
+                        freshFrozenRemainderMap(
+                                snapshot,
+                                selectedAssociations,
+                                activation);
+                List<Object> child =
+                        remainder.attempt(frame, remainderValue, activation);
+                if (child == null) {
+                    return null;
+                }
+                captures.addAll(child);
+            }
+
+            return List.copyOf(captures);
+        }
+
+        private static ProtosMapValue freshFrozenRemainderMap(
+                List<ProtosStandardMapProtocol.StableAssociation> snapshot,
+                boolean[] selectedAssociations,
+                ProtosActivation activation) {
+            ProtosMapValue result =
+                    activation.prelude()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "Map matching requires an owning Core prelude"))
+                            .newMap();
+
+            for (int index = 0; index < snapshot.size(); index++) {
+                if (selectedAssociations[index]) {
+                    continue;
+                }
+                ProtosStandardMapProtocol.StableAssociation association =
+                        snapshot.get(index);
+                result.append(
+                        association.key(),
+                        association.recordedHash(),
+                        association.value());
+            }
+            result.freeze();
+            return result;
         }
     }
 
