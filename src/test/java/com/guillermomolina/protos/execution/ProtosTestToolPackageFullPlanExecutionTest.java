@@ -55,6 +55,7 @@ final class ProtosTestToolPackageFullPlanExecutionTest {
                                 new ProtosBundledToolModuleResolver(
                                         "test",
                                         TEST_TOOL_ROOT,
+                                        TEST_TOOL_ROOT.resolveSibling("shared"),
                                         new ProtosStandardLibraryModuleResolver(
                                                 STANDARD_LIBRARY)));
         ProtosPrelude packagePrelude =

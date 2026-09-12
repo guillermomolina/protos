@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -55,6 +54,7 @@ final class ProtosTestToolH2B1BoundedSimpleSchedulingTest {
                     new ProtosBundledToolModuleResolver(
                             "test",
                             TOOL_ROOT,
+                            TOOL_ROOT.resolveSibling("shared"),
                             new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
             ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
             ProtosActivation activation = prelude.newModuleActivation();
@@ -83,8 +83,8 @@ final class ProtosTestToolH2B1BoundedSimpleSchedulingTest {
                                         + submission.maxActive()
                                         + ", completionOrder="
                                         + submission.completionOrder()
-                                        + ", guestError="
-                                        + guestErrorDiagnostic(outcome, prelude));
+                                        + ", guestErrorParent="
+                                        + guestErrorParentName(outcome, prelude));
                 assertSame(ProtosBooleanValue.TRUE, outcome.value());
                 assertEquals(3, submission.submittedCount());
                 assertEquals(
@@ -99,42 +99,18 @@ final class ProtosTestToolH2B1BoundedSimpleSchedulingTest {
         }
     }
 
-    private static String guestErrorDiagnostic(
+    private static String guestErrorParentName(
             ProtosExecutionOutcome outcome, ProtosPrelude prelude) {
         if (outcome.error() == null) {
-            return "<none>";
+            return "-";
         }
-
-        ProtosObjectValue error = outcome.error();
-        Object parent = error.parent().orElse(null);
-        return "errorClass="
-                + error.getClass().getName()
-                + ", errorSlots="
-                + error.localSlotsSnapshot()
-                + ", parentBinding="
-                + preludeBindingName(parent, prelude)
-                + ", parentClass="
-                + (parent == null ? "<none>" : parent.getClass().getName())
-                + ", parentSlots="
-                + objectSlots(parent);
-    }
-
-    private static String preludeBindingName(Object value, ProtosPrelude prelude) {
-        if (value == null) {
-            return "<none>";
-        }
+        Object parent = outcome.error().parent().orElse(null);
         for (var entry : prelude.bindings().localSlotsSnapshot().entrySet()) {
-            if (entry.getValue() == value) {
+            if (entry.getValue() == parent) {
                 return entry.getKey();
             }
         }
-        return "<unbound>";
-    }
-
-    private static Object objectSlots(Object value) {
-        return value instanceof ProtosObjectValue object
-                ? object.localSlotsSnapshot()
-                : "<not-object>";
+        return parent == null ? "<none>" : parent.getClass().getSimpleName();
     }
 
     private static final class TrackingSubmission

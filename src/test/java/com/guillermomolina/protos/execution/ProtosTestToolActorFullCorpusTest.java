@@ -55,6 +55,7 @@ final class ProtosTestToolActorFullCorpusTest {
                                 new ProtosBundledToolModuleResolver(
                                         "test",
                                         TOOL_ROOT,
+                                        TOOL_ROOT.resolveSibling("shared"),
                                         standardLibraryResolver));
         ProtosPrelude actorPrelude =
                 new ProtosCoreBootstrap()

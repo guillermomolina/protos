@@ -51,6 +51,7 @@ final class ProtosTestToolFutureResolvedMechanismTest {
                 new ProtosBundledToolModuleResolver(
                         "test",
                         TOOL_ROOT,
+                        TOOL_ROOT.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(
                                 STANDARD_LIBRARY));
         ProtosPrelude prelude =

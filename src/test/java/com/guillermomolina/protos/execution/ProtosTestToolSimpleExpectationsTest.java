@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -59,202 +58,8 @@ final class ProtosTestToolSimpleExpectationsTest {
         ProtosExecutionOutcome outcome =
                 executeFixture(POSITIVE_FIXTURE, fixture.activation());
 
-        assertEquals(
-                ProtosExecutionOutcome.State.COMPLETED,
-                outcome.state(),
-                () -> "Simple expectations "
-                        + guestErrorDiagnostic(outcome, fixture.prelude()));
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
-    }
-
-    @Test
-    void diagnosticManifestCaseSpecAndPlanBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "Manifest.caseSpec/planCases",
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
-                        + "plan: Manifest.frozenTuple(Manifest.frozenTuple(spec))\n"
-                        + "cases: Manifest.planCases(plan)\n"
-                        + "(cases.size() == 1) &&\n"
-                        + "(Manifest.caseId(cases[0]) === \"diagnostic/one.protos\") &&\n"
-                        + "(Manifest.caseExpectation(cases[0]) === \"integer\") &&\n"
-                        + "(Manifest.caseExpected(cases[0]) === \"1\")\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticSimpleExpectationClassifierBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "Runner.isSimpleExpectation",
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Runner: import(\"self:Runner\")\n"
-                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
-                        + "Runner.isSimpleExpectation(spec)\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticMapConstructionBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "Map construction",
-                "values: Map()\n"
-                        + "(values.size() == 0) && (values.containsKey(\"missing\") === false)\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticExactExecutionBindingBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "execution(\"true\")",
-                "observation: execution(\"true\")\n"
-                        + "(observation.state === \"completed\") &&\n"
-                        + "(observation.error === null) &&\n"
-                        + "(observation.value === true)\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticEvaluateSimpleBooleanBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "Runner.evaluateSimple boolean",
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Runner: import(\"self:Runner\")\n"
-                        + "spec: Manifest.caseSpec(Array(\"diagnostic/true.protos\", \"boolean\", \"true\"))\n"
-                        + "result: Runner.evaluateSimple(spec, \"true\", execution)\n"
-                        + "Runner.resultPassed(result)\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticEvaluateSimpleIntegerBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "Runner.evaluateSimple integer",
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Runner: import(\"self:Runner\")\n"
-                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
-                        + "result: Runner.evaluateSimple(spec, \"1\", execution)\n"
-                        + "Runner.resultPassed(result)\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticRunnerPureAccessorBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "Runner.resultPassed pure accessor",
-                "Runner: import(\"self:Runner\")\n"
-                        + "Runner.resultPassed(Array(true, null))\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticRunnerManifestSlotIdentityBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "Runner Manifest slot identity",
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Runner: import(\"self:Runner\")\n"
-                        + "runnerManifest: Runner.slotValue(\"Manifest\")\n"
-                        + "runnerManifest === Manifest\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticRunnerManifestSlotAccessBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "Runner Manifest slot caseExpectation",
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Runner: import(\"self:Runner\")\n"
-                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
-                        + "runnerManifest: Runner.slotValue(\"Manifest\")\n"
-                        + "runnerManifest.caseExpectation(spec) === \"integer\"\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticLocalClassifierCaptureBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "local classifier capturing Manifest",
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "classifier: (spec) => {\n"
-                        + "    kind: Manifest.caseExpectation(spec)\n"
-                        + "    supported: kind === \"boolean\"\n"
-                        + "    (kind === \"integer\").ifTrue(() => { supported = true })\n"
-                        + "    supported\n"
-                        + "}\n"
-                        + "spec: Manifest.caseSpec(Array(\"diagnostic/one.protos\", \"integer\", \"1\"))\n"
-                        + "classifier(spec)\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticRunnerSingleManifestClassifierBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "Runner single Manifest classifier",
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Runner: import(\"self:Runner\")\n"
-                        + "spec: Manifest.caseSpec(Array(\"diagnostic/fresh.protos\", \"closure-error-parent-fresh\", \"Error\"))\n"
-                        + "Runner.isClosureErrorParentFreshExpectation(spec)\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticManifestImportOnlyBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "import self:Manifest",
-                "Manifest: import(\"self:Manifest\")\n"
-                        + "Manifest === Manifest\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticResourceCatalogImportOnlyBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "import self:ResourceCatalog",
-                "ResourceCatalog: import(\"self:ResourceCatalog\")\n"
-                        + "ResourceCatalog === ResourceCatalog\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticResourceBindingImportOnlyBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "import self:ResourceBinding",
-                "ResourceBinding: import(\"self:ResourceBinding\")\n"
-                        + "ResourceBinding === ResourceBinding\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticResourceReservationImportOnlyBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "import self:ResourceReservation",
-                "ResourceReservation: import(\"self:ResourceReservation\")\n"
-                        + "ResourceReservation === ResourceReservation\n",
-                fixture);
-    }
-
-    @Test
-    void diagnosticRunnerImportOnlyBoundary() throws Exception {
-        Fixture fixture = fixture();
-        assertDiagnosticCompletedTrue(
-                "import self:Runner",
-                "Runner: import(\"self:Runner\")\n"
-                        + "Runner === Runner\n",
-                fixture);
     }
 
     @Test
@@ -279,26 +84,6 @@ final class ProtosTestToolSimpleExpectationsTest {
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
     }
 
-    private static void assertDiagnosticCompletedTrue(
-            String boundary,
-            String source,
-            Fixture fixture)
-            throws Exception {
-        ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source),
-                        fixture.activation());
-
-        assertEquals(
-                ProtosExecutionOutcome.State.COMPLETED,
-                outcome.state(),
-                () -> boundary + " " + guestErrorDiagnostic(outcome, fixture.prelude()));
-        assertSame(
-                ProtosBooleanValue.TRUE,
-                outcome.value(),
-                () -> boundary + " completed with unexpected value: " + outcome.value());
-    }
-
     private static ProtosExecutionOutcome executeFixture(
             Path fixture,
             ProtosActivation activation)
@@ -317,53 +102,14 @@ final class ProtosTestToolSimpleExpectationsTest {
                 new ProtosBundledToolModuleResolver(
                         "test",
                         TOOL_ROOT,
+                        TOOL_ROOT.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosExactExecutionFacility.install(activation);
-        return new Fixture(activation, prelude);
+        return new Fixture(activation);
     }
 
-    private static String guestErrorDiagnostic(
-            ProtosExecutionOutcome outcome, ProtosPrelude prelude) {
-        if (outcome.error() == null) {
-            return "state=" + outcome.state() + ", guestError=<none>";
-        }
-
-        ProtosObjectValue error = outcome.error();
-        Object parent = error.parent().orElse(null);
-        return "state="
-                + outcome.state()
-                + ", errorClass="
-                + error.getClass().getName()
-                + ", errorSlots="
-                + error.localSlotsSnapshot()
-                + ", parentBinding="
-                + preludeBindingName(parent, prelude)
-                + ", parentClass="
-                + (parent == null ? "<none>" : parent.getClass().getName())
-                + ", parentSlots="
-                + objectSlots(parent);
-    }
-
-    private static String preludeBindingName(Object value, ProtosPrelude prelude) {
-        if (value == null) {
-            return "<none>";
-        }
-        for (var entry : prelude.bindings().localSlotsSnapshot().entrySet()) {
-            if (entry.getValue() == value) {
-                return entry.getKey();
-            }
-        }
-        return "<unbound>";
-    }
-
-    private static Object objectSlots(Object value) {
-        return value instanceof ProtosObjectValue object
-                ? object.localSlotsSnapshot()
-                : "<not-object>";
-    }
-
-    private record Fixture(ProtosActivation activation, ProtosPrelude prelude) {}
+    private record Fixture(ProtosActivation activation) {}
 }

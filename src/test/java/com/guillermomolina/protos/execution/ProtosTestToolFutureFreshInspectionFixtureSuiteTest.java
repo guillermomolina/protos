@@ -84,6 +84,7 @@ final class ProtosTestToolFutureFreshInspectionFixtureSuiteTest {
                 new ProtosBundledToolModuleResolver(
                         "test",
                         TOOL_ROOT,
+                        TOOL_ROOT.resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
