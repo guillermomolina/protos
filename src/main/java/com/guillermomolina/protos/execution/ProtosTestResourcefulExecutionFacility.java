@@ -36,19 +36,22 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 
 /**
- * Private TOOL002-I8D4C1 caller-domain rematerialization of I8D4B terminal attempts.
+ * Private TOOL002-I8D4C1/C2 caller-domain rematerialization of resourceful D108 terminal attempts.
  *
- * <p>The facility exposes only one bootstrap-local {@code resourceExecutionAsync} Closure. Its
- * second argument is an inert snapshot of already-bound and already-reserved D077/D097/D098 facts.
- * Provider resolution/provisioning remains I8D2/I8D4B; scheduler admission and I8B release remain
- * Protos Runner policy.
+ * <p>{@code resourceExecutionAsync} is the closed C1 ordinary exact-source path.
+ * {@code resourceExecutionInspectAsync} is the C2 live-result inspection peer. The inspection
+ * callable accepts exact source, exact inspector source, and the same inert snapshot of
+ * already-bound/already-reserved D077/D097/D098 facts. Source and inspector stay inside the same
+ * fresh resourceful Process; only the inspector's detached observation is rematerialized.
  *
- * <p>Infrastructure failure is resolved as ordinary inert completion data and is never converted
- * into guest Error. The caller Future becomes terminal only after I8D4B has completed the D108
- * Process/host/provider lifecycle.
+ * <p>Provider resolution/provisioning remains I8D2/I8D4B/C2. Scheduler admission and I8B release
+ * remain Protos Runner policy. Infrastructure failure resolves as ordinary inert completion data
+ * and is never converted into guest Error. Caller Futures become terminal only after the D108
+ * Process/host/provider lifecycle is terminal.
  */
 final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
     static final String BOOTSTRAP_SLOT = "resourceExecutionAsync";
+    static final String INSPECTION_BOOTSTRAP_SLOT = "resourceExecutionInspectAsync";
 
     private final ProtosPrelude executionPrelude;
     private final ProtosTestResourcefulAttemptBridge bridge;
@@ -67,7 +70,38 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
             ProtosTestResourceProviderRegistry registry,
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosAsyncExactExecutionFacility.Submission submission) {
+        return install(
+                activation,
+                BOOTSTRAP_SLOT,
+                registry,
+                runtimeHost,
+                submission,
+                false);
+    }
+
+    static ProtosTestResourcefulExecutionFacility installInspection(
+            ProtosActivation activation,
+            ProtosTestResourceProviderRegistry registry,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            ProtosAsyncExactExecutionFacility.Submission submission) {
+        return install(
+                activation,
+                INSPECTION_BOOTSTRAP_SLOT,
+                registry,
+                runtimeHost,
+                submission,
+                true);
+    }
+
+    private static ProtosTestResourcefulExecutionFacility install(
+            ProtosActivation activation,
+            String slotName,
+            ProtosTestResourceProviderRegistry registry,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            ProtosAsyncExactExecutionFacility.Submission submission,
+            boolean inspection) {
         Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(slotName, "slotName");
         Objects.requireNonNull(registry, "registry");
         Objects.requireNonNull(runtimeHost, "runtimeHost");
         Objects.requireNonNull(submission, "submission");
@@ -80,9 +114,9 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
                                         new IllegalStateException(
                                                 "resourceful execution facility requires Core prelude"));
 
-        if (activation.context().hasLocalSlot(BOOTSTRAP_SLOT)) {
+        if (activation.context().hasLocalSlot(slotName)) {
             throw new IllegalStateException(
-                    "resourceful execution bootstrap slot already exists: " + BOOTSTRAP_SLOT);
+                    "resourceful execution bootstrap slot already exists: " + slotName);
         }
 
         ProtosTestResourcefulExecutionFacility facility =
@@ -96,10 +130,12 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
         activation
                 .context()
                 .createLocalSlot(
-                        BOOTSTRAP_SLOT,
+                        slotName,
                         ProtosExactExecutionFacility.exactExecutionBootstrapClosure(
                                 (callActivation, arguments) ->
-                                        facility.execute(callActivation, arguments)));
+                                        inspection
+                                                ? facility.inspect(callActivation, arguments)
+                                                : facility.execute(callActivation, arguments)));
         return facility;
     }
 
@@ -123,6 +159,30 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
         return start(
                 caller,
                 () -> bridge.execute(request));
+    }
+
+    private Object inspect(ProtosActivation caller, List<?> arguments) {
+        if (arguments.size() != 3
+                || !(arguments.get(0) instanceof ProtosStringValue source)
+                || !(arguments.get(1) instanceof ProtosStringValue inspector)
+                || !(arguments.get(2) instanceof ProtosArrayValue bindingSnapshot)) {
+            throw ProtosExactExecutionFacility.ordinaryError(caller);
+        }
+
+        List<ProtosTestResourceProviderRequest.Binding> bindings =
+                parseBindings(caller, bindingSnapshot);
+
+        ProtosTestResourcefulAttemptBridge.InspectionRequest request =
+                new ProtosTestResourcefulAttemptBridge.InspectionRequest(
+                        ProtosExactExecutionFacility.inspectionInvocation(
+                                source,
+                                inspector,
+                                executionPrelude),
+                        bindings);
+
+        return start(
+                caller,
+                () -> bridge.inspect(request));
     }
 
     private ProtosFutureValue start(

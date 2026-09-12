@@ -12,14 +12,20 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the License.
+ * the specific language governing rights and limitations under the LICENSE.
  */
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosTask;
+import com.oracle.truffle.api.source.Source;
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -32,12 +38,18 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 
 /**
- * Private TOOL002-I8D4B bridge from one already-reserved binding set to one D108 terminal attempt.
+ * Private TOOL002-I8D4B/C2 bridge from one already-reserved binding set to one D108 terminal
+ * attempt.
+ *
+ * <p>The ordinary execution path remains the closed I8D4B contract. I8D4C2 adds only the
+ * resourceful live-result inspection variant needed by already-owned Test Tool future expectation
+ * policy: source and inspector both execute inside the same resource-provisioned fresh Process,
+ * and only the inspector's detached terminal observation crosses back to the caller.
  *
  * <p>This class owns no scheduler policy and releases no I8B reservation. Provider provisioning is
  * allowed to remain asynchronous. Only after successful provisioning is child execution submitted
- * to the explicit off-domain host Submission. The returned stage completes only with a D108
- * terminal envelope after Process/host terminality and provider cleanup.
+ * to the explicit off-domain host Submission. Returned stages complete only with D108 terminal
+ * envelopes after Process/host terminality and provider cleanup.
  */
 final class ProtosTestResourcefulAttemptBridge {
 
@@ -51,6 +63,20 @@ final class ProtosTestResourcefulAttemptBridge {
             if (bindings.isEmpty()) {
                 throw new IllegalArgumentException(
                         "resourceful attempt bridge requires at least one reserved binding");
+            }
+        }
+    }
+
+    record InspectionRequest(
+            ProtosExactExecutionFacility.InspectionInvocation invocation,
+            List<ProtosTestResourceProviderRequest.Binding> bindings) {
+        InspectionRequest {
+            Objects.requireNonNull(invocation, "invocation");
+            Objects.requireNonNull(bindings, "bindings");
+            bindings = List.copyOf(bindings);
+            if (bindings.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "resourceful inspection bridge requires at least one reserved binding");
             }
         }
     }
@@ -76,12 +102,29 @@ final class ProtosTestResourcefulAttemptBridge {
 
     CompletionStage<ProtosTestResourceAttemptCompletion> execute(Request request) {
         Objects.requireNonNull(request, "request");
+        return provisionThenSubmit(
+                request.execution(),
+                null,
+                request.bindings());
+    }
 
+    CompletionStage<ProtosTestResourceAttemptCompletion> inspect(InspectionRequest request) {
+        Objects.requireNonNull(request, "request");
+        return provisionThenSubmit(
+                request.invocation().request(),
+                request.invocation().inspector(),
+                request.bindings());
+    }
+
+    private CompletionStage<ProtosTestResourceAttemptCompletion> provisionThenSubmit(
+            ProtosCapturedProcessExecution.Request execution,
+            Source inspector,
+            List<ProtosTestResourceProviderRequest.Binding> bindings) {
         final CompletionStage<ProtosTestResourceProviderTransaction> provisionStage;
         try {
             provisionStage =
                     Objects.requireNonNull(
-                            coordinator.provision(request.bindings()),
+                            coordinator.provision(bindings),
                             "provider provisioning transaction stage");
         } catch (RuntimeException | Error failure) {
             return CompletableFuture.completedFuture(
@@ -107,12 +150,13 @@ final class ProtosTestResourcefulAttemptBridge {
                                     Objects.requireNonNull(
                                             outcome.transaction(),
                                             "successful provider transaction");
-                            return submitStarted(request, transaction);
+                            return submitStarted(execution, inspector, transaction);
                         });
     }
 
     private CompletionStage<ProtosTestResourceAttemptCompletion> submitStarted(
-            Request request,
+            ProtosCapturedProcessExecution.Request execution,
+            Source inspector,
             ProtosTestResourceProviderTransaction transaction) {
         CompletableFuture<ProtosTestResourceAttemptCompletion> terminal =
                 new CompletableFuture<>();
@@ -121,11 +165,15 @@ final class ProtosTestResourcefulAttemptBridge {
             ProtosAsyncExactExecutionFacility.Submitted accepted =
                     Objects.requireNonNull(
                             submission.submit(
-                                    () -> runSubmitted(request, transaction, terminal)),
+                                    () ->
+                                            runSubmitted(
+                                                    execution,
+                                                    inspector,
+                                                    transaction,
+                                                    terminal)),
                             "resourceful attempt submission handle");
-            // I8D4B intentionally exposes no cancellation policy yet. Keeping the accepted handle
-            // local proves the submission contract was fulfilled without inventing withdrawal
-            // semantics ahead of I8D4C.
+            // I8D4C2 deliberately introduces no cancellation/withdrawal semantics. Keeping the
+            // accepted handle local proves the existing Submission contract was fulfilled.
             Objects.requireNonNull(accepted, "accepted resourceful submission");
         } catch (RuntimeException | Error failure) {
             return ProtosTestResourceAttemptTerminalizer.finishUnstarted(
@@ -136,12 +184,13 @@ final class ProtosTestResourcefulAttemptBridge {
     }
 
     private void runSubmitted(
-            Request request,
+            ProtosCapturedProcessExecution.Request execution,
+            Source inspector,
             ProtosTestResourceProviderTransaction transaction,
             CompletableFuture<ProtosTestResourceAttemptCompletion> terminal) {
         final CompletionStage<ProtosTestResourceAttemptCompletion> completionStage;
         try {
-            completionStage = executeStarted(request, transaction);
+            completionStage = executeStarted(execution, inspector, transaction);
         } catch (RuntimeException | Error failure) {
             ProtosTestResourceAttemptTerminalizer
                     .finishUnstarted(failure, transaction)
@@ -158,9 +207,9 @@ final class ProtosTestResourcefulAttemptBridge {
     }
 
     private CompletionStage<ProtosTestResourceAttemptCompletion> executeStarted(
-            Request request,
+            ProtosCapturedProcessExecution.Request execution,
+            Source inspector,
             ProtosTestResourceProviderTransaction transaction) {
-        ProtosCapturedProcessExecution.Request execution = request.execution();
 
         final ProtosMapValue resources;
         try {
@@ -217,9 +266,15 @@ final class ProtosTestResourcefulAttemptBridge {
         final ProtosExecutionOutcome outcome;
         try {
             outcome =
-                    processContext.execute(
-                            execution.entry(),
-                            bootstrap.activation());
+                    inspector == null
+                            ? processContext.execute(
+                                    execution.entry(),
+                                    bootstrap.activation())
+                            : inspectStarted(
+                                    processContext,
+                                    bootstrap.activation(),
+                                    execution.entry(),
+                                    inspector);
         } catch (RuntimeException | Error failure) {
             return ProtosTestResourceAttemptTerminalizer.finishCreated(
                     process, null, List.of(failure), transaction);
@@ -233,6 +288,90 @@ final class ProtosTestResourcefulAttemptBridge {
 
         return ProtosTestResourceAttemptTerminalizer.finishStarted(
                 process, guestObservation, transaction);
+    }
+
+    private static ProtosExecutionOutcome inspectStarted(
+            ProtosPolyglotProcessContext processContext,
+            ProtosActivation activation,
+            Source entry,
+            Source inspector) {
+        final Object subject;
+        try {
+            subject = processContext.evaluatePersistent(entry, activation);
+        } catch (ProtosSignalException signal) {
+            return ProtosExecutionOutcome.failed(signal.error());
+        }
+
+        processContext.callForRuntime(
+                () -> {
+                    activation.executionDomain().dispatchUntilIdle();
+                    return null;
+                });
+
+        try {
+            Object inspectorValue =
+                    processContext.evaluatePersistent(inspector, activation);
+            if (!(inspectorValue instanceof ProtosClosureValue inspectorClosure)) {
+                throw new IllegalStateException(
+                        "resourceful inspection inspector source must evaluate to Closure");
+            }
+
+            ProtosTask inspectorTask =
+                    activation.executionDomain()
+                            .createTask(
+                                    null,
+                                    null,
+                                    task ->
+                                            ProtosClosureInvoker.executeInTaskForRuntime(
+                                                    inspectorClosure,
+                                                    List.of(subject),
+                                                    activation,
+                                                    task));
+
+            processContext.callForRuntime(
+                    () -> {
+                        activation.executionDomain()
+                                .dispatchUntilTerminal(inspectorTask, () -> false);
+                        return null;
+                    });
+
+            if (activation.executionDomain().liveTaskCount() != 0) {
+                throw new IllegalStateException(
+                        "resourceful inspection inspector left live RootActor tasks");
+            }
+            return taskOutcome(inspectorTask);
+        } catch (ProtosSignalException signal) {
+            return ProtosExecutionOutcome.failed(signal.error());
+        }
+    }
+
+    private static ProtosExecutionOutcome taskOutcome(ProtosTask task) {
+        return switch (task.state()) {
+            case COMPLETED ->
+                    ProtosExecutionOutcome.completed(
+                            task.result()
+                                    .orElseThrow(
+                                            () ->
+                                                    new IllegalStateException(
+                                                            "completed resourceful inspection task has no result")));
+            case FAILED -> {
+                Object failure =
+                        task.failure()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "failed resourceful inspection task has no error"));
+                if (!(failure instanceof ProtosObjectValue error)) {
+                    throw new IllegalStateException(
+                            "resourceful inspection task failed with a non-Protos error value");
+                }
+                yield ProtosExecutionOutcome.failed(error);
+            }
+            case CANCELLED -> ProtosExecutionOutcome.cancelled();
+            default ->
+                    throw new IllegalStateException(
+                            "resourceful inspection task returned before reaching a terminal state");
+        };
     }
 
     private static void completeTerminal(
