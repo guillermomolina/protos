@@ -1822,6 +1822,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredArrayEachCall", null);
         BytecodeLocal structuredArrayEachChild =
                 builder.createLocal("structuredArrayEachChildCall", null);
+        BytecodeLocal structuredBytesEach =
+                builder.createLocal("structuredBytesEachCall", null);
+        BytecodeLocal structuredBytesEachChild =
+                builder.createLocal("structuredBytesEachChildCall", null);
 
         builder.beginIfThenElse();
 
@@ -2186,12 +2190,71 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredBytesEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredBytesEachCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredBytesEach);
+        builder.beginPrepareStructuredBytesEachCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredBytesEachCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+        builder.beginStructuredBytesEachHasNext();
+        builder.emitLoadLocal(structuredBytesEach);
+        builder.endStructuredBytesEachHasNext();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredBytesEachChild);
+        builder.beginPrepareStructuredBytesEachElementCall();
+        builder.emitLoadLocal(structuredBytesEach);
+        builder.endPrepareStructuredBytesEachElementCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredBytesEachChild,
+                childResult,
+                resumeValue);
+        builder.beginAdvanceStructuredBytesEach();
+        builder.emitLoadLocal(structuredBytesEach);
+        builder.endAdvanceStructuredBytesEach();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredBytesEach();
+        builder.emitLoadLocal(structuredBytesEach);
+        builder.endFinishStructuredBytesEach();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

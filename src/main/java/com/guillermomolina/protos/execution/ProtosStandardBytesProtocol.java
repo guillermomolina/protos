@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -34,8 +35,35 @@ import java.util.Objects;
 
 public final class ProtosStandardBytesProtocol {
     private static final BigInteger MAX_OCTET = BigInteger.valueOf(255);
+    private static final ProtosNativeClosureBody STANDARD_EACH_BODY =
+            ProtosStandardBytesProtocol::each;
+    private static final ProtosClosureValue STANDARD_EACH =
+            ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
 
     private ProtosStandardBytesProtocol() {}
+
+    static boolean isStandardEachImplementation(ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
+    }
+
+    static boolean isCanonicalStandardEachSelection(
+            ProtosClosureValue behavior,
+            ProtosObjectValue home,
+            ProtosActivation caller) {
+        if (behavior != STANDARD_EACH) {
+            return false;
+        }
+        return caller.prelude()
+                .map(
+                        prelude -> {
+                            try {
+                                return prelude.bytesPrototypeForRuntime() == home;
+                            } catch (IllegalStateException missingRuntimeBytes) {
+                                return false;
+                            }
+                        })
+                .orElse(false);
+    }
 
     public static void install(ProtosObjectValue bytesFactory) {
         Objects.requireNonNull(bytesFactory, "bytesFactory");
@@ -107,22 +135,7 @@ public final class ProtosStandardBytesProtocol {
                             return bytes.indexedPut(index, supplied.get(1));
                         }));
 
-        bytesFactory.createLocalSlot(
-                "each",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosBytesValue bytes = requireBytesReceiver(activation);
-                            if (supplied.size() != 1) {
-                                return fail(activation);
-                            }
-                            Object block = supplied.get(0);
-                            requireInvokable(block, activation);
-                            List<Object> snapshot = bytes.indexedSnapshot();
-                            for (Object octet : snapshot) {
-                                ProtosInvocation.invoke(block, List.of(octet), activation);
-                            }
-                            return bytes;
-                        }));
+        bytesFactory.createLocalSlot("each", STANDARD_EACH);
 
         bytesFactory.createLocalSlot(
                 "add",
@@ -160,6 +173,20 @@ public final class ProtosStandardBytesProtocol {
         ProtosParallelRuntime.installBytesParallel(bytesFactory);
     }
 
+    private static Object each(ProtosActivation activation, List<?> supplied) {
+        ProtosBytesValue bytes = requireBytesReceiver(activation);
+        if (supplied.size() != 1) {
+            return fail(activation);
+        }
+        Object block = supplied.get(0);
+        requireInvokableForStructured(block, activation);
+        List<Object> snapshot = bytes.indexedSnapshot();
+        for (Object octet : snapshot) {
+            ProtosInvocation.invoke(block, List.of(octet), activation);
+        }
+        return bytes;
+    }
+
     private static ProtosBytesValue requireBytesReceiver(ProtosActivation activation) {
         if (!(activation.receiver() instanceof ProtosBytesValue bytes)) {
             fail(activation);
@@ -193,7 +220,9 @@ public final class ProtosStandardBytesProtocol {
         return null;
     }
 
-    private static void requireInvokable(Object candidate, ProtosActivation activation) {
+    static void requireInvokableForStructured(
+            Object candidate,
+            ProtosActivation activation) {
         ProtosPrelude prelude =
                 activation.prelude()
                         .orElseThrow(
