@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C CLOSED — D115 Candidate C′; LIB011-D READY — D118 RATIFIED (Candidate F′)**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C CLOSED — D115 Candidate C′; LIB011-D READY — D118 Candidate F′ + D119 Candidate A′ RATIFIED**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1249,7 +1249,7 @@ The governing durable traversal decision is
 
 ### LIB011-D — pure help rendering
 
-**READY — D118 RATIFIED (Candidate F′).**
+**READY — D118 RATIFIED (Candidate F′) + D119 RATIFIED (Candidate A′).**
 
 Implement the canonical pure help renderer as:
 
@@ -1288,6 +1288,28 @@ command-tree flattening or recursive help dump.
 
 The durable decision is recorded in
 `docs/project/decisions/language/D118_COMMAND_LINE_HELP_RENDERING_CONTRACT.md`.
+
+D119 / #446 additionally closes the renderability invariant required by this
+slice. Canonical value metadata is now exact:
+
+```text
+flag OptionSpec (0..0 values) -> valueName must be null
+valued OptionSpec (1..1)      -> valueName must be a non-empty String
+PositionalSpec                -> valueName must be a non-empty String
+```
+
+The executable D slice must tighten constructor validation together with its
+semantic fixtures before relying on `valueName` for D118 output. No fallback may
+be derived from logical `key`, short/long spelling, generic `VALUE`/`ARG`, type
+metadata, reflection, converter metadata, locale or runtime values. Missing
+presentation identity is rejected during canonical construction rather than
+during help rendering.
+
+`valueName` has no additional ASCII/casing/normalization rule; when present it is
+ordinary non-empty String presentation metadata and is rendered as supplied.
+
+The durable metadata decision is recorded in
+`docs/project/decisions/language/D119_COMMAND_LINE_VALUE_NAME_SEMANTICS.md`.
 
 ### LIB011-E — Test Tool adoption
 
