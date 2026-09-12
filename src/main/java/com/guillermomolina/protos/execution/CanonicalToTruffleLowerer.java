@@ -27,6 +27,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
+import com.guillermomolina.protos.semantic.ast.CanonicalGuardedArmBody;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
@@ -172,21 +173,29 @@ public final class CanonicalToTruffleLowerer {
     }
 
     private ProtosMatchNode.ArmNode lowerBasicMatchArm(CanonicalMatch.Arm arm) {
-        if (arm.guard().isPresent()) {
-            throw new UnsupportedOperationException(
-                    "I038-D4 does not yet lower guarded match arms");
-        }
-
         ProtosMatchNode.PatternNode patternNode =
                 lowerExecutableMatchPattern(arm.pattern());
         java.util.List<CanonicalParameter> parameters =
                 parametersForMatchPattern(arm.pattern());
 
+        CanonicalSequence invocationBody = arm.body();
+        if (arm.guard().isPresent()) {
+            CanonicalExpression guard = arm.guard().orElseThrow();
+            com.guillermomolina.protos.source.SourceSpan guardedSpan =
+                    new com.guillermomolina.protos.source.SourceSpan(
+                            guard.span().startOffset(),
+                            arm.body().span().endOffset());
+            CanonicalGuardedArmBody guardedBody =
+                    new CanonicalGuardedArmBody(guard, arm.body(), guardedSpan);
+            invocationBody =
+                    new CanonicalSequence(java.util.List.of(guardedBody), guardedSpan);
+        }
+
         CanonicalClosure bodyDefinition =
-                new CanonicalClosure(parameters, arm.body(), arm.body().span());
+                new CanonicalClosure(parameters, invocationBody, invocationBody.span());
         ProtosExpressionNode body =
                 new ProtosClosureLiteralNode(
-                        arm.body().span(),
+                        invocationBody.span(),
                         bodyDefinition,
                         lowerClosurePlan(bodyDefinition));
         return new ProtosMatchNode.ArmNode(patternNode, body);
@@ -435,6 +444,12 @@ public final class CanonicalToTruffleLowerer {
     }
 
     private ProtosExpressionNode lowerCallable(CanonicalExpression expression) {
+        if (expression instanceof CanonicalGuardedArmBody guarded) {
+            return new ProtosGuardedArmBodyNode(
+                    guarded.span(),
+                    lowerCallable(guarded.guard()),
+                    lowerCallable(guarded.body()));
+        }
         if (expression instanceof CanonicalIntrinsic intrinsic
                 && intrinsic.kind() == CanonicalIntrinsic.Kind.ARGS) {
             return new ProtosArgsNode(intrinsic.span());

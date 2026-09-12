@@ -18,8 +18,17 @@
 package com.guillermomolina.protos.semantic.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.Objects;
 
-public sealed interface CanonicalExpression
-        permits CanonicalAssign, CanonicalCall, CanonicalClosure, CanonicalCompose, CanonicalCreate, CanonicalGuardedArmBody, CanonicalIdentity, CanonicalNotIdentity, CanonicalIndexedAssign, CanonicalIntrinsic, CanonicalLiteral, CanonicalLookup, CanonicalMatch, CanonicalMember, CanonicalObject, CanonicalReturn, CanonicalSend, CanonicalSequence, CanonicalSpread, CanonicalSuperSend {
-    SourceSpan span();
+/** Compiler-internal body for one guarded synthetic match-arm Closure. */
+public record CanonicalGuardedArmBody(
+        CanonicalExpression guard,
+        CanonicalSequence body,
+        SourceSpan span)
+        implements CanonicalExpression {
+    public CanonicalGuardedArmBody {
+        Objects.requireNonNull(guard, "guard");
+        Objects.requireNonNull(body, "body");
+        Objects.requireNonNull(span, "span");
+    }
 }

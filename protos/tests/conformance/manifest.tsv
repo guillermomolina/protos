@@ -162,6 +162,15 @@ matching/or-structural-bindings.protos	boolean	true
 matching/or-nested-attempt-order.protos	boolean	true
 matching/or-subject-evaluated-once.protos	boolean	true
 matching/or-dynamic-captures.protos	boolean	true
+matching/guard-bindings-shared-with-body.protos	boolean	true
+matching/guard-false-next-arm-effects.protos	boolean	true
+matching/guard-pattern-mismatch-skips-guard.protos	boolean	true
+matching/guard-or-success-not-reopened.protos	boolean	true
+matching/guard-dynamic-rest-visible.protos	boolean	true
+matching/guard-non-local-return.protos	boolean	true
+matching/guard-true-body-once.protos	boolean	true
+matching/guard-invalid-no-retry-error.protos	error	-
+matching/guard-terminal-no-match-error.protos	error	-
 matching/map-exact-residue-before-children.protos	boolean	true
 matching/map-ineligible.protos	boolean	true
 matching/map-remainder-bindings.protos	boolean	true

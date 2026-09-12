@@ -34,6 +34,12 @@ import java.util.Objects;
 
 /** Production AST execution node for the ratified matching protocol. */
 public final class ProtosMatchNode extends ProtosExpressionNode {
+    private static final Object GUARDED_ARM_REJECTED = new Object();
+
+    static Object guardedArmRejectedSentinel() {
+        return GUARDED_ARM_REJECTED;
+    }
+
     @Child private ProtosExpressionNode subjectNode;
     @Children private final ArmNode[] arms;
 
@@ -67,7 +73,11 @@ public final class ProtosMatchNode extends ProtosExpressionNode {
             }
 
             Object body = arm.bodyClosure(frame);
-            return ProtosInvocation.invoke(body, captures, activation);
+            Object armResult = ProtosInvocation.invoke(body, captures, activation);
+            if (armResult == GUARDED_ARM_REJECTED) {
+                continue;
+            }
+            return armResult;
         }
 
         throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
