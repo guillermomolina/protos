@@ -685,9 +685,29 @@ match-arm-line =
 match-arm =
     contextual-case-marker,
     match-pattern,
-    [ contextual-when-marker, expression ],
+    [ contextual-when-marker, match-guard-expression ],
     "=>",
     closure-body ;
+
+match-guard-expression =
+    expression ;
+
+The `match-guard-expression` production denotes the ordinary Protos expression
+grammar with one contextual source-form restriction required by D100. While
+parsing a `when` guard, the first `=>` at the guard's own structural nesting
+level is the match-arm delimiter. An ordinary Closure expression therefore may
+not be the **ungrouped root** of the guard.
+
+Grouping makes the Closure extent explicit, for example
+`case p when (x => y) => body`. Closures nested inside another delimited ordinary
+expression likewise remain ordinary and legal.
+
+Thus `case p when x => y => body` has exactly one Core v0.1 parse: guard `x`,
+the first `=>` as arm delimiter, and body `y => body`. This rule is structural,
+not line-oriented; newline/layout does not change arrow ownership. No
+rightmost-arrow rule, greedy root-Closure parse, arrow backtracking, type
+information, runtime guard value, or indentation may select the delimiter.
+D100 changes no D092 guard runtime semantics.
 
 match-pattern =
     or-pattern ;

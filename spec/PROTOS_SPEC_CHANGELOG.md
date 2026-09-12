@@ -9,6 +9,20 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.408] - 2026-09-12
+
+### D100 — Match-arm guard / Closure-arrow disambiguation
+- Ratifies D100-A-prime: within a D093 `when` guard, the first `=>` at the guard's own structural nesting level is the match-arm delimiter.
+- An ordinary Closure expression is not admitted as the ungrouped root guard expression. Grouped and nested Closures remain ordinary and legal.
+- `case p when x => y => body` has one Core v0.1 parse: guard `x`; arm body `y => body`.
+- The rule is structural rather than newline/layout based; no rightmost-arrow search, root-Closure greediness, parser backtracking, type-directed parsing or runtime-value disambiguation is permitted.
+- D092 runtime guard semantics are unchanged and no new token, reserved word, runtime Guard/Match/Case object or alternate guard path is introduced.
+
+### Compatibility and implementation state
+- D093's postfix surface and `=>` arm boundary are preserved.
+- D095 pattern syntax and D096 coverage semantics are unchanged.
+- No parser/runtime implementation or Maven implementation-version change is included.
+
 ## [0.1.407] - 2026-09-11
 
 ### D096 — Match exhaustiveness, redundancy and static no-match analysis
