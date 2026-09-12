@@ -23,7 +23,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Files;
@@ -32,6 +31,10 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
+/**
+ * Host/runtime representation coverage retained after TEST001-D3 moved
+ * ordinary Map-pattern semantics to TOOL002.
+ */
 class ProtosMapMatchExecutionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path MATCHING =
@@ -42,22 +45,6 @@ class ProtosMapMatchExecutionTest {
     @BeforeAll
     static void bootstrapCore() throws Exception {
         prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-    }
-
-    @Test
-    void retainedProtosCasesCoverD086MapSemantics() throws Exception {
-        for (String name :
-                List.of(
-                        "map-open-exact.protos",
-                        "map-key-order-stable-snapshot.protos",
-                        "map-all-keys-before-children.protos",
-                        "map-repeated-requirements.protos",
-                        "map-exact-residue-before-children.protos",
-                        "map-ineligible.protos",
-                        "map-remainder-bindings.protos",
-                        "map-nested-dynamic-terminal.protos")) {
-            assertSame(ProtosBooleanValue.TRUE, execute(name), name);
-        }
     }
 
     @Test

@@ -32,6 +32,37 @@
       "migration_ref": "TEST001-D2"
     },
     {
+      "id": "language.match.map-patterns",
+      "classification": "PROTOS_SEMANTIC",
+      "state": "RECONCILED",
+      "primary": {
+        "owner": "TOOL002",
+        "evidence": [
+          "protos/tests/conformance/manifest.tsv",
+          "protos/tests/conformance/matching/map-all-keys-before-children.protos",
+          "protos/tests/conformance/matching/map-exact-residue-before-children.protos",
+          "protos/tests/conformance/matching/map-ineligible.protos",
+          "protos/tests/conformance/matching/map-key-order-stable-snapshot.protos",
+          "protos/tests/conformance/matching/map-nested-dynamic-terminal.protos",
+          "protos/tests/conformance/matching/map-open-exact.protos",
+          "protos/tests/conformance/matching/map-remainder-bindings.protos",
+          "protos/tests/conformance/matching/map-repeated-requirements.protos"
+        ]
+      },
+      "secondary": [
+        {
+          "owner": "JUNIT",
+          "role": "HOST_RUNTIME",
+          "evidence": [
+            "src/test/java/com/guillermomolina/protos/execution/ProtosMapMatchExecutionTest.java",
+            "src/test/java/com/guillermomolina/protos/execution/ProtosMatchBytecodeExecutionTest.java"
+          ],
+          "reason": "Retains host-visible Map remainder representation/frozen-state/recorded-hash checks and Bytecode backend parity/continuation invariants rather than primary Map-pattern semantic policy."
+        }
+      ],
+      "migration_ref": "TEST001-D3"
+    },
+    {
       "id": "language.match.or-alternatives",
       "classification": "PROTOS_SEMANTIC",
       "state": "RECONCILED",

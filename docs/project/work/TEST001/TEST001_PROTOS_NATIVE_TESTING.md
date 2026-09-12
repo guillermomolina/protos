@@ -401,6 +401,50 @@ runtime implementation, TOOL002 behavior or implementation version.
 No full Maven suite or full TOOL002 corpus run is required for this bounded
 mixed-owner reduction.
 
+### TEST001-D3 — Map-pattern semantic ownership
+
+Status: CLOSED
+
+D3 reconciles the Map-pattern family using the same mixed-owner split established
+by D2.
+
+Before D3, `ProtosMapMatchExecutionTest` contained:
+
+- one semantic wrapper that directly re-executed eight ordinary `.protos`
+  Map-pattern fixtures already present in the TOOL002 main manifest;
+- one host/runtime representation test for materialized remainder Maps, including
+  represented frozen state, standard Map prototype, fresh container identity,
+  retained key/value identity and recorded-hash preservation.
+
+D3 removes only the duplicate semantic-wrapper method. The Java class remains as
+explicit host/runtime evidence.
+
+The registered semantic contract is `language.match.map-patterns` with TOOL002 as
+the primary owner for the eight observable Map-pattern cases.
+
+`ProtosMapMatchExecutionTest` and `ProtosMatchBytecodeExecutionTest` remain as
+`HOST_RUNTIME` secondary evidence for representation details and Bytecode
+backend/continuation invariants.
+
+D3 changes no Map-pattern semantics, grammar, fixtures, manifest rows, runtime
+implementation, TOOL002 behavior or implementation version.
+
+#### TEST001-D3 focal validation profile
+
+1. baseline `ProtosMapMatchExecutionTest` proves both portions of the mixed owner;
+2. structural guards prove all eight TOOL002 manifest rows remain present exactly
+   once and the semantic wrapper method is absent after editing;
+3. `scripts/test_ownership_guard.py` validates the reconciled ownership record;
+4. post-edit `ProtosMapMatchExecutionTest` validates retained host representation;
+5. `ProtosMatchBytecodeExecutionTest` validates retained Bytecode host/runtime
+   evidence;
+6. `scripts/source_style_guard.py` validates the candidate delta;
+7. TEST001-D top-level closure retains responsibility for broader integrated
+   validation.
+
+No full Maven suite or full TOOL002 corpus run is required for this bounded
+mixed-owner reduction.
+
 ## Migration order established by A
 
 The dependency/order for remaining slices is:
@@ -461,7 +505,7 @@ Dxxx/LIBxxx/TOOLxxx/PLATxxx approval gate.
 | TEST001-A | CLOSED | Current suite classified at durable ownership-family level; per-test retirement rule fixed. |
 | TEST001-B | CLOSED | CI invokes packaged checkout `bin/protos test --jobs 2` directly; JUnit retains only a pre-corpus bundled-tool bootstrap floor. |
 | TEST001-C | CLOSED | Machine-readable semantic ownership ledger and fail-closed no-duplicate-primary-owner guard are active in publication validation. |
-| TEST001-D | IN_PROGRESS | Core/language semantic migration under the C ownership guard; D1 OR-pattern and D2 Array-pattern ownership closed. |
+| TEST001-D | IN_PROGRESS | Core/language semantic migration under the C ownership guard; D1 OR-pattern, D2 Array-pattern and D3 Map-pattern ownership closed. |
 | TEST001-E | BLOCKED_BY_D | Concurrency/execution-model semantic migration. |
 | TEST001-F | BLOCKED_BY_E | Standard Library migration. |
 | TEST001-G | BLOCKED_BY_F | Package/modules/I/O integration migration. |
@@ -512,4 +556,15 @@ CI configuration or implementation version.
 D2 narrows one mixed Java test to host/runtime ownership and registers the
 existing TOOL002 Array-pattern semantic owner. It changes no fixture, manifest
 row, specification, public behavior, runtime implementation, CI configuration or
+implementation version.
+
+
+## TEST001-D3 publication classification
+
+`VALIDATION_CLASS=TEST_IMPACT`
+`VALIDATION_IMPACT=FOCAL_BOUNDED`
+
+D3 narrows one mixed Java test to host/runtime ownership and registers the
+existing TOOL002 Map-pattern semantic owner. It changes no fixture, manifest row,
+specification, public behavior, runtime implementation, CI configuration or
 implementation version.
