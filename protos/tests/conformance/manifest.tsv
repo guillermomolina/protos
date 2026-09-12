@@ -145,6 +145,13 @@ matching/no-match-error.protos	error	-
 matching/invalid-outcome-error.protos	error	-
 matching/empty-capture-array-error.protos	error	-
 matching/capture-arity-no-retry-error.protos	error	-
+matching/array-fixed-alias.protos	boolean	true
+matching/array-shape-ineligible.protos	boolean	true
+matching/array-snapshot-child-order.protos	boolean	true
+matching/array-remainder-bindings.protos	boolean	true
+matching/array-empty-remainder.protos	boolean	true
+matching/array-nested-dynamic-terminal.protos	boolean	true
+matching/array-effects-retained-on-mismatch.protos	boolean	true
 collections/map-replacement-keeps-size.protos	integer	2
 collections/map-remove-and-reinsert.protos	integer	3
 collections/identity-map-distinct-objects.protos	integer	2

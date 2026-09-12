@@ -174,36 +174,13 @@ public final class CanonicalToTruffleLowerer {
     private ProtosMatchNode.ArmNode lowerBasicMatchArm(CanonicalMatch.Arm arm) {
         if (arm.guard().isPresent()) {
             throw new UnsupportedOperationException(
-                    "I038-D1 does not yet lower guarded match arms");
+                    "I038-D2 does not yet lower guarded match arms");
         }
 
-        CanonicalMatchPattern pattern = arm.pattern();
-        ProtosExpressionNode matcher = null;
-        ProtosMatchNode.ArmNode.Kind kind;
-        java.util.List<CanonicalParameter> parameters;
-
-        if (pattern instanceof CanonicalMatchPattern.Wildcard) {
-            kind = ProtosMatchNode.ArmNode.Kind.WILDCARD;
-            parameters = java.util.List.of();
-        } else if (pattern instanceof CanonicalMatchPattern.Binder binder) {
-            kind = ProtosMatchNode.ArmNode.Kind.BINDER;
-            parameters =
-                    java.util.List.of(
-                            new CanonicalParameter(
-                                    binder.name(),
-                                    java.util.Optional.empty(),
-                                    false,
-                                    binder.span()));
-        } else if (pattern instanceof CanonicalMatchPattern.Value value) {
-            kind = ProtosMatchNode.ArmNode.Kind.VALUE;
-            matcher = lower(value.matcher());
-            parameters = parametersForValuePattern(value);
-        } else {
-            throw new UnsupportedOperationException(
-                    "I038-D1 does not yet lower "
-                            + pattern.getClass().getSimpleName()
-                            + " match patterns");
-        }
+        ProtosMatchNode.PatternNode patternNode =
+                lowerExecutableMatchPattern(arm.pattern());
+        java.util.List<CanonicalParameter> parameters =
+                parametersForMatchPattern(arm.pattern());
 
         CanonicalClosure bodyDefinition =
                 new CanonicalClosure(parameters, arm.body(), arm.body().span());
@@ -212,39 +189,150 @@ public final class CanonicalToTruffleLowerer {
                         arm.body().span(),
                         bodyDefinition,
                         lowerClosurePlan(bodyDefinition));
-        return new ProtosMatchNode.ArmNode(kind, matcher, body);
+        return new ProtosMatchNode.ArmNode(patternNode, body);
     }
 
-    private java.util.List<CanonicalParameter> parametersForValuePattern(
-            CanonicalMatchPattern.Value value) {
-        if (value.captureInterface().isEmpty()) {
-            return java.util.List.of();
+    private ProtosMatchNode.PatternNode lowerExecutableMatchPattern(
+            CanonicalMatchPattern pattern) {
+        if (pattern instanceof CanonicalMatchPattern.Wildcard) {
+            return new ProtosMatchNode.WildcardPatternNode();
+        }
+        if (pattern instanceof CanonicalMatchPattern.Binder) {
+            return new ProtosMatchNode.BinderPatternNode();
+        }
+        if (pattern instanceof CanonicalMatchPattern.Value value) {
+            return new ProtosMatchNode.ValuePatternNode(lower(value.matcher()));
+        }
+        if (pattern instanceof CanonicalMatchPattern.Alias alias) {
+            return new ProtosMatchNode.AliasPatternNode(
+                    lowerExecutableMatchPattern(alias.pattern()));
+        }
+        if (pattern instanceof CanonicalMatchPattern.ArrayPattern array) {
+            ProtosMatchNode.PatternNode[] prefix =
+                    array.prefix().stream()
+                            .map(this::lowerExecutableMatchPattern)
+                            .toArray(ProtosMatchNode.PatternNode[]::new);
+            ProtosMatchNode.PatternNode remainder = null;
+            if (array.remainder().isPresent()
+                    && array.remainder().orElseThrow().pattern().isPresent()) {
+                remainder =
+                        lowerExecutableMatchPattern(
+                                array.remainder()
+                                        .orElseThrow()
+                                        .pattern()
+                                        .orElseThrow());
+            }
+            ProtosMatchNode.PatternNode[] suffix =
+                    array.suffix().stream()
+                            .map(this::lowerExecutableMatchPattern)
+                            .toArray(ProtosMatchNode.PatternNode[]::new);
+            return new ProtosMatchNode.ArrayPatternNode(
+                    prefix,
+                    array.remainder().isPresent(),
+                    remainder,
+                    suffix);
         }
 
-        CanonicalMatchPattern.CaptureInterface capture =
-                value.captureInterface().orElseThrow();
-        java.util.ArrayList<CanonicalParameter> parameters =
-                new java.util.ArrayList<>(
-                        capture.requiredNames().size()
-                                + (capture.restName().isPresent() ? 1 : 0));
-        for (String name : capture.requiredNames()) {
+        throw new UnsupportedOperationException(
+                "I038-D2 does not yet lower "
+                        + pattern.getClass().getSimpleName()
+                        + " match patterns");
+    }
+
+    private java.util.List<CanonicalParameter> parametersForMatchPattern(
+            CanonicalMatchPattern pattern) {
+        MatchParameterAccumulator parameters = new MatchParameterAccumulator();
+        appendMatchParameters(pattern, parameters);
+        return parameters.snapshot();
+    }
+
+    private void appendMatchParameters(
+            CanonicalMatchPattern pattern,
+            MatchParameterAccumulator parameters) {
+        if (pattern instanceof CanonicalMatchPattern.Wildcard) {
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Binder binder) {
+            parameters.addRequired(binder.name(), binder.span());
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Value value) {
+            if (value.captureInterface().isEmpty()) {
+                return;
+            }
+
+            CanonicalMatchPattern.CaptureInterface capture =
+                    value.captureInterface().orElseThrow();
+            for (String name : capture.requiredNames()) {
+                parameters.addRequired(name, capture.span());
+            }
+            capture.restName()
+                    .ifPresent(name -> parameters.addRest(name, capture.span()));
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.Alias alias) {
+            parameters.addRequired(alias.name(), alias.span());
+            appendMatchParameters(alias.pattern(), parameters);
+            return;
+        }
+        if (pattern instanceof CanonicalMatchPattern.ArrayPattern array) {
+            for (CanonicalMatchPattern item : array.prefix()) {
+                appendMatchParameters(item, parameters);
+            }
+            array.remainder()
+                    .flatMap(CanonicalMatchPattern.Remainder::pattern)
+                    .ifPresent(item -> appendMatchParameters(item, parameters));
+            for (CanonicalMatchPattern item : array.suffix()) {
+                appendMatchParameters(item, parameters);
+            }
+            return;
+        }
+
+        throw new UnsupportedOperationException(
+                "I038-D2 does not yet build arm parameters for "
+                        + pattern.getClass().getSimpleName()
+                        + " match patterns");
+    }
+
+    private static final class MatchParameterAccumulator {
+        private final java.util.ArrayList<CanonicalParameter> parameters =
+                new java.util.ArrayList<>();
+        private boolean dynamicTail;
+
+        void addRequired(
+                String name,
+                com.guillermomolina.protos.source.SourceSpan span) {
+            if (dynamicTail) {
+                throw new IllegalStateException(
+                        "D103 non-terminal dynamic capture segment escaped parser validation");
+            }
             parameters.add(
                     new CanonicalParameter(
                             name,
                             java.util.Optional.empty(),
                             false,
-                            capture.span()));
+                            span));
         }
-        capture.restName()
-                .ifPresent(
-                        name ->
-                                parameters.add(
-                                        new CanonicalParameter(
-                                                name,
-                                                java.util.Optional.empty(),
-                                                true,
-                                                capture.span())));
-        return java.util.List.copyOf(parameters);
+
+        void addRest(
+                String name,
+                com.guillermomolina.protos.source.SourceSpan span) {
+            if (dynamicTail) {
+                throw new IllegalStateException(
+                        "multiple dynamic capture tails escaped D103 validation");
+            }
+            parameters.add(
+                    new CanonicalParameter(
+                            name,
+                            java.util.Optional.empty(),
+                            true,
+                            span));
+            dynamicTail = true;
+        }
+
+        java.util.List<CanonicalParameter> snapshot() {
+            return java.util.List.copyOf(parameters);
+        }
     }
 
     public ProtosClosureExecutionPlan lowerClosurePlan(CanonicalClosure closure) {

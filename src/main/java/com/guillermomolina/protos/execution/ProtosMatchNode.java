@@ -27,10 +27,11 @@ import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-/** Initial production execution node for the already-ratified matching protocol. */
+/** Production AST execution node for the ratified matching protocol. */
 public final class ProtosMatchNode extends ProtosExpressionNode {
     @Child private ProtosExpressionNode subjectNode;
     @Children private final ArmNode[] arms;
@@ -71,70 +72,222 @@ public final class ProtosMatchNode extends ProtosExpressionNode {
         throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
     }
 
-    public static final class ArmNode extends Node {
-        enum Kind {
-            VALUE,
-            BINDER,
-            WILDCARD
+    abstract static class PatternNode extends Node {
+        abstract List<Object> attempt(
+                VirtualFrame frame,
+                Object subject,
+                ProtosActivation activation);
+    }
+
+    static final class WildcardPatternNode extends PatternNode {
+        @Override
+        List<Object> attempt(
+                VirtualFrame frame,
+                Object subject,
+                ProtosActivation activation) {
+            return List.of();
+        }
+    }
+
+    static final class BinderPatternNode extends PatternNode {
+        @Override
+        List<Object> attempt(
+                VirtualFrame frame,
+                Object subject,
+                ProtosActivation activation) {
+            return List.of(subject);
+        }
+    }
+
+    static final class ValuePatternNode extends PatternNode {
+        @Child private ProtosExpressionNode matcherNode;
+
+        ValuePatternNode(ProtosExpressionNode matcherNode) {
+            this.matcherNode = Objects.requireNonNull(matcherNode, "matcherNode");
         }
 
-        private final Kind kind;
-        @Child private ProtosExpressionNode matcherNode;
+        @Override
+        List<Object> attempt(
+                VirtualFrame frame,
+                Object subject,
+                ProtosActivation activation) {
+            return consumeMatcherOutcome(
+                    ProtosInvocation.invokeMessage(
+                            matcherNode.execute(frame),
+                            "match",
+                            List.of(subject),
+                            activation),
+                    activation);
+        }
+    }
+
+    static final class AliasPatternNode extends PatternNode {
+        @Child private PatternNode nested;
+
+        AliasPatternNode(PatternNode nested) {
+            this.nested = Objects.requireNonNull(nested, "nested");
+        }
+
+        @Override
+        List<Object> attempt(
+                VirtualFrame frame,
+                Object subject,
+                ProtosActivation activation) {
+            List<Object> nestedCaptures = nested.attempt(frame, subject, activation);
+            if (nestedCaptures == null) {
+                return null;
+            }
+
+            ArrayList<Object> captures =
+                    new ArrayList<>(nestedCaptures.size() + 1);
+            captures.add(subject);
+            captures.addAll(nestedCaptures);
+            return List.copyOf(captures);
+        }
+    }
+
+    static final class ArrayPatternNode extends PatternNode {
+        @Children private final PatternNode[] prefix;
+        private final boolean hasRemainder;
+        @Child private PatternNode remainder;
+        @Children private final PatternNode[] suffix;
+
+        ArrayPatternNode(
+                PatternNode[] prefix,
+                boolean hasRemainder,
+                PatternNode remainder,
+                PatternNode[] suffix) {
+            Objects.requireNonNull(prefix, "prefix");
+            Objects.requireNonNull(suffix, "suffix");
+            this.prefix = prefix.clone();
+            this.hasRemainder = hasRemainder;
+            this.remainder = remainder;
+            this.suffix = suffix.clone();
+
+            for (PatternNode item : this.prefix) {
+                Objects.requireNonNull(item, "prefix contains null");
+            }
+            for (PatternNode item : this.suffix) {
+                Objects.requireNonNull(item, "suffix contains null");
+            }
+            if (!hasRemainder && remainder != null) {
+                throw new IllegalArgumentException(
+                        "Array pattern without remainder cannot own a remainder child");
+            }
+        }
+
+        @ExplodeLoop
+        @Override
+        List<Object> attempt(
+                VirtualFrame frame,
+                Object subject,
+                ProtosActivation activation) {
+            CompilerAsserts.compilationConstant(prefix.length);
+            CompilerAsserts.compilationConstant(suffix.length);
+
+            if (!(subject instanceof ProtosArrayValue array)) {
+                return null;
+            }
+
+            List<Object> observed = array.indexedSnapshot();
+            int fixedCount = prefix.length + suffix.length;
+            if (hasRemainder) {
+                if (observed.size() < fixedCount) {
+                    return null;
+                }
+            } else if (observed.size() != fixedCount) {
+                return null;
+            }
+
+            ArrayList<Object> captures = new ArrayList<>();
+
+            for (int index = 0; index < prefix.length; index++) {
+                List<Object> child =
+                        prefix[index].attempt(
+                                frame,
+                                observed.get(index),
+                                activation);
+                if (child == null) {
+                    return null;
+                }
+                captures.addAll(child);
+            }
+
+            if (hasRemainder && remainder != null) {
+                int remainderEnd = observed.size() - suffix.length;
+                ProtosArrayValue remainderValue =
+                        activation.prelude()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "Array matching requires an owning Core prelude"))
+                                .newFrozenArray(
+                                        observed.subList(prefix.length, remainderEnd));
+                List<Object> child =
+                        remainder.attempt(frame, remainderValue, activation);
+                if (child == null) {
+                    return null;
+                }
+                captures.addAll(child);
+            }
+
+            int suffixStart = observed.size() - suffix.length;
+            for (int index = 0; index < suffix.length; index++) {
+                List<Object> child =
+                        suffix[index].attempt(
+                                frame,
+                                observed.get(suffixStart + index),
+                                activation);
+                if (child == null) {
+                    return null;
+                }
+                captures.addAll(child);
+            }
+
+            return List.copyOf(captures);
+        }
+    }
+
+    public static final class ArmNode extends Node {
+        @Child private PatternNode patternNode;
         @Child private ProtosExpressionNode bodyClosureNode;
 
         ArmNode(
-                Kind kind,
-                ProtosExpressionNode matcherNode,
+                PatternNode patternNode,
                 ProtosExpressionNode bodyClosureNode) {
-            this.kind = Objects.requireNonNull(kind, "kind");
-            this.matcherNode = matcherNode;
+            this.patternNode = Objects.requireNonNull(patternNode, "patternNode");
             this.bodyClosureNode =
                     Objects.requireNonNull(bodyClosureNode, "bodyClosureNode");
-
-            if ((kind == Kind.VALUE) != (matcherNode != null)) {
-                throw new IllegalArgumentException(
-                        "only VALUE match arms own a matcher expression node");
-            }
         }
 
         List<Object> attempt(
                 VirtualFrame frame,
                 Object subject,
                 ProtosActivation activation) {
-            return switch (kind) {
-                case WILDCARD -> List.of();
-                case BINDER -> List.of(subject);
-                case VALUE -> consumeMatcherOutcome(
-                        ProtosInvocation.invokeMessage(
-                                matcherNode.execute(frame),
-                                "match",
-                                List.of(subject),
-                                activation),
-                        activation);
-            };
+            return patternNode.attempt(frame, subject, activation);
         }
 
         Object bodyClosure(VirtualFrame frame) {
             return bodyClosureNode.execute(frame);
         }
+    }
 
-        private static List<Object> consumeMatcherOutcome(
-                Object outcome,
-                ProtosActivation activation) {
-            if (outcome == ProtosBooleanValue.FALSE) {
-                return null;
-            }
-            if (outcome == ProtosBooleanValue.TRUE) {
-                return List.of();
-            }
-            if (outcome instanceof ProtosArrayValue captures) {
-                List<Object> snapshot = captures.indexedSnapshot();
-                if (!snapshot.isEmpty()) {
-                    return snapshot;
-                }
-            }
-
-            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+    private static List<Object> consumeMatcherOutcome(
+            Object outcome,
+            ProtosActivation activation) {
+        if (outcome == ProtosBooleanValue.FALSE) {
+            return null;
         }
+        if (outcome == ProtosBooleanValue.TRUE) {
+            return List.of();
+        }
+        if (outcome instanceof ProtosArrayValue captures) {
+            List<Object> snapshot = captures.indexedSnapshot();
+            if (!snapshot.isEmpty()) {
+                return snapshot;
+            }
+        }
+
+        throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
     }
 }

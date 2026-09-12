@@ -178,6 +178,7 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
         TokenOccurrence caseMarker = consumeContextualIdentifier("case");
         SurfaceMatchPattern pattern = parseMatchPattern();
         validatePatternLinearity(pattern);
+        validateDynamicCaptureTerminality(pattern);
 
         Optional<SurfaceExpression> guard = Optional.empty();
         if (atContextualIdentifier("when")) {
@@ -626,6 +627,88 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
         declaredNamesWithValidation(pattern);
     }
 
+    private void validateDynamicCaptureTerminality(
+            SurfaceMatchPattern pattern) {
+        bindingShape(pattern);
+    }
+
+    private PatternBindingShape bindingShape(SurfaceMatchPattern pattern) {
+        if (pattern instanceof SurfaceMatchPattern.Binder) {
+            return new PatternBindingShape(true, false);
+        }
+        if (pattern instanceof SurfaceMatchPattern.Wildcard) {
+            return new PatternBindingShape(false, false);
+        }
+        if (pattern instanceof SurfaceMatchPattern.Value value) {
+            if (value.captureInterface().isEmpty()) {
+                return new PatternBindingShape(false, false);
+            }
+            SurfaceMatchPattern.CaptureInterface capture =
+                    value.captureInterface().orElseThrow();
+            return new PatternBindingShape(
+                    !capture.declaredNames().isEmpty(),
+                    capture.variableArity());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Group group) {
+            return bindingShape(group.pattern());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Alias alias) {
+            PatternBindingShape nested = bindingShape(alias.pattern());
+            return new PatternBindingShape(true, nested.dynamicTail());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Or orPattern) {
+            boolean hasBindings = false;
+            boolean dynamicTail = false;
+            for (SurfaceMatchPattern alternative : orPattern.alternatives()) {
+                PatternBindingShape alternativeShape = bindingShape(alternative);
+                hasBindings |= alternativeShape.hasBindings();
+                dynamicTail |= alternativeShape.dynamicTail();
+            }
+            return new PatternBindingShape(hasBindings, dynamicTail);
+        }
+        if (pattern instanceof SurfaceMatchPattern.ArrayPattern array) {
+            ArrayList<SurfaceMatchPattern> ordered = new ArrayList<>();
+            ordered.addAll(array.prefix());
+            array.remainder()
+                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                    .ifPresent(ordered::add);
+            ordered.addAll(array.suffix());
+            return sequentialBindingShape(ordered);
+        }
+        if (pattern instanceof SurfaceMatchPattern.MapPattern map) {
+            ArrayList<SurfaceMatchPattern> ordered = new ArrayList<>();
+            for (SurfaceMatchPattern.MapEntry entry : map.entries()) {
+                ordered.add(entry.valuePattern());
+            }
+            map.remainder()
+                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                    .ifPresent(ordered::add);
+            return sequentialBindingShape(ordered);
+        }
+
+        throw new IllegalStateException(
+                "Unknown SurfaceMatchPattern: " + pattern.getClass().getName());
+    }
+
+    private PatternBindingShape sequentialBindingShape(
+            List<SurfaceMatchPattern> ordered) {
+        boolean hasBindings = false;
+        boolean dynamicTail = false;
+
+        for (SurfaceMatchPattern nested : ordered) {
+            PatternBindingShape nestedShape = bindingShape(nested);
+            if (dynamicTail && nestedShape.hasBindings()) {
+                throw new ParseError(
+                        "A variable-arity capture segment must be terminal in the final ordered arm-binding interface",
+                        nested.span());
+            }
+            hasBindings |= nestedShape.hasBindings();
+            dynamicTail |= nestedShape.dynamicTail();
+        }
+
+        return new PatternBindingShape(hasBindings, dynamicTail);
+    }
+
     private Set<String> declaredNamesWithValidation(SurfaceMatchPattern pattern) {
         if (pattern instanceof SurfaceMatchPattern.Binder binder) {
             return new HashSet<>(Set.of(binder.name()));
@@ -847,6 +930,10 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
         return cursor.at(TokenType.CUSTOM_OPERATOR)
                 && cursor.current().token().lexeme().equals(spelling);
     }
+
+    private record PatternBindingShape(
+            boolean hasBindings,
+            boolean dynamicTail) {}
 
     private record ParsedMatchBody(
             SurfaceSequence body,
