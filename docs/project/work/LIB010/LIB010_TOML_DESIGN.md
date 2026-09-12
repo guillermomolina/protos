@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-B2 IN_PROGRESS — B2A iterative value nesting CLOSED; B2B document/path scaling + parser closure READY**
+Status: **LIB010-B2 IN_PROGRESS — B2A CLOSED; B2B1 document/path scaling CLOSED; B2B2 lexical/AoT parser closure READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -1063,12 +1063,18 @@ LIB010-B implementation is deliberately split into two publications:
     tables use explicit heap frames rather than recursive value descent. Deep
     nesting therefore does not use host/JVM call depth as the resource boundary,
     and no public or tunable nesting limit is introduced.
-  - **B2B — document/path scaling + parser closure: READY.** Remove the remaining
-    input-proportional recursive scans/path walks and quadratic document/table
-    accumulation hotspots relevant to large flat documents, add retained large
-    input evidence, and close LIB010-B.
+  - **B2B1 — document/path scaling: CLOSED.** Document statement accumulation is
+    balanced rather than repeated whole-Array copying; dotted-key and table-header
+    path construction/walking is iterative; assignment/trim/path scans owned by
+    this document path no longer consume host stack proportional to document/path
+    size. Retained evidence covers 4,096 flat assignments and 1,536-component
+    dotted-assignment/header paths.
+  - **B2B2 — lexical/AoT parser closure: READY.** Remove the remaining
+    input-proportional scalar/token recursion and repeated array-of-tables
+    accumulation hotspot, retain long-token/repeated-AoT stress evidence, and
+    close LIB010-B.
 
-B1 and B2A are intermediate `FOCAL_BOUNDED` publications. Integrated full
+B1, B2A and B2B1 are intermediate `FOCAL_BOUNDED` publications. Integrated full
 validation remains deferred to the owning `LIB010` closure.
 
 ## Deliberately deferred

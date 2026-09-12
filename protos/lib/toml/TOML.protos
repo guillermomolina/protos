@@ -498,9 +498,9 @@ parse: (text) => {
             result
         }
 
-        skipSpaces: null
-        skipSpaces = () => {
-            (index < length).ifTrue(() => {
+        skipSpaces: () => {
+            scanning: true
+            (() => scanning && (index < length)).while(() => {
                 octet: source[index]
                 whitespace: octet == 32
                 (octet == 9).ifTrue(() => {
@@ -508,7 +508,9 @@ parse: (text) => {
                 })
                 whitespace.ifTrue(() => {
                     index = index + 1
-                    skipSpaces()
+                })
+                whitespace.ifFalse(() => {
+                    scanning = false
                 })
             })
         }
@@ -743,20 +745,20 @@ parse: (text) => {
 
         parseBareKey: () => {
             buffer: Encoding.UTF8.encode("")
+            scanning: true
 
-            scan: null
-            scan = () => {
-                (index < length).ifTrue(() => {
-                    octet: source[index]
-                    isBareKeyOctet(octet).ifTrue(() => {
-                        buffer.add(octet)
-                        index = index + 1
-                        scan()
-                    })
+            (() => scanning && (index < length)).while(() => {
+                octet: source[index]
+                validBare: isBareKeyOctet(octet)
+                validBare.ifTrue(() => {
+                    buffer.add(octet)
+                    index = index + 1
                 })
-            }
+                validBare.ifFalse(() => {
+                    scanning = false
+                })
+            })
 
-            scan()
             (buffer.size() == 0).ifTrue(() => {
                 fail()
             })
@@ -783,33 +785,42 @@ parse: (text) => {
             result
         }
 
-        parts: Array(parsePart())
-        more: true
+        pathEntries: Map()
+        pathCount: 0
 
-        continuePath: null
-        continuePath = () => {
-            more.ifTrue(() => {
-                skipSpaces()
-                (index < length).ifTrue(() => {
-                    (source[index] == 46).ifFalse(() => {
-                        fail()
-                    })
-                    index = index + 1
-                    parts = Array(...parts, parsePart())
-                    continuePath()
-                })
-                (index >= length).ifTrue(() => {
-                    more = false
-                })
-            })
+        appendPathPart: (part) => {
+            pathEntries[pathCount] = part
+            pathCount = pathCount + 1
         }
 
-        continuePath()
+        appendPathPart(parsePart())
+        more: true
+
+        (() => more).while(() => {
+            skipSpaces()
+
+            (index < length).ifTrue(() => {
+                (source[index] == 46).ifFalse(() => {
+                    fail()
+                })
+                index = index + 1
+                appendPathPart(parsePart())
+            })
+
+            (index >= length).ifTrue(() => {
+                more = false
+            })
+        })
+
         skipSpaces()
         (index == length).ifFalse(() => {
             fail()
         })
-        parts
+
+        {
+            entries: pathEntries
+            count: pathCount
+        }
     }
 
     syntaxValue: (text) => {
@@ -1418,25 +1429,55 @@ parse: (text) => {
         }
 
         parseKeyPath: () => {
-            parts: Array(parseKeyPart())
-            more: true
+            chunks: Map()
+            maxLevel: -1
 
-            continuePath: null
-            continuePath = () => {
-                more.ifTrue(() => {
-                    skipSpaces()
-                    (peek() == 46).ifTrue(() => {
-                        index = index + 1
-                        parts = Array(...parts, parseKeyPart())
-                        continuePath()
+            appendPart: (part) => {
+                chunk: Array(part)
+                level: 0
+                carrying: true
+
+                (() => carrying).while(() => {
+                    present: chunks.containsKey(level)
+                    present.ifTrue(() => {
+                        left: chunks[level]
+                        chunks.remove(level)
+                        chunk = Array(...left, ...chunk)
+                        level = level + 1
                     })
-                    (peek() == 46).ifFalse(() => {
-                        more = false
+                    present.ifFalse(() => {
+                        chunks[level] = chunk
+                        (level > maxLevel).ifTrue(() => {
+                            maxLevel = level
+                        })
+                        carrying = false
                     })
                 })
             }
 
-            continuePath()
+            appendPart(parseKeyPart())
+            more: true
+
+            (() => more).while(() => {
+                skipSpaces()
+                hasDot: peek() == 46
+                hasDot.ifTrue(() => {
+                    index = index + 1
+                    appendPart(parseKeyPart())
+                })
+                hasDot.ifFalse(() => {
+                    more = false
+                })
+            })
+
+            parts: Array()
+            level: maxLevel
+            (() => level >= 0).while(() => {
+                chunks.containsKey(level).ifTrue(() => {
+                    parts = Array(...parts, ...chunks[level])
+                })
+                level = level - 1
+            })
             parts
         }
 
@@ -2638,9 +2679,39 @@ parse: (text) => {
         index: 0
         length: source.size()
 
-        result: Array()
+        statementChunks: Map()
+        statementMaxLevel: -1
         buffer: Encoding.UTF8.encode("")
         significant: false
+
+        carryStatementChunk: null
+        carryStatementChunk = (chunk, level) => {
+            present: statementChunks.containsKey(level)
+            present.ifTrue(() => {
+                left: statementChunks[level]
+                statementChunks.remove(level)
+                carryStatementChunk(Array(...left, ...chunk), level + 1)
+            })
+            present.ifFalse(() => {
+                statementChunks[level] = chunk
+                (level > statementMaxLevel).ifTrue(() => {
+                    statementMaxLevel = level
+                })
+            })
+        }
+
+        collectStatementChunks: null
+        collectStatementChunks = (level, result) => {
+            finalResult: result
+            (level >= 0).ifTrue(() => {
+                nextResult: result
+                statementChunks.containsKey(level).ifTrue(() => {
+                    nextResult = Array(...result, ...statementChunks[level])
+                })
+                finalResult = collectStatementChunks(level - 1, nextResult)
+            })
+            finalResult
+        }
         squareDepth: 0
         braceDepth: 0
         stringQuote: -1
@@ -2688,25 +2759,25 @@ parse: (text) => {
         quoteRun: (quote) => {
             look: index
             count: 0
+            scanning: true
 
-            scan: null
-            scan = () => {
-                (look < length).ifTrue(() => {
-                    (source[look] == quote).ifTrue(() => {
-                        count = count + 1
-                        look = look + 1
-                        scan()
-                    })
+            (() => scanning && (look < length)).while(() => {
+                matches: source[look] == quote
+                matches.ifTrue(() => {
+                    count = count + 1
+                    look = look + 1
                 })
-            }
+                matches.ifFalse(() => {
+                    scanning = false
+                })
+            })
 
-            scan()
             count
         }
 
         finish: () => {
             significant.ifTrue(() => {
-                result = Array(...result, Encoding.UTF8.decode(buffer))
+                carryStatementChunk(Array(Encoding.UTF8.decode(buffer)), 0)
             })
             buffer = Encoding.UTF8.encode("")
             significant = false
@@ -2936,7 +3007,7 @@ parse: (text) => {
         })
 
         finish()
-        result
+        collectStatementChunks(statementMaxLevel, Array())
     }
 
     documentTable: (text) => {
@@ -2981,28 +3052,28 @@ parse: (text) => {
             left: 0
             right: source.size()
 
-            trimLeft: null
-            trimLeft = () => {
-                (left < right).ifTrue(() => {
-                    isSpace(source[left]).ifTrue(() => {
-                        left = left + 1
-                        trimLeft()
-                    })
+            trimmingLeft: true
+            (() => trimmingLeft && (left < right)).while(() => {
+                whitespace: isSpace(source[left])
+                whitespace.ifTrue(() => {
+                    left = left + 1
                 })
-            }
-
-            trimRight: null
-            trimRight = () => {
-                (right > left).ifTrue(() => {
-                    isSpace(source[right - 1]).ifTrue(() => {
-                        right = right - 1
-                        trimRight()
-                    })
+                whitespace.ifFalse(() => {
+                    trimmingLeft = false
                 })
-            }
+            })
 
-            trimLeft()
-            trimRight()
+            trimmingRight: true
+            (() => trimmingRight && (right > left)).while(() => {
+                whitespace: isSpace(source[right - 1])
+                whitespace.ifTrue(() => {
+                    right = right - 1
+                })
+                whitespace.ifFalse(() => {
+                    trimmingRight = false
+                })
+            })
+
             {
                 left: left
                 right: right
@@ -3015,49 +3086,55 @@ parse: (text) => {
             })
         }
 
-        putDotted: null
-        putDotted = (tableNode, parts, position, valueNode) => {
-            name: parts[position]
-            last: position == parts.size() - 1
-            entries: tableNode.value
+        putDotted: (tableNode, parts, ignoredPosition, valueNode) => {
+            selected: tableNode
+            position: 0
 
-            last.ifTrue(() => {
-                entries.containsKey(name).ifTrue(() => {
-                    fail()
+            (() => position < parts.count).while(() => {
+                name: parts.entries[position]
+                last: position == parts.count - 1
+                entries: selected.value
+
+                last.ifTrue(() => {
+                    entries.containsKey(name).ifTrue(() => {
+                        fail()
+                    })
+                    entries[name] = valueNode
+                    markInlineTable(valueNode)
+                    position = parts.count
                 })
-                entries[name] = valueNode
-                markInlineTable(valueNode)
-            })
 
-            last.ifFalse(() => {
-                child: null
-                entries.containsKey(name).ifTrue(() => {
-                    child = entries[name]
-                    (child.kind == "table").ifFalse(() => {
-                        fail()
+                last.ifFalse(() => {
+                    child: null
+                    entries.containsKey(name).ifTrue(() => {
+                        child = entries[name]
+                        (child.kind == "table").ifFalse(() => {
+                            fail()
+                        })
+                        states.containsKey(child).ifFalse(() => {
+                            fail()
+                        })
+                        state: states[child]
+                        (state == "header").ifTrue(() => {
+                            fail()
+                        })
+                        (state == "inline").ifTrue(() => {
+                            fail()
+                        })
+                        (state == "implicit").ifTrue(() => {
+                            states[child] = "dotted"
+                        })
                     })
-                    states.containsKey(child).ifFalse(() => {
-                        fail()
-                    })
-                    state: states[child]
-                    (state == "header").ifTrue(() => {
-                        fail()
-                    })
-                    (state == "inline").ifTrue(() => {
-                        fail()
-                    })
-                    (state == "implicit").ifTrue(() => {
+
+                    entries.containsKey(name).ifFalse(() => {
+                        child = node("table", Map())
+                        entries[name] = child
                         states[child] = "dotted"
                     })
-                })
 
-                entries.containsKey(name).ifFalse(() => {
-                    child = node("table", Map())
-                    entries[name] = child
-                    states[child] = "dotted"
+                    selected = child
+                    position = position + 1
                 })
-
-                putDotted(child, parts, position + 1, valueNode)
             })
         }
 
@@ -3109,10 +3186,9 @@ parse: (text) => {
             selected: root
             position: 0
 
-            walk: null
-            walk = () => {
-                name: parts[position]
-                last: position == parts.size() - 1
+            (() => position < parts.count).while(() => {
+                name: parts.entries[position]
+                last: position == parts.count - 1
                 entries: selected.value
                 child: null
 
@@ -3153,13 +3229,9 @@ parse: (text) => {
                     selected = child
                 })
 
-                last.ifFalse(() => {
-                    position = position + 1
-                    walk()
-                })
-            }
+                position = position + 1
+            })
 
-            walk()
             selected
         }
 
@@ -3168,10 +3240,9 @@ parse: (text) => {
             position: 0
             created: null
 
-            walk: null
-            walk = () => {
-                name: parts[position]
-                last: position == parts.size() - 1
+            (() => position < parts.count).while(() => {
+                name: parts.entries[position]
+                last: position == parts.count - 1
                 entries: selected.value
                 child: null
 
@@ -3214,13 +3285,11 @@ parse: (text) => {
                         states[child] = "implicit"
                         selected = child
                     })
-
-                    position = position + 1
-                    walk()
                 })
-            }
 
-            walk()
+                position = position + 1
+            })
+
             created
         }
 
@@ -3269,10 +3338,7 @@ parse: (text) => {
             quote: -1
             separator: -1
 
-            scan: null
-            scan = () => {
-                (position < length).ifTrue(() => {
-                    (separator < 0).ifTrue(() => {
+            (() => (position < length) && (separator < 0)).while(() => {
                         octet: source[position]
                         inQuote: quote >= 0
 
@@ -3325,12 +3391,7 @@ parse: (text) => {
                             })
                         })
 
-                        scan()
-                    })
-                })
-            }
-
-            scan()
+            })
             (quote >= 0).ifTrue(() => {
                 fail()
             })

@@ -68,6 +68,75 @@ final class ProtosTomlParserStressTest {
         assertSame(ProtosBooleanValue.TRUE, result);
     }
 
+    @Test
+    void parsesLargeFlatDocumentWithoutQuadraticStatementAccumulation() throws Exception {
+        int entries = 4096;
+        StringBuilder source = new StringBuilder(entries * 18);
+        for (int i = 0; i < entries; i++) {
+            source.append("k").append(i).append(" = ").append(i).append('\n');
+        }
+
+        Object result =
+                evaluate(
+                        source.toString(),
+                        """
+                        root: TOML.parse(input)
+                        (root.kind === "table") &&
+                            (root.value["k0"].value == 0) &&
+                            (root.value["k2048"].value == 2048) &&
+                            (root.value["k4095"].value == 4095)
+                        """);
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void parsesVeryDeepDottedAssignmentWithoutPathRecursion() throws Exception {
+        int depth = 1536;
+        String input = "a.".repeat(depth) + "leaf = 7\n";
+
+        Object result =
+                evaluate(
+                        input,
+                        """
+                        root: TOML.parse(input)
+                        node: root
+                        remaining: 1536
+                        (() => remaining > 0).while(() => {
+                            (node.kind === "table").ifFalse(() => { Error().signal() })
+                            node = node.value["a"]
+                            remaining = remaining - 1
+                        })
+                        (node.kind === "table") &&
+                            (node.value["leaf"].kind === "integer") &&
+                            (node.value["leaf"].value == 7)
+                        """);
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void parsesVeryDeepHeaderPathWithoutHeaderWalkRecursion() throws Exception {
+        int depth = 1536;
+        String input = "[" + "a.".repeat(depth) + "section]\nleaf = 9\n";
+
+        Object result =
+                evaluate(
+                        input,
+                        """
+                        root: TOML.parse(input)
+                        node: root
+                        remaining: 1536
+                        (() => remaining > 0).while(() => {
+                            (node.kind === "table").ifFalse(() => { Error().signal() })
+                            node = node.value["a"]
+                            remaining = remaining - 1
+                        })
+                        (node.kind === "table") &&
+                            (node.value["section"].kind === "table") &&
+                            (node.value["section"].value["leaf"].value == 9)
+                        """);
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
     private static Object evaluate(String input, String body) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
