@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C CLOSED — D115 Candidate C′; LIB011-D READY — D118 Candidate F′ + D119 Candidate A′ RATIFIED**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A CLOSED — Candidate E′; LIB011-B CLOSED; LIB011-C CLOSED — D115 Candidate C′; LIB011-D CLOSED — D118 F′ + D119 A′; LIB011-E READY**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1249,69 +1249,57 @@ The governing durable traversal decision is
 
 ### LIB011-D — pure help rendering
 
-**READY — D118 RATIFIED (Candidate F′) + D119 RATIFIED (Candidate A′).**
+**CLOSED — D118 Candidate F′ + D119 Candidate A′ implemented.**
 
-Implement the canonical pure help renderer as:
-
-```text
-CommandLine.renderHelp(rootSpec, commandPath) -> String
-```
-
-`commandPath` is an exact `Array(String)` path relative to the canonical frozen
-`rootSpec`. The renderer resolves that path without re-canonicalizing the tree and
-renders only the selected command plus its immediate children.
-
-D118 / #445 fixes the baseline output as deterministic unwrapped plain text. It
-preserves canonical declaration order for positionals, options and child commands;
-performs no alphabetical/locale sorting; accepts no width parameter; probes no
-terminal/TTY; and creates no render-options descriptor, template language or public
-HelpModel.
-
-Present blocks are ordered `Usage`, optional command help, `Arguments`, `Options`,
-`Commands`, omitting empty sections. Usage explicitly renders required options,
-summarizes any optional-option set as `[OPTIONS]`, mechanically renders the
-already-ratified positional cardinalities, and appends `[COMMAND]` when immediate
-children exist. Option rows derive spellings/value names/cardinality annotations
-from their canonical `OptionSpec`; logical keys are never presentation spellings.
-
-Descriptions use next-line indentation rather than width-sensitive aligned
-columns. Renderer-generated separators are `\n` and the returned String has no
-final newline. Output destination/newline behavior remains caller-owned.
-
-The renderer has no Process, stdout/stderr, exit, environment, filesystem,
-network, terminal-width, TTY, ANSI/style, pager, locale, shell, callback or global
-registry authority. Future wrapped, Markdown, manpage, structured or localized
-renderers remain additive decisions rather than changing this baseline.
-
-The target is `O(Svisited + Sscope + H)` time and `O(H)` memory, with no complete
-command-tree flattening or recursive help dump.
-
-The durable decision is recorded in
-`docs/project/decisions/language/D118_COMMAND_LINE_HELP_RENDERING_CONTRACT.md`.
-
-D119 / #446 additionally closes the renderability invariant required by this
-slice. Canonical value metadata is now exact:
+`std:cli/CommandLine` now exposes:
 
 ```text
-flag OptionSpec (0..0 values) -> valueName must be null
-valued OptionSpec (1..1)      -> valueName must be a non-empty String
-PositionalSpec                -> valueName must be a non-empty String
+renderHelp(rootSpec, commandPath) -> String
 ```
 
-The executable D slice must tighten constructor validation together with its
-semantic fixtures before relying on `valueName` for D118 output. No fallback may
-be derived from logical `key`, short/long spelling, generic `VALUE`/`ARG`, type
-metadata, reflection, converter metadata, locale or runtime values. Missing
-presentation identity is rejected during canonical construction rather than
-during help rendering.
+as the canonical pure help interpretation of the same frozen CommandSpec consumed
+by `parse`. The path is an explicit exact `Array(String)` relative to the supplied
+root, is resolved without re-canonicalizing or flattening the tree, and invalid
+paths fail through the ordinary fresh Error lane.
 
-`valueName` has no additional ASCII/casing/normalization rule; when present it is
-ordinary non-empty String presentation metadata and is rendered as supplied.
+The renderer emits deterministic unwrapped plain text only for the selected
+command plus its immediate children. It derives the full invocation path from the
+root name plus explicit path, preserves canonical declaration order, renders
+required options explicitly, collapses optional options to `[OPTIONS]` in Usage,
+uses the D118 positional cardinality notation, lists Arguments/Options/Commands in
+the ratified order, uses next-line descriptions, emits LF separators, and emits no
+final newline.
 
-The durable metadata decision is recorded in
-`docs/project/decisions/language/D119_COMMAND_LINE_VALUE_NAME_SEMANTICS.md`.
+The implementation uses an invocation-local UTF-8 output buffer, keeping output
+construction proportional to produced text rather than repeatedly concatenating a
+growing String. It performs no terminal/TTY/width, Process, environment,
+filesystem, network, ANSI/style, pager, locale, callback, execution or global
+registry work.
+
+D119 A′ is enforced at canonical construction. Flag options require
+`valueName === null`; value-taking options and all positionals require a non-empty
+String `valueName`. No `key`, spelling, generic VALUE/ARG, type/reflection or
+converter fallback exists. Existing semantic fixtures were reconciled so unrelated
+adversarial failures remain targeted at their original invariant.
+
+Authoritative executable Protos fixtures cover D119 constructor validity,
+byte-for-byte D118 canonical root help, explicit nested path help, declaration
+order, cardinality notation, immediate-child scope, null descriptions, invalid
+paths and no-final-newline minimal output. JUnit remains the thin execution harness
+and complementary structural evidence.
+
+Publication remains impact-aware `FOCAL_BOUNDED`; broader integrated validation is
+deferred to LIB011-F / top-level LIB011 closure.
+
+The durable decisions remain:
+
+- `docs/project/decisions/language/D118_COMMAND_LINE_HELP_RENDERING_CONTRACT.md`
+- `docs/project/decisions/language/D119_COMMAND_LINE_VALUE_NAME_SEMANTICS.md`
+
 
 ### LIB011-E — Test Tool adoption
+
+**READY.**
 
 Audit and migrate TOOL002's common command-line mechanism onto LIB011 without
 silently changing Test Tool-specific defaults, validation or unknown-argument

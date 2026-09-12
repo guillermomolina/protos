@@ -124,6 +124,19 @@ option: (descriptor) => {
         fail()
     })
 
+    (maxValuesValue == 0).ifTrue(() => {
+        (valueNameValue === null).ifFalse(() => {
+            fail()
+        })
+    })
+
+    (maxValuesValue == 1).ifTrue(() => {
+        (valueNameValue === null).ifTrue(() => {
+            fail()
+        })
+        validateNonEmptyString(valueNameValue)
+    })
+
     ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
         fail()
     })
@@ -194,7 +207,7 @@ positional: (descriptor) => {
     keyValue: validateNonEmptyString(required("key"))
     minOccurrencesValue: validateInteger(required("minOccurrences"))
     maxOccurrencesValue: required("maxOccurrences")
-    valueNameValue: validateOptionalString(required("valueName"))
+    valueNameValue: validateNonEmptyString(required("valueName"))
     helpValue: validateOptionalString(required("help"))
 
     ((minOccurrencesValue == 0) || (minOccurrencesValue == 1)).ifFalse(() => {
@@ -925,4 +938,240 @@ parse: (specification, suppliedArguments) => {
         command: commandResult
     }
     result.freeze()
+}
+
+/// Renders canonical pure help for one exact command path.
+///
+/// D118 Candidate F-prime fixes deterministic unwrapped plain text with explicit
+/// path context and no terminal/output authority. D119 Candidate A-prime ensures
+/// every value-bearing canonical specification already carries a non-empty
+/// presentation valueName.
+renderHelp: (rootSpec, commandPath) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    validateArray: (value) => {
+        (value.parent() === Array).ifFalse(() => {
+            fail()
+        })
+        value
+    }
+
+    validateString: (value) => {
+        validated: "" + value
+        (validated === value).ifFalse(() => {
+            fail()
+        })
+        value
+    }
+
+    rootSpec.hasSlot("kind").ifFalse(() => {
+        fail()
+    })
+    (rootSpec.slotValue("kind") == "command").ifFalse(() => {
+        fail()
+    })
+
+    validateArray(commandPath)
+
+    selectedSpec: rootSpec
+    commandPath.each((segment) => {
+        validateString(segment)
+
+        selectedChild: null
+        selectedSpec.subcommands.each((childSpec) => {
+            (
+                (selectedChild === null) &&
+                (childSpec.name == segment)
+            ).ifTrue(() => {
+                selectedChild = childSpec
+            })
+        })
+
+        (selectedChild === null).ifTrue(() => {
+            fail()
+        })
+
+        selectedSpec = selectedChild
+    })
+
+    output: Encoding.UTF8.encode("")
+
+    appendText: (text) => {
+        source: Encoding.UTF8.encode(text)
+        index: 0
+        (() => index < source.size()).while() {
+            output.add(source[index])
+            index = index + 1
+        }
+    }
+
+    optionUsageTerm: (optionSpec) => {
+        spelling: ""
+        (optionSpec.long === null).ifFalse(() => {
+            spelling = "--" + optionSpec.long
+        })
+        (optionSpec.long === null).ifTrue(() => {
+            spelling = "-" + optionSpec.short
+        })
+
+        (optionSpec.maxValues == 1).ifTrue(() => {
+            spelling = spelling + " " + optionSpec.valueName
+        })
+
+        spelling
+    }
+
+    positionalTerm: (positionalSpec) => {
+        rendered: positionalSpec.valueName
+
+        (
+            (positionalSpec.minOccurrences == 0) &&
+            (positionalSpec.maxOccurrences == 1)
+        ).ifTrue(() => {
+            rendered = "[" + positionalSpec.valueName + "]"
+        })
+
+        (
+            (positionalSpec.minOccurrences == 0) &&
+            (positionalSpec.maxOccurrences === null)
+        ).ifTrue(() => {
+            rendered = "[" + positionalSpec.valueName + "]..."
+        })
+
+        (
+            (positionalSpec.minOccurrences == 1) &&
+            (positionalSpec.maxOccurrences === null)
+        ).ifTrue(() => {
+            rendered =
+                positionalSpec.valueName +
+                " [" + positionalSpec.valueName + "]..."
+        })
+
+        rendered
+    }
+
+    optionEntry: (optionSpec) => {
+        rendered: ""
+
+        (optionSpec.short === null).ifFalse(() => {
+            rendered = "-" + optionSpec.short
+        })
+
+        (optionSpec.long === null).ifFalse(() => {
+            (rendered == "").ifFalse(() => {
+                rendered = rendered + ", "
+            })
+            rendered = rendered + "--" + optionSpec.long
+        })
+
+        (optionSpec.maxValues == 1).ifTrue(() => {
+            rendered = rendered + " " + optionSpec.valueName
+        })
+
+        (
+            (optionSpec.minOccurrences == 1) &&
+            (optionSpec.maxOccurrences == 1)
+        ).ifTrue(() => {
+            rendered = rendered + " (required)"
+        })
+
+        (
+            (optionSpec.minOccurrences == 0) &&
+            (optionSpec.maxOccurrences === null)
+        ).ifTrue(() => {
+            rendered = rendered + " (repeatable)"
+        })
+
+        (
+            (optionSpec.minOccurrences == 1) &&
+            (optionSpec.maxOccurrences === null)
+        ).ifTrue(() => {
+            rendered = rendered + " (required, repeatable)"
+        })
+
+        rendered
+    }
+
+    appendDescription: (helpText) => {
+        (helpText === null).ifFalse(() => {
+            appendText("\n    ")
+            appendText(helpText)
+        })
+    }
+
+    appendText("Usage: ")
+    appendText(rootSpec.name)
+
+    commandPath.each((segment) => {
+        appendText(" ")
+        appendText(segment)
+    })
+
+    hasOptionalOptions: false
+    selectedSpec.options.each((optionSpec) => {
+        (optionSpec.minOccurrences == 0).ifTrue(() => {
+            hasOptionalOptions = true
+        })
+
+        (optionSpec.minOccurrences == 1).ifTrue(() => {
+            term: optionUsageTerm(optionSpec)
+            appendText(" ")
+            appendText(term)
+
+            (optionSpec.maxOccurrences === null).ifTrue(() => {
+                appendText(" [")
+                appendText(term)
+                appendText("]...")
+            })
+        })
+    })
+
+    hasOptionalOptions.ifTrue(() => {
+        appendText(" [OPTIONS]")
+    })
+
+    selectedSpec.positionals.each((positionalSpec) => {
+        appendText(" ")
+        appendText(positionalTerm(positionalSpec))
+    })
+
+    (selectedSpec.subcommands.size() > 0).ifTrue(() => {
+        appendText(" [COMMAND]")
+    })
+
+    (selectedSpec.help === null).ifFalse(() => {
+        appendText("\n\n")
+        appendText(selectedSpec.help)
+    })
+
+    (selectedSpec.positionals.size() > 0).ifTrue(() => {
+        appendText("\n\nArguments:")
+        selectedSpec.positionals.each((positionalSpec) => {
+            appendText("\n  ")
+            appendText(positionalTerm(positionalSpec))
+            appendDescription(positionalSpec.help)
+        })
+    })
+
+    (selectedSpec.options.size() > 0).ifTrue(() => {
+        appendText("\n\nOptions:")
+        selectedSpec.options.each((optionSpec) => {
+            appendText("\n  ")
+            appendText(optionEntry(optionSpec))
+            appendDescription(optionSpec.help)
+        })
+    })
+
+    (selectedSpec.subcommands.size() > 0).ifTrue(() => {
+        appendText("\n\nCommands:")
+        selectedSpec.subcommands.each((childSpec) => {
+            appendText("\n  ")
+            appendText(childSpec.name)
+            appendDescription(childSpec.help)
+        })
+    })
+
+    Encoding.UTF8.decode(output)
 }

@@ -50,7 +50,7 @@ final class ProtosCommandLineSpecModuleTest {
                         .call(prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
-        assertEquals(Set.of("option", "positional", "command", "parse"), module.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("option", "positional", "command", "parse", "renderHelp"), module.localSlotsSnapshot().keySet());
     }
 
     @Test
@@ -150,7 +150,7 @@ final class ProtosCommandLineSpecModuleTest {
                                     key: "target"
                                     minOccurrences: 0
                                     maxOccurrences: 1
-                                    valueName: null
+                                    valueName: "TARGET"
                                     help: null
                                 })
                                 """));
@@ -222,7 +222,7 @@ final class ProtosCommandLineSpecModuleTest {
                             key: "other"
                             minOccurrences: 0
                             maxOccurrences: 1
-                            valueName: null
+                            valueName: "OTHER"
                             help: null
                         }
                         subcommandsInput[0] = {
@@ -333,7 +333,7 @@ final class ProtosCommandLineSpecModuleTest {
                     maxValues: 1
                     minOccurrences: 0
                     maxOccurrences: 1
-                    valueName: null
+                    valueName: "VALUE"
                     help: null
                 })
                 """);
@@ -347,7 +347,7 @@ final class ProtosCommandLineSpecModuleTest {
                     maxValues: 1
                     minOccurrences: 0
                     maxOccurrences: 1
-                    valueName: null
+                    valueName: "VALUE"
                     help: null
                 })
                 """);
@@ -361,7 +361,7 @@ final class ProtosCommandLineSpecModuleTest {
                     maxValues: 1
                     minOccurrences: 0
                     maxOccurrences: 1
-                    valueName: null
+                    valueName: "VALUE"
                     help: null
                 })
                 """);
@@ -375,7 +375,7 @@ final class ProtosCommandLineSpecModuleTest {
                     maxValues: 1
                     minOccurrences: 0
                     maxOccurrences: 1
-                    valueName: null
+                    valueName: "VALUE"
                     help: null
                 })
                 """);
@@ -389,7 +389,7 @@ final class ProtosCommandLineSpecModuleTest {
                     maxValues: 1
                     minOccurrences: 0
                     maxOccurrences: 1
-                    valueName: null
+                    valueName: "VALUE"
                     help: null
                 })
                 """);
@@ -403,7 +403,7 @@ final class ProtosCommandLineSpecModuleTest {
                     maxValues: 1
                     minOccurrences: 0
                     maxOccurrences: 2
-                    valueName: null
+                    valueName: "VALUE"
                     help: null
                 })
                 """);

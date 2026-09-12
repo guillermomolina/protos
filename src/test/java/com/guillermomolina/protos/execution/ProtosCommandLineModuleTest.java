@@ -50,7 +50,7 @@ final class ProtosCommandLineModuleTest {
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
         assertEquals(
-                Set.of("option", "positional", "command", "parse"),
+                Set.of("option", "positional", "command", "parse", "renderHelp"),
                 module.localSlotsSnapshot().keySet());
     }
 
@@ -122,6 +122,21 @@ final class ProtosCommandLineModuleTest {
     @Test
     void deepRecursiveCommandResultsAndFreezeConformInProtos() throws Exception {
         assertFixture("parse-subcommand-deep.protos");
+    }
+
+    @Test
+    void d119ValueNameRenderabilityInvariantConformsInProtos() throws Exception {
+        assertFixture("valuename-d119.protos");
+    }
+
+    @Test
+    void d118CanonicalHelpRenderingConformsInProtos() throws Exception {
+        assertFixture("help-rendering-d118.protos");
+    }
+
+    @Test
+    void d118PathAwareHelpAndFailureBoundaryConformInProtos() throws Exception {
+        assertFixture("help-rendering-path-d118.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {
