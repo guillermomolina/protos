@@ -50,6 +50,15 @@ public interface ProtosProcessExecutionHost {
         return Optional.empty();
     }
 
+    /**
+     * Waits for this execution host's terminal disposition after semantic Process termination.
+     *
+     * <p>Hosts whose {@link #processTerminatedForRuntime()} callback is synchronously terminal may
+     * retain this no-op default. Hosts with deferred cleanup override it and must surface terminal
+     * cleanup failure as host/runtime failure rather than guest Error.
+     */
+    default void awaitTerminalDispositionForRuntime() {}
+
     /** Platform lifecycle notification after semantic Process termination is already complete. */
     void processTerminatedForRuntime();
 }

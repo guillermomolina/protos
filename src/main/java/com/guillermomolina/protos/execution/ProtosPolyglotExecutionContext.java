@@ -58,6 +58,8 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     private final Runnable closedCallback;
     private volatile boolean closeRequested;
     private volatile boolean closed;
+    private boolean closeTerminal;
+    private Throwable closeFailure;
 
     private ProtosPolyglotExecutionContext(
             Context context,
@@ -243,20 +245,51 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     }
 
     private void finishRequestedClose() {
-        if (!closeRequested || closed || lifecycle.getReadHoldCount() != 0) {
+        if (!closeRequested || closed || closeTerminal || lifecycle.getReadHoldCount() != 0) {
             return;
         }
         closeLock.lock();
         try {
-            if (closed) {
+            if (closed || closeTerminal) {
                 return;
             }
-            context.close();
-            closed = true;
-            closedCallback.run();
+            Throwable failure = null;
+            try {
+                context.close();
+                closed = true;
+                closedCallback.run();
+            } catch (RuntimeException | Error closeFailure) {
+                failure = closeFailure;
+                throw closeFailure;
+            } finally {
+                synchronized (this) {
+                    this.closeFailure = failure;
+                    closeTerminal = true;
+                    notifyAll();
+                }
+            }
         } finally {
             closeLock.unlock();
         }
+    }
+
+    Throwable awaitCloseDispositionForRuntime() {
+        boolean interrupted = false;
+        Throwable failure;
+        synchronized (this) {
+            while (!closeTerminal) {
+                try {
+                    wait();
+                } catch (InterruptedException interruption) {
+                    interrupted = true;
+                }
+            }
+            failure = closeFailure;
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+        return failure;
     }
 
     Engine engineForTesting() {

@@ -151,6 +151,29 @@ public final class ProtosProcessRuntime {
         return lifecycle;
     }
 
+    /**
+     * Waits until this semantic Process has actually reached TERMINATED.
+     *
+     * <p>A termination request is not equivalent to terminality: hosted Actors may still be
+     * unwinding. This host-only wait preserves interruption status while retaining lifecycle
+     * custody until the Process terminal transition has fired.
+     */
+    public void awaitTerminationForRuntime() {
+        boolean interrupted = false;
+        synchronized (this) {
+            while (lifecycle != LifecycleState.TERMINATED) {
+                try {
+                    wait();
+                } catch (InterruptedException interruption) {
+                    interrupted = true;
+                }
+            }
+        }
+        if (interrupted) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     public ProtosActor rootActorForRuntime() {
         return rootActor;
     }

@@ -111,6 +111,17 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         }
     }
 
+    @Override
+    public void awaitTerminalDispositionForRuntime() {
+        Throwable failure = context.awaitCloseDispositionForRuntime();
+        if (failure != null) {
+            runtimeHost.recordContextCloseFailure(failure);
+            throw new IllegalStateException(
+                    "Polyglot Process Context failed to reach clean terminal disposition",
+                    failure);
+        }
+    }
+
     Engine engineForTesting() {
         return context.engineForTesting();
     }
