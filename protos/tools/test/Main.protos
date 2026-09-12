@@ -16,8 +16,18 @@
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 Options: import("self:Options")
+ResourceCatalog: import("self:ResourceCatalog")
 
-jobs: Options.jobs(process.args())
+arguments: process.args()
+jobs: Options.jobs(arguments)
+resourceCatalogPath: Options.resourceCatalogPath(arguments)
+
+resourceCatalog: ResourceCatalog.empty()
+(resourceCatalogPath === null).ifFalse(() => {
+    resourceCatalogBytes: catalogAcquirer(resourceCatalogPath)
+    resourceCatalogText: Encoding.UTF8.decode(resourceCatalogBytes)
+    resourceCatalog = ResourceCatalog.parse(resourceCatalogText)
+})
 
 plan: Manifest.load(filesystem)
 packageTomlPlan: Manifest.loadPackageToml(packageTomlFilesystem)

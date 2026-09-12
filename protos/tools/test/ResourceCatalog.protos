@@ -30,6 +30,12 @@ frozenTuple: (...items) => {
     items
 }
 
+// D077/D099: absence of an explicit catalog source is the empty inert catalog.
+// Use the same frozen tuple representation as successfully parsed catalogs.
+empty: () => {
+    frozenTuple()
+}
+
 tableEntries: (node) => {
     (node.kind == "table").ifFalse(() => {
         fail()
