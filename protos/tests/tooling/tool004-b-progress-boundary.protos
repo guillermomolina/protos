@@ -1,0 +1,243 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+
+Manifest: import("self:Manifest")
+Runner: import("self:Runner")
+Catalog: import("self:ResourceCatalog")
+
+completedObservation: (value) => {
+    {
+        state: "completed"
+        value: value
+        error: null
+    }
+}
+
+completion: (guestObservation, infrastructureFailed, capacitySafe) => {
+    {
+        guestObservation: guestObservation
+        infrastructureFailed: infrastructureFailed
+        infrastructureFailures: Array()
+        capacitySafe: capacitySafe
+    }
+}
+
+baseSpec: (path, expectation, expected) => {
+    Manifest.caseSpec(Array(path, expectation, expected))
+}
+
+withExclusive: (spec, key) => {
+    Manifest.caseSpecWithRequirements(
+        spec,
+        Array(Manifest.requirement(key, "exclusive", null))
+    )
+}
+
+plainPass: baseSpec(
+    "tool004-b/plain-pass.protos",
+    "integer",
+    "1"
+)
+plainFail: baseSpec(
+    "tool004-b/plain-fail.protos",
+    "integer",
+    "99"
+)
+plainPlan: Manifest.frozenTuple(
+    Manifest.frozenTuple(
+        plainPass,
+        plainFail
+    )
+)
+
+sourceLoader: (spec) => {
+    id: Manifest.caseId(spec)
+    source: null
+
+    (id === "tool004-b/plain-pass.protos").ifTrue(() => {
+        source = "1"
+    })
+    (id === "tool004-b/plain-fail.protos").ifTrue(() => {
+        source = "2"
+    })
+    (id === "tool004-b/infrastructure.protos").ifTrue(() => {
+        source = "3"
+    })
+
+    (source === null).ifTrue(() => {
+        Error().signal()
+    })
+
+    source
+}
+
+ordinaryExecutorAsync: (source) => {
+    value: null
+    (source === "1").ifTrue(() => {
+        value = 1
+    })
+    (source === "2").ifTrue(() => {
+        value = 2
+    })
+    (value === null).ifTrue(() => {
+        Error().signal()
+    })
+
+    (() => {
+        completedObservation(value)
+    }).future()
+}
+
+terminalEvents: Array()
+
+terminalObserver: (spec, evaluation, infrastructureFailed) => {
+    terminalEvents = Array(
+        ...terminalEvents,
+        Array(
+            Manifest.caseId(spec),
+            evaluation,
+            infrastructureFailed
+        )
+    )
+    null
+}
+
+plainEnvelope: Runner.runD108WithResourcesWithLoader(
+    plainPlan,
+    Catalog.empty(),
+    sourceLoader,
+    ordinaryExecutorAsync,
+    null,
+    null,
+    null,
+    2,
+    terminalObserver
+)
+
+plainPassed: Runner.d108RunInfrastructureFailed(plainEnvelope).not()
+plainPassed.ifTrue(() => {
+    run: Runner.d108RunHealthyRun(plainEnvelope)
+    plainPassed = Runner.runSelectedCount(run) == 2
+    plainPassed = plainPassed && (Runner.runPassedCount(run) == 1)
+    plainPassed = plainPassed && (Runner.runSkippedCount(run) == 0)
+})
+
+plainPassed = plainPassed && (terminalEvents.size() == 2)
+
+plainPassed.ifTrue(() => {
+    first: terminalEvents[0]
+    plainPassed = first[0] === "tool004-b/plain-pass.protos"
+    plainPassed = plainPassed && (first[1] === null).not()
+    plainPassed.ifTrue(() => {
+        plainPassed = Runner.resultPassed(first[1])
+    })
+    plainPassed = plainPassed && first[2].not()
+})
+
+plainPassed.ifTrue(() => {
+    second: terminalEvents[1]
+    plainPassed = second[0] === "tool004-b/plain-fail.protos"
+    plainPassed = plainPassed && (second[1] === null).not()
+    plainPassed.ifTrue(() => {
+        plainPassed = Runner.resultPassed(second[1]).not()
+    })
+    plainPassed = plainPassed && second[2].not()
+})
+
+// The public/default path remains compatible when no observer is supplied.
+defaultEnvelope: Runner.runD108WithResourcesWithLoader(
+    plainPlan,
+    Catalog.empty(),
+    sourceLoader,
+    ordinaryExecutorAsync,
+    null,
+    null,
+    null,
+    2
+)
+
+defaultPassed: Runner.d108RunInfrastructureFailed(defaultEnvelope).not()
+defaultPassed.ifTrue(() => {
+    run: Runner.d108RunHealthyRun(defaultEnvelope)
+    defaultPassed = Runner.runSelectedCount(run) == 2
+    defaultPassed = defaultPassed && (Runner.runPassedCount(run) == 1)
+})
+
+// Infrastructure terminality is observable even when there is no guest result.
+infrastructureSpec: withExclusive(
+    baseSpec(
+        "tool004-b/infrastructure.protos",
+        "integer",
+        "3"
+    ),
+    "gpu"
+)
+infrastructurePlan: Manifest.frozenTuple(
+    Manifest.frozenTuple(infrastructureSpec)
+)
+
+catalog: Catalog.parse(
+    "resource-catalog-version = 1\n" +
+    "[[resource]]\n" +
+    "key = \"gpu\"\n" +
+    "capacity = 1\n" +
+    "scope = \"placement\"\n" +
+    "provider = \"device/gpu\"\n"
+)
+
+resourceExecutorAsync: (source, bindings) => {
+    (source === "3").ifFalse(() => {
+        Error().signal()
+    })
+
+    (() => {
+        completion(
+            null,
+            true,
+            true
+        )
+    }).future()
+}
+
+terminalEvents = Array()
+
+infrastructureEnvelope: Runner.runD108WithResourcesWithLoader(
+    infrastructurePlan,
+    catalog,
+    sourceLoader,
+    ordinaryExecutorAsync,
+    null,
+    resourceExecutorAsync,
+    null,
+    1,
+    terminalObserver
+)
+
+infrastructurePassed:
+    Runner.d108RunInfrastructureFailed(infrastructureEnvelope)
+
+infrastructurePassed =
+    infrastructurePassed &&
+    (Runner.d108RunInfrastructureAttempts(infrastructureEnvelope).size() == 1)
+
+infrastructurePassed =
+    infrastructurePassed &&
+    (Runner.d108RunRetainedReservationCount(infrastructureEnvelope) == 0)
+
+infrastructurePassed =
+    infrastructurePassed &&
+    (terminalEvents.size() == 1)
+
+infrastructurePassed.ifTrue(() => {
+    event: terminalEvents[0]
+    infrastructurePassed =
+        event[0] === "tool004-b/infrastructure.protos"
+    infrastructurePassed =
+        infrastructurePassed &&
+        (event[1] === null)
+    infrastructurePassed =
+        infrastructurePassed &&
+        event[2]
+})
+
+plainPassed && defaultPassed && infrastructurePassed

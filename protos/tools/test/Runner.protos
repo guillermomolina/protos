@@ -1960,7 +1960,8 @@ runD108WithResourcesWithLoader: (
     inspectorExecutorAsync,
     resourceExecutorAsync,
     resourceInspectorExecutorAsync,
-    maxInFlight
+    maxInFlight,
+    terminalObserver = null
 ) => {
     maxInFlight.div(1)
     (maxInFlight > 0).ifFalse(() => {
@@ -2170,8 +2171,9 @@ runD108WithResourcesWithLoader: (
                 // Preserve guest evidence if it exists, even if cleanup later
                 // produced infrastructure failure. Never fabricate a guest
                 // passed/failed result when no guest observation exists.
+                evaluation: null
                 (guestObservation === null).ifFalse(() => {
-                    evaluation:
+                    evaluation =
                         evaluateDObservation(
                             spec,
                             source,
@@ -2188,6 +2190,18 @@ runD108WithResourcesWithLoader: (
                     infrastructureFailed.not()
                 ).ifTrue(() => {
                     policyError()
+                })
+
+                // TOOL004-B / D120: this observer sees only attempts that have
+                // crossed D108's terminal barrier and had capacity/result state
+                // reconciled. It is presentation-neutral and optional; Main does
+                // not supply it until TOOL004-C.
+                (terminalObserver === null).ifFalse(() => {
+                    terminalObserver(
+                        spec,
+                        evaluation,
+                        infrastructureFailed
+                    )
                 })
 
                 resultIndex = resultIndex + 1
@@ -2291,7 +2305,8 @@ runD108WithResources: (
     inspectorExecutorAsync,
     resourceExecutorAsync,
     resourceInspectorExecutorAsync,
-    maxInFlight
+    maxInFlight,
+    terminalObserver = null
 ) => {
     runD108WithResourcesWithLoader(
         plan,
@@ -2301,7 +2316,8 @@ runD108WithResources: (
         inspectorExecutorAsync,
         resourceExecutorAsync,
         resourceInspectorExecutorAsync,
-        maxInFlight
+        maxInFlight,
+        terminalObserver
     )
 }
 
