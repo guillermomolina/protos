@@ -156,6 +156,100 @@ final class ProtosTomlEncoderModuleTest {
                 """);
     }
 
+    @Test
+    void encodesVeryDeepArraysWithoutHostRecursiveTraversal() throws Exception {
+        Object result =
+                evaluate(
+                        """
+                        node: TOML.integer(7)
+                        remaining: 2048
+                        (() => remaining > 0).while(() => {
+                            node = TOML.array(node)
+                            remaining = remaining - 1
+                        })
+
+                        parsed: TOML.parse(TOML.encode(TOML.table("deep", node)))
+                        decoded: parsed.value["deep"]
+                        remaining = 2048
+                        (() => remaining > 0).while(() => {
+                            (decoded.kind === "array").ifFalse(() => {
+                                Error().signal()
+                            })
+                            (decoded.value.size() == 1).ifFalse(() => {
+                                Error().signal()
+                            })
+                            decoded = decoded.value[0]
+                            remaining = remaining - 1
+                        })
+
+                        (decoded.kind === "integer") && (decoded.value == 7)
+                        """);
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void encodesVeryDeepInlineTablesWithoutHostRecursiveTraversal() throws Exception {
+        Object result =
+                evaluate(
+                        """
+                        node: TOML.integer(9)
+                        remaining: 1024
+                        (() => remaining > 0).while(() => {
+                            node = TOML.table("a", node)
+                            remaining = remaining - 1
+                        })
+
+                        parsed: TOML.parse(TOML.encode(TOML.table("deep", node)))
+                        decoded: parsed.value["deep"]
+                        remaining = 1024
+                        (() => remaining > 0).while(() => {
+                            (decoded.kind === "table").ifFalse(() => {
+                                Error().signal()
+                            })
+                            decoded = decoded.value["a"]
+                            remaining = remaining - 1
+                        })
+
+                        (decoded.kind === "integer") && (decoded.value == 9)
+                        """);
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void sharedAcyclicContainersAreReusableAndTemporalSpellingIsDeterministic()
+            throws Exception {
+        Object result =
+                evaluate(
+                        """
+                        shared: TOML.table("value", TOML.integer(1))
+                        encoded: TOML.encode(
+                            TOML.table(
+                                "left", shared,
+                                "right", shared,
+                                "time", TOML.localTime(23, 59, 60, 123, 5),
+                                "offset", TOML.offsetDateTime(
+                                    1979, 5, 27, 0, 32, 0, 0, 0, 0
+                                )
+                            )
+                        )
+
+                        parsed: TOML.parse(encoded)
+
+                        (parsed.value["left"].value["value"].value == 1) &&
+                            (parsed.value["right"].value["value"].value == 1) &&
+                            (parsed.value["time"].value.second == 60) &&
+                            (parsed.value["time"].value.fraction.coefficient == 123) &&
+                            (parsed.value["time"].value.fraction.digits == 5) &&
+                            (parsed.value["offset"].value.offsetMinutes == 0) &&
+                            (encoded ==
+                                "\\"left\\" = {\\"value\\" = 1}\\n" +
+                                "\\"right\\" = {\\"value\\" = 1}\\n" +
+                                "\\"time\\" = 23:59:60.00123\\n" +
+                                "\\"offset\\" = 1979-05-27T00:32:00Z\\n")
+                        """);
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
     private static Object evaluate(String body) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);

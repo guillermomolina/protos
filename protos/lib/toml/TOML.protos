@@ -978,9 +978,28 @@ encode: (rootTable) => {
     }
 
     active: IdentityMap()
-    visit: null
+    topFrame: null
 
-    visit = (node) => {
+    snapshotTableEntries: (tableValue) => {
+        entries: Map()
+        count: 0
+
+        tableValue.each((name, child) => {
+            ignoredNameValidation: name + ""
+            entries[count] = {
+                name: name
+                child: child
+            }
+            count = count + 1
+        })
+
+        {
+            entries: entries
+            count: count
+        }
+    }
+
+    pushValue: (node, parentFrame) => {
         kind: node.kind
         value: node.value
         handled: false
@@ -1041,17 +1060,14 @@ encode: (rootTable) => {
             active[node] = true
 
             output.add(91)
-            first: true
-            value.each((child) => {
-                first.ifFalse(() => {
-                    emitText(", ")
-                })
-                visit(child)
-                first = false
-            })
-            output.add(93)
-
-            active.remove(node)
+            topFrame = {
+                frameKind: "array"
+                parent: parentFrame
+                node: node
+                values: value
+                count: value.size()
+                index: 0
+            }
             handled = true
         })
 
@@ -1061,22 +1077,16 @@ encode: (rootTable) => {
             })
             active[node] = true
 
+            snapshot: snapshotTableEntries(value)
             output.add(123)
-            first: true
-            value.each((name, child) => {
-                ignoredNameValidation: name + ""
-
-                first.ifFalse(() => {
-                    emitText(", ")
-                })
-                emitBasicString(name)
-                emitText(" = ")
-                visit(child)
-                first = false
-            })
-            output.add(125)
-
-            active.remove(node)
+            topFrame = {
+                frameKind: "table"
+                parent: parentFrame
+                node: node
+                entries: snapshot.entries
+                count: snapshot.count
+                index: 0
+            }
             handled = true
         })
 
@@ -1089,15 +1099,84 @@ encode: (rootTable) => {
         fail()
     })
 
+    rootSnapshot: snapshotTableEntries(rootTable.value)
     active[rootTable] = true
-    rootTable.value.each((name, child) => {
-        ignoredNameValidation: name + ""
-        emitBasicString(name)
-        emitText(" = ")
-        visit(child)
-        output.add(10)
+    topFrame = {
+        frameKind: "root"
+        parent: null
+        node: rootTable
+        entries: rootSnapshot.entries
+        count: rootSnapshot.count
+        index: 0
+    }
+
+    running: true
+    (() => running).while(() => {
+        frame: topFrame
+        frameKind: frame.frameKind
+
+        (frameKind == "root").ifTrue(() => {
+            (frame.index >= frame.count).ifTrue(() => {
+                (frame.count > 0).ifTrue(() => {
+                    output.add(10)
+                })
+                active.remove(frame.node)
+                running = false
+            })
+
+            (frame.index < frame.count).ifTrue(() => {
+                (frame.index > 0).ifTrue(() => {
+                    output.add(10)
+                })
+
+                entry: frame.entries[frame.index]
+                frame.index = frame.index + 1
+
+                emitBasicString(entry.name)
+                emitText(" = ")
+                pushValue(entry.child, frame)
+            })
+        })
+
+        (frameKind == "array").ifTrue(() => {
+            (frame.index >= frame.count).ifTrue(() => {
+                output.add(93)
+                active.remove(frame.node)
+                topFrame = frame.parent
+            })
+
+            (frame.index < frame.count).ifTrue(() => {
+                (frame.index > 0).ifTrue(() => {
+                    emitText(", ")
+                })
+
+                child: frame.values[frame.index]
+                frame.index = frame.index + 1
+                pushValue(child, frame)
+            })
+        })
+
+        (frameKind == "table").ifTrue(() => {
+            (frame.index >= frame.count).ifTrue(() => {
+                output.add(125)
+                active.remove(frame.node)
+                topFrame = frame.parent
+            })
+
+            (frame.index < frame.count).ifTrue(() => {
+                (frame.index > 0).ifTrue(() => {
+                    emitText(", ")
+                })
+
+                entry: frame.entries[frame.index]
+                frame.index = frame.index + 1
+
+                emitBasicString(entry.name)
+                emitText(" = ")
+                pushValue(entry.child, frame)
+            })
+        })
     })
-    active.remove(rootTable)
 
     Encoding.UTF8.decode(output)
 }

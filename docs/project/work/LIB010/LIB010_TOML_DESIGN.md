@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **LIB010-C IN_PROGRESS — C1 functional semantic encoder CLOSED; C2 encoder hardening/conformance READY**
+Status: **LIB010-C CLOSED — deterministic semantic encoder complete; LIB010-D conformance/stress/baseline closure READY**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -460,12 +460,26 @@ future source-preserving `std:toml/Document` layer.
   Float emission implements D109-C in ordinary Protos using exact unbounded
   Integer arithmetic and existing exact numeric conversions; no new Java/native
   boundary, host display formatter or binary64 bit-inspection primitive is added.
-- **C2 — encoder hardening/conformance: READY.** Remove input-depth recursion from
-  semantic container traversal, retain adversarial/deep encoder evidence, broaden
-  semantic round-trip/conformance cases, and close LIB010-C.
+- **C2 — encoder hardening/conformance: CLOSED.** Semantic container traversal now
+  uses explicit heap frames for root tables, Arrays and nested Tables instead of
+  host-recursive `visit` descent. Table associations are snapshot into
+  invocation-local indexed records before traversal; cycle detection remains
+  identity-based and permits shared acyclic containers after each completed
+  branch is removed from the active path. Retained evidence covers 2,048 nested
+  Arrays, 1,024 nested inline Tables, shared-container reuse, deterministic
+  temporal spelling, D104 leap-second emission and parse/encode semantic
+  round-trip.
 
-C1 is an intermediate `FOCAL_BOUNDED` publication. Integrated full validation
-remains debt of top-level LIB010 closure.
+**LIB010-C — deterministic semantic encoder: CLOSED.** `TOML.encode(rootTable)`
+covers all ten ratified semantic kinds, D109 shortest-round-trip binary64
+rendering, deterministic String/key/temporal spelling, cycle rejection and deep
+container traversal without input-proportional host recursion. It introduces no
+host Float formatter, Java/native helper, global mutable state, I/O authority or
+source-preserving presentation contract.
+
+C1/C2 used bounded focal validation. Integrated/full validation remains debt of
+**LIB010-D**, which is now READY to perform retained TOML conformance, integrated
+stress/isolation checks and bounded baseline closure.
 
 ## Round-trip guarantee
 
