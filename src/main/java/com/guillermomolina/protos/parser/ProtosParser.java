@@ -30,6 +30,8 @@ import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
+import com.guillermomolina.protos.parser.ast.SurfaceMatch;
+import com.guillermomolina.protos.parser.ast.SurfaceMatchPattern;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
 import com.guillermomolina.protos.parser.ast.SurfaceObject;
@@ -96,10 +98,16 @@ public final class ProtosParser {
                     new SourceSpan(caret.span().startOffset(), expression.span().endOffset()));
         }
 
+        SurfaceExpression expression = parseBinaryExpressionFoundation();
+        expression = parseMatchSuffixFoundation(expression);
+        return parseMutationSuffixFoundation(expression);
+    }
+
+private SurfaceExpression parseBinaryExpressionFoundation() {
         SurfaceExpression expression = parseLogicalOrFoundation();
 
         if (!cursor.at(TokenType.CUSTOM_OPERATOR)) {
-            return parseMutationSuffixFoundation(expression);
+            return expression;
         }
 
         /*
@@ -112,9 +120,738 @@ public final class ProtosParser {
             return expression;
         }
 
-        expression = parseCustomBinaryFoundation(expression);
-        return parseMutationSuffixFoundation(expression);
+        return parseCustomBinaryFoundation(expression);
     }
+
+    private SurfaceExpression parseMatchSuffixFoundation(SurfaceExpression subject) {
+        if (!atContextualIdentifier("match")) {
+            return subject;
+        }
+
+        cursor.advance();
+        TokenOccurrence open = cursor.consume(TokenType.LBRACE, "'{' after contextual match");
+        consumeNewlines();
+
+        List<SurfaceMatch.Arm> arms = new ArrayList<>();
+        if (cursor.at(TokenType.RBRACE)) {
+            throw ParseError.expected("at least one 'case' match arm", cursor.current());
+        }
+
+        parseMatchArmLine(arms);
+        while (cursor.at(TokenType.NEWLINE)) {
+            consumeNewlines();
+            if (!cursor.at(TokenType.RBRACE)) {
+                parseMatchArmLine(arms);
+            }
+        }
+
+        TokenOccurrence close = cursor.consume(TokenType.RBRACE, "'}'");
+        return new SurfaceMatch(
+                subject,
+                arms,
+                new SourceSpan(subject.span().startOffset(), close.span().endOffset()));
+    }
+
+    private void parseMatchArmLine(List<SurfaceMatch.Arm> arms) {
+        addMatchArm(arms, parseMatchArm());
+
+        while (cursor.at(TokenType.SEMICOLON)) {
+            cursor.advance();
+            addMatchArm(arms, parseMatchArm());
+        }
+    }
+
+    private void addMatchArm(List<SurfaceMatch.Arm> arms, SurfaceMatch.Arm arm) {
+        if (!arms.isEmpty()) {
+            SurfaceMatch.Arm previous = arms.get(arms.size() - 1);
+            if (previous.guard().isEmpty()
+                    && isSyntacticallyIrrefutable(previous.pattern())) {
+                throw new ParseError(
+                        "A match arm cannot follow an unguarded syntactically irrefutable arm",
+                        arm.span());
+            }
+        }
+        arms.add(arm);
+    }
+
+    private SurfaceMatch.Arm parseMatchArm() {
+        TokenOccurrence caseMarker = consumeContextualIdentifier("case");
+        SurfaceMatchPattern pattern = parseMatchPattern();
+        validatePatternLinearity(pattern);
+
+        Optional<SurfaceExpression> guard = Optional.empty();
+        if (atContextualIdentifier("when")) {
+            cursor.advance();
+            guard = Optional.of(parseMatchGuardExpression());
+        }
+
+        cursor.consume(TokenType.FAT_ARROW, "'=>' after match arm pattern");
+        ParsedMatchBody body = parseMatchArmBody();
+        return new SurfaceMatch.Arm(
+                pattern,
+                guard,
+                body.body(),
+                body.expressionBody(),
+                new SourceSpan(caseMarker.span().startOffset(), body.endOffset()));
+    }
+
+    private SurfaceExpression parseMatchGuardExpression() {
+        List<TokenOccurrence> guardTokens =
+                cursor.consumeUntilTopLevel(
+                        TokenType.FAT_ARROW,
+                        "'=>' terminating match guard");
+        SurfaceSequence parsed = new ProtosParser(guardTokens).parseProgram();
+        if (parsed.expressions().size() != 1) {
+            throw new ParseError(
+                    "A match guard must contain exactly one expression",
+                    parsed.span());
+        }
+        return parsed.expressions().get(0);
+    }
+
+    private ParsedMatchBody parseMatchArmBody() {
+        consumeContinuationNewlines();
+
+        if (cursor.at(TokenType.LBRACE)) {
+            TokenOccurrence open = cursor.advance();
+            consumeNewlines();
+            List<SurfaceExpression> expressions = new ArrayList<>();
+
+            if (!cursor.at(TokenType.RBRACE)) {
+                parseExpressionLine(expressions);
+                while (cursor.at(TokenType.NEWLINE)) {
+                    consumeNewlines();
+                    if (!cursor.at(TokenType.RBRACE)) {
+                        parseExpressionLine(expressions);
+                    }
+                }
+            }
+
+            TokenOccurrence close = cursor.consume(TokenType.RBRACE, "'}'");
+            SourceSpan bodySpan =
+                    expressions.isEmpty()
+                            ? new SourceSpan(
+                                    open.span().endOffset(), close.span().startOffset())
+                            : new SourceSpan(
+                                    expressions.get(0).span().startOffset(),
+                                    expressions.get(expressions.size() - 1).span().endOffset());
+            return new ParsedMatchBody(
+                    new SurfaceSequence(expressions, bodySpan),
+                    false,
+                    close.span().endOffset());
+        }
+
+        SurfaceExpression expression = parseExpressionFoundation();
+        return new ParsedMatchBody(
+                new SurfaceSequence(List.of(expression), expression.span()),
+                true,
+                expression.span().endOffset());
+    }
+
+    private SurfaceMatchPattern parseMatchPattern() {
+        return parseOrMatchPattern();
+    }
+
+    private SurfaceMatchPattern parseOrMatchPattern() {
+        List<SurfaceMatchPattern> alternatives = new ArrayList<>();
+        SurfaceMatchPattern first = parseAliasedMatchPattern();
+        alternatives.add(first);
+        boolean irrefutableSeen = isSyntacticallyIrrefutable(first);
+
+        while (atCustomOperator("|")) {
+            TokenOccurrence separator = cursor.current();
+            if (irrefutableSeen) {
+                throw new ParseError(
+                        "A pattern alternative cannot follow a syntactically irrefutable alternative",
+                        separator.span());
+            }
+            cursor.advance();
+            SurfaceMatchPattern alternative = parseAliasedMatchPattern();
+            alternatives.add(alternative);
+            irrefutableSeen = isSyntacticallyIrrefutable(alternative);
+        }
+
+        if (alternatives.size() == 1) {
+            return first;
+        }
+
+        SurfaceMatchPattern.Or pattern =
+                new SurfaceMatchPattern.Or(
+                        alternatives,
+                        new SourceSpan(
+                                first.span().startOffset(),
+                                alternatives.get(alternatives.size() - 1).span().endOffset()));
+        validateFixedOrBindingInterface(pattern);
+        return pattern;
+    }
+
+    private SurfaceMatchPattern parseAliasedMatchPattern() {
+        if (!atCustomOperator("@")) {
+            return parsePrimaryMatchPattern();
+        }
+
+        TokenOccurrence at = cursor.advance();
+        TokenOccurrence name = cursor.consume(TokenType.IDENTIFIER, "a pattern binder name");
+        SurfaceMatchPattern binder =
+                new SurfaceMatchPattern.Binder(
+                        name.token().lexeme(),
+                        new SourceSpan(at.span().startOffset(), name.span().endOffset()));
+
+        if (!cursor.at(TokenType.COLON)) {
+            return binder;
+        }
+
+        cursor.advance();
+        SurfaceMatchPattern nested = parseAliasedMatchPattern();
+        return new SurfaceMatchPattern.Alias(
+                name.token().lexeme(),
+                nested,
+                new SourceSpan(at.span().startOffset(), nested.span().endOffset()));
+    }
+
+    private SurfaceMatchPattern parsePrimaryMatchPattern() {
+        if (atCustomOperator("@")) {
+            TokenOccurrence at = cursor.advance();
+            TokenOccurrence name =
+                    cursor.consume(TokenType.IDENTIFIER, "a pattern binder name");
+            if (cursor.at(TokenType.COLON)) {
+                throw new ParseError(
+                        "A binder alias is not a primary pattern here; parenthesize the alias",
+                        cursor.current().span());
+            }
+            return new SurfaceMatchPattern.Binder(
+                    name.token().lexeme(),
+                    new SourceSpan(at.span().startOffset(), name.span().endOffset()));
+        }
+
+        if (atContextualIdentifier("_")) {
+            TokenOccurrence wildcard = cursor.advance();
+            return new SurfaceMatchPattern.Wildcard(wildcard.span());
+        }
+
+        if (cursor.at(TokenType.LBRACKET)) {
+            return parseArrayMatchPattern();
+        }
+
+        if (atContextualIdentifier("exact") && cursor.nextAt(TokenType.PERCENT)) {
+            TokenOccurrence exact = cursor.advance();
+            return parseMapMatchPattern(true, exact.span().startOffset());
+        }
+
+        if (cursor.at(TokenType.PERCENT)) {
+            return parseMapMatchPattern(false, cursor.current().span().startOffset());
+        }
+
+        if (cursor.at(TokenType.LPAREN)) {
+            TokenOccurrence open = cursor.advance();
+            consumeNewlines();
+            SurfaceMatchPattern nested = parseMatchPattern();
+            consumeNewlines();
+            TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
+            return new SurfaceMatchPattern.Group(
+                    nested,
+                    new SourceSpan(open.span().startOffset(), close.span().endOffset()));
+        }
+
+        return parseMatcherValuePattern();
+    }
+
+    private SurfaceMatchPattern parseMatcherValuePattern() {
+        SurfaceExpression matcher = parseMatcherValueExpression();
+        Optional<SurfaceMatchPattern.CaptureInterface> captureInterface =
+                Optional.empty();
+
+        if (atContextualIdentifier("captures")) {
+            captureInterface = Optional.of(parseCaptureInterface());
+        }
+
+        int endOffset =
+                captureInterface
+                        .map(value -> value.span().endOffset())
+                        .orElse(matcher.span().endOffset());
+        return new SurfaceMatchPattern.Value(
+                matcher,
+                captureInterface,
+                new SourceSpan(matcher.span().startOffset(), endOffset));
+    }
+
+    private SurfaceExpression parseMatcherValueExpression() {
+        TokenOccurrence token = cursor.current();
+        SurfaceExpression expression =
+                switch (token.token().type()) {
+                    case NUMBER -> literal(SurfaceLiteral.Kind.NUMBER);
+                    case STRING -> literal(SurfaceLiteral.Kind.STRING);
+                    case TRUE -> literal(SurfaceLiteral.Kind.TRUE);
+                    case FALSE -> literal(SurfaceLiteral.Kind.FALSE);
+                    case NULL -> literal(SurfaceLiteral.Kind.NULL);
+                    case IDENTIFIER -> {
+                        cursor.advance();
+                        yield new SurfaceName(token.token().lexeme(), token.span());
+                    }
+                    case THIS -> intrinsic(SurfaceIntrinsic.Kind.THIS);
+                    case CONTEXT -> intrinsic(SurfaceIntrinsic.Kind.CONTEXT);
+                    case ARGS -> intrinsic(SurfaceIntrinsic.Kind.ARGS);
+                    default ->
+                            throw ParseError.expected(
+                                    "a matcher value, binder, wildcard, Array/Map pattern, or grouped pattern",
+                                    token);
+                };
+
+        while (true) {
+            if (cursor.at(TokenType.NEWLINE) && cursor.nextAt(TokenType.DOT)) {
+                cursor.advance();
+            }
+
+            if (cursor.at(TokenType.DOT)) {
+                expression = parseMemberSuffix(expression);
+                continue;
+            }
+            if (cursor.at(TokenType.LPAREN)) {
+                expression = parseCallSuffix(expression);
+                continue;
+            }
+            if (cursor.at(TokenType.LBRACKET)) {
+                expression = parseIndexSuffix(expression);
+                continue;
+            }
+            return expression;
+        }
+    }
+
+    private SurfaceMatchPattern parseArrayMatchPattern() {
+        TokenOccurrence open = cursor.consume(TokenType.LBRACKET, "'['");
+        consumeNewlines();
+
+        List<SurfaceMatchPattern> prefix = new ArrayList<>();
+        List<SurfaceMatchPattern> suffix = new ArrayList<>();
+        Optional<SurfaceMatchPattern.Remainder> remainder = Optional.empty();
+        boolean afterRemainder = false;
+
+        if (!cursor.at(TokenType.RBRACKET)) {
+            while (true) {
+                if (cursor.at(TokenType.ELLIPSIS)) {
+                    if (remainder.isPresent()) {
+                        throw new ParseError(
+                                "An Array pattern may contain at most one remainder",
+                                cursor.current().span());
+                    }
+                    remainder = Optional.of(parsePatternRemainder());
+                    afterRemainder = true;
+                } else {
+                    SurfaceMatchPattern item = parseMatchPattern();
+                    if (afterRemainder) {
+                        suffix.add(item);
+                    } else {
+                        prefix.add(item);
+                    }
+                }
+
+                if (!cursor.at(TokenType.COMMA)) {
+                    break;
+                }
+                cursor.advance();
+                consumeNewlines();
+                if (cursor.at(TokenType.RBRACKET)) {
+                    throw ParseError.expected(
+                            "an Array pattern item after ','", cursor.current());
+                }
+            }
+        }
+
+        consumeNewlines();
+        TokenOccurrence close = cursor.consume(TokenType.RBRACKET, "']'");
+        return new SurfaceMatchPattern.ArrayPattern(
+                prefix,
+                remainder,
+                suffix,
+                new SourceSpan(open.span().startOffset(), close.span().endOffset()));
+    }
+
+    private SurfaceMatchPattern parseMapMatchPattern(boolean exact, int startOffset) {
+        cursor.consume(TokenType.PERCENT, "'%'");
+        cursor.consume(TokenType.LBRACE, "'{' after '%' in Map pattern");
+        consumeNewlines();
+
+        List<SurfaceMatchPattern.MapEntry> entries = new ArrayList<>();
+        Optional<SurfaceMatchPattern.Remainder> remainder = Optional.empty();
+
+        if (!cursor.at(TokenType.RBRACE)) {
+            while (true) {
+                if (cursor.at(TokenType.ELLIPSIS)) {
+                    remainder = Optional.of(parsePatternRemainder());
+                    if (cursor.at(TokenType.COMMA)) {
+                        throw new ParseError(
+                                "A Map pattern remainder must be final",
+                                cursor.current().span());
+                    }
+                    break;
+                }
+
+                SurfaceExpression key = parseBinaryExpressionFoundation();
+                cursor.consume(TokenType.COLON, "':' after Map pattern key");
+                SurfaceMatchPattern valuePattern = parseMatchPattern();
+                entries.add(
+                        new SurfaceMatchPattern.MapEntry(
+                                key,
+                                valuePattern,
+                                new SourceSpan(
+                                        key.span().startOffset(),
+                                        valuePattern.span().endOffset())));
+
+                if (!cursor.at(TokenType.COMMA)) {
+                    break;
+                }
+                cursor.advance();
+                consumeNewlines();
+                if (cursor.at(TokenType.RBRACE)) {
+                    throw ParseError.expected(
+                            "a Map pattern entry or remainder after ','",
+                            cursor.current());
+                }
+            }
+        }
+
+        consumeNewlines();
+        TokenOccurrence close = cursor.consume(TokenType.RBRACE, "'}'");
+        if (exact && remainder.isPresent()) {
+            throw new ParseError(
+                    "An exact Map pattern cannot contain a remainder",
+                    remainder.orElseThrow().span());
+        }
+        return new SurfaceMatchPattern.MapPattern(
+                exact,
+                entries,
+                remainder,
+                new SourceSpan(startOffset, close.span().endOffset()));
+    }
+
+    private SurfaceMatchPattern.Remainder parsePatternRemainder() {
+        TokenOccurrence spread = cursor.consume(TokenType.ELLIPSIS, "'...'");
+        Optional<SurfaceMatchPattern> nested = Optional.empty();
+        int endOffset = spread.span().endOffset();
+
+        if (startsPrimaryMatchPattern()) {
+            SurfaceMatchPattern pattern = parsePrimaryMatchPattern();
+            nested = Optional.of(pattern);
+            endOffset = pattern.span().endOffset();
+        }
+
+        return new SurfaceMatchPattern.Remainder(
+                nested,
+                new SourceSpan(spread.span().startOffset(), endOffset));
+    }
+
+    private boolean startsPrimaryMatchPattern() {
+        if (cursor.at(TokenType.LBRACKET)
+                || cursor.at(TokenType.LPAREN)
+                || cursor.at(TokenType.PERCENT)
+                || cursor.at(TokenType.NUMBER)
+                || cursor.at(TokenType.STRING)
+                || cursor.at(TokenType.TRUE)
+                || cursor.at(TokenType.FALSE)
+                || cursor.at(TokenType.NULL)
+                || cursor.at(TokenType.THIS)
+                || cursor.at(TokenType.CONTEXT)
+                || cursor.at(TokenType.ARGS)
+                || atCustomOperator("@")) {
+            return true;
+        }
+        return cursor.at(TokenType.IDENTIFIER);
+    }
+
+    private SurfaceMatchPattern.CaptureInterface parseCaptureInterface() {
+        TokenOccurrence captures = consumeContextualIdentifier("captures");
+        cursor.consume(TokenType.LPAREN, "'(' after contextual captures");
+        consumeNewlines();
+
+        List<String> requiredNames = new ArrayList<>();
+        Optional<String> restName = Optional.empty();
+        Set<String> names = new HashSet<>();
+
+        if (cursor.at(TokenType.RPAREN)) {
+            throw ParseError.expected(
+                    "at least one capture binding in captures(...)",
+                    cursor.current());
+        }
+
+        if (cursor.at(TokenType.ELLIPSIS)) {
+            cursor.advance();
+            TokenOccurrence rest =
+                    cursor.consume(TokenType.IDENTIFIER, "a capture rest name");
+            addUniquePatternBindingName(names, rest);
+            restName = Optional.of(rest.token().lexeme());
+        } else {
+            TokenOccurrence required =
+                    cursor.consume(TokenType.IDENTIFIER, "a capture binding name");
+            addUniquePatternBindingName(names, required);
+            requiredNames.add(required.token().lexeme());
+
+            while (cursor.at(TokenType.COMMA)) {
+                cursor.advance();
+                consumeNewlines();
+                if (cursor.at(TokenType.ELLIPSIS)) {
+                    cursor.advance();
+                    TokenOccurrence rest =
+                            cursor.consume(TokenType.IDENTIFIER, "a capture rest name");
+                    addUniquePatternBindingName(names, rest);
+                    restName = Optional.of(rest.token().lexeme());
+                    break;
+                }
+
+                TokenOccurrence next =
+                        cursor.consume(TokenType.IDENTIFIER, "a capture binding name");
+                addUniquePatternBindingName(names, next);
+                requiredNames.add(next.token().lexeme());
+            }
+        }
+
+        consumeNewlines();
+        TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
+        return new SurfaceMatchPattern.CaptureInterface(
+                requiredNames,
+                restName,
+                new SourceSpan(captures.span().startOffset(), close.span().endOffset()));
+    }
+
+    private void addUniquePatternBindingName(
+            Set<String> names, TokenOccurrence name) {
+        if (!names.add(name.token().lexeme())) {
+            throw new ParseError(
+                    "Pattern binding names must be unique and linear",
+                    name.span());
+        }
+    }
+
+    private void validatePatternLinearity(SurfaceMatchPattern pattern) {
+        declaredNamesWithValidation(pattern);
+    }
+
+    private Set<String> declaredNamesWithValidation(SurfaceMatchPattern pattern) {
+        if (pattern instanceof SurfaceMatchPattern.Binder binder) {
+            return new HashSet<>(Set.of(binder.name()));
+        }
+
+        if (pattern instanceof SurfaceMatchPattern.Wildcard) {
+            return new HashSet<>();
+        }
+
+        if (pattern instanceof SurfaceMatchPattern.Value value) {
+            return new HashSet<>(
+                    value.captureInterface()
+                            .map(SurfaceMatchPattern.CaptureInterface::declaredNames)
+                            .orElse(List.of()));
+        }
+
+        if (pattern instanceof SurfaceMatchPattern.Group group) {
+            return declaredNamesWithValidation(group.pattern());
+        }
+
+        if (pattern instanceof SurfaceMatchPattern.Alias alias) {
+            Set<String> names = declaredNamesWithValidation(alias.pattern());
+            if (!names.add(alias.name())) {
+                throw new ParseError(
+                        "Pattern binding names must be unique and linear",
+                        alias.span());
+            }
+            return names;
+        }
+
+        if (pattern instanceof SurfaceMatchPattern.Or orPattern) {
+            Set<String> union = new HashSet<>();
+            for (SurfaceMatchPattern alternative : orPattern.alternatives()) {
+                union.addAll(declaredNamesWithValidation(alternative));
+            }
+            return union;
+        }
+
+        if (pattern instanceof SurfaceMatchPattern.ArrayPattern array) {
+            Set<String> names = new HashSet<>();
+            for (SurfaceMatchPattern item : array.prefix()) {
+                mergeSequentialPatternNames(names, item);
+            }
+            array.remainder()
+                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                    .ifPresent(item -> mergeSequentialPatternNames(names, item));
+            for (SurfaceMatchPattern item : array.suffix()) {
+                mergeSequentialPatternNames(names, item);
+            }
+            return names;
+        }
+
+        if (pattern instanceof SurfaceMatchPattern.MapPattern map) {
+            Set<String> names = new HashSet<>();
+            for (SurfaceMatchPattern.MapEntry entry : map.entries()) {
+                mergeSequentialPatternNames(names, entry.valuePattern());
+            }
+            map.remainder()
+                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                    .ifPresent(item -> mergeSequentialPatternNames(names, item));
+            return names;
+        }
+
+        throw new IllegalStateException(
+                "Unknown SurfaceMatchPattern: " + pattern.getClass().getName());
+    }
+
+    private void mergeSequentialPatternNames(
+            Set<String> accumulated, SurfaceMatchPattern nested) {
+        Set<String> nestedNames = declaredNamesWithValidation(nested);
+        for (String name : nestedNames) {
+            if (!accumulated.add(name)) {
+                throw new ParseError(
+                        "Pattern binding names must be unique and linear",
+                        nested.span());
+            }
+        }
+    }
+
+    private Optional<List<String>> fixedBindingInterface(
+            SurfaceMatchPattern pattern) {
+        if (pattern instanceof SurfaceMatchPattern.Binder binder) {
+            return Optional.of(List.of(binder.name()));
+        }
+        if (pattern instanceof SurfaceMatchPattern.Wildcard) {
+            return Optional.of(List.of());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Value value) {
+            if (value.captureInterface().isEmpty()) {
+                return Optional.of(List.of());
+            }
+            SurfaceMatchPattern.CaptureInterface capture =
+                    value.captureInterface().orElseThrow();
+            return capture.variableArity()
+                    ? Optional.empty()
+                    : Optional.of(capture.requiredNames());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Group group) {
+            return fixedBindingInterface(group.pattern());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Alias alias) {
+            Optional<List<String>> nested = fixedBindingInterface(alias.pattern());
+            if (nested.isEmpty()) {
+                return Optional.empty();
+            }
+            ArrayList<String> names = new ArrayList<>();
+            names.add(alias.name());
+            names.addAll(nested.orElseThrow());
+            return Optional.of(List.copyOf(names));
+        }
+        if (pattern instanceof SurfaceMatchPattern.Or orPattern) {
+            List<String> common = null;
+            for (SurfaceMatchPattern alternative : orPattern.alternatives()) {
+                Optional<List<String>> candidate = fixedBindingInterface(alternative);
+                if (candidate.isEmpty()) {
+                    return Optional.empty();
+                }
+                if (common == null) {
+                    common = candidate.orElseThrow();
+                } else if (!common.equals(candidate.orElseThrow())) {
+                    throw new ParseError(
+                            "Fixed OR alternatives must expose the same ordered binder-name interface",
+                            orPattern.span());
+                }
+            }
+            return Optional.of(common == null ? List.of() : common);
+        }
+        if (pattern instanceof SurfaceMatchPattern.ArrayPattern array) {
+            ArrayList<String> names = new ArrayList<>();
+            for (SurfaceMatchPattern item : array.prefix()) {
+                if (!appendFixedBindingInterface(names, item)) {
+                    return Optional.empty();
+                }
+            }
+            if (array.remainder().flatMap(SurfaceMatchPattern.Remainder::pattern).isPresent()
+                    && !appendFixedBindingInterface(
+                            names,
+                            array.remainder()
+                                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                                    .orElseThrow())) {
+                return Optional.empty();
+            }
+            for (SurfaceMatchPattern item : array.suffix()) {
+                if (!appendFixedBindingInterface(names, item)) {
+                    return Optional.empty();
+                }
+            }
+            return Optional.of(List.copyOf(names));
+        }
+        if (pattern instanceof SurfaceMatchPattern.MapPattern map) {
+            ArrayList<String> names = new ArrayList<>();
+            for (SurfaceMatchPattern.MapEntry entry : map.entries()) {
+                if (!appendFixedBindingInterface(names, entry.valuePattern())) {
+                    return Optional.empty();
+                }
+            }
+            if (map.remainder().flatMap(SurfaceMatchPattern.Remainder::pattern).isPresent()
+                    && !appendFixedBindingInterface(
+                            names,
+                            map.remainder()
+                                    .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                                    .orElseThrow())) {
+                return Optional.empty();
+            }
+            return Optional.of(List.copyOf(names));
+        }
+        throw new IllegalStateException(
+                "Unknown SurfaceMatchPattern: " + pattern.getClass().getName());
+    }
+
+    private boolean appendFixedBindingInterface(
+            List<String> accumulated, SurfaceMatchPattern nested) {
+        Optional<List<String>> names = fixedBindingInterface(nested);
+        if (names.isEmpty()) {
+            return false;
+        }
+        accumulated.addAll(names.orElseThrow());
+        return true;
+    }
+
+    private void validateFixedOrBindingInterface(
+            SurfaceMatchPattern.Or pattern) {
+        fixedBindingInterface(pattern);
+    }
+
+    private boolean isSyntacticallyIrrefutable(SurfaceMatchPattern pattern) {
+        if (pattern instanceof SurfaceMatchPattern.Binder
+                || pattern instanceof SurfaceMatchPattern.Wildcard) {
+            return true;
+        }
+        if (pattern instanceof SurfaceMatchPattern.Alias alias) {
+            return isSyntacticallyIrrefutable(alias.pattern());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Group group) {
+            return isSyntacticallyIrrefutable(group.pattern());
+        }
+        if (pattern instanceof SurfaceMatchPattern.Or orPattern) {
+            return orPattern.alternatives().stream()
+                    .anyMatch(this::isSyntacticallyIrrefutable);
+        }
+        return false;
+    }
+
+    private boolean atContextualIdentifier(String spelling) {
+        return cursor.at(TokenType.IDENTIFIER)
+                && cursor.current().token().lexeme().equals(spelling);
+    }
+
+    private TokenOccurrence consumeContextualIdentifier(String spelling) {
+        if (!atContextualIdentifier(spelling)) {
+            throw ParseError.expected(
+                    "'" + spelling + "'",
+                    cursor.current());
+        }
+        return cursor.advance();
+    }
+
+    private boolean atCustomOperator(String spelling) {
+        return cursor.at(TokenType.CUSTOM_OPERATOR)
+                && cursor.current().token().lexeme().equals(spelling);
+    }
+
+    private record ParsedMatchBody(
+            SurfaceSequence body,
+            boolean expressionBody,
+            int endOffset) {}
 
     private SurfaceExpression parseMutationSuffixFoundation(SurfaceExpression expression) {
         if (cursor.at(TokenType.COLON)) {

@@ -18,24 +18,35 @@
 package com.guillermomolina.protos.parser.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
-public sealed interface SurfaceExpression
-        permits SurfaceLiteral,
-                SurfaceName,
-                SurfaceIntrinsic,
-                SurfaceSequence,
-                SurfaceGroup,
-                SurfaceMember,
-                SurfaceCall,
-                SurfaceIndex,
-                SurfaceUnary,
-                SurfaceBinary,
-                SurfaceMatch,
-                SurfaceNonLocalReturn,
-                SurfaceSlotCreation,
-                SurfaceAssignment,
-                SurfaceSuperSend,
-                SurfaceObject,
-                SurfaceClosure {
-    SourceSpan span();
+public record SurfaceMatch(
+        SurfaceExpression subject,
+        List<Arm> arms,
+        SourceSpan span)
+        implements SurfaceExpression {
+    public SurfaceMatch {
+        Objects.requireNonNull(subject, "subject");
+        arms = List.copyOf(Objects.requireNonNull(arms, "arms"));
+        if (arms.isEmpty()) {
+            throw new IllegalArgumentException("match requires at least one arm");
+        }
+        Objects.requireNonNull(span, "span");
+    }
+
+    public record Arm(
+            SurfaceMatchPattern pattern,
+            Optional<SurfaceExpression> guard,
+            SurfaceSequence body,
+            boolean expressionBody,
+            SourceSpan span) {
+        public Arm {
+            Objects.requireNonNull(pattern, "pattern");
+            guard = Objects.requireNonNull(guard, "guard");
+            Objects.requireNonNull(body, "body");
+            Objects.requireNonNull(span, "span");
+        }
+    }
 }

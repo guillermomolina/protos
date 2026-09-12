@@ -27,6 +27,8 @@ import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
+import com.guillermomolina.protos.parser.ast.SurfaceMatch;
+import com.guillermomolina.protos.parser.ast.SurfaceMatchPattern;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
@@ -89,6 +91,7 @@ public final class ProtosDocumentSymbols {
             }
             case SurfaceNonLocalReturn nonLocalReturn ->
                     collect(nonLocalReturn.expression(), destination);
+            case SurfaceMatch match -> collectMatch(match, destination);
             case SurfaceSlotCreation creation -> collectCreation(creation, destination);
             case SurfaceAssignment assignment -> {
                 // '=' is never a symbol, but its subexpressions can still contain ':' creations.
@@ -108,6 +111,59 @@ public final class ProtosDocumentSymbols {
                     parameter.defaultValue().ifPresent(value -> collect(value, destination));
                 }
                 collect(closure.body(), destination);
+            }
+        }
+    }
+
+    private static void collectMatch(
+            SurfaceMatch match,
+            List<ProtosDocumentSymbol> destination) {
+        collect(match.subject(), destination);
+        for (SurfaceMatch.Arm arm : match.arms()) {
+            collectMatchPattern(arm.pattern(), destination);
+            arm.guard().ifPresent(guard -> collect(guard, destination));
+            collect(arm.body(), destination);
+        }
+    }
+
+    private static void collectMatchPattern(
+            SurfaceMatchPattern pattern,
+            List<ProtosDocumentSymbol> destination) {
+        switch (pattern) {
+            case SurfaceMatchPattern.Binder ignored -> {
+            }
+            case SurfaceMatchPattern.Wildcard ignored -> {
+            }
+            case SurfaceMatchPattern.Alias alias ->
+                    collectMatchPattern(alias.pattern(), destination);
+            case SurfaceMatchPattern.Group group ->
+                    collectMatchPattern(group.pattern(), destination);
+            case SurfaceMatchPattern.Or orPattern -> {
+                for (SurfaceMatchPattern alternative : orPattern.alternatives()) {
+                    collectMatchPattern(alternative, destination);
+                }
+            }
+            case SurfaceMatchPattern.Value value ->
+                    collect(value.matcher(), destination);
+            case SurfaceMatchPattern.ArrayPattern array -> {
+                for (SurfaceMatchPattern item : array.prefix()) {
+                    collectMatchPattern(item, destination);
+                }
+                array.remainder()
+                        .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                        .ifPresent(item -> collectMatchPattern(item, destination));
+                for (SurfaceMatchPattern item : array.suffix()) {
+                    collectMatchPattern(item, destination);
+                }
+            }
+            case SurfaceMatchPattern.MapPattern map -> {
+                for (SurfaceMatchPattern.MapEntry entry : map.entries()) {
+                    collect(entry.key(), destination);
+                    collectMatchPattern(entry.valuePattern(), destination);
+                }
+                map.remainder()
+                        .flatMap(SurfaceMatchPattern.Remainder::pattern)
+                        .ifPresent(item -> collectMatchPattern(item, destination));
             }
         }
     }
