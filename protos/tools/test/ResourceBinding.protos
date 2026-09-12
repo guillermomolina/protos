@@ -1,0 +1,124 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// TOOL002-I8A: pure D076/D077/D097 Requirement -> CatalogEntry binding.
+//
+// This module proves only static per-case feasibility against an already parsed
+// inert catalog. It has no scheduler occupancy, no mutable reservation state, no
+// placement-domain identity, no provider resolution/provisioning and no Main or
+// Runner integration.
+//
+// Static impossibility is fail-closed:
+// - a required logical key must exist in the selected catalog;
+// - shared units must fit within that entry's total capacity;
+// - duplicate supplied requirements/catalog keys remain invalid.
+//
+// Temporary contention is intentionally not represented here. That belongs to a
+// later atomic reservation boundary.
+
+Manifest: import("self:Manifest")
+ResourceCatalog: import("self:ResourceCatalog")
+
+fail: () => {
+    Error().signal()
+}
+
+frozenTuple: (...items) => {
+    items
+}
+
+binding: (requirementValue, catalogEntryValue) => {
+    frozenTuple(requirementValue, catalogEntryValue)
+}
+
+bindingRequirement: (bindingValue) => {
+    bindingValue[0]
+}
+
+bindingCatalogEntry: (bindingValue) => {
+    bindingValue[1]
+}
+
+catalogByKey: (catalog) => {
+    byKey: Map()
+
+    catalog.each((entry) => {
+        key: ResourceCatalog.entryKey(entry)
+        byKey.containsKey(key).ifTrue(() => {
+            fail()
+        })
+        byKey[key] = entry
+    })
+
+    byKey
+}
+
+bindRequirements: (requirements, catalog) => {
+    byKey: catalogByKey(catalog)
+    seenRequirementKeys: Map()
+    bindings: Array()
+
+    requirements.each((requirementValue) => {
+        key: Manifest.requirementKey(requirementValue)
+
+        seenRequirementKeys.containsKey(key).ifTrue(() => {
+            fail()
+        })
+        seenRequirementKeys[key] = true
+
+        byKey.containsKey(key).ifFalse(() => {
+            fail()
+        })
+
+        entry: byKey[key]
+        mode: Manifest.requirementMode(requirementValue)
+        units: Manifest.requirementUnits(requirementValue)
+        capacity: ResourceCatalog.entryCapacity(entry)
+
+        knownMode: false
+
+        (mode == "shared").ifTrue(() => {
+            // Canonical Requirement construction already guarantees a positive
+            // ordinary Integer. This check answers only static catalog
+            // feasibility; current occupancy is a later concern.
+            (units > capacity).ifTrue(() => {
+                fail()
+            })
+            knownMode = true
+        })
+
+        (mode == "exclusive").ifTrue(() => {
+            // Canonical Requirement construction already guarantees null units.
+            // Every validated catalog entry has positive capacity, therefore an
+            // exclusive request is statically feasible before occupancy exists.
+            knownMode = true
+        })
+
+        knownMode.ifFalse(() => {
+            fail()
+        })
+
+        bindings = Array(
+            ...bindings,
+            binding(requirementValue, entry)
+        )
+    })
+
+    frozenTuple(...bindings)
+}
+
+bindCase: (spec, catalog) => {
+    bindRequirements(Manifest.caseRequirements(spec), catalog)
+}
