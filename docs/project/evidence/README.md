@@ -13,3 +13,4 @@ its references, retention role, and compatibility implications.
 - [`DIST001/`](DIST001/README.md) — immutable first-pre-release selection,
   candidate, validation, claims, release-envelope, and observed-publication
   evidence for DIST001.
+- [`D098/`](D098/README.md) — immutable ratification publication, safe-abort, and GitHub closure evidence for D098.
