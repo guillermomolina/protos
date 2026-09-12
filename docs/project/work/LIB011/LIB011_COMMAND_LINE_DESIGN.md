@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A READY**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A RATIFIED — Candidate E′ selected; LIB011-A1 READY**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -874,18 +874,188 @@ LIB011-0 does not select:
 Each may be added later only when a real consumer justifies it and any new
 substantive semantics cross the normal approval gate.
 
+## LIB011-A public model ratification
+
+LIB011-A is **RATIFIED — Candidate E′ selected** by explicit project-owner
+approval on 2026-09-12 after the focused public-model audit of mature CLI
+libraries and tools.
+
+Candidate E′ refines the already-ratified LIB011-0 Candidate C′ architecture; it
+does not replace it. The selected materialization rule is:
+
+```text
+validated descriptor records
+        |
+        v
+fresh canonical tagged structural data
+        |
+        v
+node-by-node frozen specification graph
+```
+
+and, for eventual parsing:
+
+```text
+explicit arguments snapshot
+        |
+        v
+recursive inert lossless result tree
+```
+
+The public model remains ordinary inspectable Protos data rather than a nominal
+`CommandSpec` / `OptionSpec` prototype hierarchy, mutable builder graph,
+reflection/annotation system, typed object mapper or command-execution framework.
+
+Focused selection scores for Candidate E′ are:
+
+| Axis | Score |
+| --- | ---: |
+| Aguante de futuro | **5.0 / 5** |
+| Escalabilidad | **5.0 / 5** |
+| Filosofía Protos | **5.0 / 5** |
+| Ten-axis comparative average | **4.92 / 5** |
+
+The strongest argument against E′ is verbosity: explicit logical keys,
+independent cardinality bounds and canonical copying/freezing require more
+ceremony than derive/annotation or fluent-builder frameworks. That cost is
+accepted because convenience helpers can be layered later without losing
+provenance, absence, portability or inspectability.
+
+### Approved LIB011-A contract
+
+The bounded approved decisions are exactly:
+
+1. `std:cli/CommandLine` uses ordinary tagged structural records, not a public
+   `CommandSpec` / `OptionSpec` prototype hierarchy.
+2. Public constructors are descriptor-record based and return fresh canonical
+   data; they never mutate the supplied descriptor.
+3. Canonical specification records and retained Arrays are snapshotted and
+   frozen node-by-node. This is required because ordinary Protos `freeze()` is
+   shallow and therefore does not by itself make a retained graph deeply
+   immutable.
+4. Options and positionals have explicit non-empty logical `key` Strings; option
+   keys are separate from long/short spelling. `key` is used rather than `id` so
+   this library does not overload Protos identity terminology.
+5. External names use the initial portable ASCII grammar; comparison is exact
+   and case-sensitive; no Unicode normalization or case folding occurs. The
+   bounded initial grammar is one ASCII alphanumeric character for a short name,
+   and an ASCII-letter first character followed by ASCII letters, digits or `-`
+   for long option and command names.
+6. Cardinality uses independent min/max fields for values and occurrences.
+   LIB011-A validates only the already-ratified baseline value cardinalities
+   `0..0` and `1..1` and occurrence roles `0..1`, `1..1`, `0..unbounded`, and
+   `1..unbounded`; `null` represents an unbounded maximum.
+7. Conflicts, requirements, groups, aliases beyond long+short, typed
+   converters/defaults, callbacks and authority-bearing metadata are deferred.
+8. Explicit parse argument Arrays exclude the executable/root command name; the
+   root name comes from the command specification.
+9. `ParseResult` retains a frozen snapshot of those exact arguments and a
+   recursive `CommandResult` tree rather than collapsing results into an
+   application-value Map.
+10. Token indices are zero-based direct indices into the retained arguments
+    Array. `CommandResult` records the structural `--` delimiter index, while
+    option and positional occurrences retain the source indices needed for exact
+    provenance. An option value that is literally `--` remains distinguishable
+    from a structural end-of-options delimiter.
+11. Results carry logical keys/canonical names, not references whose meaning
+    depends on `OptionSpec` / `CommandSpec` object identity or lifetime.
+12. Any implementation discovery that requires observable parent-positionals /
+    subcommand allocation semantics, a public parse-error taxonomy or another
+    durable semantic choice stops the affected LIB011 slice and crosses the
+    normal explicit decision gate before implementation continues.
+
+These choices intentionally preserve private implementation freedom. A parser
+may later build local lookup indexes or a private compiled plan from the frozen
+specification, but no global registry/cache or public compiled-spec identity is
+selected.
+
+### Result/provenance shape selected for later parsing
+
+LIB011-A may publish or internally prepare the ordinary record shape needed by
+LIB011-B, but A does not publish a complete token parser.
+
+The selected result architecture is conceptually:
+
+```text
+ParseResult
+  arguments: frozen exact input snapshot
+  command: CommandResult
+
+CommandResult
+  name: canonical command name
+  tokenIndex: null | Integer
+  endOfOptionsIndex: null | Integer
+  options: ordered option-occurrence Array
+  positionals: ordered positional-occurrence Array
+  subcommand: null | CommandResult
+```
+
+An option occurrence preserves at least its logical `key`, exact spelling,
+zero-based option-token index, exact raw String value when present and the
+zero-based token index containing that value. For `--name=value`, the option and
+value indices are the same input-token index. Multiple members of one accepted
+short-flag cluster may likewise share one input-token index while retaining
+occurrence order.
+
+The recursive command-result shape scopes parent/child occurrences naturally and
+avoids collisions when the same logical key is deliberately reused at different
+command levels.
+
+### Deferred boundary after LIB011-A
+
+LIB011-A does **not** select or implement:
+
+- token recognition/parsing behavior beyond model invariants already ratified by
+  LIB011-0;
+- parent-positionals versus subcommand traversal/allocation policy;
+- conflicts, requirements or option groups;
+- aliases beyond the one canonical long spelling and optional short spelling;
+- typed decoding/default projection;
+- callbacks/actions/dispatch;
+- environment/config/process/TTY/filesystem/network authority;
+- completion providers;
+- a public structured parse-error taxonomy;
+- a public compiled-spec/cache abstraction.
+
+Those remain later bounded work. LIB011-B is not released by this ratification;
+A1/A2/A3 must first publish and close the approved public model.
+
 ## Implementation sequence
 
 The ratified architecture releases this bounded sequence:
 
 ### LIB011-A — public specification/result model
 
-Publish the ordinary public data model required to describe commands/options,
-validate specification invariants and represent a future lossless parse result.
-No complete parser, subcommand traversal or help renderer is required in A.
+**RATIFIED — Candidate E′ selected.** LIB011-A is decomposed into these bounded
+publication slices before LIB011-B may begin:
 
-If exact public constructor/slot spelling exposes a substantive rather than
-mechanical compatibility choice, stop at the approval gate.
+#### LIB011-A1 — specification model
+
+Publish descriptor-based constructors plus canonical, fresh, tagged and
+node-by-node-frozen `CommandSpec`, `OptionSpec` and `PositionalSpec` structural
+records. Validate only the approved naming, logical-key, cardinality, ordering,
+uniqueness and graph-snapshot invariants. No token parser, command traversal or
+help renderer is included.
+
+#### LIB011-A2 — result model
+
+Publish or internally establish, as required by the future parser surface, the
+recursive lossless result representation: exact frozen arguments snapshot,
+`CommandResult`, option occurrences, positional occurrences, direct zero-based
+input-token indices and `endOfOptionsIndex`. Do not add token parsing merely to
+exercise the representation. If a public result-construction API is unnecessary,
+keep construction helpers private until LIB011-B publishes `parse`.
+
+#### LIB011-A3 — adversarial model closure
+
+Exercise malformed descriptors and model invariants, including duplicate logical
+keys/spellings, shallow-freeze alias attacks, invalid cardinalities, invalid
+external names and invalid nested specifications. Reconcile the durable design
+record and release LIB011-B only when the public model is closed.
+
+If A1/A2/A3 exposes parent-positionals/subcommand allocation semantics, a public
+error taxonomy or another substantive public choice not already approved, stop
+the affected slice at the ordinary decision gate.
 
 ### LIB011-B — token parser
 
