@@ -1846,6 +1846,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredMapReadLookupCall", null);
         BytecodeLocal structuredMapReadLookupChild =
                 builder.createLocal("structuredMapReadLookupChildCall", null);
+        BytecodeLocal structuredMapAtPut =
+                builder.createLocal("structuredMapAtPutCall", null);
+        BytecodeLocal structuredMapAtPutChild =
+                builder.createLocal("structuredMapAtPutChildCall", null);
 
         builder.beginIfThenElse();
 
@@ -2591,12 +2595,114 @@ final class CanonicalToBytecodeLowerer {
         builder.endBlock();
 
         builder.beginBlock();
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredMapAtPutCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredMapAtPutCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredMapAtPut);
+        builder.beginPrepareStructuredMapAtPutCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredMapAtPutCall();
+        builder.endStoreLocal();
+
+        builder.beginEnterStructuredMapAtPutComparison();
+        builder.emitLoadLocal(structuredMapAtPut);
+        builder.endEnterStructuredMapAtPutComparison();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveStructuredMapAtPutComparison();
+                    builder.emitLoadLocal(structuredMapAtPut);
+                    builder.endLeaveStructuredMapAtPutComparison();
+                });
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredMapAtPutChild);
+        builder.beginPrepareStructuredMapAtPutHashCall();
+        builder.emitLoadLocal(structuredMapAtPut);
+        builder.endPrepareStructuredMapAtPutHashCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapAtPutChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptStructuredMapAtPutHashResult();
+        builder.emitLoadLocal(structuredMapAtPut);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredMapAtPutHashResult();
+
+        builder.beginWhile();
+        builder.beginStructuredMapAtPutNeedsEquality();
+        builder.emitLoadLocal(structuredMapAtPut);
+        builder.endStructuredMapAtPutNeedsEquality();
+
+        builder.beginBlock();
+        builder.beginEnterStructuredMapAtPutComparison();
+        builder.emitLoadLocal(structuredMapAtPut);
+        builder.endEnterStructuredMapAtPutComparison();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveStructuredMapAtPutComparison();
+                    builder.emitLoadLocal(structuredMapAtPut);
+                    builder.endLeaveStructuredMapAtPutComparison();
+                });
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredMapAtPutChild);
+        builder.beginPrepareStructuredMapAtPutEqualityCall();
+        builder.emitLoadLocal(structuredMapAtPut);
+        builder.endPrepareStructuredMapAtPutEqualityCall();
+        builder.endStoreLocal();
+        emitScopedOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapAtPutChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptStructuredMapAtPutEqualityResult();
+        builder.emitLoadLocal(structuredMapAtPut);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredMapAtPutEqualityResult();
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredMapAtPut();
+        builder.emitLoadLocal(structuredMapAtPut);
+        builder.endFinishStructuredMapAtPut();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
         emitOrdinaryPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

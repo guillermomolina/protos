@@ -8,6 +8,10 @@ public final class ProtosStandardMapProtocol {
          ProtosStandardMapProtocol::at;
  private static final ProtosClosureValue STANDARD_AT =
          ProtosClosureValue.nativeClosure(STANDARD_AT_BODY);
+ private static final ProtosNativeClosureBody STANDARD_AT_PUT_BODY =
+         ProtosStandardMapProtocol::atPut;
+ private static final ProtosClosureValue STANDARD_AT_PUT =
+         ProtosClosureValue.nativeClosure(STANDARD_AT_PUT_BODY);
  private static final ProtosNativeClosureBody STANDARD_CONTAINS_KEY_BODY =
          ProtosStandardMapProtocol::containsKey;
  private static final ProtosClosureValue STANDARD_CONTAINS_KEY =
@@ -96,6 +100,20 @@ public final class ProtosStandardMapProtocol {
   return null;
  }
 
+ static boolean isStandardAtPutImplementation(ProtosClosureValue closure) {
+  return closure.nativeBody().orElse(null) == STANDARD_AT_PUT_BODY;
+ }
+
+ static boolean isCanonicalStandardAtPutSelection(
+         ProtosClosureValue behavior,
+         ProtosObjectValue home,
+         ProtosActivation caller) {
+  return behavior == STANDARD_AT_PUT
+          && caller.prelude()
+                  .map(prelude -> prelude.mapPrototype() == home)
+                  .orElse(false);
+ }
+
  static boolean isStandardEachImplementation(ProtosClosureValue closure) {
   return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
  }
@@ -114,7 +132,7 @@ public final class ProtosStandardMapProtocol {
   p.createLocalSlot("call",ProtosClosureValue.nativeClosure((a,x)->{arity(a,x,0);if(!(a.receiver() instanceof ProtosObjectValue r)||!delegatesTo(r,p))throw err(a);return new ProtosMapValue(r);}));
   p.createLocalSlot("at", STANDARD_AT);
   p.createLocalSlot("containsKey", STANDARD_CONTAINS_KEY);
-  p.createLocalSlot("atPut",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,2);mutationEntry(m,a);Object k=x.get(0),v=x.get(1);BigInteger h=hash(m,k,a);var e=find(m,k,h,a);if(e!=null){if(m.isFrozen())throw err(a);m.replaceValue(e,v);return v;}if(!m.isOpen())throw err(a);m.append(k,h,v);return v;}));
+  p.createLocalSlot("atPut", STANDARD_AT_PUT);
   p.createLocalSlot("remove",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,1);mutationEntry(m,a);if(!m.isOpen())throw err(a);var e=find(m,x.get(0),a);if(e==null||!m.isOpen())throw err(a);return m.remove(e);}));
   p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return new ProtosIntegerValue(BigInteger.valueOf(m.keyedSize()));}));
   p.createLocalSlot("each", STANDARD_EACH);
@@ -127,6 +145,23 @@ public final class ProtosStandardMapProtocol {
    throw err(a);
   }
   return entry.value();
+ }
+ private static Object atPut(ProtosActivation a, List<?> x) {
+  ProtosMapValue m = map(a);
+  arity(a, x, 2);
+  mutationEntry(m, a);
+  Object k = x.get(0);
+  Object v = x.get(1);
+  BigInteger h = hash(m, k, a);
+  ProtosMapValue.Entry e = find(m, k, h, a);
+  if (e != null) {
+   if (m.isFrozen()) throw err(a);
+   m.replaceValue(e, v);
+   return v;
+  }
+  if (!m.isOpen()) throw err(a);
+  m.append(k, h, v);
+  return v;
  }
  private static Object containsKey(ProtosActivation a, List<?> x) {
   ProtosMapValue m = map(a);
@@ -194,7 +229,13 @@ public final class ProtosStandardMapProtocol {
   }
   throw err(a);
  }
- private static void mutationEntry(ProtosMapValue m,ProtosActivation a){if(m.comparisonActive()||m.isFrozen())throw err(a);}
+ private static void mutationEntry(ProtosMapValue m, ProtosActivation a) {
+  requireMutationEntryForStructured(m, a);
+ }
+ static void requireMutationEntryForStructured(
+         ProtosMapValue m, ProtosActivation a) {
+  if (m.comparisonActive() || m.isFrozen()) throw err(a);
+ }
  private static ProtosMapValue map(ProtosActivation a){if(!(a.receiver() instanceof ProtosMapValue m))throw err(a);return m;}
  private static void arity(ProtosActivation a,List<?> x,int n){if(x.size()!=n)throw err(a);}
  static void requireInvokableForStructured(Object c, ProtosActivation a) {
