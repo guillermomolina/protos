@@ -2,6 +2,36 @@
   "version": 1,
   "contracts": [
     {
+      "id": "language.match.array-patterns",
+      "classification": "PROTOS_SEMANTIC",
+      "state": "RECONCILED",
+      "primary": {
+        "owner": "TOOL002",
+        "evidence": [
+          "protos/tests/conformance/manifest.tsv",
+          "protos/tests/conformance/matching/array-effects-retained-on-mismatch.protos",
+          "protos/tests/conformance/matching/array-empty-remainder.protos",
+          "protos/tests/conformance/matching/array-fixed-alias.protos",
+          "protos/tests/conformance/matching/array-nested-dynamic-terminal.protos",
+          "protos/tests/conformance/matching/array-remainder-bindings.protos",
+          "protos/tests/conformance/matching/array-shape-ineligible.protos",
+          "protos/tests/conformance/matching/array-snapshot-child-order.protos"
+        ]
+      },
+      "secondary": [
+        {
+          "owner": "JUNIT",
+          "role": "HOST_RUNTIME",
+          "evidence": [
+            "src/test/java/com/guillermomolina/protos/execution/ProtosArrayMatchExecutionTest.java",
+            "src/test/java/com/guillermomolina/protos/execution/ProtosMatchBytecodeExecutionTest.java"
+          ],
+          "reason": "Retains host-visible remainder representation/frozen-state checks and Bytecode backend parity/continuation invariants rather than primary Array-pattern semantic policy."
+        }
+      ],
+      "migration_ref": "TEST001-D2"
+    },
+    {
       "id": "language.match.or-alternatives",
       "classification": "PROTOS_SEMANTIC",
       "state": "RECONCILED",

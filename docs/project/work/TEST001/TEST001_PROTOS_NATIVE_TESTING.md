@@ -354,6 +354,53 @@ Retained executable evidence and validation dependency closure:
 No full Maven suite or full TOOL002 corpus run is required for this bounded
 ownership-retirement child.
 
+### TEST001-D2 — Array-pattern semantic ownership
+
+Status: CLOSED
+
+D2 reconciles the Array-pattern conformance family without deleting legitimate
+host/runtime representation coverage.
+
+Before D2, `ProtosArrayMatchExecutionTest` was a mixed owner:
+
+- one method directly re-executed seven ordinary `.protos` fixtures whose exact
+  boolean expectations are already present in the TOOL002 main manifest;
+- one method inspected host-visible materialization details of remainder Arrays:
+  represented frozen state, standard Array prototype, fresh container identity
+  and retained element identity.
+
+D2 removes only the duplicate semantic-wrapper method. The Java class remains,
+now explicitly host/runtime-only.
+
+The registered semantic contract is `language.match.array-patterns` with TOOL002
+as primary owner for the seven observable Array-pattern cases.
+
+`ProtosArrayMatchExecutionTest` and `ProtosMatchBytecodeExecutionTest` remain as
+`HOST_RUNTIME` secondary evidence. They cover implementation representation and
+Bytecode backend parity/continuation behavior, not a second primary semantic
+policy.
+
+D2 does not change Array-pattern semantics, grammar, fixtures, manifest contents,
+runtime implementation, TOOL002 behavior or implementation version.
+
+#### TEST001-D2 focal validation profile
+
+1. baseline `ProtosArrayMatchExecutionTest` proves both portions of the mixed
+   owner before editing;
+2. structural guards prove the seven TOOL002 manifest rows remain present exactly
+   once and that the semantic wrapper method is absent after editing;
+3. `scripts/test_ownership_guard.py` validates the reconciled ownership record;
+4. post-edit `ProtosArrayMatchExecutionTest` validates the retained host
+   representation contract;
+5. `ProtosMatchBytecodeExecutionTest` validates the retained Bytecode host/runtime
+   evidence over the same fixture family;
+6. `scripts/source_style_guard.py` validates the candidate delta;
+7. TEST001-D top-level closure retains responsibility for broader integrated
+   validation.
+
+No full Maven suite or full TOOL002 corpus run is required for this bounded
+mixed-owner reduction.
+
 ## Migration order established by A
 
 The dependency/order for remaining slices is:
@@ -414,7 +461,7 @@ Dxxx/LIBxxx/TOOLxxx/PLATxxx approval gate.
 | TEST001-A | CLOSED | Current suite classified at durable ownership-family level; per-test retirement rule fixed. |
 | TEST001-B | CLOSED | CI invokes packaged checkout `bin/protos test --jobs 2` directly; JUnit retains only a pre-corpus bundled-tool bootstrap floor. |
 | TEST001-C | CLOSED | Machine-readable semantic ownership ledger and fail-closed no-duplicate-primary-owner guard are active in publication validation. |
-| TEST001-D | IN_PROGRESS | Core/language semantic migration under the C ownership guard; D1 OR-pattern ownership closed. |
+| TEST001-D | IN_PROGRESS | Core/language semantic migration under the C ownership guard; D1 OR-pattern and D2 Array-pattern ownership closed. |
 | TEST001-E | BLOCKED_BY_D | Concurrency/execution-model semantic migration. |
 | TEST001-F | BLOCKED_BY_E | Standard Library migration. |
 | TEST001-G | BLOCKED_BY_F | Package/modules/I/O integration migration. |
@@ -455,3 +502,14 @@ D1 changes test ownership, one TOOL002 manifest row, the ownership registry and
 the TEST001 migration record. It removes one duplicate Java semantic-policy
 owner. It does not change specification, public behavior, runtime implementation,
 CI configuration or implementation version.
+
+
+## TEST001-D2 publication classification
+
+`VALIDATION_CLASS=TEST_IMPACT`
+`VALIDATION_IMPACT=FOCAL_BOUNDED`
+
+D2 narrows one mixed Java test to host/runtime ownership and registers the
+existing TOOL002 Array-pattern semantic owner. It changes no fixture, manifest
+row, specification, public behavior, runtime implementation, CI configuration or
+implementation version.
