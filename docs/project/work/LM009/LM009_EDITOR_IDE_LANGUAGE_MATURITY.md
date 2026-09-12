@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 READY FOR DECISION AUDIT)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106/D110 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 READY FOR IMPLEMENTATION AUDIT)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1596,3 +1596,35 @@ with LM009-G/#360 before G can close. G4 go-to-definition identity/resolution is
 implemented by this slice and must cross its independent decision audit before code.
 
 Implementation version after publication: `0.2.439-SNAPSHOT`.
+
+## D110 static go-to-definition proof boundary
+
+Status: **RATIFIED — Candidate B′; LM009-G4 READY FOR IMPLEMENTATION AUDIT**
+
+Coordination: GitHub #435 / #360
+
+D110 separates exploratory symbol search from definition identity. A successful
+`textDocument/definition` result must be a complete finite static proof set over
+exact source-backed binding origins under the current canonical source/project
+snapshot. A singleton proof may return one location; several locations are valid
+only when every returned target is semantically possible and the complete finite
+set is proven. Unknown/incomplete/dynamic cases return no definition rather than
+a likely subset.
+
+Generation 1 is deliberately singleton-first and may implement only mechanically
+exact forms. Definition targets are not restricted to D079 workspace/document
+symbols: exact Closure parameters, pattern binders/captures and other real lexical
+binding origins may participate. D106 workspace-symbol matching is never a
+definition fallback. No fuzzy/name/proximity/path heuristic, result truncation,
+filesystem guessing, guest execution, live Truffle Context or runtime-assisted
+dispatch is authorized.
+
+Member/delegation, receiver fallback, `super`, composition and module-member
+navigation remain available only when their effective lookup origin and complete
+source target set are statically proven using the existing canonical authorities.
+Open-document state changes authoritative content only through the exact canonical
+URI overlay and provides no semantic identity shortcut.
+
+This ratification changes no Core semantics and implements no G4 code. G4 may now
+audit the current parser/static-analysis surface and publish only the exact proof
+subset supported without crossing a new substantive decision boundary.
