@@ -1,6 +1,6 @@
 # LIB011 — Command-line parsing Standard Library design
 
-Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A RATIFIED — Candidate E′ selected; LIB011-A1 CLOSED; LIB011-A2 READY**
+Status: **LIB011-0 RATIFIED — Candidate C′ selected; LIB011-A RATIFIED — Candidate E′ selected; LIB011-A1 CLOSED; LIB011-A2 CLOSED; LIB011-A3 READY**
 
 Owning work item: GitHub Issue `#428` — `LIB011 — Command-line argument parsing and help generation`
 
@@ -1054,16 +1054,78 @@ help renderer is included.
 
 #### LIB011-A2 — result model
 
-**READY.**
+**CLOSED — test-only executable shape evidence; implementation version unchanged.**
 
-Publish or internally establish, as required by the future parser surface, the
-recursive lossless result representation: exact frozen arguments snapshot,
-`CommandResult`, option occurrences, positional occurrences, direct zero-based
-input-token indices and `endOfOptionsIndex`. Do not add token parsing merely to
-exercise the representation. If a public result-construction API is unnecessary,
-keep construction helpers private until LIB011-B publishes `parse`.
+A2 closes the already-approved E-prime result/data contract without publishing
+result-construction functions. `std:cli/CommandLine` continues to export exactly
+`option`, `positional`, and `command`; future `parse` remains the sole intended
+public producer of parse-result data. This avoids turning parser-private
+construction mechanics into a compatibility surface before the parser exists.
+
+The future parser output is fixed to these ordinary tagged structural records:
+
+```text
+ParseResult
+  kind: "parseResult"
+  arguments: Array(String)
+  command: CommandResult
+
+CommandResult
+  kind: "commandResult"
+  name: String
+  tokenIndex: null | Integer
+  endOfOptionsIndex: null | Integer
+  options: Array(OptionOccurrence)
+  positionals: Array(PositionalOccurrence)
+  subcommand: null | CommandResult
+
+OptionOccurrence
+  kind: "optionOccurrence"
+  key: String
+  spelling: String
+  tokenIndex: Integer
+  value: null | String
+  valueTokenIndex: null | Integer
+
+PositionalOccurrence
+  kind: "positionalOccurrence"
+  key: String
+  value: String
+  tokenIndex: Integer
+```
+
+`ParseResult.arguments` is a fresh frozen snapshot of the exact explicit argument
+Array supplied to the future parser; it excludes the executable/root-command
+name. Every result record and every retained result Array is frozen. Result nodes
+carry canonical names/logical keys plus source spelling and values, never
+references whose meaning depends on specification-object identity or lifetime.
+
+Every non-null token index is zero-based and directly indexes the retained
+`ParseResult.arguments` Array. Root `CommandResult.tokenIndex` is `null`; a
+selected nested command records the source token that selected it. A non-null
+`endOfOptionsIndex` identifies the exact structural `--` token for that command
+scope. This remains distinct from an option value whose exact String is also
+`"--"`, because such a value retains its own `valueTokenIndex`.
+
+Ordered option and positional occurrence Arrays are scoped to their containing
+`CommandResult`. The optional recursive `subcommand` carries the selected child
+scope. A2 therefore does not flatten repeated keys across command levels and does
+not retain parent backlinks.
+
+`ProtosCommandLineResultModelTest` provides executable shape evidence entirely in
+test-local ordinary Protos data: exact slot sets, fresh argument snapshot,
+node-by-node freezing, recursive command scoping, direct indices and the
+literal-`--` versus structural-delimiter distinction. It also asserts that A2
+adds no `CommandLine` export. No production parser or hidden native helper is
+introduced by this slice.
+
+A2 deliberately does not validate parent-positionals/subcommand allocation,
+recognize tokens, select options, define parse failures, or expose a public Error
+taxonomy. Those remain outside this bounded result-model closure.
 
 #### LIB011-A3 — adversarial model closure
+
+**READY.**
 
 Exercise malformed descriptors and model invariants, including duplicate logical
 keys/spellings, shallow-freeze alias attacks, invalid cardinalities, invalid
