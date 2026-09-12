@@ -1,5 +1,8 @@
-## 0.2.459-SNAPSHOT
+## 0.2.460-SNAPSHOT
 
+- Implement `TOOL002-I8D5B — D114 TestRunOutcome projection`. Add a pure bundled-Protos projection above the closed C3 D108 scheduler envelope. Healthy envelopes become an outer `completed` TestRunOutcome retaining the historical runTuple unchanged. Infrastructure-cutover envelopes become `infrastructure-aborted` with no healthy run and one stable payload preserving the exact D114 categories: ordered executed CaseRuns, ordinary unsupported count, ordered per-attempt infrastructure evidence, exact cutover-not-admitted CaseSpecs and retained unsafe-reservation count. Add accessors and a focal synthetic-envelope proof for exact preservation. Do not modify Main.protos, emit user-facing reporting, choose CLI exit status or alter C3 scheduler semantics; those remain I8D5C. Implementation version becomes `0.2.460-SNAPSHOT`.
+
+## 0.2.459-SNAPSHOT
 - Implement `TOOL002-I8D5A — D113 production host registry bootstrap`. Add a narrow public `ProtosTestResourceExecutionScope` host facade over the private C1/C2 resourceful facilities and install one explicit immutable empty D113 provider registry as the valid/default local Test Tool environment. Extend `ProtosTestToolAsyncExecutionScope` to own and close that resource scope using the existing PLAT023 per-task Submission, making `resourceExecutionAsync` and `resourceExecutionInspectAsync` available to production Test Tool sessions without exposing ProviderAdapter/ProviderLease/credentials/configuration/registry mutation. Unknown logical providers fail closed through existing D107/D108 infrastructure evidence before guest start and remain capacity SAFE when no lease was acquired. Add a focal production-host proof for both routes and the empty-registry failure disposition. Main/Runner routing and D114 public reporting remain unchanged for I8D5B/I8D5C. Implementation version becomes `0.2.459-SNAPSHOT`.
 
 ## 0.2.458-SNAPSHOT

@@ -2306,6 +2306,106 @@ runD108WithResources: (
 }
 
 
+// TOOL002-I8D5B / D114: stable Test Tool outer outcome projection.
+//
+// Healthy runs preserve the historical runTuple unchanged under the "completed"
+// tag. D108 infrastructure cutover projects to a distinct "infrastructure-aborted"
+// tag with the five independently ratified evidence categories. No guest result is
+// synthesized here and no CLI exit/reporting policy is executed here.
+
+testRunInfrastructureAbortPayload: (...items) => {
+    resultTuple(...items)
+}
+
+testRunInfrastructureAbortExecutedCaseRuns: (payload) => {
+    payload[0]
+}
+
+testRunInfrastructureAbortOrdinaryUnsupportedCount: (payload) => {
+    payload[1]
+}
+
+testRunInfrastructureAbortAttempts: (payload) => {
+    payload[2]
+}
+
+testRunInfrastructureAbortCutoverNotAdmittedCases: (payload) => {
+    payload[3]
+}
+
+testRunInfrastructureAbortRetainedUnsafeReservationCount: (payload) => {
+    payload[4]
+}
+
+testRunOutcome: (...items) => {
+    resultTuple(...items)
+}
+
+testRunOutcomeCompleted: (run) => {
+    testRunOutcome(
+        "completed",
+        run,
+        null
+    )
+}
+
+testRunOutcomeInfrastructureAborted: (
+    executedCaseRuns,
+    ordinaryUnsupportedCount,
+    infrastructureAttempts,
+    cutoverNotAdmittedCases,
+    retainedUnsafeReservationCount
+) => {
+    testRunOutcome(
+        "infrastructure-aborted",
+        null,
+        testRunInfrastructureAbortPayload(
+            executedCaseRuns,
+            ordinaryUnsupportedCount,
+            infrastructureAttempts,
+            cutoverNotAdmittedCases,
+            retainedUnsafeReservationCount
+        )
+    )
+}
+
+testRunOutcomeStatus: (outcome) => {
+    outcome[0]
+}
+
+testRunOutcomeRun: (outcome) => {
+    outcome[1]
+}
+
+testRunOutcomeInfrastructureAbort: (outcome) => {
+    outcome[2]
+}
+
+testRunOutcomeFromD108: (d108Run) => {
+    projected: null
+
+    d108RunInfrastructureFailed(d108Run).ifTrue(() => {
+        projected =
+            testRunOutcomeInfrastructureAborted(
+                d108RunCaseResults(d108Run),
+                d108RunSkippedCount(d108Run),
+                d108RunInfrastructureAttempts(d108Run),
+                d108RunCutoverCases(d108Run),
+                d108RunRetainedReservationCount(d108Run)
+            )
+    })
+
+    d108RunInfrastructureFailed(d108Run).ifFalse(() => {
+        projected =
+            testRunOutcomeCompleted(
+                d108RunHealthyRun(d108Run)
+            )
+    })
+
+    projected
+}
+
+
 runBounded: (
     plan,
     filesystem,
