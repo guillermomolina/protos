@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082/D085/D089/D102 RATIFIED; G3P P1/P2/P3A + D102 package-domain implementation CLOSED, P3B/P4 pending; G3 BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G BLOCKED (G1/G2 CLOSED; D082/D085/D089/D102 RATIFIED; G3P P1/P2/P3A/P3B + D102 package-domain implementation CLOSED, P4 pending; G3 BLOCKED_BY_PROJECT_BINDING_IMPLEMENTATION)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1441,3 +1441,32 @@ and runtime resolver rejection of the same parent alias.
 This closes only the implementation prerequisite exposed by D102. **LM009-G3P P3B is
 READY to resume** against the shared authority. P3/#413 still owns the previously
 declared integrated validation debt and P4 remains pending.
+## LM009-G3P P3B exact ProjectBinding acquisition provider
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED**
+Coordination: GitHub #413 (parent #373)
+Authority: D082 Candidate A′ + D085 Candidate F′ + D089 Candidate A″ + D102 Candidate A′
+
+P3B publishes the first editor-neutral consumer of the D089 generation-1
+`protos.project` authority:
+
+- `ProtosProjectBindingProvider` is the replaceable exact-candidate acquisition
+  boundary consumed by later static tooling;
+- `ProtosProjectFileBindingProvider` reads only `<candidate>/protos.project`; it
+  performs no parent/child/sibling project discovery and never promotes an editor
+  workspace folder to project identity by itself;
+- generation-1 text is decoded as canonical UTF-8/LF, parsed with the D089 canonical
+  qstring/digest/order rules and rejected fail-closed when absent, malformed or
+  unsupported;
+- the provider recomputes only `protos-project-metadata-v1` from the exact bytes of
+  root/member `protos.toml` plus root `protos.lock`; it does not parse those files or
+  independently recompute `protos-resolution-input-v1` semantics;
+- projected package roots are bound through the existing exact confinement authority,
+  then the D102-enforced P1 source inventory supplies the current canonical `.protos` module snapshot;
+- ordinary source add/remove/content churn therefore does not stale project authority;
+- no Package Tool/guest/Truffle fallback, public package command, G3 index/query,
+  definition semantics or LM009-H behavior is introduced.
+
+P3 remains **IN_PROGRESS**. P4 still owns multi-root isolation, duplicate-binding
+rejection, integrated freshness invalidation and static no-guest closure evidence before
+#413/#373 can release LM009-G3.
