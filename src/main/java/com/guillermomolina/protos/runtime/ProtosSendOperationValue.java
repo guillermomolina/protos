@@ -167,21 +167,33 @@ public final class ProtosSendOperationValue extends ProtosObjectValue
             return;
         }
         try {
-            task.executeAction(
-                    () -> {
-                        ProtosActivation turnActivation = target.newMessageActivationForRuntime();
-                        turnActivation.attachTask(task);
-                        ProtosObjectValue behavior =
-                                target.currentBehavior()
-                                        .orElseThrow(
-                                                () ->
-                                                        new IllegalStateException(
-                                                                "READY Actor lost current behavior"));
-                        ProtosInvocation.invokeMessage(
-                                behavior, selector, snapshot, turnActivation);
-                        // send() ignores the handler's ordinary result.
-                        return ProtosNullValue.INSTANCE;
-                    });
+            ProtosActivation turnActivation = target.newMessageActivationForRuntime();
+            turnActivation.attachTask(task);
+            ProtosObjectValue behavior =
+                    target.currentBehavior()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "READY Actor lost current behavior"));
+            boolean cPrime =
+                    ProtosInvocation.executeMessageInTaskForRuntime(
+                            behavior,
+                            selector,
+                            snapshot,
+                            turnActivation,
+                            task,
+                            () ->
+                                    task.installTerminalLifecycleForRuntime(
+                                            (terminalTask, terminalState, outcome) ->
+                                                    finalizeCPrimeAcceptedTurn(
+                                                            target,
+                                                            terminalTask,
+                                                            delivery,
+                                                            terminalState,
+                                                            outcome)));
+            if (cPrime) {
+                return;
+            }
         } catch (RuntimeException failure) {
             delivery.markFailedAfterAcceptanceForRuntime();
             throw failure;
@@ -211,6 +223,31 @@ public final class ProtosSendOperationValue extends ProtosObjectValue
             case RUNNABLE, RUNNING ->
                     throw new IllegalStateException(
                             "message turn returned in non-yielded state " + task.state());
+        }
+    }
+
+    private void finalizeCPrimeAcceptedTurn(
+            ProtosActor target,
+            ProtosTask task,
+            ProtosActorDeliveryAttempt delivery,
+            ProtosTask.State terminalState,
+            Object outcome) {
+        switch (terminalState) {
+            case COMPLETED -> delivery.markCompletedForRuntime();
+            case FAILED -> {
+                delivery.markFailedAfterAcceptanceForRuntime();
+                target.failForRuntime(
+                        Objects.requireNonNull(
+                                outcome,
+                                "failed Actor send C-prime turn lost failure value"));
+            }
+            case CANCELLED -> {
+                delivery.markFailedAfterAcceptanceForRuntime();
+                target.requestTerminationForRuntime();
+            }
+            default ->
+                    throw new IllegalStateException(
+                            "PLAT027 finalized non-terminal Actor send state " + terminalState);
         }
     }
 

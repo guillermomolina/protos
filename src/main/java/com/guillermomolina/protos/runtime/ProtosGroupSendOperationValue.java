@@ -368,18 +368,32 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
             return;
         }
         try {
-            task.executeAction(
-                    () -> {
-                        ProtosActivation activation = target.newMessageActivationForRuntime();
-                        activation.attachTask(task);
-                        ProtosObjectValue behavior =
-                                target.currentBehavior()
-                                        .orElseThrow(
-                                                () -> new IllegalStateException(
-                                                        "READY Group member lost current behavior"));
-                        ProtosInvocation.invokeMessage(behavior, selector, snapshot, activation);
-                        return ProtosNullValue.INSTANCE;
-                    });
+            ProtosActivation activation = target.newMessageActivationForRuntime();
+            activation.attachTask(task);
+            ProtosObjectValue behavior =
+                    target.currentBehavior()
+                            .orElseThrow(
+                                    () -> new IllegalStateException(
+                                            "READY Group member lost current behavior"));
+            boolean cPrime =
+                    ProtosInvocation.executeMessageInTaskForRuntime(
+                            behavior,
+                            selector,
+                            snapshot,
+                            activation,
+                            task,
+                            () ->
+                                    task.installTerminalLifecycleForRuntime(
+                                            (terminalTask, terminalState, outcome) ->
+                                                    finalizeCPrimeAcceptedTurn(
+                                                            target,
+                                                            terminalTask,
+                                                            delivery,
+                                                            terminalState,
+                                                            outcome)));
+            if (cPrime) {
+                return;
+            }
         } catch (RuntimeException failure) {
             delivery.markFailedAfterAcceptanceForRuntime();
             throw failure;
@@ -406,6 +420,37 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
             case RUNNABLE, RUNNING ->
                     throw new IllegalStateException(
                             "Group send turn returned in non-yielded state " + task.state());
+        }
+    }
+
+    private void finalizeCPrimeAcceptedTurn(
+            ProtosActor target,
+            ProtosTask task,
+            ProtosActorDeliveryAttempt delivery,
+            ProtosTask.State terminalState,
+            Object outcome) {
+        switch (terminalState) {
+            case COMPLETED -> {
+                delivery.markCompletedForRuntime();
+                synchronized (this) {
+                    state = State.COMPLETED;
+                }
+                group.operationFinishedForRuntime(this);
+            }
+            case FAILED -> {
+                delivery.markFailedAfterAcceptanceForRuntime();
+                target.failForRuntime(
+                        Objects.requireNonNull(
+                                outcome,
+                                "failed Group send C-prime turn lost failure value"));
+            }
+            case CANCELLED -> {
+                delivery.markFailedAfterAcceptanceForRuntime();
+                target.requestTerminationForRuntime();
+            }
+            default ->
+                    throw new IllegalStateException(
+                            "PLAT027 finalized non-terminal Group send state " + terminalState);
         }
     }
 

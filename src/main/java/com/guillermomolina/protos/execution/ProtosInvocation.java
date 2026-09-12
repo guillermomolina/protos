@@ -112,11 +112,36 @@ public final class ProtosInvocation {
             List<?> supplied,
             ProtosActivation caller,
             ProtosTask task) {
+        executeMessageInTaskForRuntime(
+                receiver,
+                selector,
+                supplied,
+                caller,
+                task,
+                () -> {});
+    }
+
+    /**
+     * Executes one ordinary message in the owning Task and reports whether the selected guest
+     * handler entered through the Task-owned C-prime backend.
+     *
+     * <p>The callback runs only after ordinary lookup/selection and successful C-prime
+     * preparation, immediately before that C-prime computation starts. It is runtime hosting
+     * machinery for PLAT027 installation, not a guest callback or another continuation layer.
+     */
+    public static boolean executeMessageInTaskForRuntime(
+            Object receiver,
+            String selector,
+            List<?> supplied,
+            ProtosActivation caller,
+            ProtosTask task,
+            Runnable beforeBytecodeExecution) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(selector, "selector");
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(caller, "caller");
         Objects.requireNonNull(task, "task");
+        Objects.requireNonNull(beforeBytecodeExecution, "beforeBytecodeExecution");
 
         ProtosSlotLookupResult selected;
         try {
@@ -131,12 +156,18 @@ public final class ProtosInvocation {
                                                     ProtosCoreErrors.newSlotNotFound(caller)));
         } catch (UnsupportedOperationException unsupportedRepresentation) {
             task.fail(ProtosCoreErrors.newError(caller));
-            return;
+            return false;
         } catch (ProtosSignalException signalled) {
             task.fail(signalled.error());
-            return;
+            return false;
         }
-        executeSelectedInTaskForRuntime(receiver, selected, supplied, caller, task);
+        return executeSelectedInTaskForRuntime(
+                receiver,
+                selected,
+                supplied,
+                caller,
+                task,
+                beforeBytecodeExecution);
     }
 
     private static void executeSelectedInTaskForRuntime(
@@ -145,9 +176,26 @@ public final class ProtosInvocation {
             List<?> supplied,
             ProtosActivation caller,
             ProtosTask task) {
+        executeSelectedInTaskForRuntime(
+                receiver,
+                selected,
+                supplied,
+                caller,
+                task,
+                () -> {});
+    }
+
+    private static boolean executeSelectedInTaskForRuntime(
+            Object receiver,
+            ProtosSlotLookupResult selected,
+            List<?> supplied,
+            ProtosActivation caller,
+            ProtosTask task,
+            Runnable beforeBytecodeExecution) {
+        Objects.requireNonNull(beforeBytecodeExecution, "beforeBytecodeExecution");
         if (!(selected.value() instanceof ProtosClosureValue closure)) {
             task.fail(ProtosCoreErrors.newError(caller));
-            return;
+            return false;
         }
 
         ProtosBytecodeRootNode.PreparedClosureCall prepared =
@@ -158,10 +206,15 @@ public final class ProtosInvocation {
                         caller,
                         task);
         if (prepared != null) {
+            beforeBytecodeExecution.run();
             ProtosBytecodeTaskExecution.executePreparedClosure(task, prepared);
-            return;
+            return true;
         }
 
+        /*
+         * B6A6A3 deliberately retains the historical AST/native Task branch until B6B. The
+         * PLAT027 hook above is never installed for this compatibility path.
+         */
         task.executeAction(
                 () -> {
                     if (receiver instanceof ProtosClosureValue targetClosure
@@ -182,6 +235,7 @@ public final class ProtosInvocation {
                             caller,
                             task);
                 });
+        return false;
     }
 
     public static Object invokeSuperMessage(

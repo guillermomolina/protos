@@ -484,15 +484,31 @@ public final class ProtosGroupRequest implements ProtosActorGroupRuntime.Routing
         }
         ProtosActivation turnActivation = target.newMessageActivationForRuntime();
         turnActivation.attachTask(task);
-        task.executeAction(
-                () -> {
-                    ProtosObjectValue behavior =
-                            target.currentBehavior()
-                                    .orElseThrow(
-                                            () -> new IllegalStateException(
-                                                    "READY Group member lost current behavior"));
-                    return ProtosInvocation.invokeMessage(behavior, selector, snapshot, turnActivation);
-                });
+        ProtosObjectValue behavior =
+                target.currentBehavior()
+                        .orElseThrow(
+                                () -> new IllegalStateException(
+                                        "READY Group member lost current behavior"));
+        boolean cPrime =
+                ProtosInvocation.executeMessageInTaskForRuntime(
+                        behavior,
+                        selector,
+                        snapshot,
+                        turnActivation,
+                        task,
+                        () ->
+                                task.installTerminalLifecycleForRuntime(
+                                        (terminalTask, terminalState, outcome) ->
+                                                finalizeCPrimeAcceptedTurn(
+                                                        target,
+                                                        terminalTask,
+                                                        turnActivation,
+                                                        delivery,
+                                                        terminalState,
+                                                        outcome)));
+        if (cPrime) {
+            return;
+        }
 
         switch (task.state()) {
             case COMPLETED -> completeReply(task, turnActivation, delivery);
@@ -509,6 +525,32 @@ public final class ProtosGroupRequest implements ProtosActorGroupRuntime.Routing
             case RUNNABLE, RUNNING ->
                     throw new IllegalStateException(
                             "Group request turn returned in non-yielded state " + task.state());
+        }
+    }
+
+    private void finalizeCPrimeAcceptedTurn(
+            ProtosActor target,
+            ProtosTask task,
+            ProtosActivation turnActivation,
+            ProtosActorDeliveryAttempt delivery,
+            ProtosTask.State terminalState,
+            Object outcome) {
+        switch (terminalState) {
+            case COMPLETED -> completeReply(task, turnActivation, delivery);
+            case FAILED -> {
+                delivery.markFailedAfterAcceptanceForRuntime();
+                target.failForRuntime(
+                        Objects.requireNonNull(
+                                outcome,
+                                "failed Group request C-prime turn lost failure value"));
+            }
+            case CANCELLED -> {
+                delivery.markFailedAfterAcceptanceForRuntime();
+                target.requestTerminationForRuntime();
+            }
+            default ->
+                    throw new IllegalStateException(
+                            "PLAT027 finalized non-terminal Group request state " + terminalState);
         }
     }
 
