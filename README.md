@@ -2,6 +2,12 @@
   <img src="docs/assets/branding/protos-logo.png" alt="Protos" width="360">
 </p>
 
+<p align="center">
+  <a href="https://github.com/guillermomolina/protos/actions/workflows/tests.yml">
+    <img src="https://github.com/guillermomolina/protos/actions/workflows/tests.yml/badge.svg?branch=main" alt="CI">
+  </a>
+</p>
+
 # Protos
 
 > **Core language:** v0.1 draft specification\
