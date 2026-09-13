@@ -37,7 +37,7 @@ def main():
         "version": "0.1.0",
         "publisher": "guillermomolina",
         "license": "APL-1.0",
-        "main": "./extension.js",
+        "main": "./dist/extension.js",
         "icon": "icon.png",
     }
     for key, expected in expected_scalar.items():
@@ -54,14 +54,29 @@ def main():
     for forbidden in (
         "browser",
         "activationEvents",
-        "scripts",
-        "devDependencies",
     ):
         if forbidden in package:
             fail("LM009 must not add %s" % forbidden)
 
     if package.get("dependencies") != {"vscode-languageclient": "10.1.1"}:
         fail("LM009-F4 requires exactly vscode-languageclient 10.1.1")
+
+    expected_scripts = {
+        "build": (
+            "esbuild extension.js --bundle --platform=node --format=cjs "
+            "--target=node22 --external:vscode --outfile=dist/extension.js"
+        ),
+        "vscode:prepublish": "npm run build",
+    }
+    if package.get("scripts") != expected_scripts:
+        fail("D127/I1-A build scripts changed")
+
+    expected_dev_dependencies = {
+        "@vscode/vsce": "3.9.2",
+        "esbuild": "0.28.2",
+    }
+    if package.get("devDependencies") != expected_dev_dependencies:
+        fail("D127/I1-A pinned build tooling changed")
 
     expected_capabilities = {
         "untrustedWorkspaces": {

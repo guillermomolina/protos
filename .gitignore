@@ -30,3 +30,4 @@ Thumbs.db
 # Node / editor tooling
 **/node_modules/
 editors/vscode/*.vsix
+editors/vscode/dist/

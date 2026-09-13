@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; I1 READY)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; I1-A CLOSED; I1-B READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -2025,3 +2025,38 @@ version coordination; those remain LM009-I4 concerns.
 No Protos specification, runtime implementation, native boundary, Maven
 implementation version or VS Code extension version changes in the D127
 ratification slice.
+
+## LM009-I1-A — deterministic client bundle foundation
+
+Status after publication: **CLOSED; I1-B READY**
+
+I1 is intentionally subdivided into bounded implementation slices after D127
+ratification:
+
+```text
+I1-A  deterministic dependency + client bundle foundation
+I1-B  package-root license/notices + explicit VSIX content boundary
+I1-C  clean-checkout reproducibility/content closure
+```
+
+I1-A implements only the dependency/build half of D127 Candidate B′:
+
+- committed npm lockfile;
+- clean-install authority becomes `npm ci`;
+- exact generation-1 build tools: esbuild 0.28.2 and @vscode/vsce 3.9.2;
+- production extension entry becomes generated `dist/extension.js`;
+- esbuild bundles `extension.js`, the local debug adapter and the
+  `vscode-languageclient` JavaScript closure;
+- the host-provided `vscode` module remains external;
+- generated `dist/` remains ignored repository state;
+- existing source-level Node tests remain authoritative for Run/Debug/LSP
+  orchestration; and
+- a new fail-closed packaging validator checks lock/build invariants and emitted
+  bundle topology.
+
+I1-A does not yet claim a releasable VSIX. I1-B still owns package-root APL and
+third-party notices plus the explicit package content boundary. I1-C owns the
+clean-checkout reproducibility/content closure.
+
+No Protos specification, Java/runtime/native boundary, Maven implementation
+version or VS Code extension version changes in I1-A.

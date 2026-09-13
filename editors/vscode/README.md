@@ -41,19 +41,31 @@ dependency need introduced after VS Code 1.104.
 From `editors/vscode/`:
 
 ```sh
-npm install --no-package-lock
+npm ci
+npm run build
 python3 test/validate_grammar.py
 python3 test/validate_extension.py
+python3 test/validate_packaging.py
 node test/run_current_file.test.js
 node test/debug_integration.test.js
 node test/language_server_integration.test.js
 ```
 
-The static language-service client uses Microsoft's `vscode-languageclient`
-package. Node/npm remains an editor-development/packaging concern only; ordinary
-Protos Maven/runtime development and execution do not depend on Node/npm.
-`--no-package-lock` keeps this pre-LM009-I development workflow from creating a
-new distribution lockfile policy before editor packaging is closed.
+D127 Candidate B′ makes the editor dependency build reproducible: the npm
+lockfile is committed, `npm ci` is the clean-install path, and the production
+entry point is `dist/extension.js`. The generation-1 bundle is built with pinned
+esbuild and keeps VS Code's host-provided `vscode` module external while bundling
+the JavaScript `vscode-languageclient` closure and the local debug adapter.
+
+`@vscode/vsce` is also pinned as build/packaging tooling; I1-B owns the bounded
+VSIX content/license/notices layer before the package command becomes the release
+artifact path. Generated `dist/`, `node_modules/`, and `*.vsix` files remain
+repository artifacts only and are not committed.
+
+Node/npm remains an editor-development/packaging concern only; ordinary Protos
+Maven/runtime development and execution do not depend on Node/npm. The real
+Protos runtime/language server remains external through
+`protos.runtime.executable`.
 
 ## S1 live VS Code check
 
@@ -62,6 +74,8 @@ publishing anything to Marketplace:
 
 ```sh
 cd editors/vscode
+npm ci
+npm run build
 code --new-window --extensionDevelopmentPath="$PWD"
 ```
 
