@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.execution.ProtosInvocation;
+import com.guillermomolina.protos.execution.ProtosIoReleaseCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosTextReaderCPrimeExecution;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
@@ -44,6 +45,7 @@ public final class ProtosTextReader {
     private ProtosObjectValue deferredError;
     private ProtosObjectValue failedError;
     private ProtosActivation closeActivation;
+    private ProtosIoReleaseCPrimeExecution.Plan releasePlan;
 
     public ProtosTextReader(
             ProtosObjectValue receiver,
@@ -126,11 +128,32 @@ public final class ProtosTextReader {
     }
 
     public ProtosFutureValue close(ProtosActivation activation) {
+        return close(
+                activation,
+                ProtosIoReleaseCPrimeExecution.planForEnteredContextIfAvailable());
+    }
+
+    public ProtosFutureValue closeForCPrimeRuntime(
+            ProtosActivation activation,
+            ProtosIoReleaseCPrimeExecution.Plan plan) {
+        return close(
+                activation,
+                Objects.requireNonNull(plan, "plan"));
+    }
+
+    private ProtosFutureValue close(
+            ProtosActivation activation,
+            ProtosIoReleaseCPrimeExecution.Plan plan) {
         Objects.requireNonNull(activation, "activation");
         synchronized (this) {
-            if (closeActivation == null) closeActivation = activation;
+            if (closeActivation == null) {
+                closeActivation = activation;
+                releasePlan = plan;
+            }
         }
-        return lifecycle.close(activation);
+        return owning && plan != null
+                ? lifecycle.closeWithGuestReleaseForRuntime(activation)
+                : lifecycle.close(activation);
     }
 
     public ProtosEncodingValue encodingForRuntime() { return encoding; }
@@ -972,12 +995,51 @@ public final class ProtosTextReader {
             completion.succeeded();
             return;
         }
+
         ProtosActivation activation;
-        synchronized (this) { activation = closeActivation; }
+        ProtosIoReleaseCPrimeExecution.Plan plan;
+        synchronized (this) {
+            activation = closeActivation;
+            plan = releasePlan;
+        }
         if (activation == null) {
-            throw new IllegalStateException("owning TextReader release started without a close activation");
+            throw new IllegalStateException(
+                    "owning TextReader release started without a close activation");
         }
 
+        if (plan == null) {
+            releaseLegacy(completion, activation);
+            return;
+        }
+
+        ProtosIoReleaseExecution release =
+                lifecycle.beginReleaseExecutionForRuntime(
+                        activation,
+                        completion);
+        ProtosIoReleaseCPrimeExecution.Sequence sequence =
+                ProtosIoReleaseCPrimeExecution.sequence(
+                        release,
+                        null,
+                        List.of(
+                                ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                                        source,
+                                        "close",
+                                        List.of(),
+                                        () -> {},
+                                        ignored -> {})));
+        try {
+            ProtosIoReleaseCPrimeExecution.schedule(
+                    plan,
+                    release,
+                    sequence);
+        } catch (RuntimeException failure) {
+            release.fail(ioError(activation));
+        }
+    }
+
+    private void releaseLegacy(
+            ProtosIoLifecycle.ReleaseCompletion completion,
+            ProtosActivation activation) {
         final Object result;
         try {
             result = ProtosInvocation.invokeMessage(source, "close", List.of(), activation);

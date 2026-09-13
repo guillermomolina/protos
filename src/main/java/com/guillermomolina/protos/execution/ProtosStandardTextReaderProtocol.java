@@ -170,7 +170,9 @@ public final class ProtosStandardTextReaderProtocol {
             }
             case CLOSE ->
                     supplied.isEmpty()
-                            ? reader.close(activation)
+                            ? reader.closeForCPrimeRuntime(
+                                    activation,
+                                    ProtosIoReleaseCPrimeExecution.planForEnteredContext())
                             : invalidFuture(activation);
         };
     }
