@@ -124,7 +124,12 @@ final class ProtosBytecodeClosureExecutionPlan {
                 Objects.requireNonNull(
                         activationRoot,
                         "activationRoot");
-        this.activationTarget = activationRoot.getCallTarget();
+        this.activationTarget =
+                ProtosSemanticBytecodeRootNode.wrap(
+                        language,
+                        source,
+                        definition.body().span(),
+                        activationRoot.getCallTarget());
     }
 
     CanonicalClosure definition() {

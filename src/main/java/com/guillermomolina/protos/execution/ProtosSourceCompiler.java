@@ -83,9 +83,14 @@ public final class ProtosSourceCompiler {
                 new ProtosParser(source.getCharacters().toString()).parseProgram();
         CanonicalSequence canonical =
                 (CanonicalSequence) canonicalizer.canonicalize(surface);
-        return new CanonicalToBytecodeLowerer(language, source)
-                .lowerRoot(canonical)
-                .getCallTarget();
+        ProtosBytecodeRootNode helper =
+                new CanonicalToBytecodeLowerer(language, source)
+                        .lowerRoot(canonical);
+        return ProtosSemanticBytecodeRootNode.wrap(
+                language,
+                source,
+                canonical.span(),
+                helper.getCallTarget());
     }
 
     private CallTarget compileCharacters(

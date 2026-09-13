@@ -23,7 +23,11 @@ import com.oracle.truffle.api.instrumentation.ProvidedTags;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 
 /** Truffle language identity and per-polyglot-context entry boundary for Protos. */
-@ProvidedTags({StandardTags.StatementTag.class, StandardTags.CallTag.class})
+@ProvidedTags({
+    StandardTags.StatementTag.class,
+    StandardTags.CallTag.class,
+    StandardTags.RootTag.class
+})
 @TruffleLanguage.Registration(
         id = ProtosLanguage.ID,
         name = "Protos",
