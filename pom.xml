@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.2.486-SNAPSHOT</version>
+    <version>0.2.487-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -52,6 +52,14 @@
             <groupId>org.graalvm.truffle</groupId>
             <artifactId>truffle-api</artifactId>
             <version>${graalvm.version}</version>
+        </dependency>
+        <!-- PERF006-C1 / PLAT033: optimizer runtime is present for Maven/Surefire
+             but remains external to the shaded Protos application JAR. -->
+        <dependency>
+            <groupId>org.graalvm.truffle</groupId>
+            <artifactId>truffle-runtime</artifactId>
+            <version>${graalvm.version}</version>
+            <scope>runtime</scope>
         </dependency>
         <!-- LM009-D: real GraalVM DAP instrument, activated only by a debug RuntimeHost. -->
         <dependency>
@@ -132,6 +140,29 @@
             <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version><configuration><archive><manifest><mainClass>com.guillermomolina.protos.cli.ProtosCli</mainClass><addDefaultImplementationEntries>true</addDefaultImplementationEntries></manifest></archive></configuration></plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <version>3.8.1</version>
+                <executions>
+                    <execution>
+                        <id>materialize-checkout-optimizing-runtime</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <includeScope>runtime</includeScope>
+                            <includeGroupIds>org.graalvm.truffle</includeGroupIds>
+                            <includeArtifactIds>truffle-runtime,truffle-compiler</includeArtifactIds>
+                            <outputDirectory>${project.build.directory}/runtime</outputDirectory>
+                            <stripVersion>true</stripVersion>
+                            <overWriteReleases>true</overWriteReleases>
+                            <overWriteSnapshots>true</overWriteSnapshots>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-shade-plugin</artifactId>
                 <version>3.6.0</version>
                 <executions>
@@ -140,6 +171,12 @@
                         <goals><goal>shade</goal></goals>
                         <configuration>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
+                            <artifactSet>
+                                <excludes>
+                                    <exclude>org.graalvm.truffle:truffle-runtime</exclude>
+                                    <exclude>org.graalvm.truffle:truffle-compiler</exclude>
+                                </excludes>
+                            </artifactSet>
                             <transformers>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">

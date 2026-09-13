@@ -74,4 +74,16 @@ if [ "$MODE" = distribution ]; then
         com.guillermomolina.protos.cli.ProtosCli "$@"
 fi
 
-exec "$JAVA_BIN" --enable-native-access=ALL-UNNAMED -jar "$JAR" "$@"
+RUNTIME_DIR=$ROOT/target/runtime
+[ -f "$RUNTIME_DIR/truffle-runtime.jar" ] || {
+    echo "protos: checkout optimizing runtime is missing; run 'mvn package' in $ROOT" >&2
+    exit 1
+}
+[ -f "$RUNTIME_DIR/truffle-compiler.jar" ] || {
+    echo "protos: checkout Truffle compiler is missing; run 'mvn package' in $ROOT" >&2
+    exit 1
+}
+
+exec "$JAVA_BIN" --enable-native-access=ALL-UNNAMED \
+    -cp "$JAR:$RUNTIME_DIR/*" \
+    com.guillermomolina.protos.cli.ProtosCli "$@"
