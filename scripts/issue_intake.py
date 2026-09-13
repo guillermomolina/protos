@@ -150,6 +150,24 @@ class GitHubApi(object):
             page += 1
         return result
 
+    def list_all_issues(self):
+        result = []
+        page = 1
+        while True:
+            data, _ = _json_request(
+                self._url("/issues?state=all&per_page=100&page=%d" % page),
+                self.token,
+            )
+            if not data:
+                break
+            for issue in data:
+                if not issue.get("pull_request"):
+                    result.append(issue)
+            if len(data) < 100:
+                break
+            page += 1
+        return result
+
     def add_labels(self, number, names):
         if not names:
             return
@@ -310,6 +328,73 @@ def is_authorized_formal(issue):
     )
 
 
+def formal_identifier_collisions(issues):
+    owners = {}
+    for issue in issues:
+        info = parse_title_identifier(issue.get("title") or "")
+        if info is None or not is_authorized_formal(issue):
+            continue
+        owners.setdefault(info["identifier"], []).append(int(issue["number"]))
+
+    collisions = {}
+    for identifier, numbers in owners.items():
+        unique = sorted(set(numbers))
+        if len(unique) > 1:
+            collisions[identifier] = unique
+    return collisions
+
+
+def assert_no_identifier_collisions(issues):
+    collisions = formal_identifier_collisions(issues)
+    if not collisions:
+        return
+
+    details = []
+    for identifier in sorted(collisions):
+        numbers = collisions[identifier]
+        details.append(
+            "%s owner=#%d collisions=%s"
+            % (
+                identifier,
+                numbers[0],
+                ",".join("#%d" % number for number in numbers[1:]),
+            )
+        )
+    raise IntakeError(
+        "formal identifier collision(s): %s; lower GitHub Issue number keeps "
+        "the identifier unless durable repository authority says otherwise; "
+        "later Issue(s) must be reallocated before publication"
+        % "; ".join(details)
+    )
+
+
+def assert_issue_identifier_unique(issue, issues):
+    info = parse_title_identifier(issue.get("title") or "")
+    if info is None or not is_authorized_formal(issue):
+        return
+    identifier = info["identifier"]
+    matching = []
+    for candidate in issues:
+        candidate_info = parse_title_identifier(candidate.get("title") or "")
+        if (
+            candidate_info is not None
+            and candidate_info["identifier"] == identifier
+            and is_authorized_formal(candidate)
+        ):
+            matching.append(int(candidate["number"]))
+    unique = sorted(set(matching))
+    if len(unique) > 1:
+        raise IntakeError(
+            "formal identifier collision: %s owner=#%d collisions=%s; later "
+            "Issue(s) must be reallocated before publication"
+            % (
+                identifier,
+                unique[0],
+                ",".join("#%d" % number for number in unique[1:]),
+            )
+        )
+
+
 def reconcile_family(api, issue, expected_family):
     number = int(issue["number"])
     expected = FAMILY_LABEL_PREFIX + expected_family
@@ -461,7 +546,9 @@ def reconcile_issue(api, issue):
 
 
 def run_one(api, number):
+    all_issues = api.list_all_issues()
     issue = api.fetch_issue(number)
+    assert_issue_identifier_unique(issue, all_issues)
     if issue.get("state") != "open":
         print("ISSUE_INTAKE_SKIPPED_CLOSED: #%d" % int(number))
         return 0
@@ -475,7 +562,9 @@ def run_one(api, number):
 
 
 def run_all(api):
-    issues = api.list_open_issues()
+    all_issues = api.list_all_issues()
+    assert_no_identifier_collisions(all_issues)
+    issues = [issue for issue in all_issues if issue.get("state") == "open"]
     counts = {
         "open": len(issues),
         "formal": 0,
@@ -576,6 +665,7 @@ def _mock_issue(
     labels=None,
     association="OWNER",
     issue_id=None,
+    state="open",
 ):
     return {
         "number": int(number),
@@ -584,7 +674,7 @@ def _mock_issue(
         "body": body,
         "labels": [{"name": name} for name in (labels or [])],
         "author_association": association,
-        "state": "open",
+        "state": state,
     }
 
 
@@ -750,6 +840,44 @@ x
 """
     assert parse_work_form_identifier(form_body)["identifier"] == "CLI008"
 
+    assert formal_identifier_collisions([
+        _mock_issue(500, "AUD005 — First audit", labels=["family:AUD"]),
+        _mock_issue(501, "AUD005-A — Child audit", labels=["family:AUD"]),
+    ]) == {}
+
+    duplicate = [
+        _mock_issue(500, "AUD005 — First audit", labels=["family:AUD"]),
+        _mock_issue(501, "AUD005 — Racing audit", labels=["family:AUD"]),
+    ]
+    try:
+        assert_no_identifier_collisions(duplicate)
+    except IntakeError as exc:
+        assert "AUD005" in str(exc)
+        assert "owner=#500" in str(exc)
+        assert "#501" in str(exc)
+    else:
+        raise AssertionError("duplicate current formal identifier did not fail")
+
+    try:
+        assert_issue_identifier_unique(duplicate[1], duplicate)
+    except IntakeError as exc:
+        assert "AUD005" in str(exc)
+        assert "owner=#500" in str(exc)
+    else:
+        raise AssertionError("single-Issue collision preflight did not fail")
+
+    closed_owner = [
+        _mock_issue(600, "D123 — Historical decision", labels=["family:D"], state="closed"),
+        _mock_issue(601, "D123 — Reused decision", labels=["family:D"]),
+    ]
+    try:
+        assert_no_identifier_collisions(closed_owner)
+    except IntakeError as exc:
+        assert "D123" in str(exc)
+        assert "owner=#600" in str(exc)
+    else:
+        raise AssertionError("closed identifier reuse did not fail")
+
     print("ISSUE_INTAKE_SELF_TEST: PASS")
     print("FORMAL_FAMILY_DERIVATION: PASS")
     print("FORMAL_PARENT_RECONCILIATION: PASS")
@@ -758,6 +886,8 @@ x
     print("UNTRUSTED_FORMAL_CANDIDATE_NO_PROMOTION: PASS")
     print("COMMUNITY_NO_FAMILY_PROMOTION: PASS")
     print("FORMAL_ORPHAN_FAIL_CLOSED: PASS")
+    print("FORMAL_IDENTIFIER_UNIQUENESS_FAIL_CLOSED: PASS")
+    print("CLOSED_IDENTIFIER_REUSE_FAIL_CLOSED: PASS")
 
 
 def main(argv=None):

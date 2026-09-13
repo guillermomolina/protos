@@ -33,6 +33,7 @@ STATUS_TO_PROJECT = {
     "status:review": "Review",
 }
 STATUS_LABELS = frozenset(STATUS_TO_PROJECT)
+STATUS_LABEL_PREFIX = "status:"
 
 PRIORITY_TO_PROJECT = {
     "priority:p0": "P0",
@@ -109,7 +110,23 @@ def _label_names(issue):
 
 
 def choose_open_status(issue, event_action=None, event_label=None):
-    labels = [name for name in _label_names(issue) if name in STATUS_LABELS]
+    status_labels = [
+        name for name in _label_names(issue)
+        if name.startswith(STATUS_LABEL_PREFIX)
+    ]
+    unknown = sorted(set(
+        name for name in status_labels if name not in STATUS_LABELS
+    ))
+    if unknown:
+        raise SyncError(
+            "Issue #%s has unsupported status label(s): %s; allowed: %s"
+            % (
+                issue.get("number"),
+                ", ".join(unknown),
+                ", ".join(sorted(STATUS_LABELS)),
+            )
+        )
+    labels = [name for name in status_labels if name in STATUS_LABELS]
     if event_action == "labeled" and event_label in STATUS_LABELS:
         return event_label, [name for name in labels if name != event_label], False
     if len(labels) == 1:
@@ -668,12 +685,22 @@ def self_test():
     else:
         raise AssertionError("multiple priority labels must fail closed")
 
+    try:
+        choose_open_status(
+            _fake_issue(9, labels=["status:needs-user-decision"])
+        )
+    except SyncError as exc:
+        assert "unsupported status label" in str(exc)
+    else:
+        raise AssertionError("unknown status:* label must fail closed")
+
     assert STATUS_TO_PROJECT["status:paused"] == "Paused"
     assert len(STATUS_TO_PROJECT) == 7
     assert PRIORITY_TO_PROJECT["priority:p0"] == "P0"
     assert PRIORITY_TO_PROJECT["priority:p3"] == "P3"
     assert len(PRIORITY_TO_PROJECT) == 4
     print("PROJECT_STATUS_PRIORITY_SYNC_SELF_TEST: PASS")
+    print("UNKNOWN_STATUS_LABEL_FAIL_CLOSED: PASS")
 
 
 def parse_args(argv=None):

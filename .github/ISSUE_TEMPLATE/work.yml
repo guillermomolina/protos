@@ -14,6 +14,9 @@ body:
         Formal identifiers are maintainer-allocated under the collision-safe allocation
         rule in `AGENTS.md`. Creating an Issue reserves a candidate; uniqueness must be
         rechecked before any durable publication under a newly allocated identifier.
+        Issue intake also scans open and closed formal Issues and fails closed on an
+        exact duplicate; this machine guard supplements, rather than replaces, the
+        durable-repository allocation check.
 
   - type: input
     id: work-item

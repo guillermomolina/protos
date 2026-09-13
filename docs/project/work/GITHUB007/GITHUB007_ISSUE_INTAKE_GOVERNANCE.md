@@ -38,6 +38,14 @@ unset. The Issue body records the formal work item and one parent Issue number o
 The intake helper derives `family:<FAMILY>` from the formal identifier prefix.
 It never asks users to duplicate that classification in another field.
 
+Before reconciling a trusted formal Issue, the helper also scans authorized
+formal Issue titles across both open and closed Issues. Exact identifier reuse
+fails closed. The lower GitHub Issue number is the stable GitHub owner of an
+accidental race unless a durable repository allocation or explicit owner
+reconciliation says otherwise; a later colliding Issue must be reallocated
+before durable publication. Formal child identifiers are compared exactly, so
+`TEST001` and `TEST001-A` do not collide.
+
 A formal child must have a native parent. When the native relation is absent,
 one unambiguous textual/form parent declaration may be consumed only as bootstrap
 input to create the GITHUB006-native relation. A conflicting existing native
@@ -87,8 +95,12 @@ or Priority from prose.
 - one-Issue reconciliation for creation/edit/reopen and formal-family label
   changes;
 - full open-Issue reconciliation through manual `workflow_dispatch`; and
-- a network-free self-test for identifier, trust, family, parent and conflict
-  rules.
+- a network-free self-test for identifier, trust, family, parent, collision and
+  conflict rules.
+
+The identifier-collision preflight includes closed Issues because allocated
+identifiers are never reusable merely because work closed. Ordinary family and
+parent reconciliation continues to operate only on open Issues.
 
 Full reconciliation processes every open Issue, repairs deterministic family or
 missing-native-parent drift, records community/untrusted intake without

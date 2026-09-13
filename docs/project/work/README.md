@@ -52,5 +52,11 @@ Current role-first work records:
 - [`DOC004/DOC004_MATCHING_EXPRESSIONS_DOCUMENTATION.md`](DOC004/DOC004_MATCHING_EXPRESSIONS_DOCUMENTATION.md)
   — programmer-facing matching-expression documentation and validation closure.
 
+- [`GITHUB012/GITHUB012_ACTIONABLE_PROJECT_VIEWS.md`](GITHUB012/GITHUB012_ACTIONABLE_PROJECT_VIEWS.md)
+  — actionable Project-view contract and canonical lifecycle-status hardening.
+
+- [`GITHUB013/GITHUB013_FORMAL_IDENTIFIER_UNIQUENESS.md`](GITHUB013/GITHUB013_FORMAL_IDENTIFIER_UNIQUENESS.md)
+  — concurrent formal-identifier uniqueness and fail-closed intake guard.
+
 Live status, priority, assignment, and execution discussion remain in GitHub
 Issues and the Protos Development Project.

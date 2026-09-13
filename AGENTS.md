@@ -1938,6 +1938,11 @@ has no more specific state yet, `status:inbox` is the default. Agents MUST NOT
 encode this state in the `family:*` label or rely on stale prose in the Issue body
 as the machine-readable status source.
 
+A label whose name begins with `status:` but is not in the canonical status set
+above is invalid lifecycle drift. Repository status automation MUST fail closed
+on such a label; it MUST NOT ignore it and synthesize `status:inbox`, and agents
+MUST remove/replace the invalid label with the one current canonical state.
+
 Repository automation owns Project membership and Project `Status` projection.
 Agents do not need Project API capability and SHOULD NOT directly mutate the
 Project Status field merely to mirror an Issue transition. Project-sync failure
@@ -2024,6 +2029,13 @@ and GitHub state, choose the then-next family number, rename itself, and repeat
 the uniqueness check until it owns a unique identifier. If the candidate already
 belongs to a durable repository record, that repository allocation wins and the
 new Issue must be renumbered regardless of GitHub Issue ordering.
+
+`scripts/issue_intake.py` mechanically enforces the GitHub half of this
+concurrency gate by scanning authorized formal Issue titles across **open and
+closed** Issues before reconciliation. An exact duplicate identifier fails
+closed; child identifiers such as `TEST001-A` remain distinct from `TEST001`.
+This GitHub scan does not supersede the durable-repository search above: a
+repository allocation still wins when GitHub alone cannot see it.
 
 Do not publish a new durable repository record, changelog entry, source reference,
 or implementation under a newly allocated identifier until that identifier has

@@ -35,6 +35,12 @@ Every open Issue tracked by the dashboard carries exactly one of:
 
 Closed Issues project to `Done` regardless of the retained open-state label.
 
+Any other label beginning with `status:` is invalid lifecycle drift, not an
+Inbox alias. Synchronization fails closed until the Issue has exactly one
+canonical status. This prevents accidental pseudo-states such as
+`status:needs-user-decision` from being ignored while Project Status shows
+`Inbox`.
+
 `status:paused` is deliberately distinct from `status:blocked`: the former means
 work is intentionally suspended/paused (for example by the project owner); the
 latter means an unresolved dependency, decision, defect, environment condition,
