@@ -57,6 +57,7 @@ PACKAGE_TEST_GLOBS = (
 
 TEST_TOOL_TEST_GLOBS = (
     "src/test/java/com/guillermomolina/protos/execution/ProtosTestTool*Test.java",
+    "src/test/java/com/guillermomolina/protos/cli/ProtosTestTool*Test.java",
 )
 
 # Production Java that is exclusively owned by the bundled Test Tool. Keep

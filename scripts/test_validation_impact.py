@@ -101,6 +101,12 @@ class ValidationImpactTest(unittest.TestCase):
             "ProtosTestToolSequentialRunnerTest.java"
         ])
 
+    def test_test_tool_cli_owned_test_is_local(self):
+        self.assert_test_tool([
+            "src/test/java/com/guillermomolina/protos/cli/"
+            "ProtosTestToolCorpusRegistryTest.java"
+        ])
+
     def test_test_tool_owned_production_sources_are_local(self):
         self.assert_test_tool([
             "src/main/java/com/guillermomolina/protos/cli/"
