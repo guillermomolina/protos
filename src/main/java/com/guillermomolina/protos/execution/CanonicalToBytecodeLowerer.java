@@ -1281,7 +1281,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endPrepareClosureCallVector();
             builder.endStoreLocal();
 
-            emitPreparedInvocation(
+            emitPreparedInvocationForRuntime(
                     builder,
                     armResult,
                     preparedCall,
@@ -1379,7 +1379,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endPrepareSendArguments();
             builder.endStoreLocal();
 
-            emitPreparedInvocation(
+            emitPreparedInvocationForRuntime(
                     builder,
                     matcherOutcome,
                     preparedCall,
@@ -2317,7 +2317,7 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(value);
         builder.endPrepareSendArguments();
         builder.endStoreLocal();
-        emitPreparedInvocation(
+        emitPreparedInvocationForRuntime(
                 builder,
                 dispatchResult,
                 preparedCall,
@@ -2471,7 +2471,7 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(value);
         builder.endPrepareSendArguments();
         builder.endStoreLocal();
-        emitPreparedInvocation(
+        emitPreparedInvocationForRuntime(
                 builder,
                 dispatchResult,
                 preparedCall,
@@ -2550,7 +2550,7 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endStoreLocal();
 
-        emitPreparedInvocation(
+        emitPreparedInvocationForRuntime(
                 builder,
                 result,
                 preparedCall,
@@ -2630,7 +2630,7 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endStoreLocal();
 
-        emitPreparedInvocation(
+        emitPreparedInvocationForRuntime(
                 builder,
                 result,
                 preparedCall,
@@ -2901,7 +2901,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        emitPreparedInvocation(
+        emitPreparedInvocationForRuntime(
                 builder,
                 result,
                 preparedCall,
@@ -2909,7 +2909,7 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
     }
 
-    private void emitPreparedInvocation(
+    static void emitPreparedInvocationForRuntime(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -3967,7 +3967,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endIfThenElse();
     }
 
-    private void emitScopedOrdinaryPreparedInvocation(
+    private static void emitScopedOrdinaryPreparedInvocation(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -3990,7 +3990,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endTryFinally();
     }
 
-    private void emitOrdinaryPreparedInvocation(
+    private static void emitOrdinaryPreparedInvocation(
             ProtosBytecodeRootNodeGen.Builder builder,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
@@ -4359,7 +4359,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
 
-        emitPreparedInvocation(
+        emitPreparedInvocationForRuntime(
                 builder,
                 result,
                 preparedCall,
@@ -4493,7 +4493,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
 
-        emitPreparedInvocation(
+        emitPreparedInvocationForRuntime(
                 builder,
                 result,
                 preparedCall,

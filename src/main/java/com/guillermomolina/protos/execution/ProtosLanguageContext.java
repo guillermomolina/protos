@@ -44,6 +44,7 @@ final class ProtosLanguageContext {
      */
     private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
             sharedBytecodeExecutionPlans = new ConcurrentHashMap<>();
+    private volatile ProtosTaskCPrimeEntryExecution.Plan taskCPrimeEntryPlan;
     private volatile ProtosTextWriterCPrimeExecution.Plan textWriterCPrimePlan;
     private volatile ProtosTextReaderCPrimeExecution.Plan textReaderCPrimePlan;
     private volatile ProtosBufferedByteReaderCPrimeExecution.Plan bufferedByteReaderCPrimePlan;
@@ -66,6 +67,20 @@ final class ProtosLanguageContext {
             return null;
         }
         return REFERENCE.get(null);
+    }
+
+    ProtosTaskCPrimeEntryExecution.Plan taskCPrimeEntryPlanForRuntime() {
+        ProtosTaskCPrimeEntryExecution.Plan existing = taskCPrimeEntryPlan;
+        if (existing != null) {
+            return existing;
+        }
+        synchronized (this) {
+            if (taskCPrimeEntryPlan == null) {
+                taskCPrimeEntryPlan =
+                        ProtosTaskCPrimeEntryExecution.createPlan(language);
+            }
+            return taskCPrimeEntryPlan;
+        }
     }
 
     ProtosTextWriterCPrimeExecution.Plan textWriterCPrimePlanForRuntime() {
