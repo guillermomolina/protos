@@ -88,13 +88,23 @@ For an open Issue:
    of the Issue's priority label when no inherited priority replaces it.
 
 A `priority:*` label add/removal first reconciles the changed Issue using the
-event as the decisive label transition, then performs a full open-Issue
-reconciliation so descendants immediately converge on the new inherited value.
-Full `workflow_dispatch` likewise recomputes inheritance for every open Issue,
-creates the four repository `priority:*` labels if missing, and migrates any
-still-present legacy/manual Project-only P0/P1/P2/P3 value into durable Issue
-priority before normal projection. It MUST NOT erase Project-only priority merely
-because a label was absent.
+event as the decisive label transition, then walks only that Issue's native
+descendant subtree and recomputes effective Priority there. Unrelated Issues are
+not scanned or projected merely because one workstream changed scheduling.
+Explicit child priority overrides remain authoritative, while descendants below
+that override continue to inherit from their nearest open explicit ancestor.
+
+During bounded descendant propagation, an inherited Project Priority that no
+longer has an explicit/open-ancestor source is cleared rather than migrated into
+a new child `priority:*` override. Legacy Project-only migration remains available
+for ordinary Issue reconciliation and full audit, where the existing Project
+value may still represent pre-GITHUB005 authority rather than stale inheritance.
+
+Full `workflow_dispatch` remains intentionally repository-wide: it recomputes
+inheritance for every open Issue, creates the four repository `priority:*` labels
+if missing, and migrates any still-present legacy/manual Project-only
+P0/P1/P2/P3 value into durable Issue priority before normal projection. It MUST
+NOT erase Project-only priority merely because a label was absent.
 
 This migration rule is deliberately one-way compatibility, not dual authority.
 Once a `priority:*` label exists (explicitly or via migration), Issue/native-parent

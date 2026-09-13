@@ -23,6 +23,8 @@ import os
 import sys
 from urllib import error, parse, request
 
+API_VERSION = "2026-03-10"
+
 STATUS_TO_PROJECT = {
     "status:inbox": "Inbox",
     "status:ready": "Ready",
@@ -74,7 +76,7 @@ def _json_request(url, token, method="GET", payload=None):
         "Accept": "application/vnd.github+json",
         "Authorization": "Bearer " + token,
         "User-Agent": "protos-project-issue-sync",
-        "X-GitHub-Api-Version": "2022-11-28",
+        "X-GitHub-Api-Version": API_VERSION,
     }
     if payload is not None:
         data = json.dumps(payload).encode("utf-8")
@@ -329,7 +331,10 @@ def priority_migration_candidate(
     effective_priority,
     current_project_priority,
     explicit_priority_removal=False,
+    allow_migration=True,
 ):
+    if not allow_migration:
+        return None
     if effective_priority is not None:
         return None
     if explicit_priority_removal:
@@ -346,6 +351,20 @@ def priority_migration_candidate(
             )
         )
     return priority_label
+
+
+def unresolved_priority_action(
+    current_project_priority,
+    explicit_priority_removal=False,
+    clear_stale_projection=False,
+):
+    if explicit_priority_removal or clear_stale_projection:
+        if current_project_priority is None:
+            return "unchanged"
+        return "clear"
+    if current_project_priority is None:
+        return "unchanged"
+    return "error"
 
 
 def _ensure_required_assignee(
@@ -479,6 +498,33 @@ query($login: String!, $number: Int!, $after: String) {
   }
 }
 """
+
+ISSUE_PROJECT_ITEMS_QUERY = r"""
+query($content: ID!, $after: String) {
+  node(id: $content) {
+    ... on Issue {
+      projectItems(first: 100, after: $after) {
+        nodes {
+          id
+          project {
+            id
+          }
+          fieldValueByName(name: "Priority") {
+            ... on ProjectV2ItemFieldSingleSelectValue {
+              name
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+}
+"""
+
 
 ADD_ITEM_MUTATION = r"""
 mutation($project: ID!, $content: ID!) {
@@ -619,6 +665,80 @@ def load_project_issue_items(project_token, owner, number):
     return result, project_issues, project_priorities
 
 
+def _matching_issue_project_item(project_id, nodes):
+    matches = []
+    for node in nodes:
+        if not node:
+            continue
+        containing_project = node.get("project") or {}
+        if containing_project.get("id") == project_id:
+            matches.append(node)
+
+    if len(matches) > 1:
+        raise SyncError(
+            "Issue is linked to Project %s more than once" % project_id
+        )
+    if not matches:
+        return None, None
+
+    item = matches[0]
+    priority_value = item.get("fieldValueByName") or {}
+    return item.get("id"), priority_value.get("name")
+
+
+def load_issue_project_item(project_token, project, issue):
+    nodes = []
+    after = None
+    while True:
+        data = _graphql(
+            project_token,
+            ISSUE_PROJECT_ITEMS_QUERY,
+            {"content": issue["node_id"], "after": after},
+        )
+        node = data.get("node")
+        if node is None:
+            raise SyncError(
+                "Cannot resolve Issue #%s GraphQL node %s"
+                % (issue.get("number"), issue.get("node_id"))
+            )
+        connection = node.get("projectItems")
+        if connection is None:
+            raise SyncError(
+                "Issue #%s GraphQL response omitted projectItems"
+                % issue.get("number")
+            )
+
+        nodes.extend(connection.get("nodes") or [])
+        page = connection.get("pageInfo") or {}
+        if not page.get("hasNextPage"):
+            break
+        after = page.get("endCursor")
+        if not after:
+            raise SyncError(
+                "Issue #%s Project item pagination lost its end cursor"
+                % issue.get("number")
+            )
+
+    return _matching_issue_project_item(project["id"], nodes)
+
+
+def prepare_bounded_project_context(
+    project_token,
+    project,
+    repository,
+    issue,
+    item_map,
+    project_priorities,
+):
+    key = (repository, int(issue["number"]))
+    item_id, priority_name = load_issue_project_item(
+        project_token, project, issue
+    )
+    if item_id is not None:
+        item_map[key] = item_id
+    project_priorities[key] = priority_name
+
+
 def ensure_project_item(project_token, project, item_map, repository, issue):
     key = (repository, int(issue["number"]))
     existing = item_map.get(key)
@@ -693,6 +813,63 @@ def fetch_issue(repository, number, issue_token):
     return _rest(repository, "/issues/%d" % int(number), issue_token)
 
 
+def list_direct_subissues(repository, number, issue_token):
+    page = 1
+    while True:
+        batch = _rest(
+            repository,
+            "/issues/%d/sub_issues?per_page=100&page=%d"
+            % (int(number), page),
+            issue_token,
+        )
+        if not batch:
+            return
+        for issue in batch:
+            if issue.get("pull_request"):
+                raise SyncError(
+                    "Issue #%d native sub-issue graph contains pull request #%s"
+                    % (int(number), issue.get("number"))
+                )
+            yield issue
+        if len(batch) < 100:
+            return
+        page += 1
+
+
+def discover_descendant_numbers(
+    repository,
+    root_number,
+    issue_token,
+    child_lister=None,
+):
+    if child_lister is None:
+        child_lister = list_direct_subissues
+
+    root_number = int(root_number)
+    seen = set([root_number])
+    queue = [root_number]
+    descendants = []
+
+    while queue:
+        parent_number = queue.pop(0)
+        children = list(
+            child_lister(repository, parent_number, issue_token)
+        )
+        children.sort(key=lambda issue: int(issue["number"]))
+        for child in children:
+            child_number = int(child["number"])
+            if child_number in seen:
+                raise SyncError(
+                    "Native sub-issue graph rooted at #%d repeats/cycles at #%d"
+                    % (root_number, child_number)
+                )
+            seen.add(child_number)
+            descendants.append(child_number)
+            queue.append(child_number)
+
+    return descendants
+
+
 def sync_issue(
     repository,
     issue,
@@ -703,6 +880,9 @@ def sync_issue(
     project_priorities,
     event_action=None,
     event_label=None,
+    priority_fetcher=None,
+    allow_project_priority_migration=True,
+    clear_unresolved_project_priority=False,
 ):
     number = int(issue["number"])
     if issue.get("pull_request"):
@@ -726,7 +906,11 @@ def sync_issue(
         issue, event_action=event_action, event_label=event_label
     )
     effective_priority, inherited_from = resolve_effective_priority(
-        repository, issue, issue_token, canonical_priority
+        repository,
+        issue,
+        issue_token,
+        canonical_priority,
+        fetcher=priority_fetcher,
     )
 
     key = (repository, number)
@@ -738,6 +922,7 @@ def sync_issue(
         effective_priority,
         current_project_priority,
         explicit_priority_removal=explicit_priority_removal,
+        allow_migration=allow_project_priority_migration,
     )
     if migration_priority is not None:
         canonical_priority = migration_priority
@@ -780,14 +965,23 @@ def sync_issue(
     )
 
     if effective_priority is None:
-        if explicit_priority_removal:
+        action = unresolved_priority_action(
+            current_project_priority,
+            explicit_priority_removal=explicit_priority_removal,
+            clear_stale_projection=clear_unresolved_project_priority,
+        )
+        if action == "clear":
             clear_project_field(project_token, project, item_id, "priority")
             project_priorities[key] = None
+            if explicit_priority_removal:
+                reason = "explicit priority label removal"
+            else:
+                reason = "bounded inherited-priority recomputation"
             print(
-                "PROJECT_PRIORITY: #%d -> <unset> "
-                "(explicit priority label removal)" % number
+                "PROJECT_PRIORITY: #%d -> <unset> (%s)"
+                % (number, reason)
             )
-        elif current_project_priority is None:
+        elif action == "unchanged":
             project_priorities[key] = None
             print(
                 "PROJECT_PRIORITY: #%d -> <unchanged unset> "
@@ -826,6 +1020,75 @@ def sync_issue(
                     inherited_from,
                 )
             )
+
+
+def run_descendant_reconcile(
+    args,
+    root_issue,
+    project_token,
+    issue_token,
+    project,
+    item_map,
+    project_priorities,
+):
+    root_number = int(root_issue["number"])
+    descendants = discover_descendant_numbers(
+        args.repository,
+        root_number,
+        issue_token,
+    )
+
+    issue_cache = {root_number: root_issue}
+
+    def cached_fetcher(repository, number, token):
+        number = int(number)
+        cached = issue_cache.get(number)
+        if cached is None:
+            cached = fetch_issue(repository, number, token)
+            issue_cache[number] = cached
+        return cached
+
+    reconciled = 0
+    closed_traversed = 0
+    for number in descendants:
+        issue = cached_fetcher(args.repository, number, issue_token)
+        if issue.get("pull_request"):
+            raise SyncError(
+                "Native descendant #%d unexpectedly resolves to a pull request"
+                % number
+            )
+        if issue.get("state") != "open":
+            closed_traversed += 1
+            continue
+
+        prepare_bounded_project_context(
+            project_token,
+            project,
+            args.repository,
+            issue,
+            item_map,
+            project_priorities,
+        )
+        sync_issue(
+            args.repository,
+            issue,
+            project_token,
+            issue_token,
+            project,
+            item_map,
+            project_priorities,
+            priority_fetcher=cached_fetcher,
+            allow_project_priority_migration=False,
+            clear_unresolved_project_priority=True,
+        )
+        reconciled += 1
+
+    print("RECONCILE_ROOT=#%d" % root_number)
+    print("DESCENDANTS_DISCOVERED=%d" % len(descendants))
+    print("OPEN_DESCENDANTS_RECONCILED=%d" % reconciled)
+    print("CLOSED_DESCENDANTS_TRAVERSED=%d" % closed_traversed)
+    print("UNRELATED_ISSUES_RECONCILED=0")
+    print("FULL_RECONCILIATION=NO")
 
 
 def list_open_issues(repository, issue_token):
@@ -1119,6 +1382,109 @@ def self_test():
             "unknown Project Priority must fail closed during migration"
         )
 
+    assert priority_migration_candidate(
+        None,
+        "P1",
+        explicit_priority_removal=False,
+        allow_migration=False,
+    ) is None
+
+    assert unresolved_priority_action(
+        "P1",
+        explicit_priority_removal=False,
+        clear_stale_projection=True,
+    ) == "clear"
+    assert unresolved_priority_action(
+        None,
+        explicit_priority_removal=False,
+        clear_stale_projection=True,
+    ) == "unchanged"
+    assert unresolved_priority_action(
+        "P1",
+        explicit_priority_removal=False,
+        clear_stale_projection=False,
+    ) == "error"
+
+    project_nodes = [
+        {
+            "id": "PVTI_other",
+            "project": {"id": "PVT_other"},
+            "fieldValueByName": {"name": "P0"},
+        },
+        {
+            "id": "PVTI_target",
+            "project": {"id": "PVT_target"},
+            "fieldValueByName": {"name": "P2"},
+        },
+    ]
+    assert _matching_issue_project_item(
+        "PVT_target", project_nodes
+    ) == ("PVTI_target", "P2")
+    assert _matching_issue_project_item(
+        "PVT_missing", project_nodes
+    ) == (None, None)
+    try:
+        _matching_issue_project_item(
+            "PVT_target",
+            project_nodes + [{
+                "id": "PVTI_duplicate",
+                "project": {"id": "PVT_target"},
+                "fieldValueByName": None,
+            }],
+        )
+    except SyncError:
+        pass
+    else:
+        raise AssertionError("duplicate Project membership must fail closed")
+
+    graph = {
+        100: [_fake_issue(102), _fake_issue(101)],
+        101: [_fake_issue(103)],
+        102: [_fake_issue(104)],
+        103: [],
+        104: [_fake_issue(105)],
+        105: [],
+        999: [_fake_issue(998)],
+    }
+    visited_parents = []
+
+    def fake_child_lister(_repository, number, _token):
+        visited_parents.append(number)
+        return list(graph.get(number, []))
+
+    assert discover_descendant_numbers(
+        "guillermomolina/protos",
+        100,
+        "fake",
+        child_lister=fake_child_lister,
+    ) == [101, 102, 103, 104, 105]
+    assert 999 not in visited_parents
+    assert 998 not in visited_parents
+
+    cycle_graph = {
+        200: [_fake_issue(201)],
+        201: [_fake_issue(200)],
+    }
+
+    def cycle_child_lister(_repository, number, _token):
+        return list(cycle_graph.get(number, []))
+
+    try:
+        discover_descendant_numbers(
+            "guillermomolina/protos",
+            200,
+            "fake",
+            child_lister=cycle_child_lister,
+        )
+    except SyncError as exc:
+        assert "repeats/cycles" in str(exc)
+    else:
+        raise AssertionError("native descendant cycle must fail closed")
+
+    print("BOUNDED_DESCENDANT_TRAVERSAL_SELF_TEST: PASS")
+    print("BOUNDED_PROJECT_ITEM_LOOKUP_SELF_TEST: PASS")
+    print("STALE_INHERITED_PRIORITY_CLEAR_SELF_TEST: PASS")
+
     print("PROJECT_STATUS_PRIORITY_SYNC_SELF_TEST: PASS")
     print("UNKNOWN_STATUS_LABEL_FAIL_CLOSED: PASS")
     print("FORMAL_STATUS_FAIL_CLOSED_SELF_TEST: PASS")
@@ -1140,6 +1506,7 @@ def parse_args(argv=None):
     parser.add_argument("--event-action")
     parser.add_argument("--event-label")
     parser.add_argument("--reconcile-all", action="store_true")
+    parser.add_argument("--reconcile-descendants", action="store_true")
     parser.add_argument("--self-test", action="store_true")
     return parser.parse_args(argv)
 
@@ -1151,9 +1518,14 @@ def main(argv=None):
         return 0
     if not args.repository:
         raise SyncError("--repository or GITHUB_REPOSITORY is required")
-    if bool(args.issue_number) == bool(args.reconcile_all):
+    if args.reconcile_all:
+        if args.issue_number is not None or args.reconcile_descendants:
+            raise SyncError(
+                "--reconcile-all cannot be combined with Issue-scoped modes"
+            )
+    elif args.issue_number is None:
         raise SyncError(
-            "select exactly one of --issue-number or --reconcile-all"
+            "--issue-number is required unless --reconcile-all is selected"
         )
 
     project_token = os.environ.get("PROTOS_PROJECT_TOKEN", "")
@@ -1180,11 +1552,10 @@ def main(argv=None):
         )
     )
 
-    item_map, project_issues, project_priorities = load_project_issue_items(
-        project_token, args.project_owner, args.project_number
-    )
-
     if args.reconcile_all:
+        item_map, project_issues, project_priorities = load_project_issue_items(
+            project_token, args.project_owner, args.project_number
+        )
         run_reconcile(
             args,
             project_token,
@@ -1194,10 +1565,35 @@ def main(argv=None):
             project_issues,
             project_priorities,
         )
+        print("FULL_RECONCILIATION=YES")
         return 0
 
+    # Routine Issue-scoped operation must not enumerate all Project items.
+    item_map = {}
+    project_priorities = {}
     issue = fetch_issue(
         args.repository, args.issue_number, issue_token
+    )
+
+    if args.reconcile_descendants:
+        run_descendant_reconcile(
+            args,
+            issue,
+            project_token,
+            issue_token,
+            project,
+            item_map,
+            project_priorities,
+        )
+        return 0
+
+    prepare_bounded_project_context(
+        project_token,
+        project,
+        args.repository,
+        issue,
+        item_map,
+        project_priorities,
     )
     sync_issue(
         args.repository,
@@ -1210,6 +1606,10 @@ def main(argv=None):
         event_action=args.event_action,
         event_label=args.event_label,
     )
+    print("RECONCILE_ROOT=#%d" % int(issue["number"]))
+    print("ISSUES_RECONCILED=1")
+    print("UNRELATED_ISSUES_RECONCILED=0")
+    print("FULL_RECONCILIATION=NO")
     return 0
 
 

@@ -1192,9 +1192,11 @@ inheritance. Parentless work remains unprioritized unless explicitly prioritized
 Status never manufactures priority: `Ready` is not automatically P2 and `In
 progress` is not automatically P1.
 
-Repository automation owns effective-priority projection and full reconciliation
-after explicit priority changes so descendants converge without losing the
-distinction between inherited and explicit priority.
+Repository automation owns effective-priority projection. After an explicit
+priority change it MUST reconcile only the changed Issue plus the affected native
+descendant subtree so inheritance converges without losing the distinction
+between inherited and explicit priority. Repository-wide reconciliation is an
+explicit audit/repair operation, not the routine propagation path.
 
 ## Community contribution placement
 <!-- GITHUB012 COMMUNITY-WORK-QUEUE-PLACEMENT -->

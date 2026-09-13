@@ -72,13 +72,16 @@ jobs:
 
       - name: Reconcile inherited priorities after priority changes
         if: ${{ github.event_name == 'issues' && (github.event.action == 'labeled' || github.event.action == 'unlabeled') && startsWith(github.event.label.name, 'priority:') }}
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
           python3 scripts/project_status_sync.py \
             --repository "$GITHUB_REPOSITORY" \
             --project-owner guillermomolina \
             --project-number 1 \
-            --reconcile-all
+            --issue-number "$ISSUE_NUMBER" \
+            --reconcile-descendants
 
       - name: Reconcile all formal Issue intake before full Project projection
         if: ${{ github.event_name == 'workflow_dispatch' }}
