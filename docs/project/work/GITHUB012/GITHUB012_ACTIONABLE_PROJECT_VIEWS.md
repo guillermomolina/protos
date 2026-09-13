@@ -44,6 +44,58 @@ main Work queue. The saved Work queue view MUST additionally filter to
 inside their parent hierarchy and dedicated/detail views, but they do not compete
 as independent top-level workstreams.
 
+### Work queue presentation contract
+
+The saved **Work queue** SHOULD use the table layout and group horizontally by
+`Priority`. The intended visual order is:
+
+```text
+P0      immediate / exceptional attention
+P1      next / high-priority work
+P2      normal planned work
+P3      opportunistic / later work and low-attention reminders
+unset   not yet explicitly scheduled
+```
+
+This grouping is presentational, not a second scheduling authority: GITHUB005
+still owns the meaning and projection of Priority. The important usability
+property is that P0/P1 remain visually dominant while P3 stays visible near the
+bottom instead of disappearing from the maintainer's routine view.
+
+The Work queue MUST NOT exclude an Issue merely because it is suitable for
+community contribution. Community suitability is orthogonal to hierarchy and
+Priority:
+
+- a community-facing task with a genuine semantic parent SHOULD be a native
+  sub-issue and therefore does not independently compete in the top-level Work
+  queue;
+- a standalone community-facing task with no genuine semantic parent MAY remain
+  top-level;
+- community suitability alone does not manufacture `priority:p3`, but when the
+  project owner deliberately schedules such standalone work as opportunistic /
+  later work, P3 is the normal reminder tier; and
+- a community-facing task may legitimately be P0/P1/P2 when roadmap urgency
+  independently justifies that priority.
+
+The dedicated **Community** view remains the detailed contribution surface. Work
+queue provides only reminder-level visibility through ordinary Priority ordering;
+do not create a synthetic `COMMUNITYxxx` parent merely to hide contribution tasks.
+
+For maintainer readability, the Work queue SHOULD keep these fields visible when
+available:
+
+- `Status`;
+- `Assignees`;
+- `Labels`;
+- `Linked pull requests`; and
+- `Sub-issue progress`.
+
+`Linked pull requests` is especially important for external contribution work.
+GitHub may reject an external PR author as an Issue assignee when that account is
+not assignable in the repository; in that case an owner fallback assignee
+represents repository coordination responsibility, not authorship or execution
+of the linked contribution.
+
 The maintained view model is:
 
 1. **Work queue** — top-level In progress / Review / Ready.
@@ -174,6 +226,11 @@ to match the view contract above. In particular, closure now requires live
 verification that:
 
 - `Work queue` contains only top-level In progress / Review / Ready work;
+- `Work queue` is presented as a Priority-grouped table with P0/P1 ahead of P2,
+  P3 retained as low-attention reminder work, and the agreed coordination
+  fields visible;
+- standalone community-facing P3 work remains visible in Work queue while
+  semantically parented community work is represented through native hierarchy;
 - `Core` has been replaced by `Upstream`;
 - `Needs Guillermo` has been replaced by `Decisions`;
 - UPSTREAM001 / #480 appears in `Upstream` while remaining absent from

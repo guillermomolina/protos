@@ -1130,6 +1130,38 @@ Repository automation owns effective-priority projection and full reconciliation
 after explicit priority changes so descendants converge without losing the
 distinction between inherited and explicit priority.
 
+## Community contribution placement
+<!-- GITHUB012 COMMUNITY-WORK-QUEUE-PLACEMENT -->
+
+Community suitability is a contribution classification, not a hierarchy rule and
+not an automatic scheduling priority.
+
+Agents MUST preserve these distinctions:
+
+- do not create a synthetic parent/umbrella Issue merely to group unrelated work
+  because several tasks are suitable for community contribution;
+- when a community-facing task has a genuine semantic workstream parent, use the
+  native Parent/Sub-issue relationship under the ordinary hierarchy rules;
+- when no genuine semantic parent exists, the task MAY remain top-level and stay
+  visible in the main Work queue;
+- do not infer `priority:p3` merely from `good first issue`, `help wanted`,
+  `examples`, documentation, adoption, or another community-facing label;
+- when the project owner has deliberately classified standalone contribution work
+  as opportunistic/later scheduling, retain explicit `priority:p3` so the task is
+  visible as a low-attention reminder rather than hidden;
+- higher priority remains valid when independently justified by the roadmap; and
+- do not exclude community-facing work from Work queue solely because it is
+  community-facing. The dedicated Community view is the detailed contribution
+  surface; Work queue is the maintainer reminder surface.
+
+For active external contributions, an Issue assignee and the actual patch author
+may differ because GitHub can reject an external account as an eligible Issue
+assignee. When an external linked PR clearly owns the implementation but the
+author cannot be assigned, an owner fallback assignee represents repository
+coordination only. Agents MUST NOT describe that fallback as authorship or as the
+external contributor's work having been taken over. Preserve/link the PR and use
+the Project's `Linked pull requests` field as the execution-context signal.
+
 ## Mandatory pre-implementation audit
 
 Before designing, modifying, or generating a patch for implementation work,
