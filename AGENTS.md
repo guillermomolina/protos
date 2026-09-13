@@ -904,6 +904,16 @@ automation MAY reconcile those structural facts after closure, but MUST NOT
 reopen the Issue, manufacture an assignee, change lifecycle state, or invent/copy
 scheduling Priority merely to repair closed structure.
 
+The closed-structure rule is prospective, not permission to fabricate historical
+hierarchy. For formal Issues closed before GITHUB015 enforcement became active at
+`2026-09-13T10:02:02Z`, an explicit textual/form parent declaration may bootstrap
+a missing native parent, but absence of both native parent and explicit
+declaration is recorded as unrecoverable legacy structure and MUST NOT be guessed.
+If such a legacy Issue already has a native parent that conflicts with stale
+textual parent prose, the existing native relation prevails and MUST NOT be
+rewritten. Formal closures at or after the enforcement instant remain fully
+fail-closed under the normal native-parent postcondition.
+
 For trusted formal work, lifecycle state must be explicit at creation time. The
 neutral community `Inbox` fallback MUST NOT be used to hide a missing status on a
 formal Issue. `status:in-progress` and `status:needs-decision` require an owner;

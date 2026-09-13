@@ -50,6 +50,12 @@ FORMAL_FAMILIES = (
 FAMILY_LABEL_PREFIX = "family:"
 TRUSTED_AUTHOR_ASSOCIATIONS = frozenset(("OWNER", "MEMBER", "COLLABORATOR"))
 
+# GITHUB015 closed-structure enforcement became active with
+# 6f6794e24dc86a35dc1dc088c145ee18dd4f3c67. Closed work predating this
+# instant may contain truthful historical hierarchy that was never encoded in
+# native GitHub metadata. Such history is never guessed.
+CLOSED_STRUCTURE_ENFORCEMENT_AT = "2026-09-13T10:02:02Z"
+
 FAMILY_PATTERN = "|".join(
     re.escape(name) for name in sorted(FORMAL_FAMILIES, key=len, reverse=True)
 )
@@ -356,6 +362,16 @@ def is_child_identifier(identifier):
     return "-" in identifier
 
 
+def is_legacy_closed_structure(issue):
+    if issue.get("state") == "open":
+        return False
+    closed_at = issue.get("closed_at") or ""
+    return bool(
+        closed_at
+        and closed_at < CLOSED_STRUCTURE_ENFORCEMENT_AT
+    )
+
+
 def is_authorized_formal(issue):
     association = (issue.get("author_association") or "").upper()
     if association in TRUSTED_AUTHOR_ASSOCIATIONS:
@@ -489,9 +505,22 @@ def reconcile_parent(api, issue, identifier):
 
     native = api.get_parent(number)
     native_number = int(native["number"]) if native else None
+    legacy_closed = is_legacy_closed_structure(issue)
 
     if native_number is not None:
         if declared is not None and declared != native_number:
+            if legacy_closed:
+                print(
+                    "LEGACY_CLOSED_NATIVE_PARENT_PREVAILS: "
+                    "issue=#%d native=#%d textual=#%d"
+                    % (number, native_number, declared)
+                )
+                return {
+                    "native_parent": native_number,
+                    "added": False,
+                    "declared_parent": declared,
+                    "legacy_text_conflict": True,
+                }
             raise IntakeError(
                 "Issue #%d parent conflict: native #%d, textual/form #%d"
                 % (number, native_number, declared)
@@ -504,6 +533,18 @@ def reconcile_parent(api, issue, identifier):
 
     if declared is None:
         if is_child_identifier(identifier):
+            if legacy_closed:
+                print(
+                    "LEGACY_CLOSED_PARENT_UNRESOLVED: "
+                    "issue=#%d identifier=%s"
+                    % (number, identifier)
+                )
+                return {
+                    "native_parent": None,
+                    "added": False,
+                    "declared_parent": None,
+                    "legacy_unresolved": True,
+                }
             raise IntakeError(
                 "Issue #%d (%s) is a formal child but has no native parent "
                 "and no explicit parent declaration to reconcile"
@@ -629,20 +670,39 @@ def run_all(api):
         if issue.get("state") == "open"
     ]
     closed_formal_issues = []
+    legacy_closed_without_parent_declaration = 0
     for issue in all_issues:
         if issue.get("state") == "open":
             continue
         title_info = parse_title_identifier(issue.get("title") or "")
-        if title_info is not None and is_authorized_formal(issue):
-            closed_formal_issues.append(issue)
+        if title_info is None or not is_authorized_formal(issue):
+            continue
+
+        declarations = declared_parent_numbers(issue.get("body") or "")
+        if is_legacy_closed_structure(issue) and not declarations:
+            # Before GITHUB015, many completed child-shaped Issues predated
+            # native hierarchy governance entirely. There is no deterministic
+            # parent fact to recover from those records, so do not guess and do
+            # not turn historical incompleteness into a steady-state outage.
+            legacy_closed_without_parent_declaration += 1
+            continue
+
+        # Historical closed Issues with an explicit declaration are safe repair
+        # candidates (for example #481). Post-enforcement closed formal Issues
+        # are always checked, even when they lack a declaration, so a new child
+        # cannot silently close without satisfying native hierarchy.
+        closed_formal_issues.append(issue)
 
     # Open Issues retain ordinary intake semantics. Closed community/untrusted
-    # Issues need no convergence work, while trusted closed formal Issues still
-    # require durable family/native-parent structure to remain truthful.
+    # Issues need no convergence work. Closed formal structure is checked only
+    # where a deterministic repair/validation fact exists, plus every
+    # post-enforcement formal closure.
     issues = open_issues + closed_formal_issues
     counts = {
         "open": len(open_issues),
         "closed_formal": len(closed_formal_issues),
+        "legacy_closed_without_parent_declaration":
+            legacy_closed_without_parent_declaration,
         "formal": 0,
         "open_formal": 0,
         "closed_formal_reconciled": 0,
@@ -683,6 +743,10 @@ def run_all(api):
     print(
         "CLOSED_FORMAL_ISSUES_SCANNED=%d"
         % counts["closed_formal"]
+    )
+    print(
+        "LEGACY_CLOSED_FORMAL_SKIPPED_NO_PARENT_DECLARATION=%d"
+        % counts["legacy_closed_without_parent_declaration"]
     )
     print("FORMAL_ISSUES_RECONCILED=%d" % counts["formal"])
     print(
@@ -767,6 +831,7 @@ def _mock_issue(
     association="OWNER",
     issue_id=None,
     state="open",
+    closed_at=None,
 ):
     return {
         "number": int(number),
@@ -776,6 +841,7 @@ def _mock_issue(
         "labels": [{"name": name} for name in (labels or [])],
         "author_association": association,
         "state": state,
+        "closed_at": closed_at,
     }
 
 
@@ -997,6 +1063,7 @@ x
         body="Parent work item: #429 (`LIB012`)\n",
         labels=["family:LIB", "status:done"],
         state="closed",
+        closed_at="2026-09-13T09:16:53Z",
     )
     before_closed_labels = tuple(label_names(closed_structure.issues[481]))
     assert run_one(closed_structure, 481) == 0
@@ -1012,6 +1079,65 @@ x
     )
     assert run_one(closed_top, 700) == 0
     assert not closed_top.added_parents
+
+    legacy_conflict = MockApi()
+    legacy_conflict.issues[47] = _mock_issue(
+        47,
+        "TOOL001 — Package Tool",
+        labels=["family:TOOL"],
+    )
+    legacy_conflict.issues[412] = _mock_issue(
+        412,
+        "TOOL001-F2E — Package execution",
+        labels=["family:TOOL"],
+    )
+    legacy_conflict.issues[91] = _mock_issue(
+        91,
+        "TOOL001-F2E3 — Historical child",
+        body="Parent: #47\n",
+        labels=["family:TOOL", "status:done"],
+        state="closed",
+        closed_at="2026-09-10T00:00:00Z",
+    )
+    legacy_conflict.parents[91] = 412
+    legacy_conflict_result = reconcile_issue(
+        legacy_conflict,
+        legacy_conflict.issues[91],
+    )
+    assert legacy_conflict_result["parent"] == 412
+    assert legacy_conflict.parents[91] == 412
+
+    legacy_orphan = MockApi()
+    legacy_orphan.issues[286] = _mock_issue(
+        286,
+        "LIB005-D — Historical child without recoverable parent",
+        labels=["family:LIB", "status:done"],
+        state="closed",
+        closed_at="2026-09-10T00:00:00Z",
+    )
+    legacy_orphan_result = reconcile_issue(
+        legacy_orphan,
+        legacy_orphan.issues[286],
+    )
+    assert legacy_orphan_result["parent"] is None
+    assert not legacy_orphan.added_parents
+
+    post_enforcement = MockApi()
+    post_enforcement.issues[900] = _mock_issue(
+        900,
+        "LIB099-A — New child missing native hierarchy",
+        labels=["family:LIB", "status:done"],
+        state="closed",
+        closed_at="2026-09-13T10:02:03Z",
+    )
+    try:
+        reconcile_issue(post_enforcement, post_enforcement.issues[900])
+    except IntakeError as exc:
+        assert "formal child" in str(exc)
+    else:
+        raise AssertionError(
+            "post-enforcement closed formal orphan did not fail closed"
+        )
 
     closed_owner = [
         _mock_issue(600, "D123 — Historical decision", labels=["family:D"], state="closed"),
@@ -1038,6 +1164,9 @@ x
     print("CLOSED_IDENTIFIER_REUSE_FAIL_CLOSED: PASS")
     print("CLOSED_FORMAL_STRUCTURE_RECONCILIATION: PASS")
     print("CLOSED_LIFECYCLE_METADATA_PRESERVED: PASS")
+    print("LEGACY_CLOSED_NATIVE_PARENT_PRECEDENCE: PASS")
+    print("LEGACY_CLOSED_ORPHAN_NO_GUESS: PASS")
+    print("POST_ENFORCEMENT_CLOSED_ORPHAN_FAIL_CLOSED: PASS")
 
 
 def main(argv=None):

@@ -105,6 +105,26 @@ This closes the #481 regression class: a phase may complete quickly enough to
 close before asynchronous intake runs, but closure must not allow a text-only
 parent declaration to become permanent historical drift.
 
+### Legacy closed-structure boundary
+
+The rule is prospective and does not authorize reconstruction by naming
+heuristics. GITHUB015 closed-structure enforcement became active at
+`2026-09-13T10:02:02Z` with commit
+`6f6794e24dc86a35dc1dc088c145ee18dd4f3c67`.
+
+For formal Issues closed before that instant:
+
+- explicit textual/form parent + no native parent -> deterministic native repair;
+- existing native parent + contradictory stale text -> native parent prevails;
+- no native parent + no explicit declaration -> legacy unresolved; do not guess
+  and do not fail steady-state synchronization merely because the historical
+  relation cannot be recovered.
+
+For formal Issues closed at or after that instant, no grandfathering applies:
+normal GITHUB015 postconditions remain fail-closed. This preserves the value of
+the backstop for all new publication while avoiding a retroactive rewrite of
+hundreds of pre-governance Issues.
+
 ## Decision approval provenance
 
 Allocation and research do not select a Dxxx/PLATxxx. A ratification may be

@@ -118,11 +118,19 @@ reconcilable after closure. Closed reconciliation is deliberately structural
 only; it does not reopen work or infer lifecycle, assignee, or scheduling
 Priority.
 
-Full reconciliation processes every open Issue plus every trusted closed formal
-Issue. Open intake retains the ordinary community/untrusted behavior. Closed
-formal work is checked only for deterministic family and applicable native-parent
-truth, and the scan fails closed if any trusted formal Issue still has an
-unresolved hierarchy conflict.
+Full reconciliation processes every open Issue plus the closed formal subset
+for which deterministic structure can be checked without inventing history.
+Open intake retains the ordinary community/untrusted behavior.
+
+For work closed before GITHUB015 closed-structure enforcement became active at
+`2026-09-13T10:02:02Z`, an explicit parent declaration remains valid bootstrap
+evidence for a missing native relation. Legacy child-shaped Issues with neither a
+native parent nor an explicit declaration are skipped as unrecoverable historical
+structure rather than guessed or allowed to fail every future synchronization.
+When a legacy closed Issue already has a native parent, that native relation wins
+over contradictory stale parent prose. Every formal Issue closed at or after the
+enforcement instant is checked strictly, including child-shaped Issues with no
+parent declaration, so new publication defects still fail closed.
 
 Under GITHUB015 the Project-status workflow executes this intake reconciliation
 as a precondition in the **same job** before it projects status/priority. A full
