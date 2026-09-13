@@ -47,10 +47,54 @@ as independent top-level workstreams.
 The maintained view model is:
 
 1. **Work queue** — top-level In progress / Review / Ready.
-2. **Decisions** — Needs decision.
-3. **Blocked** — Blocked / Paused.
-4. **Triage** — Inbox.
-5. **History / Done** — Done.
+2. **Decisions** — open Issues whose Status is Needs decision. Assignment is
+   irrelevant to membership: needing project-owner input and being assigned to
+   `guillermomolina` are different concepts.
+3. **Upstream** — open Issues carrying `family:UPSTREAM`, regardless of lifecycle
+   Status. This is an inspection/coordination view, not an actionable queue. An
+   UPSTREAM item may also appear in Work queue when its lifecycle is Ready,
+   In progress, or Review.
+4. **Blocked** — Blocked / Paused.
+5. **Triage** — Inbox.
+6. **History / Done** — Done.
+
+The legacy saved views named **Core** and **Needs Guillermo** have no maintained
+semantic role:
+
+- **Core** is repurposed/renamed to **Upstream** rather than retained as an
+  ambiguous project slice.
+- **Needs Guillermo** is repurposed/renamed to **Decisions**. Do not use
+  assignee identity as a proxy for `Needs decision`.
+
+Representative GitHub Projects filter intent is:
+
+```text
+Work queue:
+  is:issue is:open no:parent-issue
+  Status in {In progress, Review, Ready}
+
+Decisions:
+  is:issue is:open
+  Status = Needs decision
+
+Upstream:
+  is:issue is:open
+  label = family:UPSTREAM
+
+Blocked:
+  is:issue is:open
+  Status in {Blocked, Paused}
+
+Triage:
+  is:issue is:open
+  Status = Inbox
+
+History / Done:
+  Status = Done / closed history
+```
+
+Exact saved-filter spelling remains GitHub UI configuration; the semantic
+membership above is the durable contract.
 
 ## Active ownership invariant
 
@@ -100,8 +144,38 @@ Historical prose is not live status authority. Other Inbox items must be triaged
 from current comments/dependencies/published evidence rather than keyword scans
 of old bodies.
 
+## 2026-09-13 saved-view reconciliation reopening
+
+GITHUB012 was reopened after live inspection showed that the saved Project views
+had not actually reached the durable contract before the earlier closure:
+
+- the existing `Core` view was not a useful maintained coordination surface;
+- the existing `Needs Guillermo` view conflated assignee identity with the
+  canonical `Needs decision` lifecycle state; and
+- the newly formalized UPSTREAM family needed a dedicated inspection view so
+  paused external relationships remain visible without polluting Work queue.
+
+The selected live reconciliation is therefore:
+
+```text
+Core             -> Upstream
+Needs Guillermo  -> Decisions
+```
+
+`Upstream` must include open `family:UPSTREAM` items across lifecycle states.
+UPSTREAM001 / #480 is the first acceptance case: while it remains
+`status:paused`, it must be absent from Work queue but present in Upstream.
+
 ## Closure gate
 
 GITHUB012 can close after the hardened synchronizer is published and validated,
 a full Project reconciliation succeeds, and the saved Project views are verified
-to match the actionable-view contract above.
+to match the view contract above. In particular, closure now requires live
+verification that:
+
+- `Work queue` contains only top-level In progress / Review / Ready work;
+- `Core` has been replaced by `Upstream`;
+- `Needs Guillermo` has been replaced by `Decisions`;
+- UPSTREAM001 / #480 appears in `Upstream` while remaining absent from
+  `Work queue` in its paused state; and
+- Blocked, Triage and History / Done retain their intended membership.
