@@ -1,6 +1,6 @@
 # GITHUB015 — Formal Issue publication transaction and postcondition enforcement
 
-Status: **IN PROGRESS**
+Status: **CLOSED**
 
 Owning live Issue: GitHub #484.
 
@@ -259,3 +259,103 @@ Required live validation after publication:
 
 No Maven/runtime/spec test is required unless this slice unexpectedly changes
 executable Protos/runtime code.
+
+## Final closure evidence
+
+GITHUB015 closes only after the publication transaction itself and every live
+acceptance debt discovered during hardening have converged.
+
+### Structural publication acceptance
+
+The post-enforcement closed-structure reconciliation and its legacy boundary were
+validated by manual Project status sync run `34751228184` (`Project status sync`
+run number `1249`). The run completed successfully with zero unresolved intake
+errors.
+
+The acceptance set includes:
+
+- LIB012-0 / #481 remains a closed formal `family:LIB` item and its native parent
+  is LIB012 / #429. The repair did not reopen the Issue or manufacture active
+  lifecycle/ownership/Priority state.
+- PERF006-C / #482 has native parent PERF006 / #262, allowing effective Priority
+  to derive from the real hierarchy while active instead of from textual parent
+  prose.
+- legacy closed formal Issues without recoverable parent evidence remain bounded
+  by the prospective GITHUB015 enforcement boundary rather than guessed into a
+  synthetic hierarchy.
+
+### Decision approval provenance acceptance
+
+PLAT033 / #483 originally exposed a real provenance defect: an agent-authored
+comment claimed Candidate A-prime owner approval without an explicit matching
+selection in the triggering interaction.
+
+That historical gap is now explicitly repaired by the project owner. In the
+active interaction on 2026-09-13, the owner was asked directly whether the
+already-published `PLAT033 Candidate A′` was approved and answered
+`si apruebo A`. The confirmation is durably recorded on #483 in Issue comment
+`5652880101`.
+
+The resulting acceptance state is:
+
+```text
+PLAT033_SELECTED_CANDIDATE=A_PRIME
+DECISION_APPROVAL_PROVENANCE=PASS
+DURABLE_RATIFICATION_SHA=d6c5f49d41ee08104226dba7ca1f4a5d5e75e3ab
+REQUIRED_DURABLE_PUBLICATION=PASS
+```
+
+This provenance repair changes no PLAT033 architecture. Candidate A-prime
+remains the already-published runtime/dependency/packaging decision.
+
+### Fresh publication/closure reproduction
+
+PLAT034 / #486 supplied the fresh post-hardening reproduction required by
+GITHUB015:
+
+1. Candidate C-prime was owner-approved.
+2. #486 was prematurely closed before its required durable ratification existed.
+3. ratification launcher V1 failed and correctly did not publish;
+4. #486 was reopened as active P0 work;
+5. ratification V2 published commit
+   `49cd7fe8b883b415f11ae2c33eea11c2d393bd22`;
+6. the durable `RATIFIED — Candidate C′ selected` record was re-read; and
+7. only then was #486 closed `completed`.
+
+This demonstrates that approval is not completion and that failed/pending
+publication cannot satisfy a decision closure postcondition.
+
+### Durable contract
+
+Commit `83304c6aa370ffbac48096a253d15a840fc62c5c` makes the distinction explicit
+in repository governance by adding:
+
+```text
+DECISION_APPROVAL_PROVENANCE=PASS|NOT_APPLICABLE
+REQUIRED_DURABLE_PUBLICATION=PASS|NOT_APPLICABLE
+```
+
+to the formal publication transaction.
+
+The final GITHUB015 acceptance result is therefore:
+
+```text
+FORMAL_IDENTIFIER_UNIQUE=PASS
+FAMILY=PASS
+CANONICAL_STATUS=PASS
+ASSIGNEE_INVARIANT=PASS
+NATIVE_PARENT=PASS|NOT_APPLICABLE
+EFFECTIVE_PRIORITY=RESOLVED|INTENTIONALLY_UNSET
+PROJECT_ROUTING=PASS
+DECISION_APPROVAL_PROVENANCE=PASS|NOT_APPLICABLE
+REQUIRED_DURABLE_PUBLICATION=PASS|NOT_APPLICABLE
+
+CLOSED_STRUCTURE_RECONCILIATION=PASS
+LEGACY_CLOSED_STRUCTURE_BOUNDARY=PASS
+PLAT033_APPROVAL_PROVENANCE=PASS
+PLAT034_FRESH_REPRODUCTION=PASS
+GITHUB015_STATUS=CLOSED
+```
+
+No Protos language specification, runtime implementation, implementation version,
+or executable behavior changes in this closure.
