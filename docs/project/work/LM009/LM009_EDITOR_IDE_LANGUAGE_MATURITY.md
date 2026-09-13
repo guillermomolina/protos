@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G IN_PROGRESS (G1/G2 CLOSED; D082/D085/D089/D102/D106/D110 RATIFIED; G3P P1/P2/P3A/P3B/P4 + D102 package-domain implementation CLOSED; G3 CLOSED; G4 IMPLEMENTATION AUDIT CLOSED; G4-A1 CLOSED; G4-A2 CLOSED)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H READY**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1758,3 +1758,61 @@ checks for diagnostics, document symbols, `secondaryMarker`/`workspaceMarker`,
 D110 `value` definition, fail-closed behavior and session/edit lifecycle before G
 may close. Maven/runtime implementation version and extension manifest version are
 unchanged by this repair.
+
+
+## LM009-G closure — integrated static editor intelligence
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED; LM009-H READY**
+
+Coordination: GitHub #360 / #288
+
+LM009-G closes the first faithful static-language-service feature generation over
+the already-published LM009-F foundation. The released surface remains exactly the
+bounded G feature set: real-parser diagnostics, D079 document symbols, D082/D106
+workspace symbols and D110 generation-1 exact go-to-definition. Completion, hover,
+signature help and references remain LM009-H-owned and are not implemented or
+semantically selected by this closure.
+
+The project-owner real VS Code Dev Container S5 re-run after published G5A
+`6b5fc4503ddc5cdfcfb7b24ff620fbddaab73c4d` supplies the required live-editor
+closure evidence:
+
+- parser diagnostics: PASS;
+- hierarchical document symbols: PASS;
+- workspace symbols: PASS for `secondaryMarker` -> `Other.protos` and
+  `workspaceMarker` -> `app/Main.protos`;
+- D110 definition navigation: PASS from the body `value` reference to the exact
+  Closure parameter declaration;
+- D110 fail-closed/no-guess behavior: PASS; and
+- language-server session/edit lifecycle after edit plus undo/restore: PASS.
+
+The apparent repeated-F12 no-result after one successful definition jump is not a
+lifecycle defect: the first jump leaves the cursor on the parameter declaration,
+while D110 generation 1 resolves proven references to their origins and does not
+define declaration-to-self navigation. Returning the cursor to the body reference
+restores the same successful definition result, including after the edit/undo
+sequence. No LM009-G5B repair is required.
+
+This closure owns the broad validation debt deliberately retained by the bounded
+G3/G4 publications. Publication runs the repository's canonical
+`scripts/publication_validation.py` against the immutable candidate with
+`--top-level-closure`. Under the current PERF007 Tool-test quarantine, because this
+closure changes no Tool-owned surface, the deterministic selector must choose
+`FULL:NON_TOOL`; source-style prevention, test-ownership validation and the selected
+broad non-Tool Maven suite must all pass before the candidate may reach `main`.
+
+By publication of this slice:
+
+- LM009-G / GitHub #360 is CLOSED;
+- S4 parser-diagnostic evidence and the complete live S5 matrix are accepted;
+- no filesystem/project guessing, guest execution or TypeScript semantic authority
+  has been introduced;
+- no Protos specification or runtime implementation changes are made by the closure;
+- the Maven implementation version and VS Code extension manifest version remain
+  unchanged; and
+- LM009-H is READY for its own bounded audit/implementation sequence. Any substantive
+  completion/hover/signature/reference semantic choice exposed by H still crosses the
+  normal Dxxx/PLATxxx explicit-approval gate rather than being selected here.
+
+LM009 itself remains **IN_PROGRESS**: LM009-H and the already-allocated LM009-I
+packaging/end-to-end closure remain downstream work.
