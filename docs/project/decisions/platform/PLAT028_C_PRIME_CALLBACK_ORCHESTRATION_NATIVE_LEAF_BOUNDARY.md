@@ -487,3 +487,18 @@ Implementation may not:
 ## Approval record
 
 The project owner explicitly approved **Candidate C — C-prime-owned suspendible callback orchestration + native-leaf invariant** on **2026-09-11** after the initial decision packet and the requested expanded survey of all principal Truffle implementations, relevant experimental/historical implementations, Apple Pkl, outside-Truffle async runtimes, future endurance, scalability and Protos-philosophy scoring recorded in GitHub #386.
+
+## PLAT032 consumption — selected ordinary wrapper identity
+
+PLAT032 applies this native-leaf/C-prime ownership rule to copied, aliased or
+otherwise non-canonical standard wrappers whose ordinary method semantics must
+remain visible under PLAT017.
+
+The selected wrapper's lookup result, receiver, implementation identity and
+`methodHome` are preserved. Only the control that must survive a suspendible
+nested guest call moves into a finite behavior-specific C-prime orchestration
+plan.
+
+PLAT032 therefore does not create the generic host-continuation ABI rejected by
+PLAT028 and does not permit canonical-intrinsic elision for non-canonical
+wrappers.

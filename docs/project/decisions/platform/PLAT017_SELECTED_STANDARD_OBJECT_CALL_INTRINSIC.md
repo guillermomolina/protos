@@ -512,3 +512,18 @@ affected slice and crosses the normal Dxxx/PLATxxx approval gate.
 - cross-machine migration/serialization of live continuations; and
 - any future general native-wrapper composition mechanism not justified by
   concrete requirements and separately approved.
+
+## PLAT032 clarification — non-canonical standard wrappers
+
+PLAT032 does not widen this intrinsic.
+
+Only the exact canonical selected standard `Object.call` remains eligible for the
+PLAT017 intrinsic/elision. A copied, aliased, rebound or otherwise non-canonical
+copy of that implementation remains an ordinary selected method with its lookup,
+receiver, selected identity and `methodHome` preserved.
+
+If such an ordinary wrapper must invoke guest code that may suspend and then
+continue, PLAT032 places the surviving sub-call/post-call sequencing state in a
+behavior-specific C-prime orchestration plan. The wrapper remains logically
+visible as the ordinary selected method; its Java frame is not continuation
+state and evaluator replay is not a fallback.
