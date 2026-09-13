@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; I1-A CLOSED; I1-B CLOSED; I1-C READY)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; D128 RATIFIED C″; I1-A CLOSED; I1-B CLOSED; I1-C READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -2106,3 +2106,45 @@ proof; I1-C owns reproducibility and final I1 closure.
 
 No Protos specification, Java/runtime/native boundary, Maven implementation
 version or VS Code extension version changes in I1-B.
+
+## LM009-I1-C reproducibility decision — D128 RATIFIED
+
+Status after publication: **I1-C READY**
+
+Decision issue: GitHub #500
+
+Explicit project-owner approval selected Candidate C″ after an exhaustive
+cross-ecosystem reproducibility audit.
+
+`VSIX_REPRODUCIBLE=YES` now means both:
+
+```text
+VSIX_CONTENT_REPRODUCIBLE=YES
+VSIX_ARTIFACT_REPRODUCIBLE=YES
+```
+
+VSCE remains the only VSIX semantic/package-content authority. I1-C may add only
+a narrow canonical transport layer that preserves every VSCE-produced member path
+and byte sequence while normalizing ZIP representation:
+
+```text
+timestamp = SOURCE_DATE_EPOCH from immutable Git commit time
+entry order = lexicographic
+regular-file mode/attributes = fixed
+archive comment = none
+compression = ZIP STORE
+```
+
+ZIP STORE is selected deliberately so compressor implementation/version cannot
+become a hidden artifact-identity input.
+
+I1-C must use two independent clean worktrees of the same immutable source commit
+and prove exact member path/byte identity plus exact final canonical `.vsix`
+SHA-256 identity. Raw pre-canonicalization VSCE archive hashes need not match.
+
+Direct exact ZIP reader/writer build dependencies are permitted; a Protos-owned
+VSIX semantic builder is not.
+
+D128 changes no Protos semantics, Java/runtime/native boundary, D127 external
+runtime authority, public-registry policy, Maven implementation version or VS
+Code extension version.

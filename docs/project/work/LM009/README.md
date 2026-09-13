@@ -12,8 +12,8 @@ This directory contains durable non-normative documentation owned by
   Hover, completion and signature help remain deferred to paused LM010 /
   GitHub #493 and do not block LM009. LM009-I is IN_PROGRESS under ratified
   D127 Candidate B′: I1-A deterministic bundle foundation and I1-B bounded
-  VSIX license/notices/content work are CLOSED; I1-C clean-checkout
-  reproducibility/content closure is READY.
+  VSIX license/notices/content work are CLOSED. D128 Candidate C″ is ratified;
+  I1-C clean-worktree content + canonical-artifact reproducibility closure is READY.
 
 Live coordination belongs to GitHub Issue #288. `LM009-A` is coordinated by
 GitHub Issue #289. The existing editor highlighting Issue #11 is consumed by
