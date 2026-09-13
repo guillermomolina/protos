@@ -250,6 +250,7 @@ public final class ProtosCli {
         Path distributionRoot = core.getParent().getParent();
         Path testsRoot = distributionRoot.resolve("tests");
         Path conformanceRoot = testsRoot.resolve("conformance");
+        Path libraryRoot = testsRoot.resolve("library");
         Path packageTomlRoot =
                 testsRoot.resolve("package-tool").resolve("toml-syntax");
         Path actorRoot = conformanceRoot.resolve("actor");
@@ -296,7 +297,9 @@ public final class ProtosCli {
                 ProtosNioReadOnlyTreeFilesystemBackend actorFilesystemBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(actorRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend groupFilesystemBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(groupRoot)) {
+                        new ProtosNioReadOnlyTreeFilesystemBackend(groupRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend libraryFilesystemBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(libraryRoot)) {
             return runBundledTool(
                     "test",
                     "Test",
@@ -324,6 +327,10 @@ public final class ProtosCli {
                                     session,
                                     "packageTomlFilesystem",
                                     packageTomlFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "libraryFilesystem",
+                                    libraryFilesystemBackend);
                             ProtosTestCorpusRegistry.install(
                                     session.activation);
                             ProtosTestExecutionRequirementRegistry.install(

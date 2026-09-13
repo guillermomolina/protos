@@ -1,6 +1,7 @@
 /*
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina.
+ * See LICENSE.TXT for the complete terms.
  */
 package com.guillermomolina.protos.cli;
 
@@ -40,6 +41,7 @@ final class ProtosTestToolCorpusRegistryTest {
         Path actorRoot = Files.createDirectories(tempDirectory.resolve("actor"));
         Path groupRoot = Files.createDirectories(tempDirectory.resolve("group"));
         Path packageRoot = Files.createDirectories(tempDirectory.resolve("package"));
+        Path libraryRoot = Files.createDirectories(tempDirectory.resolve("library"));
 
         try (ProtosNioReadOnlyTreeFilesystemBackend ordinaryBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(ordinaryRoot);
@@ -48,11 +50,14 @@ final class ProtosTestToolCorpusRegistryTest {
                 ProtosNioReadOnlyTreeFilesystemBackend groupBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(groupRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend packageBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(packageRoot)) {
+                        new ProtosNioReadOnlyTreeFilesystemBackend(packageRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend libraryBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(libraryRoot)) {
             installFilesystem(fixture, "filesystem", ordinaryBackend);
             installFilesystem(fixture, "actorFilesystem", actorBackend);
             installFilesystem(fixture, "groupFilesystem", groupBackend);
             installFilesystem(fixture, "packageTomlFilesystem", packageBackend);
+            installFilesystem(fixture, "libraryFilesystem", libraryBackend);
 
             ProtosTestCorpusRegistry.install(fixture.activation());
             ProtosObjectValue registry =
@@ -63,7 +68,7 @@ final class ProtosTestToolCorpusRegistryTest {
                                     .readLocalSlot(ProtosTestCorpusRegistry.REGISTRY_SLOT)
                                     .orElseThrow());
             assertTrue(registry.isFrozen());
-            assertEquals(4, registry.localSlotsSnapshot().size());
+            assertEquals(11, registry.localSlotsSnapshot().size());
 
             assertBinding(fixture.activation(), registry, "protos/corpus/conformance",
                     "manifest", "filesystem");
@@ -73,9 +78,51 @@ final class ProtosTestToolCorpusRegistryTest {
                     "manifest", "groupFilesystem");
             assertBinding(fixture.activation(), registry, "protos/corpus/package-toml",
                     "package-toml", "packageTomlFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/uri",
+                    "repository-explicit",
+                    "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/csv",
+                    "repository-explicit",
+                    "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/cli",
+                    "repository-explicit",
+                    "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/math/integer",
+                    "repository-explicit",
+                    "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/crypto/sha256",
+                    "repository-explicit",
+                    "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/network/ip-addresses",
+                    "repository-explicit",
+                    "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/library/network/ip-endpoints",
+                    "repository-explicit",
+                    "libraryFilesystem");
 
             assertFalse(registry.hasLocalSlot("protos/test/ordinary"));
-            assertFalse(registry.hasLocalSlot("protos/test/actor"));
+            assertFalse(registry.hasLocalSlot("protos/corpus/library/unknown"));
             assertThrows(
                     IllegalStateException.class,
                     () -> ProtosTestCorpusRegistry.install(fixture.activation()));

@@ -20,6 +20,7 @@ Options: import("self:Options")
 ResourceCatalog: import("self:ResourceCatalog")
 SuiteGraph: import("self:SuiteGraph")
 RepositorySuite: import("self:RepositorySuite")
+RepositoryCorpusPlans: import("self:RepositoryCorpusPlans")
 
 arguments: process.args()
 jobs: Options.jobs(arguments)
@@ -59,7 +60,14 @@ phaseNames: Array(
     "main",
     "actor",
     "group",
-    "package-toml"
+    "package-toml",
+    "uri",
+    "csv",
+    "cli",
+    "math-integer",
+    "crypto-sha256",
+    "network-ip-addresses",
+    "network-ip-endpoints"
 )
 phaseNames.freeze()
 
@@ -94,6 +102,9 @@ resolveIndex: 0
     planLoader: corpusBinding.planLoader
     supportedLoader: planLoader === "manifest"
     (planLoader === "package-toml").ifTrue(() => {
+        supportedLoader = true
+    })
+    (planLoader === "repository-explicit").ifTrue(() => {
         supportedLoader = true
     })
     supportedLoader.ifFalse(() => {
@@ -142,6 +153,9 @@ planIndex: 0
     })
     (planLoader === "package-toml").ifTrue(() => {
         suitePlan = Manifest.loadPackageToml(corpusBinding.filesystem)
+    })
+    (planLoader === "repository-explicit").ifTrue(() => {
+        suitePlan = RepositoryCorpusPlans.load(resolved.leaf.corpus)
     })
     (suitePlan === null).ifTrue(() => {
         Error().signal()

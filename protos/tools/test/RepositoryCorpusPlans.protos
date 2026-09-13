@@ -1,0 +1,183 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina.
+// See LICENSE.TXT for the complete terms.
+
+//! TOOL005-B2 explicit Test Tool membership for existing Standard Library corpora.
+//! No filesystem discovery is used.
+
+Manifest: import("self:Manifest")
+
+fail: () => {
+    Error().signal()
+}
+
+planFromEntries: (prefix, entries) => {
+    cases: Array()
+    entries.each((entry) => {
+        cases = Array(
+            ...cases,
+            Manifest.caseSpec(
+                Array(
+                    prefix + entry[0],
+                    entry[1],
+                    entry[2]
+                )
+            )
+        )
+    })
+    cases.freeze()
+    plan: Array(cases)
+    plan.freeze()
+    plan
+}
+
+load: (corpusId) => {
+    selected: null
+    matched: false
+
+    (corpusId == "protos/corpus/library/uri").ifTrue(() => {
+        selected = planFromEntries(
+            "uri/",
+            Array(
+            Array("parse-components.protos", "boolean", "true"),
+            Array("parse-valid.protos", "boolean", "true"),
+            Array("parse-invalid.protos", "boolean", "true"),
+            Array("arity-domain-rejection.protos", "boolean", "true"),
+            Array("format-roundtrip.protos", "boolean", "true"),
+            Array("format-constructed.protos", "boolean", "true"),
+            Array("format-invalid.protos", "boolean", "true"),
+            Array("resolve-rfc3986-normal.protos", "boolean", "true"),
+            Array("resolve-rfc3986-abnormal.protos", "boolean", "true"),
+            Array("resolve-boundaries.protos", "boolean", "true"),
+            Array("resolve-invalid.protos", "boolean", "true")
+            )
+        )
+        matched = true
+    })
+
+    (corpusId == "protos/corpus/library/csv").ifTrue(() => {
+        selected = planFromEntries(
+            "csv/",
+            Array(
+            Array("parse-basic.protos", "boolean", "true"),
+            Array("parse-record-boundaries.protos", "boolean", "true"),
+            Array("parse-invalid.protos", "boolean", "true"),
+            Array("arity-domain-rejection.protos", "boolean", "true"),
+            Array("encode-canonical.protos", "boolean", "true"),
+            Array("encode-roundtrip.protos", "boolean", "true"),
+            Array("encode-invalid.protos", "boolean", "true"),
+            Array("row-parser-basic.protos", "boolean", "true"),
+            Array("row-parser-boundaries.protos", "boolean", "true"),
+            Array("row-parser-lifecycle.protos", "boolean", "true"),
+            Array("row-parser-independence.protos", "boolean", "true"),
+            Array("text-adapter-reader.protos", "future-boolean", "true"),
+            Array("text-adapter-writer.protos", "future-boolean", "true"),
+            Array("text-adapter-overlap.protos", "future-boolean", "true"),
+            Array("text-adapter-terminal-errors.protos", "boolean", "true"),
+            Array("integrated-closure.protos", "future-boolean", "true"),
+            Array("streaming-scale.protos", "boolean", "true")
+            )
+        )
+        matched = true
+    })
+
+    (corpusId == "protos/corpus/library/cli").ifTrue(() => {
+        selected = planFromEntries(
+            "cli/",
+            Array(
+            Array("specification-valid.protos", "boolean", "true"),
+            Array("specification-invalid.protos", "boolean", "true"),
+            Array("specification-snapshot.protos", "boolean", "true"),
+            Array("result-model.protos", "boolean", "true"),
+            Array("result-provenance.protos", "boolean", "true"),
+            Array("adversarial.protos", "boolean", "true"),
+            Array("parse-options.protos", "boolean", "true"),
+            Array("parse-positionals-d111.protos", "boolean", "true"),
+            Array("parse-delimiter.protos", "boolean", "true"),
+            Array("parse-failures.protos", "boolean", "true"),
+            Array("parse-subcommands-d115.protos", "boolean", "true"),
+            Array("parse-subcommand-delimiter.protos", "boolean", "true"),
+            Array("parse-subcommand-options.protos", "boolean", "true"),
+            Array("parse-subcommand-deep.protos", "boolean", "true"),
+            Array("valuename-d119.protos", "boolean", "true"),
+            Array("help-rendering-d118.protos", "boolean", "true"),
+            Array("help-rendering-path-d118.protos", "boolean", "true"),
+            Array("closure-large-spec.protos", "boolean", "true"),
+            Array("closure-isolation-concurrency.protos", "boolean", "true")
+            )
+        )
+        matched = true
+    })
+
+    (corpusId == "protos/corpus/library/math/integer").ifTrue(() => {
+        selected = planFromEntries(
+            "math/integer/",
+            Array(
+            Array("gcd-lcm.protos", "boolean", "true"),
+            Array("large-values.protos", "boolean", "true"),
+            Array("domain-rejection.protos", "boolean", "true"),
+            Array("arity-rejection.protos", "boolean", "true"),
+            Array("factorial.protos", "boolean", "true"),
+            Array("factorial-domain-rejection.protos", "boolean", "true"),
+            Array("factorial-arity-rejection.protos", "boolean", "true"),
+            Array("power.protos", "boolean", "true"),
+            Array("power-domain-rejection.protos", "boolean", "true"),
+            Array("power-arity-rejection.protos", "boolean", "true"),
+            Array("integrated-closure.protos", "boolean", "true")
+            )
+        )
+        matched = true
+    })
+
+    (corpusId == "protos/corpus/library/crypto/sha256").ifTrue(() => {
+        selected = planFromEntries(
+            "crypto/sha256/",
+            Array(
+            Array("empty.protos", "boolean", "true"),
+            Array("abc.protos", "boolean", "true"),
+            Array("multi.protos", "boolean", "true"),
+            Array("binary.protos", "boolean", "true"),
+            Array("a55.protos", "boolean", "true"),
+            Array("a56.protos", "boolean", "true"),
+            Array("a64.protos", "boolean", "true"),
+            Array("fresh-result.protos", "boolean", "true"),
+            Array("input-unchanged.protos", "boolean", "true"),
+            Array("invalid-non-bytes.protos", "error", "-")
+            )
+        )
+        matched = true
+    })
+
+    (corpusId == "protos/corpus/library/network/ip-addresses").ifTrue(() => {
+        selected = planFromEntries(
+            "network/ip-addresses/",
+            Array(
+            Array("surface-ipv4.protos", "boolean", "true"),
+            Array("ipv6.protos", "boolean", "true"),
+            Array("domain-rejection.protos", "boolean", "true"),
+            Array("arity-rejection.protos", "boolean", "true"),
+            Array("ipv4-parse-format.protos", "boolean", "true"),
+            Array("ipv4-invalid.protos", "boolean", "true"),
+            Array("ipv6-parse-format.protos", "boolean", "true"),
+            Array("ipv6-invalid.protos", "boolean", "true")
+            )
+        )
+        matched = true
+    })
+
+    (corpusId == "protos/corpus/library/network/ip-endpoints").ifTrue(() => {
+        selected = planFromEntries(
+            "network/ip-endpoints/",
+            Array(
+            Array("parse-format.protos", "boolean", "true"),
+            Array("invalid.protos", "boolean", "true")
+            )
+        )
+        matched = true
+    })
+
+    matched.ifFalse(() => {
+        fail()
+    })
+    selected
+}
