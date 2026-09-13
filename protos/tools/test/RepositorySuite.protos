@@ -13,17 +13,30 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! TOOL005-A2 inert repository-owned Test Tool suite descriptor.
-//! Membership and IDs are explicit under D122 Candidate F and D123 Candidate G-prime.
+//! TOOL005-A3A inert repository-owned Test Tool suite descriptor.
+//! Membership/SuiteIds follow D122/D123; executable leaves carry the mandatory
+//! atomic D125 Candidate B-prime ExecutionRequirementId in a separate namespace.
 
 SuiteGraph: import("self:SuiteGraph")
 
 root: SuiteGraph.suite(
     "protos/repository",
     Array(
-        SuiteGraph.leaf("protos/conformance"),
-        SuiteGraph.leaf("protos/actor"),
-        SuiteGraph.leaf("protos/group"),
-        SuiteGraph.leaf("protos/package-toml")
+        SuiteGraph.leaf(
+            "protos/conformance",
+            "protos/test/ordinary"
+        ),
+        SuiteGraph.leaf(
+            "protos/actor",
+            "protos/test/actor"
+        ),
+        SuiteGraph.leaf(
+            "protos/group",
+            "protos/test/group"
+        ),
+        SuiteGraph.leaf(
+            "protos/package-toml",
+            "protos/test/package"
+        )
     )
 )

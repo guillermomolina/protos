@@ -324,6 +324,8 @@ public final class ProtosCli {
                                     session,
                                     "packageTomlFilesystem",
                                     packageTomlFilesystemBackend);
+                            ProtosTestExecutionRequirementRegistry.install(
+                                    session.activation);
                             ProtosTestToolCatalogAcquisitionFacility.install(
                                     session.activation,
                                     invocationWorkingDirectory);

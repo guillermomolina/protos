@@ -13,7 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! D122 Candidate F inert suite graph with D123 canonical SuiteId validation.
+//! D122 Candidate F inert suite graph with D123 SuiteId and D125
+//! ExecutionRequirementId validation.
 
 fail: () => {
     Error().signal()
@@ -39,10 +40,10 @@ isIdSegmentTailOctet: (octet) => {
         (octet == 45)
 }
 
-// D123 Candidate G-prime canonical SuiteId:
+// D123/D125 shared portable lexical shape:
 // segment(/segment)* where segment=[a-z0-9][a-z0-9._-]*.
-// Slash is logical namespace segmentation only; this is not a filesystem path.
-validateId: (value) => {
+// Grammar reuse does not merge the SuiteId and ExecutionRequirementId namespaces.
+validateNamespacedId: (value) => {
     validateString(value)
     source: Encoding.UTF8.encode(value)
     size: source.size()
@@ -85,6 +86,14 @@ validateId: (value) => {
     value
 }
 
+validateSuiteId: (value) => {
+    validateNamespacedId(value)
+}
+
+validateExecutionRequirementId: (value) => {
+    validateNamespacedId(value)
+}
+
 validateArray: (value) => {
     (value.parent() === Array).ifFalse(() => {
         fail()
@@ -92,23 +101,28 @@ validateArray: (value) => {
     value
 }
 
-/// Creates one inert corpus-leaf descriptor.
-leaf: (id) => {
-    idValue: validateId(id)
+/// Creates one inert executable corpus-leaf descriptor.
+/// D125 requires exactly one explicit leaf-local executionRequirement.
+leaf: (id, executionRequirement) => {
+    idValue: validateSuiteId(id)
+    executionRequirementValue:
+        validateExecutionRequirementId(executionRequirement)
     childrenValue: Array()
     childrenValue.freeze()
 
     descriptor: {
         kind: "leaf"
         id: idValue
+        executionRequirement: executionRequirementValue
         children: childrenValue
     }
     descriptor.freeze()
 }
 
-/// Creates one inert explicit suite-composition descriptor.
+/// Creates one inert explicit composition-only suite descriptor.
+/// Suite nodes do not inherit or own an execution requirement.
 suite: (id, children) => {
-    idValue: validateId(id)
+    idValue: validateSuiteId(id)
     validateArray(children)
 
     childrenValue: Array(...children)
@@ -122,8 +136,8 @@ suite: (id, children) => {
     descriptor.freeze()
 }
 
-/// Validates one complete explicit graph and returns leaf IDs in declaration order.
-flattenLeafIds: (root) => {
+/// Validates one complete explicit graph and projects leaves in declaration order.
+flatten: (root, leafProjection) => {
     ids: Map()
     visiting: IdentityMap()
 
@@ -190,7 +204,7 @@ flattenLeafIds: (root) => {
         })
 
         kindValue: validateString(required(node, "kind"))
-        idValue: validateId(required(node, "id"))
+        idValue: validateSuiteId(required(node, "id"))
 
         ids.containsKey(idValue).ifTrue(() => {
             fail()
@@ -209,7 +223,10 @@ flattenLeafIds: (root) => {
             (childrenValue.size() == 0).ifFalse(() => {
                 fail()
             })
-            appendBuilt(builder, idValue)
+            validateExecutionRequirementId(
+                required(node, "executionRequirement")
+            )
+            appendBuilt(builder, leafProjection(node))
         })
 
         (kindValue == "suite").ifTrue(() => {
@@ -227,4 +244,18 @@ flattenLeafIds: (root) => {
 
     flattened: finishBuilder(builder)
     flattened.freeze()
+}
+
+/// Returns validated executable leaf descriptors in canonical declaration order.
+flattenLeaves: (root) => {
+    flatten(root, (leafDescriptor) => {
+        leafDescriptor
+    })
+}
+
+/// Compatibility projection used by existing selectors/evidence.
+flattenLeafIds: (root) => {
+    flatten(root, (leafDescriptor) => {
+        leafDescriptor.id
+    })
 }
