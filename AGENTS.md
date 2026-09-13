@@ -1876,7 +1876,7 @@ the work.
 Every GitHub Issue that represents a formal Protos identifier MUST carry exactly
 one stable family-classification label named `family:<FAMILY>`, where `<FAMILY>`
 is the identifier prefix. Examples include `family:I`, `family:LIB`,
-`family:TOOL`, `family:CLI`, `family:PERF`, `family:DOC`, `family:DIST`,
+`family:TOOL`, `family:TEST`, `family:CLI`, `family:PERF`, `family:DOC`, `family:DIST`,
 `family:AUD`, `family:LM`, `family:GITHUB`, `family:D`, `family:PLAT`,
 `family:B`, and `family:BUG`.
 

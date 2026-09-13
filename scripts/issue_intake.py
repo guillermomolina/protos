@@ -32,6 +32,7 @@ FORMAL_FAMILIES = (
     "GITHUB",
     "PLAT",
     "TOOL",
+    "TEST",
     "PERF",
     "DIST",
     "BUG",
@@ -596,6 +597,14 @@ def self_test():
         "identifier": "TOOL001-F2E4",
         "family": "TOOL",
     }
+    assert parse_title_identifier("TEST001 — Repository testing ownership") == {
+        "identifier": "TEST001",
+        "family": "TEST",
+    }
+    assert parse_title_identifier("TEST001-A — Test inventory") == {
+        "identifier": "TEST001-A",
+        "family": "TEST",
+    }
     assert parse_title_identifier("PERF001-F blocker — detail") == {
         "identifier": "PERF001-F",
         "family": "PERF",
@@ -633,6 +642,29 @@ def self_test():
     child = reconcile_issue(mock, mock.issues[318])
     assert child["added_parent"]
     assert mock.parents[318] == 288
+
+    test_mock = MockApi()
+    test_mock.issues[449] = _mock_issue(
+        449,
+        "TEST001 — Repository testing ownership",
+        labels=["status:inbox"],
+    )
+    test_parent = reconcile_issue(test_mock, test_mock.issues[449])
+    assert test_parent["formal"]
+    assert test_parent["family"] == "TEST"
+    assert (449, ("family:TEST",)) in test_mock.added_labels
+
+    test_mock.issues[459] = _mock_issue(
+        459,
+        "TEST001-A — Test inventory",
+        body="## Parent\n\nParent: #449 (`TEST001`)\n",
+        labels=["family:TEST", "status:ready"],
+    )
+    test_child = reconcile_issue(test_mock, test_mock.issues[459])
+    assert test_child["formal"]
+    assert test_child["family"] == "TEST"
+    assert test_child["added_parent"]
+    assert test_mock.parents[459] == 449
 
     mock.parents[318] = 287
     try:
@@ -721,6 +753,7 @@ x
     print("ISSUE_INTAKE_SELF_TEST: PASS")
     print("FORMAL_FAMILY_DERIVATION: PASS")
     print("FORMAL_PARENT_RECONCILIATION: PASS")
+    print("TEST_FAMILY_RECONCILIATION: PASS")
     print("PARENT_CONFLICT_FAIL_CLOSED: PASS")
     print("UNTRUSTED_FORMAL_CANDIDATE_NO_PROMOTION: PASS")
     print("COMMUNITY_NO_FAMILY_PROMOTION: PASS")
