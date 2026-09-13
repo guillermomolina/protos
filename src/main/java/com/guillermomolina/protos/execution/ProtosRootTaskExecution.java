@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.RootCallTarget;
 import java.util.Objects;
 
 /**
@@ -44,7 +45,16 @@ public final class ProtosRootTaskExecution {
                 domain.createTask(
                         null,
                         null,
-                        task -> task.executeProtos(target, activation));
+                        task -> {
+                            if (isProductionBytecodeRoot(target)) {
+                                ProtosBytecodeTaskExecution.execute(
+                                        task,
+                                        target,
+                                        activation);
+                            } else {
+                                task.executeProtos(target, activation);
+                            }
+                        });
 
         domain.dispatchUntilTerminal(rootTask, () -> false);
 
@@ -77,4 +87,9 @@ public final class ProtosRootTaskExecution {
                             "root task returned before reaching a terminal state");
         };
     }
+    private static boolean isProductionBytecodeRoot(CallTarget target) {
+        return target instanceof RootCallTarget rootTarget
+                && rootTarget.getRootNode() instanceof ProtosSemanticBytecodeRootNode;
+    }
+
 }

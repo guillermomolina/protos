@@ -61,6 +61,6 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
             throw new IllegalArgumentException(
                     "Protos top-level parsing does not accept host argument names");
         }
-        return sourceCompiler.compile(request.getSource(), this);
+        return sourceCompiler.compileBytecode(request.getSource(), this);
     }
 }
