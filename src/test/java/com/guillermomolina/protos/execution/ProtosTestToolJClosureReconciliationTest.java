@@ -126,7 +126,12 @@ final class ProtosTestToolJClosureReconciliationTest {
                                 "ProtosCli.java"),
                         StandardCharsets.UTF_8);
 
-        assertEquals(4, occurrences(main, "Runner.runD108WithResources("));
+        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
+        assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+        assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
+        assertFalse(main.contains("actorExecutionAsync"));
+        assertFalse(main.contains("groupExecutionAsync"));
+        assertFalse(main.contains("packageExecutionAsync"));
         assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
         assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
         assertTrue(main.trim().endsWith("finalOutcome"));

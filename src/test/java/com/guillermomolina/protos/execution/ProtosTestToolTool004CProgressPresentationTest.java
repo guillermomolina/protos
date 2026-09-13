@@ -68,11 +68,17 @@ prelude.newModuleActivation());
         assertTrue(
                 main.contains(
                         "TextWriter(process.stderr(), process.stderrEncoding())"));
-        assertEquals(4, occurrences(main, "startProgress("));
-        assertEquals(4, occurrences(main, "Progress.observer("));
-        assertEquals(4, occurrences(main, "Progress.finishPhase("));
+        assertEquals(1, occurrences(main, "startProgress("));
+        assertEquals(1, occurrences(main, "Progress.observer("));
+        assertEquals(1, occurrences(main, "Progress.finishPhase("));
         assertTrue(main.contains("Progress.finishInvocation("));
-        assertEquals(4, occurrences(main, "Runner.runD108WithResources("));
+        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
+        assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+        assertTrue(main.contains("suiteProgress: startProgress(planned.phaseName, planned.plan)"));
+        assertTrue(main.contains("\"main\""));
+        assertTrue(main.contains("\"actor\""));
+        assertTrue(main.contains("\"group\""));
+        assertTrue(main.contains("\"package-toml\""));
     }
 
     private static int occurrences(String text, String needle) {

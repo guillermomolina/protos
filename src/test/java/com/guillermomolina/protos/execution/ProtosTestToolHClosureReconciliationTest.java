@@ -43,9 +43,13 @@ final class ProtosTestToolHClosureReconciliationTest {
 
         assertTrue(main.contains("arguments: process.args()"));
         assertTrue(main.contains("jobs: Options.jobs(arguments)"));
-        assertEquals(4, occurrences(main, "Runner.runD108WithResources("));
+        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
         assertEquals(0, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));
+        assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+        assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
+        assertTrue(main.contains("binding.executionAsync"));
+        assertTrue(main.contains("binding.executionInspectAsync"));
         assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
         assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
         assertTrue(main.trim().endsWith("finalOutcome"));

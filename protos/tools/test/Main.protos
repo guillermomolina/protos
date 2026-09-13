@@ -11,13 +11,15 @@
 //
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
-// the specific language governing rights and limitations under the LICENSE.
+// the specific language governing rights and limitations under the License.
 
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 Progress: import("self:Progress")
 Options: import("self:Options")
 ResourceCatalog: import("self:ResourceCatalog")
+SuiteGraph: import("self:SuiteGraph")
+RepositorySuite: import("self:RepositorySuite")
 
 arguments: process.args()
 jobs: Options.jobs(arguments)
@@ -29,11 +31,6 @@ resourceCatalog: ResourceCatalog.empty()
     resourceCatalogText: Encoding.UTF8.decode(resourceCatalogBytes)
     resourceCatalog = ResourceCatalog.parse(resourceCatalogText)
 })
-
-plan: Manifest.load(filesystem)
-packageTomlPlan: Manifest.loadPackageToml(packageTomlFilesystem)
-actorPlan: Manifest.load(actorFilesystem)
-groupPlan: Manifest.load(groupFilesystem)
 
 progressWriter:
     TextWriter(process.stderr(), process.stderrEncoding())
@@ -55,154 +52,172 @@ startProgress: (phaseName, phasePlan) => {
     state
 }
 
+// A3B keeps presentation separate from D123 SuiteId and D125
+// ExecutionRequirementId authority. These four historical labels are retained
+// only for exact output compatibility while execution order comes from the graph.
+phaseNames: Array(
+    "main",
+    "actor",
+    "group",
+    "package-toml"
+)
+phaseNames.freeze()
+
+leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)
+(leaves.size() == phaseNames.size()).ifFalse(() => {
+    Error().signal()
+})
+
+// D125: resolve and validate the complete invocation binding set before any
+// TestPlan case may be scheduled. Execution dispatch is requirement-driven; no
+// SuiteId selects a host route.
+resolvedSuites: Array()
+resolveIndex: 0
+(() => resolveIndex < leaves.size()).while() {
+    leaf: leaves[resolveIndex]
+    requirement: leaf.executionRequirement
+
+    testExecutionRequirementBindings.hasSlot(requirement).ifFalse(() => {
+        Error().signal()
+    })
+    binding: testExecutionRequirementBindings.slotValue(requirement)
+
+    Array(
+        "filesystem",
+        "planLoader",
+        "executionAsync",
+        "executionInspectAsync",
+        "resourceExecutionAsync",
+        "resourceExecutionInspectAsync"
+    ).each((slotName) => {
+        binding.hasSlot(slotName).ifFalse(() => {
+            Error().signal()
+        })
+    })
+
+    planLoader: binding.planLoader
+    supportedLoader: planLoader === "manifest"
+    (planLoader === "package-toml").ifTrue(() => {
+        supportedLoader = true
+    })
+    supportedLoader.ifFalse(() => {
+        Error().signal()
+    })
+
+    resolved: {
+        leaf: leaf
+        phaseName: phaseNames[resolveIndex]
+        binding: binding
+    }
+    resolved.freeze()
+    resolvedSuites = Array(...resolvedSuites, resolved)
+    resolveIndex = resolveIndex + 1
+}
+resolvedSuites.freeze()
+
+// Materialize every current TestPlan before scheduling begins. Loader selection
+// is a host-binding implementation fact, never SuiteId or graph ancestry.
+plannedSuites: Array()
+planIndex: 0
+(() => planIndex < resolvedSuites.size()).while() {
+    resolved: resolvedSuites[planIndex]
+    binding: resolved.binding
+    planLoader: binding.planLoader
+    suitePlan: null
+
+    (planLoader === "manifest").ifTrue(() => {
+        suitePlan = Manifest.load(binding.filesystem)
+    })
+    (planLoader === "package-toml").ifTrue(() => {
+        suitePlan = Manifest.loadPackageToml(binding.filesystem)
+    })
+    (suitePlan === null).ifTrue(() => {
+        Error().signal()
+    })
+
+    planned: {
+        leaf: resolved.leaf
+        phaseName: resolved.phaseName
+        binding: binding
+        plan: suitePlan
+    }
+    planned.freeze()
+    plannedSuites = Array(...plannedSuites, planned)
+    planIndex = planIndex + 1
+}
+plannedSuites.freeze()
+
 completedRuns: Array()
 primaryRun: null
 finalOutcome: null
 invocationAborted: false
 
-primaryProgress: startProgress("main", plan)
+suiteIndex: 0
+(() =>
+    (suiteIndex < plannedSuites.size()) &&
+    invocationAborted.not()
+).while() {
+    planned: plannedSuites[suiteIndex]
+    binding: planned.binding
+    suiteProgress: startProgress(planned.phaseName, planned.plan)
 
-primaryD108: Runner.runD108WithResources(
-    plan,
-    resourceCatalog,
-    filesystem,
-    executionAsync,
-    executionInspectAsync,
-    resourceExecutionAsync,
-    resourceExecutionInspectAsync,
-    jobs,
-    Progress.observer(primaryProgress)
-)
-
-Progress.finishPhase(
-    primaryProgress,
-    Runner.d108RunInfrastructureFailed(primaryD108)
-)
-
-Runner.d108RunInfrastructureFailed(primaryD108).ifTrue(() => {
-    finalOutcome =
-        Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation(
-            completedRuns,
-            primaryD108,
-            Array(actorPlan, groupPlan, packageTomlPlan)
-        )
-    invocationAborted = true
-})
-
-invocationAborted.not().ifTrue(() => {
-    primaryRun = Runner.d108RunHealthyRun(primaryD108)
-    completedRuns = Array(...completedRuns, primaryRun)
-
-    actorProgress: startProgress("actor", actorPlan)
-
-    actorD108: Runner.runD108WithResources(
-        actorPlan,
+    suiteD108: Runner.runD108WithResources(
+        planned.plan,
         resourceCatalog,
-        actorFilesystem,
-        actorExecutionAsync,
-        actorExecutionInspectAsync,
-        actorResourceExecutionAsync,
-        actorResourceExecutionInspectAsync,
+        binding.filesystem,
+        binding.executionAsync,
+        binding.executionInspectAsync,
+        binding.resourceExecutionAsync,
+        binding.resourceExecutionInspectAsync,
         jobs,
-        Progress.observer(actorProgress)
+        Progress.observer(suiteProgress)
     )
+
+    infrastructureFailed:
+        Runner.d108RunInfrastructureFailed(suiteD108)
 
     Progress.finishPhase(
-        actorProgress,
-        Runner.d108RunInfrastructureFailed(actorD108)
+        suiteProgress,
+        infrastructureFailed
     )
 
-    Runner.d108RunInfrastructureFailed(actorD108).ifTrue(() => {
+    infrastructureFailed.ifTrue(() => {
+        laterPlans: Array()
+        laterIndex: suiteIndex + 1
+        (() => laterIndex < plannedSuites.size()).while() {
+            laterPlans = Array(
+                ...laterPlans,
+                plannedSuites[laterIndex].plan
+            )
+            laterIndex = laterIndex + 1
+        }
+
         finalOutcome =
             Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation(
                 completedRuns,
-                actorD108,
-                Array(groupPlan, packageTomlPlan)
+                suiteD108,
+                laterPlans
             )
         invocationAborted = true
     })
 
-    invocationAborted.not().ifTrue(() => {
-        actorRun: Runner.d108RunHealthyRun(actorD108)
-        completedRuns = Array(...completedRuns, actorRun)
-
-        groupProgress: startProgress("group", groupPlan)
-
-        groupD108: Runner.runD108WithResources(
-            groupPlan,
-            resourceCatalog,
-            groupFilesystem,
-            groupExecutionAsync,
-            groupExecutionInspectAsync,
-            groupResourceExecutionAsync,
-            groupResourceExecutionInspectAsync,
-            jobs,
-            Progress.observer(groupProgress)
-        )
-
-        Progress.finishPhase(
-            groupProgress,
-            Runner.d108RunInfrastructureFailed(groupD108)
-        )
-
-        Runner.d108RunInfrastructureFailed(groupD108).ifTrue(() => {
-            finalOutcome =
-                Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation(
-                    completedRuns,
-                    groupD108,
-                    Array(packageTomlPlan)
-                )
-            invocationAborted = true
-        })
-
-        invocationAborted.not().ifTrue(() => {
-            groupRun: Runner.d108RunHealthyRun(groupD108)
-            completedRuns = Array(...completedRuns, groupRun)
-
-            packageTomlProgress:
-                startProgress("package-toml", packageTomlPlan)
-
-            packageTomlD108: Runner.runD108WithResources(
-                packageTomlPlan,
-                resourceCatalog,
-                packageTomlFilesystem,
-                packageExecutionAsync,
-                packageExecutionInspectAsync,
-                packageResourceExecutionAsync,
-                packageResourceExecutionInspectAsync,
-                jobs,
-                Progress.observer(packageTomlProgress)
-            )
-
-            Progress.finishPhase(
-                packageTomlProgress,
-                Runner.d108RunInfrastructureFailed(packageTomlD108)
-            )
-
-            Runner.d108RunInfrastructureFailed(packageTomlD108).ifTrue(() => {
-                finalOutcome =
-                    Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation(
-                        completedRuns,
-                        packageTomlD108,
-                        Array()
-                    )
-                invocationAborted = true
-            })
-
-            invocationAborted.not().ifTrue(() => {
-                packageTomlRun:
-                    Runner.d108RunHealthyRun(packageTomlD108)
-                completedRuns =
-                    Array(...completedRuns, packageTomlRun)
-
-                finalOutcome =
-                    Runner.testRunOutcomeCompletedAcrossRuns(
-                        primaryRun,
-                        completedRuns
-                    )
-            })
+    infrastructureFailed.ifFalse(() => {
+        healthyRun: Runner.d108RunHealthyRun(suiteD108)
+        completedRuns = Array(...completedRuns, healthyRun)
+        (primaryRun === null).ifTrue(() => {
+            primaryRun = healthyRun
         })
     })
+
+    suiteIndex = suiteIndex + 1
+}
+
+invocationAborted.not().ifTrue(() => {
+    finalOutcome =
+        Runner.testRunOutcomeCompletedAcrossRuns(
+            primaryRun,
+            completedRuns
+        )
 })
 
 Progress.finishInvocation(

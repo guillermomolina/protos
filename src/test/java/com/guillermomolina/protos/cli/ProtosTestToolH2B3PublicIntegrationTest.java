@@ -194,27 +194,38 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
     }
 
     @Test
-    void publicMainUsesOneBoundedRunnerPathForAllFourPlans() throws Exception {
+    void publicMainUsesOneGraphDrivenBoundedRunnerPathForAllSuites() throws Exception {
         String main = Files.readString(TOOL_ROOT.resolve("Main.protos"), StandardCharsets.UTF_8);
 
         assertTrue(main.contains("Options: import(\"self:Options\")"));
+        assertTrue(main.contains("SuiteGraph: import(\"self:SuiteGraph\")"));
+        assertTrue(main.contains("RepositorySuite: import(\"self:RepositorySuite\")"));
         assertTrue(main.contains("arguments: process.args()"));
         assertTrue(main.contains("jobs: Options.jobs(arguments)"));
-        assertEquals(4, occurrences(main, "Runner.runD108WithResources("));
+        assertTrue(main.contains("leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+        assertTrue(main.contains("testExecutionRequirementBindings.hasSlot(requirement)"));
+        assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
+        assertTrue(main.contains("Manifest.load(binding.filesystem)"));
+        assertTrue(main.contains("Manifest.loadPackageToml(binding.filesystem)"));
+        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
         assertEquals(0, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));
-        assertTrue(main.contains("executionAsync"));
-        assertTrue(main.contains("executionInspectAsync"));
-        assertTrue(main.contains("actorExecutionAsync"));
-        assertTrue(main.contains("actorExecutionInspectAsync"));
-        assertTrue(main.contains("groupExecutionAsync"));
-        assertTrue(main.contains("groupExecutionInspectAsync"));
-        assertTrue(main.contains("packageExecutionAsync"));
-        assertTrue(main.contains("packageExecutionInspectAsync"));
-        assertTrue(main.contains("resourceExecutionAsync"));
-        assertTrue(main.contains("actorResourceExecutionAsync"));
-        assertTrue(main.contains("groupResourceExecutionAsync"));
-        assertTrue(main.contains("packageResourceExecutionAsync"));
+        assertTrue(main.contains("binding.executionAsync"));
+        assertTrue(main.contains("binding.executionInspectAsync"));
+        assertTrue(main.contains("binding.resourceExecutionAsync"));
+        assertTrue(main.contains("binding.resourceExecutionInspectAsync"));
+        assertFalse(main.contains("actorExecutionAsync"));
+        assertFalse(main.contains("groupExecutionAsync"));
+        assertFalse(main.contains("packageExecutionAsync"));
+        assertFalse(main.contains("actorFilesystem"));
+        assertFalse(main.contains("groupFilesystem"));
+        assertFalse(main.contains("packageTomlFilesystem"));
+        assertFalse(main.contains("\"protos/conformance\""));
+        assertFalse(main.contains("\"protos/actor\""));
+        assertFalse(main.contains("\"protos/group\""));
+        assertFalse(main.contains("\"protos/package-toml\""));
+        assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
+        assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
     }
 
     private static OptionRun runOptionsExpression(String argsExpression) throws Exception {

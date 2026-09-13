@@ -41,6 +41,18 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
                     "ProtosGroupLanguageConformanceTest.java");
     private static final Path MAIN = Path.of("protos", "tools", "test", "Main.protos");
     private static final Path RUNNER = Path.of("protos", "tools", "test", "Runner.protos");
+    private static final Path REPOSITORY_SUITE =
+            Path.of("protos", "tools", "test", "RepositorySuite.protos");
+    private static final Path REQUIREMENT_REGISTRY =
+            Path.of(
+                    "src",
+                    "main",
+                    "java",
+                    "com",
+                    "guillermomolina",
+                    "protos",
+                    "cli",
+                    "ProtosTestExecutionRequirementRegistry.java");
     private static final Path G2_JAVA =
             Path.of(
                     "src",
@@ -85,19 +97,35 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
             throws Exception {
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
         String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
+        String repositorySuite =
+                Files.readString(REPOSITORY_SUITE, StandardCharsets.UTF_8);
+        String requirementRegistry =
+                Files.readString(REQUIREMENT_REGISTRY, StandardCharsets.UTF_8);
         String g2Java = Files.readString(G2_JAVA, StandardCharsets.UTF_8);
         String g3Java = Files.readString(G3_JAVA, StandardCharsets.UTF_8);
         String g2Fixture = Files.readString(G2_FIXTURE, StandardCharsets.UTF_8);
         String g3Fixture = Files.readString(G3_FIXTURE, StandardCharsets.UTF_8);
 
-        assertTrue(main.contains("actorPlan: Manifest.load(actorFilesystem)"));
-        assertTrue(main.contains("actorD108: Runner.runD108WithResources("));
-        assertTrue(main.contains("actorRun: Runner.d108RunHealthyRun(actorD108)"));
-        assertTrue(main.contains("groupPlan: Manifest.load(groupFilesystem)"));
-        assertTrue(main.contains("groupD108: Runner.runD108WithResources("));
-        assertTrue(main.contains("groupRun: Runner.d108RunHealthyRun(groupD108)"));
-        assertTrue(main.contains("actorResourceExecutionAsync"));
-        assertTrue(main.contains("groupResourceExecutionAsync"));
+        assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+        assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
+        assertTrue(main.contains("binding.resourceExecutionAsync"));
+        assertFalse(main.contains("actorExecutionAsync"));
+        assertFalse(main.contains("groupExecutionAsync"));
+
+        assertTrue(repositorySuite.contains("\"protos/actor\""));
+        assertTrue(repositorySuite.contains("\"protos/test/actor\""));
+        assertTrue(repositorySuite.contains("\"protos/group\""));
+        assertTrue(repositorySuite.contains("\"protos/test/group\""));
+
+        assertTrue(requirementRegistry.contains("\"protos/test/actor\""));
+        assertTrue(requirementRegistry.contains("\"actorFilesystem\""));
+        assertTrue(requirementRegistry.contains("\"actorExecutionAsync\""));
+        assertTrue(requirementRegistry.contains("\"actorResourceExecutionAsync\""));
+        assertTrue(requirementRegistry.contains("\"protos/test/group\""));
+        assertTrue(requirementRegistry.contains("\"groupFilesystem\""));
+        assertTrue(requirementRegistry.contains("\"groupExecutionAsync\""));
+        assertTrue(requirementRegistry.contains("\"groupResourceExecutionAsync\""));
+
         assertTrue(runner.contains("(kind === \"future-integer-one-of\").ifTrue"));
 
         assertTrue(

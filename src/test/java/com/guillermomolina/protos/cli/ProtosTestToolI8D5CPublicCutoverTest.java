@@ -84,14 +84,14 @@ prelude.newModuleActivation());
     void publicMainUsesD108ForAllFourOwnedPlansAndReturnsOneFinalOutcome() throws Exception {
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
 
-        assertEquals(4, occurrences(main, "Runner.runD108WithResources("));
+        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
         assertEquals(0, occurrences(main, "Runner.runBounded("));
+        assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+        assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
+        assertTrue(main.contains("binding.resourceExecutionAsync"));
+        assertTrue(main.contains("binding.resourceExecutionInspectAsync"));
         assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
         assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
-        assertTrue(main.contains("resourceExecutionAsync"));
-        assertTrue(main.contains("actorResourceExecutionAsync"));
-        assertTrue(main.contains("groupResourceExecutionAsync"));
-        assertTrue(main.contains("packageResourceExecutionAsync"));
         assertTrue(main.trim().endsWith("finalOutcome"));
     }
 
