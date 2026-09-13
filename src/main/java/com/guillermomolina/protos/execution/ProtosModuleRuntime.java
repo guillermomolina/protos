@@ -13,6 +13,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.RootCallTarget;
 import java.util.List;
 import java.util.Map;
@@ -163,6 +164,27 @@ public final class ProtosModuleRuntime {
     PreparedModuleInitialization prepareBytecodeImport(
             List<?> supplied,
             ProtosActivation caller) {
+        return prepareBytecodeImportWithTask(
+                supplied,
+                caller,
+                caller.task().orElse(null));
+    }
+
+    PreparedModuleInitialization prepareBytecodeImportForTask(
+            List<?> supplied,
+            ProtosActivation caller,
+            ProtosTask task) {
+        Objects.requireNonNull(task, "task");
+        return prepareBytecodeImportWithTask(
+                supplied,
+                caller,
+                task);
+    }
+
+    private PreparedModuleInitialization prepareBytecodeImportWithTask(
+            List<?> supplied,
+            ProtosActivation caller,
+            ProtosTask task) {
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(caller, "caller");
         if (supplied.size() != 1) {
@@ -170,12 +192,14 @@ public final class ProtosModuleRuntime {
         }
         return prepareBytecodeCanonicalModule(
                 resolveModuleKey(supplied.get(0), caller),
-                caller);
+                caller,
+                task);
     }
 
     private PreparedModuleInitialization prepareBytecodeCanonicalModule(
             ProtosModuleKey key,
-            ProtosActivation caller) {
+            ProtosActivation caller,
+            ProtosTask task) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(caller, "caller");
 
@@ -208,8 +232,8 @@ public final class ProtosModuleRuntime {
                             key,
                             moduleInstance,
                             caller.executionDomain());
-            if (caller.task().isPresent()) {
-                moduleActivation.attachTask(caller.task().orElseThrow());
+            if (task != null) {
+                moduleActivation.attachTask(task);
             } else {
                 moduleActivation.inheritDynamicControlState(caller);
             }

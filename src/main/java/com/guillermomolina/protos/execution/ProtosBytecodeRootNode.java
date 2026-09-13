@@ -3595,6 +3595,57 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 activation);
     }
 
+
+    static PreparedClosureCall prepareTaskOwnedDirectNativeForCPrime(
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation creator,
+            ProtosTask task) {
+        java.util.Objects.requireNonNull(closure, "closure");
+        java.util.Objects.requireNonNull(supplied, "supplied");
+        java.util.Objects.requireNonNull(creator, "creator");
+        java.util.Objects.requireNonNull(task, "task");
+        if (closure.nativeBody().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Task native C-prime entry requires a native Closure");
+        }
+
+        /*
+         * Direct Closure execution has already selected the exact Closure
+         * identity. Preserve implementation provenance for extracted/bound
+         * standard callback/control Closures exactly as PLAT019/PLAT021/PLAT028
+         * require; no selector/home inference is introduced here.
+         */
+        rejectComposedInvocationProjection(closure);
+        ProtosActivation activation =
+                ProtosActivation.forClosureInvocation(
+                        closure,
+                        supplied,
+                        creator.prelude().orElse(null),
+                        creator.actorModuleState(),
+                        creator.currentModuleKey().orElse(null),
+                        creator.executionDomain());
+        activation.attachTask(task);
+        return finishPreparingComposedCall(
+                closure,
+                supplied,
+                activation,
+                ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
+                ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
+                ProtosStandardObjectProtocol.isStandardWhileImplementation(closure),
+                ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
+                ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
+                ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
+                ProtosStandardProcessArgumentsProtocol.isStandardEachImplementation(closure),
+                ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure),
+                ProtosStandardIdentityMapProtocol.isStandardEachImplementation(closure),
+                ProtosStandardMapProtocol.isStandardEachImplementation(closure),
+                ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(closure),
+                ProtosStandardMapProtocol.isStandardAtPutImplementation(closure),
+                ProtosStandardMapProtocol.isStandardRemoveImplementation(closure),
+                ProtosStandardErrorProtocol.isStandardSignalImplementation(closure));
+    }
+
     static PreparedClosureCall prepareTaskOwnedSelectedCallIfBytecode(
             Object receiver,
             ProtosSlotLookupResult selected,
@@ -3648,6 +3699,135 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return new PreparedClosureCall(
                 plan.bytecodeActivationTargetForComposition(),
                 activation);
+    }
+
+
+    static PreparedClosureCall prepareTaskOwnedSelectedNativeForCPrime(
+            Object receiver,
+            ProtosSlotLookupResult selected,
+            List<?> supplied,
+            ProtosActivation creator,
+            ProtosTask task) {
+        java.util.Objects.requireNonNull(receiver, "receiver");
+        java.util.Objects.requireNonNull(selected, "selected");
+        java.util.Objects.requireNonNull(supplied, "supplied");
+        java.util.Objects.requireNonNull(creator, "creator");
+        java.util.Objects.requireNonNull(task, "task");
+
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(creator));
+        }
+
+        /*
+         * PLAT017 remains post-lookup authority. Only the exact canonical
+         * Object.call selection may elide that native bridge and execute the
+         * Closure receiver itself.
+         */
+        if (receiver instanceof ProtosClosureValue targetClosure
+                && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                        closure,
+                        selected.home())) {
+            return prepareTaskOwnedDirectNativeForCPrime(
+                    targetClosure,
+                    supplied,
+                    creator,
+                    task);
+        }
+
+        if (closure.nativeBody().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Task selected-native C-prime entry requires a native effective target");
+        }
+
+        /*
+         * Preserve PLAT025 for the exact canonical import facility. The caller
+         * remains the original semantic caller for resolution/error attribution;
+         * the explicit Task is supplied separately so no shared creator
+         * activation is mutated merely to host module initialization.
+         */
+        ProtosModuleRuntime standardImportRuntime =
+                ProtosStandardImportProtocol.selectedRuntimeForBytecodeIntrinsic(
+                        receiver,
+                        closure,
+                        selected.home(),
+                        creator.prelude().orElse(null));
+        if (standardImportRuntime != null) {
+            return PreparedClosureCall.moduleInitialization(
+                    standardImportRuntime.prepareBytecodeImportForTask(
+                            supplied,
+                            creator,
+                            task));
+        }
+
+        rejectComposedInvocationProjection(closure);
+        ProtosActivation activation =
+                ProtosActivation.forImmediateMethodInvocation(
+                        closure,
+                        supplied,
+                        receiver,
+                        selected.home(),
+                        creator.prelude().orElse(null),
+                        creator.actorModuleState(),
+                        creator.currentModuleKey().orElse(null),
+                        creator.executionDomain());
+        activation.attachTask(task);
+        return finishPreparingComposedCall(
+                closure,
+                supplied,
+                activation,
+                ProtosStandardObjectProtocol.isCanonicalStandardEnsureSelection(
+                        closure,
+                        selected.home()),
+                ProtosStandardErrorProtocol.isCanonicalStandardHandleSelection(
+                        closure,
+                        selected.home(),
+                        creator),
+                ProtosStandardObjectProtocol.isCanonicalStandardWhileSelection(
+                        closure,
+                        selected.home()),
+                ProtosStandardBooleanProtocol.structuredCallbackKindForCanonicalSelection(
+                        closure,
+                        selected.home()),
+                ProtosStandardArrayProtocol.isCanonicalStandardEachSelection(
+                        closure,
+                        selected.home(),
+                        creator),
+                ProtosStandardBytesProtocol.isCanonicalStandardEachSelection(
+                        closure,
+                        selected.home(),
+                        creator),
+                ProtosStandardProcessArgumentsProtocol.isCanonicalStandardEachSelection(
+                        closure,
+                        receiver,
+                        selected.home()),
+                ProtosStandardEnvironmentProtocol.isCanonicalStandardEachSelection(
+                        closure,
+                        receiver,
+                        selected.home()),
+                ProtosStandardIdentityMapProtocol.isCanonicalStandardEachSelection(
+                        closure,
+                        selected.home(),
+                        creator),
+                ProtosStandardMapProtocol.isCanonicalStandardEachSelection(
+                        closure,
+                        selected.home(),
+                        creator),
+                ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
+                        closure,
+                        selected.home(),
+                        creator),
+                ProtosStandardMapProtocol.isCanonicalStandardAtPutSelection(
+                        closure,
+                        selected.home(),
+                        creator),
+                ProtosStandardMapProtocol.isCanonicalStandardRemoveSelection(
+                        closure,
+                        selected.home(),
+                        creator),
+                ProtosStandardErrorProtocol.isCanonicalStandardSignalSelection(
+                        closure,
+                        selected.home(),
+                        creator));
     }
 
     private static ProtosClosureExecutionPlan taskOwnedBytecodePlan(

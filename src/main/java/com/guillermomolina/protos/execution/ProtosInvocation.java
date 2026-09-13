@@ -212,41 +212,37 @@ public final class ProtosInvocation {
         }
 
         /*
-         * B6B-C retains only the native Task compatibility branch. For canonical Object.call,
-         * the behavior that would execute is the Closure receiver itself, not the native
-         * Object.call bridge selected by lookup. Guard that exact effective target before
-         * task.executeAction() can materialize evaluator replay state.
+         * B6B-E2 removes the final production native Task replay branch.
+         * The preparer preserves PLAT017's exact canonical Object.call target,
+         * ordinary method receiver/home, PLAT021/028 structured provenance and
+         * PLAT025 canonical import lifecycle ownership.
          */
-        ProtosClosureValue legacyFallbackTarget = closure;
+        ProtosClosureValue nativeTarget = closure;
         if (receiver instanceof ProtosClosureValue targetClosure
                 && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
                         closure,
                         selected.home())) {
-            legacyFallbackTarget = targetClosure;
+            nativeTarget = targetClosure;
         }
-        ProtosClosureInvoker.requireNativeTaskFallbackForRuntime(legacyFallbackTarget);
+        ProtosClosureInvoker.requireNativeTaskFallbackForRuntime(nativeTarget);
 
-        task.executeAction(
-                () -> {
-                    if (receiver instanceof ProtosClosureValue targetClosure
-                            && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
-                                    closure,
-                                    selected.home())) {
-                        return ProtosClosureInvoker.invokeInTask(
-                                targetClosure,
-                                supplied,
-                                caller,
-                                task);
-                    }
-                    return ProtosClosureInvoker.invokeImmediateMethodInTask(
-                            closure,
+        ProtosBytecodeRootNode.PreparedClosureCall nativePrepared;
+        try {
+            nativePrepared =
+                    ProtosBytecodeRootNode.prepareTaskOwnedSelectedNativeForCPrime(
                             receiver,
-                            selected.home(),
+                            selected,
                             supplied,
                             caller,
                             task);
-                });
-        return false;
+        } catch (ProtosSignalException signalled) {
+            task.fail(signalled.error());
+            return false;
+        }
+
+        beforeBytecodeExecution.run();
+        ProtosTaskCPrimeEntryExecution.execute(task, nativePrepared);
+        return true;
     }
 
     public static Object invokeSuperMessage(

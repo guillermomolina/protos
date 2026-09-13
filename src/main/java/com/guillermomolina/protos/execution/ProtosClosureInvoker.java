@@ -80,10 +80,19 @@ public final class ProtosClosureInvoker {
             return;
         }
 
-        // B6B-C: only a native compatibility entry may allocate the legacy evaluator.
+        /*
+         * B6B-E2: native Task execution is prepared with the same native/control
+         * provenance used by composed Bytecode calls, then enters the shared
+         * Context-cached C-prime root. No evaluator replay state is allocated.
+         */
         requireNativeTaskFallbackForRuntime(closure);
-        task.executeAction(
-                () -> invokeInTask(closure, supplied, creator, task));
+        ProtosBytecodeRootNode.PreparedClosureCall nativePrepared =
+                ProtosBytecodeRootNode.prepareTaskOwnedDirectNativeForCPrime(
+                        closure,
+                        supplied,
+                        creator,
+                        task);
+        ProtosTaskCPrimeEntryExecution.execute(task, nativePrepared);
     }
 
     static Object invokeImmediateMethodInTask(

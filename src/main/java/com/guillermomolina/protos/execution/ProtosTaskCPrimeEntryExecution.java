@@ -4,6 +4,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
@@ -19,8 +20,10 @@ import java.util.Objects;
  * shared prepared-call dispatcher, including structured control, native-leaf
  * suspension, nested C-prime yield/resume and ReturnHome completion.
  *
- * <p>B6B-E1 only materializes this reusable Context-local plan. No production
- * Task entrypoint is routed through it until the following bounded slice.
+ * <p>B6B-E2 routes Task-backed native Closure/method entries through this
+ * Context-local plan. Source-backed Task Closures keep their already-established
+ * direct prepared-root path; both routes share the same C-prime continuation
+ * publication machinery.
  */
 final class ProtosTaskCPrimeEntryExecution {
     static final class Plan {
@@ -45,6 +48,17 @@ final class ProtosTaskCPrimeEntryExecution {
                     "Task C-prime entry requires an entered Protos Context");
         }
         return context.taskCPrimeEntryPlanForRuntime();
+    }
+
+    static void execute(
+            ProtosTask task,
+            ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+        Objects.requireNonNull(task, "task");
+        Objects.requireNonNull(prepared, "prepared");
+        ProtosBytecodeTaskExecution.executePreparedEntry(
+                task,
+                planForEnteredContext().target(),
+                prepared);
     }
 
     static Plan createPlan(ProtosLanguage language) {

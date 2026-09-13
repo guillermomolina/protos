@@ -71,6 +71,27 @@ final class ProtosBytecodeTaskExecution {
                 () -> prepared.bodyTarget().call(prepared.activation()));
     }
 
+    static void executePreparedEntry(
+            ProtosTask task,
+            CallTarget target,
+            ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+        Objects.requireNonNull(task, "task");
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(prepared, "prepared");
+
+        if (!prepared.isImmediate()
+                && prepared.activation().task().orElse(null) != task) {
+            throw new IllegalArgumentException(
+                    "Task C-prime entry prepared call belongs to another Task");
+        }
+
+        runSegment(
+                task,
+                () -> target.call(
+                        prepared.activation(),
+                        prepared));
+    }
+
     private static void resumePreparedPublished(
             ProtosTask task,
             ProtosBytecodeRootNode.PreparedClosureCall prepared,
