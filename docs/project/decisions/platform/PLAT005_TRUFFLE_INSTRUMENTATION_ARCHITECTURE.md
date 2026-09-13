@@ -147,3 +147,26 @@ The later ratified boundary preserves PLAT005's semantic-minimum rule:
 
 PLAT026 does not change StatementTag or CallTag semantics and does not make physical
 `RootNode` / `CallTarget` identity a tooling authority.
+
+## Later resolution — PLAT034
+
+PLAT034, explicitly approved on 2026-09-13, resolves the `ExpressionTag` part of this
+decision's deliberate deferral after real production Bytecode-DSL DAP/LSP evidence showed that
+generic Graal tools may request tags outside the original PLAT005 baseline.
+
+The ratified extension preserves PLAT005's semantic-minimum rule:
+
+- `ExpressionTag` is provided exactly on the already-authoritative PLAT005 `StatementTag`
+  membership set: each direct executable child expression of a `CanonicalSequence`;
+- no structural receiver/argument/literal/helper subexpression becomes an independent expression
+  point merely because it executes;
+- `DebuggerTags.AlwaysHalt` is provided for generic-tool compatibility but has zero actual Protos
+  locations because Protos has no guest debugger/trap instruction;
+- `ReadVariableTag`, `WriteVariableTag`, `RootBodyTag`, `TryBlockTag` and broader tag families remain
+  deferred; and
+- a later real generic-tool request for another undeclared tag must return through an explicit
+  decision rather than silently broadening PLAT034.
+
+PLAT034 does not change StatementTag or CallTag meaning, does not alter PLAT026 RootTag membership,
+and does not change Protos-visible semantics.
+
