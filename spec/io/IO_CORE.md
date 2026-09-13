@@ -226,6 +226,22 @@ ordinary Actor turn, and keeps the Actor in `TERMINATING` until the guest releas
 obligation settles. Termination cancellation cannot rewrite the committed close
 as a pre-commit cancelled or zero-effect outcome.
 
+D121 covers the complementary case in which the first lifecycle `close()`
+commitment would occur **after** Actor termination cutover. Such a close is
+admissible only when its invocation belongs to the exact dynamic execution extent
+already authorized as Actor termination cleanup. Actor state `TERMINATING` alone
+does not authorize it. The authority follows nested calls and suspension/resume
+of that same cleanup flow, but does not transfer merely by creating another
+Task, Future producer, mailbox turn, detached job or unrelated callback.
+
+Once admitted, the close is an ordinary lifecycle close with the existing
+commitment, follower and failure rules. If required release needs guest
+execution, PLAT030 owns that lifecycle-release C′ in the same Actor execution
+domain and the release becomes another termination-cleanup obligation. Actor
+termination still does not implicitly close resources, backend-only aftermath
+does not by itself keep the Actor alive, and no lifecycle guest code may execute
+after `TERMINATED`.
+
 This specialization does not make Actor termination implicit close, does not keep
 the Actor alive for backend-only residual work that no longer requires guest
 execution, and never permits guest lifecycle callbacks after `TERMINATED`.

@@ -9,6 +9,39 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.412] - 2026-09-13
+
+### D121 — Resource close initiated during Actor termination cleanup
+- Ratifies D121 Candidate A′: a first lifecycle `close()` after Actor termination
+  cutover is admissible only when invoked from the exact dynamic execution extent
+  already authorized as termination cleanup.
+- The authority follows ordinary nested calls and suspension/resumption of that
+  same cleanup continuation. `TERMINATING` state alone is insufficient, and the
+  authority is not inherited merely by creating a new Task, Future producer,
+  mailbox turn, detached job or unrelated callback.
+- A close admitted this way commits as one ordinary lifecycle close. If its
+  release requires Actor-local guest execution, PLAT030 release-owned C′ runs in
+  the same Actor domain and that release becomes another termination-cleanup
+  obligation that delays `TERMINATED`.
+- D112 remains authoritative for close commitments that predate termination
+  cutover. D121 governs only first-close commitment after cutover from an
+  already-authorized cleanup flow.
+- Actor termination remains non-implicit with respect to resource close. D121
+  adds no hidden Task, system Actor, domain migration, post-`TERMINATED` guest
+  lane, timeout or hard-kill semantics.
+
+### Compatibility and implementation state
+- Existing `ensure` cancellation shielding and async-cleanup semantics remain
+  authoritative; D121 specifies their lifecycle-close consequence rather than
+  introducing a second cleanup mechanism.
+- Existing close commitment/follower/Error rules, D112 and PLAT030 ownership
+  remain intact.
+- D121 releases the remaining semantic gate for PERF006-B PLAT030
+  lifecycle-release C′ implementation.
+- This ratification changes specification/governance only. It changes no Java
+  implementation, Maven implementation version, native boundary or
+  standard-library source and executes no Protos tests.
+
 ## [0.1.411] - 2026-09-12
 
 ### D112 — Actor termination versus committed I/O lifecycle release requiring guest re-entry

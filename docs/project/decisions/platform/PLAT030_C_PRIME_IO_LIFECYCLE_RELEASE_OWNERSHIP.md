@@ -28,6 +28,24 @@ Backend-only residual release that requires no guest execution does not by itsel
 keep the Actor alive. D112 adds no force-kill/timeout policy and does not change
 PLAT030's private release-record representation.
 
+## D121 post-cutover cleanup-close prerequisite — RESOLVED
+
+D121 / GitHub #456 is ratified as Candidate A′ at specification revision
+`0.1.412`.
+
+PLAT030 may therefore start lifecycle-release C′ for a close whose first
+commitment occurs after Actor termination cutover only when the invoking
+execution is already authorized termination cleanup under D121. The authority is
+scoped to that exact dynamic cleanup continuation; Actor `TERMINATING` state
+alone is insufficient and newly created Task/Future work does not inherit it
+merely by creation.
+
+An admitted nested close retains an independent ordinary lifecycle identity and
+the same Actor-domain release scheduling rule. If its release requires guest
+execution, that release is itself termination cleanup and delays `TERMINATED`.
+No hidden Task, system Actor, implicit resource sweep or post-`TERMINATED` guest
+execution is introduced.
+
 ## Decision
 
 Select **Candidate A′ — lifecycle-release-owned private C-prime execution record + Actor-domain scheduling; close Futures remain outcome followers only**.

@@ -10,6 +10,18 @@ Decision issue: GitHub Issue `#438`
 Nature: non-normative decision/rationale record for the normative Actor/I/O
 lifecycle semantics in `spec/concurrency/ACTORS.md` and `spec/io/IO_CORE.md`.
 
+## D121 complementary post-cutover rule
+
+D112 remains scoped to lifecycle close commitment that predates Actor termination
+cutover. D121 / GitHub #456 was subsequently ratified as Candidate A′ at
+specification revision `0.1.412` for the complementary case where an already
+authorized termination-cleanup extent explicitly invokes a first lifecycle
+`close()` after cutover.
+
+D121 does not broaden D112 into a generic `TERMINATING` privilege: admission is
+provenance-scoped to the exact cleanup continuation and is not inherited merely
+by spawning new asynchronous work.
+
 ## Decision
 
 Select **Candidate A′ — a pre-cutover committed lifecycle release that still

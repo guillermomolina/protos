@@ -817,6 +817,23 @@ already-committed lifecycle. The Actor remains `TERMINATING` until every such
 pre-cutover committed guest-release obligation has settled, together with the
 Actor-local Task cleanup already required by this section.
 
+D121 additionally permits an explicit lifecycle `close()` whose first
+commitment occurs after termination cutover **only** when that invocation belongs
+to the exact dynamic execution extent already authorized as termination cleanup.
+Examples include Actor-local cancellation/unwind `ensure` cleanup and a PLAT030
+lifecycle-release C′ segment already running as termination cleanup. The
+authorization follows nested synchronous calls and suspension/resumption of that
+same cleanup continuation; it is not granted merely by Actor state and is not
+inherited by a newly created Task, Future producer, mailbox turn, detached job or
+unrelated callback.
+
+A close admitted by that rule is an ordinary lifecycle close. If its remaining
+release requires Actor-local guest execution, that guest release becomes another
+termination-cleanup obligation and keeps the Actor in `TERMINATING` until it
+settles. This does not introduce implicit resource closing, a generic
+post-cutover work privilege, a hidden Task, domain migration, timeout/hard-kill
+semantics, or any guest-execution lane after `TERMINATED`.
+
 Once a committed lifecycle has no remaining guest release work, backend-only
 residual producer work does not by itself keep the Actor alive. That residual
 work remains subject to the existing rule that it cannot execute ordinary Protos

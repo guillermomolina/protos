@@ -674,6 +674,17 @@ control transfers into successful cleanup. An implementation may represent this
 with masking, an unwind phase, continuation metadata, or other machinery, but
 the distinction is not otherwise observable.
 
+For Actor termination, D121 makes one lifecycle-specific consequence of this
+shielded cleanup explicit. If the currently executing `ensure` cleanup is already
+authorized termination cleanup for that Actor, an explicit resource lifecycle
+`close()` invoked by that exact cleanup flow may make its first close commitment
+even though the Actor termination cutover has already occurred. The authorization
+follows ordinary nested calls and suspension/resumption of the same cleanup
+continuation. It does **not** transfer merely because the cleanup creates a new
+Task, Future producer, mailbox turn or detached computation. The admitted close
+then follows the ordinary lifecycle contract; any guest-requiring release is
+termination cleanup under D112/D121 and PLAT030.
+
 Under the idempotent request contract owned by
 `../concurrency/FUTURES_AND_TASKS.md`, repeated `Future.cancel()` calls while the
 same Future remains pending do not create a distinct or stronger cancellation
