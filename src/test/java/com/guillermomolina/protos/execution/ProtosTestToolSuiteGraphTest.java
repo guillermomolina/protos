@@ -1,1 +1,178 @@
-noop
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+package com.guillermomolina.protos.execution;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.math.BigInteger;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+
+/** TOOL005-A1 conformance for the D122 inert explicit suite graph. */
+final class ProtosTestToolSuiteGraphTest {
+    private static final Path CORE = Path.of("protos", "lib", "core");
+    private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
+    private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
+
+    @Test
+    void explicitNestedCompositionExpandsLeavesInDeclarationOrder() throws Exception {
+        ProtosArrayValue flattened =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                                        + "a: SuiteGraph.leaf(\"a\")\n"
+                                        + "b: SuiteGraph.leaf(\"b\")\n"
+                                        + "c: SuiteGraph.leaf(\"c\")\n"
+                                        + "d: SuiteGraph.leaf(\"d\")\n"
+                                        + "e: SuiteGraph.leaf(\"e\")\n"
+                                        + "f: SuiteGraph.leaf(\"f\")\n"
+                                        + "g: SuiteGraph.leaf(\"g\")\n"
+                                        + "deep: SuiteGraph.suite(\"deep\", Array(d, e))\n"
+                                        + "nested: SuiteGraph.suite(\"nested\", Array(b, c, deep))\n"
+                                        + "root: SuiteGraph.suite(\"root\", Array(a, nested, f, g))\n"
+                                        + "SuiteGraph.flattenLeafIds(root)"));
+
+        assertEquals(7, flattened.indexedSize().intValueExact());
+        assertTrue(flattened.isFrozen());
+        assertLeafId(flattened, 0, "a");
+        assertLeafId(flattened, 1, "b");
+        assertLeafId(flattened, 2, "c");
+        assertLeafId(flattened, 3, "d");
+        assertLeafId(flattened, 4, "e");
+        assertLeafId(flattened, 5, "f");
+        assertLeafId(flattened, 6, "g");
+    }
+
+    @Test
+    void stableLogicalIdentityIsPreservedLiterally() throws Exception {
+        String logicalId = " repository/library::leaf A ";
+        ProtosArrayValue flattened =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                                        + "leaf: SuiteGraph.leaf(\""
+                                        + logicalId
+                                        + "\")\n"
+                                        + "root: SuiteGraph.suite(\"root suite\", Array(leaf))\n"
+                                        + "SuiteGraph.flattenLeafIds(root)"));
+
+        assertEquals(1, flattened.indexedSize().intValueExact());
+        assertLeafId(flattened, 0, logicalId);
+    }
+
+    @Test
+    void duplicateIdsFailClosed() throws Exception {
+        assertFailed(
+                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                        + "first: SuiteGraph.leaf(\"same\")\n"
+                        + "second: SuiteGraph.leaf(\"same\")\n"
+                        + "root: SuiteGraph.suite(\"root\", Array(first, second))\n"
+                        + "SuiteGraph.flattenLeafIds(root)");
+    }
+
+    @Test
+    void cyclesFailClosed() throws Exception {
+        assertFailed(
+                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                        + "children: Array(null)\n"
+                        + "cycle: {\n"
+                        + "    kind: \"suite\"\n"
+                        + "    id: \"cycle\"\n"
+                        + "    children: children\n"
+                        + "}\n"
+                        + "children[0] = cycle\n"
+                        + "SuiteGraph.flattenLeafIds(cycle)");
+    }
+
+    @Test
+    void unknownNodeKindsFailClosed() throws Exception {
+        assertFailed(
+                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                        + "unknown: {\n"
+                        + "    kind: \"tree\"\n"
+                        + "    id: \"unknown\"\n"
+                        + "    children: Array()\n"
+                        + "}\n"
+                        + "SuiteGraph.flattenLeafIds(unknown)");
+    }
+
+    @Test
+    void emptyIdsFailClosed() throws Exception {
+        assertFailed(
+                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                        + "SuiteGraph.leaf(\"\")");
+    }
+
+    @Test
+    void nonStringIdsFailClosed() throws Exception {
+        assertFailed(
+                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                        + "SuiteGraph.leaf(42)");
+    }
+
+    private static void assertLeafId(ProtosArrayValue flattened, int index, String expected) {
+        assertEquals(
+                expected,
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                flattened.indexedAt(BigInteger.valueOf(index)))
+                        .value());
+    }
+
+    private static Object completed(String source) throws Exception {
+        ProtosExecutionOutcome outcome = execute(source);
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () -> "expected completion, error=" + outcome.error());
+        return outcome.value();
+    }
+
+    private static void assertFailed(String source) throws Exception {
+        ProtosExecutionOutcome outcome = execute(source);
+        assertEquals(
+                ProtosExecutionOutcome.State.FAILED,
+                outcome.state(),
+                () -> "expected fail-closed result, value=" + outcome.value());
+    }
+
+    private static ProtosExecutionOutcome execute(String source) throws Exception {
+        Fixture fixture = fixture();
+        return ProtosTestExecutionSupport.execute(source, fixture.activation());
+    }
+
+    private static Fixture fixture() throws Exception {
+        ProtosBundledToolModuleResolver resolver =
+                new ProtosBundledToolModuleResolver(
+                        "test",
+                        TOOL_ROOT,
+                        TOOL_ROOT.resolveSibling("shared"),
+                        new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        return new Fixture(prelude, prelude.newModuleActivation());
+    }
+
+    private record Fixture(ProtosPrelude prelude, ProtosActivation activation) {}
+}
