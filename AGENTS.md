@@ -872,6 +872,55 @@ live status/assignee when known, and the native parent in the same coordination
 step when the Issue is a formal child. The intake workflow is a convergence
 safety net, not permission to omit those obligations.
 
+### Formal Issue publication transaction
+<!-- GITHUB015 FORMAL-ISSUE-PUBLICATION-TRANSACTION -->
+
+A direct formal Issue publication is a coordination transaction, not a successful
+operation merely because GitHub returned an Issue number. Before reporting a
+formal Issue, sub-issue, phase transition, or decision checkpoint as published,
+the agent MUST re-read live GitHub state and verify every applicable postcondition:
+
+```text
+FORMAL_IDENTIFIER_UNIQUE=PASS
+FAMILY=PASS
+CANONICAL_STATUS=PASS
+ASSIGNEE_INVARIANT=PASS
+NATIVE_PARENT=PASS|NOT_APPLICABLE
+EFFECTIVE_PRIORITY=RESOLVED|INTENTIONALLY_UNSET
+PROJECT_ROUTING=PASS
+```
+
+A textual parent declaration is bootstrap input only. It never satisfies
+`NATIVE_PARENT=PASS`. If the current connector cannot mutate the native relation,
+use the repository intake reconciliation path and verify GitHub's native parent
+endpoint afterward. If that still does not converge, the publication is
+**incomplete** and MUST be reported as such rather than continuing as though the
+hierarchy existed.
+
+For trusted formal work, lifecycle state must be explicit at creation time. The
+neutral community `Inbox` fallback MUST NOT be used to hide a missing status on a
+formal Issue. `status:in-progress` and `status:needs-decision` require an owner;
+when otherwise unassigned, the repository owner is the coordination fallback.
+Those two statuses also require a resolved effective scheduling Priority: an
+explicit Priority for a top-level item, or an inherited Priority through the
+nearest open native ancestor for a child. Never copy an inherited `priority:*`
+label onto a child merely to make the invariant pass.
+
+When a parent workstream advances to a new formal child phase, create and verify
+the child hierarchy before treating the phase transition as complete. If that
+child immediately exposes a substantive Dxxx/PLATxxx decision, leave the child
+blocked and publish the decision gate with `status:needs-decision`, an owner, and
+a scheduling Priority justified by the blocking work.
+
+The design-approval gate is part of this transaction too. An agent MUST NOT post
+`owner approved`, ratify/close a Dxxx or PLATxxx, release dependent work, or
+publish a ratification record unless the project owner explicitly approved the
+**exact candidate** in the active interaction or another auditable approval source.
+Generic continuation words such as `dale`, `continue`, `go ahead`, or permission
+to repair coordination state are never approval of an unrelated pending design.
+The agent MUST NOT manufacture an owner-approval comment as provenance. If exact
+approval provenance is absent or ambiguous, fail closed at `status:needs-decision`.
+
 ## GitHub release milestone governance
 <!-- GITHUB008 RELEASE-MILESTONE-GOVERNANCE -->
 

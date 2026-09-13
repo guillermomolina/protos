@@ -5,6 +5,7 @@ on:
     types:
       - opened
       - reopened
+      - edited
       - assigned
       - unassigned
       - closed
@@ -36,6 +37,19 @@ jobs:
       - name: Verify synchronization helper
         run: python3 scripts/project_status_sync.py --self-test
 
+      - name: Verify intake helper
+        run: python3 scripts/issue_intake.py --self-test
+
+      - name: Reconcile formal Issue intake before Project projection
+        if: ${{ github.event_name == 'issues' }}
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          python3 scripts/issue_intake.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --issue-number "$ISSUE_NUMBER"
+
       - name: Synchronize changed Issue
         if: ${{ github.event_name == 'issues' }}
         env:
@@ -64,6 +78,14 @@ jobs:
             --repository "$GITHUB_REPOSITORY" \
             --project-owner guillermomolina \
             --project-number 1 \
+            --reconcile-all
+
+      - name: Reconcile all formal Issue intake before full Project projection
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/issue_intake.py \
+            --repository "$GITHUB_REPOSITORY" \
             --reconcile-all
 
       - name: Reconcile Project and all open Issues

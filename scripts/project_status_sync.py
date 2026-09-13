@@ -53,6 +53,14 @@ PRIORITY_LABEL_DEFINITIONS = {
     "priority:p3": ("0e8a16", "Opportunistic/later scheduling priority."),
 }
 DEFAULT_IN_PROGRESS_ASSIGNEE = "guillermomolina"
+ASSIGNEE_REQUIRED_STATUSES = frozenset((
+    "status:in-progress",
+    "status:needs-decision",
+))
+PRIORITY_REQUIRED_STATUSES = frozenset((
+    "status:in-progress",
+    "status:needs-decision",
+))
 MAX_PRIORITY_ANCESTRY_DEPTH = 32
 
 
@@ -115,6 +123,12 @@ def _label_names(issue):
     return names
 
 
+def _is_formal_issue(issue):
+    return any(
+        name.startswith("family:") for name in _label_names(issue)
+    )
+
+
 def choose_open_status(issue, event_action=None, event_label=None):
     status_labels = [
         name for name in _label_names(issue)
@@ -138,6 +152,13 @@ def choose_open_status(issue, event_action=None, event_label=None):
     if len(labels) == 1:
         return labels[0], [], False
     if len(labels) == 0:
+        if _is_formal_issue(issue):
+            raise SyncError(
+                "Formal Issue #%s has no canonical status label; trusted "
+                "formal publication must set lifecycle state explicitly "
+                "instead of relying on the community Inbox default"
+                % issue.get("number")
+            )
         return "status:inbox", [], True
     raise SyncError(
         "Issue #%s has multiple status labels without a decisive newly-added "
@@ -172,9 +193,22 @@ def _assignee_logins(issue):
 
 def needs_default_assignee(issue, canonical_status):
     return (
-        canonical_status == "status:in-progress"
+        canonical_status in ASSIGNEE_REQUIRED_STATUSES
         and not _assignee_logins(issue)
     )
+
+
+def validate_required_effective_priority(issue, canonical_status, effective_priority):
+    if (
+        canonical_status in PRIORITY_REQUIRED_STATUSES
+        and effective_priority is None
+    ):
+        raise SyncError(
+            "Formal actionable Issue #%s is %s but has no explicit or "
+            "inherited scheduling Priority; resolve Priority before treating "
+            "publication as complete"
+            % (issue.get("number"), canonical_status)
+        )
 
 
 def _parent_issue_number(issue):
@@ -314,7 +348,7 @@ def priority_migration_candidate(
     return priority_label
 
 
-def _ensure_in_progress_assignee(
+def _ensure_required_assignee(
     repository, issue, issue_token, canonical_status
 ):
     if not needs_default_assignee(issue, canonical_status):
@@ -331,7 +365,7 @@ def _ensure_in_progress_assignee(
     assigned = _assignee_logins(updated or {})
     if DEFAULT_IN_PROGRESS_ASSIGNEE not in assigned:
         raise SyncError(
-            "Issue #%d entered In progress without an assignee and GitHub did "
+            "Issue #%d requires an assignee and GitHub did "
             "not accept default assignee %s"
             % (number, DEFAULT_IN_PROGRESS_ASSIGNEE)
         )
@@ -725,7 +759,10 @@ def sync_issue(
         _add_issue_priority_label(
             repository, issue, issue_token, migration_priority
         )
-    _ensure_in_progress_assignee(
+    validate_required_effective_priority(
+        issue, canonical_status, effective_priority
+    )
+    _ensure_required_assignee(
         repository, issue, issue_token, canonical_status
     )
 
@@ -897,6 +934,16 @@ def self_test():
     assert choose_open_status(
         _fake_issue(2, labels=[])
     ) == ("status:inbox", [], True)
+    try:
+        choose_open_status(
+            _fake_issue(200, labels=["family:LIB"])
+        )
+    except SyncError as exc:
+        assert "trusted formal publication" in str(exc)
+    else:
+        raise AssertionError(
+            "formal Issue without canonical status must fail closed"
+        )
     assert choose_open_status(
         _fake_issue(
             3, labels=["status:ready", "status:in-progress"]
@@ -968,6 +1015,47 @@ def self_test():
         _fake_issue(12, labels=["status:in-progress"], assignees=["alice"]),
         "status:in-progress",
     )
+    assert needs_default_assignee(
+        _fake_issue(13, labels=["status:needs-decision"]),
+        "status:needs-decision",
+    )
+    assert not needs_default_assignee(
+        _fake_issue(14, labels=["status:needs-decision"], assignees=["alice"]),
+        "status:needs-decision",
+    )
+
+    try:
+        validate_required_effective_priority(
+            _fake_issue(15, labels=["status:in-progress"]),
+            "status:in-progress",
+            None,
+        )
+    except SyncError:
+        pass
+    else:
+        raise AssertionError("In progress without effective Priority must fail")
+
+    try:
+        validate_required_effective_priority(
+            _fake_issue(16, labels=["status:needs-decision"]),
+            "status:needs-decision",
+            None,
+        )
+    except SyncError:
+        pass
+    else:
+        raise AssertionError("Needs decision without effective Priority must fail")
+
+    validate_required_effective_priority(
+        _fake_issue(17, labels=["status:ready"]),
+        "status:ready",
+        None,
+    )
+    validate_required_effective_priority(
+        _fake_issue(18, labels=["status:needs-decision"]),
+        "status:needs-decision",
+        "priority:p3",
+    )
 
     parents = {
         20: _fake_issue(20, labels=["priority:p1"]),
@@ -1033,7 +1121,10 @@ def self_test():
 
     print("PROJECT_STATUS_PRIORITY_SYNC_SELF_TEST: PASS")
     print("UNKNOWN_STATUS_LABEL_FAIL_CLOSED: PASS")
-    print("IN_PROGRESS_ASSIGNEE_INVARIANT_SELF_TEST: PASS")
+    print("FORMAL_STATUS_FAIL_CLOSED_SELF_TEST: PASS")
+    print("ACTIVE_ASSIGNEE_INVARIANT_SELF_TEST: PASS")
+    print("NEEDS_DECISION_ASSIGNEE_INVARIANT_SELF_TEST: PASS")
+    print("ACTIVE_PRIORITY_RESOLUTION_SELF_TEST: PASS")
     print("PARENT_PRIORITY_INHERITANCE_SELF_TEST: PASS")
     print("NONDESTRUCTIVE_PROJECT_PRIORITY_MIGRATION_SELF_TEST: PASS")
 

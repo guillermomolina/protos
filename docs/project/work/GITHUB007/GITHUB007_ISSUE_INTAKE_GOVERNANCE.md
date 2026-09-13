@@ -88,6 +88,18 @@ family or status.
 The intake helper does not infer `Ready`, `Blocked`, `Needs decision`, assignee
 or Priority from prose.
 
+GITHUB015 hardens a different path: **trusted direct formal publication by an
+agent/maintainer**. Such a publisher already has explicit project intent and must
+provide the known lifecycle/ownership/scheduling facts itself. It may not rely on
+the neutral `Inbox` fallback to repair an omitted formal status. The Project sync
+therefore fails closed when a `family:*` Issue has no canonical status, while
+ordinary community intake with no formal family may still default to Inbox.
+
+For `status:in-progress` and `status:needs-decision`, direct formal publication
+must also resolve assignment and effective Priority. Child Priority remains
+inherited from the nearest open native ancestor; it is not copied as a child
+label.
+
 ## Steady-state reconciliation
 
 `scripts/issue_intake.py` supports:
@@ -106,6 +118,14 @@ Full reconciliation processes every open Issue, repairs deterministic family or
 missing-native-parent drift, records community/untrusted intake without
 promoting it, and fails closed after the scan if any trusted formal Issue still
 has an unresolved hierarchy conflict.
+
+Under GITHUB015 the Project-status workflow executes this intake reconciliation
+as a precondition in the **same job** before it projects status/priority. A full
+manual Project reconciliation likewise runs full intake first. This ordering is
+intentional: native hierarchy must exist before effective Priority inheritance is
+computed, so two independent workflows cannot race and leave a newly created
+formal child with stale/unset Project Priority. The standalone Issue-intake
+workflow remains an independent convergence safety net.
 
 ## Activation evidence
 
