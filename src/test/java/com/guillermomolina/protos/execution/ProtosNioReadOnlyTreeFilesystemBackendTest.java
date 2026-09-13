@@ -55,21 +55,22 @@ final class ProtosNioReadOnlyTreeFilesystemBackendTest {
                     "host provider has no SecureDirectoryStream");
 
             Fixture fixture = fixture(backend);
-            Object result =
-                    new ProtosSourceCompiler()
-                            .compile(
-                                    "file: filesystem.open("
-                                            + "Path.relative().child(\"nested\").child(\"case.protos\"))"
-                                            + ".value()\n"
-                                            + "reader: TextReader.owning(file, Encoding.UTF8)\n"
-                                            + "text: reader.readText().value()\n"
-                                            + "reader.close().value()\n"
-                                            + "text")
-                            .call(fixture.activation());
+            ProtosExecutionOutcome outcome =
+                    execute(
+                            "nio-read-only-tree-nested.protos",
+                            "file: filesystem.open("
+                                    + "Path.relative().child(\"nested\").child(\"case.protos\"))"
+                                    + ".value()\n"
+                                    + "reader: TextReader.owning(file, Encoding.UTF8)\n"
+                                    + "text: reader.readText().value()\n"
+                                    + "reader.close().value()\n"
+                                    + "text",
+                            fixture.activation());
 
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
             assertEquals(
                     "42",
-                    assertInstanceOf(ProtosStringValue.class, result).value());
+                    assertInstanceOf(ProtosStringValue.class, outcome.value()).value());
         }
     }
 
@@ -101,8 +102,9 @@ final class ProtosNioReadOnlyTreeFilesystemBackendTest {
                             + "(fourth === null)";
 
             ProtosExecutionOutcome outcome =
-                    ProtosRootTaskExecution.execute(
-                            new ProtosSourceCompiler().compile(source),
+                    execute(
+                            "nio-read-only-tree-multichunk.protos",
+                            source,
                             fixture.activation());
 
             assertEquals(
@@ -138,20 +140,37 @@ final class ProtosNioReadOnlyTreeFilesystemBackendTest {
                         "host provider has no SecureDirectoryStream");
 
                 Fixture fixture = fixture(backend);
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                new ProtosSourceCompiler()
-                                        .compile(
-                                                "filesystem.open("
-                                                        + "Path.relative().child(\"escape\")"
-                                                        + ".child(\"secret.txt\"))"
-                                                        + ".value()")
-                                        .call(fixture.activation()));
+                ProtosExecutionOutcome outcome =
+                        execute(
+                                "nio-read-only-tree-symlink.protos",
+                                "filesystem.open("
+                                        + "Path.relative().child(\"escape\")"
+                                        + ".child(\"secret.txt\"))"
+                                        + ".value()",
+                                fixture.activation());
+                assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
             }
         } finally {
             Files.deleteIfExists(outside.resolve("secret.txt"));
             Files.deleteIfExists(outside);
+        }
+    }
+
+    private static ProtosExecutionOutcome execute(
+            String sourceName,
+            CharSequence characters,
+            ProtosActivation activation) {
+        try (ProtosPolyglotExecutionContext context =
+                ProtosPolyglotExecutionContext.open(
+                        java.io.InputStream.nullInputStream(),
+                        java.io.OutputStream.nullOutputStream(),
+                        java.io.OutputStream.nullOutputStream())) {
+            return context.execute(
+                    com.oracle.truffle.api.source.Source.newBuilder(
+                                    ProtosLanguage.ID, characters, sourceName)
+                            .mimeType(ProtosLanguage.MIME_TYPE)
+                            .build(),
+                    activation);
         }
     }
 

@@ -137,32 +137,36 @@ final class ProtosPackageExecutionPlanAdapterTest {
                         TOOL_ROOT, (TOOL_ROOT).resolveSibling("shared"),
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        ProtosObjectValue rawFilesystem =
-                ProtosStandardFilesystemProtocol.createCapability(
-                        prelude.bytesPrototypeForRuntime(), activation, backend);
-        assertTrue(rawFilesystem instanceof ProtosFilesystemValue);
-        activation.context()
-                .createLocalSlot(
-                        "projectTreeFilesystem",
-                        (ProtosFilesystemValue) rawFilesystem);
-        return new Fixture(backend, activation);
+        ProtosHostedExecutionTestFixture hosted =
+                ProtosHostedExecutionTestFixture.open(prelude);
+        try {
+            hosted.installFilesystem("projectTreeFilesystem", backend);
+            return new Fixture(backend, hosted);
+        } catch (RuntimeException | Error failure) {
+            hosted.close();
+            backend.close();
+            throw failure;
+        }
     }
 
     private record Fixture(
             ProtosNioReadOnlyTreeFilesystemBackend backend,
-            ProtosActivation activation)
+            ProtosHostedExecutionTestFixture hosted)
             implements AutoCloseable {
         Object buildPlan() {
-            return new ProtosSourceCompiler()
-                    .compile(BUILD_PLAN)
-                    .call(activation);
+            ProtosExecutionOutcome outcome =
+                    hosted.execute("<package-execution-plan>", BUILD_PLAN);
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+            return outcome.value();
         }
 
         @Override
         public void close() throws Exception {
-            backend.close();
+            try {
+                hosted.close();
+            } finally {
+                backend.close();
+            }
         }
     }
 }

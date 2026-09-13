@@ -171,29 +171,38 @@ final class ProtosCsvModuleTest {
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
-        ProtosActivation activation = prelude.newModuleActivation();
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                Files.readString(
-                                        CASE_ROOT.resolve(fixture),
-                                        StandardCharsets.UTF_8))
-                        .call(activation);
+        try (ProtosHostedExecutionTestFixture hosted =
+                ProtosHostedExecutionTestFixture.open(prelude)) {
+            ProtosActivation activation = hosted.activation();
+            ProtosExecutionOutcome outcome =
+                    hosted.execute(
+                            fixture,
+                            Files.readString(
+                                    CASE_ROOT.resolve(fixture),
+                                    StandardCharsets.UTF_8));
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), fixture);
+            Object result = outcome.value();
 
-        if (result instanceof ProtosFutureValue future) {
-            awaitTerminal(future, activation, fixture);
-            assertEquals(ProtosFutureValue.State.RESOLVED, future.state(), fixture);
-            result = future.resolvedValue().orElseThrow();
+            if (result instanceof ProtosFutureValue future) {
+                awaitTerminal(hosted, future, activation, fixture);
+                assertEquals(ProtosFutureValue.State.RESOLVED, future.state(), fixture);
+                result = future.resolvedValue().orElseThrow();
+            }
+
+            assertSame(ProtosBooleanValue.TRUE, result, fixture);
         }
-
-        assertSame(ProtosBooleanValue.TRUE, result, fixture);
     }
 
     private static void awaitTerminal(
-            ProtosFutureValue future, ProtosActivation activation, String fixture) {
+            ProtosHostedExecutionTestFixture hosted,
+            ProtosFutureValue future,
+            ProtosActivation activation,
+            String fixture) {
         int dispatches = 0;
         while (future.state() == ProtosFutureValue.State.PENDING) {
-            if (!activation.executionDomain().dispatchOne()) {
+            boolean progressed =
+                    hosted.callEntered(() -> activation.executionDomain().dispatchOne());
+            if (!progressed) {
                 throw new AssertionError(fixture + ": pending Future with no runnable work");
             }
             dispatches++;

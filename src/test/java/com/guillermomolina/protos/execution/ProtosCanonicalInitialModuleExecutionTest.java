@@ -3,19 +3,87 @@
  * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
  */
 package com.guillermomolina.protos.execution;
-import static org.junit.jupiter.api.Assertions.*;
-import com.guillermomolina.protos.runtime.*;
-import java.nio.file.Path; import java.util.*; import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.guillermomolina.protos.runtime.ProtosActorModuleState;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.nio.file.Path;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+
 final class ProtosCanonicalInitialModuleExecutionTest {
- static final Path CORE=Path.of("protos","lib","core"); static final ProtosModuleKey MAIN=new ProtosModuleKey("test:Main");
- @Test void cachesBootstrapContextBeforeExecutingCanonicalEntry() throws Exception {
-  ProtosModuleResolver r=new ProtosModuleResolver(){ public ProtosModuleKey resolve(String s,Optional<ProtosModuleKey> i){if(!s.equals("self"))throw new IllegalArgumentException();return MAIN;} public ProtosModuleSource loadSource(ProtosModuleKey k){return ProtosModuleSource.fromCharacters(k, "marker: Object()\nAgain: import(\"self\")\nAgain.marker === marker\n");}};
-  ProtosPrelude p=new ProtosCoreBootstrap().bootstrap(CORE,r); var b=bootstrap(p); try {var o=ProtosCanonicalInitialModuleExecution.execute(p,r,MAIN,b.activation()); assertEquals(ProtosExecutionOutcome.State.COMPLETED,o.state()); assertSame(ProtosBooleanValue.TRUE,o.value()); var rec=b.activation().actorModuleState().lookup(MAIN).orElseThrow(); assertEquals(ProtosActorModuleState.InitializationState.READY,rec.state()); assertSame(b.activation().context(),rec.instance());} finally {b.process().requestTerminationForRuntime();}
- }
- @Test void failedInitialModuleIsRemovedFromCache() throws Exception {
-  ProtosModuleResolver r=new ProtosModuleResolver(){ public ProtosModuleKey resolve(String s,Optional<ProtosModuleKey> i){return MAIN;} public ProtosModuleSource loadSource(ProtosModuleKey k){return ProtosModuleSource.fromCharacters(k, "Error().signal()\n");}};
-  ProtosPrelude p=new ProtosCoreBootstrap().bootstrap(CORE,r); var b=bootstrap(p); try {var o=ProtosCanonicalInitialModuleExecution.execute(p,r,MAIN,b.activation()); assertEquals(ProtosExecutionOutcome.State.FAILED,o.state()); assertTrue(b.activation().actorModuleState().lookup(MAIN).isEmpty());} finally {b.process().requestTerminationForRuntime();}
- }
- static ProtosStandaloneProcessBootstrap.Result bootstrap(ProtosPrelude p){return ProtosStandaloneProcessBootstrap.create(p,List.of(),domain(),List.of(),null,null,null,null,null,null,null);}
- static ProtosEnvironmentValue.NativeNameDomain domain(){return new ProtosEnvironmentValue.NativeNameDomain(){public boolean sameCapturedName(String a,String b){return a.equals(b);} public boolean isQueryRepresentable(String n){return !n.contains("=")&&n.indexOf('\0')<0;} public boolean matchesQuery(String a,String b){return a.equals(b);}};}
+    private static final Path CORE = Path.of("protos", "lib", "core");
+    private static final ProtosModuleKey MAIN = new ProtosModuleKey("test:Main");
+
+    @Test
+    void cachesBootstrapContextBeforeExecutingCanonicalEntry() throws Exception {
+        ProtosModuleResolver resolver =
+                new ProtosModuleResolver() {
+                    @Override
+                    public ProtosModuleKey resolve(
+                            String exactSpecifier, Optional<ProtosModuleKey> importingModule) {
+                        if (!exactSpecifier.equals("self")) {
+                            throw new IllegalArgumentException();
+                        }
+                        return MAIN;
+                    }
+
+                    @Override
+                    public ProtosModuleSource loadSource(ProtosModuleKey key) {
+                        return ProtosModuleSource.fromCharacters(
+                                key,
+                                "marker: Object()\n"
+                                        + "Again: import(\"self\")\n"
+                                        + "Again.marker === marker\n");
+                    }
+                };
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        try (ProtosHostedExecutionTestFixture hosted =
+                ProtosHostedExecutionTestFixture.open(prelude)) {
+            ProtosExecutionOutcome outcome =
+                    ProtosCanonicalInitialModuleExecution.execute(
+                            prelude, resolver, MAIN, hosted.activation());
+
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+            assertSame(ProtosBooleanValue.TRUE, outcome.value());
+            ProtosActorModuleState.ModuleRecord record =
+                    hosted.activation().actorModuleState().lookup(MAIN).orElseThrow();
+            assertEquals(ProtosActorModuleState.InitializationState.READY, record.state());
+            assertSame(hosted.activation().context(), record.instance());
+        }
+    }
+
+    @Test
+    void failedInitialModuleIsRemovedFromCache() throws Exception {
+        ProtosModuleResolver resolver =
+                new ProtosModuleResolver() {
+                    @Override
+                    public ProtosModuleKey resolve(
+                            String exactSpecifier, Optional<ProtosModuleKey> importingModule) {
+                        return MAIN;
+                    }
+
+                    @Override
+                    public ProtosModuleSource loadSource(ProtosModuleKey key) {
+                        return ProtosModuleSource.fromCharacters(key, "Error().signal()\n");
+                    }
+                };
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        try (ProtosHostedExecutionTestFixture hosted =
+                ProtosHostedExecutionTestFixture.open(prelude)) {
+            ProtosExecutionOutcome outcome =
+                    ProtosCanonicalInitialModuleExecution.execute(
+                            prelude, resolver, MAIN, hosted.activation());
+
+            assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+            assertTrue(hosted.activation().actorModuleState().lookup(MAIN).isEmpty());
+        }
+    }
 }

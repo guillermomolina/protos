@@ -1,3 +1,19 @@
+## PERF006-C3C — deferred full-suite harness and native-inventory reconciliation
+
+The optimizer-enabled PERF006-C3 full-suite run after C3B exposed retained Java
+harnesses that crossed post-B6B execution boundaries with pre-cutover staging
+machinery. C3C changes no production runtime behavior: affected tests now reuse
+the already-published hosted Process/public-parse path whenever they cross
+RootTask, source-backed Task/Future, lifecycle-release C-prime I/O, or P
+execution. Pure direct semantic/lowering oracles that never cross those
+boundaries remain direct and are not globally converted to Polyglot execution.
+
+The same run exposed one stale source-count expectation: CLI `print` is still a
+reviewed non-Core native bridge, but PERF006-B6B moved it from literal ordinary
+`nativeClosure(...)` to the explicit suspension-capable constructor lane.
+C3C reconciles the current ordinary-constructor test/table only; historical
+slice counts remain historical evidence.
+
 ## PERF006-B / PLAT031 — BufferedWriter flush C-prime boundary reconciliation
 
 The PLAT029/PLAT031 migration of standard `BufferedWriter.flush` moves that
@@ -489,14 +505,18 @@ the standard native boundary.
 
 Total audited Core production construction sites: **136 across 36 providers**.
 
-CLI/launcher-owned host conveniences are not Core standard behavior and therefore
-do not change that 30-provider / 113-site Core boundary. They are nevertheless
-kept explicit rather than allowed to accumulate invisibly:
+Non-Core host/tool conveniences are not Core standard behavior and do not change
+the Core inventory above. The table below is the **current literal ordinary
+`ProtosClosureValue.nativeClosure(...)` construction-site inventory** outside
+Core. PERF006-B6B moved CLI `print` to
+`ProtosClosureValue.suspensionCapableNativeClosure(...)`; that reviewed bridge
+therefore remains explicit but is no longer part of this ordinary-constructor
+table. The current ordinary non-Core inventory is **3 sites across 2 providers**:
 
 | Non-Core provider | Native Closure sites | Boundary | Reason |
 |---|---:|---|---|
-| `ProtosCliPrintFacility.java` | 1 | standalone CLI host/display bridge | Installs one ordinary initial-context `print` Closure only for normal standalone CLI sessions. General value rendering is CLI policy; output is delegated through a borrowing standard `TextWriter` over the already-provisioned Process stdout capability and Encoding. Bundled tools, Core bootstrap, imported modules and non-root Actor bootstrap do not receive this binding. |
-| `ProtosExactExecutionFacility.java` | 2 | bundled-tool bootstrap execution bridges | Installs the ordinary initial-context `execution` Closure plus the opt-in `executionInspect` Closure only when the host explicitly grants those tooling capabilities. `execution` delegates to the existing fresh-Process/root-task/private-capture machinery; `executionInspect` delegates to the C1A same-Process live-result inspection boundary and detaches only the inspector terminal observation. Neither is a Core/prelude binding, so the 32-provider / 123-site Core standard native boundary remains unchanged while the audited non-Core provider count for this file increases from one construction site to two. |
+| `ProtosExactExecutionFacility.java` | 2 | bundled-tool bootstrap execution bridges | Installs the ordinary initial-context `execution` Closure plus the opt-in `executionInspect` Closure only when the host explicitly grants those tooling capabilities. `execution` delegates to the existing fresh-Process/root-task/private-capture machinery; `executionInspect` delegates to the C1A same-Process live-result inspection boundary and detaches only the inspector terminal observation. Neither is a Core/prelude binding. |
+| `ProtosTestToolCatalogAcquisitionFacility.java` | 1 | bundled Test Tool catalog acquisition bridge | Installs the D101-ratified bootstrap-local one-shot `catalogAcquirer` capability only for the Test Tool initial activation. It is not a Core/prelude binding and does not enlarge the standard-language native surface. |
 
 
 ### TOOL002-D3B2A Object.parent reflection prerequisite

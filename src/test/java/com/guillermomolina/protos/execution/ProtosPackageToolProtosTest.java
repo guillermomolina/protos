@@ -31,6 +31,10 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import com.oracle.truffle.api.source.Source;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -128,11 +132,14 @@ final class ProtosPackageToolProtosTest {
             }
 
             Path fixture = suiteRoot.resolve(fields[0]);
-            ProtosExecutionOutcome outcome =
-                    execute(
-                            Files.readString(fixture, StandardCharsets.UTF_8),
-                            newPackageActivation());
-            assertExpected(outcome, fields[1], fixture.toString());
+            try (ProtosHostedExecutionTestFixture hosted =
+                    ProtosHostedExecutionTestFixture.open(newPackagePrelude())) {
+                ProtosExecutionOutcome outcome =
+                        execute(
+                                Files.readString(fixture, StandardCharsets.UTF_8),
+                                hosted.activation());
+                assertExpected(outcome, fields[1], fixture.toString());
+            }
         }
     }
 
@@ -162,23 +169,15 @@ final class ProtosPackageToolProtosTest {
                         backend.secureConfinementAvailable(),
                         "host provider has no SecureDirectoryStream");
 
-                ProtosPrelude prelude = newPackagePrelude();
-                ProtosActivation activation = prelude.newModuleActivation();
-                ProtosObjectValue rawFilesystem =
-                        ProtosStandardFilesystemProtocol.createCapability(
-                                prelude.bytesPrototypeForRuntime(),
-                                activation,
-                                backend);
-                ProtosFilesystemValue filesystem =
-                        assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
-                activation.context()
-                        .createLocalSlot("projectTreeFilesystem", filesystem);
-
-                ProtosExecutionOutcome outcome =
-                        execute(
-                                Files.readString(fixture, StandardCharsets.UTF_8),
-                                activation);
-                assertExpected(outcome, fields[2], fields[0] + "/" + fields[1]);
+                try (ProtosHostedExecutionTestFixture hosted =
+                        ProtosHostedExecutionTestFixture.open(newPackagePrelude())) {
+                    hosted.installFilesystem("projectTreeFilesystem", backend);
+                    ProtosExecutionOutcome outcome =
+                            execute(
+                                    Files.readString(fixture, StandardCharsets.UTF_8),
+                                    hosted.activation());
+                    assertExpected(outcome, fields[2], fields[0] + "/" + fields[1]);
+                }
             }
         }
     }
@@ -664,11 +663,14 @@ final class ProtosPackageToolProtosTest {
     @Test
     void contentIdentityVaruintImplementationCoversFrozenArbitraryPrecisionBoundaries()
             throws Exception {
-        ProtosExecutionOutcome outcome =
-                executeFile(
-                        TEST_ROOT.resolve("content-identity/varuint.protos"),
-                        newPackageActivation());
-        assertExpected(outcome, "true", "content-identity/varuint.protos");
+        try (ProtosHostedExecutionTestFixture hosted =
+                ProtosHostedExecutionTestFixture.open(newPackagePrelude())) {
+            ProtosExecutionOutcome outcome =
+                    executeFile(
+                            TEST_ROOT.resolve("content-identity/varuint.protos"),
+                            hosted.activation());
+            assertExpected(outcome, "true", "content-identity/varuint.protos");
+        }
     }
 
     private void assertContentIdentityVerified(
@@ -719,35 +721,43 @@ final class ProtosPackageToolProtosTest {
             boolean provisionFilesystem)
             throws Exception {
         ProtosPrelude prelude = newPackagePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        for (Map.Entry<String, String> binding : stringBindings.entrySet()) {
-            activation.context()
-                    .createLocalSlot(
-                            binding.getKey(),
-                            new ProtosStringValue(binding.getValue()));
-        }
 
         if (!provisionFilesystem) {
-            return executeFile(TEST_ROOT.resolve("content-identity").resolve(fixture), activation);
+            try (ProtosHostedExecutionTestFixture hosted =
+                    ProtosHostedExecutionTestFixture.open(prelude)) {
+                for (Map.Entry<String, String> binding : stringBindings.entrySet()) {
+                    hosted.activation()
+                            .context()
+                            .createLocalSlot(
+                                    binding.getKey(),
+                                    new ProtosStringValue(binding.getValue()));
+                }
+                return executeFile(
+                        TEST_ROOT.resolve("content-identity").resolve(fixture),
+                        hosted.activation());
+            }
         }
 
         try (ProtosNioReadOnlyTreeFilesystemBackend backend =
-                new ProtosNioReadOnlyTreeFilesystemBackend(root)) {
+                        new ProtosNioReadOnlyTreeFilesystemBackend(root);
+                ProtosHostedExecutionTestFixture hosted =
+                        ProtosHostedExecutionTestFixture.open(prelude)) {
             assumeTrue(
                     backend.secureConfinementAvailable(),
                     "host provider has no SecureDirectoryStream");
 
-            ProtosObjectValue rawFilesystem =
-                    ProtosStandardFilesystemProtocol.createCapability(
-                            prelude.bytesPrototypeForRuntime(), activation, backend);
-            ProtosFilesystemValue filesystem =
-                    assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
-            activation.context().createLocalSlot("filesystem", filesystem);
+            for (Map.Entry<String, String> binding : stringBindings.entrySet()) {
+                hosted.activation()
+                        .context()
+                        .createLocalSlot(
+                                binding.getKey(),
+                                new ProtosStringValue(binding.getValue()));
+            }
+            hosted.installFilesystem("filesystem", backend);
 
             return executeFile(
                     TEST_ROOT.resolve("content-identity").resolve(fixture),
-                    activation);
+                    hosted.activation());
         }
     }
 
@@ -807,15 +817,16 @@ final class ProtosPackageToolProtosTest {
             assumeTrue(false, "host provider has no SecureDirectoryStream");
         }
 
-        ProtosPrelude prelude = newPackagePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue rawFilesystem =
-                ProtosStandardFilesystemProtocol.createCapability(
-                        prelude.bytesPrototypeForRuntime(), activation, backend);
-        ProtosFilesystemValue filesystem =
-                assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
-        activation.context().createLocalSlot("filesystem", filesystem);
-        return new Fixture(activation, backend);
+        ProtosHostedExecutionTestFixture hosted =
+                ProtosHostedExecutionTestFixture.open(newPackagePrelude());
+        try {
+            hosted.installFilesystem("filesystem", backend);
+            return new Fixture(hosted, backend);
+        } catch (RuntimeException | Error failure) {
+            hosted.close();
+            backend.close();
+            throw failure;
+        }
     }
 
     private static ProtosExecutionOutcome executeFile(
@@ -839,12 +850,20 @@ final class ProtosPackageToolProtosTest {
     }
 
     private record Fixture(
-            ProtosActivation activation,
+            ProtosHostedExecutionTestFixture hosted,
             ProtosNioConfinedFilesystemBackend backend)
             implements AutoCloseable {
+        ProtosActivation activation() {
+            return hosted.activation();
+        }
+
         @Override
         public void close() throws Exception {
-            backend.close();
+            try {
+                hosted.close();
+            } finally {
+                backend.close();
+            }
         }
     }
 
@@ -864,9 +883,32 @@ final class ProtosPackageToolProtosTest {
             String source,
             ProtosActivation activation)
             throws Exception {
-        return ProtosRootTaskExecution.execute(
-                new ProtosSourceCompiler().compile(source),
-                activation);
+        Source guestSource =
+                Source.newBuilder(
+                                ProtosLanguage.ID,
+                                source,
+                                "<package-tool-java-harness>")
+                        .mimeType(ProtosLanguage.MIME_TYPE)
+                        .build();
+
+        ProtosProcessRuntime process =
+                activation.executionDomain()
+                        .currentActorForRuntime()
+                        .flatMap(actor -> actor.processForRuntime())
+                        .orElse(null);
+        if (process != null
+                && process.executionHostForRuntime().orElse(null)
+                        instanceof ProtosPolyglotProcessContext processContext) {
+            return processContext.execute(guestSource, activation);
+        }
+
+        try (ProtosPolyglotExecutionContext context =
+                ProtosPolyglotExecutionContext.open(
+                        InputStream.nullInputStream(),
+                        OutputStream.nullOutputStream(),
+                        OutputStream.nullOutputStream())) {
+            return context.execute(guestSource, activation);
+        }
     }
 
     private static void assertExpected(

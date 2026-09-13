@@ -170,16 +170,17 @@ final class ProtosCommandLineModuleTest {
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
-        ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler()
-                                .compile(
-                                        Files.readString(
-                                                CASE_ROOT.resolve(fixture),
-                                                StandardCharsets.UTF_8)),
-                        prelude.newModuleActivation());
+        try (ProtosHostedExecutionTestFixture hosted =
+                ProtosHostedExecutionTestFixture.open(prelude)) {
+            ProtosExecutionOutcome outcome =
+                    hosted.execute(
+                            fixture,
+                            Files.readString(
+                                    CASE_ROOT.resolve(fixture),
+                                    StandardCharsets.UTF_8));
 
-        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), fixture);
-        assertSame(ProtosBooleanValue.TRUE, outcome.value(), fixture);
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), fixture);
+            assertSame(ProtosBooleanValue.TRUE, outcome.value(), fixture);
+        }
     }
 }
