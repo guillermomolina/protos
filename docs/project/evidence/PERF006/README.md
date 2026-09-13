@@ -78,3 +78,54 @@ PERF006-C1 and PERF006-C2 is paid for the validated source revision above.
 C3 does **not** close PERF006-C or parent PERF006. The next bounded slice is
 PERF006-C4, which owns final runtime-identity/warning closure across intended
 ordinary surfaces. Final performance characterization remains PERF006-D.
+
+## PERF006-C4 — runtime identity and fallback-warning closure
+
+Status: **CLOSED**
+
+C4 validates the final PLAT033 runtime-identity contract after C3 full semantic
+validation. It changes no Protos implementation, specification, runtime
+architecture, dependency authority, Graal/Truffle version, or implementation
+version.
+
+```text
+validated_source_revision=428e46523e8fa0b3f0260b5a6e76c198725c041b
+implementation_version=0.2.492-SNAPSHOT
+validated_at_utc=2026-09-13T13:59:43Z
+optimizing_runtime=com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime
+graal_truffle_version=25.3.4.1
+warning_suppression=NO
+truffle_fallback_warning=ABSENT_ALL_INTENDED_SURFACES
+```
+
+### Intended optimizer surfaces
+
+```text
+Maven/Surefire                         PASS exact HotSpotTruffleRuntime
+checkout runtime plane                 PASS exact HotSpotTruffleRuntime
+checkout ordinary guest execution      PASS no fallback warning
+checkout Package Tool                  PASS no fallback warning
+checkout Test Tool                     PASS no fallback warning
+portable runtime plane                 PASS exact HotSpotTruffleRuntime
+portable ordinary guest execution      PASS no fallback warning
+portable Package Tool                  PASS no fallback warning
+portable Test Tool                     PASS no fallback warning
+checkout/dist runtime manifest         PASS byte-for-byte identity
+```
+
+The fallback-warning detector rejects both the historical
+`No optimizing Truffle runtime found` form and the current Polyglot
+interpreter-only/runtime-compilation warning family. Neither
+`polyglot.engine.WarnInterpreterOnly=false` nor
+`truffle.UseFallbackRuntime=true` is used.
+
+JDK native-access and `sun.misc.Unsafe::objectFieldOffset` warnings are
+classified separately as host-JDK/upstream runtime deprecation diagnostics.
+They are not interpreter-fallback evidence and are not suppressed by C4.
+
+### PERF006-C consequence
+
+PERF006-C1, C2, C3 and C4 are now closed. The PLAT033 Candidate A-prime
+runtime plane is proven across all intended ordinary JVM surfaces. PERF006-C is
+therefore complete. Parent PERF006 remains open for the dedicated performance
+evidence/closure track; no parent closure is claimed by C4.

@@ -17,3 +17,5 @@ its references, retention role, and compatibility implications.
 - [`D099/`](D099/README.md) — immutable ratification publication, safe-abort, and GitHub closure evidence for D099.
 - [`PERF006/`](PERF006/README.md) — immutable optimizer-enabled retained/full validation evidence for PERF006-C3.
 - [`UPSTREAM001/`](UPSTREAM001/README.md) — retained Oracle/Graal PR #14434 configurable Bytecode DSL unwind experiment, semantic validation, IGV evidence, optimizer findings, and explicit non-conclusions.
+
+- `PERF006/README.md` — immutable PERF006-C3 full-validation and C4 runtime-identity/fallback-warning closure evidence.
