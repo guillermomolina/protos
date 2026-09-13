@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H READY**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H IN_PROGRESS (D124 RATIFIED; H1 READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1816,3 +1816,44 @@ By publication of this slice:
 
 LM009 itself remains **IN_PROGRESS**: LM009-H and the already-allocated LM009-I
 packaging/end-to-end closure remain downstream work.
+
+## LM009-H1 references decision — D124 RATIFIED
+
+Status after publication: **H1 READY**
+
+Decision: `D124` / GitHub #491 — **Candidate B′**.
+
+The selected standard references contract is:
+
+```text
+seed
+  -> exactly one D110-proven source-backed origin required
+
+occurrence
+  -> include when its complete finite proof-set contains that origin
+  -> omit when proof is incomplete/unknown
+  -> never infer from spelling/workspace search/runtime state
+```
+
+The returned set is deliberately a **sound monotonic under-approximation**:
+every returned location is a proven possible reference, while absence is not
+proof of non-reference.
+
+An ambiguous seed `{A,B,...}` produces no standard references identity; it does
+not synthesize one union symbol. A complete ambiguous occurrence `{A,B}` may be
+reported from an exact `A` query and from an exact `B` query because both are real
+proven semantic possibilities.
+
+Generation 1 is released only for the mechanically exact D110 scope-first
+provenance already available, initially Closure parameters and singleton-proven
+match Binder/Alias bindings, with exact snapshot freshness and
+`includeDeclaration`. Member/delegation/super/import/composition expansion,
+runtime-assisted lookup, workspace-symbol fallback and heuristic same-name search
+remain excluded.
+
+D124 does not make ordinary references exhaustive and does not authorize rename.
+A future rename/refactoring contract may require stronger closed-world
+completeness.
+
+H2 hover, H3 completion and H4 signature-help semantics remain independently
+audit-gated.
