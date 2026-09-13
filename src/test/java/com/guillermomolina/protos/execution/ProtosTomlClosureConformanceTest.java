@@ -112,6 +112,7 @@ final class ProtosTomlClosureConformanceTest {
         assertFalse(source.contains("java.nio.file"), source);
         assertFalse(source.contains("loadFile"), source);
         assertFalse(source.contains("saveFile"), source);
+        assertFalse(source.contains("appendQuotes(quote, remaining - 1)"), source);
     }
 
     private static Object evaluate(String input, String body) throws Exception {

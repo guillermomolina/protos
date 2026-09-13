@@ -3428,11 +3428,11 @@ parse: (text) => {
             })
         }
 
-        appendQuotes: null
-        appendQuotes = (quote, remaining) => {
-            (remaining > 0).ifTrue(() => {
+        appendQuotes: (quote, count) => {
+            remaining: count
+            (() => remaining > 0).while(() => {
                 append(quote)
-                appendQuotes(quote, remaining - 1)
+                remaining = remaining - 1
             })
         }
 
@@ -3507,6 +3507,16 @@ parse: (text) => {
                 })
 
                 isNewline.ifFalse(() => {
+                    forbiddenControl: octet < 32
+                    (octet == 9).ifTrue(() => {
+                        forbiddenControl = false
+                    })
+                    (octet == 127).ifTrue(() => {
+                        forbiddenControl = true
+                    })
+                    forbiddenControl.ifTrue(() => {
+                        fail()
+                    })
                     index = index + 1
                 })
             })

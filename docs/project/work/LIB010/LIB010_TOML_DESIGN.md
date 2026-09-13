@@ -1,6 +1,6 @@
 # LIB010 — TOML Standard Library design
 
-Status: **CLOSED — LIB010 initial public TOML 1.1 semantic baseline complete**
+Status: **CORRECTIVE AUDIT IN PROGRESS — AUD005; final LIB010 closure deferred**
 
 Owning work item: GitHub Issue `#418` — `LIB010 — TOML parsing, document model and public Standard Library API`
 
@@ -9,6 +9,30 @@ Nature: project Standard Library design record; **non-normative**
 Explicit project-owner approval: **2026-09-12**
 
 Validation class: `GOVERNANCE_DOCUMENTATION_ONLY`
+
+Corrective audit owner: GitHub Issue `#451` — `AUD005 — LIB010 TOML post-closure
+conformance and hardening audit`.
+
+Current corrective state after this publication:
+
+```text
+AUD005_STATUS=IN_PROGRESS
+LIB010_E1_STATUS=CLOSED
+LIB010_E2_STATUS=READY
+LIB010_FINAL_CLOSURE=DEFERRED_TO_AUD005
+F1_COMMENT_CONTROL_CONFORMANCE=CLOSED
+F2_QUOTE_APPEND_RECURSION=CLOSED
+F3_OFFICIAL_TOML_TEST_EVIDENCE=OPEN_IN_E2
+F4_COMPOSITE_CONSTRUCTOR_POLICY=UNCHANGED
+F5_V9_EVIDENCE_GATE_RECONCILIATION=OPEN_IN_E2
+F6_TEMPORAL_FRACTION_SCALING=OPEN_IN_E2
+```
+
+LIB010-E1 is a mechanical corrective slice under the already-ratified TOML 1.1
+contract. It rejects forbidden C0/DEL controls in comments while retaining
+horizontal TAB, and removes the remaining self-recursive quote-append helper.
+It does not change the public module/API, D104, D109, D087, semantic node shapes,
+composite-constructor policy, source-preserving scope or authority boundaries.
 
 ## Purpose
 

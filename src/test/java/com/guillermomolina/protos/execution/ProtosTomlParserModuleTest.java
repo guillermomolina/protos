@@ -200,6 +200,30 @@ final class ProtosTomlParserModuleTest {
         assertExpressionSignals("TOML.parse(1)");
     }
 
+    @Test
+    void enforcesToml11CommentControlsAndHardensAdversarialQuoteRuns() throws Exception {
+        Object tabResult =
+                evaluate(
+                        "value = 1 # horizontal\tcomment\n",
+                        "root: TOML.parse(input)\n"
+                                + "(root.kind === \"table\") &&\n"
+                                + "    (root.value[\"value\"].kind === \"integer\") &&\n"
+                                + "    (root.value[\"value\"].value == 1)\n");
+        assertSame(ProtosBooleanValue.TRUE, tabResult);
+
+        for (int octet = 0; octet < 32; octet++) {
+            if (octet == 9 || octet == 10 || octet == 13) {
+                continue;
+            }
+            assertParseSignals("value = 1 # forbidden" + (char) octet + "control\n");
+        }
+        assertParseSignals("value = 1 # forbidden" + (char) 127 + "control\n");
+
+        // Exercise a source-controlled quote run large enough to expose accidental
+        // input-proportional recursion if the structural hardening regresses.
+        assertParseSignals("value = " + "\"".repeat(16384) + "\n");
+    }
+
     private static Object evaluate(String input, String body) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
