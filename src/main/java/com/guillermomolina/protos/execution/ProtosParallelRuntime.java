@@ -2,6 +2,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import java.math.BigInteger;
 import java.util.*;
 import java.util.concurrent.*;
@@ -376,14 +377,30 @@ public final class ProtosParallelRuntime {
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;
             if(v instanceof ProtosClosureValue x){
                 java.util.function.Supplier<ProtosClosureExecutionPlan> rematerializer=null;
-                if(x.definition()!=null){
+                CanonicalClosure definition=x.definition();
+                if(definition!=null){
                     rematerializer=x.executionPlanRematerializerForParallelRuntime().orElseGet(
                             ()->x.executionPlan()
                                     .<java.util.function.Supplier<ProtosClosureExecutionPlan>>map(
-                                            existing->()->existing.rebuild(x.definition()))
+                                            existing->()->{
+                                                if(existing.isBytecodeBackendForRuntime()){
+                                                    ProtosLanguageContext context=
+                                                            ProtosLanguageContext.currentIfEnteredForRuntime();
+                                                    if(context==null
+                                                            || !ProtosPolyglotExecutionContext
+                                                                    .hasEnteredContextForRuntime()){
+                                                        throw new IllegalStateException(
+                                                                "P Bytecode Closure rematerialization "
+                                                                        + "requires the retained Process Context");
+                                                    }
+                                                    return context.bytecodeExecutionPlanForDefinition(
+                                                            definition,existing);
+                                                }
+                                                return existing.rebuild(definition);
+                                            })
                                     .orElseGet(
                                             ()->()->new CanonicalToTruffleLowerer()
-                                                    .lowerClosurePlan(x.definition())));
+                                                    .lowerClosurePlan(definition)));
                 }
                 ProtosClosureValue y=x.parallelProjectionDeferred(
                         List.of(p.newExecutionContext()),ProtosNullValue.INSTANCE,p,rematerializer);

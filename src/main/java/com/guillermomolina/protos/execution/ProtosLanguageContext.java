@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleFile;
 import com.oracle.truffle.api.TruffleLanguage;
@@ -172,15 +173,29 @@ final class ProtosLanguageContext {
     ProtosClosureExecutionPlan bytecodeExecutionPlanForEnteredClosure(
             ProtosClosureValue closure, ProtosClosureExecutionPlan template) {
         Objects.requireNonNull(closure, "closure");
+        return bytecodeExecutionPlanForDefinition(
+                Objects.requireNonNull(
+                        closure.definition(),
+                        "entered Closure definition"),
+                template);
+    }
+
+    /**
+     * Returns the Context-owned Bytecode projection for one semantic Closure definition/template.
+     *
+     * <p>PERF006-C3D uses this definition-based form for P transfer so a transferred Closure does
+     * not retain the source Closure object merely to recover its immutable canonical definition.
+     * The executable projection remains keyed by the semantic template inside this exact
+     * ProtosLanguageContext, preserving PLAT001's one-Context-per-hosted-Process ownership while
+     * allowing all P carriers of that Process to share the same executable projection.
+     */
+    ProtosClosureExecutionPlan bytecodeExecutionPlanForDefinition(
+            CanonicalClosure definition, ProtosClosureExecutionPlan template) {
+        Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(template, "template");
         return sharedBytecodeExecutionPlans.computeIfAbsent(
                 template,
-                ignored ->
-                        template.rebuildBytecodeForLanguage(
-                                Objects.requireNonNull(
-                                        closure.definition(),
-                                        "entered Closure definition"),
-                                language));
+                ignored -> template.rebuildBytecodeForLanguage(definition, language));
     }
 
     ProtosClosureExecutionPlan executionPlanForSharedClosure(ProtosClosureValue closure) {
