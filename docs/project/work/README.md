@@ -52,6 +52,9 @@ Current role-first work records:
 - [`DOC004/DOC004_MATCHING_EXPRESSIONS_DOCUMENTATION.md`](DOC004/DOC004_MATCHING_EXPRESSIONS_DOCUMENTATION.md)
   — programmer-facing matching-expression documentation and validation closure.
 
+- [`DOC005/DOC005_BUNDLED_TOOLS_TEST_TOOL_DOCUMENTATION.md`](DOC005/DOC005_BUNDLED_TOOLS_TEST_TOOL_DOCUMENTATION.md)
+  — maintained Bundled Tools overview plus staged TOOL002 / Test Tool user documentation.
+
 - [`GITHUB012/GITHUB012_ACTIONABLE_PROJECT_VIEWS.md`](GITHUB012/GITHUB012_ACTIONABLE_PROJECT_VIEWS.md)
   — actionable Project-view contract and canonical lifecycle-status hardening.
 

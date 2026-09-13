@@ -62,6 +62,13 @@ documentation areas whose semantics and implementation are already closed.
 11. [Process, I/O, Filesystems, and Authority](11-process-io-filesystems-and-authority.md)
 12. [Matching expressions](12-matching-expressions.md)
 
+
+## Toolchain guides
+
+- [Bundled Tools](tools/README.md) — what an official bundled Tool is, which
+  Tools currently ship, and where Tool policy stops and language/runtime
+  behavior begins.
+
 ## Current guide state
 
 The control-flow dependency that originally blocked chapter 04 is closed.
@@ -130,9 +137,10 @@ that materially affect matching programs.
 
 ## Planned progression
 
-Future chapters should cover, as the guide grows:
-
-- packages, testing, and the bundled toolchain.
+DOC005-A now documents the common Bundled Tools model under
+[Toolchain guides](tools/README.md). Future guide work still needs to cover
+detailed Test Tool usage and the Package Tool surface as their owning work is
+reconciled.
 
 These headings organize explanatory work only. They do not define planned
 language behavior or override current implementation status.
