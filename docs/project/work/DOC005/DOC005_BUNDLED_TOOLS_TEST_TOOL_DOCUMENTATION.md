@@ -51,9 +51,9 @@ The durable work record remains under `docs/project/work/DOC005/`.
 |---|---|---|---|
 | DOC005-A | CLOSED | Bundled Tools concept + maintained navigation | Publishes only the common Tool/Core/stdlib/host boundary, current Tool inventory and private-bootstrap explanation. No Test Tool command/result contract is newly defined. |
 | DOC005-B | CLOSED | Test Tool fundamentals | Publishes current first use, four-plan corpus/expectation model, fresh-Process isolation, private captured output, deterministic logical ordering and published `--jobs` behavior. Commands/examples are checked against current sources/fixtures without running the Test Tool suite. |
-| DOC005-C | READY | Resource-aware Test Tool execution | Requirements/catalog/provider/profile, admission/reservation and one complete resource-backed example from closed TOOL002-I authority. |
-| DOC005-D | READY | Results, diagnostics, exit status and CI recipes | Consume the ratified/published D108/D114/D116 + TOOL002-J result boundary; no pre-emptive new reporting semantics. |
-| DOC005-E | BLOCKED_BY_C_D | Consistency and closure | Verify examples/commands/links, reconcile current `--help` and CLI behavior, reconcile DOC001-M, and absorb any published TOOL005 corpus-routing change before DOC005 closure. |
+| DOC005-C | BLOCKED_BY_TOOL006 | Resource-aware Test Tool execution | Current public `Main.protos` does not attach `resource-requirements.toml` before D108 scheduling; restore already-published wiring under TOOL006/#473 before documenting a runnable resource-backed example. |
+| DOC005-D | CLOSED | Results, diagnostics, exit status and CI recipes | Documents current D108/D114/D116 + TOOL002-J result lanes, bounded diagnostics and CI consumption without introducing a structured-report schema. |
+| DOC005-E | BLOCKED_BY_C | Consistency and closure | Wait for DOC005-C/TOOL006, then verify examples/commands/links, reconcile current `--help` and CLI behavior, reconcile DOC001-M, and absorb any published TOOL005 corpus-routing change before DOC005 closure. |
 
 ## DOC005-A publication
 
@@ -110,6 +110,68 @@ The fundamentals chapter also records the already-published execution contract:
 The examples are source/fixture checked. DOC005-B deliberately does **not** run
 `protos test` as validation because that command is itself the executable test
 suite prohibited for this documentation-only slice.
+
+## DOC005-C audit blocker — TOOL006 / #473
+
+The DOC005-C source audit found an executable mismatch and therefore stopped
+instead of documenting a candidate or historical intent as current behavior.
+
+The durable TOOL002-I record says I8D5C completed the public resource-aware
+Main/CLI cutover for all four owned plans. The current published `Main.protos`,
+however, loads those plans directly through `Manifest` and sends them to the
+D108 resource-aware Runner without importing or invoking
+`ResourceRequirements.loadFromCorpus(...)`.
+
+The already-published components still exist:
+
+- exact `resource-requirements.toml` discovery and strict parsing;
+- D091 full-plan referential attachment;
+- resource catalog parsing;
+- requirement/catalog binding;
+- atomic reservation;
+- provider request projection and resourceful execution;
+- D108 terminal/infrastructure handling.
+
+What is missing is the public plan-side attachment step that makes those
+requirements reach the scheduler.
+
+This is tracked by
+[`TOOL006 / #473`](https://github.com/guillermomolina/protos/issues/473).
+DOC005-C is therefore **BLOCKED_BY_TOOL006**. Documentation must not provide the
+issue-required complete resource-backed runnable example until that wiring is
+restored and published.
+
+## DOC005-D publication
+
+DOC005-D extends
+[`docs/guide/tools/test-tool.md`](../../../guide/tools/test-tool.md) with the
+current published result, diagnostic, exit-status and CI contract.
+
+The guide now explains:
+
+- D116 completed aggregation across every actually executed owned plan;
+- exit `0` for completed all-healthy execution;
+- exit `1` for completed ordinary guest/test failure;
+- D114/D108 `infrastructure-aborted` as a separate outer outcome with exit `3`
+  and precedence over earlier guest failures;
+- preservation of already-produced guest CaseRuns and separation from
+  infrastructure evidence;
+- the current bounded infrastructure-abort stderr summary;
+- unexpected Test Tool/runtime failure as the separate exit-`70` lane;
+- the practical distinction between a completed test-failure `1` and a
+  Tool/configuration Error that is also currently reported by the host as
+  `Test tool error: ...` with exit `1`;
+- progress on the Tool stderr channel while guest stdout/stderr remain private;
+- fail-closed CI use of `bin/protos test --jobs 2`; and
+- a shell classification recipe that consumes exit status rather than physical
+  completion order.
+
+No machine-readable report schema, retry/flaky policy, timeout/recovery,
+remote-worker protocol or event-stream API is invented.
+
+Validation is source/static only. Command examples are checked against the
+current CLI/Runner/Progress sources but are not executed because `protos test`
+is itself the executable suite excluded from this documentation-only slice.
 
 ## D122 / TOOL005 boundary
 
@@ -168,6 +230,6 @@ DOC005 closes only when:
    and
 7. final navigation/link consistency is green.
 
-DOC005-A and DOC005-B are **CLOSED**. The parent remains **IN_PROGRESS**
-with DOC005-C and DOC005-D ready and final consistency/closure deferred to
-DOC005-E.
+DOC005-A, DOC005-B and DOC005-D are **CLOSED**. The parent remains
+**IN_PROGRESS**. DOC005-C is **BLOCKED_BY_TOOL006 / #473**, and final
+consistency/closure remains deferred to DOC005-E after C is released.

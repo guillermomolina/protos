@@ -273,13 +273,266 @@ Repository-wide Test Tool corpus routing is active work under TOOL005. This
 guide should be updated when that owning implementation is actually published,
 not when an architectural candidate merely exists.
 
+## Results and exit status
+
+`protos test` has more than one failure lane. The final process status is useful
+for automation, but it should be interpreted together with the diagnostic lane
+that produced it.
+
+For a normally completed Test Tool invocation, bundled Protos aggregates every
+owned plan that actually executed. The primary conformance plan remains the
+compatibility payload, but it is **not** the only plan that can make the command
+fail.
+
+| Outcome | Meaning | Current CLI exit |
+|---|---|---:|
+| completed; every executed owned plan healthy | ordinary successful test run | `0` |
+| completed; at least one ordinary guest/test failure | tests ran normally, but one or more tests failed | `1` |
+| infrastructure-aborted | the Test Tool could not complete normal execution because an admitted resource/provider attempt reached infrastructure failure | `3` |
+| unexpected Test Tool/runtime failure | internal/tool implementation failure rather than a structured Test Tool outcome | `70` |
+
+The completed classification is invocation-wide. A failure in `actor`, `group` or
+`package-toml` affects the command just as a failure in `main` does. An ordinary
+guest/test failure does not by itself stop later owned plans from running.
+
+Infrastructure abort is different. D108 fail-stop prevents later work from being
+admitted once the invocation reaches that condition, and exit `3` has precedence
+even if ordinary guest/test failures were already produced earlier.
+
+### Configuration and Tool-policy errors are not completed test failures
+
+There is one important current CLI distinction around exit `1`.
+
+Some failures happen before the Test Tool can return a completed `TestRunOutcome`.
+For example, an invalid selected `--jobs` value or an invalid Tool-owned
+configuration/schema can signal an ordinary Test Tool Error. The bundled-tool
+host reports that lane as:
+
+```text
+Test tool error: ...
+```
+
+and currently returns exit `1`.
+
+That is **not** the same thing as:
+
+```text
+TestRunOutcome.status = "completed"
+exit = 1
+```
+
+from an ordinary failed test run.
+
+Therefore automation that needs to distinguish "a test failed" from "the Test
+Tool rejected its configuration" must also inspect the diagnostic class/text;
+the numeric exit alone is not sufficient for that distinction today.
+
+The driver retains exit `2` for its CLI usage-error lane, but the Test Tool's
+historical argument projection is intentionally permissive: unknown Test Tool
+tokens are currently ignored, while invalid values of selected Tool options are
+Tool Errors rather than a new generic usage classification.
+
+## Guest failure and infrastructure failure are orthogonal
+
+A guest program can fail its expected test without anything being wrong with the
+Test Tool infrastructure.
+
+Conceptually:
+
+```text
+test executes
+    |
+    +-- observation matches expectation
+    |       -> guest/test PASS
+    |
+    `-- observation does not match expectation
+            -> guest/test FAIL
+```
+
+That is ordinary completed Test Tool policy.
+
+Infrastructure evidence belongs to a separate lane. A provider/provisioning,
+transport, terminalization, cleanup or unsafe-capacity failure must not be
+invented as a failed guest test.
+
+The stable infrastructure-abort payload preserves these categories separately:
+
+```text
+executedCaseRuns
+ordinaryUnsupportedCount
+infrastructureAttempts
+cutoverNotAdmittedCases
+retainedUnsafeReservationCount
+```
+
+Already-produced guest CaseRuns remain real guest evidence even if a later
+cleanup/infrastructure failure changes the invocation status to
+`infrastructure-aborted`.
+
+Likewise, a case that was never admitted after fail-stop is not fabricated as a
+failed test or an ordinary skipped test.
+
+## Current infrastructure-abort CLI diagnostic
+
+The current host-side reporter consumes the already-decided Test Tool outcome.
+It does not recompute guest pass/fail policy.
+
+For `infrastructure-aborted`, the current CLI writes a bounded summary to
+standard error with this shape:
+
+```text
+Test infrastructure aborted
+infrastructure attempts: N
+cutover not admitted: N
+retained unsafe reservations: N
+```
+
+The internal Test Tool outcome retains richer ordered evidence than these three
+counts. The current human-readable CLI output is deliberately not a frozen
+machine-readable report schema.
+
+In particular, do not parse those prose lines as a durable JSON/JUnit-style API.
+A future structured reporter can project the same Test Tool evidence without
+changing the `0` / `1` / `3` classification.
+
+## Progress output
+
+Test Tool progress is separate from guest standard output.
+
+Guest `stdout` and `stderr` remain private captured streams for the individual
+case execution. Test Tool progress is written on the Tool's own standard-error
+channel.
+
+Current progress records have shapes such as:
+
+```text
+[main] 0/N
+[main] FAIL some/case.protos
+[main] K/N
+[main] N/N passed
+```
+
+or, for infrastructure failure:
+
+```text
+[main] INFRA some/case.protos
+[main] K/N infrastructure-aborted
+```
+
+The final invocation summary reports aggregate passed/failed counts for normal
+completion, or completed/failed counts plus `infrastructure-aborted` for the
+infrastructure lane.
+
+These records are useful to humans and CI logs, but physical case completion
+order is still not the result-order contract. Logical TestPlan order remains the
+stable evidence order.
+
+## CI recipes
+
+### Simple fail-closed CI
+
+If the CI system only needs success versus non-success, use the command directly:
+
+```sh
+bin/protos test --jobs 2
+```
+
+The command returns non-zero for ordinary completed test failure, structured
+infrastructure abort, or an unexpected Tool/runtime failure.
+
+The repository's TOOL002 closure uses this Java-first / Protos-tool-second model:
+Java/runtime validation is one stage, then the real public Test Tool command is
+a separate fail-closed stage.
+
+### Distinguish the major exit lanes
+
+When CI needs to react differently to infrastructure abort, inspect the exit code
+without trying to infer semantics from physical completion order:
+
+```sh
+set +e
+bin/protos test --jobs 2
+status=$?
+set -e
+
+case "$status" in
+  0)
+    echo "Protos tests passed"
+    ;;
+  1)
+    echo "Protos tests failed or the Test Tool rejected configuration/policy" >&2
+    exit 1
+    ;;
+  2)
+    echo "Protos CLI usage error" >&2
+    exit 2
+    ;;
+  3)
+    echo "Protos Test Tool infrastructure aborted" >&2
+    exit 3
+    ;;
+  70)
+    echo "Unexpected Test Tool/runtime failure" >&2
+    exit 70
+    ;;
+  *)
+    echo "Unexpected protos test exit: $status" >&2
+    exit "$status"
+    ;;
+esac
+```
+
+If your CI needs to distinguish ordinary failed tests from Tool configuration
+errors within exit `1`, retain and classify the Test Tool diagnostic text as
+well. Do not silently treat every `1` as an assertion/test mismatch.
+
+### Do not key automation to completion timing
+
+With `--jobs > 1`, independent cases may finish physically in a different order
+from their manifest order. CI should use the final exit classification and
+stable Test Tool evidence/reporting rather than treating "the first line that
+finished" as authoritative.
+
+## What is deliberately not a public reporting contract yet
+
+The current Test Tool does not publish a stable JSON result schema, JUnit XML
+mapping, retry/flaky classification, remote-worker protocol, hard timeout
+recovery model or event-stream API.
+
+Those can be added later without changing the current core classification:
+
+```text
+0  completed and healthy
+1  completed with ordinary guest/test failure
+3  infrastructure-aborted
+```
+
+Nor should a future richer reporter erase the distinction between guest evidence
+and infrastructure evidence.
+
+## Resource-guide status
+
+The resource-aware architecture itself is extensively implemented and ratified,
+but the DOC005-C audit found a current public wiring regression: the present
+`Main.protos` loads the four manifests and invokes the resource-aware Runner
+without first attaching the implemented `resource-requirements.toml` sidecar.
+
+That mismatch is tracked by
+[`TOOL006 / #473`](https://github.com/guillermomolina/protos/issues/473).
+
+For that reason this guide intentionally does **not** publish a complete
+resource-backed user recipe yet. DOC005-C remains blocked until the already
+published resource-requirements wiring is restored and validated.
+
 ## Where to go next
 
-This chapter establishes the Test Tool fundamentals: current corpus selection,
-manifest expectations, isolated execution, private captured output, bounded
-outer parallelism and deterministic logical ordering.
+This chapter now covers the current Test Tool fundamentals plus the published
+result/diagnostic/exit-status and CI surface.
 
-Resource requirements/catalogs and provider/profile semantics are a separate
-layer on top of this model. Result classes, diagnostics, exit status and CI
-recipes are also documented separately so those contracts can evolve without
-turning this fundamentals chapter into an implementation-history ledger.
+Resource requirements/catalogs and provider/profile semantics are the remaining
+user-facing layer. That DOC005-C section is temporarily blocked by TOOL006/#473
+so the guide does not claim a resource-backed command path that current `main`
+does not actually wire end to end.
+
+Repository-wide suite/corpus routing remains separate work under TOOL005 and will
+be reconciled only after its implementation is published.
