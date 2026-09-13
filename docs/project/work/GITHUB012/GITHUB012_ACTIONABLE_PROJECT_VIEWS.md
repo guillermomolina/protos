@@ -76,9 +76,6 @@ explicit priority plus native-parent inheritance; no lifecycle transition
 automatically means P0/P1/P2/P3.
 
 Saved Project-view filters are GitHub UI configuration, not repository semantic
-authority.
-
-Saved Project-view filters are GitHub UI configuration, not repository semantic
 authority. Current repository automation owns Project membership, Status and
 Priority projection; it does not currently mutate saved view definitions. The
 view configuration must therefore be verified explicitly in the Project UI after
