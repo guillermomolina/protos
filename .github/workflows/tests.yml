@@ -10,8 +10,16 @@ on:
 permissions:
   contents: read
 
+# Main receives many small publication commits. Keep one CI run executing and
+# at most the newest pending run for the same event/ref. Never kill an executing
+# validation merely because a newer commit arrived.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
+    timeout-minutes: 60
     runs-on: ubuntu-latest
     container:
       image: ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825
