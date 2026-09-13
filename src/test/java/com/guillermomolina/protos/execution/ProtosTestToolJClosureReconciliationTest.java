@@ -27,11 +27,55 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosTestToolJClosureReconciliationTest {
     @Test
-    void ciValidatesJavaBeforeRunningThePublicProtosTestToolDirectly() throws Exception {
+    void ciWorkflowMatchesExplicitSuspensionOrActiveClosureContract() throws Exception {
         String workflow =
                 Files.readString(
                         Path.of(".github", "workflows", "tests.yml"),
                         StandardCharsets.UTF_8);
+
+        boolean suspended =
+                workflow.contains("name: CI (suspended)")
+                        || workflow.contains("GITHUB017 / #492");
+
+        if (suspended) {
+            assertTrue(
+                    workflow.contains("name: CI (suspended)"),
+                    "GITHUB017 suspension must be explicit in the workflow name");
+            assertTrue(
+                    workflow.contains("workflow_dispatch:"),
+                    "the suspended workflow must remain manually inspectable");
+            assertFalse(
+                    workflow.contains("\n  push:\n"),
+                    "GITHUB017 suspension must not retain an automatic push trigger");
+            assertFalse(
+                    workflow.contains("\n  pull_request:\n"),
+                    "GITHUB017 suspension must not retain an automatic pull-request trigger");
+            assertTrue(
+                    workflow.contains("AUTOMATIC_TEST_CI=SUSPENDED"),
+                    "the explanatory stub must publish the suspension state");
+            assertTrue(
+                    workflow.contains("BLOCKED_BY=TOOL005/#468"),
+                    "the explanatory stub must retain the TOOL005 blocker authority");
+            assertTrue(
+                    workflow.contains("NO_TESTS_EXECUTED=YES"),
+                    "the explanatory stub must not pretend to execute tests");
+            assertFalse(
+                    workflow.contains("- name: Run impact-aware tests"),
+                    "suspended CI must not execute Java/runtime validation");
+            assertFalse(
+                    workflow.contains("- name: Build checkout CLI for Protos Test Tool"),
+                    "suspended CI must not build the Test Tool checkout path");
+            assertFalse(
+                    workflow.contains("- name: Run Protos Test Tool directly"),
+                    "suspended CI must not execute the public Test Tool");
+            assertFalse(
+                    workflow.contains("python3 scripts/publication_validation.py"),
+                    "the suspended workflow must not invoke repository test validation");
+            assertFalse(
+                    workflow.contains("bin/protos test --jobs 2"),
+                    "the suspended workflow must not run the public Test Tool");
+            return;
+        }
 
         int javaFirst = workflow.indexOf("- name: Run impact-aware tests");
         int checkoutBuild = workflow.indexOf("- name: Build checkout CLI for Protos Test Tool");
