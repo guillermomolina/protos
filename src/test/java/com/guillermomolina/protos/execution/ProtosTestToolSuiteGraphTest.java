@@ -28,7 +28,7 @@ import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-/** TOOL005-A1 conformance for the D122 inert explicit suite graph. */
+/** TOOL005-A1/A2 conformance for the D122 suite graph and D123 SuiteId contract. */
 final class ProtosTestToolSuiteGraphTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
@@ -66,7 +66,7 @@ final class ProtosTestToolSuiteGraphTest {
 
     @Test
     void stableLogicalIdentityIsPreservedLiterally() throws Exception {
-        String logicalId = " repository/library::leaf A ";
+        String logicalId = "protos/library.leaf-a";
         ProtosArrayValue flattened =
                 assertInstanceOf(
                         ProtosArrayValue.class,
@@ -75,11 +75,58 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "leaf: SuiteGraph.leaf(\""
                                         + logicalId
                                         + "\")\n"
-                                        + "root: SuiteGraph.suite(\"root suite\", Array(leaf))\n"
+                                        + "root: SuiteGraph.suite(\"protos/root-suite\", Array(leaf))\n"
                                         + "SuiteGraph.flattenLeafIds(root)"));
 
         assertEquals(1, flattened.indexedSize().intValueExact());
         assertLeafId(flattened, 0, logicalId);
+    }
+
+    @Test
+    void repositorySuiteUsesRatifiedRootAndExactCurrentLeafOrder() throws Exception {
+        ProtosStringValue rootId =
+                assertInstanceOf(
+                        ProtosStringValue.class,
+                        completed(
+                                "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                                        + "RepositorySuite.root.id"));
+        assertEquals("protos/repository", rootId.value());
+
+        ProtosArrayValue flattened =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                                        + "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                                        + "SuiteGraph.flattenLeafIds(RepositorySuite.root)"));
+
+        assertEquals(4, flattened.indexedSize().intValueExact());
+        assertTrue(flattened.isFrozen());
+        assertLeafId(flattened, 0, "protos/conformance");
+        assertLeafId(flattened, 1, "protos/actor");
+        assertLeafId(flattened, 2, "protos/group");
+        assertLeafId(flattened, 3, "protos/package-toml");
+    }
+
+    @Test
+    void repositorySuiteDescriptorsAreFrozen() throws Exception {
+        assertFailed(
+                "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                        + "RepositorySuite.root.id = \"protos/changed\"");
+        assertFailed(
+                "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                        + "leaf: RepositorySuite.root.children[0]\n"
+                        + "leaf.id = \"protos/changed\"");
+    }
+
+    @Test
+    void d123CanonicalSuiteIdsRejectNonCanonicalForms() throws Exception {
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"Protos/actor\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos//actor\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"/protos/actor\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor/\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor suite\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor:host\")");
     }
 
     @Test

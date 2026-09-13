@@ -13,7 +13,7 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! D122 Candidate F generation-1 inert suite-graph descriptors.
+//! D122 Candidate F inert suite graph with D123 canonical SuiteId validation.
 
 fail: () => {
     Error().signal()
@@ -27,9 +27,59 @@ validateString: (value) => {
     value
 }
 
+isIdSegmentStartOctet: (octet) => {
+    ((octet >= 97) && (octet <= 122)) ||
+        ((octet >= 48) && (octet <= 57))
+}
+
+isIdSegmentTailOctet: (octet) => {
+    isIdSegmentStartOctet(octet) ||
+        (octet == 46) ||
+        (octet == 95) ||
+        (octet == 45)
+}
+
+// D123 Candidate G-prime canonical SuiteId:
+// segment(/segment)* where segment=[a-z0-9][a-z0-9._-]*.
+// Slash is logical namespace segmentation only; this is not a filesystem path.
 validateId: (value) => {
     validateString(value)
-    (value == "").ifTrue(() => {
+    source: Encoding.UTF8.encode(value)
+    size: source.size()
+    (size == 0).ifTrue(() => {
+        fail()
+    })
+
+    segmentStart: true
+    index: 0
+    (() => index < size).while() {
+        octet: source[index]
+
+        (octet == 47).ifTrue(() => {
+            segmentStart.ifTrue(() => {
+                fail()
+            })
+            segmentStart = true
+        })
+
+        (octet == 47).ifFalse(() => {
+            allowed: false
+            segmentStart.ifTrue(() => {
+                allowed = isIdSegmentStartOctet(octet)
+            })
+            segmentStart.ifFalse(() => {
+                allowed = isIdSegmentTailOctet(octet)
+            })
+            allowed.ifFalse(() => {
+                fail()
+            })
+            segmentStart = false
+        })
+
+        index = index + 1
+    }
+
+    segmentStart.ifTrue(() => {
         fail()
     })
     value
