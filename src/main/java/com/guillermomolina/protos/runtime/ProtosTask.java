@@ -371,20 +371,22 @@ public final class ProtosTask {
         }
     }
 
-    public void executeAction(java.util.function.Supplier<Object> action) {
+    /**
+     * Executes one host/runtime-only Task action without materializing legacy evaluator replay.
+     *
+     * <p>This boundary is for inert caller-domain rematerialization/completion work only. It must
+     * not execute guest expressions or attempt semantic suspension. Cancellation and ordinary
+     * guest Error transfers retain the same terminal mapping previously provided by
+     * {@code executeAction}; replay segment/tape ownership is intentionally absent.
+     */
+    public void executeHostActionForRuntime(java.util.function.Supplier<Object> action) {
         Objects.requireNonNull(action, "action");
-        ProtosEvaluatorContinuation evaluator = evaluatorContinuation();
-        evaluator.beginSegment();
         try {
             complete(action.get());
-        } catch (ProtosEvaluatorSuspension suspended) {
-            // suspension already changed task state
         } catch (ProtosTaskCancellationException cancelled) {
             finishCancellationUnwind();
         } catch (ProtosSignalException signalled) {
             fail(signalled.error());
-        } finally {
-            evaluator.endSegment();
         }
     }
 

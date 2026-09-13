@@ -400,7 +400,7 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
                                 null,
                                 null,
                                 task ->
-                                        task.executeAction(
+                                        task.executeHostActionForRuntime(
                                                 () -> {
                                                     if (!future.isPending()) {
                                                         return ProtosNullValue.INSTANCE;

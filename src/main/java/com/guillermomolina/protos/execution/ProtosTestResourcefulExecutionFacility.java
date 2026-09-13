@@ -472,7 +472,7 @@ final class ProtosTestResourcefulExecutionFacility implements AutoCloseable {
                                 null,
                                 null,
                                 task ->
-                                        task.executeAction(
+                                        task.executeHostActionForRuntime(
                                                 () -> {
                                                     if (!future.isPending()) {
                                                         return ProtosNullValue.INSTANCE;
