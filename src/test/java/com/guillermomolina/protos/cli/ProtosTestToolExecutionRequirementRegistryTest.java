@@ -1,18 +1,6 @@
 /*
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
- * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
- * https://github.com/guillermomolina/protos
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
  */
 package com.guillermomolina.protos.cli;
 
@@ -25,61 +13,31 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosBundledToolModuleResolver;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
-import com.guillermomolina.protos.execution.ProtosNioReadOnlyTreeFilesystemBackend;
 import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
-import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
-/** TOOL005-A3A conformance for the D125 host-owned execution requirement registry. */
 final class ProtosTestToolExecutionRequirementRegistryTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
 
-    @TempDir Path tempDirectory;
-
     @Test
-    void registryIsExactInvocationScopedFrozenAndSeparateFromSuiteIdentity()
-            throws Exception {
+    void registryIsExactInvocationScopedFrozenAndSourceFree() throws Exception {
         Fixture fixture = fixture();
-
-        Path ordinaryRoot = Files.createDirectories(tempDirectory.resolve("ordinary"));
-        Path actorRoot = Files.createDirectories(tempDirectory.resolve("actor"));
-        Path groupRoot = Files.createDirectories(tempDirectory.resolve("group"));
-        Path packageRoot = Files.createDirectories(tempDirectory.resolve("package"));
-
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
-                ProtosTestToolAsyncExecutionScope executionScope =
+                ProtosTestToolAsyncExecutionScope scope =
                         ProtosTestToolAsyncExecutionScope.install(
                                 fixture.activation(),
                                 runtimeHost,
                                 fixture.prelude(),
                                 fixture.prelude(),
-                                fixture.prelude());
-                ProtosNioReadOnlyTreeFilesystemBackend ordinaryBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(ordinaryRoot);
-                ProtosNioReadOnlyTreeFilesystemBackend actorBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(actorRoot);
-                ProtosNioReadOnlyTreeFilesystemBackend groupBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(groupRoot);
-                ProtosNioReadOnlyTreeFilesystemBackend packageBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(packageRoot)) {
-            installFilesystem(fixture, "filesystem", ordinaryBackend);
-            installFilesystem(fixture, "actorFilesystem", actorBackend);
-            installFilesystem(fixture, "groupFilesystem", groupBackend);
-            installFilesystem(fixture, "packageTomlFilesystem", packageBackend);
-
+                                fixture.prelude())) {
             ProtosTestExecutionRequirementRegistry.install(fixture.activation());
-
             ProtosObjectValue registry =
                     assertInstanceOf(
                             ProtosObjectValue.class,
@@ -91,107 +49,43 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
             assertTrue(registry.isFrozen());
             assertEquals(4, registry.localSlotsSnapshot().size());
 
-            assertBinding(
-                    fixture.activation(),
-                    registry,
-                    "protos/test/ordinary",
-                    "manifest",
-                    "filesystem",
-                    "executionAsync",
-                    "executionInspectAsync",
-                    "resourceExecutionAsync",
-                    "resourceExecutionInspectAsync");
-            assertBinding(
-                    fixture.activation(),
-                    registry,
-                    "protos/test/actor",
-                    "manifest",
-                    "actorFilesystem",
-                    "actorExecutionAsync",
-                    "actorExecutionInspectAsync",
-                    "actorResourceExecutionAsync",
-                    "actorResourceExecutionInspectAsync");
-            assertBinding(
-                    fixture.activation(),
-                    registry,
-                    "protos/test/group",
-                    "manifest",
-                    "groupFilesystem",
-                    "groupExecutionAsync",
-                    "groupExecutionInspectAsync",
-                    "groupResourceExecutionAsync",
-                    "groupResourceExecutionInspectAsync");
-            assertBinding(
-                    fixture.activation(),
-                    registry,
-                    "protos/test/package",
-                    "package-toml",
-                    "packageTomlFilesystem",
-                    "packageExecutionAsync",
-                    "packageExecutionInspectAsync",
-                    "packageResourceExecutionAsync",
-                    "packageResourceExecutionInspectAsync");
+            assertBinding(fixture.activation(), registry, "protos/test/ordinary",
+                    "executionAsync", "executionInspectAsync",
+                    "resourceExecutionAsync", "resourceExecutionInspectAsync");
+            assertBinding(fixture.activation(), registry, "protos/test/actor",
+                    "actorExecutionAsync", "actorExecutionInspectAsync",
+                    "actorResourceExecutionAsync", "actorResourceExecutionInspectAsync");
+            assertBinding(fixture.activation(), registry, "protos/test/group",
+                    "groupExecutionAsync", "groupExecutionInspectAsync",
+                    "groupResourceExecutionAsync", "groupResourceExecutionInspectAsync");
+            assertBinding(fixture.activation(), registry, "protos/test/package",
+                    "packageExecutionAsync", "packageExecutionInspectAsync",
+                    "packageResourceExecutionAsync", "packageResourceExecutionInspectAsync");
 
-            assertFalse(registry.hasLocalSlot("protos/conformance"));
-            assertFalse(registry.hasLocalSlot("protos/actor"));
-            assertFalse(registry.hasLocalSlot("protos/group"));
-            assertFalse(registry.hasLocalSlot("protos/package-toml"));
-            assertFalse(registry.hasLocalSlot("protos/test/unknown"));
-
+            assertFalse(registry.hasLocalSlot("protos/corpus/conformance"));
+            assertFalse(registry.hasLocalSlot("protos/corpus/actor"));
             assertThrows(
                     IllegalStateException.class,
-                    () ->
-                            ProtosTestExecutionRequirementRegistry.install(
-                                    fixture.activation()));
+                    () -> ProtosTestExecutionRequirementRegistry.install(fixture.activation()));
         }
     }
 
     @Test
-    void missingAuthorizedBindingFacilityFailsClosedBeforeRegistryPublication()
-            throws Exception {
+    void missingExecutionFacilityFailsClosedBeforePublication() throws Exception {
         Fixture fixture = fixture();
-
-        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
-                ProtosTestToolAsyncExecutionScope executionScope =
-                        ProtosTestToolAsyncExecutionScope.install(
-                                fixture.activation(),
-                                runtimeHost,
-                                fixture.prelude(),
-                                fixture.prelude(),
-                                fixture.prelude())) {
-            assertThrows(
-                    IllegalStateException.class,
-                    () ->
-                            ProtosTestExecutionRequirementRegistry.install(
-                                    fixture.activation()));
-            assertFalse(
-                    fixture.activation()
-                            .context()
-                            .hasLocalSlot(
-                                    ProtosTestExecutionRequirementRegistry.REGISTRY_SLOT));
-        }
-    }
-
-    private static void installFilesystem(
-            Fixture fixture,
-            String slotName,
-            ProtosStandardFilesystemProtocol.Backend backend) {
-        Object rawFilesystem =
-                ProtosStandardFilesystemProtocol.createCapability(
-                        fixture.prelude().bytesPrototypeForRuntime(),
-                        fixture.activation(),
-                        backend);
-        ProtosFilesystemValue filesystem =
-                assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
-        fixture.activation().context().createLocalSlot(slotName, filesystem);
+        assertThrows(
+                IllegalStateException.class,
+                () -> ProtosTestExecutionRequirementRegistry.install(fixture.activation()));
+        assertFalse(
+                fixture.activation()
+                        .context()
+                        .hasLocalSlot(ProtosTestExecutionRequirementRegistry.REGISTRY_SLOT));
     }
 
     private static void assertBinding(
             ProtosActivation activation,
             ProtosObjectValue registry,
             String requirementId,
-            String expectedPlanLoader,
-            String filesystemSlot,
             String executionSlot,
             String inspectionSlot,
             String resourceExecutionSlot,
@@ -200,18 +94,10 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         registry.readLocalSlot(requirementId).orElseThrow());
-
         assertTrue(binding.isFrozen());
-        assertEquals(6, binding.localSlotsSnapshot().size());
-        assertSame(
-                activation.context().readLocalSlot(filesystemSlot).orElseThrow(),
-                binding.readLocalSlot("filesystem").orElseThrow());
-        assertEquals(
-                expectedPlanLoader,
-                assertInstanceOf(
-                                ProtosStringValue.class,
-                                binding.readLocalSlot("planLoader").orElseThrow())
-                        .value());
+        assertEquals(4, binding.localSlotsSnapshot().size());
+        assertFalse(binding.hasLocalSlot("filesystem"));
+        assertFalse(binding.hasLocalSlot("planLoader"));
         assertSame(
                 activation.context().readLocalSlot(executionSlot).orElseThrow(),
                 binding.readLocalSlot("executionAsync").orElseThrow());

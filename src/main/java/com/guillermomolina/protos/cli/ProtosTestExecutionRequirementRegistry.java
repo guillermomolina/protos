@@ -17,18 +17,14 @@
 package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.util.Objects;
 
 /**
- * D125 production host registry for Test Tool suite execution requirements.
+ * D125 host registry for Test Tool execution requirements.
  *
- * <p>The registry is created once per bundled Test Tool invocation after all authorized filesystem
- * and execution facilities have been installed. Persisted suite descriptors see only logical
- * {@code ExecutionRequirementId} values; concrete bootstrap slot identities remain confined to this
- * host binding.
+ * <p>D126 moves source authority and plan materialization to the independent corpus registry, so
+ * these bindings contain execution and inspection mechanics only.
  */
 final class ProtosTestExecutionRequirementRegistry {
     static final String REGISTRY_SLOT = "testExecutionRequirementBindings";
@@ -48,8 +44,6 @@ final class ProtosTestExecutionRequirementRegistry {
                 registry,
                 activation,
                 "protos/test/ordinary",
-                "manifest",
-                "filesystem",
                 "executionAsync",
                 "executionInspectAsync",
                 "resourceExecutionAsync",
@@ -58,8 +52,6 @@ final class ProtosTestExecutionRequirementRegistry {
                 registry,
                 activation,
                 "protos/test/actor",
-                "manifest",
-                "actorFilesystem",
                 "actorExecutionAsync",
                 "actorExecutionInspectAsync",
                 "actorResourceExecutionAsync",
@@ -68,8 +60,6 @@ final class ProtosTestExecutionRequirementRegistry {
                 registry,
                 activation,
                 "protos/test/group",
-                "manifest",
-                "groupFilesystem",
                 "groupExecutionAsync",
                 "groupExecutionInspectAsync",
                 "groupResourceExecutionAsync",
@@ -78,8 +68,6 @@ final class ProtosTestExecutionRequirementRegistry {
                 registry,
                 activation,
                 "protos/test/package",
-                "package-toml",
-                "packageTomlFilesystem",
                 "packageExecutionAsync",
                 "packageExecutionInspectAsync",
                 "packageResourceExecutionAsync",
@@ -93,8 +81,6 @@ final class ProtosTestExecutionRequirementRegistry {
             ProtosObjectValue registry,
             ProtosActivation activation,
             String requirementId,
-            String planLoader,
-            String filesystemSlot,
             String executionSlot,
             String inspectionSlot,
             String resourceExecutionSlot,
@@ -104,18 +90,7 @@ final class ProtosTestExecutionRequirementRegistry {
                     "duplicate Test Tool execution requirement binding: " + requirementId);
         }
 
-        Object filesystem = requiredSlot(activation, filesystemSlot);
-        if (!(filesystem instanceof ProtosFilesystemValue)) {
-            throw new IllegalStateException(
-                    "Test Tool execution binding "
-                            + requirementId
-                            + " requires Filesystem capability in slot "
-                            + filesystemSlot);
-        }
-
         ProtosObjectValue binding = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        binding.createLocalSlot("filesystem", filesystem);
-        binding.createLocalSlot("planLoader", new ProtosStringValue(planLoader));
         binding.createLocalSlot("executionAsync", requiredSlot(activation, executionSlot));
         binding.createLocalSlot("executionInspectAsync", requiredSlot(activation, inspectionSlot));
         binding.createLocalSlot(
@@ -124,7 +99,6 @@ final class ProtosTestExecutionRequirementRegistry {
                 "resourceExecutionInspectAsync",
                 requiredSlot(activation, resourceInspectionSlot));
         binding.freeze();
-
         registry.createLocalSlot(requirementId, binding);
     }
 

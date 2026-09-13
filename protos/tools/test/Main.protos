@@ -52,7 +52,7 @@ startProgress: (phaseName, phasePlan) => {
     state
 }
 
-// A3B keeps presentation separate from D123 SuiteId and D125
+// Presentation stays separate from D123 SuiteId, D126 CorpusId and D125
 // ExecutionRequirementId authority. These four historical labels are retained
 // only for exact output compatibility while execution order comes from the graph.
 phaseNames: Array(
@@ -68,23 +68,43 @@ leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)
     Error().signal()
 })
 
-// D125: resolve and validate the complete invocation binding set before any
-// TestPlan case may be scheduled. Execution dispatch is requirement-driven; no
-// SuiteId selects a host route.
+// D126/D125: resolve and validate the complete invocation corpus + execution
+// binding set before any TestPlan case may be scheduled. SuiteId selects neither
+// source authority nor host execution route.
 resolvedSuites: Array()
 resolveIndex: 0
 (() => resolveIndex < leaves.size()).while() {
     leaf: leaves[resolveIndex]
+    corpus: leaf.corpus
     requirement: leaf.executionRequirement
+
+    testCorpusBindings.hasSlot(corpus).ifFalse(() => {
+        Error().signal()
+    })
+    corpusBinding: testCorpusBindings.slotValue(corpus)
+    Array(
+        "filesystem",
+        "planLoader"
+    ).each((slotName) => {
+        corpusBinding.hasSlot(slotName).ifFalse(() => {
+            Error().signal()
+        })
+    })
+
+    planLoader: corpusBinding.planLoader
+    supportedLoader: planLoader === "manifest"
+    (planLoader === "package-toml").ifTrue(() => {
+        supportedLoader = true
+    })
+    supportedLoader.ifFalse(() => {
+        Error().signal()
+    })
 
     testExecutionRequirementBindings.hasSlot(requirement).ifFalse(() => {
         Error().signal()
     })
     binding: testExecutionRequirementBindings.slotValue(requirement)
-
     Array(
-        "filesystem",
-        "planLoader",
         "executionAsync",
         "executionInspectAsync",
         "resourceExecutionAsync",
@@ -95,18 +115,10 @@ resolveIndex: 0
         })
     })
 
-    planLoader: binding.planLoader
-    supportedLoader: planLoader === "manifest"
-    (planLoader === "package-toml").ifTrue(() => {
-        supportedLoader = true
-    })
-    supportedLoader.ifFalse(() => {
-        Error().signal()
-    })
-
     resolved: {
         leaf: leaf
         phaseName: phaseNames[resolveIndex]
+        corpusBinding: corpusBinding
         binding: binding
     }
     resolved.freeze()
@@ -115,21 +127,21 @@ resolveIndex: 0
 }
 resolvedSuites.freeze()
 
-// Materialize every current TestPlan before scheduling begins. Loader selection
-// is a host-binding implementation fact, never SuiteId or graph ancestry.
+// D126: materialize every current TestPlan through its CorpusBinding before
+// scheduling begins. Loader/source mechanics never come from ExecutionBinding.
 plannedSuites: Array()
 planIndex: 0
 (() => planIndex < resolvedSuites.size()).while() {
     resolved: resolvedSuites[planIndex]
-    binding: resolved.binding
-    planLoader: binding.planLoader
+    corpusBinding: resolved.corpusBinding
+    planLoader: corpusBinding.planLoader
     suitePlan: null
 
     (planLoader === "manifest").ifTrue(() => {
-        suitePlan = Manifest.load(binding.filesystem)
+        suitePlan = Manifest.load(corpusBinding.filesystem)
     })
     (planLoader === "package-toml").ifTrue(() => {
-        suitePlan = Manifest.loadPackageToml(binding.filesystem)
+        suitePlan = Manifest.loadPackageToml(corpusBinding.filesystem)
     })
     (suitePlan === null).ifTrue(() => {
         Error().signal()
@@ -138,7 +150,8 @@ planIndex: 0
     planned: {
         leaf: resolved.leaf
         phaseName: resolved.phaseName
-        binding: binding
+        corpusBinding: corpusBinding
+        binding: resolved.binding
         plan: suitePlan
     }
     planned.freeze()
@@ -158,13 +171,14 @@ suiteIndex: 0
     invocationAborted.not()
 ).while() {
     planned: plannedSuites[suiteIndex]
+    corpusBinding: planned.corpusBinding
     binding: planned.binding
     suiteProgress: startProgress(planned.phaseName, planned.plan)
 
     suiteD108: Runner.runD108WithResources(
         planned.plan,
         resourceCatalog,
-        binding.filesystem,
+        corpusBinding.filesystem,
         binding.executionAsync,
         binding.executionInspectAsync,
         binding.resourceExecutionAsync,

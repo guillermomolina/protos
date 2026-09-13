@@ -29,7 +29,7 @@ import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-/** TOOL005-A1/A2/A3A conformance for D122/D123 suite identity and D125 execution requirements. */
+/** TOOL005 conformance for D122/D123 suite identity plus D126/D125 leaf identities. */
 final class ProtosTestToolSuiteGraphTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
@@ -42,13 +42,13 @@ final class ProtosTestToolSuiteGraphTest {
                         ProtosArrayValue.class,
                         completed(
                                 "SuiteGraph: import(\"self:SuiteGraph\")\n"
-                                        + "a: SuiteGraph.leaf(\"a\", \"test/ordinary\")\n"
-                                        + "b: SuiteGraph.leaf(\"b\", \"test/ordinary\")\n"
-                                        + "c: SuiteGraph.leaf(\"c\", \"test/ordinary\")\n"
-                                        + "d: SuiteGraph.leaf(\"d\", \"test/ordinary\")\n"
-                                        + "e: SuiteGraph.leaf(\"e\", \"test/ordinary\")\n"
-                                        + "f: SuiteGraph.leaf(\"f\", \"test/ordinary\")\n"
-                                        + "g: SuiteGraph.leaf(\"g\", \"test/ordinary\")\n"
+                                        + "a: SuiteGraph.leaf(\"a\", \"corpus/test\", \"test/ordinary\")\n"
+                                        + "b: SuiteGraph.leaf(\"b\", \"corpus/test\", \"test/ordinary\")\n"
+                                        + "c: SuiteGraph.leaf(\"c\", \"corpus/test\", \"test/ordinary\")\n"
+                                        + "d: SuiteGraph.leaf(\"d\", \"corpus/test\", \"test/ordinary\")\n"
+                                        + "e: SuiteGraph.leaf(\"e\", \"corpus/test\", \"test/ordinary\")\n"
+                                        + "f: SuiteGraph.leaf(\"f\", \"corpus/test\", \"test/ordinary\")\n"
+                                        + "g: SuiteGraph.leaf(\"g\", \"corpus/test\", \"test/ordinary\")\n"
                                         + "deep: SuiteGraph.suite(\"deep\", Array(d, e))\n"
                                         + "nested: SuiteGraph.suite(\"nested\", Array(b, c, deep))\n"
                                         + "root: SuiteGraph.suite(\"root\", Array(a, nested, f, g))\n"
@@ -75,7 +75,7 @@ final class ProtosTestToolSuiteGraphTest {
                                 "SuiteGraph: import(\"self:SuiteGraph\")\n"
                                         + "leaf: SuiteGraph.leaf(\""
                                         + logicalId
-                                        + "\", \"test/ordinary\")\n"
+                                        + "\", \"corpus/test\", \"test/ordinary\")\n"
                                         + "root: SuiteGraph.suite(\"protos/root-suite\", Array(leaf))\n"
                                         + "SuiteGraph.flattenLeafIds(root)"));
 
@@ -110,6 +110,24 @@ final class ProtosTestToolSuiteGraphTest {
     }
 
     @Test
+    void repositorySuiteUsesRatifiedD126CorporaInLeafOrder() throws Exception {
+        ProtosArrayValue leaves =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                                        + "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                                        + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+
+        assertEquals(4, leaves.indexedSize().intValueExact());
+        assertTrue(leaves.isFrozen());
+        assertLeafCorpus(leaves, 0, "protos/conformance", "protos/corpus/conformance");
+        assertLeafCorpus(leaves, 1, "protos/actor", "protos/corpus/actor");
+        assertLeafCorpus(leaves, 2, "protos/group", "protos/corpus/group");
+        assertLeafCorpus(leaves, 3, "protos/package-toml", "protos/corpus/package-toml");
+    }
+
+    @Test
     void repositorySuiteUsesRatifiedD125RequirementsInLeafOrder() throws Exception {
         ProtosArrayValue leaves =
                 assertInstanceOf(
@@ -132,6 +150,25 @@ final class ProtosTestToolSuiteGraphTest {
     }
 
     @Test
+    void d126CorpusIdsAreMandatoryCanonicalAndLeafLocal() throws Exception {
+        assertFailed(
+                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                        + "SuiteGraph.leaf(\"protos/a\", \"Protos/corpus\", \"test/ordinary\")");
+        assertFailed(
+                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                        + "SuiteGraph.leaf(\"protos/a\", \"protos//corpus\", \"test/ordinary\")");
+        assertFailed(
+                "SuiteGraph: import(\"self:SuiteGraph\")\n"
+                        + "leaf: {\n"
+                        + "    kind: \"leaf\"\n"
+                        + "    id: \"protos/a\"\n"
+                        + "    executionRequirement: \"test/ordinary\"\n"
+                        + "    children: Array()\n"
+                        + "}\n"
+                        + "SuiteGraph.flattenLeafIds(leaf)");
+    }
+
+    @Test
     void d125ExecutionRequirementIdsAreMandatoryCanonicalAndLeafLocal()
             throws Exception {
         assertFailed(
@@ -145,6 +182,7 @@ final class ProtosTestToolSuiteGraphTest {
                         + "leaf: {\n"
                         + "    kind: \"leaf\"\n"
                         + "    id: \"protos/a\"\n"
+                        + "    corpus: \"protos/corpus/a\"\n"
                         + "    children: Array()\n"
                         + "}\n"
                         + "SuiteGraph.flattenLeafIds(leaf)");
@@ -162,25 +200,29 @@ final class ProtosTestToolSuiteGraphTest {
         assertFailed(
                 "RepositorySuite: import(\"self:RepositorySuite\")\n"
                         + "leaf: RepositorySuite.root.children[0]\n"
+                        + "leaf.corpus = \"protos/corpus/changed\"");
+        assertFailed(
+                "RepositorySuite: import(\"self:RepositorySuite\")\n"
+                        + "leaf: RepositorySuite.root.children[0]\n"
                         + "leaf.executionRequirement = \"protos/test/changed\"");
     }
 
     @Test
     void d123CanonicalSuiteIdsRejectNonCanonicalForms() throws Exception {
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"Protos/actor\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos//actor\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"/protos/actor\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor/\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor suite\", \"test/ordinary\")");
-        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor:host\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"Protos/actor\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos//actor\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"/protos/actor\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor/\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor suite\", \"corpus/test\", \"test/ordinary\")");
+        assertFailed("SuiteGraph: import(\"self:SuiteGraph\")\nSuiteGraph.leaf(\"protos/actor:host\", \"corpus/test\", \"test/ordinary\")");
     }
 
     @Test
     void duplicateIdsFailClosed() throws Exception {
         assertFailed(
                 "SuiteGraph: import(\"self:SuiteGraph\")\n"
-                        + "first: SuiteGraph.leaf(\"same\", \"test/ordinary\")\n"
-                        + "second: SuiteGraph.leaf(\"same\", \"test/ordinary\")\n"
+                        + "first: SuiteGraph.leaf(\"same\", \"corpus/test\", \"test/ordinary\")\n"
+                        + "second: SuiteGraph.leaf(\"same\", \"corpus/test\", \"test/ordinary\")\n"
                         + "root: SuiteGraph.suite(\"root\", Array(first, second))\n"
                         + "SuiteGraph.flattenLeafIds(root)");
     }
@@ -215,7 +257,7 @@ final class ProtosTestToolSuiteGraphTest {
     void emptyIdsFailClosed() throws Exception {
         assertFailed(
                 "SuiteGraph: import(\"self:SuiteGraph\")\n"
-                        + "SuiteGraph.leaf(\"\", \"test/ordinary\")");
+                        + "SuiteGraph.leaf(\"\", \"corpus/test\", \"test/ordinary\")");
     }
 
     @Test
@@ -223,6 +265,30 @@ final class ProtosTestToolSuiteGraphTest {
         assertFailed(
                 "SuiteGraph: import(\"self:SuiteGraph\")\n"
                         + "SuiteGraph.leaf(42, \"test/ordinary\")");
+    }
+
+    private static void assertLeafCorpus(
+            ProtosArrayValue leaves,
+            int index,
+            String expectedId,
+            String expectedCorpus) {
+        ProtosObjectValue leaf =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        leaves.indexedAt(BigInteger.valueOf(index)));
+        assertTrue(leaf.isFrozen());
+        assertEquals(
+                expectedId,
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                leaf.readLocalSlot("id").orElseThrow())
+                        .value());
+        assertEquals(
+                expectedCorpus,
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                leaf.readLocalSlot("corpus").orElseThrow())
+                        .value());
     }
 
     private static void assertLeafRequirement(

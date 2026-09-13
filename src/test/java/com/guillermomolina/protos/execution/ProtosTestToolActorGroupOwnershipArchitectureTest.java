@@ -43,6 +43,16 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
     private static final Path RUNNER = Path.of("protos", "tools", "test", "Runner.protos");
     private static final Path REPOSITORY_SUITE =
             Path.of("protos", "tools", "test", "RepositorySuite.protos");
+    private static final Path CORPUS_REGISTRY =
+            Path.of(
+                    "src",
+                    "main",
+                    "java",
+                    "com",
+                    "guillermomolina",
+                    "protos",
+                    "cli",
+                    "ProtosTestCorpusRegistry.java");
     private static final Path REQUIREMENT_REGISTRY =
             Path.of(
                     "src",
@@ -99,6 +109,8 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
         String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
         String repositorySuite =
                 Files.readString(REPOSITORY_SUITE, StandardCharsets.UTF_8);
+        String corpusRegistry =
+                Files.readString(CORPUS_REGISTRY, StandardCharsets.UTF_8);
         String requirementRegistry =
                 Files.readString(REQUIREMENT_REGISTRY, StandardCharsets.UTF_8);
         String g2Java = Files.readString(G2_JAVA, StandardCharsets.UTF_8);
@@ -107,22 +119,33 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
         String g3Fixture = Files.readString(G3_FIXTURE, StandardCharsets.UTF_8);
 
         assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+        assertTrue(main.contains("testCorpusBindings.slotValue(corpus)"));
         assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
+        assertTrue(main.contains("corpusBinding.filesystem"));
         assertTrue(main.contains("binding.resourceExecutionAsync"));
         assertFalse(main.contains("actorExecutionAsync"));
         assertFalse(main.contains("groupExecutionAsync"));
 
         assertTrue(repositorySuite.contains("\"protos/actor\""));
+        assertTrue(repositorySuite.contains("\"protos/corpus/actor\""));
         assertTrue(repositorySuite.contains("\"protos/test/actor\""));
         assertTrue(repositorySuite.contains("\"protos/group\""));
+        assertTrue(repositorySuite.contains("\"protos/corpus/group\""));
         assertTrue(repositorySuite.contains("\"protos/test/group\""));
 
+        assertTrue(corpusRegistry.contains("\"protos/corpus/actor\""));
+        assertTrue(corpusRegistry.contains("\"actorFilesystem\""));
+        assertTrue(corpusRegistry.contains("\"protos/corpus/group\""));
+        assertTrue(corpusRegistry.contains("\"groupFilesystem\""));
+        assertFalse(corpusRegistry.contains("\"actorExecutionAsync\""));
+        assertFalse(corpusRegistry.contains("\"groupExecutionAsync\""));
+
         assertTrue(requirementRegistry.contains("\"protos/test/actor\""));
-        assertTrue(requirementRegistry.contains("\"actorFilesystem\""));
+        assertFalse(requirementRegistry.contains("\"actorFilesystem\""));
         assertTrue(requirementRegistry.contains("\"actorExecutionAsync\""));
         assertTrue(requirementRegistry.contains("\"actorResourceExecutionAsync\""));
         assertTrue(requirementRegistry.contains("\"protos/test/group\""));
-        assertTrue(requirementRegistry.contains("\"groupFilesystem\""));
+        assertFalse(requirementRegistry.contains("\"groupFilesystem\""));
         assertTrue(requirementRegistry.contains("\"groupExecutionAsync\""));
         assertTrue(requirementRegistry.contains("\"groupResourceExecutionAsync\""));
 

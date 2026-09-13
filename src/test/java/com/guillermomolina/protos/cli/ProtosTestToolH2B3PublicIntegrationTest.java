@@ -203,10 +203,12 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         assertTrue(main.contains("arguments: process.args()"));
         assertTrue(main.contains("jobs: Options.jobs(arguments)"));
         assertTrue(main.contains("leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+        assertTrue(main.contains("testCorpusBindings.hasSlot(corpus)"));
+        assertTrue(main.contains("testCorpusBindings.slotValue(corpus)"));
         assertTrue(main.contains("testExecutionRequirementBindings.hasSlot(requirement)"));
         assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
-        assertTrue(main.contains("Manifest.load(binding.filesystem)"));
-        assertTrue(main.contains("Manifest.loadPackageToml(binding.filesystem)"));
+        assertTrue(main.contains("Manifest.load(corpusBinding.filesystem)"));
+        assertTrue(main.contains("Manifest.loadPackageToml(corpusBinding.filesystem)"));
         assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
         assertEquals(0, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));
@@ -214,6 +216,9 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         assertTrue(main.contains("binding.executionInspectAsync"));
         assertTrue(main.contains("binding.resourceExecutionAsync"));
         assertTrue(main.contains("binding.resourceExecutionInspectAsync"));
+        assertTrue(main.contains("corpusBinding.filesystem"));
+        assertFalse(main.contains("binding.filesystem"));
+        assertFalse(main.contains("binding.planLoader"));
         assertFalse(main.contains("actorExecutionAsync"));
         assertFalse(main.contains("groupExecutionAsync"));
         assertFalse(main.contains("packageExecutionAsync"));
