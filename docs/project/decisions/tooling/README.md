@@ -30,6 +30,10 @@ DOC002-F2 migrated the initial ratified tooling-domain set into this role:
 Their existing identifiers and decision outcomes are unchanged. This list is
 not a closed manifest for future tooling decisions.
 
+Subsequent ratified tooling decisions include:
+
+- [`D122_TEST_TOOL_COMPOSABLE_SUITE_GRAPH.md`](D122_TEST_TOOL_COMPOSABLE_SUITE_GRAPH.md)
+
 Observable Protos semantics remain authoritative under `spec/`. Concrete
 runtime/host architecture belongs under [`../platform/`](../platform/README.md).
 Language/specification decision rationale belongs under
