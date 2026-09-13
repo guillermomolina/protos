@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H IN_PROGRESS (D124 RATIFIED; H1 CLOSED; H5 READY; hover/completion/signature help DEFERRED_TO_LM010)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I READY**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1903,3 +1903,83 @@ They are retained as paused post-baseline work in LM010 / GitHub #493.
 H5 owns the real VS Code `Find All References` evidence, stale/fail-closed check
 and top-level static-intelligence closure before LM009-I packaging/end-to-end work
 is released.
+
+## LM009-H closure — references + static-intelligence baseline
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED; LM009-I READY**
+
+Coordination: GitHub #489 / #288. Decision authority: D124 / #491,
+Candidate B′. H1 implementation authority:
+`89e462fb3250b7ac7cbe68cd7dcd32aacf3ed150`.
+
+LM009-H closes the remaining initial static-intelligence baseline with standard
+references backed only by D110 exact static proof authority. Hover, completion and
+signature help remain explicitly deferred to paused LM010 / #493 and are not
+LM009 closure dependencies.
+
+The project-owner real VS Code Extension Development Host / Dev Container H5
+acceptance run used a temporary canonical generation-1 ProjectBinding workspace
+with exact `protos.project`, `protos.toml` and `protos.lock` authority. Loose or
+otherwise non-authoritative `.protos` files correctly fail closed and are not
+valid acceptance surfaces for definition/references.
+
+The accepted H5 live-editor matrix is:
+
+- D110 definition from a proven Closure-parameter body reference to the exact
+  parameter declaration: PASS;
+- D124 Find All References from a proven Closure-parameter reference: PASS;
+- `includeDeclaration`: PASS — declaration plus both same-Closure body
+  occurrences were returned;
+- independent same-spelled Closure binding isolation: PASS;
+- opaque invocation/effect barrier: PASS — from the proven `sink(value)`
+  argument, only the declaration, earlier proven body occurrence and call
+  argument were returned; the later post-barrier occurrence was omitted;
+- post-barrier seed fail-closed behavior: PASS — the later unproven occurrence
+  returned no references;
+- open-document edit overlay: PASS — adding one proven occurrence changed the
+  live result from three to four locations;
+- undo/restore freshness: PASS — undo returned four to three immediately with no
+  stale deleted location;
+- document symbols regression smoke: PASS (`first`, `second`, `barrier`);
+- workspace symbols regression smoke: PASS (`first`);
+- parser diagnostics regression smoke: PASS — an introduced syntax error produced
+  a Protos diagnostic and undo cleared it;
+- definition regression smoke: PASS; and
+- duplicate TypeScript/editor semantic authority, runtime-assisted reference
+  lookup and workspace-symbol reference fallback: NONE.
+
+An earlier attempted live check against
+`protos/tools/package/TomlSyntax.protos` produced no definition or references
+because that source was not owned by the active exact ProjectBinding in that test
+window. The canonical-workspace rerun proved this was an invalid acceptance setup,
+not an H1 defect, and confirms the intended fail-closed project/source authority
+boundary.
+
+No H5 observation exposes a new semantic or durable architecture decision.
+D124 Candidate B′ remains unchanged: standard references are a sound monotonic
+static under-approximation; absence is not proof of non-reference and does not
+authorize rename completeness.
+
+This closure discharges the broader validation debt retained by H1. Publication
+commits the documentation-only closure candidate first and runs the repository's
+canonical `scripts/publication_validation.py` against that immutable candidate
+with `--top-level-closure`. The repository-selected impact class, test-ownership
+guard, source-style prevention gate and selected Maven suite must all pass before
+the candidate may reach `main`. Temporary Tool-suite quarantine policy, if still
+active at execution time, is consumed from the repository selector rather than
+hard-coded by LM009-H.
+
+By publication of this slice:
+
+- LM009-H / GitHub #489 is CLOSED;
+- D124 remains RATIFIED as Candidate B′;
+- H1 remains the released references implementation;
+- H5 real-editor evidence is accepted;
+- no Protos specification, runtime implementation, native boundary, Maven
+  implementation version or VS Code extension manifest version changes are made;
+- LM010 / #493 remains PAUSED future work and does not block LM009; and
+- LM009-I / GitHub #474 becomes READY for reproducible VSIX packaging, CI
+  artifact, clean-install evidence and explicit distribution/release closure.
+
+LM009 itself remains **IN_PROGRESS** until LM009-I and the final LM009
+packaging/end-to-end acceptance path close.

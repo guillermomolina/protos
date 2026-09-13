@@ -7,11 +7,11 @@ This directory contains durable non-normative documentation owned by
   — editor/IDE maturity plan and durable evidence through closed LM009-G:
   language association/highlighting, Run, real DAP debugging, the dedicated static
   language-service foundation, parser diagnostics, document/workspace symbols and
-  exact generation-1 go-to-definition with real S4/S5 VS Code evidence. LM009-H is
-  now in progress: D124 Candidate B′ references is published and H5 real-editor
-  closure is next. Hover, completion and signature help are deferred to paused
-  LM010 / GitHub #493 and do not block LM009. LM009-I owns packaging/end-to-end
-  closure.
+  exact generation-1 go-to-definition with real S4/S5 VS Code evidence, and
+  closed LM009-H D124 Candidate B′ references with real H5 VS Code evidence.
+  Hover, completion and signature help remain deferred to paused LM010 /
+  GitHub #493 and do not block LM009. LM009-I is now READY and owns the remaining
+  packaging/end-to-end closure.
 
 Live coordination belongs to GitHub Issue #288. `LM009-A` is coordinated by
 GitHub Issue #289. The existing editor highlighting Issue #11 is consumed by
