@@ -34,6 +34,7 @@ Subsequent ratified tooling decisions include:
 
 - [`D122_TEST_TOOL_COMPOSABLE_SUITE_GRAPH.md`](D122_TEST_TOOL_COMPOSABLE_SUITE_GRAPH.md)
 - [`D123_TEST_TOOL_SUITE_IDENTITY.md`](D123_TEST_TOOL_SUITE_IDENTITY.md)
+- [`D125_TEST_TOOL_EXECUTION_REQUIREMENT.md`](D125_TEST_TOOL_EXECUTION_REQUIREMENT.md)
 
 Observable Protos semantics remain authoritative under `spec/`. Concrete
 runtime/host architecture belongs under [`../platform/`](../platform/README.md).
