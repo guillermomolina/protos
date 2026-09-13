@@ -1,8 +1,8 @@
 # GITHUB012 — Actionable Project views and canonical status reconciliation
 
-Status: **IN PROGRESS**
+Status: **CLOSED / LIVE VIEW CONTRACT VERIFIED**
 
-Owning live Issue: GitHub #470.
+Owning live Issue: GitHub #470 (closed `completed`).
 
 This record governs live GitHub coordination only. It changes no Protos language,
 Tool, Standard Library, runtime or specification semantics.
@@ -126,7 +126,12 @@ The maintained view model is:
    In progress, or Review, unless it is separately routed to Community.
 5. **Blocked** — Blocked / Paused.
 6. **Triage** — Inbox.
-7. **History / Done** — Done.
+7. **History / Done** — closed / Done history. The legacy saved view formerly
+   named **Current work** has been repurposed to this role after Work queue became
+   the canonical actionable top-level surface.
+8. **Roadmap** — optional directional planning view. It may present broader
+   Now/Next/Later direction, but it is not lifecycle authority and MUST NOT be
+   treated as a second Work queue.
 
 The legacy saved views named **Core** and **Needs Guillermo** have no maintained
 semantic role:
@@ -169,6 +174,11 @@ History / Done:
 
 Exact saved-filter spelling remains GitHub UI configuration; the semantic
 membership above is the durable contract.
+
+`Roadmap` is intentionally not given an exact lifecycle filter contract here.
+`ROADMAP.md` remains the human-facing directional authority for Now/Next/Later;
+the Project Roadmap view is only a visual planning projection and cannot override
+Issue lifecycle, Priority, hierarchy, or Work queue membership.
 
 ## Active ownership invariant
 
@@ -263,3 +273,30 @@ verification that:
 - UPSTREAM001 / #480 appears in `Upstream` while remaining absent from
   `Work queue` in its paused state; and
 - Blocked, Triage and History / Done retain their intended membership.
+
+## Final live verification — 2026-09-13
+
+The saved-view contract was subsequently verified/reconciled live:
+
+- Work queue uses open top-level `In progress` / `Review` / `Ready` membership and
+  excludes `label:community`;
+- Community is routed by the durable Issue-owned `community` label and spans
+  hierarchy levels;
+- Community currently separates active contribution work from Ready contribution
+  backlog and Blocked contribution work without competing in Work queue;
+- Decisions and Triage may legitimately be empty when no live Issue currently
+  occupies those lifecycle states;
+- six stale decision Issues that had remained open in Inbox after their durable
+  decisions were already ratified were reconciled to closed `completed`
+  coordination history: PLAT032/#478, PLAT031/#442, D109/#434, D104/#423,
+  PLAT027/#378 and PLAT026/#375;
+- Upstream retains paused UPSTREAM001/#480 as an inspection/coordination item
+  outside Work queue;
+- the legacy saved view `Current work` was repurposed/renamed to
+  `History / Done`; and
+- Roadmap remains a separate directional planning surface rather than a duplicate
+  actionable queue.
+
+GITHUB012 is therefore closed. Future saved-view drift is a coordination defect
+to reconcile against this contract; it does not reopen the completed historical
+reconciliation automatically.

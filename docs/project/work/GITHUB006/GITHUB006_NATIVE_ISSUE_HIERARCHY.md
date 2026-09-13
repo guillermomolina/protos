@@ -41,11 +41,21 @@ CURRENT_WORK_VIEW=9
 REPOSITORY_FILES_CHANGED=NO
 ```
 
-The primary `Current work` table exposes:
+At the 2026-09-10 migration checkpoint, the primary saved view was named
+`Current work` and exposed:
 
 ```text
 Title | Parent issue | Status | Priority | Labels | Assignees | Sub-issues progress
 ```
+
+That saved-view name is **historical evidence**, not part of the native hierarchy
+authority. GITHUB012 later made `Work queue` the canonical actionable top-level
+surface and, on 2026-09-13, the saved view formerly named `Current work` was
+repurposed/renamed to `History / Done`.
+
+The hierarchy contract is unaffected: native Parent/Sub-issue relationships
+remain authoritative, while `Parent issue` and `Sub-issues progress` are derived
+presentation fields that may be shown in any useful Project view or Issue detail.
 
 ## Steady-state rule
 
@@ -78,5 +88,7 @@ would create noise and is outside GITHUB006.
 
 ## Closure condition
 
-GITHUB006 may close after this policy is published on `main` and live verification
-continues to show the migrated hierarchy conflict-free.
+GITHUB006 closed after this policy was published on `main` and live verification
+showed the migrated hierarchy conflict-free. Later Project view renames or
+repurposing do not change the native hierarchy authority and do not reopen
+GITHUB006.
