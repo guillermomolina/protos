@@ -42,6 +42,8 @@ ASSIGNEE_INVARIANT=PASS
 NATIVE_PARENT=PASS|NOT_APPLICABLE
 EFFECTIVE_PRIORITY=RESOLVED|INTENTIONALLY_UNSET
 PROJECT_ROUTING=PASS
+DECISION_APPROVAL_PROVENANCE=PASS|NOT_APPLICABLE
+REQUIRED_DURABLE_PUBLICATION=PASS|NOT_APPLICABLE
 ```
 
 `Parent: #N`, `Parent work item: #N`, dependency prose and naming conventions do
@@ -140,6 +142,69 @@ human-vs-connector write under the same GitHub identity, so this invariant is
 backed by explicit agent fail-closed policy and auditable publication evidence,
 not by pretending GitHub actor identity proves conversational consent.
 
+## Decision closure and durable publication
+
+Exact owner approval and durable ratification publication are distinct
+postconditions.
+
+For a Dxxx/PLATxxx whose selected contract must be written to repository
+governance, approval changes the lifecycle from waiting-for-decision to
+publication work; it does not complete the Issue. While the ratification slice is
+being prepared or retried, the Issue remains open, normally
+`status:in-progress`, with its required owner and effective Priority.
+
+A launcher/result that aborts before mutation, fails validation, fails
+commit/push, or otherwise does not return the required `PUBLISHED` evidence
+leaves `REQUIRED_DURABLE_PUBLICATION` unsatisfied. The Issue must remain open and
+dependent work must remain blocked when the decision itself says ratification is
+a release condition.
+
+Closure as `completed` is valid only after:
+
+1. exact owner approval provenance is already satisfied;
+2. the bounded ratification publication succeeds;
+3. `origin/main` is re-read and contains the expected durable decision record;
+4. live Issue/Project state is re-read; and
+5. every applicable publication postcondition passes.
+
+A comment saying `owner approved`, an approved candidate in the Issue body, or a
+prepared-but-unpublished patch is not a substitute for the durable record.
+
+### PLAT034 fresh-chat closure regression
+
+PLAT034 / #486 provided a live post-GITHUB015 reproduction of this boundary on
+2026-09-13.
+
+The Issue was created as a P0 PLAT decision gate and Candidate C-prime was
+explicitly owner-approved, but #486 was closed `completed` seconds after creation
+while its own contract still required durable ratification before PERF006-C3
+could proceed. The first ratification launcher then explicitly reported that it
+did not publish because of a launcher precondition defect.
+
+The live repair sequence was:
+
+```text
+premature closed #486
+    -> reopen
+    -> family:PLAT
+    -> status:in-progress
+    -> priority:p0
+    -> assignee:guillermomolina
+
+ratification V2
+    -> PUBLISHED
+    -> origin/main commit
+       49cd7fe8b883b415f11ae2c33eea11c2d393bd22
+    -> durable PLAT034 record:
+       RATIFIED — Candidate C′ selected
+    -> live state re-read
+    -> close #486 completed
+```
+
+This is the required fresh-chat reproduction evidence: approval alone did not
+satisfy closure, a failed publication kept the decision incomplete, and closure
+became valid only after durable publication and live re-verification.
+
 ## Phase transitions
 
 When a workstream advances to a new formal child phase:
@@ -162,9 +227,13 @@ GITHUB015 closure requires re-verification of at least:
   native parent #429 and `family:LIB` are structurally verified/reconciled; no
   lifecycle/assignee/Priority is manufactured by the repair;
 - #482 -> native parent #262; effective P0 inherited while active;
-- #483 -> decision/ratification provenance explicitly resolved by the owner; and
-- a fresh-chat formal publication reproduction that cannot report success while
-  any applicable postcondition is missing.
+- #483 -> decision/ratification provenance explicitly resolved by the owner;
+- #486 -> PLAT034 durable ratification commit
+  `49cd7fe8b883b415f11ae2c33eea11c2d393bd22` exists before final `completed`
+  closure; and
+- a fresh-chat formal publication reproduction cannot report success while any
+  applicable postcondition is missing. PLAT034/#486 satisfies this reproduction
+  for the decision-closure boundary.
 
 ## Validation
 

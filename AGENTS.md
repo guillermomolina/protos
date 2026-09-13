@@ -888,6 +888,8 @@ ASSIGNEE_INVARIANT=PASS
 NATIVE_PARENT=PASS|NOT_APPLICABLE
 EFFECTIVE_PRIORITY=RESOLVED|INTENTIONALLY_UNSET
 PROJECT_ROUTING=PASS
+DECISION_APPROVAL_PROVENANCE=PASS|NOT_APPLICABLE
+REQUIRED_DURABLE_PUBLICATION=PASS|NOT_APPLICABLE
 ```
 
 A textual parent declaration is bootstrap input only. It never satisfies
@@ -937,6 +939,40 @@ Generic continuation words such as `dale`, `continue`, `go ahead`, or permission
 to repair coordination state are never approval of an unrelated pending design.
 The agent MUST NOT manufacture an owner-approval comment as provenance. If exact
 approval provenance is absent or ambiguous, fail closed at `status:needs-decision`.
+
+Owner selection and durable ratification are separate postconditions. When an
+approved Dxxx/PLATxxx requires a repository ratification/publication record, the
+Issue MUST remain open until that publication succeeds. After exact approval,
+`status:in-progress` is appropriate while the bounded ratification publication is
+being prepared or retried; approval alone MUST NOT move the Issue directly to
+`completed`.
+
+A ratification launcher that aborts, fails validation, fails commit/push, or does
+not return its required `PUBLISHED` evidence leaves
+`REQUIRED_DURABLE_PUBLICATION` unsatisfied. The agent MUST NOT close the Issue,
+release dependent work, or describe the decision as durably ratified merely
+because the candidate is approved or an Issue comment records the approval.
+
+Closure is allowed only after the required repository publication succeeds and
+the agent re-reads the resulting durable repository state plus live Issue state.
+For a Dxxx/PLATxxx closure that requires such a publication, the transaction is
+therefore:
+
+```text
+exact owner approval
+    -> DECISION_APPROVAL_PROVENANCE=PASS
+bounded ratification publication
+    -> PUBLISHED
+re-read origin/main durable record
+    -> REQUIRED_DURABLE_PUBLICATION=PASS
+re-read live Issue / Project state
+    -> remaining publication postconditions PASS
+close completed
+```
+
+If the repository record is not required for a particular formal item, record
+`REQUIRED_DURABLE_PUBLICATION=NOT_APPLICABLE`; never silently treat a failed or
+pending required publication as not applicable.
 
 ## GitHub release milestone governance
 <!-- GITHUB008 RELEASE-MILESTONE-GOVERNANCE -->
