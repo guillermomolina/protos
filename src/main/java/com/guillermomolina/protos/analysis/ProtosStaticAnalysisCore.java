@@ -65,4 +65,24 @@ public final class ProtosStaticAnalysisCore {
         }
         return ProtosStaticDefinitions.resolve(successful, sourceOffset);
     }
+
+    /**
+     * Resolves the D124 generation-1 references relation for one exact seed
+     * position in the supplied immutable snapshot.
+     *
+     * <p>The result is sound but deliberately not a global-completeness claim.
+     * Parse failure, an ambiguous/unproven seed, or an unsupported source form
+     * is an ordinary empty result.</p>
+     */
+    public Optional<ProtosStaticReferenceResult> references(
+            ProtosDocumentSnapshot snapshot,
+            int sourceOffset) {
+        Objects.requireNonNull(snapshot, "snapshot");
+
+        ProtosStaticParseResult parsed = parse(snapshot);
+        if (!(parsed instanceof ProtosStaticParseResult.Parsed successful)) {
+            return Optional.empty();
+        }
+        return ProtosStaticReferences.resolve(successful, sourceOffset);
+    }
 }

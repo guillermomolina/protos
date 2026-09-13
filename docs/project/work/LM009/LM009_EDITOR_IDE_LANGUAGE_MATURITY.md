@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H IN_PROGRESS (D124 RATIFIED; H1 READY)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H IN_PROGRESS (D124 RATIFIED; H1 CLOSED; H5 READY; hover/completion/signature help DEFERRED_TO_LM010)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1855,5 +1855,51 @@ D124 does not make ordinary references exhaustive and does not authorize rename.
 A future rename/refactoring contract may require stronger closed-world
 completeness.
 
-H2 hover, H3 completion and H4 signature-help semantics remain independently
-audit-gated.
+H2 hover, H3 completion and H4 signature-help are explicitly removed from
+LM009 baseline closure by project-owner direction and tracked as paused future
+work in LM010 / GitHub #493. LM010 is not a dependency of LM009.
+
+## LM009-H1 references implementation — CLOSED
+
+Status after publication: **H1 CLOSED; H5 READY**
+
+Decision authority: D124 / GitHub #491 — Candidate B′.
+
+Generation 1 implements standard `textDocument/references` without introducing a
+second name-resolution authority. The analysis first collects structural source
+candidates, then delegates every candidate-membership proof to the existing D110
+`ProtosStaticDefinitions` authority. Same-name filtering is only a bounded cost
+filter; spelling never establishes reference identity.
+
+The released subset supports:
+
+- exact Closure-parameter declaration or proven-reference seeds;
+- exact match Binder/Alias declaration or proven-reference seeds;
+- every same-snapshot occurrence for which D110's complete finite proof result
+  contains the selected exact target;
+- exact `ReferenceContext.includeDeclaration`;
+- deterministic source ordering and deduplication;
+- exact current-snapshot freshness;
+- the same canonical ProjectBinding source-authority gate used by definition.
+
+It deliberately omits:
+
+- ambiguous/unproven reference seeds;
+- occurrences D110 cannot currently prove after opaque invocation/effect barriers;
+- capture-interface, receiver/member/delegation/super/import/composition expansion;
+- workspace-symbol or textual fallback;
+- runtime/guest execution;
+- cross-source/project-wide expansion beyond the current generation-1 proof
+  domain; and
+- any rename-completeness promise.
+
+No durable index/lifetime architecture is added: H1 reuses the existing
+client-session custody and D110 proof implementation. This keeps future stronger
+proof/index implementations free to add coverage monotonically under D124.
+
+Hover, completion and signature help are no longer LM009-H closure requirements.
+They are retained as paused post-baseline work in LM010 / GitHub #493.
+
+H5 owns the real VS Code `Find All References` evidence, stale/fail-closed check
+and top-level static-intelligence closure before LM009-I packaging/end-to-end work
+is released.

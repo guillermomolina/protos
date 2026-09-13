@@ -178,6 +178,26 @@ public final class ProtosStaticAnalysisSession {
     }
 
     /**
+     * Resolves the D124 generation-1 references relation from the currently
+     * captured immutable document snapshot, if present.
+     *
+     * <p>The result may become stale after a concurrent replacement. Callers
+     * whose publication requires freshness must use
+     * {@link #isCurrent(String, ProtosStaticReferenceResult)}.</p>
+     */
+    public Optional<ProtosStaticReferenceResult> referencesCurrent(
+            String workspaceId,
+            String documentId,
+            int sourceOffset) {
+        Optional<ProtosDocumentSnapshot> snapshot =
+                currentSnapshot(workspaceId, documentId);
+        if (snapshot.isEmpty()) {
+            return Optional.empty();
+        }
+        return core.references(snapshot.get(), sourceOffset);
+    }
+
+    /**
      * Returns whether a parse result still corresponds exactly to the current
      * snapshot of the same document in the selected workspace.
      *
@@ -216,6 +236,25 @@ public final class ProtosStaticAnalysisSession {
                 workspace.documents.get(
                         result.referenceSnapshot().documentId());
         return result.referenceSnapshot().equals(current);
+    }
+
+    /**
+     * Returns whether a references proof still corresponds exactly to the
+     * current snapshot of its seed document.
+     */
+    public boolean isCurrent(
+            String workspaceId,
+            ProtosStaticReferenceResult result) {
+        Objects.requireNonNull(workspaceId, "workspaceId");
+        Objects.requireNonNull(result, "result");
+
+        WorkspaceState workspace = workspaces.get(workspaceId);
+        if (workspace == null) {
+            return false;
+        }
+        ProtosDocumentSnapshot current =
+                workspace.documents.get(result.seedSnapshot().documentId());
+        return result.seedSnapshot().equals(current);
     }
 
     private static final class WorkspaceState {

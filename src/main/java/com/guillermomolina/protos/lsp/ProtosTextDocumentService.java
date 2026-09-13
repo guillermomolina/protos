@@ -23,6 +23,9 @@ import com.guillermomolina.protos.analysis.ProtosDocumentSymbols;
 import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
 import com.guillermomolina.protos.analysis.ProtosStaticDefinitionResult;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
+import com.guillermomolina.protos.analysis.ProtosStaticReferenceResult;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -41,6 +44,7 @@ import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.ReferenceParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
@@ -58,8 +62,9 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * parser-derived diagnostics. G2 derives D079 document symbols from the same
  * current parser-authoritative snapshot. G4 definition queries consume only
  * D110 proof results after the workspace edge confirms exact canonical
- * ProjectBinding source ownership; the open-document domain itself never
- * becomes project/package/module authority.</p>
+ * ProjectBinding source ownership. H1 adds D124 references by inverting only
+ * those D110-proven identities; the open-document domain itself never becomes
+ * project/package/module authority.</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
@@ -67,7 +72,7 @@ final class ProtosTextDocumentService implements TextDocumentService {
     private final ProtosStaticAnalysisSession session;
     private volatile LanguageClient client;
     private volatile boolean hierarchicalDocumentSymbolsEnabled;
-    private volatile Predicate<String> definitionSourceAuthority = ignored -> false;
+    private volatile Predicate<String> navigationSourceAuthority = ignored -> false;
 
     ProtosTextDocumentService(ProtosStaticAnalysisSession session) {
         this.session = Objects.requireNonNull(session, "session");
@@ -171,7 +176,7 @@ final class ProtosTextDocumentService implements TextDocumentService {
                 Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
                 "textDocument.uri");
 
-        Predicate<String> authority = definitionSourceAuthority;
+        Predicate<String> authority = navigationSourceAuthority;
         if (!authority.test(uri)) {
             return noDefinition();
         }
@@ -223,6 +228,87 @@ final class ProtosTextDocumentService implements TextDocumentService {
         return CompletableFuture.completedFuture(Either.forLeft(left));
     }
 
+
+    @Override
+    public CompletableFuture<List<? extends Location>> references(
+            ReferenceParams params) {
+        Objects.requireNonNull(params, "params");
+        String uri = Objects.requireNonNull(
+                Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
+                "textDocument.uri");
+
+        Predicate<String> authority = navigationSourceAuthority;
+        if (!authority.test(uri)) {
+            return noReferences();
+        }
+
+        Optional<ProtosDocumentSnapshot> current =
+                session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
+        if (current.isEmpty()) {
+            return noReferences();
+        }
+        OptionalInt sourceOffset =
+                ProtosLspSourcePositions.offset(
+                        current.get().characters(),
+                        Objects.requireNonNull(params.getPosition(), "position"));
+        if (sourceOffset.isEmpty()) {
+            return noReferences();
+        }
+
+        Optional<ProtosStaticReferenceResult> references =
+                session.referencesCurrent(
+                        OPEN_DOCUMENTS_DOMAIN,
+                        uri,
+                        sourceOffset.getAsInt());
+        if (references.isEmpty()) {
+            return noReferences();
+        }
+
+        ProtosStaticReferenceResult proven = references.get();
+        if (!session.isCurrent(OPEN_DOCUMENTS_DOMAIN, proven)
+                || !authority.test(uri)
+                || !proven.seedSnapshot().documentId().equals(uri)) {
+            return noReferences();
+        }
+
+        ProtosStaticDefinitionResult.Target target = proven.target();
+        if (!target.snapshot().equals(proven.seedSnapshot())
+                || !target.snapshot().documentId().equals(uri)) {
+            return noReferences();
+        }
+        for (ProtosStaticReferenceResult.Occurrence occurrence : proven.occurrences()) {
+            if (!occurrence.snapshot().equals(proven.seedSnapshot())
+                    || !occurrence.snapshot().documentId().equals(uri)) {
+                return noReferences();
+            }
+        }
+
+        ArrayList<ProtosStaticReferenceResult.Occurrence> selected =
+                new ArrayList<>(proven.occurrences());
+        if (Objects.requireNonNull(params.getContext(), "context")
+                .isIncludeDeclaration()) {
+            selected.add(new ProtosStaticReferenceResult.Occurrence(
+                    target.snapshot(),
+                    target.span()));
+        }
+        selected.sort(Comparator
+                .comparing((ProtosStaticReferenceResult.Occurrence occurrence) ->
+                        occurrence.snapshot().documentId())
+                .thenComparingInt(occurrence -> occurrence.span().startOffset())
+                .thenComparingInt(occurrence -> occurrence.span().endOffset()));
+
+        List<Location> locations = selected.stream()
+                .distinct()
+                .map(occurrence -> new Location(
+                        occurrence.snapshot().documentId(),
+                        ProtosLspSourcePositions.range(
+                                occurrence.snapshot().characters(),
+                                occurrence.span())))
+                .toList();
+        List<? extends Location> response = locations;
+        return CompletableFuture.completedFuture(response);
+    }
+
     @Override
     public void didSave(DidSaveTextDocumentParams params) {
         Objects.requireNonNull(params, "params");
@@ -239,8 +325,8 @@ final class ProtosTextDocumentService implements TextDocumentService {
     }
 
 
-    void setDefinitionSourceAuthority(Predicate<String> authority) {
-        definitionSourceAuthority =
+    void setNavigationSourceAuthority(Predicate<String> authority) {
+        navigationSourceAuthority =
                 Objects.requireNonNull(authority, "authority");
     }
 
@@ -249,6 +335,11 @@ final class ProtosTextDocumentService implements TextDocumentService {
             noDefinition() {
         List<? extends Location> empty = List.of();
         return CompletableFuture.completedFuture(Either.forLeft(empty));
+    }
+
+    private static CompletableFuture<List<? extends Location>> noReferences() {
+        List<? extends Location> empty = List.of();
+        return CompletableFuture.completedFuture(empty);
     }
 
     private static DocumentSymbol toLspDocumentSymbol(
