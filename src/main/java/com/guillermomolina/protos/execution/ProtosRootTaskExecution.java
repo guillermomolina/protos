@@ -39,22 +39,21 @@ public final class ProtosRootTaskExecution {
             ProtosActivation activation) {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(activation, "activation");
+        if (!isProductionBytecodeRoot(target)) {
+            throw new IllegalArgumentException(
+                    "cooperative RootTask execution requires a semantic Bytecode root");
+        }
 
         ProtosActorExecutionDomain domain = activation.executionDomain();
         ProtosTask rootTask =
                 domain.createTask(
                         null,
                         null,
-                        task -> {
-                            if (isProductionBytecodeRoot(target)) {
+                        task ->
                                 ProtosBytecodeTaskExecution.execute(
                                         task,
                                         target,
-                                        activation);
-                            } else {
-                                task.executeProtos(target, activation);
-                            }
-                        });
+                                        activation));
 
         domain.dispatchUntilTerminal(rootTask, () -> false);
 

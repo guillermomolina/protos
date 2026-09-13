@@ -16,7 +16,6 @@
  */
 package com.guillermomolina.protos.runtime;
 
-import com.guillermomolina.protos.execution.ProtosEvaluatorBridge;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -147,31 +146,25 @@ public final class ProtosFutureValue extends ProtosObjectValue {
     public Object observeValue(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
         requireDomain(activation);
-        while (true) {
-            State snapshot;
-            Object resolved;
-            ProtosObjectValue failed;
-            synchronized (this) {
-                snapshot = state;
-                resolved = value;
-                failed = error;
-                if (snapshot == State.PENDING) {
-                    ProtosTask task = activation.task().orElseThrow(
-                            () -> new IllegalStateException("pending Future.value() requires an Actor-local task execution"));
-                    Waiter waiter = new Waiter(this, task);
-                    waiters.add(waiter);
-                    ProtosEvaluatorBridge.await(activation, waiter);
-                    // await either suspended (control unwind) or observed a terminal-ready waiter.
-                    waiters.remove(waiter);
-                    continue;
-                }
-            }
-            return observedTerminalValue(
-                    activation,
-                    snapshot,
-                    resolved,
-                    failed);
+
+        State snapshot;
+        Object resolved;
+        ProtosObjectValue failed;
+        synchronized (this) {
+            snapshot = state;
+            resolved = value;
+            failed = error;
         }
+
+        if (snapshot == State.PENDING) {
+            throw new IllegalStateException(
+                    "pending Future.value() requires the C-prime continuation entry");
+        }
+        return observedTerminalValue(
+                activation,
+                snapshot,
+                resolved,
+                failed);
     }
 
     /**
