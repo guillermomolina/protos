@@ -11,6 +11,15 @@
   </a>
 </p>
 
+> ### 🚀 Latest milestone — PERF006 complete
+>
+> Protos now runs ordinary intended JVM execution on the optimizing
+> Graal/Truffle runtime. Controlled exact-source measurements show
+> **1.06x–1.73x faster steady-state execution across all five retained
+> workloads**, while the historical replay bottleneck has disappeared.
+>
+> **[Read the PERF006 milestone story →](docs/news/2026-09-13-perf006-complete.md)**
+
 # Protos
 
 > **Core language:** v0.1 draft specification\
