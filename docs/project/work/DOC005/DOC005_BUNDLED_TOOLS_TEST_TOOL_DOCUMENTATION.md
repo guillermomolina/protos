@@ -50,10 +50,10 @@ The durable work record remains under `docs/project/work/DOC005/`.
 | Slice | Status | Scope | Boundary |
 |---|---|---|---|
 | DOC005-A | CLOSED | Bundled Tools concept + maintained navigation | Publishes only the common Tool/Core/stdlib/host boundary, current Tool inventory and private-bootstrap explanation. No Test Tool command/result contract is newly defined. |
-| DOC005-B | READY | Test Tool fundamentals | First use, current corpus/expectation model, isolation, private output, deterministic reporting and published `--jobs` behavior. Examples must be checked against current executable sources/fixtures. |
+| DOC005-B | CLOSED | Test Tool fundamentals | Publishes current first use, four-plan corpus/expectation model, fresh-Process isolation, private captured output, deterministic logical ordering and published `--jobs` behavior. Commands/examples are checked against current sources/fixtures without running the Test Tool suite. |
 | DOC005-C | READY | Resource-aware Test Tool execution | Requirements/catalog/provider/profile, admission/reservation and one complete resource-backed example from closed TOOL002-I authority. |
 | DOC005-D | READY | Results, diagnostics, exit status and CI recipes | Consume the ratified/published D108/D114/D116 + TOOL002-J result boundary; no pre-emptive new reporting semantics. |
-| DOC005-E | BLOCKED_BY_B_C_D | Consistency and closure | Verify examples/commands/links, reconcile current `--help` and CLI behavior, reconcile DOC001-M, and absorb any published TOOL005 corpus-routing change before DOC005 closure. |
+| DOC005-E | BLOCKED_BY_C_D | Consistency and closure | Verify examples/commands/links, reconcile current `--help` and CLI behavior, reconcile DOC001-M, and absorb any published TOOL005 corpus-routing change before DOC005 closure. |
 
 ## DOC005-A publication
 
@@ -82,6 +82,35 @@ The chapter establishes only already-selected/common behavior:
 DOC005-A intentionally does not document detailed Package Tool behavior and does
 not publish the detailed `protos test` command/result contract.
 
+## DOC005-B publication
+
+DOC005-B publishes
+[`docs/guide/tools/test-tool.md`](../../../guide/tools/test-tool.md) from current
+executable evidence rather than from superseded design sketches.
+
+At this publication boundary, the Test Tool still selects exactly four explicit
+repository/toolchain plans: primary conformance, Actor, Actor Group and Package
+Tool TOML syntax. The guide therefore documents that current surface and states
+explicitly that arbitrary working-directory discovery and the D122 suite graph
+are not yet executable public behavior.
+
+The fundamentals chapter also records the already-published execution contract:
+
+- retained `manifest.tsv` plans select exact relative test sources plus
+  expectations;
+- each exact test execution runs in a fresh semantic Process;
+- guest standard streams are captured privately per execution;
+- `--jobs N` is positive logical outer test-case capacity, defaulting to one;
+- `--jobs` does not redefine concurrency inside an individual test;
+- bounded parallel execution preserves logical TestPlan/manifest result order;
+- the exact separate-token spelling `--jobs N` is selected, while the historical
+  TOOL002 projection continues to ignore unknown/attached forms such as
+  `--jobs=N`.
+
+The examples are source/fixture checked. DOC005-B deliberately does **not** run
+`protos test` as validation because that command is itself the executable test
+suite prohibited for this documentation-only slice.
+
 ## D122 / TOOL005 boundary
 
 D122 is ratified and releases TOOL005 to implement an explicit composable Test
@@ -96,10 +125,11 @@ ratified future/owning architecture
 published current user behavior
 ```
 
-DOC005-B/C/D may document the Test Tool surface that is already published.
-DOC005-E must reconcile whatever TOOL005 has actually published by closure time,
-especially corpus/suite selection, without teaching an unimplemented suite graph
-as though users can already invoke it.
+DOC005-B documents the currently published four-plan executable surface.
+DOC005-C/D may add the Test Tool resource/result surfaces that are already
+published. DOC005-E must reconcile whatever TOOL005 has actually published by
+closure time, especially corpus/suite selection, without teaching an
+unimplemented suite graph as though users can already invoke it.
 
 ## Validation policy
 
@@ -138,5 +168,6 @@ DOC005 closes only when:
    and
 7. final navigation/link consistency is green.
 
-DOC005-A closes only the common Tool-model slice. The parent remains
-**IN_PROGRESS**.
+DOC005-A and DOC005-B are **CLOSED**. The parent remains **IN_PROGRESS**
+with DOC005-C and DOC005-D ready and final consistency/closure deferred to
+DOC005-E.

@@ -68,6 +68,9 @@ documentation areas whose semantics and implementation are already closed.
 - [Bundled Tools](tools/README.md) — what an official bundled Tool is, which
   Tools currently ship, and where Tool policy stops and language/runtime
   behavior begins.
+- [Test Tool](tools/test-tool.md) — current `protos test` corpus and
+  expectation model, isolated case execution, deterministic reporting and
+  bounded `--jobs` parallelism.
 
 ## Current guide state
 
@@ -137,10 +140,13 @@ that materially affect matching programs.
 
 ## Planned progression
 
-DOC005-A now documents the common Bundled Tools model under
-[Toolchain guides](tools/README.md). Future guide work still needs to cover
-detailed Test Tool usage and the Package Tool surface as their owning work is
-reconciled.
+DOC005-A documents the common Bundled Tools model under
+[Toolchain guides](tools/README.md), and DOC005-B now adds the maintained
+[Test Tool fundamentals](tools/test-tool.md): current corpus routing,
+expectations, isolated execution, deterministic reporting and `--jobs`.
+Resource-aware Test Tool execution, final diagnostics/exit-status recipes and
+the Package Tool surface remain later documentation work under their owning
+published contracts.
 
 These headings organize explanatory work only. They do not define planned
 language behavior or override current implementation status.

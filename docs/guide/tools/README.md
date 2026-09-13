@@ -229,6 +229,7 @@ That answers the main boundary question:
 
 > **A Bundled Tool is part of the toolchain, but it is not part of the language.**
 
-The Test Tool guide builds on this model with concrete `protos test` usage,
-corpus/expectation behavior, parallel execution, resources, diagnostics and CI
-recipes.
+Continue with the maintained [Test Tool guide](test-tool.md). DOC005-B covers
+current `protos test` corpus/expectation behavior, isolated execution and
+`--jobs`; later DOC005 slices add the already-published resource and final
+result/diagnostic contracts without mixing them into this Tool-model overview.
