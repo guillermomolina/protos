@@ -30,6 +30,15 @@ import java.util.Objects;
 public final class ProtosClosureInvoker {
     private ProtosClosureInvoker() {}
 
+    static void requireNativeTaskFallbackForRuntime(ProtosClosureValue closure) {
+        Objects.requireNonNull(closure, "closure");
+        if (closure.nativeBody().isEmpty()) {
+            throw new IllegalStateException(
+                    "B6B-C retired Task-owned source Closure AST/replay fallback; "
+                            + "source-backed Task execution must enter through C-prime");
+        }
+    }
+
     public static Object invoke(
             ProtosClosureValue closure,
             List<?> supplied) {
@@ -41,6 +50,7 @@ public final class ProtosClosureInvoker {
             com.guillermomolina.protos.runtime.ProtosTask task) {
         Objects.requireNonNull(creator, "creator");
         Objects.requireNonNull(task, "task");
+        requireNativeTaskFallbackForRuntime(closure);
         ProtosActivation activation = task.evaluatorContinuation().rootInvocationActivation(() ->
                 ProtosActivation.forClosureInvocation(
                         closure, supplied, creator.prelude().orElse(null), creator.actorModuleState(),
@@ -70,6 +80,8 @@ public final class ProtosClosureInvoker {
             return;
         }
 
+        // B6B-C: only a native compatibility entry may allocate the legacy evaluator.
+        requireNativeTaskFallbackForRuntime(closure);
         task.executeAction(
                 () -> invokeInTask(closure, supplied, creator, task));
     }
@@ -87,6 +99,7 @@ public final class ProtosClosureInvoker {
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(creator, "creator");
         Objects.requireNonNull(task, "task");
+        requireNativeTaskFallbackForRuntime(closure);
 
         ProtosActivation activation =
                 task.evaluatorContinuation()
@@ -133,6 +146,7 @@ public final class ProtosClosureInvoker {
                 };
         ProtosActivation activation;
         if (caller != null && caller.task().isPresent()) {
+            requireNativeTaskFallbackForRuntime(closure);
             com.guillermomolina.protos.runtime.ProtosTask task = caller.task().orElseThrow();
             activation = task.evaluatorContinuation().invocationActivation(activationFactory);
             activation.attachTask(task);
@@ -176,6 +190,7 @@ public final class ProtosClosureInvoker {
 
         ProtosActivation activation;
         if (caller.task().isPresent()) {
+            requireNativeTaskFallbackForRuntime(closure);
             com.guillermomolina.protos.runtime.ProtosTask task = caller.task().orElseThrow();
             activation = task.evaluatorContinuation().invocationActivation(activationFactory);
             activation.attachTask(task);
@@ -197,19 +212,18 @@ public final class ProtosClosureInvoker {
             if (closure.nativeBody().isPresent()) {
                 return closure.nativeBody().orElseThrow().execute(activation, supplied);
             }
+            if (activation.task().isPresent()) {
+                throw new IllegalStateException(
+                        "B6B-C retired Task-owned source Closure AST/replay fallback; "
+                                + "source-backed Task execution must enter through C-prime");
+            }
             ProtosClosureExecutionPlan template =
                     closure.executionPlanForRuntimeInvocation();
             /*
-             * Entered-Context projection remains selective. The durable A+ contract marks semantic
-             * Closures that may cross Contexts through requiresContextLocalExecutionProjection;
-             * language-unbound templates also require projection, and Bytecode templates reaching
-             * this still-legacy synchronous path require the temporary AST fallback. Do not project
-             * every ordinary source Closure merely because a Context is entered: that would widen
-             * the executable-projection cache and violate the established one-template/one-projection
-             * A+ boundary.
-             *
-             * The no-entered-Context cooperative Task case is separate below: its temporary AST
-             * fallback is replay-stable and Task-owned by ProtosEvaluatorContinuation.
+             * This synchronous path is now non-Task only. Entered-Context projection remains
+             * selective for the retained AST equivalence/oracle surface. A direct host invocation
+             * outside an entered Context may still rebuild one fresh AST plan, but no Task may use
+             * that path or acquire evaluator replay state through it.
              */
             ProtosLanguageContext enteredContext =
                     ProtosLanguageContext.currentIfEnteredForRuntime();
@@ -227,18 +241,6 @@ public final class ProtosClosureInvoker {
                     || (enteredContext != null
                             && !template.isBytecodeBackendForRuntime())) {
                 plan = template;
-            } else if (activation.task().isPresent()) {
-                com.guillermomolina.protos.runtime.ProtosTask task =
-                        activation.task().orElseThrow();
-                plan =
-                        task.evaluatorContinuation()
-                                .replayStableLegacyAstPlan(
-                                        template,
-                                        () ->
-                                                template.rebuildAstForLegacyFallback(
-                                                        Objects.requireNonNull(
-                                                                closure.definition(),
-                                                                "legacy fallback Closure definition")));
             } else {
                 plan =
                         template.rebuildAstForLegacyFallback(
@@ -248,7 +250,7 @@ public final class ProtosClosureInvoker {
             }
             if (plan.isBytecodeBackendForRuntime()) {
                 throw new IllegalStateException(
-                        "temporary B6B fallback must materialize an AST execution plan");
+                        "direct legacy/oracle invocation must materialize an AST execution plan");
             }
             plan.bind(activation);
             return plan.executeBody(activation);

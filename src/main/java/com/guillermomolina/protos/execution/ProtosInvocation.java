@@ -212,9 +212,20 @@ public final class ProtosInvocation {
         }
 
         /*
-         * B6A6A3 deliberately retains the historical AST/native Task branch until B6B. The
-         * PLAT027 hook above is never installed for this compatibility path.
+         * B6B-C retains only the native Task compatibility branch. For canonical Object.call,
+         * the behavior that would execute is the Closure receiver itself, not the native
+         * Object.call bridge selected by lookup. Guard that exact effective target before
+         * task.executeAction() can materialize evaluator replay state.
          */
+        ProtosClosureValue legacyFallbackTarget = closure;
+        if (receiver instanceof ProtosClosureValue targetClosure
+                && ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                        closure,
+                        selected.home())) {
+            legacyFallbackTarget = targetClosure;
+        }
+        ProtosClosureInvoker.requireNativeTaskFallbackForRuntime(legacyFallbackTarget);
+
         task.executeAction(
                 () -> {
                     if (receiver instanceof ProtosClosureValue targetClosure
