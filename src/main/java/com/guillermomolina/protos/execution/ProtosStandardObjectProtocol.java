@@ -35,9 +35,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ProtosStandardObjectProtocol {
+    private static final ProtosNativeClosureBody STANDARD_CALL_BODY =
+            ProtosStandardObjectProtocol::call;
     private static final ProtosClosureValue STANDARD_CALL =
-            ProtosClosureValue.nativeClosure(
-                    ProtosStandardObjectProtocol::call);
+            ProtosClosureValue.nativeClosure(STANDARD_CALL_BODY);
     private static final ProtosNativeClosureBody STANDARD_ENSURE_BODY =
             ProtosStandardObjectProtocol::ensure;
     private static final ProtosClosureValue STANDARD_ENSURE =
@@ -54,6 +55,11 @@ public final class ProtosStandardObjectProtocol {
             ProtosObjectValue home) {
         return behavior == STANDARD_CALL
                 && home.isRootObject();
+    }
+
+    static boolean isStandardCallImplementation(
+            ProtosClosureValue closure) {
+        return closure.nativeBody().orElse(null) == STANDARD_CALL_BODY;
     }
 
     static boolean isCanonicalStandardEnsureSelection(

@@ -583,6 +583,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final boolean structuredMapAtPut;
         private final boolean structuredMapRemove;
         private final boolean directControlNative;
+        private final boolean structuredObjectCall;
+        private final ProtosModuleRuntime structuredImportRuntime;
         private final ProtosModuleRuntime.PreparedModuleInitialization moduleInitialization;
 
         PreparedClosureCall(RootCallTarget bodyTarget, ProtosActivation activation) {
@@ -604,7 +606,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     null,
                     false,
                     false,
-                    false);
+                    false,
+                    false,
+                    null);
         }
 
         private PreparedClosureCall(
@@ -625,7 +629,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
                 boolean structuredMapAtPut,
                 boolean structuredMapRemove,
-                boolean directControlNative) {
+                boolean directControlNative,
+                boolean structuredObjectCall,
+                ProtosModuleRuntime structuredImportRuntime) {
             this.bodyTarget = bodyTarget;
             this.nativeBody = nativeBody;
             this.supplied = List.copyOf(supplied);
@@ -647,6 +653,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredMapAtPut = structuredMapAtPut;
             this.structuredMapRemove = structuredMapRemove;
             this.directControlNative = directControlNative;
+            this.structuredObjectCall = structuredObjectCall;
+            this.structuredImportRuntime = structuredImportRuntime;
             this.moduleInitialization = null;
             int controlCapabilities =
                     (structuredEnsure ? 1 : 0)
@@ -662,7 +670,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             + (structuredMapReadLookup != null ? 1 : 0)
                             + (structuredMapAtPut ? 1 : 0)
                             + (structuredMapRemove ? 1 : 0)
-                            + (directControlNative ? 1 : 0);
+                            + (directControlNative ? 1 : 0)
+                            + (structuredObjectCall ? 1 : 0)
+                            + (structuredImportRuntime != null ? 1 : 0);
             if (controlCapabilities > 1) {
                 throw new IllegalArgumentException(
                         "prepared Closure call cannot own multiple structured-control capabilities");
@@ -686,7 +696,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
                 boolean structuredMapAtPut,
                 boolean structuredMapRemove,
-                boolean directControlNative) {
+                boolean directControlNative,
+                boolean structuredObjectCall,
+                ProtosModuleRuntime structuredImportRuntime) {
             return new PreparedClosureCall(
                     null,
                     java.util.Objects.requireNonNull(nativeBody, "nativeBody"),
@@ -705,7 +717,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredMapReadLookup,
                     structuredMapAtPut,
                     structuredMapRemove,
-                    directControlNative);
+                    directControlNative,
+                    structuredObjectCall,
+                    structuredImportRuntime);
         }
 
         private PreparedClosureCall(
@@ -730,6 +744,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.structuredMapAtPut = false;
             this.structuredMapRemove = false;
             this.directControlNative = false;
+            this.structuredObjectCall = false;
+            this.structuredImportRuntime = null;
             this.moduleInitialization =
                     java.util.Objects.requireNonNull(
                             moduleInitialization,
@@ -753,6 +769,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             return moduleInitialization.immediateResult();
         }
+        boolean isStructuredObjectCall() { return structuredObjectCall; }
+        boolean isStructuredImportCall() { return structuredImportRuntime != null; }
         boolean isStructuredEnsure() { return structuredEnsure; }
         boolean isStructuredErrorHandler() { return structuredErrorHandler; }
         boolean isStructuredWhile() { return structuredWhile; }
@@ -766,6 +784,65 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         boolean isStructuredMapReadLookup() { return structuredMapReadLookup != null; }
         boolean isStructuredMapAtPut() { return structuredMapAtPut; }
         boolean isStructuredMapRemove() { return structuredMapRemove; }
+
+        boolean requiresStructuredDispatch() {
+            return structuredObjectCall
+                    || structuredImportRuntime != null
+                    || structuredEnsure
+                    || structuredErrorHandler
+                    || structuredWhile
+                    || structuredBoolean != null
+                    || structuredArrayEach
+                    || structuredBytesEach
+                    || structuredProcessArgumentsEach
+                    || structuredEnvironmentEach
+                    || structuredIdentityMapEach
+                    || structuredMapEach
+                    || structuredMapReadLookup != null
+                    || structuredMapAtPut
+                    || structuredMapRemove;
+        }
+
+        PreparedStandardObjectCall prepareStructuredObjectCall() {
+            if (!structuredObjectCall) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no PLAT032 Object.call capability");
+            }
+
+            Object receiver = activation.receiver();
+            if (receiver instanceof ProtosClosureValue targetClosure) {
+                return PreparedStandardObjectCall.closure(
+                        prepareDirectClosureCall(
+                                targetClosure,
+                                supplied,
+                                activation));
+            }
+            if (receiver instanceof ProtosObjectValue prototype) {
+                ProtosObjectValue instance = new ProtosObjectValue(prototype);
+                return PreparedStandardObjectCall.construction(
+                        prepareSend(
+                                instance,
+                                "init",
+                                activation,
+                                supplied),
+                        instance);
+            }
+            throw ProtosCoreErrors.signal(
+                    activation,
+                    ProtosCoreErrors.newError(activation));
+        }
+
+        PreparedStandardImportCall prepareStructuredImportCall() {
+            if (structuredImportRuntime == null) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no PLAT032 import capability");
+            }
+            return new PreparedStandardImportCall(
+                    PreparedClosureCall.moduleInitialization(
+                            structuredImportRuntime.prepareBytecodeImport(
+                                    supplied,
+                                    activation)));
+        }
 
         PreparedEnsureCall prepareStructuredEnsure() {
             if (!structuredEnsure) {
@@ -950,7 +1027,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw new IllegalStateException(
                         "prepared Closure call is not native");
             }
-            if (structuredEnsure
+            if (structuredObjectCall
+                    || structuredImportRuntime != null
+                    || structuredEnsure
                     || structuredErrorHandler
                     || structuredWhile
                     || structuredBoolean != null
@@ -1024,6 +1103,60 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             complete();
             return result;
+        }
+    }
+
+    static final class PreparedStandardObjectCall {
+        private final PreparedClosureCall child;
+        private final ProtosObjectValue constructedInstance;
+
+        private PreparedStandardObjectCall(
+                PreparedClosureCall child,
+                ProtosObjectValue constructedInstance) {
+            this.child = java.util.Objects.requireNonNull(child, "child");
+            this.constructedInstance = constructedInstance;
+        }
+
+        static PreparedStandardObjectCall closure(
+                PreparedClosureCall child) {
+            return new PreparedStandardObjectCall(child, null);
+        }
+
+        static PreparedStandardObjectCall construction(
+                PreparedClosureCall child,
+                ProtosObjectValue constructedInstance) {
+            return new PreparedStandardObjectCall(
+                    child,
+                    java.util.Objects.requireNonNull(
+                            constructedInstance,
+                            "constructedInstance"));
+        }
+
+        PreparedClosureCall child() {
+            return child;
+        }
+
+        Object finish(Object childResult) {
+            return constructedInstance == null
+                    ? childResult
+                    : constructedInstance;
+        }
+    }
+
+    static final class PreparedStandardImportCall {
+        private final PreparedClosureCall child;
+
+        PreparedStandardImportCall(
+                PreparedClosureCall child) {
+            this.child = java.util.Objects.requireNonNull(child, "child");
+        }
+
+        PreparedClosureCall child() {
+            return child;
+        }
+
+        Object finish(Object childResult) {
+            return childResult;
         }
     }
 
@@ -1200,6 +1333,112 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                 activation);
                 case IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE -> result;
             };
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredObjectCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredObjectCall();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredObjectCall {
+        @Specialization
+        public static PreparedStandardObjectCall perform(
+                PreparedClosureCall prepared) {
+            return prepared.prepareStructuredObjectCall();
+        }
+    }
+
+    @Operation
+    public static final class LoadStructuredObjectCallChild {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedStandardObjectCall prepared) {
+            return prepared.child();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredObjectCall {
+        @Specialization
+        public static Object perform(
+                PreparedStandardObjectCall prepared,
+                Object childResult) {
+            return prepared.finish(childResult);
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredImportCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredImportCall();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredImportCall {
+        @Specialization
+        public static PreparedStandardImportCall perform(
+                PreparedClosureCall prepared) {
+            return prepared.prepareStructuredImportCall();
+        }
+    }
+
+    @Operation
+    public static final class LoadStructuredImportCallChild {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedStandardImportCall prepared) {
+            return prepared.child();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredImportCall {
+        @Specialization
+        public static Object perform(
+                PreparedStandardImportCall prepared,
+                Object childResult) {
+            return prepared.finish(childResult);
+        }
+    }
+
+    @Operation
+    public static final class RequiresStructuredDispatch {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.requiresStructuredDispatch();
+        }
+    }
+
+    @Operation
+    public static final class EnterNestedStructuredDispatch {
+        @Specialization
+        public static Object perform(
+                PreparedClosureCall prepared,
+                @Cached IndirectCallNode node) {
+            RootCallTarget target =
+                    ProtosTaskCPrimeEntryExecution
+                            .planForEnteredContext()
+                            .target();
+            try {
+                return node.call(
+                        target,
+                        prepared.activation(),
+                        prepared);
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (AbstractTruffleException transfer) {
+                prepared.failIfModuleInitialization();
+                throw transfer;
+            } catch (RuntimeException failure) {
+                throw prepared.mapRuntimeFailure(failure);
+            }
         }
     }
 
@@ -3626,24 +3865,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         creator.currentModuleKey().orElse(null),
                         creator.executionDomain());
         activation.attachTask(task);
-        return finishPreparingComposedCall(
+        return finishPreparingComposedCallByImplementation(
                 closure,
                 supplied,
-                activation,
-                ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
-                ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
-                ProtosStandardObjectProtocol.isStandardWhileImplementation(closure),
-                ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
-                ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
-                ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
-                ProtosStandardProcessArgumentsProtocol.isStandardEachImplementation(closure),
-                ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure),
-                ProtosStandardIdentityMapProtocol.isStandardEachImplementation(closure),
-                ProtosStandardMapProtocol.isStandardEachImplementation(closure),
-                ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(closure),
-                ProtosStandardMapProtocol.isStandardAtPutImplementation(closure),
-                ProtosStandardMapProtocol.isStandardRemoveImplementation(closure),
-                ProtosStandardErrorProtocol.isStandardSignalImplementation(closure));
+                activation);
     }
 
     static PreparedClosureCall prepareTaskOwnedSelectedCallIfBytecode(
@@ -3771,63 +3996,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         creator.currentModuleKey().orElse(null),
                         creator.executionDomain());
         activation.attachTask(task);
-        return finishPreparingComposedCall(
+        return finishPreparingComposedCallByImplementation(
                 closure,
                 supplied,
-                activation,
-                ProtosStandardObjectProtocol.isCanonicalStandardEnsureSelection(
-                        closure,
-                        selected.home()),
-                ProtosStandardErrorProtocol.isCanonicalStandardHandleSelection(
-                        closure,
-                        selected.home(),
-                        creator),
-                ProtosStandardObjectProtocol.isCanonicalStandardWhileSelection(
-                        closure,
-                        selected.home()),
-                ProtosStandardBooleanProtocol.structuredCallbackKindForCanonicalSelection(
-                        closure,
-                        selected.home()),
-                ProtosStandardArrayProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        selected.home(),
-                        creator),
-                ProtosStandardBytesProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        selected.home(),
-                        creator),
-                ProtosStandardProcessArgumentsProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        receiver,
-                        selected.home()),
-                ProtosStandardEnvironmentProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        receiver,
-                        selected.home()),
-                ProtosStandardIdentityMapProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        selected.home(),
-                        creator),
-                ProtosStandardMapProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        selected.home(),
-                        creator),
-                ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
-                        closure,
-                        selected.home(),
-                        creator),
-                ProtosStandardMapProtocol.isCanonicalStandardAtPutSelection(
-                        closure,
-                        selected.home(),
-                        creator),
-                ProtosStandardMapProtocol.isCanonicalStandardRemoveSelection(
-                        closure,
-                        selected.home(),
-                        creator),
-                ProtosStandardErrorProtocol.isCanonicalStandardSignalSelection(
-                        closure,
-                        selected.home(),
-                        creator));
+                activation);
     }
 
     private static ProtosClosureExecutionPlan taskOwnedBytecodePlan(
@@ -3950,25 +4122,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         attachTaskOrInheritDynamicControlState(
                 activation,
                 caller);
-        return finishPreparingComposedCall(
+        return finishPreparingComposedCallByImplementation(
                 targetClosure,
                 supplied,
-                activation,
-                ProtosStandardObjectProtocol.isStandardEnsureImplementation(targetClosure),
-                ProtosStandardErrorProtocol.isStandardHandleImplementation(targetClosure),
-                ProtosStandardObjectProtocol.isStandardWhileImplementation(targetClosure),
-                ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(
-                        targetClosure),
-                ProtosStandardArrayProtocol.isStandardEachImplementation(targetClosure),
-                ProtosStandardBytesProtocol.isStandardEachImplementation(targetClosure),
-                ProtosStandardProcessArgumentsProtocol.isStandardEachImplementation(targetClosure),
-                ProtosStandardEnvironmentProtocol.isStandardEachImplementation(targetClosure),
-                ProtosStandardIdentityMapProtocol.isStandardEachImplementation(targetClosure),
-                ProtosStandardMapProtocol.isStandardEachImplementation(targetClosure),
-                ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(targetClosure),
-                ProtosStandardMapProtocol.isStandardAtPutImplementation(targetClosure),
-                ProtosStandardMapProtocol.isStandardRemoveImplementation(targetClosure),
-                ProtosStandardErrorProtocol.isStandardSignalImplementation(targetClosure));
+                activation);
     }
 
     @Operation
@@ -4651,63 +4808,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         attachTaskOrInheritDynamicControlState(
                 activation,
                 caller);
-        return finishPreparingComposedCall(
+        return finishPreparingComposedCallByImplementation(
                 closure,
                 supplied,
-                activation,
-                ProtosStandardObjectProtocol.isCanonicalStandardEnsureSelection(
-                        closure,
-                        methodHome),
-                ProtosStandardErrorProtocol.isCanonicalStandardHandleSelection(
-                        closure,
-                        methodHome,
-                        caller),
-                ProtosStandardObjectProtocol.isCanonicalStandardWhileSelection(
-                        closure,
-                        methodHome),
-                ProtosStandardBooleanProtocol.structuredCallbackKindForCanonicalSelection(
-                        closure,
-                        methodHome),
-                ProtosStandardArrayProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        methodHome,
-                        caller),
-                ProtosStandardBytesProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        methodHome,
-                        caller),
-                ProtosStandardProcessArgumentsProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        receiver,
-                        methodHome),
-                ProtosStandardEnvironmentProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        receiver,
-                        methodHome),
-                ProtosStandardIdentityMapProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        methodHome,
-                        caller),
-                ProtosStandardMapProtocol.isCanonicalStandardEachSelection(
-                        closure,
-                        methodHome,
-                        caller),
-                ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
-                        closure,
-                        methodHome,
-                        caller),
-                ProtosStandardMapProtocol.isCanonicalStandardAtPutSelection(
-                        closure,
-                        methodHome,
-                        caller),
-                ProtosStandardMapProtocol.isCanonicalStandardRemoveSelection(
-                        closure,
-                        methodHome,
-                        caller),
-                ProtosStandardErrorProtocol.isCanonicalStandardSignalSelection(
-                        closure,
-                        methodHome,
-                        caller));
+                activation);
     }
 
     private static PreparedClosureCall prepareDirectClosureCall(
@@ -4732,24 +4836,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         attachTaskOrInheritDynamicControlState(
                 activation,
                 caller);
-        return finishPreparingComposedCall(
+        return finishPreparingComposedCallByImplementation(
                 closure,
                 supplied,
-                activation,
-                false,
-                false,
-                false,
-                null,
-                false,
-                false,
-                false,
-                false,
-                false,
-                false,
-                null,
-                false,
-                false,
-                false);
+                activation);
     }
 
     private static void attachTaskOrInheritDynamicControlState(
@@ -4772,6 +4862,32 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    private static PreparedClosureCall finishPreparingComposedCallByImplementation(
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation activation) {
+        return finishPreparingComposedCall(
+                closure,
+                supplied,
+                activation,
+                ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
+                ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
+                ProtosStandardObjectProtocol.isStandardWhileImplementation(closure),
+                ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
+                ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
+                ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
+                ProtosStandardProcessArgumentsProtocol.isStandardEachImplementation(closure),
+                ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure),
+                ProtosStandardIdentityMapProtocol.isStandardEachImplementation(closure),
+                ProtosStandardMapProtocol.isStandardEachImplementation(closure),
+                ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(closure),
+                ProtosStandardMapProtocol.isStandardAtPutImplementation(closure),
+                ProtosStandardMapProtocol.isStandardRemoveImplementation(closure),
+                ProtosStandardErrorProtocol.isStandardSignalImplementation(closure),
+                ProtosStandardObjectProtocol.isStandardCallImplementation(closure),
+                ProtosStandardImportProtocol.runtimeForImplementation(closure));
+    }
+
     private static PreparedClosureCall finishPreparingComposedCall(
             ProtosClosureValue closure,
             List<?> supplied,
@@ -4789,7 +4905,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
             boolean structuredMapAtPut,
             boolean structuredMapRemove,
-            boolean directControlNative) {
+            boolean directControlNative,
+            boolean structuredObjectCall,
+            ProtosModuleRuntime structuredImportRuntime) {
         if (closure.nativeBody().isPresent()) {
             ProtosNativeClosureBody nativeBody =
                     closure.nativeBody().orElseThrow();
@@ -4817,7 +4935,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredMapReadLookup,
                     structuredMapAtPut,
                     structuredMapRemove,
-                    directControlNative);
+                    directControlNative,
+                    structuredObjectCall,
+                    structuredImportRuntime);
         }
         if (structuredEnsure
                 || structuredErrorHandler
@@ -4832,7 +4952,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 || structuredMapReadLookup != null
                 || structuredMapAtPut
                 || structuredMapRemove
-                || directControlNative) {
+                || directControlNative
+                || structuredObjectCall
+                || structuredImportRuntime != null) {
             throw new IllegalStateException(
                     "structured control capability requires the canonical native implementation");
         }

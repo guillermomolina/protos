@@ -55,6 +55,14 @@ final class ProtosStandardImportProtocol {
         }
     }
 
+    static ProtosModuleRuntime runtimeForImplementation(
+            ProtosClosureValue behavior) {
+        ProtosNativeClosureBody body = behavior.nativeBody().orElse(null);
+        return body instanceof StandardImportBody standardBody
+                ? standardBody.runtime()
+                : null;
+    }
+
     static ProtosModuleRuntime selectedRuntimeForBytecodeIntrinsic(
             Object receiver,
             ProtosClosureValue selectedBehavior,
