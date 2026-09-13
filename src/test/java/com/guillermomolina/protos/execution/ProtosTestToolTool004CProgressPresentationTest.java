@@ -5,7 +5,6 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -16,7 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-final class ProtosTestToolTool004BProgressBoundaryTest {
+final class ProtosTestToolTool004CProgressPresentationTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
@@ -26,12 +25,12 @@ final class ProtosTestToolTool004BProgressBoundaryTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool004-b-progress-boundary.protos");
-    private static final Path RUNNER = TOOL_ROOT.resolve("Runner.protos");
+                    "tool004-c-progress-presentation.protos");
     private static final Path MAIN = TOOL_ROOT.resolve("Main.protos");
+    private static final Path PROGRESS = TOOL_ROOT.resolve("Progress.protos");
 
     @Test
-    void d120TerminalObserverSeesOnlyTerminalAttemptsWithoutChangingDefaultScheduling()
+    void d120CandidateERendersBoundedMilestonesFailuresAndPhaseSummaries()
             throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
@@ -51,20 +50,39 @@ final class ProtosTestToolTool004BProgressBoundaryTest {
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
                 () ->
-                        "TOOL004-B root outcome="
+                        "TOOL004-C root outcome="
                                 + outcome.state()
                                 + ", error="
                                 + outcome.error());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
 
-        String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
-        assertTrue(runner.contains("terminalObserver = null"));
-        assertTrue(runner.contains("terminalObserver("));
-        assertTrue(runner.contains("infrastructureFailed"));
+        String progress = Files.readString(PROGRESS, StandardCharsets.UTF_8);
+        assertTrue(progress.contains("beginPlan: (phaseName, plan, emitLine) => {"));
+        assertTrue(progress.contains("observer: (state) => {"));
+        assertTrue(progress.contains("finishPhase: (state, infrastructureAborted) => {"));
+        assertTrue(progress.contains("finishInvocation: (states, status, emitLine) => {"));
+        assertTrue(progress.contains("\"FAIL\""));
+        assertTrue(progress.contains("\"INFRA\""));
 
-        // TOOL004-B owns only the optional Runner seam. TOOL004-C may wire a
-        // presentation through that seam without changing B's terminality law.
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
-        assertFalse(main.contains("terminalObserver"));
+        assertTrue(main.contains("Progress: import(\"self:Progress\")"));
+        assertTrue(
+                main.contains(
+                        "TextWriter(process.stderr(), process.stderrEncoding())"));
+        assertEquals(4, occurrences(main, "startProgress("));
+        assertEquals(4, occurrences(main, "Progress.observer("));
+        assertEquals(4, occurrences(main, "Progress.finishPhase("));
+        assertTrue(main.contains("Progress.finishInvocation("));
+        assertEquals(4, occurrences(main, "Runner.runD108WithResources("));
+    }
+
+    private static int occurrences(String text, String needle) {
+        int count = 0;
+        int index = 0;
+        while ((index = text.indexOf(needle, index)) >= 0) {
+            count++;
+            index += needle.length();
+        }
+        return count;
     }
 }

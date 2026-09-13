@@ -1,0 +1,133 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+
+Manifest: import("self:Manifest")
+Progress: import("self:Progress")
+
+lines: Array()
+
+emitLine: (line) => {
+    lines = Array(...lines, line)
+    null
+}
+
+passSpec:
+    Manifest.caseSpec(
+        Array(
+            "tool004-c/pass.protos",
+            "integer",
+            "1"
+        )
+    )
+
+failSpec:
+    Manifest.caseSpec(
+        Array(
+            "tool004-c/fail.protos",
+            "integer",
+            "1"
+        )
+    )
+
+passEvaluation: Array(true, null)
+failEvaluation: Array(false, null)
+
+state: Progress.begin("main", 23, emitLine)
+terminal: Progress.observer(state)
+
+index: 1
+(() => index <= 23).while(() => {
+    (index == 5).ifTrue(() => {
+        terminal(
+            failSpec,
+            failEvaluation,
+            false
+        )
+    })
+
+    (index == 5).ifFalse(() => {
+        terminal(
+            passSpec,
+            passEvaluation,
+            false
+        )
+    })
+
+    index = index + 1
+})
+
+Progress.finishPhase(state, false)
+Progress.finishInvocation(
+    Array(state),
+    "completed",
+    emitLine
+)
+
+expected: Array(
+    "[main] 0/23",
+    "[main] 3/23",
+    "[main] FAIL tool004-c/fail.protos",
+    "[main] 6/23",
+    "[main] 9/23",
+    "[main] 12/23",
+    "[main] 15/23",
+    "[main] 18/23",
+    "[main] 21/23",
+    "[main] 23/23 failed=1",
+    "22 passed, 1 failed"
+)
+
+passed: lines.size() == expected.size()
+
+checkIndex: 0
+(() => passed && (checkIndex < expected.size())).while(() => {
+    passed = lines[checkIndex] === expected[checkIndex]
+    checkIndex = checkIndex + 1
+})
+
+infraLines: Array()
+
+emitInfra: (line) => {
+    infraLines = Array(...infraLines, line)
+    null
+}
+
+infraState: Progress.begin("actor", 4, emitInfra)
+infraTerminal: Progress.observer(infraState)
+
+infraTerminal(
+    passSpec,
+    passEvaluation,
+    false
+)
+infraTerminal(
+    failSpec,
+    null,
+    true
+)
+
+Progress.finishPhase(infraState, true)
+Progress.finishInvocation(
+    Array(infraState),
+    "infrastructure-aborted",
+    emitInfra
+)
+
+infraExpected: Array(
+    "[actor] 0/4",
+    "[actor] 1/4",
+    "[actor] INFRA tool004-c/fail.protos",
+    "[actor] 2/4",
+    "[actor] 2/4 infrastructure-aborted",
+    "2 completed, 1 failed - infrastructure-aborted"
+)
+
+infraPassed: infraLines.size() == infraExpected.size()
+
+infraIndex: 0
+(() => infraPassed && (infraIndex < infraExpected.size())).while(() => {
+    infraPassed = infraLines[infraIndex] === infraExpected[infraIndex]
+    infraIndex = infraIndex + 1
+})
+
+passed && infraPassed

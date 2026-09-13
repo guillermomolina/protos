@@ -15,6 +15,7 @@
 
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
+Progress: import("self:Progress")
 Options: import("self:Options")
 ResourceCatalog: import("self:ResourceCatalog")
 
@@ -34,10 +35,32 @@ packageTomlPlan: Manifest.loadPackageToml(packageTomlFilesystem)
 actorPlan: Manifest.load(actorFilesystem)
 groupPlan: Manifest.load(groupFilesystem)
 
+progressWriter:
+    TextWriter(process.stderr(), process.stderrEncoding())
+
+emitProgress: (line) => {
+    progressWriter.writeLine(line).value()
+    null
+}
+
+progressPhases: Array()
+
+startProgress: (phaseName, phasePlan) => {
+    state: Progress.beginPlan(
+        phaseName,
+        phasePlan,
+        emitProgress
+    )
+    progressPhases = Array(...progressPhases, state)
+    state
+}
+
 completedRuns: Array()
 primaryRun: null
 finalOutcome: null
 invocationAborted: false
+
+primaryProgress: startProgress("main", plan)
 
 primaryD108: Runner.runD108WithResources(
     plan,
@@ -47,7 +70,13 @@ primaryD108: Runner.runD108WithResources(
     executionInspectAsync,
     resourceExecutionAsync,
     resourceExecutionInspectAsync,
-    jobs
+    jobs,
+    Progress.observer(primaryProgress)
+)
+
+Progress.finishPhase(
+    primaryProgress,
+    Runner.d108RunInfrastructureFailed(primaryD108)
 )
 
 Runner.d108RunInfrastructureFailed(primaryD108).ifTrue(() => {
@@ -64,6 +93,8 @@ invocationAborted.not().ifTrue(() => {
     primaryRun = Runner.d108RunHealthyRun(primaryD108)
     completedRuns = Array(...completedRuns, primaryRun)
 
+    actorProgress: startProgress("actor", actorPlan)
+
     actorD108: Runner.runD108WithResources(
         actorPlan,
         resourceCatalog,
@@ -72,7 +103,13 @@ invocationAborted.not().ifTrue(() => {
         actorExecutionInspectAsync,
         actorResourceExecutionAsync,
         actorResourceExecutionInspectAsync,
-        jobs
+        jobs,
+        Progress.observer(actorProgress)
+    )
+
+    Progress.finishPhase(
+        actorProgress,
+        Runner.d108RunInfrastructureFailed(actorD108)
     )
 
     Runner.d108RunInfrastructureFailed(actorD108).ifTrue(() => {
@@ -89,6 +126,8 @@ invocationAborted.not().ifTrue(() => {
         actorRun: Runner.d108RunHealthyRun(actorD108)
         completedRuns = Array(...completedRuns, actorRun)
 
+        groupProgress: startProgress("group", groupPlan)
+
         groupD108: Runner.runD108WithResources(
             groupPlan,
             resourceCatalog,
@@ -97,7 +136,13 @@ invocationAborted.not().ifTrue(() => {
             groupExecutionInspectAsync,
             groupResourceExecutionAsync,
             groupResourceExecutionInspectAsync,
-            jobs
+            jobs,
+            Progress.observer(groupProgress)
+        )
+
+        Progress.finishPhase(
+            groupProgress,
+            Runner.d108RunInfrastructureFailed(groupD108)
         )
 
         Runner.d108RunInfrastructureFailed(groupD108).ifTrue(() => {
@@ -114,6 +159,9 @@ invocationAborted.not().ifTrue(() => {
             groupRun: Runner.d108RunHealthyRun(groupD108)
             completedRuns = Array(...completedRuns, groupRun)
 
+            packageTomlProgress:
+                startProgress("package-toml", packageTomlPlan)
+
             packageTomlD108: Runner.runD108WithResources(
                 packageTomlPlan,
                 resourceCatalog,
@@ -122,7 +170,13 @@ invocationAborted.not().ifTrue(() => {
                 packageExecutionInspectAsync,
                 packageResourceExecutionAsync,
                 packageResourceExecutionInspectAsync,
-                jobs
+                jobs,
+                Progress.observer(packageTomlProgress)
+            )
+
+            Progress.finishPhase(
+                packageTomlProgress,
+                Runner.d108RunInfrastructureFailed(packageTomlD108)
             )
 
             Runner.d108RunInfrastructureFailed(packageTomlD108).ifTrue(() => {
@@ -150,6 +204,12 @@ invocationAborted.not().ifTrue(() => {
         })
     })
 })
+
+Progress.finishInvocation(
+    progressPhases,
+    Runner.testRunOutcomeStatus(finalOutcome),
+    emitProgress
+)
 
 writer: TextWriter(process.stdout(), process.stdoutEncoding())
 writer.writeLine("Protos test tool bootstrap")

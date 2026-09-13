@@ -1,0 +1,215 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+
+Manifest: import("self:Manifest")
+Runner: import("self:Runner")
+
+digits: Array(
+    "0", "1", "2", "3", "4",
+    "5", "6", "7", "8", "9"
+)
+
+policyError: () => {
+    Error().signal()
+}
+
+countText: (value) => {
+    value.div(1)
+    (value < 0).ifTrue(() => {
+        policyError()
+    })
+
+    text: ""
+
+    (value == 0).ifTrue(() => {
+        text = "0"
+    })
+
+    (value > 0).ifTrue(() => {
+        divisor: 1
+        probe: value
+
+        (() => probe >= 10).while(() => {
+            probe = probe.div(10)
+            divisor = divisor * 10
+        })
+
+        remaining: value
+
+        (() => divisor > 0).while(() => {
+            digit: remaining.div(divisor)
+            text = text + digits[digit]
+            remaining = remaining.mod(divisor)
+            divisor = divisor.div(10)
+        })
+    })
+
+    text
+}
+
+selectedCount: (plan) => {
+    count: 0
+
+    Manifest.planCases(plan).each((spec) => {
+        Runner.isDExpectation(spec).ifTrue(() => {
+            count = count + 1
+        })
+    })
+
+    count
+}
+
+// State layout is private to this module:
+// [phaseName, total, completed, failed, step, nextMilestone, emitLine]
+begin: (phaseName, total, emitLine) => {
+    total.div(1)
+    (total < 0).ifTrue(() => {
+        policyError()
+    })
+
+    step: total.div(10)
+    (total.mod(10) > 0).ifTrue(() => {
+        step = step + 1
+    })
+    (step < 1).ifTrue(() => {
+        step = 1
+    })
+
+    state: Array(
+        phaseName,
+        total,
+        0,
+        0,
+        step,
+        step,
+        emitLine
+    )
+
+    emitLine(
+        "[" + phaseName + "] 0/" + countText(total)
+    )
+
+    state
+}
+
+beginPlan: (phaseName, plan, emitLine) => {
+    begin(
+        phaseName,
+        selectedCount(plan),
+        emitLine
+    )
+}
+
+observer: (state) => {
+    (spec, evaluation, infrastructureFailed) => {
+        phaseName: state[0]
+        total: state[1]
+        completed: state[2] + 1
+        failed: infrastructureFailed
+
+        (evaluation === null).ifFalse(() => {
+            Runner.resultPassed(evaluation).ifFalse(() => {
+                failed = true
+            })
+        })
+
+        state[2] = completed
+
+        failed.ifTrue(() => {
+            state[3] = state[3] + 1
+
+            kind: "FAIL"
+            infrastructureFailed.ifTrue(() => {
+                kind = "INFRA"
+            })
+
+            state[6](
+                "[" + phaseName + "] " +
+                kind + " " +
+                Manifest.caseId(spec)
+            )
+        })
+
+        (
+            (completed >= state[5]) &&
+            (completed < total)
+        ).ifTrue(() => {
+            state[6](
+                "[" + phaseName + "] " +
+                countText(completed) + "/" +
+                countText(total)
+            )
+
+            (() => state[5] <= completed).while(() => {
+                state[5] = state[5] + state[4]
+            })
+        })
+
+        null
+    }
+}
+
+finishPhase: (state, infrastructureAborted) => {
+    phaseName: state[0]
+    total: state[1]
+    completed: state[2]
+    failed: state[3]
+
+    line:
+        "[" + phaseName + "] " +
+        countText(completed) + "/" +
+        countText(total)
+
+    infrastructureAborted.ifTrue(() => {
+        line = line + " infrastructure-aborted"
+    })
+
+    infrastructureAborted.ifFalse(() => {
+        (failed == 0).ifTrue(() => {
+            line = line + " passed"
+        })
+        (failed > 0).ifTrue(() => {
+            line = line + " failed=" + countText(failed)
+        })
+    })
+
+    state[6](line)
+    null
+}
+
+finishInvocation: (states, status, emitLine) => {
+    completed: 0
+    failed: 0
+
+    states.each((state) => {
+        completed = completed + state[2]
+        failed = failed + state[3]
+    })
+
+    (status === "completed").ifTrue(() => {
+        emitLine(
+            countText(completed - failed) +
+            " passed, " +
+            countText(failed) +
+            " failed"
+        )
+    })
+
+    (status === "infrastructure-aborted").ifTrue(() => {
+        emitLine(
+            countText(completed) +
+            " completed, " +
+            countText(failed) +
+            " failed - infrastructure-aborted"
+        )
+    })
+
+    (
+        (status === "completed").not() &&
+        (status === "infrastructure-aborted").not()
+    ).ifTrue(() => {
+        policyError()
+    })
+
+    null
+}
