@@ -183,7 +183,9 @@ public final class ProtosStandardTextWriterProtocol {
             }
             case CLOSE ->
                     supplied.isEmpty()
-                            ? writer.close(activation)
+                            ? writer.closeForCPrimeRuntime(
+                                    activation,
+                                    ProtosIoReleaseCPrimeExecution.planForEnteredContext())
                             : invalidFuture(activation);
         };
     }

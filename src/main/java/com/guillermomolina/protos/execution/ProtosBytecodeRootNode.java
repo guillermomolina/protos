@@ -967,7 +967,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         "structured control native must execute through Bytecode control operations");
             }
             if ((activation.task().isPresent()
-                            || activation.deferredCPrimeOperationForRuntime().isPresent())
+                            || activation.deferredCPrimeOperationForRuntime().isPresent()
+                            || activation.deferredCPrimeReleaseForRuntime().isPresent())
                     && nativeBody
                             instanceof ProtosSuspensionCapableNativeClosureBody
                                     suspensionCapable) {
@@ -4091,6 +4092,104 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         "BufferedWriter followup lower wait produced an invalid carrier");
             }
             return state.applyFollowupFlushOutcome(lowerOutcome);
+        }
+    }
+
+
+    @Operation
+    public static final class IoReleaseHasNextStep {
+        @Specialization
+        public static boolean perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence) {
+            return sequence.hasNextStep();
+        }
+    }
+
+    @Operation
+    public static final class PrepareIoReleaseTargetCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                ProtosActivation activation) {
+            return prepareSend(
+                    sequence.target(),
+                    sequence.selector(),
+                    activation,
+                    sequence.arguments());
+        }
+    }
+
+    @Operation
+    public static final class WrapIoReleaseTargetInvocation {
+        @Specialization
+        public static Object perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                Object result) {
+            return sequence.invocationSucceeded(result);
+        }
+    }
+
+    @Operation
+    public static final class IoReleaseTargetInvocationFailed {
+        @Specialization
+        public static Object perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence) {
+            return sequence.invocationFailed();
+        }
+    }
+
+    @Operation
+    public static final class AwaitIoReleaseTargetFuture {
+        @Specialization
+        public static Object perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                Object invocation) {
+            if (!(invocation
+                    instanceof ProtosIoReleaseCPrimeExecution.TargetInvocation
+                            targetInvocation)) {
+                throw new IllegalStateException(
+                        "lifecycle release C-prime invocation produced an invalid carrier");
+            }
+            return sequence.awaitTargetFuture(targetInvocation);
+        }
+    }
+
+    @Operation
+    public static final class ResumeIoReleaseTargetFutureWait {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                Object yielded,
+                Object resumeValue) {
+            return ProtosStandardFutureProtocol.resumeIoReleaseFutureWaitForRuntime(
+                    activation,
+                    yielded,
+                    resumeValue);
+        }
+    }
+
+    @Operation
+    public static final class ApplyIoReleaseTargetOutcome {
+        @Specialization
+        public static void perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence,
+                Object outcome) {
+            if (!(outcome
+                    instanceof ProtosIoReleaseCPrimeExecution.LowerOutcome
+                            lowerOutcome)) {
+                throw new IllegalStateException(
+                        "lifecycle release C-prime lower wait produced an invalid carrier");
+            }
+            sequence.applyOutcome(lowerOutcome);
+        }
+    }
+
+    @Operation
+    public static final class FinishIoReleaseSequence {
+        @Specialization
+        public static Object perform(
+                ProtosIoReleaseCPrimeExecution.Sequence sequence) {
+            return sequence.finish();
         }
     }
 

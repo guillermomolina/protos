@@ -18,9 +18,11 @@
 package com.guillermomolina.protos.runtime;
 
 import com.guillermomolina.protos.execution.ProtosInvocation;
+import com.guillermomolina.protos.execution.ProtosIoReleaseCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosTextWriterCPrimeExecution;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -40,6 +42,7 @@ public final class ProtosTextWriter {
     private Request active;
     private ProtosObjectValue outputError;
     private ProtosActivation closeActivation;
+    private ProtosIoReleaseCPrimeExecution.Plan releasePlan;
 
     public ProtosTextWriter(
             ProtosObjectValue receiver,
@@ -140,11 +143,32 @@ public final class ProtosTextWriter {
     }
 
     public ProtosFutureValue close(ProtosActivation activation) {
+        return close(
+                activation,
+                ProtosIoReleaseCPrimeExecution.planForEnteredContextIfAvailable());
+    }
+
+    public ProtosFutureValue closeForCPrimeRuntime(
+            ProtosActivation activation,
+            ProtosIoReleaseCPrimeExecution.Plan plan) {
+        return close(
+                activation,
+                Objects.requireNonNull(plan, "plan"));
+    }
+
+    private ProtosFutureValue close(
+            ProtosActivation activation,
+            ProtosIoReleaseCPrimeExecution.Plan plan) {
         Objects.requireNonNull(activation, "activation");
         synchronized (this) {
-            if (closeActivation == null) closeActivation = activation;
+            if (closeActivation == null) {
+                closeActivation = activation;
+                releasePlan = plan;
+            }
         }
-        return lifecycle.close(activation);
+        return plan == null
+                ? lifecycle.close(activation)
+                : lifecycle.closeWithGuestReleaseForRuntime(activation);
     }
 
     public ProtosEncodingValue encodingForRuntime() { return encoding; }
@@ -426,6 +450,104 @@ public final class ProtosTextWriter {
 
     /** Finalize committed encoder state, propagate final bytes, then release an explicitly owned target. */
     private void release(ProtosIoLifecycle.ReleaseCompletion completion) {
+        ProtosIoReleaseCPrimeExecution.Plan plan;
+        synchronized (this) {
+            plan = releasePlan;
+        }
+        if (plan == null) {
+            releaseLegacy(completion);
+            return;
+        }
+        releaseCPrime(plan, completion);
+    }
+
+    private void releaseCPrime(
+            ProtosIoReleaseCPrimeExecution.Plan plan,
+            ProtosIoLifecycle.ReleaseCompletion completion) {
+        ProtosObjectValue primary;
+        ProtosActivation activation;
+        ProtosEncodingValue.StreamingEncoder current;
+        synchronized (this) {
+            primary = outputError;
+            activation = closeActivation;
+            current = encoder;
+        }
+        if (activation == null) {
+            throw new IllegalStateException(
+                    "TextWriter release started without close activation");
+        }
+
+        byte[] finalBytes = new byte[0];
+        if (primary == null) {
+            try {
+                ProtosEncodingValue.EncodePreview finalization = current.finish();
+                synchronized (this) {
+                    encoder = finalization.nextEncoder();
+                }
+                finalBytes = finalization.bytes();
+            } catch (ProtosEncodingValue.ConversionFailure failure) {
+                primary =
+                        ProtosCoreErrors.newOccurrence(
+                                activation,
+                                ProtosCoreErrors.StandardError.ENCODING_ERROR);
+            }
+        }
+
+        ArrayList<ProtosIoReleaseCPrimeExecution.Step> steps = new ArrayList<>();
+        if (primary == null && finalBytes.length > 0) {
+            ProtosBytesValue payload = bytes(finalBytes, activation);
+            steps.add(
+                    ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                            target,
+                            "write",
+                            List.of(payload),
+                            () -> {},
+                            this::recordReleaseOutputFailure));
+        }
+        if (owning) {
+            steps.add(
+                    ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                            target,
+                            "close",
+                            List.of(),
+                            () -> {},
+                            ignored -> {}));
+        }
+
+        if (steps.isEmpty()) {
+            if (primary == null) completion.succeeded();
+            else completion.failed(primary);
+            return;
+        }
+
+        ProtosIoReleaseExecution release =
+                lifecycle.beginReleaseExecutionForRuntime(
+                        activation,
+                        completion);
+        ProtosIoReleaseCPrimeExecution.Sequence sequence =
+                ProtosIoReleaseCPrimeExecution.sequence(
+                        release,
+                        primary,
+                        steps);
+        try {
+            ProtosIoReleaseCPrimeExecution.schedule(
+                    plan,
+                    release,
+                    sequence);
+        } catch (RuntimeException failure) {
+            release.fail(ioError(activation));
+        }
+    }
+
+    private void recordReleaseOutputFailure(ProtosObjectValue error) {
+        synchronized (this) {
+            if (outputError == null) {
+                outputError = error;
+            }
+        }
+    }
+
+    private void releaseLegacy(ProtosIoLifecycle.ReleaseCompletion completion) {
         ProtosObjectValue primary;
         ProtosActivation activation;
         ProtosEncodingValue.StreamingEncoder current;

@@ -89,7 +89,15 @@ public final class ProtosStandardBufferedByteIoProtocol {
             wrapper.createLocalSlot("write",ProtosClosureValue.nativeClosure((x,xs)->xs.size()==1&&x.receiver()==wrapper?io.write(x,xs.get(0)):invalid(x)));
             wrapper.createLocalSlot("flush",writerFlushClosure(io,wrapper));
         }
-        wrapper.createLocalSlot("close",ProtosClosureValue.nativeClosure((x,xs)->xs.isEmpty()&&x.receiver()==wrapper?io.close(x):invalid(x)));
+        wrapper.createLocalSlot(
+                "close",
+                ProtosClosureValue.nativeClosure(
+                        (x,xs) ->
+                                xs.isEmpty() && x.receiver() == wrapper
+                                        ? io.closeForCPrimeRuntime(
+                                                x,
+                                                ProtosIoReleaseCPrimeExecution.planForEnteredContext())
+                                        : invalid(x)));
         return wrapper;
     }
     private static ProtosClosureValue writerFlushClosure(

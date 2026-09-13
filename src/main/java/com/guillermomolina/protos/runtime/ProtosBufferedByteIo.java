@@ -4,6 +4,7 @@ package com.guillermomolina.protos.runtime;
 import com.guillermomolina.protos.execution.ProtosBufferedByteReaderCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosBufferedByteWriterCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosInvocation;
+import com.guillermomolina.protos.execution.ProtosIoReleaseCPrimeExecution;
 import java.math.BigInteger;
 import java.util.*;
 
@@ -30,6 +31,7 @@ public final class ProtosBufferedByteIo {
     private ProtosActivation closeActivation;
     private ProtosObjectValue outputError;
     private ProtosIoLifecycle.ReleaseCompletion releaseCompletion;
+    private ProtosIoReleaseCPrimeExecution.Plan releasePlan;
 
     private ProtosBufferedByteIo(
             Mode mode,
@@ -189,11 +191,32 @@ public final class ProtosBufferedByteIo {
     }
 
     public ProtosFutureValue close(ProtosActivation activation) {
+        return close(
+                activation,
+                ProtosIoReleaseCPrimeExecution.planForEnteredContextIfAvailable());
+    }
+
+    public ProtosFutureValue closeForCPrimeRuntime(
+            ProtosActivation activation,
+            ProtosIoReleaseCPrimeExecution.Plan plan) {
+        return close(
+                activation,
+                Objects.requireNonNull(plan, "plan"));
+    }
+
+    private ProtosFutureValue close(
+            ProtosActivation activation,
+            ProtosIoReleaseCPrimeExecution.Plan plan) {
         check(activation);
         synchronized (this) {
-            if (closeActivation == null) closeActivation = activation;
+            if (closeActivation == null) {
+                closeActivation = activation;
+                releasePlan = plan;
+            }
         }
-        return lifecycle.close(activation);
+        return plan == null
+                ? lifecycle.close(activation)
+                : lifecycle.closeWithGuestReleaseForRuntime(activation);
     }
 
     private static final class Req {
@@ -1021,13 +1044,117 @@ public final class ProtosBufferedByteIo {
         }
     }
 
-    /**
-     * Existing physical buffered release path, now invoked by the common lifecycle.
-     *
-     * <p>D112/PLAT030 still govern a later C-prime lifecycle-release migration. This
-     * method deliberately preserves the pre-PLAT031 callback/observer mechanics.
-     */
+    /** Physical buffered release, using PLAT030 C-prime whenever an entered Context supplied its plan. */
     private void release(ProtosIoLifecycle.ReleaseCompletion completion) {
+        ProtosIoReleaseCPrimeExecution.Plan plan;
+        synchronized (this) {
+            plan = releasePlan;
+        }
+        if (plan == null) {
+            releaseLegacy(completion);
+            return;
+        }
+        releaseCPrime(plan, completion);
+    }
+
+    private void releaseCPrime(
+            ProtosIoReleaseCPrimeExecution.Plan plan,
+            ProtosIoLifecycle.ReleaseCompletion completion) {
+        ProtosActivation activation;
+        ProtosObjectValue primary;
+        byte[] pending;
+        synchronized (this) {
+            activation = closeActivation;
+            primary = outputError;
+            pending = output.clone();
+        }
+        if (activation == null) {
+            throw new IllegalStateException(
+                    "buffered I/O release started without close activation");
+        }
+
+        ArrayList<ProtosIoReleaseCPrimeExecution.Step> steps = new ArrayList<>();
+
+        if (mode == Mode.WRITER
+                && primary == null
+                && pending.length > 0) {
+            ProtosBytesValue payload = bytes(pending);
+            steps.add(
+                    ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                            target,
+                            "write",
+                            List.of(payload),
+                            () -> releaseBufferedPrefix(pending.length),
+                            this::recordReleaseOutputFailure));
+            if (target.lookupSlot("flush").isPresent()) {
+                steps.add(
+                        ProtosIoReleaseCPrimeExecution.Step.ordinary(
+                                target,
+                                "flush",
+                                List.of(),
+                                () -> {},
+                                this::recordReleaseOutputFailure));
+            }
+        }
+
+        if (owning) {
+            steps.add(
+                    ProtosIoReleaseCPrimeExecution.Step.mandatoryFinalizer(
+                            target,
+                            "close",
+                            List.of(),
+                            () -> {},
+                            ignored -> {}));
+        }
+
+        if (steps.isEmpty()) {
+            if (primary == null) completion.succeeded();
+            else completion.failed(primary);
+            return;
+        }
+
+        ProtosIoReleaseExecution release =
+                lifecycle.beginReleaseExecutionForRuntime(
+                        activation,
+                        completion);
+        ProtosIoReleaseCPrimeExecution.Sequence sequence =
+                ProtosIoReleaseCPrimeExecution.sequence(
+                        release,
+                        primary,
+                        steps);
+        try {
+            ProtosIoReleaseCPrimeExecution.schedule(
+                    plan,
+                    release,
+                    sequence);
+        } catch (RuntimeException failure) {
+            release.fail(ioError(activation));
+        }
+    }
+
+    private void releaseBufferedPrefix(int pendingLength) {
+        synchronized (this) {
+            if (output.length < pendingLength) {
+                throw new IllegalStateException(
+                        "BufferedWriter output frontier shrank during lifecycle release");
+            }
+            output =
+                    Arrays.copyOfRange(
+                            output,
+                            pendingLength,
+                            output.length);
+        }
+    }
+
+    private void recordReleaseOutputFailure(ProtosObjectValue error) {
+        synchronized (this) {
+            if (outputError == null) {
+                outputError = error;
+            }
+        }
+    }
+
+    private void releaseLegacy(ProtosIoLifecycle.ReleaseCompletion completion) {
         ProtosActivation activation;
         synchronized (this) {
             if (releaseCompletion != null) {
