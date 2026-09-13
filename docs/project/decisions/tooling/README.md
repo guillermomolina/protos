@@ -36,6 +36,7 @@ Subsequent ratified tooling decisions include:
 - [`D123_TEST_TOOL_SUITE_IDENTITY.md`](D123_TEST_TOOL_SUITE_IDENTITY.md)
 - [`D124_STATIC_REFERENCES_IDENTITY_AMBIGUITY_COMPLETENESS.md`](D124_STATIC_REFERENCES_IDENTITY_AMBIGUITY_COMPLETENESS.md)
 - [`D125_TEST_TOOL_EXECUTION_REQUIREMENT.md`](D125_TEST_TOOL_EXECUTION_REQUIREMENT.md)
+- [`D126_TEST_TOOL_CORPUS_IDENTITY.md`](D126_TEST_TOOL_CORPUS_IDENTITY.md)
 
 Observable Protos semantics remain authoritative under `spec/`. Concrete
 runtime/host architecture belongs under [`../platform/`](../platform/README.md).
