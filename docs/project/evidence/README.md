@@ -15,7 +15,7 @@ its references, retention role, and compatibility implications.
   evidence for DIST001.
 - [`D098/`](D098/README.md) — immutable ratification publication, safe-abort, and GitHub closure evidence for D098.
 - [`D099/`](D099/README.md) — immutable ratification publication, safe-abort, and GitHub closure evidence for D099.
-- [`PERF006/`](PERF006/README.md) — immutable optimizer-enabled retained/full validation evidence for PERF006-C3.
+- [`PERF006/`](PERF006/README.md) — immutable PERF006 C3/C4 runtime validation plus D1-D4 controlled performance, structural-diagnostic, and final closure evidence.
 - [`UPSTREAM001/`](UPSTREAM001/README.md) — retained Oracle/Graal PR #14434 configurable Bytecode DSL unwind experiment, semantic validation, IGV evidence, optimizer findings, and explicit non-conclusions.
 
-- `PERF006/README.md` — immutable PERF006-C3 full-validation and C4 runtime-identity/fallback-warning closure evidence.
+- `PERF006/README.md` — immutable PERF006 C3/C4 runtime-validation and D1-D4 performance/diagnostic/closure evidence.
