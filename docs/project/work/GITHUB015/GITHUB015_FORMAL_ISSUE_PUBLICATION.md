@@ -88,6 +88,23 @@ The independent Issue-intake workflow remains active as a convergence safety
 net; it is no longer the only opportunity for hierarchy convergence before
 Project projection.
 
+## Closure preserves formal structure
+
+Closure changes lifecycle, not identity or hierarchy. Formal family and native
+Parent/Sub-issue relationships remain durable historical facts after an Issue is
+closed.
+
+The intake helper therefore reconciles trusted closed formal Issues structurally:
+family remains deterministic from the formal identifier, and a formal child (or
+an Issue carrying an explicit parent declaration) must still have the matching
+native parent. This structural repair MUST NOT reopen work, assign responsibility,
+change status, manufacture Priority, or copy an inherited parent Priority onto a
+closed child.
+
+This closes the #481 regression class: a phase may complete quickly enough to
+close before asynchronous intake runs, but closure must not allow a text-only
+parent declaration to become permanent historical drift.
+
 ## Decision approval provenance
 
 Allocation and research do not select a Dxxx/PLATxxx. A ratification may be
@@ -121,8 +138,10 @@ resolved scheduling Priority.
 
 GITHUB015 closure requires re-verification of at least:
 
-- #481 -> native parent #429; Needs decision; owner present; effective P3 inherited;
-- #482 -> native parent #262; blocked by PLAT033; effective P0 inherited;
+- #481 -> remains closed after its completed design/ratification path, while
+  native parent #429 and `family:LIB` are structurally verified/reconciled; no
+  lifecycle/assignee/Priority is manufactured by the repair;
+- #482 -> native parent #262; effective P0 inherited while active;
 - #483 -> decision/ratification provenance explicitly resolved by the owner; and
 - a fresh-chat formal publication reproduction that cannot report success while
   any applicable postcondition is missing.
@@ -142,10 +161,12 @@ git diff --check
 Required live validation after publication:
 
 1. run `Project status sync` manually once;
-2. verify native parent endpoints for #481 and #482;
-3. verify inherited Project Priority after the native hierarchy exists;
-4. verify #484 remains correctly routed as the active GITHUB015 work item;
-5. repeat a bounded fresh-chat creation/phase-transition test before closure.
+2. verify native parent endpoints for #481 and #482, including closed #481;
+3. verify #481 stayed closed and received no manufactured lifecycle/assignee/
+   Priority changes from structural repair;
+4. verify inherited Project Priority for active #482 after native hierarchy exists;
+5. verify #484 remains correctly routed as the active GITHUB015 work item;
+6. repeat a bounded fresh-chat creation/phase-transition test before closure.
 
 No Maven/runtime/spec test is required unless this slice unexpectedly changes
 executable Protos/runtime code.

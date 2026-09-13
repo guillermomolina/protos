@@ -897,6 +897,13 @@ endpoint afterward. If that still does not converge, the publication is
 **incomplete** and MUST be reported as such rather than continuing as though the
 hierarchy existed.
 
+Closing an Issue does not erase these structural postconditions. A closed formal
+child MUST remain attached through the native Parent/Sub-issue relation, and its
+formal family/identifier structure remains auditable historical truth. Intake
+automation MAY reconcile those structural facts after closure, but MUST NOT
+reopen the Issue, manufacture an assignee, change lifecycle state, or invent/copy
+scheduling Priority merely to repair closed structure.
+
 For trusted formal work, lifecycle state must be explicit at creation time. The
 neutral community `Inbox` fallback MUST NOT be used to hide a missing status on a
 formal Issue. `status:in-progress` and `status:needs-decision` require an owner;

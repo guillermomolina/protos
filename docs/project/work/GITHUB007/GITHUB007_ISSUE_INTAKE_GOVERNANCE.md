@@ -104,20 +104,25 @@ label.
 
 `scripts/issue_intake.py` supports:
 
-- one-Issue reconciliation for creation/edit/reopen and formal-family label
-  changes;
-- full open-Issue reconciliation through manual `workflow_dispatch`; and
-- a network-free self-test for identifier, trust, family, parent, collision and
-  conflict rules.
+- one-Issue reconciliation for creation/edit/reopen/close and formal-family
+  label changes;
+- full open-intake plus closed-formal structural reconciliation through manual
+  `workflow_dispatch`; and
+- a network-free self-test for identifier, trust, family, parent, collision,
+  conflict, and closed-structure rules.
 
 The identifier-collision preflight includes closed Issues because allocated
-identifiers are never reusable merely because work closed. Ordinary family and
-parent reconciliation continues to operate only on open Issues.
+identifiers are never reusable merely because work closed. Family/native-parent
+structure is likewise durable: trusted formal Issues remain structurally
+reconcilable after closure. Closed reconciliation is deliberately structural
+only; it does not reopen work or infer lifecycle, assignee, or scheduling
+Priority.
 
-Full reconciliation processes every open Issue, repairs deterministic family or
-missing-native-parent drift, records community/untrusted intake without
-promoting it, and fails closed after the scan if any trusted formal Issue still
-has an unresolved hierarchy conflict.
+Full reconciliation processes every open Issue plus every trusted closed formal
+Issue. Open intake retains the ordinary community/untrusted behavior. Closed
+formal work is checked only for deterministic family and applicable native-parent
+truth, and the scan fails closed if any trusted formal Issue still has an
+unresolved hierarchy conflict.
 
 Under GITHUB015 the Project-status workflow executes this intake reconciliation
 as a precondition in the **same job** before it projects status/priority. A full

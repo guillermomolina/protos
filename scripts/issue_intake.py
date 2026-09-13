@@ -471,6 +471,22 @@ def reconcile_parent(api, issue, identifier):
         )
 
     declared = next(iter(declarations)) if declarations else None
+
+    # Closure does not erase formal hierarchy, but a closed top-level work item
+    # with no explicit parent declaration has no required parent postcondition.
+    # Avoid a needless parent API read for that common historical case while
+    # still verifying every formal child and every explicitly parented Issue.
+    if (
+        issue.get("state") != "open"
+        and declared is None
+        and not is_child_identifier(identifier)
+    ):
+        return {
+            "native_parent": None,
+            "added": False,
+            "declared_parent": None,
+        }
+
     native = api.get_parent(number)
     native_number = int(native["number"]) if native else None
 
@@ -590,14 +606,16 @@ def run_one(api, number):
     all_issues = api.list_all_issues()
     issue = api.fetch_issue(number)
     assert_issue_identifier_unique(issue, all_issues)
-    if issue.get("state") != "open":
-        print("ISSUE_INTAKE_SKIPPED_CLOSED: #%d" % int(number))
-        return 0
 
+    # Closed formal Issues still own durable structural facts: identifier,
+    # family, and (when applicable) native parent. Intake never mutates
+    # lifecycle, assignee, or scheduling Priority, so structural reconciliation
+    # is safe after closure and must not silently skip the hierarchy.
     result = reconcile_issue(api, issue)
+    scope = "OPEN" if issue.get("state") == "open" else "CLOSED_STRUCTURE"
     print(
-        "ISSUE_INTAKE: PASS issue=#%d kind=%s"
-        % (int(number), result["kind"])
+        "ISSUE_INTAKE: PASS issue=#%d kind=%s scope=%s"
+        % (int(number), result["kind"], scope)
     )
     return 0
 
@@ -605,10 +623,29 @@ def run_one(api, number):
 def run_all(api):
     all_issues = api.list_all_issues()
     assert_no_identifier_collisions(all_issues)
-    issues = [issue for issue in all_issues if issue.get("state") == "open"]
+
+    open_issues = [
+        issue for issue in all_issues
+        if issue.get("state") == "open"
+    ]
+    closed_formal_issues = []
+    for issue in all_issues:
+        if issue.get("state") == "open":
+            continue
+        title_info = parse_title_identifier(issue.get("title") or "")
+        if title_info is not None and is_authorized_formal(issue):
+            closed_formal_issues.append(issue)
+
+    # Open Issues retain ordinary intake semantics. Closed community/untrusted
+    # Issues need no convergence work, while trusted closed formal Issues still
+    # require durable family/native-parent structure to remain truthful.
+    issues = open_issues + closed_formal_issues
     counts = {
-        "open": len(issues),
+        "open": len(open_issues),
+        "closed_formal": len(closed_formal_issues),
         "formal": 0,
+        "open_formal": 0,
+        "closed_formal_reconciled": 0,
         "community": 0,
         "untrusted": 0,
         "family_changed": 0,
@@ -622,6 +659,10 @@ def run_all(api):
             result = reconcile_issue(api, issue)
             if result["kind"] == "formal":
                 counts["formal"] += 1
+                if issue.get("state") == "open":
+                    counts["open_formal"] += 1
+                else:
+                    counts["closed_formal_reconciled"] += 1
             elif result["kind"] == "community":
                 counts["community"] += 1
             else:
@@ -639,7 +680,19 @@ def run_all(api):
             )
 
     print("OPEN_ISSUES_SCANNED=%d" % counts["open"])
+    print(
+        "CLOSED_FORMAL_ISSUES_SCANNED=%d"
+        % counts["closed_formal"]
+    )
     print("FORMAL_ISSUES_RECONCILED=%d" % counts["formal"])
+    print(
+        "OPEN_FORMAL_ISSUES_RECONCILED=%d"
+        % counts["open_formal"]
+    )
+    print(
+        "CLOSED_FORMAL_ISSUES_RECONCILED=%d"
+        % counts["closed_formal_reconciled"]
+    )
     print("COMMUNITY_ISSUES_OBSERVED=%d" % counts["community"])
     print("UNTRUSTED_FORMAL_CANDIDATES=%d" % counts["untrusted"])
     print("FAMILY_RECONCILIATIONS=%d" % counts["family_changed"])
@@ -665,6 +718,9 @@ class MockApi(object):
 
     def fetch_issue(self, number):
         return self.issues[int(number)]
+
+    def list_all_issues(self):
+        return list(self.issues.values())
 
     def ensure_family_label(self, name):
         self.ensured_family_labels.append(name)
@@ -929,6 +985,34 @@ x
     else:
         raise AssertionError("single-Issue collision preflight did not fail")
 
+    closed_structure = MockApi()
+    closed_structure.issues[429] = _mock_issue(
+        429,
+        "LIB012 — Semantic version utilities",
+        labels=["family:LIB", "status:ready", "priority:p3"],
+    )
+    closed_structure.issues[481] = _mock_issue(
+        481,
+        "LIB012-0 — Semantic Versioning design audit",
+        body="Parent work item: #429 (`LIB012`)\n",
+        labels=["family:LIB", "status:done"],
+        state="closed",
+    )
+    before_closed_labels = tuple(label_names(closed_structure.issues[481]))
+    assert run_one(closed_structure, 481) == 0
+    assert closed_structure.parents[481] == 429
+    assert tuple(label_names(closed_structure.issues[481])) == before_closed_labels
+
+    closed_top = MockApi()
+    closed_top.issues[700] = _mock_issue(
+        700,
+        "AUD099 — Historical top-level audit",
+        labels=["family:AUD", "status:done"],
+        state="closed",
+    )
+    assert run_one(closed_top, 700) == 0
+    assert not closed_top.added_parents
+
     closed_owner = [
         _mock_issue(600, "D123 — Historical decision", labels=["family:D"], state="closed"),
         _mock_issue(601, "D123 — Reused decision", labels=["family:D"]),
@@ -952,6 +1036,8 @@ x
     print("FORMAL_ORPHAN_FAIL_CLOSED: PASS")
     print("FORMAL_IDENTIFIER_UNIQUENESS_FAIL_CLOSED: PASS")
     print("CLOSED_IDENTIFIER_REUSE_FAIL_CLOSED: PASS")
+    print("CLOSED_FORMAL_STRUCTURE_RECONCILIATION: PASS")
+    print("CLOSED_LIFECYCLE_METADATA_PRESERVED: PASS")
 
 
 def main(argv=None):
