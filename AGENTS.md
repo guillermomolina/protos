@@ -1030,7 +1030,7 @@ Protos GitHub Issue, the agent MUST reconcile the Issue assignee state when the
 available GitHub capability can mutate assignees:
 
 - an Issue that the agent is directly working on and keeps or moves to
-  `In progress` SHOULD have an active responsible assignee;
+  `In progress` MUST have an active responsible assignee;
 - when the agent is acting on behalf of the repository owner and no different
   human contributor is already responsible, assign `guillermomolina`;
 - when creating a new formal Issue and immediately starting it, set the assignee
@@ -1049,6 +1049,10 @@ available GitHub capability can mutate assignees:
 - closing/completing an Issue does not require clearing its assignee; historical
   responsibility may remain visible.
 
+Repository synchronization MAY enforce the `In progress` invariant by assigning
+`guillermomolina` only when the Issue has no assignee. It MUST preserve an
+existing assignee and MUST fail visibly if GitHub rejects the fallback assignment.
+
 Agents MUST attempt this reconciliation when they have GitHub mutation capability.
 If the environment cannot update GitHub assignees, report that coordination
 limitation explicitly instead of claiming the Issue was assigned. Lack of
@@ -1060,6 +1064,28 @@ coordination. Agents maintain Issue-owned `status:*` and, when explicitly
 prioritized, `priority:*` labels; repository automation projects those values into
 the Project. Agents MUST NOT probe for or mutate Project fields merely to mirror
 Issue coordination. See **Optional GitHub Project metadata** below.
+
+## Native parent priority inheritance
+<!-- GITHUB005 NATIVE-PARENT-PRIORITY-INHERITANCE -->
+
+A `priority:*` label on an Issue is an **explicit override**, not a mechanically
+duplicated copy of its parent's label. Effective Project priority is resolved as:
+
+1. the Issue's own explicit `priority:*`, when present; otherwise
+2. the nearest **open** native ancestor with an explicit `priority:*`; otherwise
+3. unset.
+
+Therefore agents MUST NOT copy a parent priority label onto every child merely to
+make Project ordering work. Leave an ordinary child unlabeled when it should
+follow its workstream; add a child `priority:*` only to intentionally override
+inheritance. A closed ancestor's retained historical priority is not live
+inheritance. Parentless work remains unprioritized unless explicitly prioritized.
+Status never manufactures priority: `Ready` is not automatically P2 and `In
+progress` is not automatically P1.
+
+Repository automation owns effective-priority projection and full reconciliation
+after explicit priority changes so descendants converge without losing the
+distinction between inherited and explicit priority.
 
 ## Mandatory pre-implementation audit
 

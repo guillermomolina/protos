@@ -5,6 +5,8 @@ on:
     types:
       - opened
       - reopened
+      - assigned
+      - unassigned
       - closed
       - labeled
       - unlabeled
@@ -53,6 +55,16 @@ jobs:
             args+=(--event-label "$EVENT_LABEL")
           fi
           python3 scripts/project_status_sync.py "${args[@]}"
+
+      - name: Reconcile inherited priorities after priority changes
+        if: ${{ github.event_name == 'issues' && (github.event.action == 'labeled' || github.event.action == 'unlabeled') && startsWith(github.event.label.name, 'priority:') }}
+        run: |
+          set -euo pipefail
+          python3 scripts/project_status_sync.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --project-owner guillermomolina \
+            --project-number 1 \
+            --reconcile-all
 
       - name: Reconcile Project and all open Issues
         if: ${{ github.event_name == 'workflow_dispatch' }}

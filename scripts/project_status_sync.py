@@ -48,6 +48,8 @@ PRIORITY_LABEL_DEFINITIONS = {
     "priority:p2": ("fbca04", "Normal planned scheduling priority."),
     "priority:p3": ("0e8a16", "Opportunistic/later scheduling priority."),
 }
+DEFAULT_IN_PROGRESS_ASSIGNEE = "guillermomolina"
+MAX_PRIORITY_ANCESTRY_DEPTH = 32
 
 
 class SyncError(Exception):
@@ -155,6 +157,86 @@ def choose_open_priority(issue, event_action=None, event_label=None):
     )
 
 
+def _assignee_logins(issue):
+    result = []
+    for assignee in issue.get("assignees") or []:
+        login = assignee.get("login") if isinstance(assignee, dict) else assignee
+        if login:
+            result.append(login)
+    return result
+
+
+def needs_default_assignee(issue, canonical_status):
+    return (
+        canonical_status == "status:in-progress"
+        and not _assignee_logins(issue)
+    )
+
+
+def _parent_issue_number(issue):
+    url = issue.get("parent_issue_url")
+    if not url:
+        return None
+    raw = url.rstrip("/").rsplit("/", 1)[-1]
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        raise SyncError(
+            "Issue #%s has invalid parent_issue_url: %r"
+            % (issue.get("number"), url)
+        )
+
+
+def resolve_effective_priority(
+    repository, issue, issue_token, explicit_priority, fetcher=None
+):
+    if explicit_priority is not None:
+        return explicit_priority, None
+
+    if fetcher is None:
+        fetcher = fetch_issue
+
+    number = int(issue["number"])
+    seen = set([number])
+    parent_number = _parent_issue_number(issue)
+    depth = 0
+
+    while parent_number is not None:
+        if parent_number in seen:
+            raise SyncError(
+                "Issue #%d priority ancestry contains a cycle at #%d"
+                % (number, parent_number)
+            )
+        seen.add(parent_number)
+        depth += 1
+        if depth > MAX_PRIORITY_ANCESTRY_DEPTH:
+            raise SyncError(
+                "Issue #%d priority ancestry exceeds %d levels"
+                % (number, MAX_PRIORITY_ANCESTRY_DEPTH)
+            )
+
+        parent = fetcher(repository, parent_number, issue_token)
+        if not parent:
+            raise SyncError(
+                "Issue #%d cannot resolve parent #%d for priority inheritance"
+                % (number, parent_number)
+            )
+        if parent.get("pull_request"):
+            raise SyncError(
+                "Issue #%d has pull request #%d in its parent chain"
+                % (number, parent_number)
+            )
+
+        if parent.get("state") == "open":
+            parent_priority, _ = choose_open_priority(parent)
+            if parent_priority is not None:
+                return parent_priority, parent_number
+
+        parent_number = _parent_issue_number(parent)
+
+    return None, None
+
+
 def _remove_issue_labels(repository, number, issue_token, removals, kind):
     for label in removals:
         encoded = parse.quote(label, safe="")
@@ -188,6 +270,35 @@ def _set_issue_priority_label(repository, issue, issue_token, removals):
     _remove_issue_labels(
         repository, number, issue_token, removals, "PRIORITY"
     )
+
+
+def _ensure_in_progress_assignee(
+    repository, issue, issue_token, canonical_status
+):
+    if not needs_default_assignee(issue, canonical_status):
+        return False
+
+    number = int(issue["number"])
+    updated = _rest(
+        repository,
+        "/issues/%d/assignees" % number,
+        issue_token,
+        method="POST",
+        payload={"assignees": [DEFAULT_IN_PROGRESS_ASSIGNEE]},
+    )
+    assigned = _assignee_logins(updated or {})
+    if DEFAULT_IN_PROGRESS_ASSIGNEE not in assigned:
+        raise SyncError(
+            "Issue #%d entered In progress without an assignee and GitHub did "
+            "not accept default assignee %s"
+            % (number, DEFAULT_IN_PROGRESS_ASSIGNEE)
+        )
+    issue["assignees"] = (updated or {}).get("assignees") or []
+    print(
+        "ISSUE_ASSIGNEE_ADDED: #%d %s"
+        % (number, DEFAULT_IN_PROGRESS_ASSIGNEE)
+    )
+    return True
 
 
 def _repository_label_names(repository, issue_token):
@@ -511,6 +622,9 @@ def sync_issue(
     canonical_priority, priority_removals = choose_open_priority(
         issue, event_action=event_action, event_label=event_label
     )
+    effective_priority, inherited_from = resolve_effective_priority(
+        repository, issue, issue_token, canonical_priority
+    )
 
     _set_issue_status_label(
         repository,
@@ -522,6 +636,9 @@ def sync_issue(
     )
     _set_issue_priority_label(
         repository, issue, issue_token, priority_removals
+    )
+    _ensure_in_progress_assignee(
+        repository, issue, issue_token, canonical_status
     )
 
     item_id, added = ensure_project_item(
@@ -537,18 +654,29 @@ def sync_issue(
         % (number, status_name, canonical_status)
     )
 
-    if canonical_priority is None:
+    if effective_priority is None:
         clear_project_field(project_token, project, item_id, "priority")
         print("PROJECT_PRIORITY: #%d -> <unset>" % number)
     else:
-        priority_name = PRIORITY_TO_PROJECT[canonical_priority]
+        priority_name = PRIORITY_TO_PROJECT[effective_priority]
         set_project_priority(
             project_token, project, item_id, priority_name
         )
-        print(
-            "PROJECT_PRIORITY: #%d -> %s (%s)"
-            % (number, priority_name, canonical_priority)
-        )
+        if inherited_from is None:
+            print(
+                "PROJECT_PRIORITY: #%d -> %s (%s explicit)"
+                % (number, priority_name, effective_priority)
+            )
+        else:
+            print(
+                "PROJECT_PRIORITY: #%d -> %s (%s inherited from #%d)"
+                % (
+                    number,
+                    priority_name,
+                    effective_priority,
+                    inherited_from,
+                )
+            )
 
 
 def list_open_issues(repository, issue_token):
@@ -625,13 +753,22 @@ def run_reconcile(
         )
 
 
-def _fake_issue(number, state="open", labels=None):
-    return {
+def _fake_issue(
+    number, state="open", labels=None, parent=None, assignees=None
+):
+    issue = {
         "number": number,
         "state": state,
         "labels": [{"name": name} for name in (labels or [])],
+        "assignees": [{"login": login} for login in (assignees or [])],
         "node_id": "I_fake_%d" % number,
     }
+    if parent is not None:
+        issue["parent_issue_url"] = (
+            "https://api.github.com/repos/guillermomolina/protos/issues/%d"
+            % int(parent)
+        )
+    return issue
 
 
 def self_test():
@@ -699,8 +836,63 @@ def self_test():
     assert PRIORITY_TO_PROJECT["priority:p0"] == "P0"
     assert PRIORITY_TO_PROJECT["priority:p3"] == "P3"
     assert len(PRIORITY_TO_PROJECT) == 4
+
+    assert needs_default_assignee(
+        _fake_issue(10, labels=["status:in-progress"]),
+        "status:in-progress",
+    )
+    assert not needs_default_assignee(
+        _fake_issue(11, labels=["status:ready"]),
+        "status:ready",
+    )
+    assert not needs_default_assignee(
+        _fake_issue(12, labels=["status:in-progress"], assignees=["alice"]),
+        "status:in-progress",
+    )
+
+    parents = {
+        20: _fake_issue(20, labels=["priority:p1"]),
+        21: _fake_issue(21, parent=20),
+        22: _fake_issue(22, labels=["priority:p2"]),
+        23: _fake_issue(23, parent=22, state="closed", labels=["priority:p0"]),
+    }
+
+    def fake_fetcher(_repository, number, _token):
+        return parents[number]
+
+    assert resolve_effective_priority(
+        "guillermomolina/protos",
+        _fake_issue(30, parent=20),
+        "fake",
+        None,
+        fetcher=fake_fetcher,
+    ) == ("priority:p1", 20)
+    assert resolve_effective_priority(
+        "guillermomolina/protos",
+        _fake_issue(31, labels=["priority:p3"], parent=20),
+        "fake",
+        "priority:p3",
+        fetcher=fake_fetcher,
+    ) == ("priority:p3", None)
+    assert resolve_effective_priority(
+        "guillermomolina/protos",
+        _fake_issue(32, parent=21),
+        "fake",
+        None,
+        fetcher=fake_fetcher,
+    ) == ("priority:p1", 20)
+    assert resolve_effective_priority(
+        "guillermomolina/protos",
+        _fake_issue(33, parent=23),
+        "fake",
+        None,
+        fetcher=fake_fetcher,
+    ) == ("priority:p2", 22)
+
     print("PROJECT_STATUS_PRIORITY_SYNC_SELF_TEST: PASS")
     print("UNKNOWN_STATUS_LABEL_FAIL_CLOSED: PASS")
+    print("IN_PROGRESS_ASSIGNEE_INVARIANT_SELF_TEST: PASS")
+    print("PARENT_PRIORITY_INHERITANCE_SELF_TEST: PASS")
 
 
 def parse_args(argv=None):

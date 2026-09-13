@@ -39,15 +39,44 @@ Status is one of:
 
 Within that actionable set, Priority orders work P0, P1, P2, P3, then unset.
 `Done`, `Inbox`, `Blocked`, `Paused`, and `Needs decision` do not compete in the
-main Work queue.
+main Work queue. The saved Work queue view MUST additionally filter to
+**top-level Issues only** (`no:parent-issue`): native sub-issues remain visible
+inside their parent hierarchy and dedicated/detail views, but they do not compete
+as independent top-level workstreams.
 
 The maintained view model is:
 
-1. **Work queue** — In progress / Review / Ready.
+1. **Work queue** — top-level In progress / Review / Ready.
 2. **Decisions** — Needs decision.
 3. **Blocked** — Blocked / Paused.
 4. **Triage** — Inbox.
 5. **History / Done** — Done.
+
+## Active ownership invariant
+
+`status:in-progress` means somebody is actively responsible for driving the
+Issue. Every open Issue in that state MUST therefore have at least one assignee.
+Repository synchronization enforces the invariant as follows:
+
+- preserve every existing assignee; never replace a human contributor merely
+  because automation or an agent is assisting;
+- if an Issue reaches `status:in-progress` with no assignee, assign
+  `guillermomolina` as the repository-owner fallback;
+- do not auto-assign `Ready`/`Inbox` work merely because it is available; and
+- do not infer assignment on `Blocked`, `Needs decision`, `Paused` or `Review`
+  solely from the status name. Existing responsibility may remain.
+
+This applies equally to a top-level workstream that is itself `In progress`. A
+parent does not become assigned merely because a child is active, but when the
+parent's own canonical status is `In progress`, the parent itself has active
+coordination responsibility and must satisfy the invariant.
+
+Priority remains orthogonal to lifecycle and ownership. GITHUB005 defines
+explicit priority plus native-parent inheritance; no lifecycle transition
+automatically means P0/P1/P2/P3.
+
+Saved Project-view filters are GitHub UI configuration, not repository semantic
+authority.
 
 Saved Project-view filters are GitHub UI configuration, not repository semantic
 authority. Current repository automation owns Project membership, Status and
