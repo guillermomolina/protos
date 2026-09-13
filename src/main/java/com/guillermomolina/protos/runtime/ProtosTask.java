@@ -110,7 +110,15 @@ public final class ProtosTask {
 
     private Object result;
     private Object failure;
-    private final ProtosEvaluatorContinuation evaluatorContinuation = new ProtosEvaluatorContinuation();
+
+    /*
+     * PERF006-B6B replay state is legacy-AST-only and pay-only-when-used.
+     *
+     * Ordinary production semantic Bytecode roots execute through C-prime and
+     * retain no evaluator tape/map merely because they are Tasks.
+     */
+    private ProtosEvaluatorContinuation evaluatorContinuation;
+
     private WaitDependency resumedDependency;
     private final WaitDependency childDrain = new WaitDependency() {};
     private Object pendingCompletion;
@@ -192,8 +200,24 @@ public final class ProtosTask {
         terminalLifecycle = lifecycle;
     }
 
-    public ProtosEvaluatorContinuation evaluatorContinuation() {
+    /**
+     * Materializes legacy evaluator replay state.
+     *
+     * <p>This method is intentionally retained for the AST/equivalence oracle and
+     * legacy direct-Java execution only. Production C-prime code that merely needs
+     * to inspect replay state must use the non-creating optional accessor below.
+     */
+    public synchronized ProtosEvaluatorContinuation evaluatorContinuation() {
+        if (evaluatorContinuation == null) {
+            evaluatorContinuation = new ProtosEvaluatorContinuation();
+        }
         return evaluatorContinuation;
+    }
+
+    /** Non-creating B6B inspection of legacy evaluator replay state. */
+    public synchronized Optional<ProtosEvaluatorContinuation>
+            evaluatorContinuationIfPresentForRuntime() {
+        return Optional.ofNullable(evaluatorContinuation);
     }
 
     /**
@@ -236,7 +260,8 @@ public final class ProtosTask {
         Objects.requireNonNull(target, "target");
         Objects.requireNonNull(activation, "activation");
         activation.attachTask(this);
-        evaluatorContinuation.beginSegment();
+        ProtosEvaluatorContinuation evaluator = evaluatorContinuation();
+        evaluator.beginSegment();
         try {
             Object value = target.call(activation);
             complete(value);
@@ -247,7 +272,7 @@ public final class ProtosTask {
         } catch (ProtosSignalException signalled) {
             fail(signalled.error());
         } finally {
-            evaluatorContinuation.endSegment();
+            evaluator.endSegment();
         }
     }
 
@@ -348,7 +373,8 @@ public final class ProtosTask {
 
     public void executeAction(java.util.function.Supplier<Object> action) {
         Objects.requireNonNull(action, "action");
-        evaluatorContinuation.beginSegment();
+        ProtosEvaluatorContinuation evaluator = evaluatorContinuation();
+        evaluator.beginSegment();
         try {
             complete(action.get());
         } catch (ProtosEvaluatorSuspension suspended) {
@@ -358,7 +384,7 @@ public final class ProtosTask {
         } catch (ProtosSignalException signalled) {
             fail(signalled.error());
         } finally {
-            evaluatorContinuation.endSegment();
+            evaluator.endSegment();
         }
     }
 

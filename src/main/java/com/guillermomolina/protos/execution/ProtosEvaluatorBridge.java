@@ -23,11 +23,14 @@ public final class ProtosEvaluatorBridge {
             return node.executeDirect(frame);
         }
         ProtosTask task = activation.task().orElse(null);
-        if (task == null || !task.evaluatorContinuation().segmentActive()) {
+        ProtosEvaluatorContinuation continuation =
+                task == null
+                        ? null
+                        : task.evaluatorContinuationIfPresentForRuntime().orElse(null);
+        if (continuation == null || !continuation.segmentActive()) {
             return node.executeDirect(frame);
         }
 
-        ProtosEvaluatorContinuation continuation = task.evaluatorContinuation();
         ProtosExpressionNode replaySiteIdentity =
                 ProtosExpressionNode.replaySiteIdentity(node);
         ProtosEvaluatorContinuation.Entry entry = continuation.enter(replaySiteIdentity);
@@ -61,17 +64,22 @@ public final class ProtosEvaluatorBridge {
             if (!observed) {
                 throw new IllegalStateException("pending cancellation was not observable");
             }
-            task.evaluatorContinuation().markControlUnwind();
+            task.evaluatorContinuationIfPresentForRuntime()
+                    .ifPresent(ProtosEvaluatorContinuation::markControlUnwind);
             throw new ProtosTaskCancellationException();
         }
         if (task.consumeResume(dependency)) return;
 
         if (!task.suspend(dependency)) return;
-        task.evaluatorContinuation().markControlUnwind();
+        task.evaluatorContinuationIfPresentForRuntime()
+                .ifPresent(ProtosEvaluatorContinuation::markControlUnwind);
         throw new ProtosEvaluatorSuspension();
     }
 
     public static boolean isControlUnwindInProgress(ProtosActivation activation) {
-        return activation.task().map(task -> task.evaluatorContinuation().controlUnwind()).orElse(false);
+        return activation.task()
+                .flatMap(ProtosTask::evaluatorContinuationIfPresentForRuntime)
+                .map(ProtosEvaluatorContinuation::controlUnwind)
+                .orElse(false);
     }
 }
