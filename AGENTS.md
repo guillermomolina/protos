@@ -1134,7 +1134,8 @@ distinction between inherited and explicit priority.
 <!-- GITHUB012 COMMUNITY-WORK-QUEUE-PLACEMENT -->
 
 Community suitability is a contribution classification, not a hierarchy rule and
-not an automatic scheduling priority.
+not an automatic scheduling priority. The Issue-owned `community` label is the
+durable routing marker for the dedicated Community Project view.
 
 Agents MUST preserve these distinctions:
 
@@ -1142,17 +1143,22 @@ Agents MUST preserve these distinctions:
   because several tasks are suitable for community contribution;
 - when a community-facing task has a genuine semantic workstream parent, use the
   native Parent/Sub-issue relationship under the ordinary hierarchy rules;
-- when no genuine semantic parent exists, the task MAY remain top-level and stay
-  visible in the main Work queue;
-- do not infer `priority:p3` merely from `good first issue`, `help wanted`,
-  `examples`, documentation, adoption, or another community-facing label;
-- when the project owner has deliberately classified standalone contribution work
-  as opportunistic/later scheduling, retain explicit `priority:p3` so the task is
-  visible as a low-attention reminder rather than hidden;
-- higher priority remains valid when independently justified by the roadmap; and
-- do not exclude community-facing work from Work queue solely because it is
-  community-facing. The dedicated Community view is the detailed contribution
-  surface; Work queue is the maintainer reminder surface.
+- when no genuine semantic parent exists, the task MAY remain top-level;
+- a top-level Issue carrying `community` is intentionally excluded from the main
+  Work queue and remains visible through the dedicated Community view;
+- the Community view MUST include open `community` Issues across hierarchy levels,
+  so native sub-issues are not hidden merely because they have a parent;
+- Project `Area=Community` may be useful metadata but MUST NOT be treated as the
+  durable routing authority; `community` label membership is Issue-owned and
+  survives Project-field drift;
+- do not infer Community membership from `good first issue`, `help wanted`,
+  `examples`, documentation, adoption or another adjacent label; apply/remove the
+  `community` label deliberately;
+- do not infer `priority:p3` from Community membership; Priority remains an
+  independent scheduling dimension and a community Issue may legitimately be
+  P0/P1/P2/P3; and
+- do not use Priority as a substitute for view routing. P3 means
+  opportunistic/later scheduling, not "Community".
 
 For active external contributions, an Issue assignee and the actual patch author
 may differ because GitHub can reject an external account as an eligible Issue

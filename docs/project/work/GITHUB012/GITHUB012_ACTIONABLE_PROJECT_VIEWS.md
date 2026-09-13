@@ -39,10 +39,17 @@ Status is one of:
 
 Within that actionable set, Priority orders work P0, P1, P2, P3, then unset.
 `Done`, `Inbox`, `Blocked`, `Paused`, and `Needs decision` do not compete in the
-main Work queue. The saved Work queue view MUST additionally filter to
-**top-level Issues only** (`no:parent-issue`): native sub-issues remain visible
-inside their parent hierarchy and dedicated/detail views, but they do not compete
-as independent top-level workstreams.
+main Work queue. The saved Work queue view MUST additionally:
+
+- filter to **top-level Issues only** (`no:parent-issue`): native sub-issues remain
+  visible inside their parent hierarchy and dedicated/detail views, but they do
+  not compete as independent top-level workstreams; and
+- exclude Issues carrying the durable `community` label (`-label:community`).
+  Community contribution work is managed through the dedicated Community view
+  rather than competing with maintainer roadmap/coordination work.
+
+This exclusion is view routing only. It does not change lifecycle status,
+Priority, hierarchy, ownership or whether a community Issue is actionable.
 
 ### Work queue presentation contract
 
@@ -62,24 +69,30 @@ still owns the meaning and projection of Priority. The important usability
 property is that P0/P1 remain visually dominant while P3 stays visible near the
 bottom instead of disappearing from the maintainer's routine view.
 
-The Work queue MUST NOT exclude an Issue merely because it is suitable for
-community contribution. Community suitability is orthogonal to hierarchy and
-Priority:
+Community suitability is orthogonal to hierarchy and Priority, but it has an
+explicit Project-view routing authority:
 
+- the Issue-owned `community` label is the durable membership marker for the
+  Community lane;
+- the Project `Area` field may remain useful presentation metadata but is not
+  authoritative for Community membership and MUST NOT be required for Work queue
+  exclusion;
+- `good first issue`, `help wanted`, `examples`, `documentation`, `adoption` and
+  similar labels do not individually imply Community membership;
 - a community-facing task with a genuine semantic parent SHOULD be a native
-  sub-issue and therefore does not independently compete in the top-level Work
-  queue;
+  sub-issue under that workstream;
 - a standalone community-facing task with no genuine semantic parent MAY remain
-  top-level;
-- community suitability alone does not manufacture `priority:p3`, but when the
-  project owner deliberately schedules such standalone work as opportunistic /
-  later work, P3 is the normal reminder tier; and
-- a community-facing task may legitimately be P0/P1/P2 when roadmap urgency
-  independently justifies that priority.
+  top-level; being top-level does not make it Work queue work while `community`
+  is present;
+- Community membership does not manufacture `priority:p3`; P0/P1/P2/P3 retain
+  their ordinary scheduling meanings inside the Community lane; and
+- removing or adding `community` is therefore a deliberate routing/classification
+  change and must not be inferred merely from Priority or hierarchy.
 
-The dedicated **Community** view remains the detailed contribution surface. Work
-queue provides only reminder-level visibility through ordinary Priority ordering;
-do not create a synthetic `COMMUNITYxxx` parent merely to hide contribution tasks.
+The dedicated **Community** view is the maintainer/contributor surface for these
+Issues and MUST include open `label:community` work across hierarchy levels; it
+must not use `no:parent-issue`. Do not create a synthetic `COMMUNITYxxx` parent
+merely to remove contribution tasks from Work queue.
 
 For maintainer readability, the Work queue SHOULD keep these fields visible when
 available:
@@ -98,17 +111,22 @@ of the linked contribution.
 
 The maintained view model is:
 
-1. **Work queue** — top-level In progress / Review / Ready.
-2. **Decisions** — open Issues whose Status is Needs decision. Assignment is
+1. **Work queue** — top-level In progress / Review / Ready, excluding
+   `label:community`.
+2. **Community** — all open `label:community` Issues across hierarchy levels.
+   Grouping by Status is recommended so active/review work remains visible ahead
+   of the Ready contribution backlog; Priority remains an ordinary secondary
+   scheduling dimension inside this lane.
+3. **Decisions** — open Issues whose Status is Needs decision. Assignment is
    irrelevant to membership: needing project-owner input and being assigned to
    `guillermomolina` are different concepts.
-3. **Upstream** — open Issues carrying `family:UPSTREAM`, regardless of lifecycle
+4. **Upstream** — open Issues carrying `family:UPSTREAM`, regardless of lifecycle
    Status. This is an inspection/coordination view, not an actionable queue. An
    UPSTREAM item may also appear in Work queue when its lifecycle is Ready,
-   In progress, or Review.
-4. **Blocked** — Blocked / Paused.
-5. **Triage** — Inbox.
-6. **History / Done** — Done.
+   In progress, or Review, unless it is separately routed to Community.
+5. **Blocked** — Blocked / Paused.
+6. **Triage** — Inbox.
+7. **History / Done** — Done.
 
 The legacy saved views named **Core** and **Needs Guillermo** have no maintained
 semantic role:
@@ -122,8 +140,12 @@ Representative GitHub Projects filter intent is:
 
 ```text
 Work queue:
-  is:issue is:open no:parent-issue
+  is:issue is:open no:parent-issue -label:community
   Status in {In progress, Review, Ready}
+
+Community:
+  is:issue is:open
+  label = community
 
 Decisions:
   is:issue is:open
@@ -225,12 +247,17 @@ a full Project reconciliation succeeds, and the saved Project views are verified
 to match the view contract above. In particular, closure now requires live
 verification that:
 
-- `Work queue` contains only top-level In progress / Review / Ready work;
+- `Work queue` contains only top-level In progress / Review / Ready work that
+  does **not** carry `label:community`;
 - `Work queue` is presented as a Priority-grouped table with P0/P1 ahead of P2,
-  P3 retained as low-attention reminder work, and the agreed coordination
-  fields visible;
-- standalone community-facing P3 work remains visible in Work queue while
-  semantically parented community work is represented through native hierarchy;
+  P3 retained as ordinary low-priority maintainer work, and the agreed
+  coordination fields visible;
+- `Community` contains all open `label:community` Issues across hierarchy levels,
+  including standalone top-level contribution tasks and semantically parented
+  contribution sub-issues;
+- current community-facing open Issues such as #6, #8, #9, #10, #13, #15, #382
+  and #383 are routed by the durable `community` label rather than depending on a
+  populated Project `Area` field;
 - `Core` has been replaced by `Upstream`;
 - `Needs Guillermo` has been replaced by `Decisions`;
 - UPSTREAM001 / #480 appears in `Upstream` while remaining absent from
