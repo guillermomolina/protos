@@ -59,6 +59,19 @@ TEST_TOOL_TEST_GLOBS = (
     "src/test/java/com/guillermomolina/protos/execution/ProtosTestTool*Test.java",
 )
 
+# Production Java that is exclusively owned by the bundled Test Tool. Keep
+# ProtosCli.java itself outside this list: it is shared CLI surface and receives
+# a narrower method-body check in classify_delta().
+TEST_TOOL_SOURCE_GLOBS = (
+    "src/main/java/com/guillermomolina/protos/cli/ProtosTestCorpusRegistry.java",
+    "src/main/java/com/guillermomolina/protos/cli/ProtosTestExecutionRequirementRegistry.java",
+    "src/main/java/com/guillermomolina/protos/cli/ProtosTestTool*.java",
+    "src/main/java/com/guillermomolina/protos/execution/ProtosTestTool*.java",
+)
+
+PROTOS_CLI_PATH = "src/main/java/com/guillermomolina/protos/cli/ProtosCli.java"
+PROTOS_CLI_TEST_TOOL_METHOD = "    private int runBundledTestTool("
+
 
 class Selection(object):
     def __init__(self, impact, test_set, reason, skip_allowed):
@@ -103,10 +116,13 @@ def _kind(path):
     if _matches(path, TEST_TOOL_TEST_GLOBS):
         return "TEST"
 
+    if _matches(path, TEST_TOOL_SOURCE_GLOBS):
+        return "TEST"
+
     return "FULL"
 
 
-def classify_paths(paths, top_level_closure=False):
+def classify_paths(paths, top_level_closure=False, kind_overrides=None):
     normalized = []
     for raw in paths:
         if raw is None:
@@ -124,9 +140,10 @@ def classify_paths(paths, top_level_closure=False):
 
     tool_kinds = []
     first_full_path = None
+    overrides = {} if kind_overrides is None else dict(kind_overrides)
 
     for path in normalized:
-        kind = _kind(path)
+        kind = overrides.get(path, _kind(path))
         if kind in ("PACKAGE", "TEST") and kind not in tool_kinds:
             tool_kinds.append(kind)
         if kind == "FULL" and first_full_path is None:
@@ -192,6 +209,114 @@ def classify_paths(paths, top_level_closure=False):
 
     return Selection("FULL", "ALL", "unreachable fail-closed classification", False)
 
+def _java_method_span(source, signature):
+    # Return [start,end) for one Java method, failing closed on ambiguity.
+    start = source.find(signature)
+    if start < 0 or source.find(signature, start + 1) >= 0:
+        return None
+
+    brace = source.find("{", start + len(signature))
+    if brace < 0:
+        return None
+
+    depth = 0
+    index = brace
+    state = "code"
+    while index < len(source):
+        char = source[index]
+        nxt = source[index + 1] if index + 1 < len(source) else ""
+
+        if state == "code":
+            if char == '"':
+                state = "string"
+            elif char == "'":
+                state = "char"
+            elif char == "/" and nxt == "/":
+                state = "line-comment"
+                index += 1
+            elif char == "/" and nxt == "*":
+                state = "block-comment"
+                index += 1
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return (start, index + 1)
+                if depth < 0:
+                    return None
+        elif state == "string":
+            if char == "\\":
+                index += 1
+            elif char == '"':
+                state = "code"
+        elif state == "char":
+            if char == "\\":
+                index += 1
+            elif char == "'":
+                state = "code"
+        elif state == "line-comment":
+            if char == "\n":
+                state = "code"
+        elif state == "block-comment":
+            if char == "*" and nxt == "/":
+                state = "code"
+                index += 1
+
+        index += 1
+
+    return None
+
+
+def _without_java_method(source, signature):
+    span = _java_method_span(source, signature)
+    if span is None:
+        return None
+    start, end = span
+    return source[:start] + "<TEST_TOOL_METHOD_BODY>\n" + source[end:]
+
+
+def _git_text(repo, ref, path):
+    try:
+        data = subprocess.check_output([
+            "git", "-C", repo, "show", ref + ":" + path
+        ])
+    except subprocess.CalledProcessError:
+        return None
+    return data.decode("utf-8", "strict")
+
+
+def protos_cli_change_is_test_tool_only(repo, base, head):
+    # True only when ProtosCli.java changed inside runBundledTestTool().
+    before = _git_text(repo, base, PROTOS_CLI_PATH)
+    after = _git_text(repo, head, PROTOS_CLI_PATH)
+    if before is None or after is None or before == after:
+        return False
+
+    before_outer = _without_java_method(before, PROTOS_CLI_TEST_TOOL_METHOD)
+    after_outer = _without_java_method(after, PROTOS_CLI_TEST_TOOL_METHOD)
+    return (
+        before_outer is not None
+        and after_outer is not None
+        and before_outer == after_outer
+    )
+
+
+def classify_delta(repo, base, head, top_level_closure=False):
+    paths = changed_paths(repo, base, head)
+    overrides = {}
+    normalized = [p.replace("\\", "/").lstrip("./") for p in paths]
+    if PROTOS_CLI_PATH in normalized:
+        if protos_cli_change_is_test_tool_only(repo, base, head):
+            overrides[PROTOS_CLI_PATH] = "TEST"
+
+    return classify_paths(
+        paths,
+        top_level_closure=top_level_closure,
+        kind_overrides=overrides,
+    )
+
+
 def parse_name_status_z(data):
     """Parse `git diff --name-status -z`, retaining both paths for R/C."""
     fields = data.split(b"\0")
@@ -248,8 +373,12 @@ def main(argv=None):
     parser.add_argument("--format", choices=("env", "json"), default="env")
     args = parser.parse_args(argv)
 
-    paths = changed_paths(os.path.abspath(args.repo), args.base, args.head)
-    selection = classify_paths(paths, top_level_closure=args.top_level_closure)
+    selection = classify_delta(
+        os.path.abspath(args.repo),
+        args.base,
+        args.head,
+        top_level_closure=args.top_level_closure,
+    )
 
     if args.format == "json":
         print(json.dumps(selection.to_dict(), sort_keys=True))

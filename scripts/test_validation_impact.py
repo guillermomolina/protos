@@ -19,6 +19,8 @@ from __future__ import print_function
 
 import importlib.util
 import os
+import subprocess
+import tempfile
 import unittest
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -98,6 +100,95 @@ class ValidationImpactTest(unittest.TestCase):
             "src/test/java/com/guillermomolina/protos/execution/"
             "ProtosTestToolSequentialRunnerTest.java"
         ])
+
+    def test_test_tool_owned_production_sources_are_local(self):
+        self.assert_test_tool([
+            "src/main/java/com/guillermomolina/protos/cli/"
+            "ProtosTestCorpusRegistry.java"
+        ])
+        self.assert_test_tool([
+            "src/main/java/com/guillermomolina/protos/execution/"
+            "ProtosTestToolCatalogAcquisitionFacility.java"
+        ])
+
+    def test_protos_cli_path_remains_shared_without_delta_proof(self):
+        self.assert_full_non_tool([
+            "src/main/java/com/guillermomolina/protos/cli/ProtosCli.java"
+        ])
+
+    def test_protos_cli_method_parser_is_fail_closed(self):
+        before = (
+            "final class ProtosCli {\n"
+            "    private int runBundledTestTool(\n"
+            "            String[] args) {\n"
+            "        return 1;\n"
+            "    }\n"
+            "    private int shared() { return 2; }\n"
+            "}\n"
+        )
+        after_method = before.replace("return 1;", "return 7;")
+        self.assertEqual(
+            IMPACT._without_java_method(before, IMPACT.PROTOS_CLI_TEST_TOOL_METHOD),
+            IMPACT._without_java_method(after_method, IMPACT.PROTOS_CLI_TEST_TOOL_METHOD),
+        )
+        after_shared = before.replace("return 2;", "return 9;")
+        self.assertNotEqual(
+            IMPACT._without_java_method(before, IMPACT.PROTOS_CLI_TEST_TOOL_METHOD),
+            IMPACT._without_java_method(after_shared, IMPACT.PROTOS_CLI_TEST_TOOL_METHOD),
+        )
+
+    def test_classify_delta_maps_only_test_tool_method_change(self):
+        with tempfile.TemporaryDirectory() as directory:
+            subprocess.check_call(["git", "-C", directory, "init", "-q"])
+            subprocess.check_call([
+                "git", "-C", directory, "config", "user.email", "test@example.invalid"
+            ])
+            subprocess.check_call([
+                "git", "-C", directory, "config", "user.name", "Validation Test"
+            ])
+            path = os.path.join(
+                directory, "src", "main", "java", "com", "guillermomolina",
+                "protos", "cli", "ProtosCli.java")
+            os.makedirs(os.path.dirname(path))
+            before = (
+                "final class ProtosCli {\n"
+                "    private int runBundledTestTool(\n"
+                "            String[] args) {\n"
+                "        return 1;\n"
+                "    }\n"
+                "    private int shared() { return 2; }\n"
+                "}\n"
+            )
+            with open(path, "w") as handle:
+                handle.write(before)
+            subprocess.check_call(["git", "-C", directory, "add", "."])
+            subprocess.check_call(["git", "-C", directory, "commit", "-qm", "base"])
+            base = subprocess.check_output(
+                ["git", "-C", directory, "rev-parse", "HEAD"], text=True).strip()
+
+            with open(path, "w") as handle:
+                handle.write(before.replace("return 1;", "return 7;"))
+            subprocess.check_call(["git", "-C", directory, "add", "."])
+            subprocess.check_call(["git", "-C", directory, "commit", "-qm", "tool"])
+            head = subprocess.check_output(
+                ["git", "-C", directory, "rev-parse", "HEAD"], text=True).strip()
+
+            result = IMPACT.classify_delta(directory, base, head)
+            self.assertEqual("TOOL_LOCAL:TEST", result.impact)
+            self.assertTrue(result.skip_allowed)
+
+            with open(path, "w") as handle:
+                handle.write(
+                    before.replace("return 1;", "return 7;")
+                          .replace("return 2;", "return 9;"))
+            subprocess.check_call(["git", "-C", directory, "add", "."])
+            subprocess.check_call(["git", "-C", directory, "commit", "-qm", "shared"])
+            shared_head = subprocess.check_output(
+                ["git", "-C", directory, "rev-parse", "HEAD"], text=True).strip()
+
+            result = IMPACT.classify_delta(directory, base, shared_head)
+            self.assertEqual("FULL:NON_TOOL", result.impact)
+            self.assertTrue(result.skip_allowed)
 
     def test_shared_main_is_full_non_tool(self):
         self.assert_full_non_tool([
