@@ -24,7 +24,6 @@ import shutil
 import stat
 import subprocess
 import sys
-import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
@@ -37,7 +36,6 @@ SUPPORTED_GRAALVM_RELEASE = "25.3.4.1"
 SUPPORTED_VENDOR_TOKEN = "GraalVM"
 EXPECTED_TRUFFLE_VERSION = "25.3.4.1"
 EXPECTED_OPTIMIZING_RUNTIME = "HotSpotTruffleRuntime"
-DEPENDENCY_PLUGIN = "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:copy-dependencies"
 
 
 def fail(message: str) -> "NoReturn":
@@ -187,7 +185,6 @@ def verify_archive(
         f"{root_name}/lib/protos.jar",
     }
     required_prefixes = [
-        f"{root_name}/lib/runtime/truffle-runtime-{EXPECTED_TRUFFLE_VERSION}.jar",
         f"{root_name}/protos/lib/core/",
         f"{root_name}/protos/tools/package/",
         f"{root_name}/protos/tools/test/",
@@ -205,6 +202,31 @@ def verify_archive(
         missing = sorted(required - name_set)
         if missing:
             fail("archive is missing required entries: " + ", ".join(missing))
+
+        runtime_prefix = f"{root_name}/lib/runtime/"
+        runtime_names = sorted(
+            name for name in names
+            if name.startswith(runtime_prefix) and name.endswith(".jar")
+        )
+        if not runtime_names:
+            fail("archive contains no canonical runtime jars")
+        runtime_basenames = [PurePosixPath(name).name for name in runtime_names]
+        if not any(
+            name.endswith(f"truffle-runtime-{EXPECTED_TRUFFLE_VERSION}.jar")
+            for name in runtime_basenames
+        ):
+            fail("archive is missing the exact optimizing Truffle runtime")
+        if not any(
+            name.endswith(f"truffle-compiler-{EXPECTED_TRUFFLE_VERSION}.jar")
+            for name in runtime_basenames
+        ):
+            fail("archive is missing the exact Truffle compiler")
+        if not any(
+            "dap" in name.lower()
+            and name.endswith(f"-{EXPECTED_TRUFFLE_VERSION}.jar")
+            for name in runtime_basenames
+        ):
+            fail("archive is missing the exact DAP runtime closure")
         for prefix in required_prefixes:
             if prefix.endswith(".jar"):
                 if prefix not in name_set:
@@ -308,34 +330,62 @@ def build(args: argparse.Namespace) -> Path:
     copy_tree(root / "protos/examples", bundle / "protos/examples")
     copy_tree(root / "protos/tutorials", bundle / "protos/tutorials")
 
-    print("phase=dist03 resolve optimizing Truffle runtime")
+    print("phase=dist03 copy canonical root-POM runtime projection")
+    source_runtime_dir = root / "target" / "runtime"
+    if not source_runtime_dir.is_dir():
+        fail(
+            "canonical target/runtime projection is missing; "
+            "run the root Maven package lifecycle first"
+        )
+
+    source_jars = sorted(source_runtime_dir.glob("*.jar"))
+    if not source_jars:
+        fail("canonical target/runtime projection contains no jars")
+
     runtime_dir = bundle / "lib/runtime"
     runtime_dir.mkdir(parents=True)
-    with tempfile.TemporaryDirectory(prefix="protos-runtime-deps-") as tmp:
-        tmp_path = Path(tmp)
-        run(
-            [
-                "mvn",
-                "-q",
-                "-f",
-                str(root / "dist/runtime-pom.xml"),
-                DEPENDENCY_PLUGIN,
-                "-DincludeScope=runtime",
-                f"-DoutputDirectory={tmp_path}",
-            ],
-            cwd=root,
+    for jar in source_jars:
+        shutil.copy2(jar, runtime_dir / jar.name)
+
+    source_manifest = {path.name: sha256(path) for path in source_jars}
+    copied_jars = sorted(runtime_dir.glob("*.jar"))
+    copied_manifest = {path.name: sha256(path) for path in copied_jars}
+    if source_manifest != copied_manifest:
+        fail("portable runtime projection differs from target/runtime")
+
+    runtime_names = sorted(source_manifest)
+    runtime_matches = [
+        name
+        for name in runtime_names
+        if name.endswith(f"truffle-runtime-{EXPECTED_TRUFFLE_VERSION}.jar")
+    ]
+    compiler_matches = [
+        name
+        for name in runtime_names
+        if name.endswith(f"truffle-compiler-{EXPECTED_TRUFFLE_VERSION}.jar")
+    ]
+    dap_matches = [
+        name
+        for name in runtime_names
+        if "dap" in name.lower()
+        and name.endswith(f"-{EXPECTED_TRUFFLE_VERSION}.jar")
+    ]
+    if len(runtime_matches) != 1:
+        fail(
+            "canonical runtime projection must contain exactly one exact "
+            "Truffle runtime; found: " + ", ".join(runtime_matches)
         )
-        jars = sorted(tmp_path.glob("*.jar"))
-        if not jars:
-            fail("runtime dependency resolution produced no jars")
-        for jar in jars:
-            shutil.copy2(jar, runtime_dir / jar.name)
+    if len(compiler_matches) != 1:
+        fail(
+            "canonical runtime projection must contain exactly one exact "
+            "Truffle compiler; found: " + ", ".join(compiler_matches)
+        )
+    if not dap_matches:
+        fail("canonical runtime projection does not contain the DAP runtime closure")
 
-    required_runtime = runtime_dir / f"truffle-runtime-{EXPECTED_TRUFFLE_VERSION}.jar"
-    if not required_runtime.is_file():
-        fail(f"required optimizing runtime jar was not resolved: {required_runtime.name}")
-
-    runtime_jars = sorted(path.name for path in runtime_dir.glob("*.jar"))
+    runtime_jars = runtime_names
+    print("DIST_RUNTIME_PROJECTION_CHECK: PASS")
+    print(f"DIST_RUNTIME_PROJECTION_JARS: {len(runtime_jars)}")
     write_text(
         bundle / "SOURCE.txt",
         "\n".join(f"{key}={value}" for key, value in source_metadata.items()),
@@ -352,6 +402,8 @@ def build(args: argparse.Namespace) -> Path:
                 f"java_distribution=GraalVM Community Edition {SUPPORTED_GRAALVM_RELEASE} for JDK {SUPPORTED_JAVA_VERSION}",
                 f"truffle_runtime_version={EXPECTED_TRUFFLE_VERSION}",
                 f"optimizing_runtime={EXPECTED_OPTIMIZING_RUNTIME}",
+                "runtime_authority=pom.xml",
+                "runtime_projection=target/runtime",
                 "runtime_evidence=docs/project/work/DIST002/DIST002_TOOLCHAIN_ALIGNMENT.md",
                 "unsupported_runtime_override=PROTOS_ALLOW_UNSUPPORTED_RUNTIME=1",
             ]
@@ -363,9 +415,9 @@ def build(args: argparse.Namespace) -> Path:
             [
                 "Protos application dependencies are contained in lib/protos.jar.",
                 (
-                    "The optimizing distribution runtime is resolved from "
-                    f"org.graalvm.truffle:truffle-runtime:{EXPECTED_TRUFFLE_VERSION} "
-                    "and its Maven runtime dependency closure."
+                    "The Graal/Truffle/Polyglot runtime plane is materialized "
+                    "from the canonical root pom.xml dependency graph into "
+                    "target/runtime and copied byte-for-byte into lib/runtime."
                 ),
                 "Runtime jars:",
                 *[f"  {name}" for name in runtime_jars],

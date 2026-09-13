@@ -94,12 +94,47 @@ def make_fixture(
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
 
     components = "24.0.0" if old_c_state else "25.3.4.1"
-    write(
-        root / "pom.xml",
-        """<project xmlns=\"http://maven.apache.org/POM/4.0.0\"><properties><maven.compiler.release>21</maven.compiler.release><graalvm.version>%s</graalvm.version></properties><build><plugins><plugin><configuration><transformers><transformer implementation=\"org.apache.maven.plugins.shade.resource.ServicesResourceTransformer\"/><transformer implementation=\"org.apache.maven.plugins.shade.resource.ManifestResourceTransformer\"><manifestEntries><Multi-Release>true</Multi-Release></manifestEntries></transformer></transformers><filters><filter><excludes><exclude>META-INF/*.SF</exclude><exclude>META-INF/*.DSA</exclude><exclude>META-INF/*.RSA</exclude></excludes></filter></filters></configuration></plugin></plugins></build></project>\n""" % components,
-    )
-    if old_c_state:
-        write(root / "pom.xml", """<project xmlns=\"http://maven.apache.org/POM/4.0.0\"><properties><maven.compiler.release>21</maven.compiler.release><graalvm.version>24.0.0</graalvm.version></properties></project>\n""")
+    graal_dependencies = """<dependencies>
+<dependency><groupId>org.graalvm.sdk</groupId><artifactId>graal-sdk</artifactId><version>${graalvm.version}</version></dependency>
+<dependency><groupId>org.graalvm.polyglot</groupId><artifactId>polyglot</artifactId><version>${graalvm.version}</version></dependency>
+<dependency><groupId>org.graalvm.truffle</groupId><artifactId>truffle-api</artifactId><version>${graalvm.version}</version></dependency>
+<dependency><groupId>org.graalvm.truffle</groupId><artifactId>truffle-runtime</artifactId><version>${graalvm.version}</version><scope>runtime</scope></dependency>
+<dependency><groupId>org.graalvm.polyglot</groupId><artifactId>dap</artifactId><version>${graalvm.version}</version><type>pom</type><scope>runtime</scope></dependency>
+<dependency><groupId>org.graalvm.polyglot</groupId><artifactId>lsp</artifactId><version>${graalvm.version}</version><type>pom</type><scope>test</scope></dependency>
+</dependencies>"""
+
+    graph_projection = ""
+    shade_externalization = ""
+    if not old_c_state:
+        graph_projection = """<plugin>
+<groupId>org.apache.maven.plugins</groupId><artifactId>maven-dependency-plugin</artifactId><version>3.11.0</version>
+<executions><execution><id>materialize-canonical-graal-runtime-plane</id><configuration><graphRoots>
+<graphRoot><groupId>org.graalvm.sdk</groupId><artifactId>graal-sdk</artifactId></graphRoot>
+<graphRoot><groupId>org.graalvm.polyglot</groupId><artifactId>polyglot</artifactId></graphRoot>
+<graphRoot><groupId>org.graalvm.truffle</groupId><artifactId>truffle-api</artifactId></graphRoot>
+<graphRoot><groupId>org.graalvm.truffle</groupId><artifactId>truffle-runtime</artifactId></graphRoot>
+<graphRoot><groupId>org.graalvm.polyglot</groupId><artifactId>dap</artifactId></graphRoot>
+</graphRoots></configuration></execution></executions>
+</plugin>"""
+        shade_externalization = (
+            "<artifactSet><excludes><exclude>org.graalvm.*:*</exclude>"
+            "</excludes></artifactSet>"
+        )
+
+    pom = """<project xmlns="http://maven.apache.org/POM/4.0.0">
+<properties><maven.compiler.release>21</maven.compiler.release><graalvm.version>%s</graalvm.version></properties>
+%s
+<build><plugins>
+<plugin><artifactId>maven-shade-plugin</artifactId><configuration>
+%s
+<transformers><transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"><manifestEntries><Multi-Release>true</Multi-Release></manifestEntries></transformer></transformers>
+<filters><filter><excludes><exclude>META-INF/*.SF</exclude><exclude>META-INF/*.DSA</exclude><exclude>META-INF/*.RSA</exclude></excludes></filter></filters>
+</configuration></plugin>
+%s
+</plugins></build></project>
+""" % (components, graal_dependencies, shade_externalization, graph_projection)
+    write(root / "pom.xml", pom)
     write(root / ".devcontainer" / "Dockerfile", "FROM %s\nARG MAVEN_VERSION=3.9.9\n" % selected_image)
 
     test_image = "ghcr.io/graalvm/graalvm-community:25-ol8" if development_drift else selected_image
@@ -126,9 +161,9 @@ def make_fixture(
         feature = "25"
         java_version = "25.0.4.1"
         graal_release = "25.3.4.1"
-        launcher = """expected_version=$(sed -n 's/^java_version=//p' \"$RUNTIME_META\")
+        launcher = """expected_version=$(sed -n 's/^java_version=//p' "$RUNTIME_META")
 actual_version=25.0.4.1
-[ \"$actual_version\" = \"$expected_version\" ] || supported=0
+[ "$actual_version" = "$expected_version" ] || supported=0
 """
 
     write(
@@ -146,14 +181,26 @@ actual_version=25.0.4.1
         ),
     )
 
-    write(
-        root / "dist" / "runtime-pom.xml",
-        """<project xmlns=\"http://maven.apache.org/POM/4.0.0\"><properties><graalvm.version>%s</graalvm.version></properties></project>\n""" % dist_components,
-    )
+    if old_c_state:
+        write(
+            root / "dist" / "runtime-pom.xml",
+            """<project xmlns="http://maven.apache.org/POM/4.0.0"><properties><graalvm.version>%s</graalvm.version></properties></project>
+""" % dist_components,
+        )
+        builder_projection = (
+            'DEPENDENCY_PLUGIN = "legacy"\n'
+            'runtime_descriptor = "dist/runtime-pom.xml"\n'
+        )
+    else:
+        builder_projection = (
+            'source_runtime_dir = root / "target" / "runtime"\n'
+            '"runtime_authority=pom.xml"\n'
+        )
+
     write(
         root / "dist" / "build_portable.py",
-        'SUPPORTED_JAVA_FEATURE = "%s"\nSUPPORTED_JAVA_VERSION = "%s"\nSUPPORTED_GRAALVM_RELEASE = "%s"\nEXPECTED_TRUFFLE_VERSION = "%s"\n'
-        % (feature, java_version, graal_release, dist_components),
+        'SUPPORTED_JAVA_FEATURE = "%s"\nSUPPORTED_JAVA_VERSION = "%s"\nSUPPORTED_GRAALVM_RELEASE = "%s"\nEXPECTED_TRUFFLE_VERSION = "%s"\n%s'
+        % (feature, java_version, graal_release, dist_components, builder_projection),
     )
     write(
         root / "dist" / "smoke_optimizing_runtime.sh",
@@ -236,7 +283,10 @@ def main():
             "pom.shade_services",
             "pom.shade_signature_filter",
             "ci.distribution.image",
-            "dist.runtime_pom.graal_components",
+            "pom.runtime_plane.graph_roots",
+            "pom.runtime_plane.shade_externalization",
+            "dist.runtime_pom_absent",
+            "dist.builder.canonical_runtime_projection",
             "dist.builder.java_version",
             "dist.smoke.graal_components",
             "dist.launcher.java_version_gate",

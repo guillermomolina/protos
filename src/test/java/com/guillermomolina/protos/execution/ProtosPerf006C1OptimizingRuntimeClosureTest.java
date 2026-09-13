@@ -39,18 +39,16 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
 
         assertTrue(pom.contains("<artifactId>truffle-runtime</artifactId>"));
         assertTrue(pom.contains("<scope>runtime</scope>"));
-        assertTrue(pom.contains("<exclude>org.graalvm.truffle:truffle-runtime</exclude>"));
-        assertTrue(pom.contains("<exclude>org.graalvm.truffle:truffle-compiler</exclude>"));
-        assertTrue(pom.contains("<id>materialize-checkout-optimizing-runtime</id>"));
+        assertTrue(pom.contains("<exclude>org.graalvm.*:*</exclude>"));
+        assertTrue(pom.contains("<id>materialize-canonical-graal-runtime-plane</id>"));
+        assertTrue(pom.contains("<graphRoots>"));
+        assertTrue(pom.contains("<prependGroupId>true</prependGroupId>"));
+        assertTrue(pom.contains("<stripVersion>false</stripVersion>"));
         assertTrue(pom.contains("${project.build.directory}/runtime"));
-        assertTrue(
-                pom.contains(
-                        "<includeArtifactIds>truffle-runtime,truffle-compiler</includeArtifactIds>"));
-        assertTrue(pom.contains("<stripVersion>true</stripVersion>"));
 
         assertTrue(launcher.contains("RUNTIME_DIR=$ROOT/target/runtime"));
-        assertTrue(launcher.contains("$RUNTIME_DIR/truffle-runtime.jar"));
-        assertTrue(launcher.contains("$RUNTIME_DIR/truffle-compiler.jar"));
+        assertTrue(launcher.contains("*truffle-runtime-*.jar"));
+        assertTrue(launcher.contains("*truffle-compiler-*.jar"));
         assertTrue(launcher.contains("-cp \"$JAR:$RUNTIME_DIR/*\""));
         assertFalse(launcher.contains("-jar \"$JAR\""));
 

@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.2.487-SNAPSHOT</version>
+    <version>0.2.488-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -138,23 +138,66 @@
                 </executions>
             </plugin>
             <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version><configuration><archive><manifest><mainClass>com.guillermomolina.protos.cli.ProtosCli</mainClass><addDefaultImplementationEntries>true</addDefaultImplementationEntries></manifest></archive></configuration></plugin>
+            <!-- PERF006-C2 / PLAT033: target/runtime is a generated projection of the
+                 Graal/Truffle/Polyglot roots already declared by this root POM. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-antrun-plugin</artifactId>
+                <version>3.2.0</version>
+                <executions>
+                    <execution>
+                        <id>reset-canonical-graal-runtime-plane</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>run</goal>
+                        </goals>
+                        <configuration>
+                            <target>
+                                <delete dir="${project.build.directory}/runtime" quiet="true"/>
+                            </target>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-dependency-plugin</artifactId>
-                <version>3.8.1</version>
+                <version>3.11.0</version>
                 <executions>
                     <execution>
-                        <id>materialize-checkout-optimizing-runtime</id>
+                        <id>materialize-canonical-graal-runtime-plane</id>
                         <phase>prepare-package</phase>
                         <goals>
                             <goal>copy-dependencies</goal>
                         </goals>
                         <configuration>
-                            <includeScope>runtime</includeScope>
-                            <includeGroupIds>org.graalvm.truffle</includeGroupIds>
-                            <includeArtifactIds>truffle-runtime,truffle-compiler</includeArtifactIds>
+                            <graphRoots>
+                                <graphRoot>
+                                    <groupId>org.graalvm.sdk</groupId>
+                                    <artifactId>graal-sdk</artifactId>
+                                </graphRoot>
+                                <graphRoot>
+                                    <groupId>org.graalvm.polyglot</groupId>
+                                    <artifactId>polyglot</artifactId>
+                                </graphRoot>
+                                <graphRoot>
+                                    <groupId>org.graalvm.truffle</groupId>
+                                    <artifactId>truffle-api</artifactId>
+                                </graphRoot>
+                                <graphRoot>
+                                    <groupId>org.graalvm.truffle</groupId>
+                                    <artifactId>truffle-runtime</artifactId>
+                                </graphRoot>
+                                <graphRoot>
+                                    <groupId>org.graalvm.polyglot</groupId>
+                                    <artifactId>dap</artifactId>
+                                </graphRoot>
+                            </graphRoots>
+                            <includeTypes>jar</includeTypes>
                             <outputDirectory>${project.build.directory}/runtime</outputDirectory>
-                            <stripVersion>true</stripVersion>
+                            <prependGroupId>true</prependGroupId>
+                            <stripVersion>false</stripVersion>
+                            <useBaseVersion>true</useBaseVersion>
                             <overWriteReleases>true</overWriteReleases>
                             <overWriteSnapshots>true</overWriteSnapshots>
                         </configuration>
@@ -173,8 +216,8 @@
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <artifactSet>
                                 <excludes>
-                                    <exclude>org.graalvm.truffle:truffle-runtime</exclude>
-                                    <exclude>org.graalvm.truffle:truffle-compiler</exclude>
+                                    <!-- The complete Graal-owned runtime/tool plane is external. -->
+                                    <exclude>org.graalvm.*:*</exclude>
                                 </excludes>
                             </artifactSet>
                             <transformers>

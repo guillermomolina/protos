@@ -75,12 +75,19 @@ if [ "$MODE" = distribution ]; then
 fi
 
 RUNTIME_DIR=$ROOT/target/runtime
-[ -f "$RUNTIME_DIR/truffle-runtime.jar" ] || {
-    echo "protos: checkout optimizing runtime is missing; run 'mvn package' in $ROOT" >&2
+[ -d "$RUNTIME_DIR" ] || {
+    echo "protos: checkout runtime plane is missing; run 'mvn package' in $ROOT" >&2
     exit 1
 }
-[ -f "$RUNTIME_DIR/truffle-compiler.jar" ] || {
-    echo "protos: checkout Truffle compiler is missing; run 'mvn package' in $ROOT" >&2
+
+runtime_count=$(find "$RUNTIME_DIR" -maxdepth 1 -type f -name '*truffle-runtime-*.jar' | wc -l | tr -d '[:space:]')
+compiler_count=$(find "$RUNTIME_DIR" -maxdepth 1 -type f -name '*truffle-compiler-*.jar' | wc -l | tr -d '[:space:]')
+[ "$runtime_count" = 1 ] || {
+    echo "protos: checkout runtime plane must contain exactly one Truffle runtime jar; run 'mvn package' in $ROOT" >&2
+    exit 1
+}
+[ "$compiler_count" = 1 ] || {
+    echo "protos: checkout runtime plane must contain exactly one Truffle compiler jar; run 'mvn package' in $ROOT" >&2
     exit 1
 }
 

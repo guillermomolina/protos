@@ -96,8 +96,21 @@ meta_runtime=$(sed -n 's/^optimizing_runtime=//p' "$runtime_meta")
 
 runtime_dir=$toolchain/lib/runtime
 [ -d "$runtime_dir" ] || fail "distribution runtime directory missing"
-runtime_jar=$runtime_dir/truffle-runtime-$EXPECTED_TRUFFLE_VERSION.jar
-[ -f "$runtime_jar" ] || fail "exact optimizing runtime jar missing: $runtime_jar"
+
+runtime_count=$(find "$runtime_dir" -maxdepth 1 -type f \
+    -name "*truffle-runtime-$EXPECTED_TRUFFLE_VERSION.jar" | wc -l | tr -d '[:space:]')
+compiler_count=$(find "$runtime_dir" -maxdepth 1 -type f \
+    -name "*truffle-compiler-$EXPECTED_TRUFFLE_VERSION.jar" | wc -l | tr -d '[:space:]')
+dap_count=$(find "$runtime_dir" -maxdepth 1 -type f \
+    -name "*dap*-$EXPECTED_TRUFFLE_VERSION.jar" | wc -l | tr -d '[:space:]')
+
+[ "$runtime_count" = 1 ] ||
+    fail "distribution must contain exactly one exact optimizing runtime jar"
+[ "$compiler_count" = 1 ] ||
+    fail "distribution must contain exactly one exact Truffle compiler jar"
+[ "$dap_count" -ge 1 ] ||
+    fail "distribution DAP runtime closure is missing"
+
 [ -z "$(find "$toolchain/lib" -maxdepth 1 -type d -name 'runtime.dist001b*-disabled' -print -quit)" ] ||
     fail "fresh extraction unexpectedly contains disabled-runtime smoke state"
 
@@ -163,5 +176,7 @@ echo "DIST_B4B_OUTSIDE_CHECKOUT_CHECK: PASS"
 echo "DIST_SELECTED_JDK_CHECK: PASS java.version=$java_version"
 echo "DIST_SELECTED_RUNTIME_GATE_CHECK: PASS"
 echo "DIST_OPTIMIZER_JAR_INTACT_CHECK: PASS version=$EXPECTED_TRUFFLE_VERSION"
+echo "DIST_TRUFFLE_COMPILER_CHECK: PASS version=$EXPECTED_TRUFFLE_VERSION"
+echo "DIST_DAP_RUNTIME_CLOSURE_CHECK: PASS version=$EXPECTED_TRUFFLE_VERSION"
 echo "DIST_OPTIMIZING_RUNTIME_CHECK: PASS class=$actual_runtime"
 echo "DIST001_B4B_SMOKE: PASS"

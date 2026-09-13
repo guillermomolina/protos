@@ -103,6 +103,59 @@ def xml_property(path, property_name):
     return (value or "").strip()
 
 
+def direct_graal_runtime_roots(path):
+    # type: (Path) -> List[str]
+    tree = ET.parse(str(path))
+    root = tree.getroot()
+    ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+    result = []
+    dependencies = root.find("m:dependencies", ns)
+    if dependencies is None:
+        return result
+    for dependency in dependencies.findall("m:dependency", ns):
+        group = (dependency.findtext("m:groupId", namespaces=ns) or "").strip()
+        artifact = (dependency.findtext("m:artifactId", namespaces=ns) or "").strip()
+        scope = (dependency.findtext("m:scope", namespaces=ns) or "compile").strip()
+        if group.startswith("org.graalvm.") and scope != "test":
+            result.append("%s:%s" % (group, artifact))
+    return sorted(result)
+
+
+def dependency_plugin_projection(path):
+    # type: (Path) -> Tuple[str, List[str]]
+    tree = ET.parse(str(path))
+    root = tree.getroot()
+    ns = {"m": "http://maven.apache.org/POM/4.0.0"}
+    plugins = root.find("m:build/m:plugins", ns)
+    if plugins is None:
+        return "<missing>", []
+    for plugin in plugins.findall("m:plugin", ns):
+        artifact = (plugin.findtext("m:artifactId", namespaces=ns) or "").strip()
+        if artifact != "maven-dependency-plugin":
+            continue
+        version = (plugin.findtext("m:version", namespaces=ns) or "").strip()
+        for execution in plugin.findall("m:executions/m:execution", ns):
+            execution_id = (
+                execution.findtext("m:id", namespaces=ns) or ""
+            ).strip()
+            if execution_id != "materialize-canonical-graal-runtime-plane":
+                continue
+            roots = []
+            for graph_root in execution.findall(
+                "m:configuration/m:graphRoots/m:graphRoot", ns
+            ):
+                group = (
+                    graph_root.findtext("m:groupId", namespaces=ns) or ""
+                ).strip()
+                artifact_id = (
+                    graph_root.findtext("m:artifactId", namespaces=ns) or ""
+                ).strip()
+                roots.append("%s:%s" % (group, artifact_id))
+            return version, sorted(roots)
+        return version, []
+    return "<missing>", []
+
+
 def first_match(text, pattern, label):
     # type: (str, str, str) -> str
     match = re.search(pattern, text, flags=re.MULTILINE)
@@ -210,6 +263,24 @@ def audit_bindings(root, contract):
     shade_signature_filter = all(token in pom_text for token in ("<exclude>META-INF/*.SF</exclude>", "<exclude>META-INF/*.DSA</exclude>", "<exclude>META-INF/*.RSA</exclude>"))
     rows.append(("pom.shade_signature_filter", "present", "present" if shade_signature_filter else "missing"))
 
+    canonical_roots = direct_graal_runtime_roots(pom)
+    dependency_plugin_version, projected_roots = dependency_plugin_projection(pom)
+    rows.append((
+        "pom.runtime_plane.graph_roots",
+        ",".join(canonical_roots),
+        ",".join(projected_roots),
+    ))
+    rows.append((
+        "pom.runtime_plane.dependency_plugin",
+        "3.11.0",
+        dependency_plugin_version,
+    ))
+    rows.append((
+        "pom.runtime_plane.shade_externalization",
+        "present",
+        "present" if "<exclude>org.graalvm.*:*</exclude>" in pom_text else "missing",
+    ))
+
     docker = read_text(root / ".devcontainer" / "Dockerfile")
     rows.append((
         "devcontainer.image",
@@ -234,12 +305,24 @@ def audit_bindings(root, contract):
     rows.append(("ci.distribution.maven", maven, workflow_job_scalar(ci_workflow, "distribution", "PROTOS_MAVEN_VERSION")))
 
     rows.append((
-        "dist.runtime_pom.graal_components",
-        components,
-        xml_property(root / "dist" / "runtime-pom.xml", "graalvm.version"),
+        "dist.runtime_pom_absent",
+        "absent",
+        "absent" if not (root / "dist" / "runtime-pom.xml").exists() else "present",
     ))
 
     builder = read_text(root / "dist" / "build_portable.py")
+    builder_projection = (
+        "present"
+        if 'source_runtime_dir = root / "target" / "runtime"' in builder
+        and "runtime-pom.xml" not in builder
+        and '"runtime_authority=pom.xml"' in builder
+        else "missing"
+    )
+    rows.append((
+        "dist.builder.canonical_runtime_projection",
+        "present",
+        builder_projection,
+    ))
     rows.append((
         "dist.builder.java_feature",
         feature,
