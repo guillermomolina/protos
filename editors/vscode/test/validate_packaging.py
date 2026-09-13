@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# LM009-I1-A validation for D127 deterministic VS Code client bundling.
+# LM009-I1-A/B validation for D127 deterministic VS Code packaging.
 
 from pathlib import Path
 import json
@@ -23,10 +23,30 @@ EXPECTED_DEV_DEPENDENCIES = {
 EXPECTED_SCRIPTS = {
     "build": (
         "esbuild extension.js --bundle --platform=node --format=cjs "
-        "--target=node22 --external:vscode --outfile=dist/extension.js"
+        "--target=node22 --external:vscode --metafile=dist/meta.json "
+        "--outfile=dist/extension.js"
     ),
-    "vscode:prepublish": "npm run build",
+    "package:assets": "node scripts/sync_package_assets.js --check",
+    "vscode:prepublish": "npm run build && npm run package:assets",
+    "package:vsix": "vsce package --no-dependencies",
 }
+
+PACKAGE_LICENSE = ROOT / "license.txt"
+SOURCE_LICENSE = REPO / "LICENSE.TXT"
+THIRD_PARTY_NOTICES = ROOT / "THIRD_PARTY_NOTICES.txt"
+VSCODEIGNORE = ROOT / ".vscodeignore"
+EXPECTED_VSCODEIGNORE = """# LM009-I1-B explicit package boundary.
+# The exact allowed shipping set is enforced by test/validate_vsix.py.
+.vscodeignore
+extension.js
+debug_adapter.js
+package-lock.json
+node_modules/**
+test/**
+scripts/**
+dist/meta.json
+*.vsix
+"""
 
 def fail(message):
     print("LM009_I1A_PACKAGING_VALIDATION_FAILED: " + message, file=sys.stderr)
@@ -89,7 +109,23 @@ def main():
     if re.search(r"require\([\"']\./debug_adapter[\"']\)", bundle):
         fail("debug_adapter remains a runtime filesystem require")
 
+    try:
+        if PACKAGE_LICENSE.read_bytes() != SOURCE_LICENSE.read_bytes():
+            fail("package-root license.txt must equal repository LICENSE.TXT exactly")
+        notices = THIRD_PARTY_NOTICES.read_text(encoding="utf-8")
+        vscodeignore = VSCODEIGNORE.read_text(encoding="utf-8")
+    except OSError as exc:
+        fail(str(exc))
+
+    if "=== vscode-languageclient@10.1.1 ===" not in notices:
+        fail("third-party notices do not cover the bundled vscode-languageclient")
+    if "@vscode/vsce@" in notices or "esbuild@" in notices:
+        fail("build-only dependencies must not be reported as bundled runtime code")
+    if vscodeignore != EXPECTED_VSCODEIGNORE:
+        fail(".vscodeignore package boundary changed")
+
     print("LM009_I1A_PACKAGING_VALIDATION: PASS")
+    print("LM009_I1B_PACKAGE_ASSET_VALIDATION: PASS")
     print("PACKAGE_LOCKFILE=COMMITTED")
     print("CLEAN_INSTALL_COMMAND=npm_ci")
     print("PRODUCTION_CLIENT=BUNDLED")
@@ -99,6 +135,9 @@ def main():
     print("PACKAGE_TOOL_VSCE=3.9.2")
     print("PRODUCTION_NODE_MODULES_IN_VSIX_POLICY=NO")
     print("PROTOS_RUNTIME_IN_VSIX=NO")
+    print("PACKAGE_LICENSE=license.txt")
+    print("THIRD_PARTY_NOTICES=THIRD_PARTY_NOTICES.txt")
+    print("PACKAGE_CONTENT_BOUNDARY=EXPLICIT")
 
 if __name__ == "__main__":
     main()

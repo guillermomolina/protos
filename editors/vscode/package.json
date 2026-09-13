@@ -127,8 +127,10 @@
     "workspace"
   ],
   "scripts": {
-    "build": "esbuild extension.js --bundle --platform=node --format=cjs --target=node22 --external:vscode --outfile=dist/extension.js",
-    "vscode:prepublish": "npm run build"
+    "build": "esbuild extension.js --bundle --platform=node --format=cjs --target=node22 --external:vscode --metafile=dist/meta.json --outfile=dist/extension.js",
+    "package:assets": "node scripts/sync_package_assets.js --check",
+    "vscode:prepublish": "npm run build && npm run package:assets",
+    "package:vsix": "vsce package --no-dependencies"
   },
   "devDependencies": {
     "@vscode/vsce": "3.9.2",

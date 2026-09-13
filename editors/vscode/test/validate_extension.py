@@ -64,12 +64,15 @@ def main():
     expected_scripts = {
         "build": (
             "esbuild extension.js --bundle --platform=node --format=cjs "
-            "--target=node22 --external:vscode --outfile=dist/extension.js"
+            "--target=node22 --external:vscode --metafile=dist/meta.json "
+            "--outfile=dist/extension.js"
         ),
-        "vscode:prepublish": "npm run build",
+        "package:assets": "node scripts/sync_package_assets.js --check",
+        "vscode:prepublish": "npm run build && npm run package:assets",
+        "package:vsix": "vsce package --no-dependencies",
     }
     if package.get("scripts") != expected_scripts:
-        fail("D127/I1-A build scripts changed")
+        fail("D127/I1-A/B build scripts changed")
 
     expected_dev_dependencies = {
         "@vscode/vsce": "3.9.2",

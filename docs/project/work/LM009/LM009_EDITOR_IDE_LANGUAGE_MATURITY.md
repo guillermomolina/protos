@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; I1-A CLOSED; I1-B READY)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; I1-A CLOSED; I1-B CLOSED; I1-C READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -2060,3 +2060,49 @@ clean-checkout reproducibility/content closure.
 
 No Protos specification, Java/runtime/native boundary, Maven implementation
 version or VS Code extension version changes in I1-A.
+
+## LM009-I1-B — package license/notices + bounded VSIX contents
+
+Status after publication: **CLOSED; I1-C READY**
+
+I1-B implements the package-content half of ratified D127 Candidate B′ without
+changing the external Protos runtime boundary.
+
+The packaged extension root now carries:
+
+```text
+license.txt
+THIRD_PARTY_NOTICES.txt
+```
+
+`license.txt` is byte-for-byte the repository `LICENSE.TXT`, preserving the
+APL-1.0 distribution requirement. `THIRD_PARTY_NOTICES.txt` is generated
+deterministically from the actual npm package inputs included by the production
+esbuild metafile and includes each bundled package's package-root license/notice
+material. Build-only tooling is not treated as bundled runtime code.
+
+The explicit shipping set is fail-closed and contains only:
+
+```text
+README.md
+THIRD_PARTY_NOTICES.txt
+dist/extension.js
+icon.png
+language-configuration.json
+license.txt
+package.json
+syntaxes/protos.tmLanguage.json
+```
+
+`.vscodeignore` excludes raw editor sources, lock/build inputs, tests, fixtures,
+scripts, raw `node_modules`, generated VSIX files and the esbuild metafile.
+Artifact validation inspects the actual VSIX archive rather than trusting ignore
+patterns alone.
+
+I1-B performs one bounded real `vsce package --no-dependencies` smoke and checks
+that production `node_modules`, tests, fixtures and raw editor source files are
+absent. This is content-boundary evidence, not the clean-checkout reproducibility
+proof; I1-C owns reproducibility and final I1 closure.
+
+No Protos specification, Java/runtime/native boundary, Maven implementation
+version or VS Code extension version changes in I1-B.

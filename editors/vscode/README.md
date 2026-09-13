@@ -43,6 +43,7 @@ From `editors/vscode/`:
 ```sh
 npm ci
 npm run build
+npm run package:assets
 python3 test/validate_grammar.py
 python3 test/validate_extension.py
 python3 test/validate_packaging.py
@@ -57,10 +58,31 @@ entry point is `dist/extension.js`. The generation-1 bundle is built with pinned
 esbuild and keeps VS Code's host-provided `vscode` module external while bundling
 the JavaScript `vscode-languageclient` closure and the local debug adapter.
 
-`@vscode/vsce` is also pinned as build/packaging tooling; I1-B owns the bounded
-VSIX content/license/notices layer before the package command becomes the release
-artifact path. Generated `dist/`, `node_modules/`, and `*.vsix` files remain
-repository artifacts only and are not committed.
+`@vscode/vsce` is pinned as build/packaging tooling. I1-B adds the explicit
+VSIX boundary: package-root `license.txt`, deterministic
+`THIRD_PARTY_NOTICES.txt`, `.vscodeignore`, and an exact artifact-content guard.
+The package command is:
+
+```sh
+npm run package:vsix -- --out /tmp/protos.vsix
+python3 test/validate_vsix.py /tmp/protos.vsix
+```
+
+The VSIX contains only the bundled runtime client, declarative editor assets,
+README, icon and required license/notices. Raw `node_modules`, tests, fixtures,
+source-only editor JavaScript, build scripts, the npm lockfile and esbuild
+metafile do not ship.
+
+When bundled npm dependencies or the project license change, regenerate the
+tracked package assets after `npm ci && npm run build` with:
+
+```sh
+node scripts/sync_package_assets.js
+```
+
+Normal packaging runs the same generator in `--check` mode and fails closed if
+the committed license/notices are stale. Generated `dist/`, `node_modules/`, and
+`*.vsix` files remain repository artifacts only and are not committed.
 
 Node/npm remains an editor-development/packaging concern only; ordinary Protos
 Maven/runtime development and execution do not depend on Node/npm. The real

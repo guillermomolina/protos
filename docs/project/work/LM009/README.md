@@ -11,8 +11,9 @@ This directory contains durable non-normative documentation owned by
   closed LM009-H D124 Candidate B′ references with real H5 VS Code evidence.
   Hover, completion and signature help remain deferred to paused LM010 /
   GitHub #493 and do not block LM009. LM009-I is IN_PROGRESS under ratified
-  D127 Candidate B′: I1-A deterministic bundle foundation is CLOSED and I1-B
-  package content/license/notices work is READY.
+  D127 Candidate B′: I1-A deterministic bundle foundation and I1-B bounded
+  VSIX license/notices/content work are CLOSED; I1-C clean-checkout
+  reproducibility/content closure is READY.
 
 Live coordination belongs to GitHub Issue #288. `LM009-A` is coordinated by
 GitHub Issue #289. The existing editor highlighting Issue #11 is consumed by
