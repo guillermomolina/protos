@@ -41,6 +41,10 @@ PRIORITY_TO_PROJECT = {
     "priority:p2": "P2",
     "priority:p3": "P3",
 }
+PROJECT_TO_PRIORITY = dict(
+    (project_name, label_name)
+    for label_name, project_name in PRIORITY_TO_PROJECT.items()
+)
 PRIORITY_LABELS = frozenset(PRIORITY_TO_PROJECT)
 PRIORITY_LABEL_DEFINITIONS = {
     "priority:p0": ("b60205", "Immediate/critical scheduling priority; exceptional."),
@@ -272,6 +276,44 @@ def _set_issue_priority_label(repository, issue, issue_token, removals):
     )
 
 
+def _add_issue_priority_label(repository, issue, issue_token, priority_label):
+    number = int(issue["number"])
+    _rest(
+        repository,
+        "/issues/%d/labels" % number,
+        issue_token,
+        method="POST",
+        payload={"labels": [priority_label]},
+    )
+    print(
+        "ISSUE_PRIORITY_LABEL_MIGRATED: #%d %s"
+        % (number, priority_label)
+    )
+
+
+def priority_migration_candidate(
+    effective_priority,
+    current_project_priority,
+    explicit_priority_removal=False,
+):
+    if effective_priority is not None:
+        return None
+    if explicit_priority_removal:
+        return None
+    if current_project_priority is None:
+        return None
+    priority_label = PROJECT_TO_PRIORITY.get(current_project_priority)
+    if priority_label is None:
+        raise SyncError(
+            "Project Priority %r cannot be migrated; expected one of %s"
+            % (
+                current_project_priority,
+                ", ".join(sorted(PROJECT_TO_PRIORITY)),
+            )
+        )
+    return priority_label
+
+
 def _ensure_in_progress_assignee(
     repository, issue, issue_token, canonical_status
 ):
@@ -371,6 +413,18 @@ query($login: String!, $number: Int!, $after: String) {
       items(first: 100, after: $after) {
         nodes {
           id
+          fieldValues(first: 20) {
+            nodes {
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                name
+                field {
+                  ... on ProjectV2SingleSelectField {
+                    name
+                  }
+                }
+              }
+            }
+          }
           content {
             ... on Issue {
               id
@@ -480,9 +534,20 @@ def load_project(project_token, owner, number):
     }
 
 
+def _project_item_single_select_value(node, field_name):
+    for value in ((node.get("fieldValues") or {}).get("nodes") or []):
+        if not value:
+            continue
+        field = value.get("field") or {}
+        if field.get("name") == field_name:
+            return value.get("name")
+    return None
+
+
 def load_project_issue_items(project_token, owner, number):
     result = {}
     project_issues = []
+    project_priorities = {}
     after = None
     while True:
         data = _graphql(
@@ -502,6 +567,9 @@ def load_project_issue_items(project_token, owner, number):
             repo_name = repository.get("nameWithOwner")
             key = (repo_name, int(content["number"]))
             result[key] = node["id"]
+            project_priorities[key] = _project_item_single_select_value(
+                node, "Priority"
+            )
             project_issues.append({
                 "item_id": node["id"],
                 "repository": repo_name,
@@ -514,7 +582,7 @@ def load_project_issue_items(project_token, owner, number):
         after = page["endCursor"]
         if not after:
             raise SyncError("Project item pagination lost its end cursor")
-    return result, project_issues
+    return result, project_issues, project_priorities
 
 
 def ensure_project_item(project_token, project, item_map, repository, issue):
@@ -598,6 +666,7 @@ def sync_issue(
     issue_token,
     project,
     item_map,
+    project_priorities,
     event_action=None,
     event_label=None,
 ):
@@ -626,6 +695,21 @@ def sync_issue(
         repository, issue, issue_token, canonical_priority
     )
 
+    key = (repository, number)
+    current_project_priority = project_priorities.get(key)
+    explicit_priority_removal = (
+        event_action == "unlabeled" and event_label in PRIORITY_LABELS
+    )
+    migration_priority = priority_migration_candidate(
+        effective_priority,
+        current_project_priority,
+        explicit_priority_removal=explicit_priority_removal,
+    )
+    if migration_priority is not None:
+        canonical_priority = migration_priority
+        effective_priority = migration_priority
+        inherited_from = None
+
     _set_issue_status_label(
         repository,
         issue,
@@ -637,6 +721,10 @@ def sync_issue(
     _set_issue_priority_label(
         repository, issue, issue_token, priority_removals
     )
+    if migration_priority is not None:
+        _add_issue_priority_label(
+            repository, issue, issue_token, migration_priority
+        )
     _ensure_in_progress_assignee(
         repository, issue, issue_token, canonical_status
     )
@@ -655,14 +743,38 @@ def sync_issue(
     )
 
     if effective_priority is None:
-        clear_project_field(project_token, project, item_id, "priority")
-        print("PROJECT_PRIORITY: #%d -> <unset>" % number)
+        if explicit_priority_removal:
+            clear_project_field(project_token, project, item_id, "priority")
+            project_priorities[key] = None
+            print(
+                "PROJECT_PRIORITY: #%d -> <unset> "
+                "(explicit priority label removal)" % number
+            )
+        elif current_project_priority is None:
+            project_priorities[key] = None
+            print(
+                "PROJECT_PRIORITY: #%d -> <unchanged unset> "
+                "(no explicit/inherited/migratable priority)" % number
+            )
+        else:
+            raise SyncError(
+                "Issue #%d has Project Priority %r but migration did not "
+                "produce a durable priority label"
+                % (number, current_project_priority)
+            )
     else:
         priority_name = PRIORITY_TO_PROJECT[effective_priority]
         set_project_priority(
             project_token, project, item_id, priority_name
         )
-        if inherited_from is None:
+        project_priorities[key] = priority_name
+        if migration_priority is not None:
+            print(
+                "PROJECT_PRIORITY: #%d -> %s "
+                "(%s migrated from existing Project Priority)"
+                % (number, priority_name, effective_priority)
+            )
+        elif inherited_from is None:
             print(
                 "PROJECT_PRIORITY: #%d -> %s (%s explicit)"
                 % (number, priority_name, effective_priority)
@@ -698,7 +810,13 @@ def list_open_issues(repository, issue_token):
 
 
 def run_reconcile(
-    args, project_token, issue_token, project, item_map, project_issues
+    args,
+    project_token,
+    issue_token,
+    project,
+    item_map,
+    project_issues,
+    project_priorities,
 ):
     failures = []
     closed_count = 0
@@ -735,6 +853,7 @@ def run_reconcile(
                 issue_token,
                 project,
                 item_map,
+                project_priorities,
             )
         except SyncError as exc:
             failures.append((issue.get("number"), str(exc)))
@@ -889,10 +1008,34 @@ def self_test():
         fetcher=fake_fetcher,
     ) == ("priority:p2", 22)
 
+    assert priority_migration_candidate(
+        None, "P1", explicit_priority_removal=False
+    ) == "priority:p1"
+    assert priority_migration_candidate(
+        "priority:p2", "P1", explicit_priority_removal=False
+    ) is None
+    assert priority_migration_candidate(
+        None, "P1", explicit_priority_removal=True
+    ) is None
+    assert priority_migration_candidate(
+        None, None, explicit_priority_removal=False
+    ) is None
+    try:
+        priority_migration_candidate(
+            None, "URGENT", explicit_priority_removal=False
+        )
+    except SyncError:
+        pass
+    else:
+        raise AssertionError(
+            "unknown Project Priority must fail closed during migration"
+        )
+
     print("PROJECT_STATUS_PRIORITY_SYNC_SELF_TEST: PASS")
     print("UNKNOWN_STATUS_LABEL_FAIL_CLOSED: PASS")
     print("IN_PROGRESS_ASSIGNEE_INVARIANT_SELF_TEST: PASS")
     print("PARENT_PRIORITY_INHERITANCE_SELF_TEST: PASS")
+    print("NONDESTRUCTIVE_PROJECT_PRIORITY_MIGRATION_SELF_TEST: PASS")
 
 
 def parse_args(argv=None):
@@ -946,7 +1089,7 @@ def main(argv=None):
         )
     )
 
-    item_map, project_issues = load_project_issue_items(
+    item_map, project_issues, project_priorities = load_project_issue_items(
         project_token, args.project_owner, args.project_number
     )
 
@@ -958,6 +1101,7 @@ def main(argv=None):
             project,
             item_map,
             project_issues,
+            project_priorities,
         )
         return 0
 
@@ -971,6 +1115,7 @@ def main(argv=None):
         issue_token,
         project,
         item_map,
+        project_priorities,
         event_action=args.event_action,
         event_label=args.event_label,
     )

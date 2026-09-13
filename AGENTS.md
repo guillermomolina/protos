@@ -2058,7 +2058,15 @@ When an agent with Issue-write capability deliberately changes priority, it MUST
 replace the Issue's `priority:*` label coherently. A newly-added priority label
 wins over an older one; repository automation removes the stale label and projects
 the canonical priority into `Protos Development`. Removing the only priority label
-clears Project Priority for an open Issue.
+is an explicit priority-removal transition: Project Priority is cleared only when
+no inherited priority replaces it.
+
+Absence of a `priority:*` label MUST NOT by itself erase an existing Project
+Priority. During migration from historical/manual Project-only scheduling data,
+if an open Issue has no explicit/inherited Issue priority but the Project item
+still carries P0/P1/P2/P3, automation MUST preserve that value and materialize the
+matching `priority:p*` label. Agents MUST NOT guess or reconstruct a Project
+priority that has already been lost.
 
 Closed Issues may retain their last `priority:*` label as historical scheduling
 context while Project Status becomes `Done`. Reopening reuses a retained priority.

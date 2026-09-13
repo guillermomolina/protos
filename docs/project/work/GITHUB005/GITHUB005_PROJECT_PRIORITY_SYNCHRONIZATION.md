@@ -40,8 +40,15 @@ An Issue may carry at most one of:
 - `priority:p2` — normal planned work; or
 - `priority:p3` — opportunistic/later work.
 
-For a top-level open Issue, no `priority:*` label still means effective
-Priority is unset. For a sub-issue, absence of an explicit `priority:*` means:
+For a top-level open Issue, no `priority:*` label normally means effective
+Priority is unset **after legacy/manual Project-only priority migration has been
+resolved**. Existing Project `Priority` is protected migration evidence: when an
+open Issue has neither an explicit nor inherited Issue priority but its existing
+Project item still carries P0/P1/P2/P3, synchronization MUST preserve that value
+and materialize the matching `priority:p*` label before Issue-owned priority
+authority is considered complete.
+
+For a sub-issue, absence of an explicit `priority:*` means:
 
 1. walk native Parent/Sub-issue ancestry toward the root;
 2. use the nearest **open** ancestor carrying an explicit `priority:*`;
@@ -73,14 +80,26 @@ For an open Issue:
    nearest open ancestor's explicit priority becomes the effective priority;
 6. the Project item is created if missing;
 7. Project Status is projected from `status:*`; and
-8. Project Priority is projected from effective priority, or cleared when neither
-   the Issue nor an open ancestor supplies one.
+8. Project Priority is projected from effective priority. If no Issue/ancestor
+   priority exists but the Project item already carries P0/P1/P2/P3, that value
+   is preserved and migrated into the corresponding Issue `priority:*` label;
+   absence of Issue priority alone is never destructive.
+9. Project Priority may be cleared automatically only from an explicit removal
+   of the Issue's priority label when no inherited priority replaces it.
 
 A `priority:*` label add/removal first reconciles the changed Issue using the
 event as the decisive label transition, then performs a full open-Issue
 reconciliation so descendants immediately converge on the new inherited value.
-Full `workflow_dispatch` likewise recomputes inheritance for every open Issue and
-creates the four repository `priority:*` labels if missing.
+Full `workflow_dispatch` likewise recomputes inheritance for every open Issue,
+creates the four repository `priority:*` labels if missing, and migrates any
+still-present legacy/manual Project-only P0/P1/P2/P3 value into durable Issue
+priority before normal projection. It MUST NOT erase Project-only priority merely
+because a label was absent.
+
+This migration rule is deliberately one-way compatibility, not dual authority.
+Once a `priority:*` label exists (explicitly or via migration), Issue/native-parent
+state remains authoritative. A later manual Project-field edit does not silently
+override an existing Issue priority label.
 
 A closed Issue projects Status to `Done` and retains its last Issue priority label
 as historical scheduling context. Closure does not rewrite Project Priority.
@@ -131,7 +150,10 @@ GITHUB005 closes only after:
 
 - this policy and automation are published;
 - full reconciliation creates/verifies `priority:p0` through `priority:p3`;
-- unprioritized open Issues have stale Project Priority cleared;
+- legacy/manual Project-only priorities that still exist are adopted into
+  durable `priority:*` labels rather than erased;
+- any truly stale Project Priority is cleared only through an explicit reviewed
+  priority-removal transition, not by absence-of-label inference;
 - representative priority add/replacement/removal projection is demonstrated;
 - the current actionable Work queue has an explicitly reviewed initial
   prioritization; and
