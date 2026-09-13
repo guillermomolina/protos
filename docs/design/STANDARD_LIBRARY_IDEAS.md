@@ -319,6 +319,7 @@ before requiring a new runtime boundary:
 | `csv` | CSV parser/encoder | dialect policy, streaming composition, malformed-input errors |
 | `uri` | URI parsing, normalization, resolution | exact standards/profile and Unicode/percent-encoding rules |
 | `cli` | **Promoted: LIB011 / #428.** argument/option parsing and help generation | Candidate C′ ratified: explicit arguments + inspectable command spec -> lossless result; no hidden Process authority |
+| `semver` | **Promoted: LIB012 / #429; LIB012-0 / #481 A′ ratified.** strict Semantic Versioning value/parser/format/precedence | `std:semver/SemVer`; strict SemVer 2.0.0; build preserved; precedence ignores build; Range/Requirement deferred |
 | `toml` | TOML parser/encoder and explicit data model | datetime/numeric mapping and duplicate-key rules |
 
 ### Candidates needing a deeper semantic/API audit

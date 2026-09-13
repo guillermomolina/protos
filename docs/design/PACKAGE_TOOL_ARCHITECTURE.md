@@ -229,8 +229,10 @@ independent from project package resolution.
 
 ### Semantic Versioning core
 
-The parse/precedence machinery underlying `self:ReleaseVersion` is another
-candidate for a reusable Semantic Versioning library.
+LIB012-0 / GitHub #481 ratified Candidate A′ on 2026-09-13: the public reusable
+Semantic Versioning kernel is `std:semver/SemVer`, strict SemVer 2.0.0 Version
+semantics only. Range/Requirement syntax and Package Tool resolution policy stay
+outside the initial library contract.
 
 Do **not** assume that the whole current Package Tool value is generic SemVer.
 The package `ReleaseVersion` contract intentionally narrows SemVer 2.0.0 to:
