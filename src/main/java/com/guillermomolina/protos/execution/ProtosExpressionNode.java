@@ -84,7 +84,8 @@ public abstract class ProtosExpressionNode extends Node implements Instrumentabl
 
     @Override
     public final boolean hasTag(Class<? extends Tag> tag) {
-        if (tag == StandardTags.StatementTag.class) {
+        if (tag == StandardTags.StatementTag.class
+                || tag == StandardTags.ExpressionTag.class) {
             return (instrumentationTags & TAG_STATEMENT) != 0;
         }
         if (tag == StandardTags.CallTag.class) {

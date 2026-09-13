@@ -472,7 +472,8 @@ final class CanonicalToBytecodeLowerer {
                                             span.startOffset(),
                                             span.length());
                                     builder.beginTag(
-                                            StandardTags.StatementTag.class);
+                                            StandardTags.StatementTag.class,
+                                            StandardTags.ExpressionTag.class);
                                     builder.beginBlock();
 
                                     if (requiresComposedInvocation(expression)) {
@@ -491,7 +492,8 @@ final class CanonicalToBytecodeLowerer {
 
                                     builder.endBlock();
                                     builder.endTag(
-                                            StandardTags.StatementTag.class);
+                                            StandardTags.StatementTag.class,
+                                            StandardTags.ExpressionTag.class);
                                     builder.endSourceSection();
                                 }
 
@@ -2006,7 +2008,9 @@ final class CanonicalToBytecodeLowerer {
         for (CanonicalExpression expression : sequence.expressions()) {
             SourceSpan span = expression.span();
             builder.beginSourceSection(span.startOffset(), span.length());
-            builder.beginTag(StandardTags.StatementTag.class);
+            builder.beginTag(
+                    StandardTags.StatementTag.class,
+                    StandardTags.ExpressionTag.class);
             builder.beginBlock();
             emitBodyExpressionToLocal(
                     builder,
@@ -2016,7 +2020,9 @@ final class CanonicalToBytecodeLowerer {
                     childResult,
                     resumeValue);
             builder.endBlock();
-            builder.endTag(StandardTags.StatementTag.class);
+            builder.endTag(
+                    StandardTags.StatementTag.class,
+                    StandardTags.ExpressionTag.class);
             builder.endSourceSection();
         }
     }

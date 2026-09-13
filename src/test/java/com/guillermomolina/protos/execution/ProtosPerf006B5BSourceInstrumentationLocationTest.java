@@ -39,6 +39,7 @@ import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.TagTree;
+import com.oracle.truffle.api.debug.DebuggerTags;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
@@ -83,6 +84,8 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
             TagTree tree = root.getBytecodeNode().getTagTree();
             List<TagTree> statements =
                     collectTags(tree, StandardTags.StatementTag.class);
+            List<TagTree> expressions =
+                    collectTags(tree, StandardTags.ExpressionTag.class);
             List<TagTree> calls = collectTags(tree, StandardTags.CallTag.class);
 
             assertEquals(2, statements.size());
@@ -93,19 +96,38 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                     statements.stream()
                             .allMatch(tag -> tag.getSourceSection().getSource() == source));
 
+            assertEquals(
+                    statements.size(),
+                    expressions.size(),
+                    "PLAT034 Expression membership must equal Statement membership");
+            assertEquals(
+                    sourceCharacters(statements),
+                    sourceCharacters(expressions),
+                    "Expression and Statement tags must own identical source ranges");
+            for (int index = 0; index < statements.size(); index++) {
+                assertSame(
+                        statements.get(index),
+                        expressions.get(index),
+                        "Bytecode DSL must use one shared tag region for Statement+Expression");
+            }
+
             assertEquals(1, calls.size());
             assertEquals("target()", calls.get(0).getSourceSection().getCharacters().toString());
             assertSame(source, calls.get(0).getSourceSection().getSource());
 
             assertEquals(0, collectTags(tree, StandardTags.RootTag.class).size());
             assertEquals(0, collectTags(tree, StandardTags.RootBodyTag.class).size());
-            assertEquals(0, collectTags(tree, StandardTags.ExpressionTag.class).size());
+            assertEquals(
+                    0,
+                    collectTags(tree, DebuggerTags.AlwaysHalt.class).size(),
+                    "PLAT034 provides AlwaysHalt compatibility but no guest halt locations");
         }
 
         System.out.println("PERF006_B5B_ROOT_SOURCE_IDENTITY=PASS");
         System.out.println("PERF006_B5B_STATEMENT_TAG_SOURCE_EXACT=PASS");
         System.out.println("PERF006_B5B_CALL_TAG_SOURCE_EXACT=PASS");
-        System.out.println("PERF006_B5B_TAG_POLICY_EXPANSION=NO");
+        System.out.println("PERF006_B5B_PLAT034_EXPRESSION_EQUALS_STATEMENT=PASS");
+        System.out.println("PERF006_B5B_PLAT034_ALWAYS_HALT_LOCATIONS=ZERO");
     }
 
     @Test

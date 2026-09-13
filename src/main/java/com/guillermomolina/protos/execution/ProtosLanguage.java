@@ -19,14 +19,17 @@ package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.debug.DebuggerTags;
 import com.oracle.truffle.api.instrumentation.ProvidedTags;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 
 /** Truffle language identity and per-polyglot-context entry boundary for Protos. */
 @ProvidedTags({
     StandardTags.StatementTag.class,
+    StandardTags.ExpressionTag.class,
     StandardTags.CallTag.class,
-    StandardTags.RootTag.class
+    StandardTags.RootTag.class,
+    DebuggerTags.AlwaysHalt.class
 })
 @TruffleLanguage.Registration(
         id = ProtosLanguage.ID,

@@ -14,6 +14,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
+import com.oracle.truffle.api.debug.DebuggerTags;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.instrumentation.InstrumentableNode;
 import com.oracle.truffle.api.instrumentation.ProbeNode;
@@ -39,17 +40,31 @@ final class ProtosI026CInstrumentationTest {
         List<ProtosExpressionNode> nodes = descendants(lowered);
 
         assertFalse(lowered.hasTag(StandardTags.StatementTag.class));
+        assertFalse(lowered.hasTag(StandardTags.ExpressionTag.class));
         assertFalse(lowered.hasTag(StandardTags.CallTag.class));
-        assertTrue(nodes.stream().anyMatch(n -> n.span().equals(A) && n.hasTag(StandardTags.StatementTag.class)));
+        assertFalse(lowered.hasTag(DebuggerTags.AlwaysHalt.class));
+        assertTrue(
+                nodes.stream()
+                        .anyMatch(
+                                n ->
+                                        n.span().equals(A)
+                                                && n.hasTag(StandardTags.StatementTag.class)
+                                                && n.hasTag(StandardTags.ExpressionTag.class)));
         ProtosExpressionNode callNode = nodes.stream()
                 .filter(ProtosCallNode.class::isInstance)
                 .findFirst()
                 .orElseThrow();
         assertTrue(callNode.hasTag(StandardTags.StatementTag.class));
+        assertTrue(callNode.hasTag(StandardTags.ExpressionTag.class));
         assertTrue(callNode.hasTag(StandardTags.CallTag.class));
+        assertFalse(callNode.hasTag(DebuggerTags.AlwaysHalt.class));
         assertTrue(nodes.stream()
                 .filter(n -> n.span().equals(B) && !(n instanceof ProtosCallNode))
-                .noneMatch(n -> n.hasTag(StandardTags.StatementTag.class)));
+                .noneMatch(
+                        n ->
+                                n.hasTag(StandardTags.StatementTag.class)
+                                        || n.hasTag(StandardTags.ExpressionTag.class)
+                                        || n.hasTag(DebuggerTags.AlwaysHalt.class)));
     }
 
     @Test
@@ -61,7 +76,9 @@ final class ProtosI026CInstrumentationTest {
         assertSame(guest, wrapper.getDelegateNode());
         assertEquals(guest.span(), wrapperNode.span());
         assertTrue(wrapperNode.hasTag(StandardTags.StatementTag.class));
+        assertTrue(wrapperNode.hasTag(StandardTags.ExpressionTag.class));
         assertFalse(wrapperNode.hasTag(StandardTags.CallTag.class));
+        assertFalse(wrapperNode.hasTag(DebuggerTags.AlwaysHalt.class));
     }
 
     @Test
