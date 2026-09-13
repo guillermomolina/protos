@@ -5049,7 +5049,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              */
             return value instanceof ContinuationResult
                     || value instanceof ProtosNativeSuspension
-                    || value instanceof ProtosIoOperationSuspension;
+                    || value instanceof ProtosIoOperationSuspension
+                    || value instanceof ProtosIoReleaseSuspension;
         }
     }
 
