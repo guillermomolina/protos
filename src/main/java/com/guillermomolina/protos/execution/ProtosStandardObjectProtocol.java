@@ -400,15 +400,16 @@ public final class ProtosStandardObjectProtocol {
         if (callbackCheckpoint < 0) {
             return;
         }
-        ProtosEvaluatorContinuation continuation =
-                activation.task()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "while callback compaction requires a task"))
-                        .evaluatorContinuation();
-        // Ordinal zero belongs to the enclosing native Object.while activation itself.
-        continuation.compactCompletedChildExecution(callbackCheckpoint, 1);
+        ProtosTask task = activation.task().orElse(null);
+        if (task == null) {
+            return;
+        }
+        task.evaluatorContinuationIfPresentForRuntime()
+                .ifPresent(
+                        continuation ->
+                                continuation.compactCompletedChildExecution(
+                                        callbackCheckpoint,
+                                        1));
     }
 
     private static Object ensure(ProtosActivation activation, List<?> supplied) {
@@ -523,12 +524,15 @@ public final class ProtosStandardObjectProtocol {
     }
 
     private static int replayCursor(ProtosActivation activation) {
-        if (activation.task().isEmpty()) {
+        ProtosTask task = activation.task().orElse(null);
+        if (task == null) {
             return -1;
         }
         ProtosEvaluatorContinuation continuation =
-                activation.task().orElseThrow().evaluatorContinuation();
-        return continuation.segmentActive() ? continuation.cursorPosition() : -1;
+                task.evaluatorContinuationIfPresentForRuntime().orElse(null);
+        return continuation != null && continuation.segmentActive()
+                ? continuation.cursorPosition()
+                : -1;
     }
 
     private static void resumeEnsureCleanupReplay(
