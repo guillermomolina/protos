@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.execution.ProtosInvocation;
+import com.guillermomolina.protos.execution.ProtosStandardFutureProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -26,6 +27,10 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
+import com.guillermomolina.protos.runtime.ProtosSuspensionCapableNativeClosureBody;
+import com.guillermomolina.protos.runtime.ProtosTask;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.util.List;
 import java.util.Objects;
@@ -57,37 +62,133 @@ final class ProtosCliPrintFacility {
         activation.context()
                 .createLocalSlot(
                         "print",
-                        ProtosClosureValue.nativeClosure(
-                                (callActivation, supplied) -> {
-                                    if (supplied.size() != 1) {
-                                        throw ordinaryError(callActivation);
-                                    }
+                        ProtosClosureValue.suspensionCapableNativeClosure(
+                                (callActivation, supplied) ->
+                                        printOrdinary(
+                                                writer,
+                                                renderer,
+                                                callActivation,
+                                                supplied),
+                                (callActivation, supplied) ->
+                                        printForCPrime(
+                                                writer,
+                                                renderer,
+                                                callActivation,
+                                                supplied)));
+    }
 
-                                    Object value = supplied.get(0);
-                                    ProtosStringValue text =
-                                            value instanceof ProtosStringValue string
-                                                    ? string
-                                                    : new ProtosStringValue(renderer.render(value));
+    private static Object printOrdinary(
+            Object writer,
+            ProtosValueRenderer renderer,
+            ProtosActivation callActivation,
+            List<?> supplied) {
+        ProtosStringValue text = renderText(renderer, callActivation, supplied);
+        Object result =
+                ProtosInvocation.invokeMessage(
+                        writer,
+                        "writeLine",
+                        List.of(text),
+                        callActivation);
+        if (!(result instanceof ProtosFutureValue future)) {
+            throw new IllegalStateException(
+                    "TextWriter.writeLine did not return Future");
+        }
+        future.observeValue(callActivation);
+        return ProtosNullValue.INSTANCE;
+    }
 
-                                    Object result =
-                                            ProtosInvocation.invokeMessage(
-                                                    writer,
-                                                    "writeLine",
-                                                    List.of(text),
-                                                    callActivation);
-                                    if (!(result instanceof ProtosFutureValue future)) {
-                                        throw new IllegalStateException(
-                                                "TextWriter.writeLine did not return Future");
-                                    }
+    private static Object printForCPrime(
+            Object writer,
+            ProtosValueRenderer renderer,
+            ProtosActivation callActivation,
+            List<?> supplied) {
+        ProtosStringValue text = renderText(renderer, callActivation, supplied);
+        ProtosFutureValue future =
+                invokePrivateWriteLineForCPrime(
+                        writer,
+                        text,
+                        callActivation);
+        return ProtosStandardFutureProtocol
+                .awaitTaskFutureThenForContinuationForRuntime(
+                        callActivation,
+                        future,
+                        () -> ProtosNullValue.INSTANCE);
+    }
 
-                                    /*
-                                     * The standalone CLI stdout backend commits synchronously.
-                                     * In task-backed use this also permits ordinary Future
-                                     * suspension if a future CLI backend introduces backpressure.
-                                     */
-                                    future.observeValue(callActivation);
-                                    return ProtosNullValue.INSTANCE;
-                                }));
+    private static ProtosStringValue renderText(
+            ProtosValueRenderer renderer,
+            ProtosActivation activation,
+            List<?> supplied) {
+        if (supplied.size() != 1) {
+            throw ordinaryError(activation);
+        }
+        Object value = supplied.get(0);
+        return value instanceof ProtosStringValue string
+                ? string
+                : new ProtosStringValue(renderer.render(value));
+    }
+
+    private static ProtosFutureValue invokePrivateWriteLineForCPrime(
+            Object writer,
+            ProtosStringValue text,
+            ProtosActivation caller) {
+        ProtosSlotLookupResult selected;
+        try {
+            selected =
+                    ProtosValueLookup.lookup(
+                                    writer,
+                                    "writeLine",
+                                    caller.prelude().orElseThrow())
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "CLI stdout writer lost writeLine"));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            throw new IllegalStateException(
+                    "CLI stdout writer has unsupported writeLine representation",
+                    unsupportedRepresentation);
+        }
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new IllegalStateException(
+                    "CLI stdout writer writeLine is not invokable");
+        }
+        Object nativeBody =
+                closure.nativeBody()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "CLI stdout writer writeLine is not native"));
+        if (!(nativeBody instanceof ProtosSuspensionCapableNativeClosureBody cPrimeBody)) {
+            throw new IllegalStateException(
+                    "CLI stdout writer writeLine lost C-prime suspension capability");
+        }
+        ProtosTask task =
+                caller.task()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "C-prime CLI print requires an Actor-local Task"));
+        List<?> arguments = List.of(text);
+        ProtosActivation invocation =
+                ProtosActivation.forImmediateMethodInvocation(
+                        closure,
+                        arguments,
+                        writer,
+                        selected.home(),
+                        caller.prelude().orElse(null),
+                        caller.actorModuleState(),
+                        caller.currentModuleKey().orElse(null),
+                        caller.executionDomain());
+        invocation.attachTask(task);
+        Object result =
+                cPrimeBody.executeForBytecodeContinuation(
+                        invocation,
+                        arguments);
+        if (!(result instanceof ProtosFutureValue future)) {
+            throw new IllegalStateException(
+                    "C-prime TextWriter.writeLine did not return Future");
+        }
+        return future;
     }
 
     private static Object borrowingStdoutWriter(

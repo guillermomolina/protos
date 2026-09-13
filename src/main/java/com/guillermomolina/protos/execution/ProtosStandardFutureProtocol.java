@@ -55,6 +55,39 @@ public final class ProtosStandardFutureProtocol {
         slot(futurePrototype, "all", (a,x)->all(a,x,futurePrototype));
     }
 
+    public static Object awaitTaskFutureThenForContinuationForRuntime(
+            ProtosActivation activation,
+            ProtosFutureValue observed,
+            Supplier<Object> terminalProjection) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(observed, "observed");
+        Objects.requireNonNull(terminalProjection, "terminalProjection");
+        activation.task()
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "Task-owned C-prime Future wait requires an Actor-local Task"));
+
+        Object observedOrSuspension =
+                observed.observeValueForContinuationForRuntime(
+                        activation,
+                        (dependency, resumer) ->
+                                ProtosNativeSuspension.pending(
+                                        dependency,
+                                        () -> {
+                                            resumer.get();
+                                            return Objects.requireNonNull(
+                                                    terminalProjection.get(),
+                                                    "C-prime Future post-wait projection returned null");
+                                        }));
+        if (observedOrSuspension instanceof ProtosNativeSuspension) {
+            return observedOrSuspension;
+        }
+        return Objects.requireNonNull(
+                terminalProjection.get(),
+                "C-prime Future terminal projection returned null");
+    }
+
     static void installObjectFuture() {
         ProtosObjectValue object = ProtosObjectValue.rootObject();
         if (object.hasLocalSlot("future")) return;
