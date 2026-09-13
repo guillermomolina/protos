@@ -384,7 +384,7 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
                 ProtosNativeSuspension yielded =
                         assertInstanceOf(
                                 ProtosNativeSuspension.class,
-                                middleContinuation.getResult());
+                                terminalContinuationResult(middleContinuation));
 
                 assertSame(
                         dependency,
@@ -529,4 +529,18 @@ final class ProtosPerf006B3CSuspensionCapableNativeLeafTest {
                         contextPrototype)
                 .newModuleActivation();
     }
+
+    private static Object terminalContinuationResult(ContinuationResult continuation) {
+        Object result = continuation.getResult();
+        int depth = 0;
+        while (result instanceof ContinuationResult nested) {
+            depth++;
+            if (depth > 32) {
+                throw new AssertionError("unexpectedly deep Bytecode continuation composition");
+            }
+            result = nested.getResult();
+        }
+        return result;
+    }
+
 }

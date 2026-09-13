@@ -107,9 +107,7 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                                 ContinuationResult.class,
                                 parent.getResult());
                 ProtosActivation methodActivation =
-                        assertInstanceOf(
-                                ProtosActivation.class,
-                                child.getResult());
+                        activationOf(child);
 
                 assertSame(receiver, methodActivation.receiver());
                 assertSame(
@@ -294,4 +292,13 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
         return new ProtosPrelude(bindings, contextPrototype)
                 .newModuleActivation();
     }
+
+    private static ProtosActivation activationOf(ContinuationResult continuation) {
+        Object[] arguments = continuation.getFrame().getArguments();
+        if (arguments.length == 0) {
+            throw new AssertionError("ContinuationResult frame has no invocation activation");
+        }
+        return assertInstanceOf(ProtosActivation.class, arguments[0]);
+    }
+
 }

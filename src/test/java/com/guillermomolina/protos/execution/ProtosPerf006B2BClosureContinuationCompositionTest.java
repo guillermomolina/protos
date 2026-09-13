@@ -145,8 +145,8 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
 
                 assertSame(
                         leafActivation,
-                        leafContinuation1.getResult(),
-                        "leaf yield exposes its exact invocation activation");
+                        activationOf(leafContinuation1),
+                        "leaf yield retains its exact invocation activation in the continuation frame");
                 assertTrue(middleActivation.ownsReturnHome());
                 assertTrue(leafActivation.ownsReturnHome());
                 ProtosReturnHome middleHome =
@@ -185,7 +185,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                         activationOf(leafContinuation2));
                 assertSame(
                         leafActivation,
-                        leafContinuation2.getResult());
+                        activationOf(leafContinuation2));
                 assertTrue(middleHome.isActive());
                 assertTrue(leafHome.isActive());
 

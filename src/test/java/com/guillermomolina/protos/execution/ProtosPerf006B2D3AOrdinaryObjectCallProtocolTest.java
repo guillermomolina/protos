@@ -135,9 +135,7 @@ final class ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest {
                                 ContinuationResult.class,
                                 parent.getResult());
                 ProtosActivation callActivation =
-                        assertInstanceOf(
-                                ProtosActivation.class,
-                                child.getResult());
+                        activationOf(child);
 
                 assertSame(callable, callActivation.receiver());
                 assertSame(
@@ -396,4 +394,13 @@ final class ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest {
                         contextPrototype)
                 .newModuleActivation();
     }
+
+    private static ProtosActivation activationOf(ContinuationResult continuation) {
+        Object[] arguments = continuation.getFrame().getArguments();
+        if (arguments.length == 0) {
+            throw new AssertionError("ContinuationResult frame has no invocation activation");
+        }
+        return assertInstanceOf(ProtosActivation.class, arguments[0]);
+    }
+
 }

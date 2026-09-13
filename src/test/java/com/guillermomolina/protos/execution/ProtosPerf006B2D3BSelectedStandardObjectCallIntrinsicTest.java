@@ -266,9 +266,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                                 ContinuationResult.class,
                                 parent.getResult());
                 ProtosActivation targetActivation =
-                        assertInstanceOf(
-                                ProtosActivation.class,
-                                child.getResult());
+                        activationOf(child);
 
                 assertSame(
                         target.capturedReceiver(),
@@ -594,4 +592,13 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                         contextPrototype)
                 .newModuleActivation();
     }
+
+    private static ProtosActivation activationOf(ContinuationResult continuation) {
+        Object[] arguments = continuation.getFrame().getArguments();
+        if (arguments.length == 0) {
+            throw new AssertionError("ContinuationResult frame has no invocation activation");
+        }
+        return assertInstanceOf(ProtosActivation.class, arguments[0]);
+    }
+
 }

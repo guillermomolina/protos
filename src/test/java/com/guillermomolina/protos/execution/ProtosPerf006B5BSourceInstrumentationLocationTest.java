@@ -141,15 +141,23 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                             childDefinition.body().span(),
                             marker);
             childRoot.getRootNodes().ensureComplete();
+            ProtosClosureExecutionPlan childPlan =
+                    ProtosClosureExecutionPlan.bytecode(
+                            childDefinition,
+                            scope.language(),
+                            childSource,
+                            childRoot);
+            ProtosSemanticBytecodeRootNode childSemanticRoot =
+                    assertInstanceOf(
+                            ProtosSemanticBytecodeRootNode.class,
+                            childPlan
+                                    .bytecodeActivationTargetForComposition()
+                                    .getRootNode());
             module.context().createLocalSlot(
                     "entry",
                     semanticClosure(
                             childDefinition,
-                            ProtosClosureExecutionPlan.bytecode(
-                                    childDefinition,
-                                    scope.language(),
-                                    childSource,
-                                    childRoot),
+                            childPlan,
                             module));
 
             String parentCharacters = "probe()\nentry()";
@@ -171,7 +179,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                     assertInstanceOf(ContinuationResult.class, first);
             ContinuationResult child =
                     assertInstanceOf(ContinuationResult.class, parent.getResult());
-            assertInstanceOf(ProtosActivation.class, child.getResult());
+            activationOf(child);
 
             BytecodeLocation parentLocation = parent.getBytecodeLocation();
             BytecodeLocation childLocation = child.getBytecodeLocation();
@@ -198,9 +206,9 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                     parentLocation.getBytecodeNode().getBytecodeRootNode(),
                     "logical caller location must remain owned by the same Bytecode root");
             assertSame(
-                    childRoot,
+                    childSemanticRoot,
                     childLocation.getBytecodeNode().getBytecodeRootNode(),
-                    "logical callee location must remain owned by the same Bytecode root");
+                    "logical callee location must remain owned by the semantic Bytecode composition root");
 
             Object completed = parent.continueWith(ProtosNullValue.INSTANCE);
             assertSame(marker, completed);
@@ -215,7 +223,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                     parentRoot,
                     updatedParentLocation.getBytecodeNode().getBytecodeRootNode());
             assertSame(
-                    childRoot,
+                    childSemanticRoot,
                     updatedChildLocation.getBytecodeNode().getBytecodeRootNode());
 
             SourceSection updatedParentSection = updatedParentLocation.getSourceLocation();
@@ -337,4 +345,13 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
             context.close();
         }
     }
+
+    private static ProtosActivation activationOf(ContinuationResult continuation) {
+        Object[] arguments = continuation.getFrame().getArguments();
+        if (arguments.length == 0) {
+            throw new AssertionError("ContinuationResult frame has no invocation activation");
+        }
+        return assertInstanceOf(ProtosActivation.class, arguments[0]);
+    }
+
 }

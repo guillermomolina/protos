@@ -58,7 +58,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
     }
 
     @Test
-    void astTemplateClosureProjectsToContextLocalCPrimeTaskAndResumesWithoutReplay()
+    void bytecodeTemplateClosureExecutesDirectlyInContextLocalCPrimeTaskAndResumesWithoutReplay()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -109,9 +109,9 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                 "() => { probe()\npause()\n99 }",
                                 "perf006-b6a6a1-task-projection.protos",
                                 module);
-                assertFalse(
+                assertTrue(
                         closure.executionPlan().orElseThrow().isBytecodeBackendForRuntime(),
-                        "public parse remains AST before B6A6");
+                        "public parse is Bytecode-backed after the B6B production cutover");
 
                 ProtosTask task =
                         module.executionDomain()
@@ -128,9 +128,10 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                 assertEquals(ProtosTask.State.SUSPENDED, task.state());
                 assertEquals(1, probes.get());
                 assertEquals(
-                        1,
+                        0,
                         ProtosLanguageContext.current()
-                                .projectedBytecodeExecutionPlanCountForTesting());
+                                .projectedBytecodeExecutionPlanCountForTesting(),
+                        "a Context-local Bytecode template must enter C-prime without reprojection");
 
                 assertTrue(dependency.complete());
                 assertTrue(module.executionDomain().dispatchOne());
@@ -146,21 +147,21 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                         1,
                         probes.get(),
                         "completed prefix must not replay after C-prime resume");
-                assertFalse(
+                assertTrue(
                         closure.executionPlan().orElseThrow().isBytecodeBackendForRuntime(),
-                        "semantic/template Closure must remain unchanged by Context projection");
+                        "semantic/template Closure remains Bytecode-backed after direct C-prime execution");
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B6A6A1_AST_TEMPLATE_BYTECODE_PROJECTION=PASS");
+        System.out.println("PERF006_B6A6A1_CONTEXT_LOCAL_BYTECODE_DIRECT=PASS");
         System.out.println("PERF006_B6A6A1_TASK_CPRIME_SUSPENSION=PASS");
         System.out.println("PERF006_B6A6A1_COMPLETED_PREFIX_REPLAY=NO");
     }
 
     @Test
-    void foreignContextAstTemplateReprojectsBeforeLegacyInvocation() throws Exception {
+    void foreignContextBytecodeTemplateReprojectsBeforeLegacyInvocation() throws Exception {
         try (Engine engine = Engine.create(ProtosLanguage.ID);
                 ProtosPolyglotExecutionContext firstContext =
                         ProtosPolyglotExecutionContext.open(
@@ -196,7 +197,9 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                         module);
                         ProtosClosureExecutionPlan template =
                                 closure.executionPlan().orElseThrow();
-                        assertFalse(template.isBytecodeBackendForRuntime());
+                        assertTrue(
+                                template.isBytecodeBackendForRuntime(),
+                                "public parse template is Bytecode-backed after B6B");
 
                         assertEquals(
                                 BigInteger.valueOf(42),
@@ -248,6 +251,9 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                 ProtosLanguageContext.current()
                                         .projectedExecutionPlanForTesting(rebound);
                         assertNotSame(template, projected);
+                        assertFalse(
+                                projected.isBytecodeBackendForRuntime(),
+                                "legacy synchronous foreign-Context invocation receives a temporary AST fallback");
                         assertSame(
                                 ProtosLanguageContext.current().languageForTesting(),
                                 projected.language().orElseThrow(),
@@ -261,7 +267,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
         }
 
         System.out.println(
-                "PERF006_B6A6A1R_CONTEXT_OWNED_AST_PROJECTION=PASS");
+                "PERF006_B6A6A1R_BYTECODE_TO_CONTEXT_OWNED_AST_FALLBACK=PASS");
         System.out.println(
                 "PERF006_B6A6A1R_TRUFFLE_SHARING_LAYER_REUSE=NO");
     }

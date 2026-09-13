@@ -77,8 +77,10 @@ final class ProtosPerf006B6BFinalConformanceArchitectureTest {
         assertTrue(invocation.contains("ProtosBytecodeTaskExecution.executePreparedClosure("));
         assertTrue(invocation.contains("ProtosTaskCPrimeEntryExecution.execute("));
         assertTrue(
-                invocation.contains(
-                        "synchronous selected-method invocation cannot execute inside a Task; use C-prime"));
+                invocation.contains("return ProtosClosureInvoker.invokeImmediateMethod("));
+        assertTrue(
+                closureInvoker.contains(
+                        "synchronous method invocation cannot execute inside a Task; use C-prime"));
     }
 
     @Test
@@ -119,15 +121,18 @@ final class ProtosPerf006B6BFinalConformanceArchitectureTest {
         List<String> required =
                 List.of(
                         "execution/ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest.java",
-                        "execution/ProtosPerf006B2D4BSelectedStandardErrorHandleIntrinsicTest.java",
-                        "execution/ProtosPerf006B3APolymorphicFutureValueTest.java",
-                        "execution/ProtosPerf006B3BPolymorphicStandardControlTest.java",
-                        "execution/ProtosPerf006B4DCallbackContinuationTest.java",
+                        "execution/ProtosPerf006B2D4AComposedCallTargetTest.java",
+                        "execution/ProtosPerf006B2D4BComposedSendReceiverTest.java",
+                        "execution/ProtosPerf006B3CSuspensionCapableNativeLeafTest.java",
+                        "execution/ProtosPerf006B3EStandardFutureValueCPrimeTest.java",
+                        "execution/ProtosPerf006B4CStructuredEnsureTest.java",
+                        "execution/ProtosPerf006B4DErrorHandlersTest.java",
                         "execution/ProtosPerf006B4ECancellationUnwindTest.java",
+                        "execution/ProtosPerf006B4FStructuredWhileTest.java",
                         "execution/ProtosPerf006B4GControlUnwindClosureTest.java",
                         "execution/ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest.java",
-                        "execution/ProtosPerf006B6A6A2OrdinaryCallSuspensionTest.java",
-                        "execution/ProtosPerf006B6A6A3CallbackSuspensionTest.java",
+                        "runtime/ProtosPerf006B6A6A2TaskTerminalLifecycleTest.java",
+                        "runtime/ProtosPerf006B6A6A3ActorGroupLifecycleIntegrationTest.java",
                         "execution/ProtosStandardFutureProtocolTest.java",
                         "runtime/ProtosIoLifecycleTest.java");
 
