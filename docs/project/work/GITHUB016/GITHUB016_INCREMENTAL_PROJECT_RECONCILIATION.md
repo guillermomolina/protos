@@ -1,6 +1,6 @@
 # GITHUB016 — Incremental Project reconciliation and bounded descendant propagation
 
-Status: **IN_PROGRESS**
+Status: **CLOSED**
 
 Owning live Issue: GitHub #485.
 
@@ -104,3 +104,46 @@ The network-free self-test covers:
 The live acceptance step is a real `priority:*` event on a parent with native
 descendants, verifying that the workflow logs bounded descendant counters and
 does not invoke `--reconcile-all`.
+
+## Live acceptance evidence
+
+Acceptance was exercised against `PERF004` / GitHub #52 on
+`356a756dabe8075454d39474589fe2a837d4b460`. #52 had three native open
+descendants: #107, #108 and #109.
+
+The first controlled transition removed `priority:p2` from #52. Project status
+sync run `34752063915` / run number `1257` completed successfully and reported:
+
+```text
+RECONCILE_ROOT=#52
+ISSUES_RECONCILED=1
+UNRELATED_ISSUES_RECONCILED=0
+FULL_RECONCILIATION=NO
+
+DESCENDANTS_DISCOVERED=3
+OPEN_DESCENDANTS_RECONCILED=3
+CLOSED_DESCENDANTS_TRAVERSED=0
+UNRELATED_ISSUES_RECONCILED=0
+FULL_RECONCILIATION=NO
+```
+
+The stale inherited P2 projection was cleared on #107, #108 and #109 rather than
+being migrated into explicit child labels.
+
+The second controlled transition restored `priority:p2` on #52. Project status
+sync run `34752090060` / run number `1258` completed successfully and again
+reported the same bounded scope. #107, #108 and #109 were projected back to P2
+as inherited from #52.
+
+In both event runs the manual full-audit steps were skipped. PERF004/#52 was
+restored to its original `status:ready` + `priority:p2` state.
+
+Live evidence is also recorded on owning Issue #485 in comment
+`5652731194`.
+
+## Closure
+
+GITHUB016 is closed. Routine priority-label events now scale with the affected
+native hierarchy rather than total repository history. The repository-wide
+`workflow_dispatch` reconciliation remains available as an explicit audit/repair
+operation.
