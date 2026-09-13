@@ -10,8 +10,8 @@ This directory contains durable non-normative documentation owned by
   exact generation-1 go-to-definition with real S4/S5 VS Code evidence, and
   closed LM009-H D124 Candidate B′ references with real H5 VS Code evidence.
   Hover, completion and signature help remain deferred to paused LM010 /
-  GitHub #493 and do not block LM009. LM009-I is now READY and owns the remaining
-  packaging/end-to-end closure.
+  GitHub #493 and do not block LM009. LM009-I is now IN_PROGRESS: D127 Candidate
+  B′ is ratified and I1 reproducible VSIX package hygiene is READY.
 
 Live coordination belongs to GitHub Issue #288. `LM009-A` is coordinated by
 GitHub Issue #289. The existing editor highlighting Issue #11 is consumed by

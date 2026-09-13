@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I READY**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; I1 READY)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -1983,3 +1983,45 @@ By publication of this slice:
 
 LM009 itself remains **IN_PROGRESS** until LM009-I and the final LM009
 packaging/end-to-end acceptance path close.
+
+## LM009-I1 packaging decision — D127 RATIFIED
+
+Status after publication: **I1 READY**
+
+Decision issue: GitHub #497
+
+Explicit project-owner approval selected Candidate B′ for the VS Code extension
+dependency/runtime distribution boundary.
+
+The durable split is:
+
+```text
+VSIX
+  = bundled editor/LSP JavaScript client + declarative assets + licenses/notices
+
+workspace extension host
+  = external protos runtime/launcher
+      +-- run
+      +-- debug
+      `-- language-server
+```
+
+I1 must therefore use a committed npm lockfile, `npm ci`, pinned build tooling,
+a bundled production client with host-provided `vscode` left external, no raw
+production `node_modules` tree in the VSIX, no activation-time dependency
+download and no Protos runtime/JAR/language-server payload copied into the VSIX.
+
+The package must contain APL-1.0 material and required third-party notices, use
+an explicit bounded content boundary and fail closed if package contents expand
+unexpectedly.
+
+Generation-1 esbuild is an implementation choice, not part of the durable D127
+identity: an equivalent future bundler may replace it without reopening D127 if
+the emitted contract remains unchanged.
+
+D127 selects no Marketplace/Open VSX publication policy and no extension/runtime
+version coordination; those remain LM009-I4 concerns.
+
+No Protos specification, runtime implementation, native boundary, Maven
+implementation version or VS Code extension version changes in the D127
+ratification slice.
