@@ -301,3 +301,20 @@ The foundation live check is:
 
 Once this live composition is confirmed, LM009-F can close and LM009-G can own
 the first visible static diagnostics/symbol/definition features.
+
+## Remote/Dev Container LSP URI bridge (LM009-G5A)
+
+The language server remains editor-neutral and file-system based even when the
+reference extension runs in a VS Code Remote or Dev Container workspace. In an
+all-`vscode-remote:` workspace whose folders share one exact remote authority,
+the thin client translates editor URIs to `file:` URIs before they cross the LSP
+boundary and translates server-returned `file:` URIs back to that same
+`vscode-remote:` authority.
+
+This bridge lets the server consume the canonical workspace-host paths already
+used by `ProjectBinding` for `workspace/symbol` and lets definition/symbol
+locations navigate back through VS Code without teaching the Java language server
+about VS Code-specific URI schemes. Local `file:` workspaces are unchanged.
+Mixed schemes, missing remote authority, multiple remote authorities and foreign
+remote authorities are not guessed or normalized; conversion fails closed to the
+ordinary URI representation instead.

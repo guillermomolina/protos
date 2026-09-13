@@ -4,12 +4,62 @@ const assert = require("node:assert/strict");
 const {
     createProtosLanguageClient,
     createProtosLanguageServerController,
+    createProtosLanguageUriConverters,
+    remoteWorkspaceAuthority,
     LANGUAGE_CLIENT_ID,
     LANGUAGE_CLIENT_NAME,
     LANGUAGE_SERVER_ARGUMENTS,
     LANGUAGE_SERVER_DOCUMENT_SELECTOR,
     DEFAULT_RUNTIME_EXECUTABLE
 } = require("../extension.js");
+
+function encodedPath(pathname) {
+    return pathname
+        .split("/")
+        .map((segment, index) => index === 0 ? "" : encodeURIComponent(segment))
+        .join("/");
+}
+
+function fakeUri(parts) {
+    const value = {
+        scheme: parts.scheme,
+        authority: parts.authority || "",
+        path: parts.path || "",
+        query: parts.query || "",
+        fragment: parts.fragment || "",
+        get fsPath() {
+            return this.path;
+        },
+        toString() {
+            const hierarchical = this.scheme === "file" || this.authority.length > 0;
+            let result = `${this.scheme}:${hierarchical ? "//" + this.authority : ""}${encodedPath(this.path)}`;
+            if (this.query.length > 0) {
+                result += `?${this.query}`;
+            }
+            if (this.fragment.length > 0) {
+                result += `#${this.fragment}`;
+            }
+            return result;
+        }
+    };
+    return value;
+}
+
+const fakeUriApi = {
+    from(parts) {
+        return fakeUri(parts);
+    },
+    parse(value) {
+        const parsed = new URL(value);
+        return fakeUri({
+            scheme: parsed.protocol.slice(0, -1),
+            authority: parsed.host,
+            path: decodeURIComponent(parsed.pathname),
+            query: parsed.search.slice(1),
+            fragment: parsed.hash.slice(1)
+        });
+    }
+};
 
 function harness(options = {}) {
     const calls = {
@@ -46,8 +96,10 @@ function harness(options = {}) {
     }
 
     const vscode = {
+        Uri: fakeUriApi,
         workspace: {
             isTrusted: options.trusted !== false,
+            workspaceFolders: options.workspaceFolders,
             getConfiguration(section) {
                 calls.configurationSections.push(section);
                 return {
@@ -91,8 +143,86 @@ async function testExactRatifiedLaunchContract() {
     assert.deepEqual(created.serverOptions.args, ["language-server"]);
     assert.deepEqual(created.serverOptions.options, { shell: false });
     assert.deepEqual(created.clientOptions.documentSelector, [{ language: "protos" }]);
+    assert.equal(typeof created.clientOptions.uriConverters.code2Protocol, "function");
+    assert.equal(typeof created.clientOptions.uriConverters.protocol2Code, "function");
     assert.deepEqual(h.calls.configurationSections, ["protos"]);
     assert.deepEqual(h.calls.configurationKeys, ["runtime.executable"]);
+}
+
+function testRemoteWorkspaceUriBridge() {
+    const authority = "dev-container+protos";
+    const remoteRoot = fakeUri({
+        scheme: "vscode-remote",
+        authority,
+        path: "/tmp/protos-lm009-g-s5"
+    });
+    const vscode = harness({
+        workspaceFolders: [{ uri: remoteRoot }]
+    }).vscode;
+
+    assert.equal(remoteWorkspaceAuthority(vscode), authority);
+    const converters = createProtosLanguageUriConverters(vscode);
+    const remoteDocument = fakeUri({
+        scheme: "vscode-remote",
+        authority,
+        path: "/tmp/protos-lm009-g-s5/app/Á Main.protos"
+    });
+
+    const protocolUri = converters.code2Protocol(remoteDocument);
+    assert.equal(
+        protocolUri,
+        "file:///tmp/protos-lm009-g-s5/app/%C3%81%20Main.protos"
+    );
+
+    const editorUri = converters.protocol2Code(protocolUri);
+    assert.equal(editorUri.scheme, "vscode-remote");
+    assert.equal(editorUri.authority, authority);
+    assert.equal(editorUri.path, "/tmp/protos-lm009-g-s5/app/Á Main.protos");
+}
+
+function testLocalAndAmbiguousWorkspacesFailClosedToIdentity() {
+    const localRoot = fakeUri({ scheme: "file", path: "/workspace/protos" });
+    const local = harness({ workspaceFolders: [{ uri: localRoot }] }).vscode;
+    assert.equal(remoteWorkspaceAuthority(local), undefined);
+    const localConverters = createProtosLanguageUriConverters(local);
+    const localDocument = fakeUri({ scheme: "file", path: "/workspace/protos/Main.protos" });
+    assert.equal(localConverters.code2Protocol(localDocument), localDocument.toString());
+    assert.equal(
+        localConverters.protocol2Code(localDocument.toString()).toString(),
+        localDocument.toString()
+    );
+
+    const mixed = harness({
+        workspaceFolders: [
+            { uri: fakeUri({ scheme: "vscode-remote", authority: "remote-a", path: "/a" }) },
+            { uri: fakeUri({ scheme: "file", path: "/b" }) }
+        ]
+    }).vscode;
+    assert.equal(remoteWorkspaceAuthority(mixed), undefined);
+
+    const twoAuthorities = harness({
+        workspaceFolders: [
+            { uri: fakeUri({ scheme: "vscode-remote", authority: "remote-a", path: "/a" }) },
+            { uri: fakeUri({ scheme: "vscode-remote", authority: "remote-b", path: "/b" }) }
+        ]
+    }).vscode;
+    assert.equal(remoteWorkspaceAuthority(twoAuthorities), undefined);
+}
+
+function testRemoteBridgeRejectsForeignRemoteAuthority() {
+    const authority = "dev-container+protos";
+    const vscode = harness({
+        workspaceFolders: [{
+            uri: fakeUri({ scheme: "vscode-remote", authority, path: "/workspace" })
+        }]
+    }).vscode;
+    const converters = createProtosLanguageUriConverters(vscode);
+    const foreign = fakeUri({
+        scheme: "vscode-remote",
+        authority: "ssh-remote+elsewhere",
+        path: "/workspace/Main.protos"
+    });
+    assert.equal(converters.code2Protocol(foreign), foreign.toString());
 }
 
 async function testDefaultRuntimeUsesExistingToolchainAuthority() {
@@ -146,6 +276,9 @@ async function testFailedStartupIsVisibleAndRetryable() {
 
 async function main() {
     await testExactRatifiedLaunchContract();
+    testRemoteWorkspaceUriBridge();
+    testLocalAndAmbiguousWorkspacesFailClosedToIdentity();
+    testRemoteBridgeRejectsForeignRemoteAuthority();
     await testDefaultRuntimeUsesExistingToolchainAuthority();
     await testRestrictedModeCreatesNoServerProcess();
     await testControllerOwnsOneClientAndStopsItCleanly();

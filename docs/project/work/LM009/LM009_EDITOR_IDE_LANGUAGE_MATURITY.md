@@ -1717,3 +1717,44 @@ positions and D110 no-result behavior.
 LM009-G4 implementation is complete for the current generation. LM009-G remains
 open for integrated/full validation and real VS Code S5 navigation evidence
 before closure.
+
+## LM009-G5A — VS Code Remote LSP URI bridge repair
+
+Status: **CLOSED WHEN THIS SLICE IS PUBLISHED; REAL S5 RE-RUN REQUIRED**
+
+Coordination: GitHub #360
+
+The first real LM009-G5/S5 attempt in the existing Dev Container exposed an
+integration defect rather than a G3/D106 or G4/D110 semantic failure. VS Code
+presented the workspace and open document as `vscode-remote:` URIs while the
+editor-neutral external language server correctly accepted canonical `file:`
+workspace-host paths. The pre-G5 client forwarded those editor URIs unchanged, so
+G3 acquired no candidate ProjectBinding and `workspace/symbol` returned an empty
+result. The same mismatch also prevented G4-A2's exact canonical source-URI
+ownership check from authorizing a remote document for definition navigation.
+
+G5A repairs only the editor/LSP transport boundary. The reference VS Code client
+installs the standard `vscode-languageclient` URI converters. When every current
+workspace folder is `vscode-remote:` and all share one exact authority,
+`code2Protocol` maps that authority's editor URI to the equivalent workspace-host
+`file:` URI and `protocol2Code` maps server-returned `file:` locations back to the
+same remote authority. Local `file:` sessions remain identity behavior. Mixed
+schemes, absent authorities, multiple authorities and a foreign remote authority
+are not guessed.
+
+No Java language-server code, ProjectBinding/provider semantics, D082 source/index
+authority, D106 matching/ranking, D110 proof rules, parser semantics or runtime
+execution changes. The bridge is the same workspace-extension-host boundary
+already used by Run/Debug and keeps VS Code-specific transport knowledge out of
+the server.
+
+Focused validation owns the extension structural validator plus the Run, Debug and
+LanguageClient Node regressions. The LanguageClient regression includes remote
+workspace root/document conversion, reverse location conversion, spaces/Unicode,
+local identity behavior and fail-closed ambiguous/foreign authority cases.
+
+Publication does **not** close LM009-G. The project owner must repeat the real S5
+checks for diagnostics, document symbols, `secondaryMarker`/`workspaceMarker`,
+D110 `value` definition, fail-closed behavior and session/edit lifecycle before G
+may close. Maven/runtime implementation version and extension manifest version are
+unchanged by this repair.

@@ -33,6 +33,66 @@ function executionPathForUri(vscode, uri) {
     return vscode.Uri.from({ scheme: "file", path: uri.path }).fsPath;
 }
 
+function remoteWorkspaceAuthority(vscode) {
+    const folders = vscode.workspace.workspaceFolders;
+    if (!Array.isArray(folders) || folders.length === 0) {
+        return undefined;
+    }
+
+    const authorities = new Set();
+    for (const folder of folders) {
+        const uri = folder && folder.uri;
+        if (!uri || uri.scheme !== "vscode-remote") {
+            return undefined;
+        }
+        if (typeof uri.authority !== "string" || uri.authority.length === 0) {
+            return undefined;
+        }
+        authorities.add(uri.authority);
+    }
+
+    if (authorities.size !== 1) {
+        return undefined;
+    }
+    return authorities.values().next().value;
+}
+
+function createProtosLanguageUriConverters(vscode) {
+    const remoteAuthority = remoteWorkspaceAuthority(vscode);
+
+    return {
+        code2Protocol(uri) {
+            if (
+                remoteAuthority !== undefined &&
+                uri.scheme === "vscode-remote" &&
+                uri.authority === remoteAuthority
+            ) {
+                return vscode.Uri.from({
+                    scheme: "file",
+                    path: uri.path,
+                    query: uri.query,
+                    fragment: uri.fragment
+                }).toString();
+            }
+            return uri.toString();
+        },
+
+        protocol2Code(value) {
+            const uri = vscode.Uri.parse(value);
+            if (remoteAuthority !== undefined && uri.scheme === "file") {
+                return vscode.Uri.from({
+                    scheme: "vscode-remote",
+                    authority: remoteAuthority,
+                    path: uri.path,
+                    query: uri.query,
+                    fragment: uri.fragment
+                });
+            }
+            return uri;
+        }
+    };
+}
+
 function createRunCurrentFile(vscode, pathModule = path) {
     return async function runCurrentFile() {
         if (!vscode.workspace.isTrusted) {
@@ -243,7 +303,8 @@ function createProtosLanguageClient(vscode, languageClientApi) {
     const clientOptions = {
         documentSelector: LANGUAGE_SERVER_DOCUMENT_SELECTOR.map(
             (selector) => ({ ...selector })
-        )
+        ),
+        uriConverters: createProtosLanguageUriConverters(vscode)
     };
 
     return new api.LanguageClient(
@@ -358,6 +419,8 @@ module.exports = {
     createProtosLanguageServerController,
     configuredRuntimeExecutable,
     executionPathForUri,
+    remoteWorkspaceAuthority,
+    createProtosLanguageUriConverters,
     RUN_CURRENT_FILE_COMMAND,
     DEFAULT_RUNTIME_EXECUTABLE,
     EXECUTABLE_RESOURCE_SCHEMES,
