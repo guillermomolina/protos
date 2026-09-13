@@ -35,6 +35,8 @@ public final class ProtosActorExecutionDomain {
     private final ArrayDeque<Object> runnable = new ArrayDeque<>();
     private final Set<ProtosTask> liveTasks = new LinkedHashSet<>();
     private final Set<ProtosIoOperation> actorIoOperations = new LinkedHashSet<>();
+    private final Set<ProtosIoReleaseExecution> actorIoReleases = new LinkedHashSet<>();
+    private final Set<ProtosIoLifecycle> actorIoLifecycleCleanup = new LinkedHashSet<>();
     private final Set<ProtosFutureValue> actorNonTaskFutures = new LinkedHashSet<>();
     private ProtosActor ownerActor;
     private Runnable schedulerWakeup = NOOP_WAKEUP;
@@ -103,7 +105,20 @@ public final class ProtosActorExecutionDomain {
         }
     }
 
-    /** Dispatches at most one cooperative Task or PLAT029 I/O-operation segment. */
+    /** PLAT030 readiness publication for one registered lifecycle-release C-prime owner. */
+    public void enqueueActorIoReleaseForRuntime(ProtosIoReleaseExecution release) {
+        Objects.requireNonNull(release, "release");
+        Runnable wakeup = null;
+        synchronized (this) {
+            if (!actorIoReleases.contains(release)) return;
+            runnable.addLast(release);
+            notifyAll();
+            wakeup = schedulerWakeup;
+        }
+        if (wakeup != null) wakeup.run();
+    }
+
+    /** Dispatches at most one cooperative Task, PLAT029 operation, or PLAT030 release segment. */
     public boolean dispatchOne() {
         Object scheduled;
         while (true) {
@@ -116,23 +131,22 @@ public final class ProtosActorExecutionDomain {
                     if (!task.beginDispatch()) {
                         continue;
                     }
-                } else if (!(scheduled instanceof ProtosIoOperation)) {
+                } else if (!(scheduled instanceof ProtosIoOperation)
+                        && !(scheduled instanceof ProtosIoReleaseExecution)) {
                     throw new IllegalStateException(
                             "Actor runnable queue contains an unsupported execution segment");
                 }
             }
             if (scheduled instanceof ProtosIoOperation operation
-                    && !operation.beginDeferredCPrimeDispatchForRuntime()) {
-                continue;
-            }
+                    && !operation.beginDeferredCPrimeDispatchForRuntime()) continue;
+            if (scheduled instanceof ProtosIoReleaseExecution release
+                    && !release.beginDeferredCPrimeDispatchForRuntime()) continue;
             break;
         }
 
-        if (scheduled instanceof ProtosTask task) {
-            task.runContinuation();
-        } else {
-            ((ProtosIoOperation) scheduled).runDeferredCPrimeSegmentForRuntime();
-        }
+        if (scheduled instanceof ProtosTask task) task.runContinuation();
+        else if (scheduled instanceof ProtosIoOperation operation) operation.runDeferredCPrimeSegmentForRuntime();
+        else ((ProtosIoReleaseExecution) scheduled).runDeferredCPrimeSegmentForRuntime();
         return true;
     }
 
@@ -192,6 +206,36 @@ public final class ProtosActorExecutionDomain {
         }
     }
 
+    void registerActorIoReleaseForRuntime(ProtosIoReleaseExecution release) {
+        Objects.requireNonNull(release, "release");
+        synchronized (this) {
+            if (ownerActor != null && ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATED)
+                throw new IllegalStateException("terminated Actor cannot acquire lifecycle-release guest execution");
+            actorIoReleases.add(release);
+        }
+    }
+
+    public void terminalActorIoReleaseForRuntime(ProtosIoReleaseExecution release) {
+        ProtosActor actor;
+        synchronized (this) { actorIoReleases.remove(release); notifyAll(); actor=ownerActor; }
+        if (actor != null) actor.tryCompleteTerminationForRuntime();
+    }
+
+    void registerActorIoLifecycleCleanupForRuntime(ProtosIoLifecycle lifecycle) {
+        Objects.requireNonNull(lifecycle, "lifecycle");
+        synchronized (this) {
+            if (ownerActor != null && ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATED)
+                throw new IllegalStateException("terminated Actor cannot acquire lifecycle cleanup obligation");
+            actorIoLifecycleCleanup.add(lifecycle);
+        }
+    }
+
+    void terminalActorIoLifecycleCleanupForRuntime(ProtosIoLifecycle lifecycle) {
+        ProtosActor actor;
+        synchronized (this) { actorIoLifecycleCleanup.remove(lifecycle); notifyAll(); actor=ownerActor; }
+        if (actor != null) actor.tryCompleteTerminationForRuntime();
+    }
+
     void registerActorIoOperation(ProtosIoOperation operation) {
         synchronized (this) { actorIoOperations.add(Objects.requireNonNull(operation, "operation")); }
     }
@@ -244,8 +288,13 @@ public final class ProtosActorExecutionDomain {
     }
 
     synchronized boolean hasLiveTasksForRuntime() { return !liveTasks.isEmpty(); }
+    synchronized boolean hasTerminationCleanupForRuntime() {
+        return !actorIoLifecycleCleanup.isEmpty() || !actorIoReleases.isEmpty();
+    }
     synchronized int actorNonTaskFutureCountForTesting() { return actorNonTaskFutures.size(); }
     synchronized int actorIoOperationCountForTesting() { return actorIoOperations.size(); }
+    synchronized int actorIoReleaseCountForTesting() { return actorIoReleases.size(); }
+    synchronized int actorIoLifecycleCleanupCountForTesting() { return actorIoLifecycleCleanup.size(); }
 
     void bindActor(ProtosActor actor) {
         Objects.requireNonNull(actor, "actor");

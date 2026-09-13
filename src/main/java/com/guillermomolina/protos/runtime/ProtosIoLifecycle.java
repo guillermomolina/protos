@@ -24,6 +24,8 @@ public final class ProtosIoLifecycle {
     private ProtosObjectValue closeError;
     private ProtosActivation closeActivation;
     private boolean releaseStarted;
+    private boolean terminationCleanupReserved;
+    private ProtosIoReleaseExecution releaseExecution;
 
     public ProtosIoLifecycle(Object receiver, ProtosObjectValue futurePrototype,
             ProtosActorExecutionDomain domain, ReleaseStarter releaseStarter) {
@@ -61,7 +63,14 @@ public final class ProtosIoLifecycle {
     }
 
     /** Commits close at invocation, returns a fresh Future, and shares one permanent logical outcome. */
-    public ProtosFutureValue close(ProtosActivation activation) {
+    public ProtosFutureValue close(ProtosActivation activation) { return close(activation, false); }
+
+    /** PLAT030 close entry for release that may require Actor-local guest execution. */
+    public ProtosFutureValue closeWithGuestReleaseForRuntime(ProtosActivation activation) {
+        return close(activation, true);
+    }
+
+    private ProtosFutureValue close(ProtosActivation activation, boolean reserveGuestCleanup) {
         Objects.requireNonNull(activation,"activation");
         if (activation.executionDomain()!=domain) throw new IllegalArgumentException("close belongs to another Actor domain");
         ProtosFutureValue follower=new ProtosFutureValue(futurePrototype,domain);
@@ -75,9 +84,14 @@ public final class ProtosIoLifecycle {
                 case CLOSED_FAILED -> { follower.fail(closeError); return follower; }
                 case CLOSING -> { closeFollowers.add(follower); return follower; }
                 case OPEN -> {
+                    if (!authorizeFirstCloseLocked(activation, reserveGuestCleanup)) {
+                        follower.fail(ProtosCoreErrors.newOccurrence(activation,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR));
+                        return follower;
+                    }
                     state=State.CLOSING;
                     closeActivation=activation;
                     closeFollowers.add(follower);
+                    terminationCleanupReserved=reserveGuestCleanup;
                     for (ProtosIoOperation operation : List.copyOf(operations)) {
                         ProtosIoOperation.CloseCutoverAction action =
                                 operation.closeCutoverLocked();
@@ -109,6 +123,33 @@ public final class ProtosIoLifecycle {
         if (start) startRelease();
         else maybeStartRelease();
         return follower;
+    }
+
+    private boolean authorizeFirstCloseLocked(ProtosActivation activation, boolean reserveGuestCleanup) {
+        ProtosActor actor=domain.currentActorForRuntime().orElse(null);
+        if (actor != null) return actor.authorizeLifecycleCloseForRuntime(activation,this,reserveGuestCleanup);
+        if (reserveGuestCleanup) domain.registerActorIoLifecycleCleanupForRuntime(this);
+        return true;
+    }
+
+    public ProtosIoReleaseExecution beginReleaseExecutionForRuntime(
+            ProtosActivation activation, ReleaseCompletion completion) {
+        Objects.requireNonNull(activation,"activation"); Objects.requireNonNull(completion,"completion");
+        if (activation.executionDomain()!=domain) throw new IllegalArgumentException("lifecycle release belongs to another Actor execution domain");
+        ProtosIoReleaseExecution created;
+        synchronized(this) {
+            if (state!=State.CLOSING || !releaseStarted) throw new IllegalStateException("lifecycle release execution requires an active closing release");
+            if (closeActivation!=activation) throw new IllegalArgumentException("lifecycle release execution must use the committed close activation");
+            if (releaseExecution!=null) throw new IllegalStateException("lifecycle already owns a release execution record");
+            created=new ProtosIoReleaseExecution(this,activation,completion); releaseExecution=created;
+        }
+        try { domain.registerActorIoReleaseForRuntime(created); }
+        catch(RuntimeException failure) { synchronized(this){if(releaseExecution==created)releaseExecution=null;} throw failure; }
+        return created;
+    }
+
+    void releaseExecutionTerminalForRuntime(ProtosIoReleaseExecution terminalRelease) {
+        synchronized(this) { if (releaseExecution==terminalRelease) releaseExecution=null; }
     }
 
     void operationTerminal(ProtosIoOperation operation) {
@@ -154,6 +195,9 @@ public final class ProtosIoLifecycle {
             if (error==null) follower.resolve(receiver, activation);
             else follower.fail(error);
         }
+        boolean releaseReservation;
+        synchronized(this) { releaseReservation=terminationCleanupReserved; terminationCleanupReserved=false; }
+        if (releaseReservation) domain.terminalActorIoLifecycleCleanupForRuntime(this);
     }
 
     private record CloseFailure(

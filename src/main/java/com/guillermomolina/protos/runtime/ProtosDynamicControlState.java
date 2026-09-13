@@ -329,6 +329,19 @@ public final class ProtosDynamicControlState {
         return false;
     }
 
+    /** D121 provenance for the exact Task flow executing cancellation ensure cleanup. */
+    public boolean hasActiveCancellationEnsureCleanupForRuntime() {
+        for (Frame frame : framesNewestFirst) {
+            if (frame.active()
+                    && frame.kind() == FrameKind.ENSURE
+                    && frame.ensurePhase() == EnsurePhase.CLEANUP
+                    && frame.ensureExitKind().orElse(null) == EnsureExitKind.CANCELLATION) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public Optional<Frame> frameForInvocation(Object invocationIdentity) {
         Objects.requireNonNull(invocationIdentity, "invocationIdentity");
         return Optional.ofNullable(framesByInvocation.get(invocationIdentity));

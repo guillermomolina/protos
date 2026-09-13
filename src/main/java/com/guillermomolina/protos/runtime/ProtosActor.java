@@ -358,6 +358,23 @@ public final class ProtosActor {
         return true;
     }
 
+    /** D121 first-close admission and optional D112/PLAT030 cleanup reservation. */
+    boolean authorizeLifecycleCloseForRuntime(
+            ProtosActivation activation,
+            ProtosIoLifecycle lifecycleOwner,
+            boolean reserveGuestCleanup) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(lifecycleOwner, "lifecycleOwner");
+        if (activation.executionDomain() != executionDomain) throw new IllegalArgumentException("lifecycle close belongs to another Actor execution domain");
+        synchronized (this) {
+            LifecycleState current = lifecycle.get();
+            if (current == LifecycleState.TERMINATED) return false;
+            if (current == LifecycleState.TERMINATING && !activation.terminationCleanupAuthorizedForRuntime()) return false;
+            if (reserveGuestCleanup) executionDomain.registerActorIoLifecycleCleanupForRuntime(lifecycleOwner);
+            return true;
+        }
+    }
+
     /** Establishes graceful/fatal termination and completes it once task cleanup permits. */
     public void requestTerminationForRuntime() {
         beginTermination();
@@ -366,7 +383,8 @@ public final class ProtosActor {
 
     void tryCompleteTerminationForRuntime() {
         if (lifecycle.get() == LifecycleState.TERMINATING
-                && !executionDomain.hasLiveTasksForRuntime()) {
+                && !executionDomain.hasLiveTasksForRuntime()
+                && !executionDomain.hasTerminationCleanupForRuntime()) {
             markTerminated();
         }
     }
@@ -407,7 +425,8 @@ public final class ProtosActor {
                         "Actor termination must begin before completion");
             }
             if (!terminationCutoverCleanupComplete
-                    || executionDomain.hasLiveTasksForRuntime()) {
+                    || executionDomain.hasLiveTasksForRuntime()
+                    || executionDomain.hasTerminationCleanupForRuntime()) {
                 return false;
             }
             lifecycle.set(LifecycleState.TERMINATED);

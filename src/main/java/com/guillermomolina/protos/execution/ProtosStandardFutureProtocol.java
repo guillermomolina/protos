@@ -37,10 +37,10 @@ public final class ProtosStandardFutureProtocol {
                     arity(a,x,0);
                     ProtosFutureValue observed=future(a);
                     if (a.deferredCPrimeOperationForRuntime().isPresent()) {
-                        return observeValueForIoOperationContinuation(
-                                a,
-                                observed,
-                                a.deferredCPrimeOperationForRuntime().orElseThrow());
+                        return observeValueForIoOperationContinuation(a,observed,a.deferredCPrimeOperationForRuntime().orElseThrow());
+                    }
+                    if (a.deferredCPrimeReleaseForRuntime().isPresent()) {
+                        return observeValueForIoReleaseContinuation(a,observed,a.deferredCPrimeReleaseForRuntime().orElseThrow());
                     }
                     return observed.observeValueForContinuationForRuntime(
                             a,
@@ -127,6 +127,39 @@ public final class ProtosStandardFutureProtocol {
         return aggregate;
     }
 
+
+    private static Object observeValueForIoReleaseContinuation(
+            ProtosActivation activation, ProtosFutureValue observed, ProtosIoReleaseExecution release) {
+        return awaitFutureForIoReleaseContinuationForRuntime(observed,release,()->observed.observeValue(activation));
+    }
+
+    static Object awaitFutureForIoReleaseContinuationForRuntime(
+            ProtosFutureValue observed, ProtosIoReleaseExecution release, Supplier<Object> terminalProjection) {
+        Objects.requireNonNull(observed); Objects.requireNonNull(release); Objects.requireNonNull(terminalProjection);
+        FutureReleaseDependency dependency=new FutureReleaseDependency(observed,release);
+        observed.observe(dependency);
+        if (dependency.isReady()) return Objects.requireNonNull(terminalProjection.get(),"release-owned Future terminal projection returned null");
+        return ProtosIoReleaseSuspension.pending(release,dependency,()->Objects.requireNonNull(terminalProjection.get(),"release-owned Future terminal projection returned null"));
+    }
+
+    static Object resumeIoReleaseFutureWaitForRuntime(ProtosActivation activation,Object yielded,Object resumeValue) {
+        if (!(yielded instanceof ProtosIoReleaseSuspension suspension)) throw new IllegalStateException("lifecycle release Future wait yielded an invalid carrier");
+        ProtosIoReleaseExecution release=activation.deferredCPrimeReleaseForRuntime().orElseThrow(()->new IllegalStateException("lifecycle release Future wait requires a release-owned activation"));
+        if (suspension.release()!=release) throw new IllegalStateException("lifecycle release Future wait belongs to another release");
+        if (resumeValue!=ProtosNullValue.INSTANCE) throw new IllegalStateException("lifecycle release Future wait received unsupported resume transport");
+        return suspension.resume();
+    }
+
+    private static final class FutureReleaseDependency implements ProtosFutureValue.Observer, ProtosIoReleaseSuspension.Dependency {
+        private final ProtosFutureValue source; private final ProtosIoReleaseExecution release;
+        private boolean ready,retained,released;
+        FutureReleaseDependency(ProtosFutureValue source,ProtosIoReleaseExecution release){this.source=Objects.requireNonNull(source);this.release=Objects.requireNonNull(release);}
+        @Override public synchronized boolean isReady(){return ready;}
+        @Override public void terminal(ProtosFutureValue terminalSource){boolean schedule;synchronized(this){if(terminalSource!=source||released)return;ready=true;schedule=retained;}if(schedule)release.requestDeferredCPrimeRunForRuntime();}
+        @Override public void waitingReleaseRetained(ProtosIoReleaseExecution candidate){boolean schedule;synchronized(this){requireOwner(candidate);if(released)return;retained=true;schedule=ready;}if(schedule)release.requestDeferredCPrimeRunForRuntime();}
+        @Override public void waitingReleaseReleased(ProtosIoReleaseExecution candidate){synchronized(this){requireOwner(candidate);if(released)return;released=true;retained=false;}source.removeObserver(this);}
+        private void requireOwner(ProtosIoReleaseExecution candidate){if(candidate!=release)throw new IllegalArgumentException("Future.value release waiter belongs to another lifecycle release");}
+    }
 
     private static Object observeValueForIoOperationContinuation(
             ProtosActivation activation,

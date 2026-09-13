@@ -36,6 +36,7 @@ public final class ProtosActivation {
     private final ProtosActorExecutionDomain executionDomain;
     private ProtosTask task;
     private ProtosIoOperation deferredCPrimeOperation;
+    private ProtosIoReleaseExecution deferredCPrimeRelease;
     private ProtosDynamicControlState directDynamicControlState;
 
     public ProtosActivation(
@@ -306,12 +307,29 @@ public final class ProtosActivation {
         return Optional.ofNullable(deferredCPrimeOperation);
     }
 
+    /** PLAT030 private owner for non-Task lifecycle-release C-prime execution. */
+    public Optional<ProtosIoReleaseExecution> deferredCPrimeReleaseForRuntime() {
+        return Optional.ofNullable(deferredCPrimeRelease);
+    }
+
+    /** D121 authority is provenance-scoped, never inferred from TERMINATING alone. */
+    public boolean terminationCleanupAuthorizedForRuntime() {
+        if (deferredCPrimeRelease != null) return true;
+        if (task == null) return false;
+        return task.dynamicControlStateIfPresent()
+                .map(ProtosDynamicControlState::hasActiveCancellationEnsureCleanupForRuntime)
+                .orElse(false);
+    }
+
     public synchronized ProtosDynamicControlState dynamicControlState() {
         if (task != null) {
             return task.dynamicControlState();
         }
         if (deferredCPrimeOperation != null) {
             return deferredCPrimeOperation.deferredCPrimeDynamicControlStateForRuntime();
+        }
+        if (deferredCPrimeRelease != null) {
+            return deferredCPrimeRelease.deferredCPrimeDynamicControlStateForRuntime();
         }
         if (directDynamicControlState == null) {
             directDynamicControlState = new ProtosDynamicControlState();
@@ -326,11 +344,20 @@ public final class ProtosActivation {
         if (deferredCPrimeOperation != null) {
             return deferredCPrimeOperation.deferredCPrimeDynamicControlStateIfPresentForRuntime();
         }
+        if (deferredCPrimeRelease != null) {
+            return deferredCPrimeRelease.deferredCPrimeDynamicControlStateIfPresentForRuntime();
+        }
         return Optional.ofNullable(directDynamicControlState);
     }
 
     public void inheritDynamicControlState(ProtosActivation enclosing) {
         Objects.requireNonNull(enclosing, "enclosing");
+        Optional<ProtosIoReleaseExecution> inheritedRelease =
+                enclosing.deferredCPrimeReleaseForRuntime();
+        if (inheritedRelease.isPresent()) {
+            attachDeferredCPrimeReleaseForRuntime(inheritedRelease.orElseThrow());
+            return;
+        }
         Optional<ProtosIoOperation> inheritedOperation =
                 enclosing.deferredCPrimeOperationForRuntime();
         if (inheritedOperation.isPresent()) {
@@ -362,6 +389,10 @@ public final class ProtosActivation {
             throw new IllegalStateException(
                     "operation-owned C-prime activation cannot acquire Task identity");
         }
+        if (deferredCPrimeRelease != null) {
+            throw new IllegalStateException(
+                    "release-owned C-prime activation cannot acquire Task identity");
+        }
         if (this.task != null && this.task != task) {
             throw new IllegalStateException("activation already belongs to another task");
         }
@@ -374,6 +405,10 @@ public final class ProtosActivation {
         if (task != null) {
             throw new IllegalStateException(
                     "Task-owned activation cannot acquire operation C-prime identity");
+        }
+        if (deferredCPrimeRelease != null) {
+            throw new IllegalStateException(
+                    "release-owned C-prime activation cannot acquire operation C-prime identity");
         }
         if (operation.origin().executionDomain() != executionDomain) {
             throw new IllegalArgumentException(
@@ -388,6 +423,17 @@ public final class ProtosActivation {
                     "direct dynamic-control activation cannot become operation-owned");
         }
         deferredCPrimeOperation = operation;
+    }
+
+    /** Attaches this activation to exactly one non-Task PLAT030 lifecycle release. */
+    public void attachDeferredCPrimeReleaseForRuntime(ProtosIoReleaseExecution release) {
+        Objects.requireNonNull(release, "release");
+        if (task != null) throw new IllegalStateException("Task-owned activation cannot acquire release C-prime identity");
+        if (deferredCPrimeOperation != null) throw new IllegalStateException("operation-owned C-prime activation cannot acquire release C-prime identity");
+        if (release.origin().executionDomain() != executionDomain) throw new IllegalArgumentException("deferred C-prime release belongs to another Actor execution domain");
+        if (deferredCPrimeRelease != null && deferredCPrimeRelease != release) throw new IllegalStateException("activation already belongs to another deferred C-prime release");
+        if (directDynamicControlState != null) throw new IllegalStateException("direct dynamic-control activation cannot become release-owned");
+        deferredCPrimeRelease = release;
     }
 
     public Optional<ProtosArrayValue> arguments() {
