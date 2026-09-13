@@ -320,6 +320,49 @@ project-work families may consume a ratified `PLATxxx` decision. The decision
 record owns the durable platform architecture; the consuming work item owns its
 implementation, tests, migration, and closure evidence.
 
+### External upstream evolution family
+<!-- GITHUB014 UPSTREAM-FAMILY-CONTRACT -->
+
+`UPSTREAMxxx` tracks evaluation and coordination for releases, features, defects,
+deprecations, compatibility changes, and direct collaboration in external
+projects that may affect or benefit Protos. It exists so external evolution can
+be investigated durably without being misclassified as implementation work in
+whatever Protos family happened to discover it.
+
+An `UPSTREAMxxx` item MAY retain exact external project/release/PR/Issue
+identities, version/SHA/toolchain baselines, compatibility experiments, upstream
+maintainer feedback, reproducible evidence, and later re-evaluation triggers.
+It MUST NOT by itself authorize a Protos dependency upgrade, adoption, migration,
+semantic change, durable platform choice, or roadmap commitment.
+
+Each upstream evaluation SHOULD classify its Protos impact as one of:
+
+- `NO_ACTION` — no Protos change is justified;
+- `BENEFICIAL_BUT_NOT_ACTIONABLE` — useful evidence exists but prerequisites or
+  current production applicability are absent; or
+- `ACTION_REQUIRED` — concrete Protos work is justified.
+
+`ACTION_REQUIRED` is a routing result, not implementation authority. Allocate or
+link the proper `Ixxx`, `PERFxxx`, `DISTxxx`, `BUGxxx`, `TOOLxxx`, `CLIxxx`,
+`LIBxxx`, or other owning work item. If the external change exposes a substantive
+Protos semantic or durable architecture choice, route that choice through the
+normal `Dxxx`/`PLATxxx` approval gate before dependent implementation proceeds.
+The `UPSTREAMxxx` item may close once impact is classified and any required
+Protos work has a proper owner; derived work need not finish first.
+
+`UPSTREAMxxx` uses the existing canonical lifecycle status vocabulary. Active
+evaluation may legitimately be `status:ready` or `status:in-progress` and appear
+in the GITHUB012 Work queue. Waiting for an upstream response, release, or Protos
+prerequisite may use `status:paused`. Status, not the `UPSTREAM` family itself,
+determines ordinary Project actionability. Do not invent a separate upstream
+lifecycle state or blanket-exclude the family from Project views.
+
+Durable records follow the DOC002 role-first path policy: work records primarily
+owned by the item belong under `docs/project/work/UPSTREAMxxx/`; immutable or
+snapshot-like experimental evidence belongs under
+`docs/project/evidence/UPSTREAMxxx/`. Do not create a parallel
+`docs/project/upstream/` hierarchy merely for classification.
+
 The canonical registry for platform/runtime architecture decisions is
 `docs/project/registries/PLATFORM_ARCHITECTURE_DECISIONS.md`.
 
@@ -1903,8 +1946,8 @@ Every GitHub Issue that represents a formal Protos identifier MUST carry exactly
 one stable family-classification label named `family:<FAMILY>`, where `<FAMILY>`
 is the identifier prefix. Examples include `family:I`, `family:LIB`,
 `family:TOOL`, `family:TEST`, `family:CLI`, `family:PERF`, `family:DOC`, `family:DIST`,
-`family:AUD`, `family:LM`, `family:GITHUB`, `family:D`, `family:PLAT`,
-`family:B`, and `family:BUG`.
+`family:AUD`, `family:LM`, `family:GITHUB`, `family:UPSTREAM`, `family:D`,
+`family:PLAT`, `family:B`, and `family:BUG`.
 
 A formal sub-issue keeps the same family label as its formal identifier. The
 family label classifies durable project ownership only.

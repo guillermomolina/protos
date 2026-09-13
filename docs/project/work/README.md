@@ -61,5 +61,8 @@ Current role-first work records:
 - [`GITHUB013/GITHUB013_FORMAL_IDENTIFIER_UNIQUENESS.md`](GITHUB013/GITHUB013_FORMAL_IDENTIFIER_UNIQUENESS.md)
   — concurrent formal-identifier uniqueness and fail-closed intake guard.
 
+- [`GITHUB014/GITHUB014_FORMAL_UPSTREAM_TRACKING_FAMILY.md`](GITHUB014/GITHUB014_FORMAL_UPSTREAM_TRACKING_FAMILY.md)
+  — formal external-upstream impact, compatibility, evidence, and collaboration tracking family.
+
 Live status, priority, assignment, and execution discussion remain in GitHub
 Issues and the Protos Development Project.

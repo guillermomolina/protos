@@ -30,6 +30,7 @@ API_VERSION = "2026-03-10"
 
 FORMAL_FAMILIES = (
     "GITHUB",
+    "UPSTREAM",
     "PLAT",
     "TOOL",
     "TEST",
@@ -167,6 +168,43 @@ class GitHubApi(object):
                 break
             page += 1
         return result
+
+    def ensure_family_label(self, name):
+        if not name.startswith(FAMILY_LABEL_PREFIX):
+            raise IntakeError("refusing to create non-family label %r" % name)
+
+        encoded = parse.quote(name, safe="")
+        _, status = _json_request(
+            self._url("/labels/%s" % encoded),
+            self.token,
+            allow_404=True,
+        )
+        if status != 404:
+            return
+
+        try:
+            _json_request(
+                self._url("/labels"),
+                self.token,
+                method="POST",
+                payload={
+                    "name": name,
+                    "color": "ededed",
+                    "description": "Formal Protos work family",
+                },
+            )
+        except ApiError as exc:
+            # A concurrent intake run may have created the same label after the
+            # GET above. Re-read and accept only that exact race.
+            if exc.status == 422:
+                _, verify_status = _json_request(
+                    self._url("/labels/%s" % encoded),
+                    self.token,
+                    allow_404=True,
+                )
+                if verify_status != 404:
+                    return
+            raise
 
     def add_labels(self, number, names):
         if not names:
@@ -412,6 +450,9 @@ def reconcile_family(api, issue, expected_family):
 
     added = False
     if expected not in families:
+        ensure_family_label = getattr(api, "ensure_family_label", None)
+        if ensure_family_label is not None:
+            ensure_family_label(expected)
         api.add_labels(number, [expected])
         added = True
         print("ISSUE_FAMILY_LABEL_ADDED: #%d %s" % (number, expected))
@@ -620,9 +661,13 @@ class MockApi(object):
         self.added_labels = []
         self.removed_labels = []
         self.added_parents = []
+        self.ensured_family_labels = []
 
     def fetch_issue(self, number):
         return self.issues[int(number)]
+
+    def ensure_family_label(self, name):
+        self.ensured_family_labels.append(name)
 
     def add_labels(self, number, names):
         self.added_labels.append((int(number), tuple(names)))
@@ -695,6 +740,12 @@ def self_test():
         "identifier": "TEST001-A",
         "family": "TEST",
     }
+    assert parse_title_identifier(
+        "UPSTREAM001 — Oracle/Graal configurable unwind exceptions"
+    ) == {
+        "identifier": "UPSTREAM001",
+        "family": "UPSTREAM",
+    }
     assert parse_title_identifier("PERF001-F blocker — detail") == {
         "identifier": "PERF001-F",
         "family": "PERF",
@@ -755,6 +806,18 @@ def self_test():
     assert test_child["family"] == "TEST"
     assert test_child["added_parent"]
     assert test_mock.parents[459] == 449
+
+    upstream_mock = MockApi()
+    upstream_mock.issues[700] = _mock_issue(
+        700,
+        "UPSTREAM001 — Oracle/Graal configurable unwind exceptions",
+        labels=["status:paused"],
+    )
+    upstream = reconcile_issue(upstream_mock, upstream_mock.issues[700])
+    assert upstream["formal"]
+    assert upstream["family"] == "UPSTREAM"
+    assert upstream_mock.ensured_family_labels == ["family:UPSTREAM"]
+    assert (700, ("family:UPSTREAM",)) in upstream_mock.added_labels
 
     mock.parents[318] = 287
     try:
@@ -882,6 +945,7 @@ x
     print("FORMAL_FAMILY_DERIVATION: PASS")
     print("FORMAL_PARENT_RECONCILIATION: PASS")
     print("TEST_FAMILY_RECONCILIATION: PASS")
+    print("UPSTREAM_FAMILY_RECONCILIATION: PASS")
     print("PARENT_CONFLICT_FAIL_CLOSED: PASS")
     print("UNTRUSTED_FORMAL_CANDIDATE_NO_PROMOTION: PASS")
     print("COMMUNITY_NO_FAMILY_PROMOTION: PASS")
