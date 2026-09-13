@@ -49,5 +49,8 @@ Current role-first work records:
 - [`DOC003/DOC003_DOCUMENTATION_BRANDING.md`](DOC003/DOC003_DOCUMENTATION_BRANDING.md)
   — approved transparent Protos logo/symbol identity and documentation-integration closure.
 
+- [`DOC004/DOC004_MATCHING_EXPRESSIONS_DOCUMENTATION.md`](DOC004/DOC004_MATCHING_EXPRESSIONS_DOCUMENTATION.md)
+  — programmer-facing matching-expression documentation and validation closure.
+
 Live status, priority, assignment, and execution discussion remain in GitHub
 Issues and the Protos Development Project.

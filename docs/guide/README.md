@@ -60,6 +60,7 @@ documentation areas whose semantics and implementation are already closed.
 9. [Isolated parallel execution](09-isolated-parallel-execution.md)
 10. [Actors, ActorRefs, and Actor Groups](10-actors-actorrefs-and-groups.md)
 11. [Process, I/O, Filesystems, and Authority](11-process-io-filesystems-and-authority.md)
+12. [Matching expressions](12-matching-expressions.md)
 
 ## Current guide state
 
@@ -119,6 +120,13 @@ Filesystem/File capabilities, namespace mutation, and the current D046/I024
 specified-versus-runnable boundary. No independently READY Programming Guide
 slice remains: `DOC001-M` is blocked until TOOL001 and TOOL002 close, and
 `DOC001-N` remains the final consistency closure.
+
+`DOC004` is CLOSED with
+[chapter 12](12-matching-expressions.md), which explains the complete
+programmer-facing matching surface delivered by I038: pattern-owned
+`match(subject)` authority, captures/bindings, aliases, Array/Map patterns,
+ordered OR, guards, terminal no-selection, and the static source restrictions
+that materially affect matching programs.
 
 ## Planned progression
 
