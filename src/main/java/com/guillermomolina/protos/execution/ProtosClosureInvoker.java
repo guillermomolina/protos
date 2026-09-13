@@ -45,20 +45,6 @@ public final class ProtosClosureInvoker {
         return invoke(closure, supplied, null);
     }
 
-    public static Object invokeInTask(
-            ProtosClosureValue closure, List<?> supplied, ProtosActivation creator,
-            com.guillermomolina.protos.runtime.ProtosTask task) {
-        Objects.requireNonNull(creator, "creator");
-        Objects.requireNonNull(task, "task");
-        requireNativeTaskFallbackForRuntime(closure);
-        ProtosActivation activation = task.evaluatorContinuation().rootInvocationActivation(() ->
-                ProtosActivation.forClosureInvocation(
-                        closure, supplied, creator.prelude().orElse(null), creator.actorModuleState(),
-                        creator.currentModuleKey().orElse(null), creator.executionDomain()));
-        activation.attachTask(task);
-        return invokePrepared(closure, supplied, activation);
-    }
-
     public static void executeInTaskForRuntime(
             ProtosClosureValue closure,
             List<?> supplied,
@@ -95,38 +81,6 @@ public final class ProtosClosureInvoker {
         ProtosTaskCPrimeEntryExecution.execute(task, nativePrepared);
     }
 
-    static Object invokeImmediateMethodInTask(
-            ProtosClosureValue closure,
-            Object receiver,
-            ProtosObjectValue methodHome,
-            List<?> supplied,
-            ProtosActivation creator,
-            com.guillermomolina.protos.runtime.ProtosTask task) {
-        Objects.requireNonNull(closure, "closure");
-        Objects.requireNonNull(receiver, "receiver");
-        Objects.requireNonNull(methodHome, "methodHome");
-        Objects.requireNonNull(supplied, "supplied");
-        Objects.requireNonNull(creator, "creator");
-        Objects.requireNonNull(task, "task");
-        requireNativeTaskFallbackForRuntime(closure);
-
-        ProtosActivation activation =
-                task.evaluatorContinuation()
-                        .rootInvocationActivation(
-                                () ->
-                                        ProtosActivation.forImmediateMethodInvocation(
-                                                closure,
-                                                supplied,
-                                                receiver,
-                                                methodHome,
-                                                creator.prelude().orElse(null),
-                                                creator.actorModuleState(),
-                                                creator.currentModuleKey().orElse(null),
-                                                creator.executionDomain()));
-        activation.attachTask(task);
-        return invokePrepared(closure, supplied, activation);
-    }
-
     public static Object invoke(
             ProtosClosureValue closure,
             List<?> supplied,
@@ -153,16 +107,11 @@ public final class ProtosClosureInvoker {
                     }
                     return created;
                 };
-        ProtosActivation activation;
         if (caller != null && caller.task().isPresent()) {
-            requireNativeTaskFallbackForRuntime(closure);
-            com.guillermomolina.protos.runtime.ProtosTask task = caller.task().orElseThrow();
-            activation = task.evaluatorContinuation().invocationActivation(activationFactory);
-            activation.attachTask(task);
-        } else {
-            activation = activationFactory.get();
+            throw new IllegalStateException(
+                    "synchronous Closure invocation cannot execute inside a Task; use C-prime");
         }
-        return invokePrepared(closure, supplied, activation);
+        return invokePrepared(closure, supplied, activationFactory.get());
     }
 
     public static Object invokeImmediateMethod(
@@ -197,16 +146,11 @@ public final class ProtosClosureInvoker {
                     return created;
                 };
 
-        ProtosActivation activation;
         if (caller.task().isPresent()) {
-            requireNativeTaskFallbackForRuntime(closure);
-            com.guillermomolina.protos.runtime.ProtosTask task = caller.task().orElseThrow();
-            activation = task.evaluatorContinuation().invocationActivation(activationFactory);
-            activation.attachTask(task);
-        } else {
-            activation = activationFactory.get();
+            throw new IllegalStateException(
+                    "synchronous method invocation cannot execute inside a Task; use C-prime");
         }
-        return invokePrepared(closure, supplied, activation);
+        return invokePrepared(closure, supplied, activationFactory.get());
     }
 
     private static Object invokePrepared(ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
@@ -272,14 +216,11 @@ public final class ProtosClosureInvoker {
                 return transfer.value();
             }
             throw transfer;
-        } catch (ProtosEvaluatorSuspension transfer) {
-            throw transfer;
         } catch (ProtosTaskCancellationException transfer) {
             throw transfer;
         } finally {
             if (activation.ownsReturnHome()
-                    && returnHome.isActive()
-                    && !ProtosEvaluatorBridge.isControlUnwindInProgress(activation)) {
+                    && returnHome.isActive()) {
                 returnHome.complete();
             }
         }

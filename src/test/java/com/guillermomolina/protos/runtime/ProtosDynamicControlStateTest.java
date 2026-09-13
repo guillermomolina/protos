@@ -108,24 +108,6 @@ class ProtosDynamicControlStateTest {
     }
 
     @Test
-    void taskOwnedStateAndFrameSurviveEvaluatorSegmentReset() {
-        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-        ProtosTask task = domain.createTask(null, current -> current.complete("done"));
-        ProtosDynamicControlState state = task.dynamicControlState();
-        ProtosDynamicControlState.Frame frame =
-                state.enterFrame(new Object(), ProtosDynamicControlState.FrameKind.ENSURE);
-
-        task.evaluatorContinuation().beginSegment();
-        task.evaluatorContinuation().endSegment();
-        task.evaluatorContinuation().beginSegment();
-
-        assertSame(state, task.dynamicControlState());
-        assertSame(frame, state.framesNewestFirst().get(0));
-
-        task.evaluatorContinuation().endSegment();
-    }
-
-    @Test
     void innermostMatchingHandlerSelectionUsesDelegationAndDeactivatesSelection() {
         ProtosDynamicControlState state = new ProtosDynamicControlState();
         ProtosObjectValue errorRoot = new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -149,7 +131,7 @@ class ProtosDynamicControlStateTest {
 
 
     @Test
-    void ensureCleanupPhaseRetainsExactOutcomeAcrossReplayFrameReuse() {
+    void ensureCleanupPhaseRetainsExactOutcomeAcrossStableFrameReuse() {
         ProtosDynamicControlState state = new ProtosDynamicControlState();
         Object invocation = new Object();
         Object result = new Object();
@@ -161,8 +143,7 @@ class ProtosDynamicControlStateTest {
         state.beginEnsureCleanup(
                 frame,
                 ProtosDynamicControlState.EnsureExitKind.NORMAL,
-                result,
-                17);
+                result);
 
         ProtosDynamicControlState.Frame replay =
                 state.enterFrame(invocation, ProtosDynamicControlState.FrameKind.ENSURE);
@@ -172,7 +153,6 @@ class ProtosDynamicControlStateTest {
                 ProtosDynamicControlState.EnsureExitKind.NORMAL,
                 replay.ensureExitKind().orElseThrow());
         assertSame(result, replay.ensureOutcome().orElseThrow());
-        assertEquals(17, replay.ensureBodyReplayCursor());
 
         assertThrows(
                 IllegalStateException.class,
@@ -180,8 +160,7 @@ class ProtosDynamicControlStateTest {
                         state.beginEnsureCleanup(
                                 frame,
                                 ProtosDynamicControlState.EnsureExitKind.NORMAL,
-                                result,
-                                18));
+                                result));
 
         state.leaveFrame(frame);
     }

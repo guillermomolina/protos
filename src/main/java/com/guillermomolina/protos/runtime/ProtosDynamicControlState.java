@@ -25,15 +25,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Task-local dynamic control state used by replay-stable standard control primitives.
+ * Task-local dynamic control state used by standard and C-prime control primitives.
  *
  * <p>This is internal runtime machinery, not a Protos value. It is deliberately owned by one
  * {@link ProtosTask}: synchronous activations attached to that task share the state, while a
  * distinct child task starts with independent dynamic control state.
  *
- * <p>Frames are keyed by a replay-stable invocation identity. Current evaluator invocation
- * activations already provide such an identity across suspension/replay, allowing later I022
- * slices to re-enter an installation site without duplicating a semantic handler/ensure frame.
+ * <p>Frames are keyed by a stable invocation identity. C-prime continuation state owns
+ * suspension/resumption; this structure owns only semantic dynamic-control installation state.
  */
 public final class ProtosDynamicControlState {
     public enum FrameKind {
@@ -75,10 +74,7 @@ public final class ProtosDynamicControlState {
         private EnsurePhase ensurePhase;
         private EnsureExitKind ensureExitKind;
         private Object ensureOutcome;
-        private int ensureBodyReplayCursor = -1;
         private WhilePhase whilePhase;
-        private boolean whileCallbackCheckpointBound;
-        private int whileCallbackCheckpoint = -1;
 
         private Frame(long id, FrameKind kind, Object invocationIdentity) {
             this.id = id;
@@ -123,60 +119,30 @@ public final class ProtosDynamicControlState {
             return Optional.ofNullable(ensureOutcome);
         }
 
-        public int ensureBodyReplayCursor() {
-            requireEnsureFrame();
-            if (ensurePhase != EnsurePhase.CLEANUP) {
-                throw new IllegalStateException("ensure body has not exited yet");
-            }
-            return ensureBodyReplayCursor;
-        }
-
         public WhilePhase whilePhase() {
             requireWhileFrame();
             return whilePhase;
-        }
-
-        private int bindWhileCallbackCheckpoint(int replayCursor) {
-            requireWhileFrame();
-            if (replayCursor < -1) {
-                throw new IllegalArgumentException("invalid while callback replay cursor");
-            }
-            if (!whileCallbackCheckpointBound) {
-                whileCallbackCheckpoint = replayCursor;
-                whileCallbackCheckpointBound = true;
-            } else if (whileCallbackCheckpoint != replayCursor) {
-                throw new IllegalStateException(
-                        "while callback replay checkpoint changed from "
-                                + whileCallbackCheckpoint
-                                + " to "
-                                + replayCursor);
-            }
-            return whileCallbackCheckpoint;
         }
 
         private void bindHandlerMatchPrototype(ProtosObjectValue matchPrototype) {
             Objects.requireNonNull(matchPrototype, "matchPrototype");
             if (handlerMatchPrototype != null && handlerMatchPrototype != matchPrototype) {
                 throw new IllegalStateException(
-                        "replay invocation changed handler match prototype");
+                        "stable invocation changed handler match prototype");
             }
             handlerMatchPrototype = matchPrototype;
         }
 
         private void beginEnsureCleanup(
-                EnsureExitKind exitKind, Object outcome, int bodyReplayCursor) {
+                EnsureExitKind exitKind, Object outcome) {
             requireEnsureFrame();
             Objects.requireNonNull(exitKind, "exitKind");
             Objects.requireNonNull(outcome, "outcome");
             if (ensurePhase != EnsurePhase.BODY) {
                 throw new IllegalStateException("ensure body exit was already recorded");
             }
-            if (bodyReplayCursor < -1) {
-                throw new IllegalArgumentException("invalid ensure body replay cursor");
-            }
             ensureExitKind = exitKind;
             ensureOutcome = outcome;
-            ensureBodyReplayCursor = bodyReplayCursor;
             ensurePhase = EnsurePhase.CLEANUP;
         }
 
@@ -246,7 +212,7 @@ public final class ProtosDynamicControlState {
         if (existing != null) {
             if (existing.kind() != kind) {
                 throw new IllegalStateException(
-                        "replay invocation changed dynamic frame kind from "
+                        "stable invocation changed dynamic frame kind from "
                                 + existing.kind()
                                 + " to "
                                 + kind);
@@ -299,15 +265,9 @@ public final class ProtosDynamicControlState {
     public void beginEnsureCleanup(
             Frame frame,
             EnsureExitKind exitKind,
-            Object outcome,
-            int bodyReplayCursor) {
+            Object outcome) {
         requirePresent(frame);
-        frame.beginEnsureCleanup(exitKind, outcome, bodyReplayCursor);
-    }
-
-    public int bindWhileCallbackCheckpoint(Frame frame, int replayCursor) {
-        requirePresent(frame);
-        return frame.bindWhileCallbackCheckpoint(replayCursor);
+        frame.beginEnsureCleanup(exitKind, outcome);
     }
 
     public void completeWhileCondition(Frame frame) {

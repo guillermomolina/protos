@@ -24,13 +24,6 @@ class ProtosIoLifecycleTest {
         var committed=x.lifecycle.beginOperation(x.activation); assertTrue(committed.commit()); assertTrue(committed.future().cancelRequest());
         assertEquals(ProtosFutureValue.State.PENDING,committed.future().state()); assertTrue(committed.resolve(ProtosNullValue.INSTANCE));
     }
-    @Test void waitingTaskCancellationDoesNotCancelIoProducer() throws Exception {
-        var x=fixture(); var op=x.lifecycle.beginOperation(x.activation); x.activation.context().createLocalSlot("f",op.future());
-        var target=new com.guillermomolina.protos.execution.ProtosSourceCompiler().compile("f.value()");
-        var task=x.domain.createTask(null,t->t.executeProtos(target,x.activation)); x.domain.dispatchOne(); assertEquals(ProtosTask.State.SUSPENDED,task.state());
-        assertTrue(task.requestCancellation()); x.domain.dispatchOne(); assertEquals(ProtosTask.State.CANCELLED,task.state()); assertEquals(ProtosFutureValue.State.PENDING,op.future().state());
-        assertTrue(op.commit()); assertTrue(op.resolve(ProtosNullValue.INSTANCE)); assertFalse(x.domain.dispatchOne());
-    }
     @Test void closeCutoverFailsUncommittedWaitsForCommittedAndRejectsLaterWork() throws Exception {
         var x=fixture(); var reversible=x.lifecycle.beginOperation(x.activation); var committed=x.lifecycle.beginOperation(x.activation); assertTrue(committed.commit());
         var close=x.lifecycle.close(x.activation); assertEquals(ProtosFutureValue.State.FAILED,reversible.future().state());

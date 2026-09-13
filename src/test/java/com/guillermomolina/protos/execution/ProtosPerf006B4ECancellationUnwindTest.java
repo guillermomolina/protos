@@ -535,67 +535,6 @@ final class ProtosPerf006B4ECancellationUnwindTest {
         System.out.println("PERF006_B4E_STRUCTURED_CHILD_DRAIN=PASS");
     }
 
-    @Test
-    void legacyAwaitInsideActiveCPrimeUsesContinuationCancellationUnwind()
-            throws Exception {
-        try (LanguageScope scope = languageScope()) {
-            ProtosPrelude prelude = core();
-            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosActivation module = activation(prelude, domain);
-            ProtosTask.WaitDependency neverReady = new ProtosTask.WaitDependency() {};
-            AtomicInteger cleanups = new AtomicInteger();
-
-            module.context().createLocalSlot(
-                    "requestCancel",
-                    nativeClosure(
-                            (activation, supplied) -> {
-                                if (!activation.task().orElseThrow().requestCancellation()) {
-                                    throw new IllegalStateException(
-                                            "test cancellation request was not recorded");
-                                }
-                                return ProtosNullValue.INSTANCE;
-                            }));
-            module.context().createLocalSlot(
-                    "legacyAwait",
-                    nativeClosure(
-                            (activation, supplied) -> {
-                                ProtosEvaluatorBridge.await(activation, neverReady);
-                                return ProtosNullValue.INSTANCE;
-                            }));
-            module.context().createLocalSlot(
-                    "cleanup",
-                    nativeClosure(
-                            (activation, supplied) -> {
-                                cleanups.incrementAndGet();
-                                return ProtosNullValue.INSTANCE;
-                            }));
-
-            Execution execution =
-                    executeWithFuture(
-                            domain,
-                            prelude,
-                            module,
-                            lowerRoot(
-                                    scope.language(),
-                                    "(() => { requestCancel()\nlegacyAwait() }).ensure(cleanup)",
-                                    "perf006-b4e-legacy-await-cprime-cancel.protos"));
-
-            assertTrue(domain.dispatchOne());
-
-            assertEquals(ProtosTask.State.CANCELLED, execution.task().state());
-            assertEquals(
-                    ProtosTask.CancellationPhase.TERMINAL,
-                    execution.task().cancellationPhase());
-            assertEquals(ProtosFutureValue.State.CANCELLED, execution.future().state());
-            assertEquals(1, cleanups.get());
-        }
-
-        System.out.println(
-                "PERF006_B4E_LEGACY_AWAIT_INSIDE_CPRIME_CANCEL_UNWIND=PASS");
-        System.out.println(
-                "PERF006_B4E_LEGACY_AWAIT_CPRIME_ENSURE_CLEANUP=PASS");
-    }
-
     private static ProtosClosureValue nativeClosure(
             com.guillermomolina.protos.runtime.ProtosNativeClosureBody body) {
         return ProtosClosureValue.suspensionCapableNativeClosure(body, body);

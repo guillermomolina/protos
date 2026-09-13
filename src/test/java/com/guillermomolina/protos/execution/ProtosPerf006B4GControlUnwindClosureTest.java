@@ -61,7 +61,7 @@ final class ProtosPerf006B4GControlUnwindClosureTest {
     }
 
     @Test
-    void bytecodeControlPathOwnsNoReplayCursorAndLegacyFallbackRemainsUntilB6()
+    void bytecodeControlPathAndSynchronousOracleContainNoReplayBackend()
             throws Exception {
         String lowerer = read(
                 "src/main/java/com/guillermomolina/protos/execution/CanonicalToBytecodeLowerer.java");
@@ -69,23 +69,21 @@ final class ProtosPerf006B4GControlUnwindClosureTest {
                 "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java");
         String standardObject = read(
                 "src/main/java/com/guillermomolina/protos/execution/ProtosStandardObjectProtocol.java");
+        String task = read(
+                "src/main/java/com/guillermomolina/protos/runtime/ProtosTask.java");
 
         assertFalse(lowerer.contains("bindWhileCallbackCheckpoint("));
         assertFalse(lowerer.contains("skipInvocationReplayTo("));
-        assertFalse(lowerer.contains("whilePhase()"));
-        assertFalse(lowerer.contains("ensurePhase()"));
         assertFalse(bytecodeRoot.contains("bindWhileCallbackCheckpoint("));
         assertFalse(bytecodeRoot.contains("skipInvocationReplayTo("));
-
-        assertTrue(
-                standardObject.contains("bindWhileCallbackCheckpoint("),
-                "legacy AST/replay while fallback must remain until B6 cutover");
-        assertTrue(
-                standardObject.contains("whilePhase()"),
-                "legacy AST/replay while phase must remain until B6 cutover");
+        assertFalse(standardObject.contains("bindWhileCallbackCheckpoint("));
+        assertFalse(standardObject.contains("skipInvocationReplayTo("));
+        assertFalse(standardObject.contains("resumeEnsureCleanupReplay("));
+        assertFalse(task.contains("executeProtos("));
+        assertFalse(task.contains("evaluatorContinuation("));
 
         System.out.println("PERF006_B4G_BYTECODE_REPLAY_CURSOR=NO");
-        System.out.println("PERF006_B4G_LEGACY_REPLAY_FALLBACK_RETAINED_UNTIL_B6=YES");
+        System.out.println("PERF006_B4G_LEGACY_REPLAY_BACKEND_RETIRED=YES");
     }
 
     private static String read(String path) throws Exception {

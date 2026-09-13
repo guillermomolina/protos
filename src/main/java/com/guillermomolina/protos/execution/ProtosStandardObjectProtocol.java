@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
-import com.guillermomolina.protos.runtime.ProtosEvaluatorContinuation;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -350,72 +349,22 @@ public final class ProtosStandardObjectProtocol {
         if (!(receiver instanceof ProtosClosureValue condition)) {
             throw invalid(activation);
         }
-        if (supplied.size() != 1) {
+        if (supplied.size() != 1
+                || !(supplied.get(0) instanceof ProtosClosureValue body)) {
             throw invalid(activation);
         }
-        Object bodyValue = supplied.get(0);
-        if (!(bodyValue instanceof ProtosClosureValue body)) {
-            throw invalid(activation);
-        }
-
-        ProtosDynamicControlState state = activation.dynamicControlState();
-        ProtosDynamicControlState.Frame frame =
-                state.enterFrame(activation, ProtosDynamicControlState.FrameKind.WHILE);
-        int callbackCheckpoint =
-                state.bindWhileCallbackCheckpoint(frame, replayCursor(activation));
 
         while (true) {
-            if (frame.whilePhase() == ProtosDynamicControlState.WhilePhase.CONDITION) {
-                Object conditionResult;
-                try {
-                    conditionResult = ProtosClosureInvoker.invoke(condition, List.of(), activation);
-                } catch (ProtosEvaluatorSuspension suspension) {
-                    throw suspension;
-                } catch (RuntimeException transfer) {
-                    state.leaveFrame(frame);
-                    throw transfer;
-                }
-
-                compactCompletedWhileCallback(activation, callbackCheckpoint);
-                if (conditionResult == ProtosBooleanValue.FALSE) {
-                    state.leaveFrame(frame);
-                    return ProtosNullValue.INSTANCE;
-                }
-                if (conditionResult != ProtosBooleanValue.TRUE) {
-                    state.leaveFrame(frame);
-                    throw invalid(activation);
-                }
-                state.completeWhileCondition(frame);
+            Object conditionResult =
+                    ProtosClosureInvoker.invoke(condition, List.of(), activation);
+            if (conditionResult == ProtosBooleanValue.FALSE) {
+                return ProtosNullValue.INSTANCE;
             }
-
-            try {
-                ProtosClosureInvoker.invoke(body, List.of(), activation);
-            } catch (ProtosEvaluatorSuspension suspension) {
-                throw suspension;
-            } catch (RuntimeException transfer) {
-                state.leaveFrame(frame);
-                throw transfer;
+            if (conditionResult != ProtosBooleanValue.TRUE) {
+                throw invalid(activation);
             }
-            compactCompletedWhileCallback(activation, callbackCheckpoint);
-            state.completeWhileBody(frame);
+            ProtosClosureInvoker.invoke(body, List.of(), activation);
         }
-    }
-
-    private static void compactCompletedWhileCallback(
-            ProtosActivation activation, int callbackCheckpoint) {
-        if (callbackCheckpoint < 0) {
-            return;
-        }
-        ProtosTask task = activation.task().orElse(null);
-        if (task == null) {
-            return;
-        }
-        task.evaluatorContinuationIfPresentForRuntime()
-                .ifPresent(
-                        continuation ->
-                                continuation.compactCompletedChildExecution(
-                                        callbackCheckpoint,
-                                        1));
     }
 
     private static Object ensure(ProtosActivation activation, List<?> supplied) {
@@ -423,11 +372,8 @@ public final class ProtosStandardObjectProtocol {
         if (!(receiver instanceof ProtosClosureValue body)) {
             throw invalid(activation);
         }
-        if (supplied.size() != 1) {
-            throw invalid(activation);
-        }
-        Object cleanupValue = supplied.get(0);
-        if (!(cleanupValue instanceof ProtosClosureValue cleanup)) {
+        if (supplied.size() != 1
+                || !(supplied.get(0) instanceof ProtosClosureValue cleanup)) {
             throw invalid(activation);
         }
 
@@ -435,43 +381,30 @@ public final class ProtosStandardObjectProtocol {
         ProtosDynamicControlState.Frame frame =
                 state.enterFrame(activation, ProtosDynamicControlState.FrameKind.ENSURE);
 
-        boolean replayingCleanup =
-                frame.ensurePhase() == ProtosDynamicControlState.EnsurePhase.CLEANUP;
-
-        if (!replayingCleanup) {
-            try {
-                Object result = ProtosClosureInvoker.invoke(body, List.of(), activation);
-                state.beginEnsureCleanup(
-                        frame,
-                        ProtosDynamicControlState.EnsureExitKind.NORMAL,
-                        result,
-                        replayCursor(activation));
-            } catch (ProtosEvaluatorSuspension suspension) {
-                throw suspension;
-            } catch (ProtosSignalException pending) {
-                state.beginEnsureCleanup(
-                        frame,
-                        ProtosDynamicControlState.EnsureExitKind.ERROR,
-                        pending,
-                        replayCursor(activation));
-            } catch (ProtosNonLocalReturnException pending) {
-                state.beginEnsureCleanup(
-                        frame,
-                        ProtosDynamicControlState.EnsureExitKind.RETURN,
-                        pending,
-                        replayCursor(activation));
-            } catch (ProtosTaskCancellationException pending) {
-                state.beginEnsureCleanup(
-                        frame,
-                        ProtosDynamicControlState.EnsureExitKind.CANCELLATION,
-                        pending,
-                        replayCursor(activation));
-            } catch (RuntimeException hostFailure) {
-                state.leaveFrame(frame);
-                throw hostFailure;
-            }
-        } else {
-            resumeEnsureCleanupReplay(frame, activation);
+        try {
+            Object result = ProtosClosureInvoker.invoke(body, List.of(), activation);
+            state.beginEnsureCleanup(
+                    frame,
+                    ProtosDynamicControlState.EnsureExitKind.NORMAL,
+                    result);
+        } catch (ProtosSignalException pending) {
+            state.beginEnsureCleanup(
+                    frame,
+                    ProtosDynamicControlState.EnsureExitKind.ERROR,
+                    pending);
+        } catch (ProtosNonLocalReturnException pending) {
+            state.beginEnsureCleanup(
+                    frame,
+                    ProtosDynamicControlState.EnsureExitKind.RETURN,
+                    pending);
+        } catch (ProtosTaskCancellationException pending) {
+            state.beginEnsureCleanup(
+                    frame,
+                    ProtosDynamicControlState.EnsureExitKind.CANCELLATION,
+                    pending);
+        } catch (RuntimeException hostFailure) {
+            state.leaveFrame(frame);
+            throw hostFailure;
         }
 
         return finishEnsure(state, frame, cleanup, activation);
@@ -507,9 +440,6 @@ public final class ProtosStandardObjectProtocol {
         try {
             ProtosClosureInvoker.invoke(cleanup, List.of(), activation);
             state.leaveFrame(frame);
-        } catch (ProtosEvaluatorSuspension suspension) {
-            // The frame remains in CLEANUP phase so replay resumes cleanup, never the body.
-            throw suspension;
         } catch (RuntimeException laterTransfer) {
             if (frame.ensureExitKind().orElse(null)
                     == ProtosDynamicControlState.EnsureExitKind.CANCELLATION) {
@@ -527,36 +457,6 @@ public final class ProtosStandardObjectProtocol {
             state.leaveFrame(frame);
             throw laterTransfer;
         }
-    }
-
-    private static int replayCursor(ProtosActivation activation) {
-        ProtosTask task = activation.task().orElse(null);
-        if (task == null) {
-            return -1;
-        }
-        ProtosEvaluatorContinuation continuation =
-                task.evaluatorContinuationIfPresentForRuntime().orElse(null);
-        return continuation != null && continuation.segmentActive()
-                ? continuation.cursorPosition()
-                : -1;
-    }
-
-    private static void resumeEnsureCleanupReplay(
-            ProtosDynamicControlState.Frame frame,
-            ProtosActivation activation) {
-        int targetCursor = frame.ensureBodyReplayCursor();
-        if (targetCursor < 0) {
-            throw new IllegalStateException(
-                    "suspended ensure cleanup requires a replay cursor checkpoint");
-        }
-        ProtosEvaluatorContinuation continuation =
-                activation.task()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "suspended ensure cleanup requires a task"))
-                        .evaluatorContinuation();
-        continuation.skipInvocationReplayTo(targetCursor);
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

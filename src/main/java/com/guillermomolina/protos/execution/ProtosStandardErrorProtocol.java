@@ -108,8 +108,6 @@ final class ProtosStandardErrorProtocol {
             Object result = ProtosClosureInvoker.invoke(body, List.of(), activation);
             state.leaveFrame(frame);
             return result;
-        } catch (ProtosEvaluatorSuspension suspension) {
-            throw suspension;
         } catch (ProtosSignalException transfer) {
             if (transfer.selectedHandlerFrame().orElse(null) == frame) {
                 state.leaveFrame(frame);

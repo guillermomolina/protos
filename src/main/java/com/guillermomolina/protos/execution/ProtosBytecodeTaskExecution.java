@@ -119,7 +119,6 @@ final class ProtosBytecodeTaskExecution {
             ProtosTask task,
             ProtosBytecodeRootNode.PreparedClosureCall prepared,
             java.util.function.Supplier<Object> segment) {
-        task.enterCPrimeExecutionSegmentForRuntime();
         try {
             Object outcome =
                     Objects.requireNonNull(
@@ -151,8 +150,6 @@ final class ProtosBytecodeTaskExecution {
         } catch (Error failure) {
             prepared.complete();
             throw failure;
-        } finally {
-            task.leaveCPrimeExecutionSegmentForRuntime();
         }
     }
 
@@ -227,7 +224,6 @@ final class ProtosBytecodeTaskExecution {
     private static void runSegment(
             ProtosTask task,
             java.util.function.Supplier<Object> segment) {
-        task.enterCPrimeExecutionSegmentForRuntime();
         try {
             Object outcome =
                     Objects.requireNonNull(
@@ -244,8 +240,6 @@ final class ProtosBytecodeTaskExecution {
             finishCancellationUnwind(task);
         } catch (ProtosSignalException signalled) {
             task.fail(signalled.error());
-        } finally {
-            task.leaveCPrimeExecutionSegmentForRuntime();
         }
     }
 

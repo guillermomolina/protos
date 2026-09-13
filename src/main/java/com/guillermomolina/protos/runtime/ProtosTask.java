@@ -20,8 +20,6 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
-import com.oracle.truffle.api.CallTarget;
-import com.guillermomolina.protos.execution.ProtosEvaluatorSuspension;
 import com.guillermomolina.protos.execution.ProtosTaskCancellationException;
 
 /**
@@ -96,7 +94,6 @@ public final class ProtosTask {
     private boolean cancellationRequestRecorded;
     private CancellationPhase cancellationPhase = CancellationPhase.NONE;
     private boolean continuationStarted;
-    private int cPrimeExecutionSegmentDepth;
     private WaitDependency waitDependency;
 
     /*
@@ -111,13 +108,6 @@ public final class ProtosTask {
     private Object result;
     private Object failure;
 
-    /*
-     * PERF006-B6B replay state is legacy-AST-only and pay-only-when-used.
-     *
-     * Ordinary production semantic Bytecode roots execute through C-prime and
-     * retain no evaluator tape/map merely because they are Tasks.
-     */
-    private ProtosEvaluatorContinuation evaluatorContinuation;
 
     private WaitDependency resumedDependency;
     private final WaitDependency childDrain = new WaitDependency() {};
@@ -207,19 +197,7 @@ public final class ProtosTask {
      * legacy direct-Java execution only. Production C-prime code that merely needs
      * to inspect replay state must use the non-creating optional accessor below.
      */
-    public synchronized ProtosEvaluatorContinuation evaluatorContinuation() {
-        if (evaluatorContinuation == null) {
-            evaluatorContinuation = new ProtosEvaluatorContinuation();
-        }
-        return evaluatorContinuation;
-    }
-
     /** Non-creating B6B inspection of legacy evaluator replay state. */
-    public synchronized Optional<ProtosEvaluatorContinuation>
-            evaluatorContinuationIfPresentForRuntime() {
-        return Optional.ofNullable(evaluatorContinuation);
-    }
-
     /**
      * Marks host execution of one Task-owned C-prime segment.
      *
@@ -227,22 +205,6 @@ public final class ProtosTask {
      * so legacy evaluator suspension boundaries reached from within C-prime select the existing
      * continuation-cancellation unwind path instead of terminalizing through legacy observation.
      */
-    public synchronized void enterCPrimeExecutionSegmentForRuntime() {
-        requireState(State.RUNNING, "enter C-prime execution segment");
-        cPrimeExecutionSegmentDepth++;
-    }
-
-    public synchronized void leaveCPrimeExecutionSegmentForRuntime() {
-        if (cPrimeExecutionSegmentDepth <= 0) {
-            throw new IllegalStateException("no active C-prime execution segment");
-        }
-        cPrimeExecutionSegmentDepth--;
-    }
-
-    public synchronized boolean cPrimeExecutionSegmentActiveForRuntime() {
-        return cPrimeExecutionSegmentDepth > 0;
-    }
-
     /** Internal lazy task-local handler/cleanup state; never inherited by child tasks. */
     public synchronized ProtosDynamicControlState dynamicControlState() {
         if (dynamicControlState == null) {
@@ -256,26 +218,6 @@ public final class ProtosTask {
     }
 
     /** Executes one real Truffle evaluation segment for this cooperative task. */
-    public void executeProtos(CallTarget target, ProtosActivation activation) {
-        Objects.requireNonNull(target, "target");
-        Objects.requireNonNull(activation, "activation");
-        activation.attachTask(this);
-        ProtosEvaluatorContinuation evaluator = evaluatorContinuation();
-        evaluator.beginSegment();
-        try {
-            Object value = target.call(activation);
-            complete(value);
-        } catch (ProtosEvaluatorSuspension suspended) {
-            // suspend() already changed the task state; returning yields the host thread to the domain.
-        } catch (ProtosTaskCancellationException cancelled) {
-            finishCancellationUnwind();
-        } catch (ProtosSignalException signalled) {
-            fail(signalled.error());
-        } finally {
-            evaluator.endSegment();
-        }
-    }
-
     public synchronized boolean consumeResume(WaitDependency dependency) {
         if (state != State.RUNNING || resumedDependency != dependency) {
             return false;
