@@ -77,9 +77,8 @@ final class ProtosTestToolFixedIntegerExpectationsTest {
             ProtosExactExecutionFacility.install(activation);
         }
         Path fixture = Path.of("protos", "tests", "tooling", file);
-        return ProtosRootTaskExecution.execute(
-                new ProtosSourceCompiler().compile(
-                        Files.readString(fixture, StandardCharsets.UTF_8)),
-                activation);
+        return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+Files.readString(fixture, StandardCharsets.UTF_8),
+activation);
     }
 }

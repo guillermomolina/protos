@@ -17,5 +17,5 @@ projectFilesystem: filesystem
 MetadataPublication: import("self:MetadataPublication")
 BootstrapMessage: import("self:BootstrapMessage")
 writer: TextWriter(process.stdout(), process.stdoutEncoding())
-writer.writeLine(BootstrapMessage.banner)
-writer.writeLine(process.args()[0])
+writer.writeLine(BootstrapMessage.banner).value()
+writer.writeLine(process.args()[0]).value()

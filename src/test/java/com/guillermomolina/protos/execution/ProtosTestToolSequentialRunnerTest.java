@@ -99,13 +99,11 @@ final class ProtosTestToolSequentialRunnerTest {
             Path fixture,
             ProtosActivation activation)
             throws Exception {
-        return ProtosRootTaskExecution.execute(
-                new ProtosSourceCompiler()
-                        .compile(
-                                Files.readString(
+        return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+Files.readString(
                                         fixture,
-                                        StandardCharsets.UTF_8)),
-                activation);
+                                        StandardCharsets.UTF_8),
+activation);
     }
 
     private static Fixture fixture() throws Exception {

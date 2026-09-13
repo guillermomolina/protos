@@ -264,9 +264,9 @@ final class ProtosTestToolResourceReservationKernelTest {
                         SHARED_ROOT,
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return ProtosRootTaskExecution.execute(
-                new ProtosSourceCompiler().compile(source),
-                prelude.newModuleActivation());
+        return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+prelude.newModuleActivation());
     }
 
     private static ProtosArrayValue arrayAt(ProtosArrayValue array, int index) {

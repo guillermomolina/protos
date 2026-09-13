@@ -109,9 +109,9 @@ final class ProtosTestToolI8D3RootActorResourceBundleTest {
                 bootstrap.process().rootResourcesForRuntime().orElseThrow());
 
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile("resources[\"gpu\"]"),
-                        bootstrap.activation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+"resources[\"gpu\"]",
+bootstrap.activation());
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosIntegerValue observed =

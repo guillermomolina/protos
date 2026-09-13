@@ -207,8 +207,9 @@ final class ProtosSystemResourceEndToEndConformanceTest {
         String source =
                 Files.readString(sourcePath, StandardCharsets.UTF_8);
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source), activation);
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+activation);
 
         Object result =
                 switch (outcome.state()) {

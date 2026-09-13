@@ -121,9 +121,9 @@ final class ProtosTestToolResourceRequirementsJoinTest {
     private static Object completed(String source) throws Exception {
         Fixture fixture = fixture();
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source),
-                        fixture.prelude().newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+fixture.prelude().newModuleActivation());
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
@@ -134,9 +134,9 @@ final class ProtosTestToolResourceRequirementsJoinTest {
     private static void assertFailed(String source) throws Exception {
         Fixture fixture = fixture();
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source),
-                        fixture.prelude().newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+fixture.prelude().newModuleActivation());
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
     }
 

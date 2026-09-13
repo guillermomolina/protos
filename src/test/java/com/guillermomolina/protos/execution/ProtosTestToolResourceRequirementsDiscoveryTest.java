@@ -178,9 +178,9 @@ final class ProtosTestToolResourceRequirementsDiscoveryTest {
                     assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
             activation.context().createLocalSlot("filesystem", filesystem);
 
-            return ProtosRootTaskExecution.execute(
-                    new ProtosSourceCompiler().compile(source),
-                    activation);
+            return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+activation);
         }
     }
 }

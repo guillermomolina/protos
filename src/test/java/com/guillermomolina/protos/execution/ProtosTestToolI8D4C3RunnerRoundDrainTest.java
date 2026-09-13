@@ -56,10 +56,9 @@ final class ProtosTestToolI8D4C3RunnerRoundDrainTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler()
-                                .compile(Files.readString(FIXTURE, StandardCharsets.UTF_8)),
-                        prelude.newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+Files.readString(FIXTURE, StandardCharsets.UTF_8),
+prelude.newModuleActivation());
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,

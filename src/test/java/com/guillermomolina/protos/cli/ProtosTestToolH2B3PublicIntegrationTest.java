@@ -235,8 +235,9 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source), activation);
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+activation);
         return new OptionRun(prelude, outcome);
     }
 

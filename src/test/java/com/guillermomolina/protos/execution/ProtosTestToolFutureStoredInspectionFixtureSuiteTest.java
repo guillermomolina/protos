@@ -105,13 +105,11 @@ final class ProtosTestToolFutureStoredInspectionFixtureSuiteTest {
                                         StandardCharsets.UTF_8)));
 
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler()
-                                .compile(
-                                        Files.readString(
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+Files.readString(
                                                 fixture,
-                                                StandardCharsets.UTF_8)),
-                        activation);
+                                                StandardCharsets.UTF_8),
+activation);
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,

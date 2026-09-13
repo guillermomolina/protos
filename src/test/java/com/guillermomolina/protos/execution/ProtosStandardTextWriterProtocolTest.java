@@ -54,7 +54,14 @@ final class ProtosStandardTextWriterProtocolTest {
                                 encoding(prelude, "UTF8"),
                                 false);
 
-                ProtosFutureValue result = writeLine(writer, activation, "once");
+                ProtosFutureValue result =
+                        assertInstanceOf(
+                                ProtosFutureValue.class,
+                                ProtosInvocation.invokeMessage(
+                                        writer,
+                                        "writeLine",
+                                        List.of(new ProtosStringValue("once")),
+                                        activation));
 
                 assertEquals(ProtosFutureValue.State.RESOLVED, result.state());
                 assertEquals(
@@ -107,11 +114,11 @@ final class ProtosStandardTextWriterProtocolTest {
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        ProtosInvocation.invokeMessage(
+                        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
                                 factory,
                                 "call",
                                 List.of(target.target, fakeEncoding),
-                                activation));
+                                activation)));
         assertEquals(0, target.writes);
     }
 
@@ -303,49 +310,49 @@ final class ProtosStandardTextWriterProtocolTest {
             boolean owning) {
         return assertInstanceOf(
                 ProtosObjectValue.class,
-                ProtosInvocation.invokeMessage(
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
                         factory(prelude),
                         owning ? "owning" : "call",
                         List.of(target, encoding),
-                        activation));
+                        activation)));
     }
 
     private static ProtosFutureValue writeText(
             ProtosObjectValue writer, ProtosActivation activation, String text) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
                         writer,
                         "writeText",
                         List.of(new ProtosStringValue(text)),
-                        activation));
+                        activation)));
     }
 
     private static ProtosFutureValue writeLine(
             ProtosObjectValue writer, ProtosActivation activation, String text) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
                         writer,
                         "writeLine",
                         List.of(new ProtosStringValue(text)),
-                        activation));
+                        activation)));
     }
 
     private static ProtosFutureValue flush(
             ProtosObjectValue writer, ProtosActivation activation) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(
-                        writer, "flush", List.of(), activation));
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
+                        writer, "flush", List.of(), activation)));
     }
 
     private static ProtosFutureValue close(
             ProtosObjectValue writer, ProtosActivation activation) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(
-                        writer, "close", List.of(), activation));
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
+                        writer, "close", List.of(), activation)));
     }
 
     private static void assertErrorParent(
@@ -364,6 +371,8 @@ final class ProtosStandardTextWriterProtocolTest {
 
         void resolve(Object value, ProtosActivation activation) {
             future.resolve(value, activation);
+            com.guillermomolina.protos.execution.ProtosTestExecutionSupport
+                    .dispatchUntilIdle(activation.executionDomain());
         }
     }
 

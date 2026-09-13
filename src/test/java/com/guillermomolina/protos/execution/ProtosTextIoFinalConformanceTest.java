@@ -231,8 +231,8 @@ final class ProtosTextIoFinalConformanceTest {
                         prelude.bindings().readLocalSlot("TextReader").orElseThrow());
         return assertInstanceOf(
                 ProtosObjectValue.class,
-                ProtosInvocation.invokeMessage(
-                        factory, "call", List.of(source, encoding), activation));
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
+                        factory, "call", List.of(source, encoding), activation)));
     }
 
     private static ProtosObjectValue writer(
@@ -246,40 +246,40 @@ final class ProtosTextIoFinalConformanceTest {
                         prelude.bindings().readLocalSlot("TextWriter").orElseThrow());
         return assertInstanceOf(
                 ProtosObjectValue.class,
-                ProtosInvocation.invokeMessage(
-                        factory, "call", List.of(target, encoding), activation));
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
+                        factory, "call", List.of(target, encoding), activation)));
     }
 
     private static ProtosFutureValue readText(
             ProtosObjectValue reader, ProtosActivation activation) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(reader, "readText", List.of(), activation));
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(reader, "readText", List.of(), activation)));
     }
 
     private static ProtosFutureValue readLine(
             ProtosObjectValue reader, ProtosActivation activation, Object argument) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(reader, "readLine", List.of(argument), activation));
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(reader, "readLine", List.of(argument), activation)));
     }
 
     private static ProtosFutureValue writeText(
             ProtosObjectValue writer, ProtosActivation activation, String text) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
                         writer,
                         "writeText",
                         List.of(new ProtosStringValue(text)),
-                        activation));
+                        activation)));
     }
 
     private static ProtosFutureValue close(
             ProtosObjectValue writer, ProtosActivation activation) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(writer, "close", List.of(), activation));
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(writer, "close", List.of(), activation)));
     }
 
     private static String string(ProtosFutureValue future) {

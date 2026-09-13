@@ -52,10 +52,9 @@ final class ProtosTestToolFutureStoredExpectationRecognitionTest {
         ProtosActivation activation = prelude.newModuleActivation();
 
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler()
-                                .compile(Files.readString(FIXTURE, StandardCharsets.UTF_8)),
-                        activation);
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+Files.readString(FIXTURE, StandardCharsets.UTF_8),
+activation);
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,

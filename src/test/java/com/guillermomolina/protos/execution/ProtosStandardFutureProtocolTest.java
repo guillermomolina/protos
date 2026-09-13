@@ -47,7 +47,7 @@ class ProtosStandardFutureProtocolTest {
 
     private static Object eval(
             ProtosPrelude prelude, ProtosActivation activation, String source) {
-        return new ProtosSourceCompiler().compile(source).call(activation);
+        return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.evaluate(source, activation);
     }
 
     // Deliberately Java-side: verifies the actual evaluator suspension bridge,
@@ -91,7 +91,7 @@ class ProtosStandardFutureProtocolTest {
 
         ProtosTask producer = future.producerTask().orElseThrow();
 
-        assertTrue(domain.dispatchOne());
+        assertTrue(com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchOne(domain));
         assertEquals(ProtosFutureValue.State.PENDING, future.state());
         assertEquals(ProtosTask.State.SUSPENDED, producer.state());
         assertEquals(
@@ -102,7 +102,7 @@ class ProtosStandardFutureProtocolTest {
                 "already-honored cancellation must be shielded during cleanup suspension");
 
         cleanupGate.resolve(ProtosNullValue.INSTANCE, activation);
-        domain.dispatchUntilIdle();
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(domain);
 
         assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
         assertEquals(ProtosTask.State.CANCELLED, producer.state());
@@ -153,14 +153,14 @@ class ProtosStandardFutureProtocolTest {
                                         + "}).future()\n"
                                         + "future");
 
-        assertTrue(domain.dispatchOne());
+        assertTrue(com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchOne(domain));
         assertEquals(ProtosFutureValue.State.PENDING, producer.state());
         assertEquals(1, domain.liveTaskCount());
 
         actor.requestTerminationForRuntime();
         assertEquals(ProtosActor.LifecycleState.TERMINATING, actor.lifecycleState());
 
-        assertTrue(domain.dispatchOne());
+        assertTrue(com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchOne(domain));
         ProtosTask producerTask = producer.producerTask().orElseThrow();
         assertEquals(ProtosTask.State.SUSPENDED, producerTask.state());
         assertEquals(
@@ -173,7 +173,7 @@ class ProtosStandardFutureProtocolTest {
                 "Actor termination must wait for cancellation cleanup");
 
         cleanupGate.resolve(ProtosNullValue.INSTANCE, activation);
-        domain.dispatchUntilIdle();
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(domain);
 
         assertEquals(ProtosFutureValue.State.CANCELLED, producer.state());
         assertEquals(ProtosTask.State.CANCELLED, producerTask.state());

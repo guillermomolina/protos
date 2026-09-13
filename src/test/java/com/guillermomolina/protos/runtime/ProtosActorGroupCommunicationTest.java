@@ -257,7 +257,7 @@ final class ProtosActorGroupCommunicationTest {
     private static void dispatchAccepted(ProtosActor actor) {
         ProtosTask.Continuation turn = actor.mailboxForRuntime().pollForDispatch();
         assertNotNull(turn);
-        actor.executionDomain().dispatchAcceptedTurn(turn);
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.runEntered(() -> actor.executionDomain().dispatchAcceptedTurn(turn));
     }
 
     private static ProtosGroupRefValue reference(ProtosActorGroupRuntime group) {

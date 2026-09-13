@@ -31,7 +31,6 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.oracle.truffle.api.CallTarget;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -88,9 +87,7 @@ final class ProtosTestToolManifestPlanTest {
         ProtosArrayValue caseSpec =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        completed(
-                                new ProtosSourceCompiler().compile(source),
-                                fixture.activation()));
+                        completed(source, fixture.activation()));
 
         assertEquals(5, caseSpec.indexedSize().intValueExact());
         org.junit.jupiter.api.Assertions.assertTrue(caseSpec.isFrozen());
@@ -122,9 +119,7 @@ final class ProtosTestToolManifestPlanTest {
                         + "(Manifest.caseExpected(case) == \"2\")";
 
         Object result =
-                completed(
-                        new ProtosSourceCompiler().compile(source),
-                        fixture.activation());
+                completed(source, fixture.activation());
 
         assertSame(ProtosBooleanValue.TRUE, result);
     }
@@ -143,9 +138,7 @@ final class ProtosTestToolManifestPlanTest {
         ProtosArrayValue requirements =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        completed(
-                                new ProtosSourceCompiler().compile(source),
-                                fixture.activation()));
+                        completed(source, fixture.activation()));
         assertEquals(2, requirements.indexedSize().intValueExact());
 
         ProtosArrayValue first =
@@ -183,9 +176,7 @@ final class ProtosTestToolManifestPlanTest {
         ProtosArrayValue observed =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        completed(
-                                new ProtosSourceCompiler().compile(source),
-                                fixture.activation()));
+                        completed(source, fixture.activation()));
         assertEquals(8, observed.indexedSize().intValueExact());
 
         ProtosArrayValue shared =
@@ -256,9 +247,7 @@ final class ProtosTestToolManifestPlanTest {
         ProtosArrayValue valid =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        completed(
-                                new ProtosSourceCompiler().compile(validSource),
-                                fixture.activation()));
+                        completed(validSource, fixture.activation()));
         assertEquals(7, valid.indexedSize().intValueExact());
 
         String[] invalidKeys = {
@@ -280,9 +269,9 @@ final class ProtosTestToolManifestPlanTest {
                             + invalidKey
                             + "\", \"shared\", 1)";
             ProtosExecutionOutcome outcome =
-                    ProtosRootTaskExecution.execute(
-                            new ProtosSourceCompiler().compile(source),
-                            invalidFixture.activation());
+                    com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+invalidFixture.activation());
             assertEquals(
                     ProtosExecutionOutcome.State.FAILED,
                     outcome.state(),
@@ -305,9 +294,7 @@ final class ProtosTestToolManifestPlanTest {
         ProtosArrayValue valid =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        completed(
-                                new ProtosSourceCompiler().compile(validSource),
-                                fixture.activation()));
+                        completed(validSource, fixture.activation()));
         assertEquals(3, valid.indexedSize().intValueExact());
 
         String[] invalidArguments = {
@@ -333,9 +320,9 @@ final class ProtosTestToolManifestPlanTest {
                             + invalidArgumentsValue
                             + ")";
             ProtosExecutionOutcome outcome =
-                    ProtosRootTaskExecution.execute(
-                            new ProtosSourceCompiler().compile(source),
-                            invalidFixture.activation());
+                    com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+invalidFixture.activation());
             assertEquals(
                     ProtosExecutionOutcome.State.FAILED,
                     outcome.state(),
@@ -367,9 +354,7 @@ final class ProtosTestToolManifestPlanTest {
         ProtosArrayValue observed =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        completed(
-                                new ProtosSourceCompiler().compile(source),
-                                fixture.activation()));
+                        completed(source, fixture.activation()));
         assertEquals(8, observed.indexedSize().intValueExact());
 
         ProtosArrayValue attached =
@@ -444,9 +429,9 @@ final class ProtosTestToolManifestPlanTest {
                         + "Manifest.caseSpecWithRequirements(base, Array("
                         + "Manifest.requirement(\"gpu\", \"shared\", 1)))";
         ProtosExecutionOutcome controlOutcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(controlSource),
-                        controlFixture.activation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+controlSource,
+controlFixture.activation());
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 controlOutcome.state(),
@@ -468,9 +453,9 @@ final class ProtosTestToolManifestPlanTest {
                             + duplicatePair
                             + "))";
             ProtosExecutionOutcome outcome =
-                    ProtosRootTaskExecution.execute(
-                            new ProtosSourceCompiler().compile(source),
-                            fixture.activation());
+                    com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+fixture.activation());
             assertEquals(
                     ProtosExecutionOutcome.State.FAILED,
                     outcome.state(),
@@ -496,9 +481,7 @@ final class ProtosTestToolManifestPlanTest {
         ProtosArrayValue sizes =
                 assertInstanceOf(
                         ProtosArrayValue.class,
-                        completed(
-                                new ProtosSourceCompiler().compile(source),
-                                fixture.activation()));
+                        completed(source, fixture.activation()));
         assertEquals(2, sizes.indexedSize().intValueExact());
         assertEquals(
                 1,
@@ -544,13 +527,9 @@ final class ProtosTestToolManifestPlanTest {
             installFilesystem(fixture.prelude(), fixture.activation(), backend);
 
             Object result =
-                    completed(
-                            new ProtosSourceCompiler()
-                                    .compile(
-                                            "Manifest: import(\"self:Manifest\")\n"
+                    completed("Manifest: import(\"self:Manifest\")\n"
                                                     + "Manifest.planCases("
-                                                    + "Manifest.load(filesystem)).size()"),
-                            fixture.activation());
+                                                    + "Manifest.load(filesystem)).size()", fixture.activation());
 
             assertEquals(
                     rowCount,
@@ -574,13 +553,9 @@ final class ProtosTestToolManifestPlanTest {
             installFilesystem(fixture.prelude(), fixture.activation(), backend);
 
             Object result =
-                    completed(
-                            new ProtosSourceCompiler()
-                                    .compile(
-                                            Files.readString(
+                    completed(Files.readString(
                                                     FIXTURE,
-                                                    StandardCharsets.UTF_8)),
-                            fixture.activation());
+                                                    StandardCharsets.UTF_8), fixture.activation());
 
             assertSame(ProtosBooleanValue.TRUE, result);
         }
@@ -605,13 +580,9 @@ final class ProtosTestToolManifestPlanTest {
             installFilesystem(fixture.prelude(), fixture.activation(), backend);
 
             Object result =
-                    completed(
-                            new ProtosSourceCompiler()
-                                    .compile(
-                                            Files.readString(
+                    completed(Files.readString(
                                                     PACKAGE_TOML_FIXTURE,
-                                                    StandardCharsets.UTF_8)),
-                            fixture.activation());
+                                                    StandardCharsets.UTF_8), fixture.activation());
 
             assertSame(ProtosBooleanValue.TRUE, result);
         }
@@ -643,13 +614,9 @@ final class ProtosTestToolManifestPlanTest {
                     packageTomlBackend);
 
             Object result =
-                    completed(
-                            new ProtosSourceCompiler()
-                                    .compile(
-                                            Files.readString(
+                    completed(Files.readString(
                                                     PACKAGE_TOML_FILESYSTEM_FIXTURE,
-                                                    StandardCharsets.UTF_8)),
-                            fixture.activation());
+                                                    StandardCharsets.UTF_8), fixture.activation());
 
             assertSame(ProtosBooleanValue.TRUE, result);
         }
@@ -693,10 +660,11 @@ final class ProtosTestToolManifestPlanTest {
     }
 
     private static Object completed(
-            CallTarget target,
+            String source,
             ProtosActivation activation) {
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(target, activation);
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+                        source, activation);
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),

@@ -58,11 +58,11 @@ final class ProtosStandardTextReaderProtocolTest {
         ProtosObjectValue representedWrapper =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        ProtosInvocation.invokeMessage(
+                        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
                                 factory,
                                 "call",
                                 List.of(representedStdin, utf8),
-                                activation));
+                                activation)));
         assertEquals(
                 Set.of("readText", "readLine", "close"),
                 representedWrapper.localSlotsSnapshot().keySet());
@@ -71,11 +71,11 @@ final class ProtosStandardTextReaderProtocolTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                ProtosInvocation.invokeMessage(
+                                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
                                         factory,
                                         "owning",
                                         List.of(representedStdin, utf8),
-                                        activation));
+                                        activation)));
         assertErrorParent(
                 prelude, owningWithoutClose.error(), "InvalidIOArgument");
 
@@ -86,11 +86,11 @@ final class ProtosStandardTextReaderProtocolTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                ProtosInvocation.invokeMessage(
+                                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
                                         factory,
                                         "call",
                                         List.of(ordinary.source, fakeEncoding),
-                                        activation));
+                                        activation)));
         assertErrorParent(
                 prelude, invalidEncoding.error(), "InvalidIOArgument");
     }
@@ -166,6 +166,7 @@ final class ProtosStandardTextReaderProtocolTest {
         assertEquals(1, source.reads);
 
         assertTrue(cancelled.cancelRequest());
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(activation.executionDomain());
         assertEquals(ProtosFutureValue.State.CANCELLED, cancelled.state());
         assertEquals(1, pending.cancelRequests);
 
@@ -246,11 +247,11 @@ final class ProtosStandardTextReaderProtocolTest {
             boolean owning) {
         return assertInstanceOf(
                 ProtosObjectValue.class,
-                ProtosInvocation.invokeMessage(
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
                         factory(prelude),
                         owning ? "owning" : "call",
                         List.of(source.source, encoding(prelude, encodingName)),
-                        activation));
+                        activation)));
     }
 
     private static ProtosEncodingValue encoding(
@@ -264,16 +265,16 @@ final class ProtosStandardTextReaderProtocolTest {
             ProtosObjectValue reader, ProtosActivation activation) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(
-                        reader, "readText", List.of(), activation));
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
+                        reader, "readText", List.of(), activation)));
     }
 
     private static ProtosFutureValue close(
             ProtosObjectValue reader, ProtosActivation activation) {
         return assertInstanceOf(
                 ProtosFutureValue.class,
-                ProtosInvocation.invokeMessage(
-                        reader, "close", List.of(), activation));
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(
+                        reader, "close", List.of(), activation)));
     }
 
     private static String stringResult(ProtosFutureValue future) {
@@ -319,6 +320,8 @@ final class ProtosStandardTextReaderProtocolTest {
 
         void resolve(Object value, ProtosActivation activation) {
             future.resolve(value, activation);
+            com.guillermomolina.protos.execution.ProtosTestExecutionSupport
+                    .dispatchUntilIdle(activation.executionDomain());
         }
     }
 

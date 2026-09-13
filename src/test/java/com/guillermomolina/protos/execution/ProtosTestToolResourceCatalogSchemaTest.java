@@ -158,9 +158,9 @@ final class ProtosTestToolResourceCatalogSchemaTest {
                         + protosString(document)
                         + ")";
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source),
-                        fixture.prelude().newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+fixture.prelude().newModuleActivation());
         assertEquals(
                 ProtosExecutionOutcome.State.FAILED,
                 outcome.state(),
@@ -180,9 +180,9 @@ final class ProtosTestToolResourceCatalogSchemaTest {
 
     private static Object completed(String source, Fixture fixture) throws Exception {
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source),
-                        fixture.prelude().newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+fixture.prelude().newModuleActivation());
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),

@@ -77,13 +77,11 @@ final class ProtosTestToolFutureResolvedMechanismTest {
             activation.context().createLocalSlot("filesystem", filesystem);
 
             ProtosExecutionOutcome outcome =
-                    ProtosRootTaskExecution.execute(
-                            new ProtosSourceCompiler()
-                                    .compile(
-                                            Files.readString(
+                    com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+Files.readString(
                                                     FIXTURE,
-                                                    StandardCharsets.UTF_8)),
-                            activation);
+                                                    StandardCharsets.UTF_8),
+activation);
 
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED,

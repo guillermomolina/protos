@@ -364,7 +364,7 @@ final class ProtosActorSendOperationTest {
                 command = queued.pollFirst();
             }
             assertNotNull(command, "expected scheduled Actor carrier");
-            command.run();
+            com.guillermomolina.protos.execution.ProtosTestExecutionSupport.runEntered(command);
         }
     }
 }

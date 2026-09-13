@@ -351,8 +351,9 @@ final class ProtosProcessIntegratedConformanceTest {
                                 file),
                         java.nio.charset.StandardCharsets.UTF_8);
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source), activation);
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+activation);
         return switch (outcome.state()) {
             case COMPLETED -> outcome.value();
             case FAILED -> throw new AssertionError(
@@ -434,8 +435,9 @@ final class ProtosProcessIntegratedConformanceTest {
                         Path.of("protos", "tests", "conformance", "library", "io", file),
                         java.nio.charset.StandardCharsets.UTF_8);
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source), activation);
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+activation);
         return switch (outcome.state()) {
             case COMPLETED -> outcome.value();
             case FAILED -> throw new AssertionError(

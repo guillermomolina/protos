@@ -110,10 +110,9 @@ final class ProtosTestToolFutureObservationPolicyFixtureSuiteTest {
                                 Files.readString(RETAINED_FRESH_SOURCE, StandardCharsets.UTF_8)));
 
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler()
-                                .compile(Files.readString(fixture, StandardCharsets.UTF_8)),
-                        activation);
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+Files.readString(fixture, StandardCharsets.UTF_8),
+activation);
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,

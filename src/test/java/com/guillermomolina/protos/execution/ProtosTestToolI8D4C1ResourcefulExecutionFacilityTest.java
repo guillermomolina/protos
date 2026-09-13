@@ -180,9 +180,9 @@ final class ProtosTestToolI8D4C1ResourcefulExecutionFacilityTest {
                     """;
 
             ProtosExecutionOutcome outcome =
-                    ProtosRootTaskExecution.execute(
-                            new ProtosSourceCompiler().compile(source),
-                            activation);
+                    com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+activation);
 
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED,
@@ -226,11 +226,9 @@ final class ProtosTestToolI8D4C1ResourcefulExecutionFacilityTest {
                                     return () -> false;
                                 })) {
             ProtosExecutionOutcome outcome =
-                    ProtosRootTaskExecution.execute(
-                            new ProtosSourceCompiler()
-                                    .compile(
-                                            "resourceExecutionAsync(\"1\", Array()).value()"),
-                            activation);
+                    com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+"resourceExecutionAsync(\"1\", Array()).value()",
+activation);
 
             assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
             assertTrue(outcome.error() != null);

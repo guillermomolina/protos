@@ -54,9 +54,9 @@ final class ProtosTestToolLib011OptionsAdoptionTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source),
-                        prelude.newModuleActivation());
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+prelude.newModuleActivation());
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());

@@ -62,7 +62,7 @@ final class ProtosFutureObservationFixtureShapeTest {
         ProtosObjectValue fixture =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        new ProtosSourceFileLoader().load(FIXTURE).call(activation));
+                        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.evaluateFile(FIXTURE, activation));
         ProtosFutureValue future =
                 assertInstanceOf(
                         ProtosFutureValue.class,
@@ -82,11 +82,11 @@ final class ProtosFutureObservationFixtureShapeTest {
         ProtosSignalException first =
                 assertThrows(
                         ProtosSignalException.class,
-                        () -> ProtosClosureInvoker.invoke(observe, List.of(), activation));
+                        () -> com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEntered(() -> ProtosClosureInvoker.invoke(observe, List.of(), activation)));
         ProtosSignalException second =
                 assertThrows(
                         ProtosSignalException.class,
-                        () -> ProtosClosureInvoker.invoke(observe, List.of(), activation));
+                        () -> com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEntered(() -> ProtosClosureInvoker.invoke(observe, List.of(), activation)));
 
         assertSame(error, first.error());
         assertSame(error, second.error());
@@ -107,7 +107,7 @@ final class ProtosFutureObservationFixtureShapeTest {
         ProtosObjectValue fixture =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        new ProtosSourceFileLoader().load(FIXTURE).call(activation));
+                        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.evaluateFile(FIXTURE, activation));
         ProtosFutureValue future =
                 assertInstanceOf(
                         ProtosFutureValue.class,
@@ -127,7 +127,7 @@ final class ProtosFutureObservationFixtureShapeTest {
         ProtosSignalException observed =
                 assertThrows(
                         ProtosSignalException.class,
-                        () -> ProtosClosureInvoker.invoke(observe, List.of(), activation));
+                        () -> com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEntered(() -> ProtosClosureInvoker.invoke(observe, List.of(), activation)));
 
         assertSame(error, observed.error());
     }
@@ -145,7 +145,7 @@ final class ProtosFutureObservationFixtureShapeTest {
         ProtosObjectValue fixture =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        new ProtosSourceFileLoader().load(FIXTURE).call(activation));
+                        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.evaluateFile(FIXTURE, activation));
 
         assertEquals(
                 Set.of("future", "error", "observe"),
@@ -170,7 +170,7 @@ final class ProtosFutureObservationFixtureShapeTest {
             ProtosFutureValue future, ProtosActivation activation) {
         int dispatches = 0;
         while (future.state() == ProtosFutureValue.State.PENDING) {
-            if (!activation.executionDomain().dispatchOne()) {
+            if (!com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchOne(activation.executionDomain())) {
                 throw new AssertionError(
                         "retained Future is pending with no runnable work");
             }

@@ -100,9 +100,9 @@ final class ProtosTestToolI8D5AHostRegistryBootstrapTest {
                     """;
 
             ProtosExecutionOutcome outcome =
-                    ProtosRootTaskExecution.execute(
-                            new ProtosSourceCompiler().compile(source),
-                            activation);
+                    com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+activation);
 
             assertEquals(
                     ProtosExecutionOutcome.State.COMPLETED,

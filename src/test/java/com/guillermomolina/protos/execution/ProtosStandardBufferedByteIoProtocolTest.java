@@ -45,7 +45,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
             String message,
             List<?> arguments,
             ProtosActivation activation) {
-        return ProtosInvocation.invokeMessage(object, message, arguments, activation);
+        return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.callEnteredAndDrain(activation, () -> ProtosInvocation.invokeMessage(object, message, arguments, activation));
     }
 
     @Test
@@ -343,6 +343,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosBytesValue result =
                 bytes(new ProtosObjectValue(ProtosObjectValue.rootObject()), 41);
         pending.lower.resolve(result, activation);
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(activation.executionDomain());
 
         assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
         assertSame(reader, close.resolvedValue().orElseThrow());
@@ -367,6 +368,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
                         call(reader, "read", List.of(i(2)), activation);
 
         assertTrue(read.cancelRequest());
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(activation.executionDomain());
         assertEquals(1, pending.cancelRequests);
         assertEquals(ProtosFutureValue.State.CANCELLED, read.state());
     }
@@ -406,6 +408,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         assertEquals(1, pending.cancelRequests);
 
         pending.lowerWrite.resolve(pending.target, activation);
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(activation.executionDomain());
 
         assertEquals(ProtosFutureValue.State.RESOLVED, flush.state());
         assertSame(writer, flush.resolvedValue().orElseThrow());
@@ -447,6 +450,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         assertEquals(ProtosFutureValue.State.PENDING, close.state());
 
         target.lowerClose.resolve(target.target, activation);
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(activation.executionDomain());
 
         assertEquals(ProtosFutureValue.State.FAILED, close.state());
     }
@@ -476,6 +480,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
                         call(writer, "flush", List.of(), activation);
 
         pending.lowerWrite.cancelTerminal();
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(activation.executionDomain());
 
         assertEquals(ProtosFutureValue.State.FAILED, flush.state());
         assertSame(
@@ -514,6 +519,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
                         call(writer, "close", List.of(), activation);
 
         firstLower.cancelTerminal();
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(activation.executionDomain());
 
         assertEquals(ProtosFutureValue.State.FAILED, flush.state());
         assertSame(
@@ -524,6 +530,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         assertEquals(ProtosFutureValue.State.PENDING, close.state());
 
         pending.lowerWrite.resolve(pending.target, activation);
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(activation.executionDomain());
 
         assertEquals(ProtosFutureValue.State.RESOLVED, close.state());
         assertEquals(1, pending.counter.flushes);
@@ -560,6 +567,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
                         activation, ProtosCoreErrors.StandardError.I_O_ERROR);
 
         pending.lowerWrite.fail(failure);
+        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.dispatchUntilIdle(activation.executionDomain());
 
         assertEquals(ProtosFutureValue.State.FAILED, flush.state());
         assertSame(failure, flush.failedError().orElseThrow());

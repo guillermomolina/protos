@@ -256,7 +256,7 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
     }
 
     private static Object execute(String file, ProtosActivation activation) throws IOException {
-        return new ProtosSourceFileLoader().load(CASE_ROOT.resolve(file)).call(activation);
+        return com.guillermomolina.protos.execution.ProtosTestExecutionSupport.executeFileValueWithFreshModuleActivation(CASE_ROOT.resolve(file), activation);
     }
 
     private static void createSymlinkOrSkip(Path link, Path target) throws IOException {

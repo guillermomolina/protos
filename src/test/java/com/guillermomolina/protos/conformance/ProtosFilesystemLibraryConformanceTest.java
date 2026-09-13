@@ -738,8 +738,9 @@ final class ProtosFilesystemLibraryConformanceTest {
         String source =
                 Files.readString(CASE_ROOT.resolve(file), StandardCharsets.UTF_8);
         ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(
-                        new ProtosSourceCompiler().compile(source), activation);
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+source,
+activation);
 
         return switch (outcome.state()) {
             case COMPLETED -> outcome.value();
