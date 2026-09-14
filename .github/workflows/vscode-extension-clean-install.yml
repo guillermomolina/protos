@@ -1,0 +1,126 @@
+name: VS Code packaged clean install
+
+on:
+  workflow_run:
+    workflows:
+      - VS Code extension artifact
+    types:
+      - completed
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  clean-install:
+    name: Install canonical VSIX in clean VS Code profile
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Download I2 canonical VSIX artifact
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            RUN_ID="${{ github.event.workflow_run.id }}"
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            RUN_ID="$(gh run list --workflow vscode-extension-artifact.yml --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+            SHA="$(gh run view "$RUN_ID" --json headSha --jq '.headSha')"
+          fi
+
+          test -n "$RUN_ID"
+          test -n "$SHA"
+
+          mkdir -p ci-artifact
+          gh run download "$RUN_ID" \
+            --name "protos-vscode-vsix-${SHA}" \
+            --dir ci-artifact
+
+          test -s ci-artifact/protos-vscode.vsix
+          test -s ci-artifact/protos-vscode.vsix.sha256
+
+      - name: Verify artifact digest
+        working-directory: ci-artifact
+        run: sha256sum --check protos-vscode.vsix.sha256
+
+      - name: Install VS Code
+        shell: bash
+        run: |
+          wget -qO /tmp/code.deb \
+            https://update.code.visualstudio.com/latest/linux-deb-x64/stable
+          sudo apt-get update
+          sudo apt-get install -y /tmp/code.deb
+
+      - name: Build CI-only clean-install harness VSIX
+        run: |
+          python3 clean_install/make_harness_vsix.py harness.vsix
+
+      - name: Install Protos VSIX into isolated profile
+        shell: bash
+        run: |
+          rm -rf "$RUNNER_TEMP/i3a"
+          mkdir -p "$RUNNER_TEMP/i3a/extensions" "$RUNNER_TEMP/i3a/user-data"
+
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --install-extension ci-artifact/protos-vscode.vsix \
+            --force
+
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --install-extension harness.vsix \
+            --force
+
+      - name: Verify installed Protos extension
+        shell: bash
+        run: |
+          code \
+            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --list-extensions --show-versions \
+            | tee "$RUNNER_TEMP/i3a/installed.txt"
+
+          grep -q '^guillermomolina.protos@' "$RUNNER_TEMP/i3a/installed.txt"
+
+      - name: Exercise installed packaged extension
+        shell: bash
+        env:
+          PROTOS_I3_RESULT: ${{ runner.temp }}/i3a/result.json
+          PROTOS_I3_FIXTURE: ${{ runner.temp }}/i3a/fixture.protos
+        run: |
+          printf 'print("clean-install")\n' > "$PROTOS_I3_FIXTURE"
+
+          nohup code \
+            --user-data-dir "$RUNNER_TEMP/i3a/user-data" \
+            --extensions-dir "$RUNNER_TEMP/i3a/extensions" \
+            --disable-gpu \
+            "$PROTOS_I3_FIXTURE" \
+            >/tmp/protos-i3a-code.log 2>&1 &
+
+          CODE_PID=$!
+
+          for _ in $(seq 1 60); do
+            test -f "$PROTOS_I3_RESULT" && break
+            sleep 1
+          done
+
+          if [ ! -f "$PROTOS_I3_RESULT" ]; then
+            cat /tmp/protos-i3a-code.log || true
+            kill "$CODE_PID" >/dev/null 2>&1 || true
+            echo "LM009_I3A_CLEAN_INSTALL_FAILED: harness produced no result"
+            exit 1
+          fi
+
+          python3 clean_install/validate_clean_install.py "$PROTOS_I3_RESULT"
+          kill "$CODE_PID" >/dev/null 2>&1 || true
