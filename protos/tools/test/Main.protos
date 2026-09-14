@@ -255,7 +255,7 @@ Progress.finishInvocation(
 )
 
 writer: TextWriter(process.stdout(), process.stdoutEncoding())
-writer.writeLine("Protos test tool bootstrap")
-writer.writeLine(process.args()[0])
+writer.writeLine("Protos test tool bootstrap").value()
+writer.writeLine(process.args()[0]).value()
 
 finalOutcome
