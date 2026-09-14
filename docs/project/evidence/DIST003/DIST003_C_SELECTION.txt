@@ -1,0 +1,15 @@
+selection_format=protos-dist001-e4-selection-v1
+selection_authorized=true
+selection_authorization_basis=explicit-user-decision
+release_publication_authorized=false
+release_baseline_revision=813e1cf6f935be377a79a11042a235197693a528
+release_baseline_version=0.3.0-SNAPSHOT
+release_version=0.3.0
+release_tag=v0.3.0
+specification_revision=0.1.412
+i023_status=CLOSED
+b007_status=CLOSED
+candidate_source_revision=UNMATERIALIZED
+git_tag_created=false
+github_release_created=false
+release_assets_published=false
