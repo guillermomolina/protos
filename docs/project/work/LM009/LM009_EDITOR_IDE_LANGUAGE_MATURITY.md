@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; D128 RATIFIED C″; I1-A CLOSED; I1-B CLOSED; I1-C READY)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; D128 RATIFIED C″; I1 CLOSED; I2 CLOSED; I3 CLOSED; I4 RATIFIED)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -27,6 +27,10 @@ Visual Studio Code is the first reference integration and end-to-end acceptance
 surface. It is not a Protos semantic authority, and LM009 must not make future
 editor support depend on reproducing Protos semantics inside a VS Code
 extension.
+
+## LM009-I4 release/distribution closure
+
+LM009-I4 ratifies GitHub Release as the canonical public distribution path for the extension. The extension uses an independent SemVer sequence from the Protos runtime; Marketplace/Open VSX remain optional downstream mirrors and are not required for LM009 closure. See [`LM009_I4_RELEASE_DISTRIBUTION_POLICY.md`](LM009_I4_RELEASE_DISTRIBUTION_POLICY.md).
 
 ## Existing foundation
 
