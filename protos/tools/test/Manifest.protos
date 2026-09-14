@@ -440,3 +440,79 @@ load: (filesystem) => {
 loadPackageToml: (filesystem) => {
     loadWithParser(filesystem, parsePackageTomlLine)
 }
+
+// D132 generic two-column explicit-outcome loader. It keeps the strict
+// three-column Manifest.load contract unchanged and normalizes retained
+// relative-case-key<TAB>true|error rows into the canonical boolean/error
+// CaseSpec representation under the explicit logical case namespace supplied
+// by the CorpusBinding. The loader is generic and contains no Package Tool
+// names. Duplicate logical CaseIds fail closed.
+caseOutcomeFieldArray: (line) => {
+    fields: splitFields(line)
+    (fields.size() == 2).ifFalse(() => {
+        fail()
+    })
+    fields
+}
+
+caseOutcomeSpec: (fields, caseNamespace) => {
+    key: fields[0]
+    ignoredCanonicalValidation: pathValue(key)
+    retainedOutcome: fields[1]
+
+    expectation: ""
+    expected: ""
+    known: false
+
+    (retainedOutcome == "true").ifTrue(() => {
+        expectation = "boolean"
+        expected = "true"
+        known = true
+    })
+    (retainedOutcome == "error").ifTrue(() => {
+        expectation = "error"
+        expected = "-"
+        known = true
+    })
+    known.ifFalse(() => {
+        fail()
+    })
+
+    caseId: caseNamespace + "/" + key
+    frozenTuple(caseId, key, expectation, expected, frozenTuple())
+}
+
+parseCaseOutcomeLine: (line, caseNamespace) => {
+    bytes: Encoding.UTF8.encode(line)
+    ignore: bytes.size() == 0
+    ignore.ifFalse(() => {
+        (bytes[0] == 35).ifTrue(() => {
+            ignore = true
+        })
+    })
+
+    result: null
+    ignore.ifFalse(() => {
+        result = caseOutcomeSpec(caseOutcomeFieldArray(line), caseNamespace)
+    })
+    result
+}
+
+loadCaseOutcomes: (filesystem, caseNamespace) => {
+    parser: (line) => {
+        parseCaseOutcomeLine(line, caseNamespace)
+    }
+    plan: loadWithParser(filesystem, parser)
+
+    // D132 rejects duplicate logical CaseIds rather than merging them.
+    seenIds: Map()
+    planCases(plan).each((spec) => {
+        id: caseId(spec)
+        seenIds.containsKey(id).ifTrue(() => {
+            fail()
+        })
+        seenIds[id] = true
+    })
+
+    plan
+}

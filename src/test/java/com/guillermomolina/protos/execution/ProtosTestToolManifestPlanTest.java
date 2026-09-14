@@ -622,6 +622,112 @@ fixture.activation());
         }
     }
 
+    @Test
+    void d132CaseOutcomeLoaderNormalizesExplicitRowsUnderLogicalNamespace(
+            @TempDir Path corpusRoot) throws Exception {
+        Files.writeString(
+                corpusRoot.resolve("manifest.tsv"),
+                "# key\toutcome\n"
+                        + "keep.protos\ttrue\n"
+                        + "reject.protos\terror\n",
+                StandardCharsets.UTF_8);
+
+        Fixture fixture = fixture();
+        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
+                new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {
+            assumeTrue(
+                    backend.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+            installFilesystem(fixture.prelude(), fixture.activation(), backend);
+
+            ProtosArrayValue observed =
+                    assertInstanceOf(
+                            ProtosArrayValue.class,
+                            completed(
+                                    "Manifest: import(\"self:Manifest\")\n"
+                                            + "cases: Manifest.planCases("
+                                            + "Manifest.loadCaseOutcomes(filesystem, \"ns\"))\n"
+                                            + "Array("
+                                            + "cases.size(), "
+                                            + "Manifest.caseId(cases[0]), "
+                                            + "Manifest.casePath(cases[0]), "
+                                            + "Manifest.caseExpectation(cases[0]), "
+                                            + "Manifest.caseExpected(cases[0]), "
+                                            + "Manifest.caseId(cases[1]), "
+                                            + "Manifest.casePath(cases[1]), "
+                                            + "Manifest.caseExpectation(cases[1]), "
+                                            + "Manifest.caseExpected(cases[1]))",
+                                    fixture.activation()));
+
+            assertEquals(9, observed.indexedSize().intValueExact());
+            assertEquals(
+                    2,
+                    assertInstanceOf(
+                                    ProtosIntegerValue.class,
+                                    observed.indexedAt(java.math.BigInteger.ZERO))
+                            .value()
+                            .intValueExact());
+            assertEquals("ns/keep.protos", stringAt(observed, 1));
+            assertEquals("keep.protos", stringAt(observed, 2));
+            assertEquals("boolean", stringAt(observed, 3));
+            assertEquals("true", stringAt(observed, 4));
+            assertEquals("ns/reject.protos", stringAt(observed, 5));
+            assertEquals("reject.protos", stringAt(observed, 6));
+            assertEquals("error", stringAt(observed, 7));
+            assertEquals("-", stringAt(observed, 8));
+        }
+    }
+
+    @Test
+    void d132CaseOutcomeLoaderFailsClosedOnMalformedRows(
+            @TempDir Path corpusRoot) throws Exception {
+        String[] malformedManifests = {
+            "a.protos\tmaybe\n", // unknown outcome value
+            "\ttrue\n", // empty case key
+            "a.protos\n", // missing outcome column
+            "a.protos\ttrue\textra\n", // more than two columns
+            "a.protos\ttrue\na.protos\terror\n", // duplicate logical CaseId
+            "..\ttrue\n" // unsafe relative case key
+        };
+        for (String manifest : malformedManifests) {
+            Files.writeString(
+                    corpusRoot.resolve("manifest.tsv"),
+                    manifest,
+                    StandardCharsets.UTF_8);
+
+            Fixture fixture = fixture();
+            try (ProtosNioReadOnlyTreeFilesystemBackend backend =
+                    new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {
+                assumeTrue(
+                        backend.secureConfinementAvailable(),
+                        "host provider has no SecureDirectoryStream");
+                installFilesystem(fixture.prelude(), fixture.activation(), backend);
+
+                ProtosExecutionOutcome outcome =
+                        com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+                                "Manifest: import(\"self:Manifest\")\n"
+                                        + "Manifest.loadCaseOutcomes(filesystem, \"ns\")",
+                                fixture.activation());
+                assertEquals(
+                        ProtosExecutionOutcome.State.FAILED,
+                        outcome.state(),
+                        () -> "expected fail-closed rejection for: " + manifest);
+            }
+        }
+    }
+
+    @Test
+    void threeColumnManifestParserKeepsRejectingTwoColumnRows()
+            throws Exception {
+        Fixture fixture = fixture();
+        ProtosExecutionOutcome outcome =
+                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
+                        "Manifest: import(\"self:Manifest\")\n"
+                                + "Manifest.parseLine(\"a.protos\\ttrue\")",
+                        fixture.activation());
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+    }
+
     private static Fixture fixture() throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
@@ -657,6 +763,13 @@ fixture.activation());
                         ProtosFilesystemValue.class,
                         rawFilesystem);
         activation.context().createLocalSlot(slotName, filesystem);
+    }
+
+    private static String stringAt(ProtosArrayValue array, int index) {
+        return assertInstanceOf(
+                        ProtosStringValue.class,
+                        array.indexedAt(java.math.BigInteger.valueOf(index)))
+                .value();
     }
 
     private static Object completed(

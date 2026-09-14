@@ -80,20 +80,23 @@ final class ProtosTestCorpusRegistry {
                 registry,
                 activation,
                 "protos/corpus/package-tool/version",
-                "manifest",
-                "packageToolVersionFilesystem");
+                "case-outcomes",
+                "packageToolVersionFilesystem",
+                "protos/package-tool/version");
         addBinding(
                 registry,
                 activation,
                 "protos/corpus/package-tool/lock",
-                "manifest",
-                "packageToolLockFilesystem");
+                "case-outcomes",
+                "packageToolLockFilesystem",
+                "protos/package-tool/lock");
         addBinding(
                 registry,
                 activation,
                 "protos/corpus/package-tool/resolution-input",
-                "manifest",
-                "packageToolResolutionInputFilesystem");
+                "case-outcomes",
+                "packageToolResolutionInputFilesystem",
+                "protos/package-tool/resolution-input");
 
         registry.freeze();
         activation.context().createLocalSlot(REGISTRY_SLOT, registry);
@@ -105,6 +108,21 @@ final class ProtosTestCorpusRegistry {
             String corpusId,
             String planLoader,
             String filesystemSlot) {
+        addBinding(registry, activation, corpusId, planLoader, filesystemSlot, null);
+    }
+
+    /**
+     * D132: case-outcomes bindings additionally carry the explicit logical case
+     * namespace supplied by the corpus/TestPlan authority. Other loaders pass
+     * {@code null} and keep the filesystem + planLoader shape only.
+     */
+    private static void addBinding(
+            ProtosObjectValue registry,
+            ProtosActivation activation,
+            String corpusId,
+            String planLoader,
+            String filesystemSlot,
+            String caseNamespace) {
         if (registry.hasLocalSlot(corpusId)) {
             throw new IllegalStateException("duplicate Test Tool corpus binding: " + corpusId);
         }
@@ -121,6 +139,9 @@ final class ProtosTestCorpusRegistry {
         ProtosObjectValue binding = new ProtosObjectValue(ProtosObjectValue.rootObject());
         binding.createLocalSlot("filesystem", filesystem);
         binding.createLocalSlot("planLoader", new ProtosStringValue(planLoader));
+        if (caseNamespace != null) {
+            binding.createLocalSlot("caseNamespace", new ProtosStringValue(caseNamespace));
+        }
         binding.freeze();
         registry.createLocalSlot(corpusId, binding);
     }

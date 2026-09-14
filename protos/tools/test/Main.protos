@@ -110,6 +110,15 @@ resolveIndex: 0
     (planLoader === "repository-explicit").ifTrue(() => {
         supportedLoader = true
     })
+    (planLoader === "case-outcomes").ifTrue(() => {
+        supportedLoader = true
+        // D132: the CorpusBinding supplies the explicit logical case
+        // namespace; a case-outcomes binding without one fails closed
+        // before scheduling.
+        corpusBinding.hasSlot("caseNamespace").ifFalse(() => {
+            Error().signal()
+        })
+    })
     supportedLoader.ifFalse(() => {
         Error().signal()
     })
@@ -159,6 +168,12 @@ planIndex: 0
     })
     (planLoader === "repository-explicit").ifTrue(() => {
         suitePlan = RepositoryCorpusPlans.load(resolved.leaf.corpus)
+    })
+    (planLoader === "case-outcomes").ifTrue(() => {
+        suitePlan = Manifest.loadCaseOutcomes(
+            corpusBinding.filesystem,
+            corpusBinding.caseNamespace
+        )
     })
     (suitePlan === null).ifTrue(() => {
         Error().signal()

@@ -133,23 +133,23 @@ final class ProtosTestToolCorpusRegistryTest {
                     "protos/corpus/library/network/ip-endpoints",
                     "repository-explicit",
                     "libraryFilesystem");
-            assertBinding(
+            assertCaseOutcomesBinding(
                     fixture.activation(),
                     registry,
                     "protos/corpus/package-tool/version",
-                    "manifest",
+                    "protos/package-tool/version",
                     "packageToolVersionFilesystem");
-            assertBinding(
+            assertCaseOutcomesBinding(
                     fixture.activation(),
                     registry,
                     "protos/corpus/package-tool/lock",
-                    "manifest",
+                    "protos/package-tool/lock",
                     "packageToolLockFilesystem");
-            assertBinding(
+            assertCaseOutcomesBinding(
                     fixture.activation(),
                     registry,
                     "protos/corpus/package-tool/resolution-input",
-                    "manifest",
+                    "protos/package-tool/resolution-input",
                     "packageToolResolutionInputFilesystem");
 
             assertFalse(registry.hasLocalSlot("protos/test/ordinary"));
@@ -206,6 +206,38 @@ final class ProtosTestToolCorpusRegistryTest {
                 assertInstanceOf(
                                 ProtosStringValue.class,
                                 binding.readLocalSlot("planLoader").orElseThrow())
+                        .value());
+        assertFalse(binding.hasLocalSlot("executionAsync"));
+        assertFalse(binding.hasLocalSlot("resourceExecutionAsync"));
+    }
+
+    /** D132: case-outcomes bindings add only the explicit logical case namespace. */
+    private static void assertCaseOutcomesBinding(
+            ProtosActivation activation,
+            ProtosObjectValue registry,
+            String corpusId,
+            String expectedCaseNamespace,
+            String filesystemSlot) {
+        ProtosObjectValue binding =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        registry.readLocalSlot(corpusId).orElseThrow());
+        assertTrue(binding.isFrozen());
+        assertEquals(3, binding.localSlotsSnapshot().size());
+        assertSame(
+                activation.context().readLocalSlot(filesystemSlot).orElseThrow(),
+                binding.readLocalSlot("filesystem").orElseThrow());
+        assertEquals(
+                "case-outcomes",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                binding.readLocalSlot("planLoader").orElseThrow())
+                        .value());
+        assertEquals(
+                expectedCaseNamespace,
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                binding.readLocalSlot("caseNamespace").orElseThrow())
                         .value());
         assertFalse(binding.hasLocalSlot("executionAsync"));
         assertFalse(binding.hasLocalSlot("resourceExecutionAsync"));
