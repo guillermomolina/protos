@@ -130,10 +130,13 @@
     "build": "esbuild extension.js --bundle --platform=node --format=cjs --target=node22 --external:vscode --metafile=dist/meta.json --outfile=dist/extension.js",
     "package:assets": "node scripts/sync_package_assets.js --check",
     "vscode:prepublish": "npm run build && npm run package:assets",
-    "package:vsix": "vsce package --no-dependencies"
+    "package:vsix": "vsce package --no-dependencies",
+    "package:vsix:canonical": "node scripts/canonicalize_vsix.js"
   },
   "devDependencies": {
     "@vscode/vsce": "3.9.2",
-    "esbuild": "0.28.2"
+    "esbuild": "0.28.2",
+    "yauzl": "^3.4.0",
+    "yazl": "^2.5.1"
   }
 }
