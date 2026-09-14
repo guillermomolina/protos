@@ -46,3 +46,4 @@ Language/specification decision rationale belongs under
 [`../language/`](../language/README.md).
 
 DOC002-F0 ratified this role by explicit project-owner approval on 2026-09-10.\n- [`D129_TEST_TOOL_PER_CASE_PROJECT_TREE.md`](D129_TEST_TOOL_PER_CASE_PROJECT_TREE.md)\n
+- [`D132_PLAIN_TWO_COLUMN_MANIFEST_SEMANTICS.md`](D132_PLAIN_TWO_COLUMN_MANIFEST_SEMANTICS.md)
