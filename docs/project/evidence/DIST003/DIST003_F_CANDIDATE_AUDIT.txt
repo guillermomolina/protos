@@ -1,0 +1,12 @@
+release_candidate_audit_format=protos-release-candidate-audit-v1
+candidate_selection_authorized=true
+selection_authorization_basis=explicit-user-decision
+release_publication_authorized=false
+source_revision=e98fcc85855c8cefdb0b205804f81a0357aba51c
+release_baseline_revision=705d8238af0407104b15ba1d46e628fd2d243581
+release_version=0.3.0
+release_tag=v0.3.0
+specification_revision=0.1.412
+capabilities_review=PASS
+limitations_review=PASS
+known_blockers_review=PASS

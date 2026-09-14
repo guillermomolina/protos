@@ -1,0 +1,19 @@
+static_findings_record=protos-dist003-f-static-findings-v1
+detector=tools/verify_toolchain.py --mode check --scope all
+candidate_source_revision=e98fcc85855c8cefdb0b205804f81a0357aba51c
+detected_count=8
+classification=VALID_KNOWN_LIMITATION
+classification_basis=GITHUB017 (#492) intentionally removed the CI jobs.test and jobs.distribution definitions while TOOL005 (#468) completes the official repository-wide Test Tool execution path; the checker still requires those bindings unconditionally.
+none_classified_pass=true
+known_blockers_impact=none
+reactivation_owner=#492
+corpus_path_owner=#468
+finding.1=ci.tests.image DRIFT expected=ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825 actual=<missing:test.container image>
+finding.2=ci.tests.java_feature DRIFT expected=25 actual=<missing:test.PROTOS_PRIMARY_JDK_FEATURE>
+finding.3=ci.tests.java_version DRIFT expected=25.0.4.1 actual=<missing:test.PROTOS_PRIMARY_JDK_VERSION>
+finding.4=ci.tests.maven DRIFT expected=3.9.9 actual=<missing:test.PROTOS_MAVEN_VERSION>
+finding.5=ci.distribution.image DRIFT expected=ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825 actual=<missing:distribution.container image>
+finding.6=ci.distribution.java_feature DRIFT expected=25 actual=<missing:distribution.PROTOS_PRIMARY_JDK_FEATURE>
+finding.7=ci.distribution.java_version DRIFT expected=25.0.4.1 actual=<missing:distribution.PROTOS_PRIMARY_JDK_VERSION>
+finding.8=ci.distribution.maven DRIFT expected=3.9.9 actual=<missing:distribution.PROTOS_MAVEN_VERSION>
+machinery_finding.1=dist/verify_candidate_archive_identity.py (E4C2) remains frozen to the historical DIST001 runtime contract (truffle-runtime-24.0.0.jar, java_feature 22) and was not updated during the DIST002 25.3.4.1 transition; it is not applicable to this candidate and was not modified in this slice. Archive identity for 0.3.0 is independently verified by the release-aware B2/B5 gate (SOURCE identity, SHA256SUMS, CRC and layout under the current runtime contract), the live B4B optimizing-runtime gate, and a read-only jar-manifest (Implementation-Version: 0.3.0) and RUNTIME.txt inspection. Parameterizing or retiring E4C2 would be separate owner-approved machinery work.
