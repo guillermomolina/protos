@@ -1,8 +1,8 @@
 # LM009 — Editor & IDE Language Maturity
 
-Status: **IN_PROGRESS**
+Status: **CLOSED**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I IN_PROGRESS (D127 RATIFIED B′; D128 RATIFIED C″; I1 CLOSED; I2 CLOSED; I3 CLOSED; I4 RATIFIED)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED; LM009-E CLOSED (S3 PASS); LM009-F CLOSED (foundation live check PASS); LM009-G CLOSED (G1/G2/G3/G4 CLOSED; G5A CLOSED; S4/S5 PASS; top-level closure reconciled); LM009-H CLOSED (D124 RATIFIED; H1 CLOSED; H5 PASS; hover/completion/signature help DEFERRED_TO_LM010); LM009-I CLOSED (D127 RATIFIED B′; D128 RATIFIED C″; I1 CLOSED; I2 CLOSED; I3 CLOSED; I4 RATIFIED)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -31,6 +31,10 @@ extension.
 ## LM009-I4 release/distribution closure
 
 LM009-I4 ratifies GitHub Release as the canonical public distribution path for the extension. The extension uses an independent SemVer sequence from the Protos runtime; Marketplace/Open VSX remain optional downstream mirrors and are not required for LM009 closure. See [`LM009_I4_RELEASE_DISTRIBUTION_POLICY.md`](LM009_I4_RELEASE_DISTRIBUTION_POLICY.md).
+
+## LM009 closure
+
+LM009 is closed on 2026-09-14. The complete A–I baseline is reconciled; LM009-I is closed through D127/D128 and I1–I4. Hover, completion and signature help remain explicitly deferred to LM010 and are not closure blockers. The detailed closure evidence is recorded in [`LM009_CLOSURE_RECORD.md`](LM009_CLOSURE_RECORD.md).
 
 ## Existing foundation
 
