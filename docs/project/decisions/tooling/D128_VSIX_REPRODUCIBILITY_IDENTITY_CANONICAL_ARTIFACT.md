@@ -382,6 +382,27 @@ HOST_UMASK_INPUT=FORBIDDEN
 HOST_TIMEZONE_INPUT=FORBIDDEN
 ```
 
+## Explicit approval reaffirmation — 2026-09-14
+
+The project owner explicitly reaffirms selection of **Candidate C″** after the
+D128 comparative audit and approves its use as the durable VSIX reproducibility
+contract for `LM009-I1-C`.
+
+This reaffirmation does not create a new candidate, alter the selected contract,
+or authorize implementation beyond that already-ratified boundary. It records
+the current explicit approval event so governance evidence is traceable to the
+project owner's actual decision.
+
+```text
+D128_APPROVAL_REAFFIRMED=YES
+D128_SELECTED_CANDIDATE=C_DOUBLE_PRIME
+D128_STATUS=RATIFIED
+LM009_I1_C_STATUS=READY
+SPECIFICATION_CHANGED=NO
+IMPLEMENTATION_CHANGED=NO
+IMPLEMENTATION_VERSION_CHANGED=NO
+```
+
 ## Implementation consequence
 
 After this governance record is published, LM009-I1-C is released to implement
