@@ -19,6 +19,11 @@ permanent news entry.
 
 ## 2026
 
+- **2026-09-14 — [Protos 0.3.0: the optimizing runtime era begins](2026-09-14-protos-0-3-0.md)**
+  Protos 0.3.0 is published as a public prerelease, following PERF006 and
+  the C′ production cutover, with the selected optimizing Truffle runtime
+  validated in the portable distribution.
+
 - **2026-09-13 — [PERF006 complete: Protos reaches the optimizing Truffle runtime](2026-09-13-perf006-complete.md)**
   C′ becomes the production execution generation, the historical replay
   bottleneck disappears, and controlled exact-source measurements show
