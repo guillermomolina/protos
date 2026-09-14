@@ -76,6 +76,24 @@ final class ProtosTestCorpusRegistry {
                 "protos/corpus/library/network/ip-endpoints",
                 "repository-explicit",
                 "libraryFilesystem");
+        addBinding(
+                registry,
+                activation,
+                "protos/corpus/package-tool/version",
+                "manifest",
+                "packageToolVersionFilesystem");
+        addBinding(
+                registry,
+                activation,
+                "protos/corpus/package-tool/lock",
+                "manifest",
+                "packageToolLockFilesystem");
+        addBinding(
+                registry,
+                activation,
+                "protos/corpus/package-tool/resolution-input",
+                "manifest",
+                "packageToolResolutionInputFilesystem");
 
         registry.freeze();
         activation.context().createLocalSlot(REGISTRY_SLOT, registry);

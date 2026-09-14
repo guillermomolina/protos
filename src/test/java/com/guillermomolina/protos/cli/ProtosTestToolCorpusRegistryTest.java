@@ -42,6 +42,10 @@ final class ProtosTestToolCorpusRegistryTest {
         Path groupRoot = Files.createDirectories(tempDirectory.resolve("group"));
         Path packageRoot = Files.createDirectories(tempDirectory.resolve("package"));
         Path libraryRoot = Files.createDirectories(tempDirectory.resolve("library"));
+        Path versionRoot = Files.createDirectories(tempDirectory.resolve("version"));
+        Path lockRoot = Files.createDirectories(tempDirectory.resolve("lock"));
+        Path resolutionInputRoot =
+                Files.createDirectories(tempDirectory.resolve("resolution-input"));
 
         try (ProtosNioReadOnlyTreeFilesystemBackend ordinaryBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(ordinaryRoot);
@@ -52,12 +56,21 @@ final class ProtosTestToolCorpusRegistryTest {
                 ProtosNioReadOnlyTreeFilesystemBackend packageBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(packageRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend libraryBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(libraryRoot)) {
+                        new ProtosNioReadOnlyTreeFilesystemBackend(libraryRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend versionBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(versionRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend lockBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(lockRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend resolutionInputBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(resolutionInputRoot)) {
             installFilesystem(fixture, "filesystem", ordinaryBackend);
             installFilesystem(fixture, "actorFilesystem", actorBackend);
             installFilesystem(fixture, "groupFilesystem", groupBackend);
             installFilesystem(fixture, "packageTomlFilesystem", packageBackend);
             installFilesystem(fixture, "libraryFilesystem", libraryBackend);
+            installFilesystem(fixture, "packageToolVersionFilesystem", versionBackend);
+            installFilesystem(fixture, "packageToolLockFilesystem", lockBackend);
+            installFilesystem(fixture, "packageToolResolutionInputFilesystem", resolutionInputBackend);
 
             ProtosTestCorpusRegistry.install(fixture.activation());
             ProtosObjectValue registry =
@@ -68,7 +81,7 @@ final class ProtosTestToolCorpusRegistryTest {
                                     .readLocalSlot(ProtosTestCorpusRegistry.REGISTRY_SLOT)
                                     .orElseThrow());
             assertTrue(registry.isFrozen());
-            assertEquals(11, registry.localSlotsSnapshot().size());
+            assertEquals(14, registry.localSlotsSnapshot().size());
 
             assertBinding(fixture.activation(), registry, "protos/corpus/conformance",
                     "manifest", "filesystem");
@@ -120,6 +133,24 @@ final class ProtosTestToolCorpusRegistryTest {
                     "protos/corpus/library/network/ip-endpoints",
                     "repository-explicit",
                     "libraryFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/package-tool/version",
+                    "manifest",
+                    "packageToolVersionFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/package-tool/lock",
+                    "manifest",
+                    "packageToolLockFilesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/package-tool/resolution-input",
+                    "manifest",
+                    "packageToolResolutionInputFilesystem");
 
             assertFalse(registry.hasLocalSlot("protos/test/ordinary"));
             assertFalse(registry.hasLocalSlot("protos/corpus/library/unknown"));

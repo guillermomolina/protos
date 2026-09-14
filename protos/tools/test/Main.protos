@@ -67,7 +67,10 @@ phaseNames: Array(
     "math-integer",
     "crypto-sha256",
     "network-ip-addresses",
-    "network-ip-endpoints"
+    "network-ip-endpoints",
+    "package-tool-version",
+    "package-tool-lock",
+    "package-tool-resolution-input"
 )
 phaseNames.freeze()
 

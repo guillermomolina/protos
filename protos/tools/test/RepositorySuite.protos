@@ -63,6 +63,21 @@ root: SuiteGraph.suite(
             "protos/library/network/ip-endpoints",
             "protos/corpus/library/network/ip-endpoints",
             "protos/test/ordinary"
+        ),
+        SuiteGraph.leaf(
+            "protos/package-tool/version",
+            "protos/corpus/package-tool/version",
+            "protos/test/package"
+        ),
+        SuiteGraph.leaf(
+            "protos/package-tool/lock",
+            "protos/corpus/package-tool/lock",
+            "protos/test/package"
+        ),
+        SuiteGraph.leaf(
+            "protos/package-tool/resolution-input",
+            "protos/corpus/package-tool/resolution-input",
+            "protos/test/package"
         )
     )
 )

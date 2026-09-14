@@ -101,7 +101,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeafIds(RepositorySuite.root)"));
 
-        assertEquals(11, flattened.indexedSize().intValueExact());
+        assertEquals(14, flattened.indexedSize().intValueExact());
         assertTrue(flattened.isFrozen());
         assertLeafId(flattened, 0, "protos/conformance");
         assertLeafId(flattened, 1, "protos/actor");
@@ -114,6 +114,9 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafId(flattened, 8, "protos/library/crypto/sha256");
         assertLeafId(flattened, 9, "protos/library/network/ip-addresses");
         assertLeafId(flattened, 10, "protos/library/network/ip-endpoints");
+        assertLeafId(flattened, 11, "protos/package-tool/version");
+        assertLeafId(flattened, 12, "protos/package-tool/lock");
+        assertLeafId(flattened, 13, "protos/package-tool/resolution-input");
     }
 
     @Test
@@ -126,7 +129,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(11, leaves.indexedSize().intValueExact());
+        assertEquals(14, leaves.indexedSize().intValueExact());
         assertTrue(leaves.isFrozen());
         assertLeafCorpus(leaves, 0, "protos/conformance", "protos/corpus/conformance");
         assertLeafCorpus(leaves, 1, "protos/actor", "protos/corpus/actor");
@@ -139,6 +142,9 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafCorpus(leaves, 8, "protos/library/crypto/sha256", "protos/corpus/library/crypto/sha256");
         assertLeafCorpus(leaves, 9, "protos/library/network/ip-addresses", "protos/corpus/library/network/ip-addresses");
         assertLeafCorpus(leaves, 10, "protos/library/network/ip-endpoints", "protos/corpus/library/network/ip-endpoints");
+        assertLeafCorpus(leaves, 11, "protos/package-tool/version", "protos/corpus/package-tool/version");
+        assertLeafCorpus(leaves, 12, "protos/package-tool/lock", "protos/corpus/package-tool/lock");
+        assertLeafCorpus(leaves, 13, "protos/package-tool/resolution-input", "protos/corpus/package-tool/resolution-input");
     }
 
     @Test
@@ -151,7 +157,7 @@ final class ProtosTestToolSuiteGraphTest {
                                         + "RepositorySuite: import(\"self:RepositorySuite\")\n"
                                         + "SuiteGraph.flattenLeaves(RepositorySuite.root)"));
 
-        assertEquals(11, leaves.indexedSize().intValueExact());
+        assertEquals(14, leaves.indexedSize().intValueExact());
         assertTrue(leaves.isFrozen());
         assertLeafRequirement(leaves, 0, "protos/conformance", "protos/test/ordinary");
         assertLeafRequirement(leaves, 1, "protos/actor", "protos/test/actor");
@@ -164,6 +170,9 @@ final class ProtosTestToolSuiteGraphTest {
         assertLeafRequirement(leaves, 8, "protos/library/crypto/sha256", "protos/test/ordinary");
         assertLeafRequirement(leaves, 9, "protos/library/network/ip-addresses", "protos/test/ordinary");
         assertLeafRequirement(leaves, 10, "protos/library/network/ip-endpoints", "protos/test/ordinary");
+        assertLeafRequirement(leaves, 11, "protos/package-tool/version", "protos/test/package");
+        assertLeafRequirement(leaves, 12, "protos/package-tool/lock", "protos/test/package");
+        assertLeafRequirement(leaves, 13, "protos/package-tool/resolution-input", "protos/test/package");
     }
 
     @Test

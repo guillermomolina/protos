@@ -253,6 +253,12 @@ public final class ProtosCli {
         Path libraryRoot = testsRoot.resolve("library");
         Path packageTomlRoot =
                 testsRoot.resolve("package-tool").resolve("toml-syntax");
+        Path packageToolVersionRoot =
+                testsRoot.resolve("package-tool").resolve("version");
+        Path packageToolLockRoot =
+                testsRoot.resolve("package-tool").resolve("lock");
+        Path packageToolResolutionInputRoot =
+                testsRoot.resolve("package-tool").resolve("resolution-input");
         Path actorRoot = conformanceRoot.resolve("actor");
         Path actorModulesRoot = actorRoot.resolve("modules");
         Path groupRoot = conformanceRoot.resolve("group");
@@ -299,7 +305,15 @@ public final class ProtosCli {
                 ProtosNioReadOnlyTreeFilesystemBackend groupFilesystemBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(groupRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend libraryFilesystemBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(libraryRoot)) {
+                        new ProtosNioReadOnlyTreeFilesystemBackend(libraryRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend packageToolVersionFilesystemBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(packageToolVersionRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend packageToolLockFilesystemBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(packageToolLockRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend
+                        packageToolResolutionInputFilesystemBackend =
+                                new ProtosNioReadOnlyTreeFilesystemBackend(
+                                        packageToolResolutionInputRoot)) {
             return runBundledTool(
                     "test",
                     "Test",
@@ -331,6 +345,18 @@ public final class ProtosCli {
                                     session,
                                     "libraryFilesystem",
                                     libraryFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageToolVersionFilesystem",
+                                    packageToolVersionFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageToolLockFilesystem",
+                                    packageToolLockFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageToolResolutionInputFilesystem",
+                                    packageToolResolutionInputFilesystemBackend);
                             ProtosTestCorpusRegistry.install(
                                     session.activation);
                             ProtosTestExecutionRequirementRegistry.install(
