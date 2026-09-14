@@ -19,6 +19,11 @@ permanent news entry.
 
 ## 2026
 
+- **2026-09-14 — [LM009 closed: Protos reaches a reproducible VS Code IDE baseline](2026-09-14-lm009-closed.md)**
+  The reference VS Code integration becomes a reproducible, installable,
+  executable and debuggable product artifact, with GitHub Release established
+  as the canonical public distribution path.
+
 - **2026-09-14 — [Protos 0.3.0: the optimizing runtime era begins](2026-09-14-protos-0-3-0.md)**
   Protos 0.3.0 is published as a public prerelease, following PERF006 and
   the C′ production cutover, with the selected optimizing Truffle runtime
