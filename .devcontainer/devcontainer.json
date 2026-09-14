@@ -12,6 +12,7 @@
     "vscode": {
       "extensions": [
         "vscjava.vscode-java-pack",
+        "guillermomolina.protos"
       ],
       "settings": {
         // "java.jdt.ls.java.home": "/opt/graalvm-community-java25"
