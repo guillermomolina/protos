@@ -1,0 +1,2 @@
+DIST003-A audit note generated outside repository governance publication path.
+DIST001 reuse confirmed; do not retain this file.
