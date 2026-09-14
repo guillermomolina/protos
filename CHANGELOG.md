@@ -1,5 +1,7 @@
 ## 0.3.0
 
+- Ratify `D133 — Test Tool per-case CaseAuthority scheduling boundary` (GitHub #519) as Candidate B′. Keep CaseSpec logical/inert, materialize a physical case-scoped CaseAuthority only at scheduling admission, preserve D108 aggregation/progress/cancellation semantics, and keep project-tree authority separate from generic D077/D098 resources. Governance/tooling decision only; no specification or version change.
+
 - Ratify `D132 — Plain two-column Test Tool manifest semantics` (GitHub #506) as Candidate B′. Keep `Manifest.load(...)` strict for the existing three-column schema and add a separate generic semantic loader for explicit two-column outcome manifests, with explicit case namespace and stable logical CaseId independent from physical paths. Governance/tooling decision only; no specification or version change.
 
 - Publish Protos 0.3.0 as a GitHub pre-release, the first public milestone of the optimized Truffle-runtime era following the PERF006 runtime-integrity closure. The release identifies the immutable validated candidate `e98fcc85855c8cefdb0b205804f81a0357aba51c` from development baseline `705d8238af0407104b15ba1d46e628fd2d243581` (`0.3.0-SNAPSHOT`) at Core specification revision `0.1.412`, tagged `v0.3.0`, with portable archive `protos-0.3.0-posix-jvm.zip` (SHA-256 `2cb9dea7091e391b0bb93d6533367914fe580d6fc05669da0be7e1f4a66c5fe7`).
