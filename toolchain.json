@@ -9,7 +9,7 @@
     "jdk_feature": 25,
     "jdk_version": "25.0.4.1",
     "container_channel": "25i3",
-    "container_image": "ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825"
+    "container_image": "ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol10-20260825"
   },
   "graal_components": {
     "version": "25.3.4.1"

@@ -31,7 +31,7 @@ TOOLCHAIN = {
         "jdk_feature": 25,
         "jdk_version": "25.0.4.1",
         "container_channel": "25i3",
-        "container_image": "ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825",
+        "container_image": "ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol10-20260825",
     },
     "graal_components": {"version": "25.3.4.1"},
     "maven": {"version": "3.9.9"},
@@ -137,7 +137,7 @@ def make_fixture(
     write(root / "pom.xml", pom)
     write(root / ".devcontainer" / "Dockerfile", "FROM %s\nARG MAVEN_VERSION=3.9.9\n" % selected_image)
 
-    test_image = "ghcr.io/graalvm/graalvm-community:25-ol8" if development_drift else selected_image
+    test_image = "ghcr.io/graalvm/graalvm-community:25-ol10" if development_drift else selected_image
     test_feature = "21" if development_drift else "25"
     test_version = "21" if development_drift else "25.0.4.1"
     test_maven = "3.9.8" if development_drift else "3.9.9"
@@ -153,7 +153,7 @@ def make_fixture(
         graal_release = "24.0.0"
         launcher = "expected_feature=$(sed -n 's/^java_feature=//p' \"$RUNTIME_META\")\n"
     else:
-        distribution_image = "ghcr.io/graalvm/graalvm-community:25-ol8" if distribution_drift else selected_image
+        distribution_image = "ghcr.io/graalvm/graalvm-community:25-ol10" if distribution_drift else selected_image
         distribution_feature = "24" if distribution_drift else "25"
         distribution_version = "24" if distribution_drift else "25.0.4.1"
         distribution_maven = "3.9.8" if distribution_drift else "3.9.9"
