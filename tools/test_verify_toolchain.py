@@ -135,7 +135,20 @@ def make_fixture(
 </plugins></build></project>
 """ % (components, graal_dependencies, shade_externalization, graph_projection)
     write(root / "pom.xml", pom)
-    write(root / ".devcontainer" / "Dockerfile", "FROM %s\nARG MAVEN_VERSION=3.9.9\n" % selected_image)
+    if development_drift:
+        # Historical manual-pin model: the verifier expects the OS-package
+        # provisioning model, so the ARG-pinned Dockerfile must drift.
+        write(root / ".devcontainer" / "Dockerfile", "FROM %s\nARG MAVEN_VERSION=3.9.9\n" % selected_image)
+    else:
+        write(
+            root / ".devcontainer" / "Dockerfile",
+            "FROM %s\n"
+            "RUN microdnf install -y \\\n"
+            "        findutils \\\n"
+            "        maven \\\n"
+            "        procps \\\n"
+            "    && microdnf clean all\n" % selected_image,
+        )
 
     test_image = "ghcr.io/graalvm/graalvm-community:25-ol10" if development_drift else selected_image
     test_feature = "21" if development_drift else "25"
@@ -242,7 +255,7 @@ def main():
         make_fixture(root, development_drift=True)
         result = run(verifier, root, "check", "development")
         require(result.returncode == 1, "development drift did not fail closed", result)
-        for binding in ("ci.tests.image", "ci.tests.java_feature", "ci.tests.java_version", "ci.tests.maven"):
+        for binding in ("devcontainer.maven", "ci.tests.image", "ci.tests.java_feature", "ci.tests.java_version", "ci.tests.maven"):
             require(binding in result.stdout, "development drift did not identify %s" % binding, result)
 
         root = tmp / "distribution-drift"

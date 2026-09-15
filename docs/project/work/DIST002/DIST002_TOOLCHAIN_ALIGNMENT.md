@@ -327,3 +327,23 @@ pattern.
 Opening DIST002 changes no Protos semantics, implementation version, current
 DIST001 candidate, runtime support promise, tag, GitHub Release, or release
 publication authorization.
+
+## Post-closure amendment: OL10 OS-package Maven provisioning (2026-09-15)
+
+After DIST002 closed, the UPSTREAM002 evaluation (GitHub #525) and DIST004
+(GitHub #526) migrated the development container from the OL8 image to the
+pinned OL10 counterpart. The exact Maven coordinate is **unchanged**: the OL10
+image's OS `maven` package is Apache Maven 3.9.9 (Red Hat 3.9.9-3), so the
+DIST002-A contract version remains authoritative.
+
+What changed is the provisioning model only: the devcontainer now installs the
+image-pinned OS `maven` package instead of a manual checksum-verified Apache
+bootstrap, and `tools/verify_toolchain.py`'s `devcontainer.maven` binding checks
+the OS-package provisioning model. Exactness is anchored by the pinned image
+tag, the unchanged `toolchain.json` `maven.version=3.9.9`, and the runtime Maven
+identity check when ordinary CI is reactivated (GITHUB017). The full 1950-test
+Maven suite passes in the OL10 container with the OS package (0 failures,
+0 errors, 0 skipped; evidence under `docs/project/evidence/UPSTREAM002/`).
+
+The historical DIST002-A through DIST002-D text above remains historically
+accurate for the OL8/bootstrap environment it describes and is not rewritten.

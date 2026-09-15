@@ -67,5 +67,11 @@ Current role-first work records:
 - [`GITHUB015/GITHUB015_FORMAL_ISSUE_PUBLICATION.md`](GITHUB015/GITHUB015_FORMAL_ISSUE_PUBLICATION.md)
   — fail-closed formal Issue publication transaction, hierarchy/priority ordering, and decision-approval provenance.
 
+- [`UPSTREAM002/UPSTREAM002_OL10_CONTAINER_BASE_MIGRATION.md`](UPSTREAM002/UPSTREAM002_OL10_CONTAINER_BASE_MIGRATION.md)
+  — GraalVM Community container base migration evaluation OL8 → OL10, impact classification, and closure evidence.
+
+- [`DIST004/DIST004_OL10_CONTAINER_TOOLING_MIGRATION.md`](DIST004/DIST004_OL10_CONTAINER_TOOLING_MIGRATION.md)
+  — owning record for the development-container OL10 base-OS and OS-tooling migration.
+
 Live status, priority, assignment, and execution discussion remain in GitHub
 Issues and the Protos Development Project.

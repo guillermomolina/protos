@@ -287,11 +287,20 @@ def audit_bindings(root, contract):
         str(graal["container_image"]),
         first_match(docker, r"^FROM[ \t]+([^ \t\n]+)", "FROM"),
     ))
-    rows.append((
-        "devcontainer.maven",
-        maven,
-        first_match(docker, r"^ARG[ \t]+MAVEN_VERSION=([^ \t\n]+)", "MAVEN_VERSION"),
-    ))
+    # DIST004-B: the devcontainer now provisions Maven as the image-pinned OS
+    # package instead of a manual exact-version bootstrap. The exact version
+    # coordinate remains the contract value above and is anchored by the exact
+    # pinned image tag; this binding verifies the provisioning model statically.
+    docker_maven_provisioning = (
+        "os-package"
+        if re.search(
+            r"^RUN[ \t]+microdnf install.*?\bmaven\b.*?&&",
+            docker,
+            flags=re.MULTILINE | re.DOTALL,
+        )
+        else "missing"
+    )
+    rows.append(("devcontainer.maven", "os-package", docker_maven_provisioning))
 
     ci_workflow = root / ".github" / "workflows" / "tests.yml"
     rows.append(("ci.tests.image", str(graal["container_image"]), workflow_job_container_image(ci_workflow, "test")))

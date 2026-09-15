@@ -17,5 +17,6 @@ its references, retention role, and compatibility implications.
 - [`D099/`](D099/README.md) — immutable ratification publication, safe-abort, and GitHub closure evidence for D099.
 - [`PERF006/`](PERF006/README.md) — immutable PERF006 C3/C4 runtime validation plus D1-D4 controlled performance, structural-diagnostic, and final closure evidence.
 - [`UPSTREAM001/`](UPSTREAM001/README.md) — retained Oracle/Graal PR #14434 configurable Bytecode DSL unwind experiment, semantic validation, IGV evidence, optimizer findings, and explicit non-conclusions.
+- [`UPSTREAM002/`](UPSTREAM002/README.md) — retained OL10 container environment snapshot and validation evidence for the GraalVM Community base-image migration (OL8 → OL10).
 
 - `PERF006/README.md` — immutable PERF006 C3/C4 runtime-validation and D1-D4 performance/diagnostic/closure evidence.
