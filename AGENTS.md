@@ -200,25 +200,36 @@ all of the following dimensions:
 2. **Protos alignment** — fits the documented Protos design philosophy,
    including small-universe design, mechanisms over institutions, ordinary
    things remaining ordinary, no unnecessary privileged entities,
-   orthogonality/composability, locality, pay-only-for-what-you-use, and minimal
-   coordination.
-3. **Future-option resilience** — preserves plausible future
-   language/runtime/library/backend choices instead of prematurely closing them.
-4. **Scalability** — remains sound as objects, data, Tasks, Actors, Processes,
+   orthogonality/composability, locality, and minimal coordination.
+3. **Present-need proportionality / pay for what you need** — keeps conceptual,
+   implementation, user-facing, maintenance, coordination, and runtime cost
+   proportional to requirements that actually exist today rather than charging
+   current users or the project for speculative capability.
+4. **Incremental growth / grow as you need** — permits the smallest sufficient
+   design today to acquire plausible later capability without invalidating its
+   fundamental model or requiring speculative machinery to be installed in
+   advance.
+5. **Future-option resilience** — preserves plausible future
+   language/runtime/library/backend choices instead of prematurely closing them,
+   while distinguishing preservation of an option from preimplementation of it.
+6. **Scalability** — remains sound as objects, data, Tasks, Actors, Processes,
    Contexts, threads, nodes, workloads, and concurrency increase.
-5. **Conceptual simplicity** — minimizes total semantic/architectural
+7. **Conceptual simplicity** — minimizes total semantic/architectural
    complexity, special cases, hidden rules, and interaction surface rather than
    merely implementation line count.
-6. **Portability / implementation freedom** — avoids unnecessary coupling to
+8. **Portability / implementation freedom** — avoids unnecessary coupling to
    one VM, host mechanism, OS, compiler strategy, runtime identity, or current
    implementation accident.
-7. **Runtime / resource cost** — CPU, allocation, memory, synchronization,
-   coordination, startup, and whether simple programs pay for unused capability.
-8. **Failure / operability** — predictable failure modes, cancellation/unwind
-   behavior, diagnosability, observability, and recovery of broken invariants.
-9. **Reversibility / migration cost** — difficulty of changing the choice later,
-   including compatibility, persisted-state, deployment, and rollout costs.
-10. **Evidence maturity / implementation risk** — quality of precedent and
+9. **Runtime / resource cost** — CPU, allocation, memory, synchronization,
+   coordination, startup, and other machine costs imposed by the design,
+   including costs paid when optional capability is unused.
+10. **Failure / operability** — predictable failure modes, cancellation/unwind
+    behavior, diagnosability, observability, and recovery of broken invariants.
+11. **Cost of deferral / reversibility / migration** — identifies both the cost
+    of changing an adopted choice later and the concrete rewrite, compatibility,
+    persisted-state, deployment, semantic, or architectural cost of omitting a
+    capability now and adding it later.
+12. **Evidence maturity / implementation risk** — quality of precedent and
     feasibility evidence versus unproven assumptions or implementation risk.
 
 Each score MUST include a short justification. When evidence is uncertain, mark
@@ -227,11 +238,178 @@ the score confidence as `HIGH`, `MEDIUM`, or `LOW`.
 Domain-specific criteria MAY be added, but the common criteria above MUST NOT be
 silently removed.
 
+### Incremental-design balance and anti-overengineering gate
+
+Future resilience and scalability are requirements to evaluate, not permission
+to pre-build speculative capability. Every substantive decision comparison MUST
+balance them explicitly against present necessity, incremental growth, and the
+concrete cost of deferring capability.
+
+In addition to the common scoring dimensions above, every surviving candidate
+MUST explicitly answer these questions:
+
+**Pay for what you need**
+
+Is the conceptual, implementation, user-facing, runtime, resource, maintenance,
+and coordination cost paid today proportional to requirements that actually
+exist today? Identify who pays for capability that the motivating use case does
+not currently need.
+
+**Grow as you need**
+
+Can the design begin with the smallest sufficient capability and acquire more
+capability later without invalidating its fundamental model? Distinguish
+incremental extension from a future redesign disguised as extensibility.
+
+**Cost of deferral / reversibility**
+
+If a capability is omitted today, what exactly would have to change to add it
+later? Identify whether deferral would require changing public semantics,
+identity, authority, ownership, scheduling, persistence, data representation,
+compatibility contracts, or other foundational structure, rather than merely
+adding an implementation or library layer.
+
+High concrete deferral cost may justify sophisticated architecture before all of
+its capability is immediately exercised. The burden is to demonstrate that cost;
+a generic claim that a future implementation would otherwise require a rewrite
+is not sufficient.
+
+**Smallest sufficient solution**
+
+What is the smallest design that satisfies the requirements and invariants known
+today? For every capability beyond that design, identify the concrete current
+requirement, invariant, evidence, or demonstrated deferral cost that justifies
+including it now.
+
+**Speculation burden of proof**
+
+A plausible future requirement is evidence for preserving an escape path, not by
+itself evidence for implementing the requirement now. If future capability can
+be added later at bounded cost without breaking the model, prefer preserving the
+option over paying its complexity in advance.
+
+The comparison MUST therefore distinguish:
+
+    future-compatible
+        from
+    future-preimplemented
+
+A design may deliberately leave capability absent while still being the more
+future-resilient choice.
+
+### Non-compensating design red flags
+
+Arithmetic totals MUST NOT allow strong scalability or future-option scores to
+silently compensate for unjustified present complexity.
+
+A candidate with poor pay-for-what-you-need behavior, unnecessary public or
+conceptual surface, or no credible incremental-growth path carries an explicit
+overengineering red flag. The recommendation MUST address that red flag
+directly.
+
+Likewise, choosing the smallest current implementation is not automatically
+correct. A minimal candidate carries an explicit underengineering red flag when
+credible evidence shows that deferral would force a foundational rewrite,
+compatibility break, semantic migration, or replacement of an architecture whose
+boundary must be established now.
+
+These red flags are qualitative review gates, not additional numbers to hide in
+an arithmetic total.
+
 Scores are comparison aids, not mathematical authority. Do not select a
 candidate merely because its arithmetic total is largest. A hard semantic
 constraint, qualitative threshold, catastrophic failure mode, unacceptable
-future lock-in, or fundamental Protos-philosophy violation may disqualify an
+future lock-in, fundamental Protos-philosophy violation, unjustified speculative
+complexity, or demonstrated unacceptable deferral cost may disqualify an
 otherwise high-scoring candidate.
+
+### Mandatory adversarial incremental-design questions
+
+Before recommending a candidate, the decision packet MUST explicitly answer:
+
+**What is the smallest solution that satisfies the requirements we have today,
+and what concrete evidence justifies every capability beyond it?**
+
+**If we omit this capability today, can it be added later without breaking the
+model?**
+
+**If we do not build this capability now, what exactly must be rewritten later
+to add it?**
+
+**What current complexity would make us regret implementing the future
+requirement before we actually need it?**
+
+Answers MUST be specific to the decision. Generic claims such as "more
+future-proof", "more scalable", "simpler", or "we would have to rewrite it
+later" do not satisfy this gate without identifying the affected contracts,
+boundaries, state, semantics, implementation layers, or migration work.
+
+### Retrospective complexity and necessity audits
+
+When auditing an already implemented feature or architecture, historical
+development effort is sunk cost and MUST NOT by itself justify keeping or
+removing the design. Evaluate the complexity the project is still paying.
+
+The audit MUST distinguish, where applicable:
+
+- programmer/user cognitive cost;
+- semantic, syntax, protocol, or API surface cost;
+- ongoing implementation and maintenance cost;
+- drag imposed on unrelated or future feature development;
+- duplicated semantic or execution machinery;
+- runtime, memory, startup, synchronization, or resource cost;
+- compatibility and migration cost;
+- capability currently obtained from the mechanism;
+- robustness and failure containment;
+- scalability and future-option resilience; and
+- the cost and feasibility of removing the mechanism now and reintroducing a
+  capability later if real evidence appears.
+
+A retrospective audit SHOULD classify each reviewed mechanism into one of three
+outcomes:
+
+1. **KEEP** — its current or foundational value justifies the complexity that
+   remains.
+2. **REMOVE_NOW / RECONSIDER_LATER** — its current cost or surface is not
+   justified, but future evidence could make substantially the same capability
+   worth designing again.
+3. **REMOVE_PERMANENTLY** — the concept conflicts with Protos philosophy,
+   duplicates a better mechanism, creates an undesirable semantic category, or
+   is fundamentally inferior even if related future requirements appear.
+
+`REMOVE_NOW / RECONSIDER_LATER` does not reserve syntax, semantics, implementation
+hooks, compatibility behavior, parser productions, runtime branches, dormant
+abstractions, or other scaffolding "just in case". Remove the mechanism fully
+within the approved scope. If future evidence justifies the capability, redesign
+it from the then-current Protos model and evidence.
+
+To distinguish the two removal outcomes, explicitly ask:
+
+**If future evidence justified this capability, would we want to reintroduce
+substantially the same concept?**
+
+If yes, prefer `REMOVE_NOW / RECONSIDER_LATER`. If no, prefer
+`REMOVE_PERMANENTLY`.
+
+A useful retrospective evidence matrix is:
+
+    FEATURE
+    CURRENT_REAL_USE
+    USER_VISIBLE_COMPLEXITY
+    ONGOING_MAINTENANCE_COST
+    RUNTIME_COST
+    PAY_FOR_WHAT_YOU_NEED
+    GROW_AS_YOU_NEED
+    COST_OF_DEFERRAL / REVERSIBILITY
+    FUTURE_RESILIENCE
+    SCALABILITY
+    PROTOS_PHILOSOPHY
+    OUTCOME
+
+The classification itself does not authorize removal. If removing or retaining a
+mechanism crosses the substantive design approval gate, present the evidence and
+recommended classification to the project owner before changing semantics,
+architecture, or compatibility.
 
 ### Future-scenario stress test
 
@@ -272,12 +450,15 @@ Before requesting project-owner approval, the packet MUST contain:
 5. the comparative 1–5 scoring matrix with confidence where needed;
 6. failure modes, counterexamples, and disqualifying conditions;
 7. future-scenario and scalability stress analysis;
-8. implementation/runtime/resource consequences;
-9. portability, migration, compatibility, and reversibility consequences;
-10. intentionally deferred questions;
-11. the agent's recommended option and why it is the most Protos-aligned choice;
+8. incremental-design analysis covering smallest sufficient solution,
+   pay-for-what-you-need, grow-as-you-need, and concrete cost of deferral;
+9. implementation/runtime/resource consequences, including present costs paid
+   for capability not currently required;
+10. portability, migration, compatibility, and reversibility consequences;
+11. intentionally deferred questions, including why deferral is safe or unsafe;
+12. the agent's recommended option and why it is the most Protos-aligned choice;
     and
-12. the strongest argument **against** the recommendation.
+13. the strongest argument **against** the recommendation.
 
 The agent MUST stop at that point for explicit project-owner approval unless the
 specific bounded decision has already been explicitly delegated.
