@@ -11,8 +11,7 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "vscjava.vscode-java-pack" //,
-        //"guillermomolina.protos"
+        "vscjava.vscode-java-pack"
       ],
       "settings": {
         // "java.jdt.ls.java.home": "/opt/graalvm-community-java25"
