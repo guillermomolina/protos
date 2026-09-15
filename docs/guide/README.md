@@ -15,10 +15,18 @@ The specification under [`../../spec/`](../../spec/) remains authoritative for
 observable syntax and semantics. If this guide and the specification disagree,
 the specification wins.
 
+## Start here
+
+If you want to run Protos before reading the language guide, start with
+[Try Protos](00-try-protos.md). It covers the recommended Protos Dev Container
+path and the supported manual-installation path using an official Protos
+distribution.
+
 ## How to use the learning material
 
-Three complementary resources are maintained:
+Four complementary resources are maintained:
 
+- [Try Protos](00-try-protos.md) gets a runnable Protos environment ready;
 - this guide explains concepts and mental models;
 - [`../../protos/tutorials/`](../../protos/tutorials/) contains small,
   progressive executable programs;
@@ -27,7 +35,6 @@ Three complementary resources are maintained:
 
 Where practical, guide chapters point to executable tutorial programs rather
 than duplicating large source examples that can drift independently.
-
 
 ## Source style reference
 
@@ -47,8 +54,14 @@ DOC001 tracks this guide as one documentation initiative with independently
 auditable slices. A blocker on one chapter does not automatically block unrelated
 documentation areas whose semantics and implementation are already closed.
 
+The getting-started path is tracked separately by
+[`DOC006 — Try Protos and Getting Started guide`](https://github.com/guillermomolina/protos/issues/524).
+DOC006 owns the runnable onboarding path and keeps it separate from the broader
+language-teaching progression under DOC001.
+
 ## Current chapters
 
+0. [Try Protos](00-try-protos.md)
 1. [Bindings, contexts, and object state](01-bindings-contexts-and-state.md)
 2. [Objects, delegation, and composition](02-objects-delegation-and-composition.md)
 3. [Closures, methods, and receivers](03-closures-methods-and-receivers.md)
@@ -61,7 +74,6 @@ documentation areas whose semantics and implementation are already closed.
 10. [Actors, ActorRefs, and Actor Groups](10-actors-actorrefs-and-groups.md)
 11. [Process, I/O, Filesystems, and Authority](11-process-io-filesystems-and-authority.md)
 12. [Matching expressions](12-matching-expressions.md)
-
 
 ## Toolchain guides
 

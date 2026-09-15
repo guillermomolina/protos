@@ -55,6 +55,9 @@ Current role-first work records:
 - [`DOC005/DOC005_BUNDLED_TOOLS_TEST_TOOL_DOCUMENTATION.md`](DOC005/DOC005_BUNDLED_TOOLS_TEST_TOOL_DOCUMENTATION.md)
   — maintained Bundled Tools overview plus staged TOOL002 / Test Tool user documentation.
 
+- [`DOC006/DOC006_TRY_PROTOS_GETTING_STARTED.md`](DOC006/DOC006_TRY_PROTOS_GETTING_STARTED.md)
+  — maintained runnable onboarding through the Dev Container or official release distribution.
+
 - [`GITHUB012/GITHUB012_ACTIONABLE_PROJECT_VIEWS.md`](GITHUB012/GITHUB012_ACTIONABLE_PROJECT_VIEWS.md)
   — actionable Project-view contract and canonical lifecycle-status hardening.
 

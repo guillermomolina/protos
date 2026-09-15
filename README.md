@@ -445,13 +445,19 @@ mechanisms.
 
 ## Getting started
 
-Build the current reference implementation:
+The quickest way to try Protos is the
+[Try Protos guide](docs/guide/00-try-protos.md). It covers both the recommended
+ready-to-use Dev Container and a manual installation from an official Protos
+release distribution.
+
+If you are developing the Protos implementation itself, build the current
+reference implementation with:
 
 ``` sh
 mvn package
 ```
 
-Then run the executable hello-world example:
+Then run the canonical hello-world example:
 
 ``` sh
 bin/protos protos/examples/hello-world.protos
@@ -485,6 +491,8 @@ durable implementation and closure history remains recorded in
 
 ## Learn Protos
 
+-   [Try Protos](docs/guide/00-try-protos.md) — get a runnable Protos environment
+    with the Dev Container or the official release distribution.
 -   [Programming guide](docs/guide/README.md) — conceptual explanations and the
     mental model behind Protos.
 -   [Executable tutorials](protos/tutorials/README.md) — small progressive
