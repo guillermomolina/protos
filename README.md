@@ -38,6 +38,14 @@ The name **Protos** reflects this prototype-based model: objects can serve as
 prototypes for other objects through delegation without belonging to a separate
 prototype value category.
 
+## Quick Start
+
+1. Install [GraalVM Community Edition for JDK 22](https://www.graalvm.org/) (Truffle 24.0.0)
+2. Download [`protos-0.2.236-posix-jvm.zip`](https://github.com/guillermomolina/protos/releases/tag/v0.2.236)
+3. Unzip and run: `./bin/protos`
+
+To build from source instead (requires Maven): `mvn package`
+
 The Core v0.1 specification remains a draft, while a working reference
 implementation and command-line interface are under active development. See
 [`pom.xml`](pom.xml) for the current implementation version, the
