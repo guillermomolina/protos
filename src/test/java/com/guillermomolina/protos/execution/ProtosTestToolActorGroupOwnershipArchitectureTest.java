@@ -113,10 +113,6 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
                 Files.readString(CORPUS_REGISTRY, StandardCharsets.UTF_8);
         String requirementRegistry =
                 Files.readString(REQUIREMENT_REGISTRY, StandardCharsets.UTF_8);
-        String g2Java = Files.readString(G2_JAVA, StandardCharsets.UTF_8);
-        String g3Java = Files.readString(G3_JAVA, StandardCharsets.UTF_8);
-        String g2Fixture = Files.readString(G2_FIXTURE, StandardCharsets.UTF_8);
-        String g3Fixture = Files.readString(G3_FIXTURE, StandardCharsets.UTF_8);
 
         assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
         assertTrue(main.contains("testCorpusBindings.slotValue(corpus)"));
@@ -151,22 +147,9 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
 
         assertTrue(runner.contains("(kind === \"future-integer-one-of\").ifTrue"));
 
-        assertTrue(
-                g2Java.contains(
-                        "bundledRunnerOwnsCompleteRetainedActorCorpusWithoutTestScheduler"));
-        assertTrue(
-                g3Java.contains(
-                        "bundledRunnerOwnsCompleteRetainedGroupCorpusWithoutSelectingRoutingMember"));
-        assertFalse(g2Java.contains("ManualExecutor"));
-        assertFalse(g3Java.contains("ManualExecutor"));
-        assertFalse(g2Java.contains("new ProtosStandardActorProtocol"));
-        assertFalse(g3Java.contains("new ProtosStandardActorProtocol"));
-
-        for (String fixture : new String[] {g2Fixture, g3Fixture}) {
-            assertTrue(fixture.contains("Runner.runSelectedCount(run) == cases.size()"));
-            assertTrue(fixture.contains("Runner.runPassedCount(run) == cases.size()"));
-            assertTrue(fixture.contains("Runner.runSkippedCount(run) == 0"));
-            assertTrue(fixture.contains("Runner.runAllPassed(run)"));
-        }
+        assertFalse(Files.exists(G2_JAVA));
+        assertFalse(Files.exists(G3_JAVA));
+        assertFalse(Files.exists(G2_FIXTURE));
+        assertFalse(Files.exists(G3_FIXTURE));
     }
 }

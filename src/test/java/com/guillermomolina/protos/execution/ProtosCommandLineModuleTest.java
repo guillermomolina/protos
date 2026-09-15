@@ -19,13 +19,9 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -34,8 +30,6 @@ import org.junit.jupiter.api.Test;
 final class ProtosCommandLineModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
-    private static final Path CASE_ROOT =
-            Path.of("protos", "tests", "library", "cli");
 
     @Test
     void importedModuleExportsCurrentCommandLineSurface() throws Exception {
@@ -54,133 +48,4 @@ final class ProtosCommandLineModuleTest {
                 module.localSlotsSnapshot().keySet());
     }
 
-    @Test
-    void specificationConstructionConformsInProtos() throws Exception {
-        assertFixture("specification-valid.protos");
-    }
-
-    @Test
-    void invalidSpecificationFamiliesFailClosedInProtos() throws Exception {
-        assertFixture("specification-invalid.protos");
-    }
-
-    @Test
-    void specificationSnapshotsAndFreezeConformInProtos() throws Exception {
-        assertFixture("specification-snapshot.protos");
-    }
-
-    @Test
-    void recursiveLosslessResultShapeConformsInProtos() throws Exception {
-        assertFixture("result-model.protos");
-    }
-
-    @Test
-    void exactResultProvenanceShapeConformsInProtos() throws Exception {
-        assertFixture("result-provenance.protos");
-    }
-
-    @Test
-    void remainingApprovedAdversarialFamiliesFailClosedInProtos() throws Exception {
-        assertFixture("adversarial.protos");
-    }
-
-    @Test
-    void deterministicOptionParsingConformsInProtos() throws Exception {
-        assertFixture("parse-options.protos");
-    }
-
-    @Test
-    void d111PositionalAllocationConformsInProtos() throws Exception {
-        assertFixture("parse-positionals-d111.protos");
-    }
-
-    @Test
-    void delimiterAndLiteralValueProvenanceConformInProtos() throws Exception {
-        assertFixture("parse-delimiter.protos");
-    }
-
-    @Test
-    void parserFailureFamiliesFailClosedInProtos() throws Exception {
-        assertFixture("parse-failures.protos");
-    }
-
-    @Test
-    void d115SubcommandBoundaryConformsInProtos() throws Exception {
-        assertFixture("parse-subcommands-d115.protos");
-    }
-
-    @Test
-    void currentScopeDelimiterDisablesChildRecognitionInProtos() throws Exception {
-        assertFixture("parse-subcommand-delimiter.protos");
-    }
-
-    @Test
-    void optionOwnershipAndValuePrecedenceConformAcrossScopesInProtos() throws Exception {
-        assertFixture("parse-subcommand-options.protos");
-    }
-
-    @Test
-    void deepRecursiveCommandResultsAndFreezeConformInProtos() throws Exception {
-        assertFixture("parse-subcommand-deep.protos");
-    }
-
-    @Test
-    void d119ValueNameRenderabilityInvariantConformsInProtos() throws Exception {
-        assertFixture("valuename-d119.protos");
-    }
-
-    @Test
-    void d118CanonicalHelpRenderingConformsInProtos() throws Exception {
-        assertFixture("help-rendering-d118.protos");
-    }
-
-    @Test
-    void d118PathAwareHelpAndFailureBoundaryConformInProtos() throws Exception {
-        assertFixture("help-rendering-path-d118.protos");
-    }
-
-    @Test
-    void largeSpecificationAndArgumentVectorConformInProtos() throws Exception {
-        assertFixture("closure-large-spec.protos");
-    }
-
-    @Test
-    void independentConcurrentInvocationsRemainIsolatedInProtos() throws Exception {
-        assertRootTaskFixture("closure-isolation-concurrency.protos");
-    }
-
-    private static void assertFixture(String fixture) throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                Files.readString(
-                                        CASE_ROOT.resolve(fixture),
-                                        StandardCharsets.UTF_8))
-                        .call(prelude.newModuleActivation());
-
-        assertSame(ProtosBooleanValue.TRUE, result, fixture);
-    }
-
-    private static void assertRootTaskFixture(String fixture) throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-
-        try (ProtosHostedExecutionTestFixture hosted =
-                ProtosHostedExecutionTestFixture.open(prelude)) {
-            ProtosExecutionOutcome outcome =
-                    hosted.execute(
-                            fixture,
-                            Files.readString(
-                                    CASE_ROOT.resolve(fixture),
-                                    StandardCharsets.UTF_8));
-
-            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), fixture);
-            assertSame(ProtosBooleanValue.TRUE, outcome.value(), fixture);
-        }
-    }
 }

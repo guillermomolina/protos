@@ -19,13 +19,9 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -39,8 +35,6 @@ import org.junit.jupiter.api.Test;
 final class ProtosNetworkingIpAddressesModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
-    private static final Path CASE_ROOT =
-            Path.of("protos", "tests", "library", "network", "ip-addresses");
 
     @Test
     void importedModuleExportsExactlyApprovedSurface() throws Exception {
@@ -59,59 +53,4 @@ final class ProtosNetworkingIpAddressesModuleTest {
                 module.localSlotsSnapshot().keySet());
     }
 
-    @Test
-    void ipv4ConstructionConforms() throws Exception {
-        assertFixture("surface-ipv4.protos");
-    }
-
-    @Test
-    void ipv6ConstructionConforms() throws Exception {
-        assertFixture("ipv6.protos");
-    }
-
-    @Test
-    void exactIntegerDomainsAndRangesFailClosed() throws Exception {
-        assertFixture("domain-rejection.protos");
-    }
-
-    @Test
-    void constructorArityFailsClosed() throws Exception {
-        assertFixture("arity-rejection.protos");
-    }
-
-    @Test
-    void strictIpv4ParsingFormattingAndRoundTripConform() throws Exception {
-        assertFixture("ipv4-parse-format.protos");
-    }
-
-    @Test
-    void malformedIpv4AndWrongDomainsFailClosed() throws Exception {
-        assertFixture("ipv4-invalid.protos");
-    }
-
-    @Test
-    void ipv6ParsingCanonicalFormattingAndRoundTripConform() throws Exception {
-        assertFixture("ipv6-parse-format.protos");
-    }
-
-    @Test
-    void malformedIpv6FailsClosed() throws Exception {
-        assertFixture("ipv6-invalid.protos");
-    }
-
-    private static void assertFixture(String fixture) throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                Files.readString(
-                                        CASE_ROOT.resolve(fixture),
-                                        StandardCharsets.UTF_8))
-                        .call(prelude.newModuleActivation());
-
-        assertSame(ProtosBooleanValue.TRUE, result, fixture);
-    }
 }

@@ -23,12 +23,8 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -37,7 +33,6 @@ import org.junit.jupiter.api.Test;
 final class ProtosCsvModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
-    private static final Path CASE_ROOT = Path.of("protos", "tests", "library", "csv");
 
     @Test
     void importedModuleExportsExactlyClosedDefaultProfileSurface() throws Exception {
@@ -54,63 +49,6 @@ final class ProtosCsvModuleTest {
         assertEquals(
                 Set.of("parse", "encode", "rowParser", "readRows", "writeRows"),
                 module.localSlotsSnapshot().keySet());
-    }
-
-    @Test
-    void defaultProfileRowsAndFieldsConform() throws Exception {
-        assertFixture("parse-basic.protos");
-    }
-
-    @Test
-    void recordBoundariesBlankRecordsAndEmbeddedTerminatorsConform() throws Exception {
-        assertFixture("parse-record-boundaries.protos");
-    }
-
-    @Test
-    void malformedCsvFailsClosed() throws Exception {
-        assertFixture("parse-invalid.protos");
-    }
-
-    @Test
-    void arityAndStringDomainFailClosed() throws Exception {
-        assertFixture("arity-domain-rejection.protos");
-    }
-
-    @Test
-    void encodeCanonicalWriterPolicyConforms() throws Exception {
-        assertFixture("encode-canonical.protos");
-    }
-
-    @Test
-    void encodeParseStructuralRoundTripConforms() throws Exception {
-        assertFixture("encode-roundtrip.protos");
-    }
-
-    @Test
-    void encodeRejectsInvalidTableRowAndFieldDomains() throws Exception {
-        assertFixture("encode-invalid.protos");
-    }
-
-    @Test
-    void incrementalRowParserConforms() throws Exception {
-        assertFixture("row-parser-basic.protos");
-        assertFixture("row-parser-boundaries.protos");
-        assertFixture("row-parser-lifecycle.protos");
-        assertFixture("row-parser-independence.protos");
-    }
-
-    @Test
-    void textReaderAndWriterAdaptersConform() throws Exception {
-        assertFixture("text-adapter-reader.protos");
-        assertFixture("text-adapter-writer.protos");
-        assertFixture("text-adapter-overlap.protos");
-        assertFixture("text-adapter-terminal-errors.protos");
-    }
-
-    @Test
-    void integratedClosureAndScalabilityEvidenceConform() throws Exception {
-        assertFixture("integrated-closure.protos");
-        assertFixture("streaming-scale.protos");
     }
 
     @Test
@@ -166,49 +104,4 @@ final class ProtosCsvModuleTest {
         assertNotSame(parserA2, parserB, "parser state must remain independently allocated");
     }
 
-    private static void assertFixture(String fixture) throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-
-        try (ProtosHostedExecutionTestFixture hosted =
-                ProtosHostedExecutionTestFixture.open(prelude)) {
-            ProtosActivation activation = hosted.activation();
-            ProtosExecutionOutcome outcome =
-                    hosted.execute(
-                            fixture,
-                            Files.readString(
-                                    CASE_ROOT.resolve(fixture),
-                                    StandardCharsets.UTF_8));
-            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state(), fixture);
-            Object result = outcome.value();
-
-            if (result instanceof ProtosFutureValue future) {
-                awaitTerminal(hosted, future, activation, fixture);
-                assertEquals(ProtosFutureValue.State.RESOLVED, future.state(), fixture);
-                result = future.resolvedValue().orElseThrow();
-            }
-
-            assertSame(ProtosBooleanValue.TRUE, result, fixture);
-        }
-    }
-
-    private static void awaitTerminal(
-            ProtosHostedExecutionTestFixture hosted,
-            ProtosFutureValue future,
-            ProtosActivation activation,
-            String fixture) {
-        int dispatches = 0;
-        while (future.state() == ProtosFutureValue.State.PENDING) {
-            boolean progressed =
-                    hosted.callEntered(() -> activation.executionDomain().dispatchOne());
-            if (!progressed) {
-                throw new AssertionError(fixture + ": pending Future with no runnable work");
-            }
-            dispatches++;
-            if (dispatches > 100000) {
-                throw new AssertionError(fixture + ": Future exceeded bounded terminal progress");
-            }
-        }
-    }
 }
