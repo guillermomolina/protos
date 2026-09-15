@@ -1,6 +1,6 @@
 # DIST004 — Development container Oracle Linux 10 base-OS and OS-tooling migration
 
-Status: IN_PROGRESS
+Status: CLOSED
 Live coordination: GitHub Issue #526
 Upstream evaluation: UPSTREAM002 (GitHub #525),
 `docs/project/work/UPSTREAM002/UPSTREAM002_OL10_CONTAINER_BASE_MIGRATION.md`
@@ -54,11 +54,30 @@ pre-existing GITHUB017/TOOL005 CI-suspension drift already recorded in
 `docs/project/evidence/DIST003/`; CI reactivation validation is owned by
 GITHUB017.
 
-### DIST004-C — Portable-distribution validation and closure — IN_PROGRESS
+### DIST004-C — Portable-distribution validation and closure — CLOSED
 
-Portable build and extracted-distribution smoke in the OL10 container, followed
-by final DIST004 closure with the composed evidence. The distribution CI path
-itself is suspended (GITHUB017 / TOOL005) and is not exercised by this item.
+Owner-executed in the OL10 container on 2026-09-15: `mvn package -DskipTests`
+BUILD SUCCESS, `dist/build_portable.py` `DIST_BUILD: PASS` producing
+`protos-0.3.0-SNAPSHOT-posix-jvm.zip`, and the complete B5 cross-slice gate
+(`bash dist/validate_portable.sh`) passing B2 clean-source/archive identity
+(1770 files), B3 caller-CWD + Package Tool, B4A bundled Test Tool, and B4B
+exact GraalVM JDK `25.0.4.1` / Truffle `25.3.4.1`
+`com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime`, with the archive
+byte-for-byte unchanged (`sha256=dc0a459431e22163a660e285160d22ba157f16d735f435b9d7cbfb0fbb82ed28`).
+Evidence retained under `docs/project/evidence/UPSTREAM002/`.
+
+The distribution CI path itself is suspended (GITHUB017 / TOOL005) and is not
+exercised by this item.
+
+## Closure
+
+DIST004 is complete: the development container runs the pinned GraalVM
+Community `25i3` / JDK `25.0.4.1` image on Oracle Linux 10 with unchanged
+GraalVM/JDK/Truffle coordinates, image-provided Python 3.12.13, and the OS
+`maven` package providing the exact DIST002 Maven 3.9.9 coordinate under the
+OS-package provisioning model. The complete 1950-test Maven suite and the
+portable-distribution B5 gate pass in the OL10 container. Historical OL8 /
+manual-Maven evidence remains unchanged.
 
 ## Boundaries
 

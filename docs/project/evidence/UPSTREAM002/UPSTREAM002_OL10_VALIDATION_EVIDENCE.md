@@ -47,14 +47,79 @@ CI reactivation validation is owned by GITHUB017.
 
 ## Portable-distribution build and smoke
 
-Not yet executed for the OL10 container at the time this file was first
-retained. The portable build and extracted-distribution smoke in the OL10
-container are owned by DIST004-C
-(`docs/project/work/DIST004/DIST004_OL10_CONTAINER_TOOLING_MIGRATION.md`).
-The distribution CI path itself is suspended (GITHUB017 / TOOL005).
+Owner-executed in the OL10 container on 2026-09-15. The shaded build and the
+portable distribution are produced with the OS `maven` package under
+`JAVA_HOME=/opt/graalvm-community-java25i3`.
+
+```text
+$ mvn package -DskipTests
+[INFO] Replacing original artifact with shaded artifact.
+[INFO] Replacing /workspaces/protos/target/protos-0.3.0-SNAPSHOT.jar with /workspaces/protos/target/protos-0.3.0-SNAPSHOT-shaded.jar
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  8.504 s
+[INFO] Finished at: 2026-09-15T10:43:06Z
+
+$ python3 dist/build_portable.py
+phase=dist02 materialize toolchain tree
+phase=dist03 copy canonical root-POM runtime projection
+DIST_RUNTIME_PROJECTION_CHECK: PASS
+DIST_RUNTIME_PROJECTION_JARS: 12
+phase=dist04 create archive
+DIST_ARCHIVE_CRC_CHECK: PASS
+DIST_LAYOUT_CHECK: PASS
+DIST_SOURCE_IDENTITY_CHECK: PASS
+DIST_RUNTIME_METADATA_CHECK: PASS
+DIST_LAUNCHER_MODE_CHECK: PASS
+DIST_ARCHIVE: /workspaces/protos/target/distributions/protos-0.3.0-SNAPSHOT-posix-jvm.zip
+DIST_ARTIFACT_KIND: development-distribution
+DIST_BUILD: PASS
+```
+
+The complete B5 cross-slice gate then passed against that archive:
+
+```text
+$ bash dist/validate_portable.sh
+DIST_ARCHIVE_CRC_CHECK: PASS
+DIST_SINGLE_ROOT_CHECK: PASS
+DIST_SOURCE_REVISION_CHECK: PASS revision=62b34188e13d06320c48e061f975cded36a69afc
+DIST_ARTIFACT_MODE_CHECK: PASS mode=development-distribution
+DIST_SOURCE_CLEAN_CHECK: PASS
+DIST_INTERNAL_CHECKSUM_COVERAGE_CHECK: PASS files=1770
+DIST_INTERNAL_CHECKSUM_VALUE_CHECK: PASS
+DIST001_B2_VERIFY: PASS
+DIST_OUTSIDE_CHECKOUT_CHECK: PASS
+DIST_B3_RUNTIME_ISOLATION_CHECK: PASS mode=supported
+DIST_CALLER_CWD_SOURCE_CHECK: PASS
+DIST_PACKAGE_TOOL_CWD_CHECK: PASS
+DIST001_B3_SMOKE: PASS
+DIST_B4A_OUTSIDE_CHECKOUT_CHECK: PASS
+DIST_B4A_RUNTIME_ISOLATION_CHECK: PASS mode=supported
+DIST_BUNDLED_TEST_TOOL_CHECK: PASS
+DIST001_B4A_SMOKE: PASS
+DIST_B4B_OUTSIDE_CHECKOUT_CHECK: PASS
+DIST_SELECTED_JDK_CHECK: PASS java.version=25.0.4.1
+DIST_SELECTED_RUNTIME_GATE_CHECK: PASS
+DIST_OPTIMIZER_JAR_INTACT_CHECK: PASS version=25.3.4.1
+DIST_TRUFFLE_COMPILER_CHECK: PASS version=25.3.4.1
+DIST_DAP_RUNTIME_CLOSURE_CHECK: PASS version=25.3.4.1
+DIST_OPTIMIZING_RUNTIME_CHECK: PASS class=com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime
+DIST001_B4B_SMOKE: PASS
+DIST_B5_SINGLE_ARCHIVE_CHECK: PASS sha256=dc0a459431e22163a660e285160d22ba157f16d735f435b9d7cbfb0fbb82ed28
+DIST_B5_ARTIFACT_MODE_CHECK: PASS mode=development
+DIST_B5_ARCHIVE_IDENTITY_CHECK: PASS
+DIST_B5_CWD_PACKAGE_CHECK: PASS
+DIST_B5_TEST_TOOL_CHECK: PASS
+DIST_B5_OPTIMIZING_RUNTIME_CHECK: PASS
+DIST001_B5_CROSS_SLICE: PASS
+```
+
+The archive remains byte-for-byte unchanged across the B5 gate (single-archive
+SHA-256 `dc0a459431e22163a660e285160d22ba157f16d735f435b9d7cbfb0fbb82ed28`).
 
 ## Interpretation limits
 
-The full-suite result is evidence for the OL10 container with the OS Maven
-package on the pinned image. The suspended CI surfaces are intentionally not
-claimed as validated; their reactivation validation belongs to GITHUB017.
+The full-suite and B5 results are evidence for the OL10 container with the OS
+Maven package on the pinned image. The suspended CI surfaces are intentionally
+not claimed as validated; their reactivation validation belongs to GITHUB017.

@@ -49,10 +49,10 @@ certificate surfaces) was not retained as its own artifact; the operative
 compatibility evidence is the clean microdnf provisioning, the complete Maven
 suite, and the tooling identity checks in the retained snapshot, with the
 portable-distribution build/smoke (which exercises the tar/gzip/git consumer
-path) owned by DIST004-C. The observed OS-level change is recorded explicitly:
-the OS `maven` package pulls the OL10 system JDK 21 onto PATH, which is
-intentional for the package but does not affect builds, because Maven runs
-under `JAVA_HOME` (GraalVM JDK 25.0.4.1).
+path) validated by DIST004-C. The observed OS-level change is recorded
+explicitly: the OS `maven` package pulls the OL10 system JDK 21 onto PATH,
+which is intentional for the package but does not affect builds, because Maven
+runs under `JAVA_HOME` (GraalVM JDK 25.0.4.1).
 
 ## Maven audit
 
@@ -128,9 +128,14 @@ Retained in `docs/project/evidence/UPSTREAM002/UPSTREAM002_OL10_VALIDATION_EVIDE
   since the GITHUB017 / TOOL005 CI suspension and already recorded in
   `docs/project/evidence/DIST003/`; CI reactivation validation is owned by
   GITHUB017.
-- Portable-distribution build and extracted-distribution smoke in the OL10
-  container: owned by DIST004-C (see the DIST004 work record). The distribution
-  CI path itself is suspended (GITHUB017).
+- Portable-distribution build and smoke in the OL10 container (DIST004-C,
+  2026-09-15): `mvn package -DskipTests` BUILD SUCCESS and
+  `dist/build_portable.py` `DIST_BUILD: PASS`; the complete B5 cross-slice gate
+  (`dist/validate_portable.sh`) passes B2 clean-source/archive identity, B3
+  caller-CWD + Package Tool, B4A bundled Test Tool, and B4B exact GraalVM JDK
+  `25.0.4.1` / Truffle `25.3.4.1` `HotSpotTruffleRuntime` with the archive
+  byte-for-byte unchanged. The distribution CI path itself is suspended
+  (GITHUB017).
 
 ## Impact classification
 
@@ -155,7 +160,7 @@ required Protos work has a proper owner; derived work need not finish first.
 7. Maven provisioning/pinning decision and reproducibility rationale explicitly
    recorded — PASS: Maven audit section above and DIST004-B.
 8. Affected development/debugger/distribution/CI surfaces accounted for — PASS:
-   devcontainer verified live; distribution smoke handed to DIST004-C; CI
-   reactivation remains owned by GITHUB017.
+   devcontainer verified live; portable-distribution B5 gate passes in the OL10
+   container (DIST004-C); CI reactivation remains owned by GITHUB017.
 9. Historical OL8/Maven-3.9.9 evidence remains historically accurate — PASS:
    DIST002 narrative, DIST003 evidence, and pre-C fixture retained unchanged.
