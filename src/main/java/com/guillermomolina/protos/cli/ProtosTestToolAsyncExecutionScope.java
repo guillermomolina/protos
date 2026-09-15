@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.execution.ProtosAsyncExactExecutionFacility;
+import com.guillermomolina.protos.execution.ProtosAsyncProcessSnapshotExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
 import com.guillermomolina.protos.execution.ProtosTestResourceExecutionScope;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -126,6 +127,14 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                                     () ->
                                             new IllegalStateException(
                                                     "Test Tool async scope requires Core prelude"));
+
+            facilities.add(
+                    ProtosAsyncProcessSnapshotExecutionFacility.install(
+                            activation,
+                            primaryPrelude,
+                            runtimeHost,
+                            submission));
+
             resourceExecutionScope =
                     ProtosTestResourceExecutionScope.installEmpty(
                             activation,

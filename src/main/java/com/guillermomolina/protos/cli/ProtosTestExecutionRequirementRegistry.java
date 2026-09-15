@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.cli;
 
+import com.guillermomolina.protos.execution.ProtosAsyncProcessSnapshotExecutionFacility;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.Objects;
@@ -72,6 +73,11 @@ final class ProtosTestExecutionRequirementRegistry {
                 "packageExecutionInspectAsync",
                 "packageResourceExecutionAsync",
                 "packageResourceExecutionInspectAsync");
+        addExecutionOnlyBinding(
+                registry,
+                activation,
+                "protos/test/process-snapshot",
+                ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT);
 
         registry.freeze();
         activation.context().createLocalSlot(REGISTRY_SLOT, registry);
@@ -98,6 +104,22 @@ final class ProtosTestExecutionRequirementRegistry {
         binding.createLocalSlot(
                 "resourceExecutionInspectAsync",
                 requiredSlot(activation, resourceInspectionSlot));
+        binding.freeze();
+        registry.createLocalSlot(requirementId, binding);
+    }
+
+    private static void addExecutionOnlyBinding(
+            ProtosObjectValue registry,
+            ProtosActivation activation,
+            String requirementId,
+            String executionSlot) {
+        if (registry.hasLocalSlot(requirementId)) {
+            throw new IllegalStateException(
+                    "duplicate Test Tool execution requirement binding: " + requirementId);
+        }
+
+        ProtosObjectValue binding = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        binding.createLocalSlot("executionAsync", requiredSlot(activation, executionSlot));
         binding.freeze();
         registry.createLocalSlot(requirementId, binding);
     }

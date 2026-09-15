@@ -58,6 +58,7 @@ startProgress: (phaseName, phasePlan) => {
 // only for exact output compatibility while execution order comes from the graph.
 phaseNames: Array(
     "main",
+    "process-snapshot",
     "actor",
     "group",
     "package-toml",
@@ -139,15 +140,8 @@ resolveIndex: 0
         Error().signal()
     })
     binding: testExecutionRequirementBindings.slotValue(requirement)
-    Array(
-        "executionAsync",
-        "executionInspectAsync",
-        "resourceExecutionAsync",
-        "resourceExecutionInspectAsync"
-    ).each((slotName) => {
-        binding.hasSlot(slotName).ifFalse(() => {
-            Error().signal()
-        })
+    binding.hasSlot("executionAsync").ifFalse(() => {
+        Error().signal()
     })
 
     resolved: {
@@ -231,14 +225,30 @@ suiteIndex: 0
             corpusBinding.caseAuthorityExecutionAsync
     })
 
+    executionInspectAsync: null
+    binding.hasSlot("executionInspectAsync").ifTrue(() => {
+        executionInspectAsync = binding.executionInspectAsync
+    })
+
+    resourceExecutionAsync: null
+    binding.hasSlot("resourceExecutionAsync").ifTrue(() => {
+        resourceExecutionAsync = binding.resourceExecutionAsync
+    })
+
+    resourceExecutionInspectAsync: null
+    binding.hasSlot("resourceExecutionInspectAsync").ifTrue(() => {
+        resourceExecutionInspectAsync =
+            binding.resourceExecutionInspectAsync
+    })
+
     suiteD108: Runner.runD108WithResources(
         planned.plan,
         resourceCatalog,
         corpusBinding.filesystem,
         binding.executionAsync,
-        binding.executionInspectAsync,
-        binding.resourceExecutionAsync,
-        binding.resourceExecutionInspectAsync,
+        executionInspectAsync,
+        resourceExecutionAsync,
+        resourceExecutionInspectAsync,
         jobs,
         Progress.observer(suiteProgress),
         caseAuthorityExecutorAsync

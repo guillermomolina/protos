@@ -32,8 +32,6 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.PrintStream;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -52,7 +50,7 @@ import org.junit.jupiter.api.Test;
  * <p>The bundled Test Tool module must complete both stdout marker writes before it returns its
  * final outcome; otherwise the CLI terminates the session and the pending writes are lost. The
  * exact awaited statement shape is exercised below through the same host machinery the production
- * module uses, and the complete bundled-tool invocation is asserted end to end.
+ * module uses without recursively executing the repository Protos corpus from the Java test lane.
  */
 final class ProtosTestToolStdoutCompletionTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -90,22 +88,6 @@ final class ProtosTestToolStdoutCompletionTest {
                     return captured.equals(query);
                 }
             };
-
-    @Test
-    void bundledToolStdoutMarkersAreObservableBeforeNormalTermination() {
-        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
-        ByteArrayOutputStream errBytes = new ByteArrayOutputStream();
-        int code =
-                new ProtosCli()
-                        .run(
-                                new String[] {"test"},
-                                InputStream.nullInputStream(),
-                                new PrintStream(outBytes),
-                                new PrintStream(errBytes));
-
-        assertEquals(0, code, errBytes.toString(StandardCharsets.UTF_8));
-        assertEquals(EXPECTED_STDOUT, outBytes.toString(StandardCharsets.UTF_8));
-    }
 
     @Test
     void moduleCannotTerminateBeforeMarkerWritesComplete() throws Exception {

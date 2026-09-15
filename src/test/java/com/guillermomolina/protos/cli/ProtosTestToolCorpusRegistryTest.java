@@ -38,6 +38,8 @@ final class ProtosTestToolCorpusRegistryTest {
     void registryIsExactInvocationScopedFrozenAndExecutionFree() throws Exception {
         Fixture fixture = fixture();
         Path ordinaryRoot = Files.createDirectories(tempDirectory.resolve("ordinary"));
+        Path processSnapshotRoot =
+                Files.createDirectories(tempDirectory.resolve("process-snapshot"));
         Path actorRoot = Files.createDirectories(tempDirectory.resolve("actor"));
         Path groupRoot = Files.createDirectories(tempDirectory.resolve("group"));
         Path packageRoot = Files.createDirectories(tempDirectory.resolve("package"));
@@ -55,6 +57,8 @@ final class ProtosTestToolCorpusRegistryTest {
 
         try (ProtosNioReadOnlyTreeFilesystemBackend ordinaryBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(ordinaryRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend processSnapshotBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(processSnapshotRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend actorBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(actorRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend groupBackend =
@@ -76,6 +80,10 @@ final class ProtosTestToolCorpusRegistryTest {
                 ProtosNioReadOnlyTreeFilesystemBackend projectProjectionBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(projectProjectionRoot)) {
             installFilesystem(fixture, "filesystem", ordinaryBackend);
+            installFilesystem(
+                    fixture,
+                    "processSnapshotFilesystem",
+                    processSnapshotBackend);
             installFilesystem(fixture, "actorFilesystem", actorBackend);
             installFilesystem(fixture, "groupFilesystem", groupBackend);
             installFilesystem(fixture, "packageTomlFilesystem", packageBackend);
@@ -112,10 +120,16 @@ final class ProtosTestToolCorpusRegistryTest {
                                     .readLocalSlot(ProtosTestCorpusRegistry.REGISTRY_SLOT)
                                     .orElseThrow());
             assertTrue(registry.isFrozen());
-            assertEquals(17, registry.localSlotsSnapshot().size());
+            assertEquals(18, registry.localSlotsSnapshot().size());
 
             assertBinding(fixture.activation(), registry, "protos/corpus/conformance",
                     "manifest", "filesystem");
+            assertBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/process-snapshot",
+                    "manifest",
+                    "processSnapshotFilesystem");
             assertBinding(fixture.activation(), registry, "protos/corpus/actor",
                     "manifest", "actorFilesystem");
             assertBinding(fixture.activation(), registry, "protos/corpus/group",

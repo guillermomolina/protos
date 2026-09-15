@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
+import com.guillermomolina.protos.execution.ProtosAsyncProcessSnapshotExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosBundledToolModuleResolver;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
@@ -161,6 +162,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                     "groupResourceExecutionInspectAsync",
                     "packageResourceExecutionAsync",
                     "packageResourceExecutionInspectAsync",
+                    ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT,
                     ProtosTestCaseAuthorityExecutionScope.RESOLUTION_ROOT_SLOT,
                     ProtosTestCaseAuthorityExecutionScope.EXECUTION_PLAN_SLOT,
                     ProtosTestCaseAuthorityExecutionScope.PROJECT_PROJECTION_SLOT)) {
@@ -184,6 +186,25 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                                                     + "() => { future.value() }"),
                                     new ProtosStringValue("(subject) => { subject() }")));
             assertCompletedIntegerObservation(inspection, 42);
+
+            ProtosObjectValue processSnapshot =
+                    invokeAndAwait(
+                            activation,
+                            ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT,
+                            List.of(
+                                    new ProtosStringValue(
+                                            "(process.args().size() == 3) && "
+                                                    + "(process.args() !== otherProcess.args())")));
+
+            ProtosStringValue processSnapshotState =
+                    assertInstanceOf(
+                            ProtosStringValue.class,
+                            processSnapshot.readLocalSlot("state").orElseThrow());
+
+            assertEquals("completed", processSnapshotState.value());
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    processSnapshot.readLocalSlot("value").orElseThrow());
         }
     }
 

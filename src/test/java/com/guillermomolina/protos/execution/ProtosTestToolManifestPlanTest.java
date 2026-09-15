@@ -44,6 +44,8 @@ final class ProtosTestToolManifestPlanTest {
     private static final Path MANIFEST_MODULE = TOOL_ROOT.resolve("Manifest.protos");
     private static final Path CORPUS_ROOT =
             Path.of("protos", "tests", "conformance");
+    private static final Path PROCESS_SNAPSHOT_CORPUS_ROOT =
+            Path.of("protos", "tests", "conformance", "process");
     private static final Path PACKAGE_TOML_CORPUS_ROOT =
             Path.of("protos", "tests", "package-tool", "toml-syntax");
     private static final Path FIXTURE =
@@ -585,6 +587,38 @@ fixture.activation());
                                                     StandardCharsets.UTF_8), fixture.activation());
 
             assertSame(ProtosBooleanValue.TRUE, result);
+        }
+    }
+
+    @Test
+    void processSnapshotManifestMaterializesExactFifteenCasePlan()
+            throws Exception {
+        Fixture fixture = fixture();
+
+        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
+                new ProtosNioReadOnlyTreeFilesystemBackend(PROCESS_SNAPSHOT_CORPUS_ROOT)) {
+            assumeTrue(
+                    backend.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+
+            installFilesystem(
+                    fixture.prelude(),
+                    fixture.activation(),
+                    "filesystem",
+                    backend);
+
+            Object result =
+                    completed(
+                            "Manifest: import(\"self:Manifest\")\n"
+                                    + "Manifest.planCases("
+                                    + "Manifest.load(filesystem)).size()",
+                            fixture.activation());
+
+            assertEquals(
+                    15,
+                    assertInstanceOf(ProtosIntegerValue.class, result)
+                            .value()
+                            .intValueExact());
         }
     }
 

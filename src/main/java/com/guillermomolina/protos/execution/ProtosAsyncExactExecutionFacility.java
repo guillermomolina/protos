@@ -72,9 +72,15 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
         ProtosCapturedProcessExecution.Result run();
     }
 
+    @FunctionalInterface
+    interface SourceExecution {
+        ProtosCapturedProcessExecution.Result run(ProtosStringValue source);
+    }
+
     private final ProtosPrelude executionPrelude;
     private final ProtosPolyglotRuntimeHost runtimeHost;
     private final Submission submission;
+    private final SourceExecution sourceExecution;
     private final Set<Operation> outstanding = new LinkedHashSet<>();
     private boolean closed;
 
@@ -82,9 +88,27 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
             ProtosPrelude executionPrelude,
             ProtosPolyglotRuntimeHost runtimeHost,
             Submission submission) {
+        this(
+                executionPrelude,
+                runtimeHost,
+                submission,
+                source ->
+                        ProtosCapturedProcessExecution.execute(
+                                ProtosExactExecutionFacility.executionRequest(
+                                        source,
+                                        executionPrelude),
+                                runtimeHost));
+    }
+
+    private ProtosAsyncExactExecutionFacility(
+            ProtosPrelude executionPrelude,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            Submission submission,
+            SourceExecution sourceExecution) {
         this.executionPrelude = Objects.requireNonNull(executionPrelude, "executionPrelude");
         this.runtimeHost = Objects.requireNonNull(runtimeHost, "runtimeHost");
         this.submission = Objects.requireNonNull(submission, "submission");
+        this.sourceExecution = Objects.requireNonNull(sourceExecution, "sourceExecution");
     }
 
     public static ProtosAsyncExactExecutionFacility install(
@@ -132,6 +156,45 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
                         executionPrelude,
                         runtimeHost,
                         submission);
+        activation
+                .context()
+                .createLocalSlot(
+                        slotName,
+                        ProtosExactExecutionFacility.exactExecutionBootstrapClosure(
+                                (callActivation, arguments) ->
+                                        facility.execute(callActivation, arguments)));
+        return facility;
+    }
+
+    static ProtosAsyncExactExecutionFacility installWithSourceExecution(
+            ProtosActivation activation,
+            String slotName,
+            ProtosPrelude executionPrelude,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            Submission submission,
+            SourceExecution sourceExecution) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(slotName, "slotName");
+        Objects.requireNonNull(executionPrelude, "executionPrelude");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
+        Objects.requireNonNull(submission, "submission");
+        Objects.requireNonNull(sourceExecution, "sourceExecution");
+
+        if (slotName.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "async exact execution bootstrap slot name must not be empty");
+        }
+        if (activation.context().hasLocalSlot(slotName)) {
+            throw new IllegalStateException(
+                    "async exact execution bootstrap slot already exists: " + slotName);
+        }
+
+        ProtosAsyncExactExecutionFacility facility =
+                new ProtosAsyncExactExecutionFacility(
+                        executionPrelude,
+                        runtimeHost,
+                        submission,
+                        sourceExecution);
         activation
                 .context()
                 .createLocalSlot(
@@ -211,16 +274,9 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
-        ProtosCapturedProcessExecution.Request request =
-                ProtosExactExecutionFacility.executionRequest(
-                        source,
-                        executionPrelude);
         return start(
                 caller,
-                () ->
-                        ProtosCapturedProcessExecution.execute(
-                                request,
-                                runtimeHost));
+                () -> sourceExecution.run(source));
     }
 
     private Object inspect(

@@ -15,6 +15,11 @@ root: SuiteGraph.suite(
             "protos/test/ordinary"
         ),
         SuiteGraph.leaf(
+            "protos/process-snapshot",
+            "protos/corpus/process-snapshot",
+            "protos/test/process-snapshot"
+        ),
+        SuiteGraph.leaf(
             "protos/actor",
             "protos/corpus/actor",
             "protos/test/actor"

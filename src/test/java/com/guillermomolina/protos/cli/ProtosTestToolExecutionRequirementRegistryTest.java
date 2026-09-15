@@ -11,6 +11,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.execution.ProtosAsyncProcessSnapshotExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosBundledToolModuleResolver;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
@@ -47,7 +48,7 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
                                             ProtosTestExecutionRequirementRegistry.REGISTRY_SLOT)
                                     .orElseThrow());
             assertTrue(registry.isFrozen());
-            assertEquals(4, registry.localSlotsSnapshot().size());
+            assertEquals(5, registry.localSlotsSnapshot().size());
 
             assertBinding(fixture.activation(), registry, "protos/test/ordinary",
                     "executionAsync", "executionInspectAsync",
@@ -61,6 +62,11 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
             assertBinding(fixture.activation(), registry, "protos/test/package",
                     "packageExecutionAsync", "packageExecutionInspectAsync",
                     "packageResourceExecutionAsync", "packageResourceExecutionInspectAsync");
+            assertExecutionOnlyBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/test/process-snapshot",
+                    ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT);
 
             assertFalse(registry.hasLocalSlot("protos/corpus/conformance"));
             assertFalse(registry.hasLocalSlot("protos/corpus/actor"));
@@ -110,6 +116,27 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
         assertSame(
                 activation.context().readLocalSlot(resourceInspectionSlot).orElseThrow(),
                 binding.readLocalSlot("resourceExecutionInspectAsync").orElseThrow());
+    }
+
+    private static void assertExecutionOnlyBinding(
+            ProtosActivation activation,
+            ProtosObjectValue registry,
+            String requirementId,
+            String executionSlot) {
+        ProtosObjectValue binding =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        registry.readLocalSlot(requirementId).orElseThrow());
+        assertTrue(binding.isFrozen());
+        assertEquals(1, binding.localSlotsSnapshot().size());
+        assertSame(
+                activation.context().readLocalSlot(executionSlot).orElseThrow(),
+                binding.readLocalSlot("executionAsync").orElseThrow());
+        assertFalse(binding.hasLocalSlot("executionInspectAsync"));
+        assertFalse(binding.hasLocalSlot("resourceExecutionAsync"));
+        assertFalse(binding.hasLocalSlot("resourceExecutionInspectAsync"));
+        assertFalse(binding.hasLocalSlot("filesystem"));
+        assertFalse(binding.hasLocalSlot("planLoader"));
     }
 
     private static Fixture fixture() throws Exception {

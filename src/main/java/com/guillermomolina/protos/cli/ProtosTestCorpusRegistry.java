@@ -26,6 +26,12 @@ final class ProtosTestCorpusRegistry {
         ProtosObjectValue registry = new ProtosObjectValue(ProtosObjectValue.rootObject());
 
         addBinding(registry, activation, "protos/corpus/conformance", "manifest", "filesystem");
+        addBinding(
+                registry,
+                activation,
+                "protos/corpus/process-snapshot",
+                "manifest",
+                "processSnapshotFilesystem");
         addBinding(registry, activation, "protos/corpus/actor", "manifest", "actorFilesystem");
         addBinding(registry, activation, "protos/corpus/group", "manifest", "groupFilesystem");
         addBinding(
