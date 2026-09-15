@@ -78,6 +78,21 @@ root: SuiteGraph.suite(
             "protos/package-tool/resolution-input",
             "protos/corpus/package-tool/resolution-input",
             "protos/test/package"
+        ),
+        SuiteGraph.leaf(
+            "protos/package-tool/resolution-root",
+            "protos/corpus/package-tool/resolution-root",
+            "protos/test/package"
+        ),
+        SuiteGraph.leaf(
+            "protos/package-tool/execution-plan",
+            "protos/corpus/package-tool/execution-plan",
+            "protos/test/package"
+        ),
+        SuiteGraph.leaf(
+            "protos/package-tool/project-projection",
+            "protos/corpus/package-tool/project-projection",
+            "protos/test/package"
         )
     )
 )

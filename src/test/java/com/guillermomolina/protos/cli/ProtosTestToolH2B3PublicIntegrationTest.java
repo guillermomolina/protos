@@ -120,8 +120,30 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestToolAsyncExecutionScope scope =
-                        ProtosTestToolAsyncExecutionScope.install(
-                                activation, runtimeHost, prelude, prelude, prelude)) {
+                        ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities(
+                                activation,
+                                runtimeHost,
+                                prelude,
+                                prelude,
+                                prelude,
+                                Path.of(
+                                        "protos",
+                                        "tests",
+                                        "package-tool",
+                                        "resolution-root",
+                                        "cases"),
+                                Path.of(
+                                        "protos",
+                                        "tests",
+                                        "package-tool",
+                                        "execution-plan",
+                                        "cases"),
+                                Path.of(
+                                        "protos",
+                                        "tests",
+                                        "package-tool",
+                                        "project-projection",
+                                        "cases"))) {
             for (String slot : List.of(
                     "executionAsync",
                     "executionInspectAsync",
@@ -138,7 +160,10 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                     "groupResourceExecutionAsync",
                     "groupResourceExecutionInspectAsync",
                     "packageResourceExecutionAsync",
-                    "packageResourceExecutionInspectAsync")) {
+                    "packageResourceExecutionInspectAsync",
+                    ProtosTestCaseAuthorityExecutionScope.RESOLUTION_ROOT_SLOT,
+                    ProtosTestCaseAuthorityExecutionScope.EXECUTION_PLAN_SLOT,
+                    ProtosTestCaseAuthorityExecutionScope.PROJECT_PROJECTION_SLOT)) {
                 assertTrue(activation.context().hasLocalSlot(slot), "missing async route " + slot);
             }
 
@@ -209,6 +234,8 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
         assertTrue(main.contains("Manifest.load(corpusBinding.filesystem)"));
         assertTrue(main.contains("Manifest.loadPackageToml(corpusBinding.filesystem)"));
+        assertTrue(main.contains("(planLoader === \"project-tree\")"));
+        assertTrue(main.contains("Manifest.loadProjectTreeCases("));
         assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
         assertEquals(0, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));

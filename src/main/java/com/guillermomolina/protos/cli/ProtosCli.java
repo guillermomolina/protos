@@ -259,6 +259,12 @@ public final class ProtosCli {
                 testsRoot.resolve("package-tool").resolve("lock");
         Path packageToolResolutionInputRoot =
                 testsRoot.resolve("package-tool").resolve("resolution-input");
+        Path packageToolResolutionRootRoot =
+                testsRoot.resolve("package-tool").resolve("resolution-root");
+        Path packageToolExecutionPlanRoot =
+                testsRoot.resolve("package-tool").resolve("execution-plan");
+        Path packageToolProjectProjectionRoot =
+                testsRoot.resolve("package-tool").resolve("project-projection");
         Path actorRoot = conformanceRoot.resolve("actor");
         Path actorModulesRoot = actorRoot.resolve("modules");
         Path groupRoot = conformanceRoot.resolve("group");
@@ -313,7 +319,19 @@ public final class ProtosCli {
                 ProtosNioReadOnlyTreeFilesystemBackend
                         packageToolResolutionInputFilesystemBackend =
                                 new ProtosNioReadOnlyTreeFilesystemBackend(
-                                        packageToolResolutionInputRoot)) {
+                                        packageToolResolutionInputRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend
+                        packageToolResolutionRootFilesystemBackend =
+                                new ProtosNioReadOnlyTreeFilesystemBackend(
+                                        packageToolResolutionRootRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend
+                        packageToolExecutionPlanFilesystemBackend =
+                                new ProtosNioReadOnlyTreeFilesystemBackend(
+                                        packageToolExecutionPlanRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend
+                        packageToolProjectProjectionFilesystemBackend =
+                                new ProtosNioReadOnlyTreeFilesystemBackend(
+                                        packageToolProjectProjectionRoot)) {
             return runBundledTool(
                     "test",
                     "Test",
@@ -323,12 +341,15 @@ public final class ProtosCli {
                     err,
                     session -> {
                         ProtosTestToolAsyncExecutionScope executionScope =
-                                ProtosTestToolAsyncExecutionScope.install(
+                                ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities(
                                         session.activation,
                                         session.runtimeHost,
                                         actorPrelude,
                                         groupPrelude,
-                                        packagePrelude);
+                                        packagePrelude,
+                                        packageToolResolutionRootRoot.resolve("cases"),
+                                        packageToolExecutionPlanRoot.resolve("cases"),
+                                        packageToolProjectProjectionRoot.resolve("cases"));
                         boolean provisioned = false;
                         try {
                             installBundledToolFilesystem(
@@ -357,6 +378,18 @@ public final class ProtosCli {
                                     session,
                                     "packageToolResolutionInputFilesystem",
                                     packageToolResolutionInputFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageToolResolutionRootFilesystem",
+                                    packageToolResolutionRootFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageToolExecutionPlanFilesystem",
+                                    packageToolExecutionPlanFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageToolProjectProjectionFilesystem",
+                                    packageToolProjectProjectionFilesystemBackend);
                             ProtosTestCorpusRegistry.install(
                                     session.activation);
                             ProtosTestExecutionRequirementRegistry.install(

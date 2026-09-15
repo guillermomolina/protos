@@ -97,6 +97,27 @@ final class ProtosTestCorpusRegistry {
                 "case-outcomes",
                 "packageToolResolutionInputFilesystem",
                 "protos/package-tool/resolution-input");
+                addProjectTreeBinding(
+                registry,
+                activation,
+                "protos/corpus/package-tool/resolution-root",
+                "packageToolResolutionRootFilesystem",
+                "protos/package-tool/resolution-root",
+                ProtosTestCaseAuthorityExecutionScope.RESOLUTION_ROOT_SLOT);
+                addProjectTreeBinding(
+                registry,
+                activation,
+                "protos/corpus/package-tool/execution-plan",
+                "packageToolExecutionPlanFilesystem",
+                "protos/package-tool/execution-plan",
+                ProtosTestCaseAuthorityExecutionScope.EXECUTION_PLAN_SLOT);
+                addProjectTreeBinding(
+                registry,
+                activation,
+                "protos/corpus/package-tool/project-projection",
+                "packageToolProjectProjectionFilesystem",
+                "protos/package-tool/project-projection",
+                ProtosTestCaseAuthorityExecutionScope.PROJECT_PROJECTION_SLOT);
 
         registry.freeze();
         activation.context().createLocalSlot(REGISTRY_SLOT, registry);
@@ -112,9 +133,9 @@ final class ProtosTestCorpusRegistry {
     }
 
     /**
-     * D132: case-outcomes bindings additionally carry the explicit logical case
-     * namespace supplied by the corpus/TestPlan authority. Other loaders pass
-     * {@code null} and keep the filesystem + planLoader shape only.
+     * D132/D133: namespaced corpus bindings additionally carry the explicit
+     * logical case namespace supplied by the corpus/TestPlan authority.
+     * Non-namespaced loaders pass {@code null}.
      */
     private static void addBinding(
             ProtosObjectValue registry,
@@ -144,6 +165,55 @@ final class ProtosTestCorpusRegistry {
         }
         binding.freeze();
         registry.createLocalSlot(corpusId, binding);
+    }
+
+    private static void addProjectTreeBinding(
+            ProtosObjectValue registry,
+            ProtosActivation activation,
+            String corpusId,
+            String filesystemSlot,
+            String caseNamespace,
+            String caseAuthorityExecutionSlot) {
+        if (registry.hasLocalSlot(corpusId)) {
+            throw new IllegalStateException(
+                    "duplicate Test Tool corpus binding: " + corpusId);
+        }
+
+        Object filesystem = requiredSlot(activation, filesystemSlot);
+        if (!(filesystem instanceof ProtosFilesystemValue)) {
+            throw new IllegalStateException(
+                    "Test Tool corpus binding "
+                            + corpusId
+                            + " requires Filesystem capability in slot "
+                            + filesystemSlot);
+        }
+
+        Object caseAuthorityExecution =
+                requiredSlot(
+                        activation,
+                        caseAuthorityExecutionSlot);
+
+        ProtosObjectValue binding =
+                new ProtosObjectValue(
+                        ProtosObjectValue.rootObject());
+
+        binding.createLocalSlot(
+                "filesystem",
+                filesystem);
+        binding.createLocalSlot(
+                "planLoader",
+                new ProtosStringValue("project-tree"));
+        binding.createLocalSlot(
+                "caseNamespace",
+                new ProtosStringValue(caseNamespace));
+        binding.createLocalSlot(
+                "caseAuthorityExecutionAsync",
+                caseAuthorityExecution);
+        binding.freeze();
+
+        registry.createLocalSlot(
+                corpusId,
+                binding);
     }
 
     private static Object requiredSlot(ProtosActivation activation, String slotName) {

@@ -100,6 +100,19 @@ failedPlan: Manifest.frozenTuple(
     )
 )
 
+authoritySpec: Manifest.caseSpecWithAuthorityDescriptor(
+    baseSpec(
+        "i8d4c3/authority.protos",
+        "integer",
+        "50"
+    ),
+    Manifest.projectTreeAuthorityDescriptor("workspace")
+)
+
+authorityPlan: Manifest.frozenTuple(
+    Manifest.frozenTuple(authoritySpec)
+)
+
 catalog: Catalog.parse(
     "resource-catalog-version = 1\n" +
     "[[resource]]\n" +
@@ -127,6 +140,7 @@ sourceLoader: (spec) => {
     (id === "i8d4c3/failed-blocked.protos").ifTrue(() => { source = "20" })
     (id === "i8d4c3/failed-infrastructure.protos").ifTrue(() => { source = "30" })
     (id === "i8d4c3/failed-later-free.protos").ifTrue(() => { source = "40" })
+    (id === "i8d4c3/authority.protos").ifTrue(() => { source = "50" })
 
     (source === null).ifTrue(() => { Error().signal() })
     source
@@ -240,6 +254,49 @@ resourceExecutorAsync: (source, bindings) => {
 
     (result === null).ifTrue(() => { Error().signal() })
     (() => { result }).future()
+}
+
+authorityFailureMode: "none"
+
+caseAuthorityExecutorAsync: (source, descriptor) => {
+    admissionOrder = Array(
+        ...admissionOrder,
+        "authority:" +
+        source +
+        ":" +
+        Manifest.caseAuthorityFixtureIdentity(descriptor)
+    )
+
+    (Manifest.caseAuthorityKind(descriptor) === "project-tree").ifFalse(() => {
+        Error().signal()
+    })
+    (source === "50").ifFalse(() => {
+        Error().signal()
+    })
+
+    guestObservation: completedObservation(50)
+    infrastructureFailed: false
+    infrastructureFailures: Array()
+
+    (authorityFailureMode === "provision").ifTrue(() => {
+        guestObservation = null
+        infrastructureFailed = true
+        infrastructureFailures = Array("authority-provision-failed")
+    })
+
+    (authorityFailureMode === "teardown").ifTrue(() => {
+        infrastructureFailed = true
+        infrastructureFailures = Array("authority-teardown-failed")
+    })
+
+    completion: {
+        guestObservation: guestObservation
+        infrastructureFailed: infrastructureFailed
+        infrastructureFailures: infrastructureFailures
+    }
+    completion.freeze()
+
+    (() => { completion }).future()
 }
 
 resourceInspectorAsync: (source, inspectorSource, bindings) => {
@@ -508,4 +565,147 @@ unsafePassed.ifTrue(() => {
     unsafePassed = admissionOrder[1] === "resource:30"
 })
 
-healthyPassed && safePassed && unsafePassed
+// D133 case authority route:
+// the ordinary callback deliberately cannot execute source "50", so success
+// proves that D108 dispatched the admitted case through the authority bridge.
+admissionOrder = Array()
+
+authorityEnvelope: Runner.runD108WithResourcesWithLoader(
+    authorityPlan,
+    catalog,
+    sourceLoader,
+    ordinaryExecutorAsync,
+    ordinaryInspectorAsync,
+    resourceExecutorAsync,
+    resourceInspectorAsync,
+    1,
+    null,
+    caseAuthorityExecutorAsync
+)
+
+authorityPassed:
+    Runner.d108RunInfrastructureFailed(authorityEnvelope).not()
+
+authorityPassed.ifTrue(() => {
+    authorityRun: Runner.d108RunHealthyRun(authorityEnvelope)
+    authorityPassed =
+        Runner.runSelectedCount(authorityRun) == 1
+    authorityPassed =
+        authorityPassed &&
+        (Runner.runPassedCount(authorityRun) == 1)
+    authorityPassed =
+        authorityPassed &&
+        (Runner.runSkippedCount(authorityRun) == 0)
+})
+
+authorityPassed =
+    authorityPassed &&
+    (admissionOrder.size() == 1)
+
+authorityPassed.ifTrue(() => {
+    authorityPassed =
+        admissionOrder[0] ===
+        "authority:50:workspace"
+})
+
+// D134 provisioning failure before guest execution:
+// infrastructure evidence exists, but no guest CaseRun may be fabricated.
+admissionOrder = Array()
+authorityFailureMode = "provision"
+
+authorityProvisionEnvelope: Runner.runD108WithResourcesWithLoader(
+    authorityPlan,
+    catalog,
+    sourceLoader,
+    ordinaryExecutorAsync,
+    ordinaryInspectorAsync,
+    resourceExecutorAsync,
+    resourceInspectorAsync,
+    1,
+    null,
+    caseAuthorityExecutorAsync
+)
+
+authorityProvisionPassed:
+    Runner.d108RunInfrastructureFailed(authorityProvisionEnvelope)
+
+authorityProvisionPassed =
+    authorityProvisionPassed &&
+    (Runner.d108RunCaseResults(authorityProvisionEnvelope).size() == 0)
+
+authorityProvisionPassed =
+    authorityProvisionPassed &&
+    (Runner.d108RunInfrastructureAttempts(authorityProvisionEnvelope).size() == 1)
+
+authorityProvisionPassed =
+    authorityProvisionPassed &&
+    (Runner.d108RunRetainedReservationCount(authorityProvisionEnvelope) == 0)
+
+authorityProvisionPassed.ifTrue(() => {
+    attempt:
+        Runner.d108RunInfrastructureAttempts(authorityProvisionEnvelope)[0]
+    completionValue:
+        Runner.d108InfrastructureAttemptCompletion(attempt)
+
+    authorityProvisionPassed =
+        completionValue.infrastructureFailed
+
+    authorityProvisionPassed =
+        authorityProvisionPassed &&
+        (completionValue.guestObservation === null)
+})
+
+
+// D134 teardown failure after guest execution:
+// preserve the real guest CaseRun while retaining independent infrastructure evidence.
+admissionOrder = Array()
+authorityFailureMode = "teardown"
+
+authorityTeardownEnvelope: Runner.runD108WithResourcesWithLoader(
+    authorityPlan,
+    catalog,
+    sourceLoader,
+    ordinaryExecutorAsync,
+    ordinaryInspectorAsync,
+    resourceExecutorAsync,
+    resourceInspectorAsync,
+    1,
+    null,
+    caseAuthorityExecutorAsync
+)
+
+authorityTeardownPassed:
+    Runner.d108RunInfrastructureFailed(authorityTeardownEnvelope)
+
+authorityTeardownPassed =
+    authorityTeardownPassed &&
+    (Runner.d108RunCaseResults(authorityTeardownEnvelope).size() == 1)
+
+authorityTeardownPassed =
+    authorityTeardownPassed &&
+    (Runner.d108RunInfrastructureAttempts(authorityTeardownEnvelope).size() == 1)
+
+authorityTeardownPassed =
+    authorityTeardownPassed &&
+    (Runner.d108RunRetainedReservationCount(authorityTeardownEnvelope) == 0)
+
+authorityTeardownPassed.ifTrue(() => {
+    attempt:
+        Runner.d108RunInfrastructureAttempts(authorityTeardownEnvelope)[0]
+    completionValue:
+        Runner.d108InfrastructureAttemptCompletion(attempt)
+
+    authorityTeardownPassed =
+        completionValue.infrastructureFailed
+
+    authorityTeardownPassed =
+        authorityTeardownPassed &&
+        (completionValue.guestObservation === null).not()
+})
+
+healthyPassed &&
+safePassed &&
+unsafePassed &&
+authorityPassed &&
+authorityProvisionPassed &&
+authorityTeardownPassed

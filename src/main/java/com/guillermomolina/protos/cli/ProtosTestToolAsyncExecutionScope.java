@@ -21,6 +21,7 @@ import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
 import com.guillermomolina.protos.execution.ProtosTestResourceExecutionScope;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -41,6 +42,7 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
     private final PlatformThreadPerTaskSubmission submission;
     private final List<ProtosAsyncExactExecutionFacility> facilities;
     private final ProtosTestResourceExecutionScope resourceExecutionScope;
+    private ProtosTestCaseAuthorityExecutionScope caseAuthorityExecutionScope;
     private boolean closed;
 
     private ProtosTestToolAsyncExecutionScope(
@@ -147,6 +149,40 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
         }
     }
 
+    static ProtosTestToolAsyncExecutionScope installWithCaseAuthorities(
+            ProtosActivation activation,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            ProtosPrelude actorPrelude,
+            ProtosPrelude groupPrelude,
+            ProtosPrelude packagePrelude,
+            Path resolutionRootCases,
+            Path executionPlanCases,
+            Path projectProjectionCases) {
+        ProtosTestToolAsyncExecutionScope scope =
+                install(
+                        activation,
+                        runtimeHost,
+                        actorPrelude,
+                        groupPrelude,
+                        packagePrelude);
+
+        try {
+            scope.caseAuthorityExecutionScope =
+                    ProtosTestCaseAuthorityExecutionScope.install(
+                            activation,
+                            runtimeHost,
+                            scope.submission,
+                            packagePrelude,
+                            resolutionRootCases,
+                            executionPlanCases,
+                            projectProjectionCases);
+            return scope;
+        } catch (RuntimeException | Error failure) {
+            scope.close();
+            throw failure;
+        }
+    }
+
     private static void closeFacilities(List<ProtosAsyncExactExecutionFacility> facilities) {
         for (ProtosAsyncExactExecutionFacility facility : facilities) {
             facility.close();
@@ -159,6 +195,9 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             return;
         }
         closed = true;
+        if (caseAuthorityExecutionScope != null) {
+            caseAuthorityExecutionScope.close();
+        }
         resourceExecutionScope.close();
         closeFacilities(facilities);
         submission.close();

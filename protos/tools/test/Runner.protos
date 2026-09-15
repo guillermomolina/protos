@@ -1903,50 +1903,83 @@ scheduleD108CaseAsync: (
     executorAsync,
     inspectorExecutorAsync,
     resourceExecutorAsync,
-    resourceInspectorExecutorAsync
+    resourceInspectorExecutorAsync,
+    caseAuthorityExecutorAsync = null
 ) => {
     resourceful: bindings.size() > 0
+    descriptor: Manifest.caseAuthorityDescriptor(spec)
     pending: null
 
-    resourceful.ifTrue(() => {
-        (resourceExecutorAsync === null).ifTrue(() => {
+    (descriptor === null).ifFalse(() => {
+        // D133 generation 1 keeps per-case authority distinct from D077
+        // resource/provider provisioning. TOOL005-B3B currently requires no
+        // ResourceRequirement on project-tree cases.
+        resourceful.ifTrue(() => {
             policyError()
         })
-
-        providerBindings:
-            ResourceBinding.providerRequestSnapshot(bindings)
-
-        resourceInspector: null
-        (resourceInspectorExecutorAsync === null).ifFalse(() => {
-            resourceInspector = (executionSource, inspectorSource) => {
-                resourceInspectorExecutorAsync(
-                    executionSource,
-                    inspectorSource,
-                    providerBindings
-                )
-            }
+        (caseAuthorityExecutorAsync === null).ifTrue(() => {
+            policyError()
+        })
+        (
+            Manifest.caseAuthorityKind(descriptor) === "project-tree"
+        ).ifFalse(() => {
+            policyError()
         })
 
         pending = scheduleDCaseAsync(
             spec,
             source,
             (executionSource) => {
-                resourceExecutorAsync(
+                caseAuthorityExecutorAsync(
                     executionSource,
-                    providerBindings
+                    descriptor
                 )
             },
-            resourceInspector
+            null
         )
     })
 
-    resourceful.ifFalse(() => {
-        pending = scheduleDCaseAsync(
-            spec,
-            source,
-            executorAsync,
-            inspectorExecutorAsync
-        )
+    (descriptor === null).ifTrue(() => {
+        resourceful.ifTrue(() => {
+            (resourceExecutorAsync === null).ifTrue(() => {
+                policyError()
+            })
+
+            providerBindings:
+                ResourceBinding.providerRequestSnapshot(bindings)
+
+            resourceInspector: null
+            (resourceInspectorExecutorAsync === null).ifFalse(() => {
+                resourceInspector = (executionSource, inspectorSource) => {
+                    resourceInspectorExecutorAsync(
+                        executionSource,
+                        inspectorSource,
+                        providerBindings
+                    )
+                }
+            })
+
+            pending = scheduleDCaseAsync(
+                spec,
+                source,
+                (executionSource) => {
+                    resourceExecutorAsync(
+                        executionSource,
+                        providerBindings
+                    )
+                },
+                resourceInspector
+            )
+        })
+
+        resourceful.ifFalse(() => {
+            pending = scheduleDCaseAsync(
+                spec,
+                source,
+                executorAsync,
+                inspectorExecutorAsync
+            )
+        })
     })
 
     d108Scheduled(pending, resourceful)
@@ -1961,7 +1994,8 @@ runD108WithResourcesWithLoader: (
     resourceExecutorAsync,
     resourceInspectorExecutorAsync,
     maxInFlight,
-    terminalObserver = null
+    terminalObserver = null,
+    caseAuthorityExecutorAsync = null
 ) => {
     maxInFlight.div(1)
     (maxInFlight > 0).ifFalse(() => {
@@ -2079,7 +2113,8 @@ runD108WithResourcesWithLoader: (
                                 executorAsync,
                                 inspectorExecutorAsync,
                                 resourceExecutorAsync,
-                                resourceInspectorExecutorAsync
+                                resourceInspectorExecutorAsync,
+                                caseAuthorityExecutorAsync
                             )
 
                         windowAttempted[windowIndex] = true
@@ -2129,21 +2164,34 @@ runD108WithResourcesWithLoader: (
                 infrastructureFailed: false
                 capacitySafe: true
 
-                resourceful.ifTrue(() => {
+                // D134: both D077 resourceful attempts and D133 CaseAuthority
+                // attempts return terminal guest+infrastructure envelopes.
+                // Only D077 owns capacity disposition.
+                infrastructureEnvelope: resourceful
+                (
+                    Manifest.caseAuthorityDescriptor(spec) === null
+                ).ifFalse(() => {
+                    infrastructureEnvelope = true
+                })
+
+                infrastructureEnvelope.ifTrue(() => {
                     infrastructureFailed =
                         completionValue.infrastructureFailed
-                    capacitySafe =
-                        completionValue.capacitySafe
                     guestObservation =
                         completionValue.guestObservation
 
-                    // UNSAFE without infrastructure evidence is not a valid D108
-                    // terminal disposition.
-                    (
-                        capacitySafe.not() &&
-                        infrastructureFailed.not()
-                    ).ifTrue(() => {
-                        policyError()
+                    resourceful.ifTrue(() => {
+                        capacitySafe =
+                            completionValue.capacitySafe
+
+                        // UNSAFE without infrastructure evidence is not a valid
+                        // D108 terminal disposition.
+                        (
+                            capacitySafe.not() &&
+                            infrastructureFailed.not()
+                        ).ifTrue(() => {
+                            policyError()
+                        })
                     })
 
                     infrastructureFailed.ifTrue(() => {
@@ -2306,7 +2354,8 @@ runD108WithResources: (
     resourceExecutorAsync,
     resourceInspectorExecutorAsync,
     maxInFlight,
-    terminalObserver = null
+    terminalObserver = null,
+    caseAuthorityExecutorAsync = null
 ) => {
     runD108WithResourcesWithLoader(
         plan,
@@ -2317,7 +2366,8 @@ runD108WithResources: (
         resourceExecutorAsync,
         resourceInspectorExecutorAsync,
         maxInFlight,
-        terminalObserver
+        terminalObserver,
+        caseAuthorityExecutorAsync
     )
 }
 

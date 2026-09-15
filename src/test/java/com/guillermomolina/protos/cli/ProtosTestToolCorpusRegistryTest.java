@@ -46,6 +46,12 @@ final class ProtosTestToolCorpusRegistryTest {
         Path lockRoot = Files.createDirectories(tempDirectory.resolve("lock"));
         Path resolutionInputRoot =
                 Files.createDirectories(tempDirectory.resolve("resolution-input"));
+        Path resolutionRootRoot =
+                Files.createDirectories(tempDirectory.resolve("resolution-root"));
+        Path executionPlanRoot =
+                Files.createDirectories(tempDirectory.resolve("execution-plan"));
+        Path projectProjectionRoot =
+                Files.createDirectories(tempDirectory.resolve("project-projection"));
 
         try (ProtosNioReadOnlyTreeFilesystemBackend ordinaryBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(ordinaryRoot);
@@ -62,7 +68,13 @@ final class ProtosTestToolCorpusRegistryTest {
                 ProtosNioReadOnlyTreeFilesystemBackend lockBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(lockRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend resolutionInputBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(resolutionInputRoot)) {
+                        new ProtosNioReadOnlyTreeFilesystemBackend(resolutionInputRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend resolutionRootBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(resolutionRootRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend executionPlanBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(executionPlanRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend projectProjectionBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(projectProjectionRoot)) {
             installFilesystem(fixture, "filesystem", ordinaryBackend);
             installFilesystem(fixture, "actorFilesystem", actorBackend);
             installFilesystem(fixture, "groupFilesystem", groupBackend);
@@ -71,6 +83,25 @@ final class ProtosTestToolCorpusRegistryTest {
             installFilesystem(fixture, "packageToolVersionFilesystem", versionBackend);
             installFilesystem(fixture, "packageToolLockFilesystem", lockBackend);
             installFilesystem(fixture, "packageToolResolutionInputFilesystem", resolutionInputBackend);
+            installFilesystem(fixture, "packageToolResolutionRootFilesystem", resolutionRootBackend);
+            installFilesystem(fixture, "packageToolExecutionPlanFilesystem", executionPlanBackend);
+            installFilesystem(fixture, "packageToolProjectProjectionFilesystem", projectProjectionBackend);
+
+            fixture.activation()
+                    .context()
+                    .createLocalSlot(
+                            ProtosTestCaseAuthorityExecutionScope.RESOLUTION_ROOT_SLOT,
+                            new ProtosStringValue("resolution-root-case-authority"));
+            fixture.activation()
+                    .context()
+                    .createLocalSlot(
+                            ProtosTestCaseAuthorityExecutionScope.EXECUTION_PLAN_SLOT,
+                            new ProtosStringValue("execution-plan-case-authority"));
+            fixture.activation()
+                    .context()
+                    .createLocalSlot(
+                            ProtosTestCaseAuthorityExecutionScope.PROJECT_PROJECTION_SLOT,
+                            new ProtosStringValue("project-projection-case-authority"));
 
             ProtosTestCorpusRegistry.install(fixture.activation());
             ProtosObjectValue registry =
@@ -81,7 +112,7 @@ final class ProtosTestToolCorpusRegistryTest {
                                     .readLocalSlot(ProtosTestCorpusRegistry.REGISTRY_SLOT)
                                     .orElseThrow());
             assertTrue(registry.isFrozen());
-            assertEquals(14, registry.localSlotsSnapshot().size());
+            assertEquals(17, registry.localSlotsSnapshot().size());
 
             assertBinding(fixture.activation(), registry, "protos/corpus/conformance",
                     "manifest", "filesystem");
@@ -151,6 +182,24 @@ final class ProtosTestToolCorpusRegistryTest {
                     "protos/corpus/package-tool/resolution-input",
                     "protos/package-tool/resolution-input",
                     "packageToolResolutionInputFilesystem");
+            assertProjectTreeBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/package-tool/resolution-root",
+                    "protos/package-tool/resolution-root",
+                    "packageToolResolutionRootFilesystem");
+            assertProjectTreeBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/package-tool/execution-plan",
+                    "protos/package-tool/execution-plan",
+                    "packageToolExecutionPlanFilesystem");
+            assertProjectTreeBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/package-tool/project-projection",
+                    "protos/package-tool/project-projection",
+                    "packageToolProjectProjectionFilesystem");
 
             assertFalse(registry.hasLocalSlot("protos/test/ordinary"));
             assertFalse(registry.hasLocalSlot("protos/corpus/library/unknown"));
@@ -239,6 +288,38 @@ final class ProtosTestToolCorpusRegistryTest {
                                 ProtosStringValue.class,
                                 binding.readLocalSlot("caseNamespace").orElseThrow())
                         .value());
+        assertFalse(binding.hasLocalSlot("executionAsync"));
+        assertFalse(binding.hasLocalSlot("resourceExecutionAsync"));
+    }
+
+    private static void assertProjectTreeBinding(
+            ProtosActivation activation,
+            ProtosObjectValue registry,
+            String corpusId,
+            String expectedCaseNamespace,
+            String filesystemSlot) {
+        ProtosObjectValue binding =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        registry.readLocalSlot(corpusId).orElseThrow());
+        assertTrue(binding.isFrozen());
+        assertEquals(4, binding.localSlotsSnapshot().size());
+        assertSame(
+                activation.context().readLocalSlot(filesystemSlot).orElseThrow(),
+                binding.readLocalSlot("filesystem").orElseThrow());
+        assertEquals(
+                "project-tree",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                binding.readLocalSlot("planLoader").orElseThrow())
+                        .value());
+        assertEquals(
+                expectedCaseNamespace,
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                binding.readLocalSlot("caseNamespace").orElseThrow())
+                        .value());
+        assertTrue(binding.hasLocalSlot("caseAuthorityExecutionAsync"));
         assertFalse(binding.hasLocalSlot("executionAsync"));
         assertFalse(binding.hasLocalSlot("resourceExecutionAsync"));
     }

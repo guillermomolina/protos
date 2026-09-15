@@ -166,6 +166,65 @@ caseRequirements: (spec) => {
     spec[4]
 }
 
+// D133 generation-1 inert project-tree authority descriptor.
+projectTreeAuthorityDescriptor: (fixtureIdentity) => {
+    ignoredCanonicalValidation: pathValue(fixtureIdentity)
+    frozenTuple("project-tree", fixtureIdentity, "case", "case")
+}
+
+caseAuthorityKind: (descriptor) => {
+    descriptor[0]
+}
+
+caseAuthorityFixtureIdentity: (descriptor) => {
+    descriptor[1]
+}
+
+caseAuthorityIsolation: (descriptor) => {
+    descriptor[2]
+}
+
+caseAuthorityLifecycle: (descriptor) => {
+    descriptor[3]
+}
+
+// D133 optional inert per-case provisioning descriptor. Existing five-field
+// CaseSpecs remain valid and expose no authority descriptor.
+caseAuthorityDescriptor: (spec) => {
+    descriptor: null
+    (spec.size() > 5).ifTrue(() => {
+        descriptor = spec[5]
+    })
+    descriptor
+}
+
+caseSpecWithAuthorityDescriptor: (spec, descriptor) => {
+    (descriptor.size() == 4).ifFalse(() => {
+        fail()
+    })
+    (caseAuthorityKind(descriptor) == "project-tree").ifFalse(() => {
+        fail()
+    })
+    (caseAuthorityIsolation(descriptor) == "case").ifFalse(() => {
+        fail()
+    })
+    (caseAuthorityLifecycle(descriptor) == "case").ifFalse(() => {
+        fail()
+    })
+
+    canonical: projectTreeAuthorityDescriptor(
+        caseAuthorityFixtureIdentity(descriptor)
+    )
+    frozenTuple(
+        caseId(spec),
+        casePath(spec),
+        caseExpectation(spec),
+        caseExpected(spec),
+        caseRequirements(spec),
+        canonical
+    )
+}
+
 isResourceKeyStartOctet: (octet) => {
     ((octet >= 97) && (octet <= 122)) ||
         ((octet >= 48) && (octet <= 57))
@@ -299,13 +358,18 @@ caseSpecWithRequirements: (spec, suppliedRequirements) => {
     })
 
     requirements: frozenTuple(...validated)
-    frozenTuple(
+    descriptor: caseAuthorityDescriptor(spec)
+    result: frozenTuple(
         caseId(spec),
         casePath(spec),
         caseExpectation(spec),
         caseExpected(spec),
         requirements
     )
+    (descriptor === null).ifFalse(() => {
+        result = caseSpecWithAuthorityDescriptor(result, descriptor)
+    })
+    result
 }
 
 parseLine: (line) => {
@@ -439,6 +503,84 @@ load: (filesystem) => {
 
 loadPackageToml: (filesystem) => {
     loadWithParser(filesystem, parsePackageTomlLine)
+}
+
+// D133 explicit project-tree case normalization.
+projectTreeCaseSpec: (fields, caseNamespace) => {
+    (fields.size() == 3).ifFalse(() => {
+        fail()
+    })
+
+    projectIdentity: fields[0]
+    fixturePath: fields[1]
+    retainedOutcome: fields[2]
+    ignoredProjectValidation: pathValue(projectIdentity)
+    ignoredFixtureValidation: pathValue(fixturePath)
+
+    expectation: ""
+    expected: ""
+    known: false
+    (retainedOutcome == "true").ifTrue(() => {
+        expectation = "boolean"
+        expected = "true"
+        known = true
+    })
+    (retainedOutcome == "error").ifTrue(() => {
+        expectation = "error"
+        expected = "-"
+        known = true
+    })
+    known.ifFalse(() => {
+        fail()
+    })
+
+    caseIdValue: caseNamespace + "/" + projectIdentity + "/" + fixturePath
+    sourcePath: "fixtures/" + fixturePath
+    base: frozenTuple(
+        caseIdValue,
+        sourcePath,
+        expectation,
+        expected,
+        frozenTuple()
+    )
+    caseSpecWithAuthorityDescriptor(
+        base,
+        projectTreeAuthorityDescriptor(projectIdentity)
+    )
+}
+
+parseProjectTreeCaseLine: (line, caseNamespace) => {
+    bytes: Encoding.UTF8.encode(line)
+    ignore: bytes.size() == 0
+    ignore.ifFalse(() => {
+        (bytes[0] == 35).ifTrue(() => {
+            ignore = true
+        })
+    })
+
+    result: null
+    ignore.ifFalse(() => {
+        result = projectTreeCaseSpec(splitFields(line), caseNamespace)
+    })
+    result
+}
+
+loadProjectTreeCases: (filesystem, caseNamespace) => {
+    parser: (line) => {
+        parseProjectTreeCaseLine(line, caseNamespace)
+    }
+    plan: loadWithParser(filesystem, parser)
+
+    seenIds: Map()
+    planCases(plan).each((spec) => {
+        id: caseId(spec)
+        seenIds.containsKey(id).ifTrue(() => {
+            fail()
+        })
+        seenIds[id] = true
+    })
+
+    plan
 }
 
 // D132 generic two-column explicit-outcome loader. It keeps the strict

@@ -717,6 +717,209 @@ fixture.activation());
     }
 
     @Test
+    void d133ProjectTreeAuthorityDescriptorIsInertCaseScopedData()
+            throws Exception {
+        Fixture fixture = fixture();
+
+        ProtosArrayValue observed =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                "Manifest: import(\"self:Manifest\")\n"
+                                        + "base: Manifest.caseSpec(Array(\"sample.protos\", \"boolean\", \"true\"))\n"
+                                        + "descriptor: Manifest.projectTreeAuthorityDescriptor(\"workspace\")\n"
+                                        + "spec: Manifest.caseSpecWithAuthorityDescriptor(base, descriptor)\n"
+                                        + "authority: Manifest.caseAuthorityDescriptor(spec)\n"
+                                        + "Array(spec.size(), "
+                                        + "Manifest.caseId(spec), "
+                                        + "Manifest.casePath(spec), "
+                                        + "Manifest.caseAuthorityKind(authority), "
+                                        + "Manifest.caseAuthorityFixtureIdentity(authority), "
+                                        + "Manifest.caseAuthorityIsolation(authority), "
+                                        + "Manifest.caseAuthorityLifecycle(authority))",
+                                fixture.activation()));
+
+        assertEquals(7, observed.indexedSize().intValueExact());
+        assertEquals(
+                6,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                observed.indexedAt(java.math.BigInteger.ZERO))
+                        .value()
+                        .intValueExact());
+        assertEquals("sample.protos", stringAt(observed, 1));
+        assertEquals("sample.protos", stringAt(observed, 2));
+        assertEquals("project-tree", stringAt(observed, 3));
+        assertEquals("workspace", stringAt(observed, 4));
+        assertEquals("case", stringAt(observed, 5));
+        assertEquals("case", stringAt(observed, 6));
+    }
+
+    @Test
+    void d133ProjectTreeLoaderNormalizesCaseIdentitySourceAndAuthority(
+            @TempDir Path corpusRoot) throws Exception {
+        Files.writeString(
+                corpusRoot.resolve("manifest.tsv"),
+                "# project\tfixture\toutcome\n"
+                        + "root-only\tbuild-current.protos\ttrue\n"
+                        + "root-only\tcanonical-document-order.protos\ttrue\n"
+                        + "stale\tstale-semantic-error.protos\terror\n",
+                StandardCharsets.UTF_8);
+
+        Fixture fixture = fixture();
+        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
+                new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {
+            assumeTrue(
+                    backend.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+            installFilesystem(fixture.prelude(), fixture.activation(), backend);
+
+            ProtosArrayValue observed =
+                    assertInstanceOf(
+                            ProtosArrayValue.class,
+                            completed(
+                                    "Manifest: import(\"self:Manifest\")\n"
+                                            + "cases: Manifest.planCases("
+                                            + "Manifest.loadProjectTreeCases(filesystem, \"ns\"))\n"
+                                            + "firstAuthority: Manifest.caseAuthorityDescriptor(cases[0])\n"
+                                            + "secondAuthority: Manifest.caseAuthorityDescriptor(cases[1])\n"
+                                            + "Array(cases.size(), "
+                                            + "Manifest.caseId(cases[0]), "
+                                            + "Manifest.casePath(cases[0]), "
+                                            + "Manifest.caseAuthorityFixtureIdentity(firstAuthority), "
+                                            + "Manifest.caseId(cases[1]), "
+                                            + "Manifest.casePath(cases[1]), "
+                                            + "Manifest.caseAuthorityFixtureIdentity(secondAuthority), "
+                                            + "Manifest.caseExpectation(cases[2]), "
+                                            + "Manifest.caseExpected(cases[2]))",
+                                    fixture.activation()));
+
+            assertEquals(9, observed.indexedSize().intValueExact());
+            assertEquals(
+                    3,
+                    assertInstanceOf(
+                                    ProtosIntegerValue.class,
+                                    observed.indexedAt(java.math.BigInteger.ZERO))
+                            .value()
+                            .intValueExact());
+            assertEquals("ns/root-only/build-current.protos", stringAt(observed, 1));
+            assertEquals("fixtures/build-current.protos", stringAt(observed, 2));
+            assertEquals("root-only", stringAt(observed, 3));
+            assertEquals(
+                    "ns/root-only/canonical-document-order.protos",
+                    stringAt(observed, 4));
+            assertEquals(
+                    "fixtures/canonical-document-order.protos",
+                    stringAt(observed, 5));
+            assertEquals("root-only", stringAt(observed, 6));
+            assertEquals("error", stringAt(observed, 7));
+            assertEquals("-", stringAt(observed, 8));
+        }
+    }
+
+    @Test
+    void d133ResourceRequirementAttachmentPreservesCaseAuthorityDescriptor()
+            throws Exception {
+        Fixture fixture = fixture();
+
+        ProtosArrayValue observed =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        completed(
+                                "Manifest: import(\"self:Manifest\")\n"
+                                        + "base: Manifest.caseSpec(Array(\"sample.protos\", \"boolean\", \"true\"))\n"
+                                        + "authoritySpec: Manifest.caseSpecWithAuthorityDescriptor("
+                                        + "base, Manifest.projectTreeAuthorityDescriptor(\"workspace\"))\n"
+                                        + "result: Manifest.caseSpecWithRequirements("
+                                        + "authoritySpec, Array(Manifest.requirement(\"gpu\", \"shared\", 2)))\n"
+                                        + "authority: Manifest.caseAuthorityDescriptor(result)\n"
+                                        + "Array(result.size(), "
+                                        + "Manifest.caseRequirements(result).size(), "
+                                        + "Manifest.caseAuthorityKind(authority), "
+                                        + "Manifest.caseAuthorityFixtureIdentity(authority))",
+                                fixture.activation()));
+
+        assertEquals(4, observed.indexedSize().intValueExact());
+        assertEquals(
+                6,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                observed.indexedAt(java.math.BigInteger.ZERO))
+                        .value()
+                        .intValueExact());
+        assertEquals(
+                1,
+                assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                observed.indexedAt(java.math.BigInteger.ONE))
+                        .value()
+                        .intValueExact());
+        assertEquals("project-tree", stringAt(observed, 2));
+        assertEquals("workspace", stringAt(observed, 3));
+    }
+
+    @Test
+    void d133RealProjectTreeCorporaMaterializeCompletelyBeforeScheduling()
+            throws Exception {
+        Path[] roots = {
+            Path.of("protos", "tests", "package-tool", "resolution-root"),
+            Path.of("protos", "tests", "package-tool", "execution-plan"),
+            Path.of("protos", "tests", "package-tool", "project-projection")
+        };
+        String[] namespaces = {
+            "protos/package-tool/resolution-root",
+            "protos/package-tool/execution-plan",
+            "protos/package-tool/project-projection"
+        };
+        int[] expectedCounts = {8, 28, 4};
+
+        for (int index = 0; index < roots.length; index++) {
+            Fixture fixture = fixture();
+            try (ProtosNioReadOnlyTreeFilesystemBackend backend =
+                    new ProtosNioReadOnlyTreeFilesystemBackend(roots[index])) {
+                assumeTrue(
+                        backend.secureConfinementAvailable(),
+                        "host provider has no SecureDirectoryStream");
+                installFilesystem(fixture.prelude(), fixture.activation(), backend);
+
+                ProtosArrayValue observed =
+                        assertInstanceOf(
+                                ProtosArrayValue.class,
+                                completed(
+                                        "Manifest: import(\"self:Manifest\")\n"
+                                                + "cases: Manifest.planCases("
+                                                + "Manifest.loadProjectTreeCases(filesystem, \""
+                                                + namespaces[index]
+                                                + "\"))\n"
+                                                + "valid: true\n"
+                                                + "cases.each((spec) => {\n"
+                                                + "    authority: Manifest.caseAuthorityDescriptor(spec)\n"
+                                                + "    (authority === null).ifTrue(() => { valid = false })\n"
+                                                + "    (authority === null).ifFalse(() => {\n"
+                                                + "        (Manifest.caseAuthorityKind(authority) == \"project-tree\").ifFalse(() => { valid = false })\n"
+                                                + "        (Manifest.caseAuthorityIsolation(authority) == \"case\").ifFalse(() => { valid = false })\n"
+                                                + "        (Manifest.caseAuthorityLifecycle(authority) == \"case\").ifFalse(() => { valid = false })\n"
+                                                + "    })\n"
+                                                + "})\n"
+                                                + "Array(cases.size(), valid)",
+                                        fixture.activation()));
+
+                assertEquals(2, observed.indexedSize().intValueExact());
+                assertEquals(
+                        expectedCounts[index],
+                        assertInstanceOf(
+                                        ProtosIntegerValue.class,
+                                        observed.indexedAt(java.math.BigInteger.ZERO))
+                                .value()
+                                .intValueExact());
+                assertSame(
+                        ProtosBooleanValue.TRUE,
+                        observed.indexedAt(java.math.BigInteger.ONE));
+            }
+        }
+    }
+
+    @Test
     void threeColumnManifestParserKeepsRejectingTwoColumnRows()
             throws Exception {
         Fixture fixture = fixture();

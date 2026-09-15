@@ -70,7 +70,10 @@ phaseNames: Array(
     "network-ip-endpoints",
     "package-tool-version",
     "package-tool-lock",
-    "package-tool-resolution-input"
+    "package-tool-resolution-input",
+    "package-tool-resolution-root",
+    "package-tool-execution-plan",
+    "package-tool-project-projection"
 )
 phaseNames.freeze()
 
@@ -116,6 +119,15 @@ resolveIndex: 0
         // namespace; a case-outcomes binding without one fails closed
         // before scheduling.
         corpusBinding.hasSlot("caseNamespace").ifFalse(() => {
+            Error().signal()
+        })
+    })
+    (planLoader === "project-tree").ifTrue(() => {
+        supportedLoader = true
+        corpusBinding.hasSlot("caseNamespace").ifFalse(() => {
+            Error().signal()
+        })
+        corpusBinding.hasSlot("caseAuthorityExecutionAsync").ifFalse(() => {
             Error().signal()
         })
     })
@@ -175,6 +187,12 @@ planIndex: 0
             corpusBinding.caseNamespace
         )
     })
+    (planLoader === "project-tree").ifTrue(() => {
+        suitePlan = Manifest.loadProjectTreeCases(
+            corpusBinding.filesystem,
+            corpusBinding.caseNamespace
+        )
+    })
     (suitePlan === null).ifTrue(() => {
         Error().signal()
     })
@@ -207,6 +225,12 @@ suiteIndex: 0
     binding: planned.binding
     suiteProgress: startProgress(planned.phaseName, planned.plan)
 
+    caseAuthorityExecutorAsync: null
+    corpusBinding.hasSlot("caseAuthorityExecutionAsync").ifTrue(() => {
+        caseAuthorityExecutorAsync =
+            corpusBinding.caseAuthorityExecutionAsync
+    })
+
     suiteD108: Runner.runD108WithResources(
         planned.plan,
         resourceCatalog,
@@ -216,7 +240,8 @@ suiteIndex: 0
         binding.resourceExecutionAsync,
         binding.resourceExecutionInspectAsync,
         jobs,
-        Progress.observer(suiteProgress)
+        Progress.observer(suiteProgress),
+        caseAuthorityExecutorAsync
     )
 
     infrastructureFailed:

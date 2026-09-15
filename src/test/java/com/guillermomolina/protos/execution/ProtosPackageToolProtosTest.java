@@ -47,18 +47,15 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Temporary single Java execution bridge for Protos-owned TOOL001 fixture corpora.
+ * Host/runtime integration tests for TOOL001 Package Tool mechanics.
  *
- * <p>Until TOOL002 owns this boundary, new TOOL001 observable-behavior fixtures belong under
- * {@code protos/tests/package-tool/**} and are executed through this class rather than through
- * one Java wrapper class per corpus.
+ * <p>Repository-owned Protos semantic corpora are executed by TOOL002 through {@code protos test}.
  */
 final class ProtosPackageToolProtosTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "package");
     private static final Path TEST_ROOT = Path.of("protos", "tests", "package-tool");
-    private static final Path RUNNER_MANIFEST = TEST_ROOT.resolve("java-runner.tsv");
 
     private static final Set<String> READABLE = Set.of("protos.toml", "protos.lock");
     private static final Set<String> WRITABLE =
@@ -93,95 +90,6 @@ final class ProtosPackageToolProtosTest {
                     + "root workspace \"root\"\n";
 
     @TempDir Path projectRoot;
-
-    @Test
-    void manifestDrivenCorporaUseTheSingleTool001Runner() throws Exception {
-        for (String line :
-                Files.readAllLines(RUNNER_MANIFEST, StandardCharsets.UTF_8)) {
-            if (line.isBlank() || line.startsWith("#")) {
-                continue;
-            }
-
-            String[] fields = line.split("\\t", -1);
-            if (fields.length != 2) {
-                throw new AssertionError("invalid TOOL001 runner row: " + line);
-            }
-
-            Path suiteRoot = TEST_ROOT.resolve(fields[1]);
-            switch (fields[0]) {
-                case "plain" -> runPlainSuite(suiteRoot);
-                case "project-tree" -> runProjectTreeSuite(suiteRoot);
-                default -> throw new AssertionError("unknown TOOL001 runner profile: " + line);
-            }
-        }
-    }
-
-    private static void runPlainSuite(Path suiteRoot) throws Exception {
-        List<String> lines =
-                Files.readAllLines(suiteRoot.resolve("manifest.tsv"), StandardCharsets.UTF_8);
-
-        for (String line : lines) {
-            if (line.isBlank() || line.startsWith("#")) {
-                continue;
-            }
-
-            String[] fields = line.split("\\t", -1);
-            if (fields.length != 2) {
-                throw new AssertionError(
-                        "invalid TOOL001 plain fixture row in " + suiteRoot + ": " + line);
-            }
-
-            Path fixture = suiteRoot.resolve(fields[0]);
-            try (ProtosHostedExecutionTestFixture hosted =
-                    ProtosHostedExecutionTestFixture.open(newPackagePrelude())) {
-                ProtosExecutionOutcome outcome =
-                        execute(
-                                Files.readString(fixture, StandardCharsets.UTF_8),
-                                hosted.activation());
-                assertExpected(outcome, fields[1], fixture.toString());
-            }
-        }
-    }
-
-    private static void runProjectTreeSuite(Path suiteRoot) throws Exception {
-        Path cases = suiteRoot.resolve("cases");
-        Path fixtures = suiteRoot.resolve("fixtures");
-        List<String> lines =
-                Files.readAllLines(suiteRoot.resolve("manifest.tsv"), StandardCharsets.UTF_8);
-
-        for (String line : lines) {
-            if (line.isBlank() || line.startsWith("#")) {
-                continue;
-            }
-
-            String[] fields = line.split("\\t", -1);
-            if (fields.length != 3) {
-                throw new AssertionError(
-                        "invalid TOOL001 project-tree fixture row in " + suiteRoot + ": " + line);
-            }
-
-            Path caseRoot = cases.resolve(fields[0]);
-            Path fixture = fixtures.resolve(fields[1]);
-
-            try (ProtosNioReadOnlyTreeFilesystemBackend backend =
-                    new ProtosNioReadOnlyTreeFilesystemBackend(caseRoot)) {
-                assumeTrue(
-                        backend.secureConfinementAvailable(),
-                        "host provider has no SecureDirectoryStream");
-
-                try (ProtosHostedExecutionTestFixture hosted =
-                        ProtosHostedExecutionTestFixture.open(newPackagePrelude())) {
-                    hosted.installFilesystem("projectTreeFilesystem", backend);
-                    ProtosExecutionOutcome outcome =
-                            execute(
-                                    Files.readString(fixture, StandardCharsets.UTF_8),
-                                    hosted.activation());
-                    assertExpected(outcome, fields[2], fields[0] + "/" + fields[1]);
-                }
-            }
-        }
-    }
-
 
     @Test
     void manifestCommandReadsValidManifest() throws Exception {
