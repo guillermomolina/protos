@@ -2,7 +2,7 @@
 
 GitHub coordination: Issue [#524](https://github.com/guillermomolina/protos/issues/524), labelled `family:DOC`.
 
-Status: **IN_PROGRESS**
+Status: **CLOSED**
 
 Validation class by default: **GOVERNANCE_DOCUMENTATION_ONLY**
 
@@ -54,9 +54,9 @@ The durable work record remains under `docs/project/work/DOC006/`.
 
 | Slice | Status | Scope |
 |---|---|---|
-| DOC006-A | IN_PROGRESS | Publish `docs/guide/00-try-protos.md` with the Dev Container and manual-distribution paths. |
-| DOC006-B | IN_PROGRESS | Make the guide discoverable from `docs/guide/README.md` and the root `README.md`. |
-| DOC006-C | READY_AFTER_A_B | Reconcile links, commands, release/runtime claims and close DOC006. |
+| DOC006-A | CLOSED | Published `docs/guide/00-try-protos.md` with the Dev Container and manual-distribution paths. |
+| DOC006-B | CLOSED | Published discoverability from `docs/guide/README.md` and the root `README.md`. |
+| DOC006-C | CLOSED | Reconciled current release/devcontainer authority and closed the documentation track. |
 
 ## Dev Container path
 
@@ -127,6 +127,28 @@ Validation should confirm:
 
 Pure DOC006 publication does not require a Protos implementation/specification
 version bump or the executable Maven test suite.
+
+
+## Closure evidence
+
+DOC006 publication landed in commit
+[`23b46f8165eb1e069b62c561c3ab709e2d8f3baf`](https://github.com/guillermomolina/protos/commit/23b46f8165eb1e069b62c561c3ab709e2d8f3baf).
+
+At closure:
+
+- the root README links the maintained Try Protos guide;
+- the Programming Guide exposes Try Protos as chapter 0;
+- the Dev Container path uses the current curated `examples/` snapshot rather
+  than inventing a local canonical example tree;
+- the current devcontainer pins Protos `0.3.0`, release tag `v0.3.0`,
+  `protos-0.3.0-posix-jvm.zip`, and the official VS Code extension `0.1.0`;
+- the current Protos `v0.3.0` release remains explicitly a pre-release and
+  publishes the portable POSIX/JVM ZIP plus SHA-256 verification material; and
+- the supported runtime authority remains GraalVM Community Edition `25.3.4.1`
+  for JDK `25.0.4.1`.
+
+No language, runtime, CLI, specification, or implementation-version change is
+part of this closure.
 
 ## Closure rule
 
