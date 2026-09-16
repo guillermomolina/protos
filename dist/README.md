@@ -478,11 +478,33 @@ selection.
 ## Detached selected-baseline candidate worktree
 
 `DIST001-E4B1` provides the only supported local worktree preparation primitive
-for the selected first-pre-release baseline:
+for the selected first-pre-release baseline.
+
+Release tooling consumes durable project records from an explicitly chosen
+checkout of `guillermomolina/protos-project-docs`; it does not assume that those
+records exist inside the Protos checkout or at a fixed sibling path:
+
+```sh
+PROJECT_RECORDS_ROOT=/absolute/path/to/protos-project-docs
+PROJECT_RECORD_REVISION=REPLACE_WITH_EXACT_40_HEX_SHA
+
+test -z "$(git -C "${PROJECT_RECORDS_ROOT}" status --porcelain)"
+git -C "${PROJECT_RECORDS_ROOT}" checkout --detach "${PROJECT_RECORD_REVISION}"
+test "$(git -C "${PROJECT_RECORDS_ROOT}" rev-parse HEAD)" = "${PROJECT_RECORD_REVISION}"
+test -z "$(git -C "${PROJECT_RECORDS_ROOT}" status --porcelain)"
+```
+
+`PROJECT_RECORD_REVISION` must be the exact durable-record revision required by
+the owning release/project work. The project-record checkout must be clean both
+before and after selecting that detached revision; a moving `main` checkout or a
+dirty checkout is not sufficient revision-bound evidence.
+
+Then invoke the release tooling with the exact durable record path from that
+verified checkout:
 
 ```sh
 python3 dist/prepare_release_candidate_worktree.py \
-    --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt \
+    --selection "${PROJECT_RECORDS_ROOT}/docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt" \
     --destination /absolute/path/outside/the/main/checkout
 ```
 
@@ -514,7 +536,7 @@ created an exact clean detached worktree at the selected baseline.
 Generic use:
 
 ```sh
-python3 dist/transition_release_candidate_version.py     --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
+python3 dist/transition_release_candidate_version.py     --selection "${PROJECT_RECORDS_ROOT}/docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt"     --candidate /path/to/detached-candidate-worktree
 ```
 
 The helper requires the candidate to remain a registered detached worktree whose
@@ -541,7 +563,7 @@ by E4B3B to materialize the real selected candidate.
 Generic use after E4B1 + E4B2:
 
 ```sh
-python3 dist/commit_release_candidate.py     --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
+python3 dist/commit_release_candidate.py     --selection "${PROJECT_RECORDS_ROOT}/docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt"     --candidate /path/to/detached-candidate-worktree
 ```
 
 The helper requires exactly one unstaged `pom.xml` change whose bytes equal the
@@ -571,7 +593,7 @@ E4B3B owns the first real candidate commit and exact SHA capture.
 mechanisms into one fail-closed local candidate materializer:
 
 ```sh
-python3 dist/materialize_release_candidate.py     --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
+python3 dist/materialize_release_candidate.py     --selection "${PROJECT_RECORDS_ROOT}/docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt"     --candidate /path/to/detached-candidate-worktree
 ```
 
 The helper still requires the E4A selection record to say
@@ -605,7 +627,7 @@ subsequent persistence of that exact candidate SHA.
 E4B3B2. It does not call the B1/B2/B3A/B3B1 materialization helpers.
 
 ```sh
-python3 dist/verify_release_candidate_lineage.py     --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt
+python3 dist/verify_release_candidate_lineage.py     --selection "${PROJECT_RECORDS_ROOT}/docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt"
 ```
 
 For the frozen candidate `957b1e16793a682de1d6406e37b5734c44d32d19`, the verifier reconstructs the proof from
@@ -628,7 +650,7 @@ created here.
 E4C1. It does not rebuild or mutate the archive:
 
 ```sh
-python3 dist/verify_candidate_archive_identity.py   --repository-root .   --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt   --artifact-record docs/project/evidence/DIST001/DIST001_E4_CANDIDATE_ARTIFACT.txt   --expect-verification-state true
+python3 dist/verify_candidate_archive_identity.py   --repository-root .   --selection "${PROJECT_RECORDS_ROOT}/docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt"   --artifact-record "${PROJECT_RECORDS_ROOT}/docs/project/evidence/DIST001/DIST001_E4_CANDIDATE_ARTIFACT.txt"   --expect-verification-state true
 ```
 
 For `protos-0.2.236-posix-jvm.zip` / `b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296`, the verifier requires the exact external
