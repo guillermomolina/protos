@@ -1135,8 +1135,9 @@ The agent MUST NOT manufacture an owner-approval comment as provenance. If exact
 approval provenance is absent or ambiguous, fail closed at `status:needs-decision`.
 
 Owner selection and durable ratification are separate postconditions. When an
-approved Dxxx/PLATxxx requires a repository ratification/publication record, the
-Issue MUST remain open until that publication succeeds. After exact approval,
+approved Dxxx/PLATxxx requires a durable ratification/publication record, that
+record belongs in `guillermomolina/protos-project-docs`, and the Issue MUST remain
+open until that publication succeeds. After exact approval,
 `status:in-progress` is appropriate while the bounded ratification publication is
 being prepared or retried; approval alone MUST NOT move the Issue directly to
 `completed`.
@@ -1147,26 +1148,31 @@ not return its required `PUBLISHED` evidence leaves
 release dependent work, or describe the decision as durably ratified merely
 because the candidate is approved or an Issue comment records the approval.
 
-Closure is allowed only after the required repository publication succeeds and
-the agent re-reads the resulting durable repository state plus live Issue state.
+Closure is allowed only after the required durable publication succeeds and the
+agent re-reads the exact published project-record revision plus live Issue state.
 For a Dxxx/PLATxxx closure that requires such a publication, the transaction is
 therefore:
 
 ```text
 exact owner approval
     -> DECISION_APPROVAL_PROVENANCE=PASS
-bounded ratification publication
-    -> PUBLISHED
-re-read origin/main durable record
+bounded publication to guillermomolina/protos-project-docs
+    -> PROJECT_RECORD_REVISION=<exact SHA>
+re-read exact durable record at PROJECT_RECORD_REVISION
     -> REQUIRED_DURABLE_PUBLICATION=PASS
 re-read live Issue / Project state
     -> remaining publication postconditions PASS
 close completed
 ```
 
-If the repository record is not required for a particular formal item, record
-`REQUIRED_DURABLE_PUBLICATION=NOT_APPLICABLE`; never silently treat a failed or
-pending required publication as not applicable.
+When closure evidence spans both repositories, it MUST additionally identify the
+exact `PROTOS_REVISION` and `PROJECT_RECORD_REVISION` and verify
+`CROSS_REFERENCES=PASS`; a moving `main` reference is not revision-bound closure
+evidence.
+
+If the durable project record is not required for a particular formal item,
+record `REQUIRED_DURABLE_PUBLICATION=NOT_APPLICABLE`; never silently treat a
+failed or pending required publication as not applicable.
 
 ## GitHub release milestone governance
 <!-- GITHUB008 RELEASE-MILESTONE-GOVERNANCE -->
@@ -2157,16 +2163,28 @@ its live state changes; Project Status follows automatically. When scheduling
 priority is explicitly established or changed, reconcile the Issue's
 `priority:*` label; Project Priority follows automatically.
 
-When a bounded implementation slice is successfully published, the publication
-commit MUST still record every durable artifact required by its owning work item
-(for example implementation version/changelog, owning project record, tests,
-blocker transition, or normative decision evidence where applicable). The patch
-launcher itself MUST NOT require GitHub API credentials and MUST NOT create,
-close, relabel, assign, or move Issues/Project items. Only after publication is
-confirmed as successful may the coordinating agent update the corresponding
-GitHub Issue live state. If the agent cannot perform a required Issue write, it
-must report the exact Issue coordination update still required rather than
-pretending it happened. Project-field updates are not required by this rule.
+When a bounded implementation slice is successfully published, its Protos
+publication commit MUST still record every durable artifact owned by
+`guillermomolina/protos` and required by the owning work item (for example
+implementation version/changelog, source, tests, specification changes, or other
+product-repository artifacts where applicable).
+
+A durable project record owned by `guillermomolina/protos-project-docs` MUST NOT
+be forced into that same commit. When such a record is required, first publish
+the product commit and establish `PROTOS_REVISION=<exact SHA>`, then publish the
+durable record in `protos-project-docs` naming that exact revision, establish
+`PROJECT_RECORD_REVISION=<exact SHA>`, and verify the required cross-references
+before treating `REQUIRED_DURABLE_PUBLICATION` as satisfied. Failure of the
+second publication does not roll back the product commit; the owning Issue
+remains open until the durable publication postcondition is satisfied.
+
+The patch launcher itself MUST NOT require GitHub API credentials and MUST NOT
+create, close, relabel, assign, or move Issues/Project items. Only after the
+applicable publication postconditions are confirmed as successful may the
+coordinating agent update the corresponding GitHub Issue live state. If the
+agent cannot perform a required Issue write, it must report the exact Issue
+coordination update still required rather than pretending it happened.
+Project-field updates are not required by this rule.
 
 <!-- GITHUB001 ISSUE-WORK-LOG-CHANGELOG-DISCIPLINE -->
 #### Issue work log and changelog discipline
