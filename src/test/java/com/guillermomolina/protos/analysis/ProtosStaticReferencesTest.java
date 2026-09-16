@@ -175,6 +175,19 @@ class ProtosStaticReferencesTest {
     }
 
     @Test
+    void arrayConstructionDoesNotInventTextualArrayReference() {
+        String source = "f: (Array) => [1]";
+        int declaration = source.indexOf("Array");
+        int bracket = source.indexOf("[");
+
+        ProtosStaticReferenceResult result =
+                references(source, declaration + 1).orElseThrow();
+
+        assertTrue(result.occurrences().isEmpty());
+        assertTrue(references(source, bracket).isEmpty());
+    }
+
+    @Test
     void sessionResultRetainsExactSnapshotFreshness() {
         ProtosStaticAnalysisSession session = new ProtosStaticAnalysisSession();
         session.openWorkspace("workspace");

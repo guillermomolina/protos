@@ -19,6 +19,7 @@ package com.guillermomolina.protos.analysis;
 
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
+import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -183,6 +184,8 @@ final class ProtosStaticReferences {
                     collect(call.receiver());
                     collectArguments(call.arguments());
                 }
+                case SurfaceArrayConstruction array ->
+                        collectArguments(array.arguments());
                 case SurfaceIndex index -> {
                     collect(index.receiver());
                     collect(index.index());

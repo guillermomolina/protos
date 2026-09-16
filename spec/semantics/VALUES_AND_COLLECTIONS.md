@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-16
 
 This document is the primary normative owner of Core immutable value families, equality/identity, indexed access, and standard collection/value protocols; callable and general control-flow semantics are owned by their dedicated modules.
 
@@ -425,7 +425,20 @@ existing left-to-right call rules. Once invocation begins, standard Array
 construction performs no user callback, conversion, equality, hashing,
 iteration, or hidden suspension.
 
+The Array construction source syntax defined by `../PROTOS_GRAMMAR.md` is not a
+second construction mechanism. It mandatorily lowers to the corresponding
+ordinary call:
 
+```text
+[]       -> Array()
+[a, b]   -> Array(a, b)
+```
+
+Consequently the standard factory semantics in this section apply only when
+ordinary lookup selects the standard `Array` factory, or an object inheriting
+that ordinary factory behavior. Shadowing `Array` affects bracket construction
+exactly as it affects an explicit `Array(...)` call; a non-invokable selected
+value fails by the ordinary invocation rules.
 
 A standard `Array` is an identity-bearing object with receiver-owned indexed
 element state. Its indexed contents are distinct from its ordinary local slots,
@@ -508,10 +521,11 @@ still validates the index and may replace the existing element.
 Read-only `at` remains available on open, closed, and frozen Arrays.
 
 This section defines the standard semantics of Array indexed state and the
-already-existing `at` / `atPut` protocol. It does not add Array literal syntax,
-a constructor API, insertion/removal selectors, slicing, negative indexing,
-automatic growth, or a second collection hierarchy. Such facilities require
-their own explicit contracts if standardized later.
+already-existing `at` / `atPut` protocol. The construction syntax owned by
+`../PROTOS_GRAMMAR.md` adds no second Array literal/runtime category, constructor
+API, insertion/removal selectors, slicing, negative indexing, automatic growth,
+or second collection hierarchy. Such facilities require their own explicit
+contracts if standardized later.
 
 Standard Array `==` and `hash` remain governed by the existing Core default:
 without an explicit user override, Arrays use semantic object identity and

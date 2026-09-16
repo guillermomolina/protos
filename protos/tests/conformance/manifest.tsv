@@ -887,3 +887,6 @@ surface-sugar/expression-closure-right-association.protos	integer	42
 surface-sugar/trailing-closure-equivalence.protos	integer	4242
 surface-sugar/trailing-closure-lazy.protos	integer	420
 network/network-prototype.protos	boolean	true
+collections/array-construction-syntax-basic.protos	boolean	true
+collections/array-construction-syntax-spread-order.protos	boolean	true
+collections/array-construction-syntax-shadowing.protos	integer	402

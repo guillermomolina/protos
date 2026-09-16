@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.semantic;
 
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
+import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
@@ -82,6 +83,7 @@ public final class Canonicalizer {
             case SurfaceAssignment assignment -> lowerAssignment(assignment);
             case SurfaceBinary binary -> lowerBinary(binary);
             case SurfaceCall call -> lowerCall(call);
+            case SurfaceArrayConstruction array -> lowerArrayConstruction(array);
             case SurfaceClosure closure -> lowerClosure(closure);
             case SurfaceUnary unary -> lowerUnary(unary);
             case SurfaceSequence sequence ->
@@ -215,6 +217,14 @@ public final class Canonicalizer {
             case ARGS -> CanonicalIntrinsic.Kind.ARGS;
         };
         return new CanonicalIntrinsic(kind, intrinsic.span());
+    }
+
+    private CanonicalExpression lowerArrayConstruction(
+            SurfaceArrayConstruction array) {
+        return new CanonicalCall(
+                new CanonicalLookup("Array", array.span()),
+                canonicalizeArguments(array.arguments()),
+                array.span());
     }
 
     private CanonicalExpression lowerCall(SurfaceCall call) {

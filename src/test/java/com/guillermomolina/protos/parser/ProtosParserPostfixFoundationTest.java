@@ -19,8 +19,10 @@ package com.guillermomolina.protos.parser;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
+import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
@@ -95,6 +97,57 @@ class ProtosParserPostfixFoundationTest {
                 SurfaceMember.class, program.expressions().get(0));
         SurfaceGroup group = assertInstanceOf(SurfaceGroup.class, member.receiver());
         assertEquals(new SourceSpan(0, 7), group.span());
+    }
+
+    @Test
+    void arrayConstructionRemainsVisibleInSurfaceAst() {
+        SurfaceSequence program =
+                new ProtosParser("[first, ...rest]").parseProgram();
+
+        SurfaceArrayConstruction array = assertInstanceOf(
+                SurfaceArrayConstruction.class,
+                program.expressions().get(0));
+
+        assertEquals(2, array.arguments().size());
+        assertEquals(false, array.arguments().get(0).spread());
+        assertEquals(true, array.arguments().get(1).spread());
+
+        assertEquals(new SourceSpan(0, 16), array.span());
+    }
+
+    @Test
+    void arrayConstructionParticipatesInOrdinaryPostfixIndexing() {
+        SurfaceSequence program =
+                new ProtosParser("[value][0]").parseProgram();
+
+        SurfaceIndex index = assertInstanceOf(
+                SurfaceIndex.class,
+                program.expressions().get(0));
+
+        assertInstanceOf(
+                SurfaceArrayConstruction.class,
+                index.receiver());
+    }
+
+    @Test
+    void arrayConstructionUsesCallLayoutAndRejectsTrailingComma() {
+        SurfaceSequence program =
+                new ProtosParser("[\n  first,\n  ...rest\n]").parseProgram();
+
+        SurfaceArrayConstruction array = assertInstanceOf(
+                SurfaceArrayConstruction.class,
+                program.expressions().get(0));
+
+        assertEquals(2, array.arguments().size());
+        assertEquals(false, array.arguments().get(0).spread());
+        assertEquals(true, array.arguments().get(1).spread());
+
+        assertThrows(
+                ParseError.class,
+                () -> new ProtosParser("[first,]").parseProgram());
+        assertThrows(
+                ParseError.class,
+                () -> new ProtosParser("[first,\n]").parseProgram());
     }
 
     @Test

@@ -1,3 +1,7 @@
+## 0.3.2-SNAPSHOT
+
+- Implement `I039 — Array construction syntax implementation` (GitHub #539) for ratified D130. Add `[a, b]` as surface-only construction syntax that lowers to the ordinary shadow-sensitive call `Array(a, b)`, reuses existing argument spread and left-to-right evaluation semantics, composes with ordinary postfix indexing and nesting, and leaves matching Array-pattern syntax separate. Add parser/tooling regression coverage plus TOOL002 conformance for empty/nested construction, spread/evaluation order, postfix indexing, and ordinary `Array` shadowing. Specification revision becomes `0.1.413`; implementation version becomes `0.3.2-SNAPSHOT`.
+
 ## 0.3.1-SNAPSHOT
 
 - Reconcile `TEST001-I — Superseded test infrastructure cleanup and final closure` (GitHub #467) by removing the abandoned TEST001-C/D/E/F/G semantic-test ownership registry/guard and its publication-validation coupling. Replace the registry-backed `AGENTS.md` rule with a simpler test-placement contract: prefer Protos/TOOL002 for faithfully expressible Protos behavior, retain Java/JUnit for distinct host/runtime/bootstrap evidence, and leave legacy pre-policy Java-to-Protos migration to TEST002/#538. Existing useful Protos conformance cases are retained. Governance/test-infrastructure cleanup only; no specification, runtime semantics, or implementation-version change.

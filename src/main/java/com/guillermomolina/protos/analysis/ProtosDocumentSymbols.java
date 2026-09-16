@@ -19,6 +19,7 @@ package com.guillermomolina.protos.analysis;
 
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
+import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -80,6 +81,8 @@ public final class ProtosDocumentSymbols {
                 collect(call.receiver(), destination);
                 collectArguments(call.arguments(), destination);
             }
+            case SurfaceArrayConstruction array ->
+                    collectArguments(array.arguments(), destination);
             case SurfaceIndex index -> {
                 collect(index.receiver(), destination);
                 collect(index.index(), destination);

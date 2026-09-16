@@ -21,6 +21,7 @@ import com.guillermomolina.protos.lexer.ProtosLexer;
 import com.guillermomolina.protos.lexer.TokenOccurrence;
 import com.guillermomolina.protos.lexer.TokenType;
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
+import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
@@ -1109,12 +1110,45 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
             case CONTEXT -> intrinsic(SurfaceIntrinsic.Kind.CONTEXT);
             case ARGS -> intrinsic(SurfaceIntrinsic.Kind.ARGS);
             case SUPER -> parseSuperMessageSend();
+            case LBRACKET -> parseArrayConstruction();
             case LBRACE -> parseObjectBody(null);
             case LPAREN -> cursor.matchingParenthesisFollowedBy(TokenType.FAT_ARROW)
                     ? parseParameterListClosure()
                     : parseParenthesized();
             default -> throw ParseError.expected("a primary expression", token);
         };
+    }
+
+    private SurfaceExpression parseArrayConstruction() {
+        TokenOccurrence open = cursor.consume(TokenType.LBRACKET, "'['");
+        consumeNewlines();
+
+        List<SurfaceArgument> arguments = new ArrayList<>();
+        if (!cursor.at(TokenType.RBRACKET)) {
+            arguments.add(parseArgument());
+
+            while (cursor.at(TokenType.COMMA)) {
+                cursor.advance();
+                consumeNewlines();
+
+                if (cursor.at(TokenType.RBRACKET)) {
+                    throw ParseError.expected(
+                            "an Array construction item after ','",
+                            cursor.current());
+                }
+
+                arguments.add(parseArgument());
+            }
+
+            consumeNewlines();
+        }
+
+        TokenOccurrence close = cursor.consume(TokenType.RBRACKET, "']'");
+        return new SurfaceArrayConstruction(
+                arguments,
+                new SourceSpan(
+                        open.span().startOffset(),
+                        close.span().endOffset()));
     }
 
     private SurfaceExpression parseBareParameterClosure() {

@@ -9,6 +9,39 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.413] - 2026-09-16
+
+### D130 — Array construction syntax as ordinary-call sugar
+- Adds primary-expression construction forms `[]`, `[a]`, `[a, b]`, and spread
+  forms such as `[a, ...items, b]`.
+- Requires exact lowering to the corresponding ordinary `Array(...)` call.
+  `Array` remains an ordinary identifier lookup, so local shadowing and ordinary
+  non-invokable failure are preserved rather than bypassed by a privileged Core
+  constructor.
+- Reuses the existing call argument grammar and semantics, including comma/layout
+  rules, no trailing comma, spread, left-to-right and exact-once evaluation,
+  Error propagation, and control flow.
+- Construction remains a primary expression, so ordinary postfix indexing and
+  nesting compose mechanically: `[a][0]` lowers to `Array(a)[0]`, and
+  `[[a], b]` lowers to `Array(Array(a), b)`.
+- Adds no holes, comprehensions, repetition/fill form, generic collection-literal
+  protocol, expected-type conversion, implicit iterable expansion, reserved
+  word, or second runtime construction category.
+- Existing Array match-pattern brackets remain a separate matching grammar and
+  D130 changes no matching semantics.
+
+### Compatibility and implementation state
+- Normative changes are confined to `PROTOS_GRAMMAR.md` and
+  `semantics/VALUES_AND_COLLECTIONS.md`.
+- Standard Array factory, indexing, identity, mutability, and delegation
+  semantics are unchanged; D130 only adds source syntax whose behavior is the
+  existing ordinary-call path.
+- I039/#539 implements the syntax with a surface-only AST form that canonicalizes
+  to ordinary lookup/call semantics, with parser/tooling regressions and TOOL002
+  conformance for construction, spread/order, postfix use, nesting, and
+  shadow-sensitive `Array` lookup.
+- Implementation version becomes `0.3.2-SNAPSHOT`.
+
 ## [0.1.412] - 2026-09-13
 
 ### D121 — Resource close initiated during Actor termination cleanup

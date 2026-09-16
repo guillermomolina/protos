@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-09
+Last updated: 2026-09-16
 ## Prelude Binding Note
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.
@@ -994,6 +994,7 @@ primary-expression =
     | super-message-send
     | object-expression
     | closure-expression
+    | array-construction-expression
     | parenthesized-expression;
 ```
 
@@ -1018,6 +1019,57 @@ intrinsic-reference =
 ```
 
 `this`, `context`, and `args` are intrinsic references, not ordinary identifiers. `true`, `false`, and `null` are literals only (see Literals), and `super` is governed exclusively by `super-message-send` (see Super Message Send); none of them is an intrinsic reference.
+
+## 12.3 Array Construction Expressions
+
+```ebnf
+array-construction-expression =
+    "[", [ layout ], [ argument-items ], [ layout ], "]" ;
+```
+
+Array construction is mandatory syntactic sugar for an ordinary call whose
+receiver expression is the ordinary identifier `Array`:
+
+```text
+[]                  -> Array()
+[a]                 -> Array(a)
+[a, b]              -> Array(a, b)
+[a, ...items, b]    -> Array(a, ...items, b)
+```
+
+The `Array` in the lowered call is resolved by ordinary identifier lookup at the
+construction expression's evaluation point. The syntax does not capture,
+privilege, or bypass the standard-prelude `Array` binding. A local or otherwise
+ordinary shadowing binding named `Array` therefore affects `[a, b]` exactly as it
+affects `Array(a, b)`, including ordinary invocation failure when the selected
+value is not invokable.
+
+The production reuses `argument-items` and `argument` from Calls and Arguments.
+It therefore inherits their comma separation, layout, spread, left-to-right
+evaluation, exact-once evaluation, Error propagation, and control-flow behavior.
+There is no trailing comma.
+
+Because an Array construction is a `primary-expression`, ordinary postfix
+operations apply without another rule:
+
+```text
+[a][0]       -> Array(a)[0]
+[[a], b]     -> Array(Array(a), b)
+```
+
+The first brackets in those examples are construction syntax; the postfix
+brackets are the existing indexing syntax.
+
+This syntax introduces no holes, omitted elements, comprehensions, repetition or
+fill form, generic collection-literal protocol, expected-type conversion, or
+implicit iterable expansion beyond existing call spread. It adds no reserved or
+contextual word and creates no second runtime construction category. An
+implementation may optimize the lowering only when every observable behavior,
+including ordinary `Array` lookup and shadowing, remains equivalent to the
+ordinary call.
+
+Array match-pattern brackets remain owned by the separate matching grammar.
+D130 changes no matching or pattern semantics.
 
 ## 13. Parenthesized Expressions
 

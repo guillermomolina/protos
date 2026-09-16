@@ -20,7 +20,8 @@ Understanding that distinction prevents several common mistakes:
 - `null` means a real value, not a failed lookup;
 - `===` asks about semantic identity, not customizable equality;
 - `==` is behavioral and may be customized;
-- `[]` is an indexing protocol, not dynamic slot access;
+- postfix `receiver[index]` is an indexing protocol, while primary `[items...]`
+  is ordinary-`Array(...)` construction sugar;
 - `Map` and `IdentityMap` intentionally use different key laws;
 - Core collections and Standard Library algorithms are different layers.
 
@@ -304,7 +305,7 @@ semantics. Hashing is an indexing aid used by protocols such as Map.
 
 Keep those three concepts separate.
 
-## Bracket syntax is an ordinary indexing protocol
+## Postfix bracket syntax is an ordinary indexing protocol
 
 Indexed read:
 
@@ -402,25 +403,73 @@ Array(10)
 Array(10, 20, 30)
 ```
 
-Each successful call creates a fresh open Array identity whose indexed elements
-are the exact supplied values.
+Protos also provides bracket construction syntax:
+
+```protos
+[]
+[10]
+[10, 20, 30]
+```
+
+This is syntax sugar, not another collection mechanism. The lowering is exact:
+
+```text
+[]              -> Array()
+[10]            -> Array(10)
+[10, 20, 30]    -> Array(10, 20, 30)
+```
+
+Spread is the existing call spread:
+
+```protos
+middle: [20, 30]
+values: [10, ...middle, 40]
+```
+
+and nested/postfix forms compose normally:
+
+```protos
+nested: [[10], 20]
+first: nested[0][0]
+```
+
+`Array` remains an ordinary lookup. Bracket construction does not secretly
+capture the standard-prelude factory:
+
+```protos
+Array: (a, b) => a * 100 + b
+
+[4, 2]  // 402
+```
+
+So `[a, b]` behaves exactly like `Array(a, b)` under the binding visible at that
+point. With the ordinary standard-prelude `Array`, each successful construction
+creates a fresh open Array identity whose indexed elements are the exact supplied
+values.
 
 A very important rule is:
+
+```protos
+[3]
+```
+
+and equivalently:
 
 ```protos
 Array(3)
 ```
 
-means:
+mean:
 
 ```text
 one element
 index 0 -> 3
 ```
 
-It does **not** mean "allocate an Array of length 3".
+They do **not** mean "allocate an Array of length 3".
 
-Core has no special numeric-length Array constructor.
+Core has no special numeric-length Array constructor, holes, comprehensions,
+repetition/fill form, or generic collection-literal conversion.
 
 ## Arrays are shallow containers
 
