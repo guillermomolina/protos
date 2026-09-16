@@ -70,7 +70,7 @@ class ValidationImpactTest(unittest.TestCase):
     def test_package_with_docs_is_still_local(self):
         self.assert_package([
             "protos/tools/package/ExecutionPlan.protos",
-            "docs/project/work/TOOL001/TOOL001_PACKAGE_TOOL.md",
+            "docs/design/PACKAGE_TOOL_ARCHITECTURE.md",
             "CHANGELOG.md",
         ])
 
@@ -256,12 +256,12 @@ class ValidationImpactTest(unittest.TestCase):
     def test_normal_name_status_parser(self):
         payload = (
             b"M\0protos/tools/test/Runner.protos\0"
-            b"A\0docs/project/work/TOOL002/TOOL002_TEST_TOOL.md\0"
+            b"A\0docs/design/TEST_TOOL_ARCHITECTURE.md\0"
         )
         self.assertEqual(
             [
                 "protos/tools/test/Runner.protos",
-                "docs/project/work/TOOL002/TOOL002_TEST_TOOL.md",
+                "docs/design/TEST_TOOL_ARCHITECTURE.md",
             ],
             IMPACT.parse_name_status_z(payload),
         )

@@ -35,47 +35,41 @@ Material in `design/` never defines observable Protos semantics. A design
 decision becomes authoritative only when it is incorporated into its normative
 owner under `spec/`.
 
-## `project/`
+## Durable project records
 
-Start with the [project documentation index](project/README.md) for the
-role-first durable project tree.
+Durable, non-normative project records live in the separate
+[`guillermomolina/protos-project-docs`](https://github.com/guillermomolina/protos-project-docs)
+repository.
+
+Start with its
+[project documentation index](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/README.md)
+for the role-first durable project tree.
 
 The ratified destination architecture is the
-[`DOC002-B role-first path contract`](project/work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md).
+[`DOC002-B role-first path contract`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md).
 The original 107-file inventory and alternatives remain in the historical
-[`DOC002-A audit`](project/work/DOC002/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md).
+[`DOC002-A audit`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/DOC002/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md).
 DOC002-G9 completed the staged migration/final rescan; GitHub Issue #156
 preserves the live coordination and closure history.
 
-Durable project records are organized by role. GitHub Issues are the canonical
-live work-state/coordination surface; the `Protos Development` Project is the
-automatically derived scheduling/status dashboard.
+The documentation repository is a durable project-record store, not the
+operational project control plane. GitHub Issues in `guillermomolina/protos`
+remain the canonical live work-state and coordination surface; the
+`Protos Development` Project remains the derived scheduling/status dashboard.
 
-- `project/work/<formal-work-item>/` contains records primarily owned by one
-  formal work item.
-- `project/decisions/` contains non-normative durable decision records split by
-  language, tooling, and platform role.
-- `project/architecture/` contains cross-cutting implementation architecture.
-- `project/governance/` contains maintained project/repository rationale and policy.
-- `project/registries/IMPLEMENTATION_STATUS.md` is the durable implementation
-  registry and closure-evidence ledger, not a live progress tracker.
-- `project/registries/IMPLEMENTATION_BLOCKERS.md` is the durable blocker and
-  unblock-condition ledger.
-- `project/registries/PLATFORM_ARCHITECTURE_DECISIONS.md` is the durable
-  platform-decision registry.
-- `project/evidence/` contains immutable/snapshot evidence grouped by genuine
-  formal owner where one exists.
-- `project/history/OPEN_TASKS.md` is the retired historical backlog snapshot.
-- `project/architecture/CORE_BOOTSTRAP_ARCHITECTURE.md` records the non-normative
-  bootstrap/Core implementation boundary.
+The durable corpus preserves the `docs/project/**` role-first hierarchy,
+including:
 
-Work-item-specific design and lifecycle records belong below their owner
-directory, for example
-`project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md`. They may capture alternatives,
-adopted implementation contracts, dependencies, and rejected approaches without
-becoming normative language semantics.
+- `docs/project/work/<formal-work-item>/` for records primarily owned by one
+  formal work item;
+- `docs/project/decisions/` for non-normative durable decisions;
+- `docs/project/architecture/` for cross-cutting implementation architecture;
+- `docs/project/governance/` for maintained project/repository rationale and policy;
+- `docs/project/registries/` for durable registries and closure evidence;
+- `docs/project/evidence/` for immutable or snapshot-like evidence;
+- `docs/project/history/` for retired or superseded historical snapshots.
 
-The repository intentionally has no parallel root `TODO.md`. Exploratory work
+The Protos repository intentionally has no parallel root `TODO.md`. Exploratory work
 belongs in GitHub Discussions; bounded actionable work belongs in GitHub Issues
 and the `Protos Development` Project.
 
@@ -88,6 +82,7 @@ new category's responsibility here rather than creating an ad-hoc directory.
 Use `docs/design/` for cross-cutting or still-exploratory architecture that may
 inform more than one tracked work item. Once a bounded `Ixxx`, `CLIxxx`,
 `LIBxxx`, `LMxxx`, or other formally tracked item adopts concrete implementation
-choices, keep that work-item-specific design record under `docs/project/` and
-link back to the broader design material when useful. Neither location can
+choices, keep that work-item-specific durable record under
+`docs/project/**` in `guillermomolina/protos-project-docs` and link back to the
+broader product-local design material when useful. Neither location can
 override `spec/`.

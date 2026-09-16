@@ -80,7 +80,7 @@ is actually relevant.
 ## Repository conformance tracking
 
 Repository-wide migration to this approved style was completed by
-`../project/work/AUD003/AUD003_PROTOS_SOURCE_STYLE_CONFORMANCE_AUDIT.md`.
+[`AUD003 — Protos source-style conformance audit`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/AUD003/AUD003_PROTOS_SOURCE_STYLE_CONFORMANCE_AUDIT.md).
 
 AUD003 records bounded migrations, known debt, and deliberate canonical/protocol
 exceptions. It does not strengthen this policy into a language-wide ban on

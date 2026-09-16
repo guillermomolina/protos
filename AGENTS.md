@@ -473,8 +473,10 @@ Formal decision identifiers are orthogonal to the documentation role selected by
 DOC002-F0 and to normative specification authority:
 
 - `Dxxx` identifies implementation-independent decisions. A Dxxx record may have
-  a language/specification role under `docs/project/decisions/language/` or a
-  tooling/package-system role under `docs/project/decisions/tooling/`; the prefix
+  a language/specification role under
+  `guillermomolina/protos-project-docs:docs/project/decisions/language/` or a
+  tooling/package-system role under
+  `guillermomolina/protos-project-docs:docs/project/decisions/tooling/`; the prefix
   alone does not select the role. Observable Protos semantics are normative only
   through the applicable ratified material under `spec/`.
 - `PLATxxx` records durable, non-normative implementation architecture decisions
@@ -538,24 +540,31 @@ prerequisite may use `status:paused`. Status, not the `UPSTREAM` family itself,
 determines ordinary Project actionability. Do not invent a separate upstream
 lifecycle state or blanket-exclude the family from Project views.
 
-Durable records follow the DOC002 role-first path policy: work records primarily
-owned by the item belong under `docs/project/work/UPSTREAMxxx/`; immutable or
+Durable records follow the DOC002 role-first path policy in
+`guillermomolina/protos-project-docs`: work records primarily owned by the item
+belong under `docs/project/work/UPSTREAMxxx/` in that repository; immutable or
 snapshot-like experimental evidence belongs under
 `docs/project/evidence/UPSTREAMxxx/`. Do not create a parallel
 `docs/project/upstream/` hierarchy merely for classification.
 
 The canonical registry for platform/runtime architecture decisions is
-`docs/project/registries/PLATFORM_ARCHITECTURE_DECISIONS.md`.
+`guillermomolina/protos-project-docs:docs/project/registries/PLATFORM_ARCHITECTURE_DECISIONS.md`.
 
 <!-- DOC002 ROLE-FIRST-DOCUMENTATION-PATH-POLICY -->
 ## Durable project documentation path policy
 
 DOC002-B ratified the role-first information architecture for durable project
-documentation. The canonical non-normative path contract is
-`docs/project/work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md`.
+documentation. Durable project records now live in
+`guillermomolina/protos-project-docs`; `guillermomolina/protos` remains the
+operational control plane for formal identifiers, GitHub Issues, owner
+coordination, approvals, and derived Project scheduling.
 
-Agents creating a **new** durable record under `docs/project/` MUST place it in
-the selected role-first destination when the role and owner are unambiguous:
+The canonical non-normative path contract is
+`guillermomolina/protos-project-docs:docs/project/work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md`.
+
+Agents creating a **new** durable record under `docs/project/**` MUST create it
+in `guillermomolina/protos-project-docs` and place it in the selected role-first
+destination when the role and owner are unambiguous:
 
 - `docs/project/work/<formal-work-item>/` for records primarily owned by one
   formally tracked work item;
@@ -575,15 +584,15 @@ the selected role-first destination when the role and owner are unambiguous:
   evidence with a genuine formal owner; and
 - `docs/project/history/` for retired or superseded historical snapshots.
 
-`docs/project/README.md` is the role-first navigation entry point.
-Repository-root policy/legal/community files and the established `docs/guide/`,
-`docs/design/`, and `spec/` authority boundaries are not relocated merely for
-symmetry.
+`guillermomolina/protos-project-docs:docs/project/README.md` is the role-first
+navigation entry point. Repository-root policy/legal/community files and the
+established `docs/guide/`, `docs/design/`, and `spec/` authority boundaries in
+`guillermomolina/protos` are not relocated merely for symmetry.
 
 The DOC002 migration is complete. A new durable record MUST use its canonical
-role-first destination when role and owner are unambiguous; creating a new
-unclassified flat durable record directly under `docs/project/` is
-non-compliant.
+role-first destination in `guillermomolina/protos-project-docs` when role and
+owner are unambiguous; creating a new unclassified flat durable record directly
+under `docs/project/` is non-compliant.
 
 If an unexpected legacy or unclassified durable path is discovered later, edit
 it only as necessary at its actual path until an explicit bounded
@@ -593,11 +602,13 @@ compatibility copy merely for symmetry. Historical records may retain old path
 spellings when changing them would falsify the repository state they document.
 
 References to current registries, decisions, architecture and work records MUST
-use their canonical paths. In particular, the blocker/unblock-condition ledger
-is `docs/project/registries/IMPLEMENTATION_BLOCKERS.md`, the implementation/
-closure ledger is `docs/project/registries/IMPLEMENTATION_STATUS.md`, and the
-platform decision registry is
-`docs/project/registries/PLATFORM_ARCHITECTURE_DECISIONS.md`.
+identify `guillermomolina/protos-project-docs` as their repository. In
+particular, the blocker/unblock-condition ledger is
+`guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_BLOCKERS.md`,
+the implementation/closure ledger is
+`guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_STATUS.md`,
+and the platform decision registry is
+`guillermomolina/protos-project-docs:docs/project/registries/PLATFORM_ARCHITECTURE_DECISIONS.md`.
 
 If a new durable document does not fit one selected role cleanly, do not invent
 a new directory, identifier family, or classification to force symmetry.
@@ -608,9 +619,10 @@ decision records specifically, classify by the decision's primary domain
 solely by identifier prefix.
 
 DOC002-A remains a historical audit snapshot, not a permanent placement manifest.
-The durable rule is structural: current repository state must keep
-`docs/project/` role-first, and later work that discovers a real classification
-ambiguity must resolve it explicitly rather than silently weakening the layout.
+The durable rule is structural: `guillermomolina/protos-project-docs` must keep
+`docs/project/**` role-first, and later work that discovers a real
+classification ambiguity must resolve it explicitly rather than silently
+weakening the layout.
 
 ## Current project coordinates
 
@@ -619,6 +631,7 @@ They are exact spellings, not names that agents should reconstruct from a
 person's name, memory, convention, or an approximate prompt:
 
 - GitHub repository: `guillermomolina/protos`
+- Durable project-record repository: `guillermomolina/protos-project-docs`
 - Maven groupId: `com.guillermomolina`
 - Java package root: `com.guillermomolina.protos`
 - Java source/test package path root: `com/guillermomolina/protos`
@@ -2080,8 +2093,8 @@ The authority split is:
 - normative Protos semantics remain owned by the applicable files under `spec/`;
 - ratified `Dxxx` and `PLATxxx` decisions remain durable repository records and
   are not redefined by an Issue, Discussion, reaction, vote, or Project field;
-- `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` remains the durable repository ledger
-  for `Bxxx` normative unblock conditions;
+- `guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_BLOCKERS.md`
+  remains the durable project-record ledger for `Bxxx` normative unblock conditions;
 - GitHub Discussions is the preferred public surface for questions, ideas,
   investigation, and pre-decision design discussion;
 - GitHub Issues is the canonical visible coordination/history representation for
@@ -2103,9 +2116,11 @@ substantive design decision. Apply the design-authority rules above exactly as
 before.
 
 <!-- GITHUB001-F LEGACY-LIVE-LEDGER-RETIREMENT -->
-`docs/project/history/OPEN_TASKS.md` is a retired historical backlog snapshot.
-`docs/project/registries/IMPLEMENTATION_STATUS.md` is a durable implementation registry and
-closure-evidence ledger. Neither file is a live scheduling/status source.
+`guillermomolina/protos-project-docs:docs/project/history/OPEN_TASKS.md` is a
+retired historical backlog snapshot.
+`guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_STATUS.md`
+is a durable implementation registry and closure-evidence ledger. Neither file
+is a live scheduling/status source.
 
 Agents MUST NOT add new actionable work to `OPEN_TASKS.md`, update it to mirror
 GitHub, or use it to decide what should run next. Agents MUST NOT update
@@ -2545,7 +2560,7 @@ only in prompts or chat history.
 
 The first tracked documentation initiative is `DOC001 — Protos Programming
 Documentation`, owned by
-`docs/project/work/DOC001/DOC001_PROGRAMMING_DOCUMENTATION.md`.
+`guillermomolina/protos-project-docs:docs/project/work/DOC001/DOC001_PROGRAMMING_DOCUMENTATION.md`.
 
 ### Toolchain tool work
 
@@ -2617,16 +2632,18 @@ normal implementation versioning, changelog, validation, and publication rules.
 
 ## Implementation blockers
 
-`docs/project/registries/IMPLEMENTATION_BLOCKERS.md` is the repository-wide ledger for
-implementation work that cannot proceed without unresolved normative semantics.
-It records implementation state only; it is not part of the Protos specification.
+`guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_BLOCKERS.md`
+is the durable project-record ledger for implementation work that cannot proceed
+without unresolved normative semantics. It records implementation state only;
+it is not part of the Protos specification.
 
 When implementation work reaches a semantic dependency that is not normatively
 closed or otherwise precise enough to implement without guessing:
 
 - do not invent the missing semantics;
 - do not block unrelated implementation work;
-- add or update a blocker in `docs/project/registries/IMPLEMENTATION_BLOCKERS.md`;
+- add or update a blocker in
+  `guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_BLOCKERS.md`;
 - give the blocker a stable identifier;
 - identify the blocked implementation area;
 - state the exact normative dependency;
@@ -2639,8 +2656,9 @@ commit SHA, implementation strategy, agent-specific memory, or expected wording
 of a future specification change.
 
 Before beginning implementation work, inspect
-`docs/project/registries/IMPLEMENTATION_BLOCKERS.md`. Re-check every relevant `BLOCKED` or `READY`
-entry against the current normative specification on the current `main` branch.
+`guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_BLOCKERS.md`.
+Re-check every relevant `BLOCKED` or `READY` entry against the current normative
+specification on the current `main` branch of `guillermomolina/protos`.
 Never rely on the specification state that existed when the blocker was
 recorded.
 
@@ -2770,8 +2788,9 @@ or behavior can be constructed or installed faithfully through ordinary Protos
 mechanisms.
 
 The detailed non-normative bootstrap architecture is documented in
-`docs/project/architecture/CORE_BOOTSTRAP_ARCHITECTURE.md`. Source for distributable Core
-behavior that can be expressed in Protos belongs under `protos/lib/core/`.
+`guillermomolina/protos-project-docs:docs/project/architecture/CORE_BOOTSTRAP_ARCHITECTURE.md`.
+Source for distributable Core behavior that can be expressed in Protos belongs
+under `protos/lib/core/`.
 Host-native primitives should be exposed through the ordinary object/protocol
 model wherever that model can represent them.
 
@@ -3409,7 +3428,7 @@ checksums. It MUST NOT automatically turn every successful `main` revision or
 implementation-version bump into a public release.
 
 The complete non-normative release policy and DIST001 slice boundaries are in
-`docs/project/work/DIST001/DIST001_RELEASE_POLICY.md`.
+`guillermomolina/protos-project-docs:docs/project/work/DIST001/DIST001_RELEASE_POLICY.md`.
 
 Task completion
 

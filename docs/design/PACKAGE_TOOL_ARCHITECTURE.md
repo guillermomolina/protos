@@ -1326,7 +1326,7 @@ Materially reviewed package-design records:
 - `docs/design/PACKAGE_LOCKFILE_FORMAT.md`
 - `docs/design/PROTOS_DESIGN_PHILOSOPHY.md`
 - `docs/design/STANDARD_LIBRARY_IDEAS.md`
-- `docs/project/registries/IMPLEMENTATION_STATUS.md`
+- [`docs/project/registries/IMPLEMENTATION_STATUS.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md)
 
 Derived constraints:
 

@@ -8,7 +8,7 @@ Related records:
 - `docs/design/PACKAGE_IDENTITY_VERSIONING.md`
 - `docs/design/PACKAGE_LOCKFILE_FORMAT.md`
 - `docs/design/PACKAGE_DISTRIBUTION.md`
-- `docs/project/work/TOOL001/TOOL001_F2E_EXTERNAL_MATERIALIZATION.md`
+- [`docs/project/work/TOOL001/TOOL001_F2E_EXTERNAL_MATERIALIZATION.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/TOOL001/TOOL001_F2E_EXTERNAL_MATERIALIZATION.md)
 
 ## Purpose
 

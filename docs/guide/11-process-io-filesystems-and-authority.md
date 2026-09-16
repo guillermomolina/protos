@@ -1280,9 +1280,9 @@ chapter as closed:
 - `I017 — Process I/O / bootstrap`;
 - `I021 — Filesystem namespace replacement/removal`.
 
-The canonical project view is:
+The durable implementation and closure record is:
 
-- [`Implementation Status`](../project/registries/IMPLEMENTATION_STATUS.md).
+- [`Implementation Status`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md).
 
 The implementation itself reflects the capability model:
 

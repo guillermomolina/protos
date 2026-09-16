@@ -82,11 +82,11 @@ The directory [`protos/tools/shared/`](../../../protos/tools/shared/) is shared
 private toolchain support. It is **not** a third bundled Tool.
 
 The Package Tool is still evolving under
-[`TOOL001`](../../project/work/TOOL001/TOOL001_PACKAGE_TOOL.md), so this overview
+[`TOOL001`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/TOOL001/TOOL001_PACKAGE_TOOL.md), so this overview
 does not pretend that every future package operation already exists.
 
 The Test Tool's durable lower architecture is closed under
-[`TOOL002`](../../project/work/TOOL002/TOOL002_TEST_TOOL.md). A separate current
+[`TOOL002`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/TOOL002/TOOL002_TEST_TOOL.md). A separate current
 work item is extending which repository-owned Protos corpora the Test Tool can
 reach. Until that implementation is published, an architectural decision about a
 future suite graph is not the same thing as current executable user behavior.

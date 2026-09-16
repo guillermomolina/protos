@@ -9,8 +9,8 @@ runtime supplies lower mechanisms such as executing one already-selected source
 in an isolated semantic Process.
 
 For the general Tool/Core/Standard-Library/runtime boundary, start with
-[Bundled Tools](README.md). The durable implementation/work authority is
-[`TOOL002`](../../project/work/TOOL002/TOOL002_TEST_TOOL.md).
+[Bundled Tools](README.md). The durable implementation/work record is
+[`TOOL002`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/TOOL002/TOOL002_TEST_TOOL.md).
 
 > **Current-surface note:** this chapter documents the executable Test Tool that
 > exists now. `TOOL005` is separately extending repository-wide corpus routing.

@@ -190,6 +190,6 @@ architecture.**
 - [PERF006 parent issue](https://github.com/guillermomolina/protos/issues/262)
 - [PERF006-B — C′ production continuation backend cutover](https://github.com/guillermomolina/protos/issues/276)
 - [PERF006-D — reproducible optimizer performance evidence](https://github.com/guillermomolina/protos/issues/487)
-- [PERF006 retained evidence](../project/evidence/PERF006/README.md)
+- [PERF006 retained evidence](https://github.com/guillermomolina/protos-project-docs/blob/d1739808ac5ae0f95d46cad98e2629a4e0396b2a/docs/project/evidence/PERF006/README.md)
 - [PERF008 follow-up](https://github.com/guillermomolina/protos/issues/496)
 - [`protos-benchmarks`](https://github.com/guillermomolina/protos-benchmarks)

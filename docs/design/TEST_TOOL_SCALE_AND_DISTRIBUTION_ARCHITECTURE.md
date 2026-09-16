@@ -12,8 +12,8 @@ Related Protos records:
 - `docs/design/TOOLCHAIN_TOOL_ARCHITECTURE.md`
 - `docs/design/TEST_TOOL_ARCHITECTURE.md`
 - `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`
-- `docs/project/work/TOOL002/TOOL002_TEST_TOOL.md`
-- `docs/project/registries/IMPLEMENTATION_STATUS.md`
+- [`docs/project/work/TOOL002/TOOL002_TEST_TOOL.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/TOOL002/TOOL002_TEST_TOOL.md)
+- [`docs/project/registries/IMPLEMENTATION_STATUS.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md)
 - `spec/io/PROCESS_IO.md`
 - `spec/concurrency/ACTORS.md`
 - `spec/concurrency/PARALLEL_EXECUTION.md`

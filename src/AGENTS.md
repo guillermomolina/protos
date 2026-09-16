@@ -19,10 +19,11 @@ instead of silently inventing, weakening, or replacing semantics in source code.
 Implementation agents should challenge the implementation. Language-design
 questions belong to the specification-design process.
 
-Implementation agents must also use the repository-root
-`docs/project/registries/IMPLEMENTATION_BLOCKERS.md` ledger. Before starting implementation work,
-review its relevant `BLOCKED` and `READY` entries against the current normative
-specification on the current `main` branch.
+Implementation agents must also use the durable project-record ledger
+`guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_BLOCKERS.md`.
+Before starting implementation work, review its relevant `BLOCKED` and `READY`
+entries against the current normative specification on the current `main`
+branch of `guillermomolina/protos`.
 
 When work under `src/` discovers a normative dependency that prevents faithful
 implementation, add or update the corresponding blocker instead of leaving the

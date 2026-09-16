@@ -321,13 +321,11 @@ Before standardizing any structured-data or serialization facility, ask:
 
 This document is intentionally cross-cutting and exploratory.
 
-Once a concrete tracked work item adopts a bounded design, its implementation
-contract should be recorded separately under `docs/project/`, following the
-precedent of:
+Once a concrete tracked work item adopts a bounded design, its durable
+implementation contract should be recorded separately under `docs/project/**`
+in `guillermomolina/protos-project-docs`, following the precedent of:
 
-```text
-docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md
-```
+[`docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md)
 
 A work-item design record may reference this document, choose among alternatives
 investigated here, define concrete public APIs and slices, and record rejected

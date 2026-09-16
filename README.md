@@ -44,7 +44,7 @@ implementation and command-line interface are under active development. See
 [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
 and [GitHub Issues](https://github.com/guillermomolina/protos/issues) for live
 project coordination, and
-[`docs/project/registries/IMPLEMENTATION_STATUS.md`](docs/project/registries/IMPLEMENTATION_STATUS.md)
+[`docs/project/registries/IMPLEMENTATION_STATUS.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md)
 for durable implementation/closure history.
 
 ## Why Protos?
@@ -487,7 +487,7 @@ development. Their live work/status is coordinated through
 [GitHub Issues](https://github.com/guillermomolina/protos/issues) and the
 [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1);
 durable implementation and closure history remains recorded in
-[`docs/project/registries/IMPLEMENTATION_STATUS.md`](docs/project/registries/IMPLEMENTATION_STATUS.md).
+[`docs/project/registries/IMPLEMENTATION_STATUS.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md).
 
 ## Learn Protos
 
@@ -503,7 +503,7 @@ durable implementation and closure history remains recorded in
     non-normative principles behind language and architecture choices.
 -   [Protos Development Project](https://github.com/users/guillermomolina/projects/1) —
     derived live status/scheduling dashboard; priority and roadmap are advisory planning metadata.
--   [Implementation registry](docs/project/registries/IMPLEMENTATION_STATUS.md) — durable
+-   [Implementation registry](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md) — durable
     implementation inventory and closure evidence.
 
 ## Contributing
@@ -554,7 +554,7 @@ Independent modules or plugins may use separate licenses when they
 qualify as Independent Modules or Larger Work components under the APL.
 
 For the project goals and alternatives considered when choosing the license, see
-[Why Protos uses APL-1.0](docs/project/governance/LICENSING_RATIONALE.md). This explanation
+[Why Protos uses APL-1.0](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/governance/LICENSING_RATIONALE.md). This explanation
 is non-normative; `LICENSE.TXT` remains the authoritative license text.
 
 ## Specification Status

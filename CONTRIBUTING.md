@@ -302,7 +302,7 @@ path or the contributor PR path.
 
 Protos is distributed under the Adaptive Public License 1.0 (APL-1.0). See
 [`LICENSE.TXT`](LICENSE.TXT) for the authoritative license terms and
-[`docs/project/governance/LICENSING_RATIONALE.md`](docs/project/governance/LICENSING_RATIONALE.md) for
+[`docs/project/governance/LICENSING_RATIONALE.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/governance/LICENSING_RATIONALE.md) for
 the project's non-normative explanation of that choice.
 
 Please make sure you have the right to contribute the material you submit.

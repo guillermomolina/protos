@@ -26,7 +26,7 @@ than as unrelated external systems.
 See the [README](README.md) for the current build/run path, the
 [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
 for the derived live scheduling/status dashboard, and the
-[implementation registry](docs/project/registries/IMPLEMENTATION_STATUS.md) for durable
+[implementation registry](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md) for durable
 historical/closure evidence.
 
 ## Now
@@ -64,7 +64,7 @@ These are directional priorities, not a promise that they will land in this
 exact order.
 
 The selected snapshot-versus-release and publication policy is documented in
-[`docs/project/work/DIST001/DIST001_RELEASE_POLICY.md`](docs/project/work/DIST001/DIST001_RELEASE_POLICY.md).
+[`docs/project/work/DIST001/DIST001_RELEASE_POLICY.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/work/DIST001/DIST001_RELEASE_POLICY.md).
 
 ## Later
 
