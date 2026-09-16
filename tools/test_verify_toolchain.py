@@ -49,14 +49,22 @@ def write(path, text):
 
 
 def ci_job(name, image, feature, version, maven):
+    selected = TOOLCHAIN["graalvm"]["container_image"]
+    aligned = (
+        image == selected
+        and feature == "25"
+        and version == "25.0.4.1"
+        and maven == "3.9.9"
+    )
+    action = "devcontainers/ci@v0.3" if aligned else "devcontainers/ci@v0.2"
+
     return """  %s:
-    container:
-      image: %s
-    env:
-      PROTOS_PRIMARY_JDK_FEATURE: \"%s\"
-      PROTOS_PRIMARY_JDK_VERSION: \"%s\"
-      PROTOS_MAVEN_VERSION: \"%s\"
-""" % (name, image, feature, version, maven)
+    steps:
+      - uses: %s
+        with:
+          configFile: .devcontainer/devcontainer.json
+          push: never
+""" % (name, action)
 
 
 def ci_workflow(
@@ -249,53 +257,76 @@ def main():
         make_fixture(root)
         result = run(verifier, root, "check")
         require(result.returncode == 0, "aligned fixture unexpectedly failed", result)
-        require("TOOLCHAIN_DRIFT_COUNT: 0" in result.stdout, "aligned fixture did not report zero drift", result)
+        require(
+            "TOOLCHAIN_DRIFT_COUNT: 0" in result.stdout,
+            "aligned fixture did not report zero drift",
+            result,
+        )
 
         root = tmp / "development-drift"
         make_fixture(root, development_drift=True)
         result = run(verifier, root, "check", "development")
         require(result.returncode == 1, "development drift did not fail closed", result)
-        for binding in ("devcontainer.maven", "ci.tests.image", "ci.tests.java_feature", "ci.tests.java_version", "ci.tests.maven"):
-            require(binding in result.stdout, "development drift did not identify %s" % binding, result)
+        for binding in (
+            "devcontainer.maven",
+            "ci.tests.devcontainer",
+        ):
+            require(
+                binding in result.stdout,
+                "development drift did not identify %s" % binding,
+                result,
+            )
 
         root = tmp / "distribution-drift"
         make_fixture(root, distribution_drift=True)
         result = run(verifier, root, "check")
         require(result.returncode == 1, "distribution drift did not fail closed", result)
-        for binding in (
-            "ci.distribution.image",
-            "ci.distribution.java_feature",
-            "ci.distribution.java_version",
-            "ci.distribution.maven",
-        ):
-            require(binding in result.stdout, "distribution drift did not identify %s" % binding, result)
+        require(
+            "ci.distribution.devcontainer" in result.stdout,
+            "distribution drift did not identify ci.distribution.devcontainer",
+            result,
+        )
 
         root = tmp / "missing-distribution-job"
         make_fixture(root, missing_distribution_job=True)
         result = run(verifier, root, "check", "development")
-        require(result.returncode == 0, "missing distribution job must not break development scope", result)
+        require(
+            result.returncode == 0,
+            "missing distribution job must not break development scope",
+            result,
+        )
         result = run(verifier, root, "check")
-        require(result.returncode == 1, "missing distribution job did not fail all-surface verification", result)
-        for binding in (
-            "ci.distribution.image",
-            "ci.distribution.java_feature",
-            "ci.distribution.java_version",
-            "ci.distribution.maven",
-        ):
-            require(binding in result.stdout, "missing distribution job did not identify %s" % binding, result)
+        require(
+            result.returncode == 1,
+            "missing distribution job did not fail all-surface verification",
+            result,
+        )
+        require(
+            "ci.distribution.devcontainer" in result.stdout,
+            "missing distribution job did not identify ci.distribution.devcontainer",
+            result,
+        )
 
         root = tmp / "pre-c"
         make_fixture(root, old_c_state=True)
         result = run(verifier, root, "check", "development")
-        require(result.returncode == 0, "pre-C state should remain development-aligned", result)
+        require(
+            result.returncode == 0,
+            "pre-C state should remain development-aligned",
+            result,
+        )
         result = run(verifier, root, "check")
-        require(result.returncode == 1, "pre-C all-surface drift did not fail closed", result)
+        require(
+            result.returncode == 1,
+            "pre-C all-surface drift did not fail closed",
+            result,
+        )
         for binding in (
             "pom.graal_components",
             "pom.shade_multi_release",
             "pom.shade_services",
             "pom.shade_signature_filter",
-            "ci.distribution.image",
+            "ci.distribution.devcontainer",
             "pom.runtime_plane.graph_roots",
             "pom.runtime_plane.shade_externalization",
             "dist.runtime_pom_absent",
@@ -304,13 +335,21 @@ def main():
             "dist.smoke.graal_components",
             "dist.launcher.java_version_gate",
         ):
-            require(binding in result.stdout, "pre-C drift did not identify %s" % binding, result)
+            require(
+                binding in result.stdout,
+                "pre-C drift did not identify %s" % binding,
+                result,
+            )
 
         malformed = json.loads(json.dumps(TOOLCHAIN))
         malformed["graal_components"]["version"] = "25.3.4"
         write(root / "toolchain.json", json.dumps(malformed, indent=2) + "\n")
         result = run(verifier, root, "contract")
-        require(result.returncode == 2, "malformed contract did not fail closed", result)
+        require(
+            result.returncode == 2,
+            "malformed contract did not fail closed",
+            result,
+        )
 
     print("TOOLCHAIN_VERIFIER_TESTS: PASS")
     return 0

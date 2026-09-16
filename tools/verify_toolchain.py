@@ -33,10 +33,7 @@ DEVELOPMENT_BINDINGS = {
     "pom.bytecode",
     "devcontainer.image",
     "devcontainer.maven",
-    "ci.tests.image",
-    "ci.tests.java_feature",
-    "ci.tests.java_version",
-    "ci.tests.maven",
+    "ci.tests.devcontainer",
 }
 
 
@@ -243,6 +240,29 @@ def workflow_job_container_image(path, job_id):
     )
 
 
+def workflow_job_devcontainer_contract(path, job_id):
+    # type: (Path, str) -> str
+    text = workflow_job_text(path, job_id)
+    action = "devcontainers/ci@v0.3"
+    config = ".devcontainer/devcontainer.json"
+
+    action_present = re.search(
+        r"^[ \\t]*-[ \\t]*uses:[ \\t]*%s[ \\t]*$" % re.escape(action),
+        text,
+        flags=re.MULTILINE,
+    )
+    config_present = re.search(
+        r"^[ \\t]*configFile:[ \\t]*%s[ \\t]*$" % re.escape(config),
+        text,
+        flags=re.MULTILINE,
+    )
+
+    if action_present and config_present:
+        return "%s %s" % (action, config)
+
+    return "<missing:%s.devcontainer>" % job_id
+
+
 def audit_bindings(root, contract):
     # type: (Path, Dict[str, object]) -> List[Tuple[str, str, str]]
     graal = contract["graalvm"]
@@ -303,15 +323,19 @@ def audit_bindings(root, contract):
     rows.append(("devcontainer.maven", "os-package", docker_maven_provisioning))
 
     ci_workflow = root / ".github" / "workflows" / "tests.yml"
-    rows.append(("ci.tests.image", str(graal["container_image"]), workflow_job_container_image(ci_workflow, "test")))
-    rows.append(("ci.tests.java_feature", feature, workflow_job_scalar(ci_workflow, "test", "PROTOS_PRIMARY_JDK_FEATURE")))
-    rows.append(("ci.tests.java_version", jdk_version, workflow_job_scalar(ci_workflow, "test", "PROTOS_PRIMARY_JDK_VERSION")))
-    rows.append(("ci.tests.maven", maven, workflow_job_scalar(ci_workflow, "test", "PROTOS_MAVEN_VERSION")))
-
-    rows.append(("ci.distribution.image", str(graal["container_image"]), workflow_job_container_image(ci_workflow, "distribution")))
-    rows.append(("ci.distribution.java_feature", feature, workflow_job_scalar(ci_workflow, "distribution", "PROTOS_PRIMARY_JDK_FEATURE")))
-    rows.append(("ci.distribution.java_version", jdk_version, workflow_job_scalar(ci_workflow, "distribution", "PROTOS_PRIMARY_JDK_VERSION")))
-    rows.append(("ci.distribution.maven", maven, workflow_job_scalar(ci_workflow, "distribution", "PROTOS_MAVEN_VERSION")))
+    expected_ci_devcontainer = (
+        "devcontainers/ci@v0.3 .devcontainer/devcontainer.json"
+    )
+    rows.append((
+        "ci.tests.devcontainer",
+        expected_ci_devcontainer,
+        workflow_job_devcontainer_contract(ci_workflow, "test"),
+    ))
+    rows.append((
+        "ci.distribution.devcontainer",
+        expected_ci_devcontainer,
+        workflow_job_devcontainer_contract(ci_workflow, "distribution"),
+    ))
 
     rows.append((
         "dist.runtime_pom_absent",
