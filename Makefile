@@ -14,9 +14,11 @@ PROTOS_TEST_JOBS ?= 8
 # ordinary developer/CI path until PERF009 is resolved and they are reevaluated.
 JAVA_SLOW_TEST_EXCLUDES := **/ProtosTomlParserStressTest.java,**/ProtosTomlEncoderModuleTest.java,**/ProtosPackageToolProtosTest.java,**/ProtosExternalPackagePlanningPreflightTest.java,**/ProtosWorkspaceRunCliTest.java,**/ProtosJsonParserModuleTest.java,**/ProtosPackageExecutionPlanAdapterTest.java,**/ProtosTestToolManifestPlanTest.java
 
-# DAP owns a Graal system thread and is not safe in the class-parallel lane.
-JAVA_SERIAL_TEST := ProtosI026FDapBehaviorTest
-JAVA_PARALLEL_EXCLUDES := $(JAVA_SLOW_TEST_EXCLUDES),**/$(JAVA_SERIAL_TEST).java
+# DAP and the real GraalVM LSP tests own Graal tooling state and are not safe
+# in the class-parallel lane.
+JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosI026GLspCapabilityTest,ProtosI026GLspTransportTest
+JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosI026GLspCapabilityTest.java,**/ProtosI026GLspTransportTest.java
+JAVA_PARALLEL_EXCLUDES := $(JAVA_SLOW_TEST_EXCLUDES),$(JAVA_SERIAL_TEST_EXCLUDES)
 
 .PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-protos check verify clean dist dist-validate
 
@@ -61,7 +63,7 @@ test-java-parallel:
 		test
 
 test-java-serial:
-	$(MVN) $(MVN_FLAGS) -Dtest=$(JAVA_SERIAL_TEST) test
+	$(MVN) $(MVN_FLAGS) -Dtest=$(JAVA_SERIAL_TESTS) test
 
 test-protos:
 	$(MVN) $(MVN_FLAGS) package -DskipTests

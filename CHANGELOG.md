@@ -1,5 +1,7 @@
 ## 0.3.1-SNAPSHOT
 
+- Reconcile `TEST001-I — Superseded test infrastructure cleanup and final closure` (GitHub #467) by removing the abandoned TEST001-C/D/E/F/G semantic-test ownership registry/guard and its publication-validation coupling. Replace the registry-backed `AGENTS.md` rule with a simpler test-placement contract: prefer Protos/TOOL002 for faithfully expressible Protos behavior, retain Java/JUnit for distinct host/runtime/bootstrap evidence, and leave legacy pre-policy Java-to-Protos migration to TEST002/#538. Existing useful Protos conformance cases are retained. Governance/test-infrastructure cleanup only; no specification, runtime semantics, or implementation-version change.
+
 - Establish `GITHUB020 — Formal work closure-evidence and durable-publication contract` (GitHub #536). Require every formal Issue closure to carry a compact evidence-backed closure summary and an explicit durable-record decision, while keeping publication to `protos-project-docs` conditional on whether durable project knowledge would otherwise be lost or an owning work-item contract explicitly requires it. Required durable publication remains fail-closed with exact revision identities; `Protos Development` remains a derived scheduling dashboard rather than evidence authority. Governance only; no specification, executable behavior, runtime architecture, or implementation-version change.
 
 ## 0.3.0
