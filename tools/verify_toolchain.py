@@ -247,7 +247,7 @@ def workflow_job_devcontainer_contract(path, job_id):
     config = ".devcontainer/devcontainer.json"
 
     action_present = re.search(
-        r"^[ \\t]*-[ \\t]*uses:[ \\t]*%s[ \\t]*$" % re.escape(action),
+        r"^[ \\t]*(?:-[ \\t]*)?uses:[ \\t]*%s[ \\t]*$" % re.escape(action),
         text,
         flags=re.MULTILINE,
     )

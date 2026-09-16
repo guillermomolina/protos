@@ -60,7 +60,8 @@ def ci_job(name, image, feature, version, maven):
 
     return """  %s:
     steps:
-      - uses: %s
+      - name: Run in development container
+        uses: %s
         with:
           configFile: .devcontainer/devcontainer.json
           push: never
