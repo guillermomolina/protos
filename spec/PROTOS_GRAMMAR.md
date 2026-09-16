@@ -995,6 +995,7 @@ primary-expression =
     | object-expression
     | closure-expression
     | array-construction-expression
+    | map-construction-expression
     | parenthesized-expression;
 ```
 
@@ -1070,6 +1071,150 @@ ordinary call.
 
 Array match-pattern brackets remain owned by the separate matching grammar.
 D130 changes no matching or pattern semantics.
+
+## 12.4 Map Construction Expressions
+
+```ebnf
+map-construction-expression =
+    "%", "{", map-construction-sequence, "}" ;
+
+map-construction-sequence =
+    [ newline-run ],
+    [ map-construction-line-items ],
+    [ newline-run ] ;
+
+map-construction-line-items =
+    map-construction-line,
+    { newline-run, map-construction-line } ;
+
+map-construction-line =
+    map-construction-entry,
+    { ";", map-construction-entry } ;
+
+map-construction-entry =
+    binary-expression,
+    ":",
+    [ newline-run ],
+    expression ;
+```
+
+Map construction is a primary expression with a sequential keyed-construction
+contract. `%{}` does not create a privileged collection literal and does not
+bypass ordinary lookup or message dispatch.
+
+Evaluation begins by resolving the ordinary identifier `Map` in the enclosing
+activation and invoking the selected value exactly once with zero positional
+arguments. This lookup and invocation complete before any source entry key or
+value expression is evaluated. If lookup or invocation fails or transfers
+control, no entry expression is evaluated.
+
+The exact observable construction order for entries `k1: v1`, `k2: v2`, ... is:
+
+```text
+result = ordinary lookup Map, then ordinary Map()
+
+evaluate k1
+evaluate v1
+ordinary result.atPut(k1, v1)
+
+evaluate k2
+evaluate v2
+ordinary result.atPut(k2, v2)
+
+...
+
+return result
+```
+
+The pseudocode variable `result` is explanatory only. Source Map construction
+creates no guest-visible temporary slot, Closure, lexical scope, construction
+activation, or hidden receiver. Entry key and value expressions execute in the
+same enclosing activation in which the `%{...}` expression occurs. In
+particular, construction does not change `this`, `context`, lexical parent,
+method home, or non-local-return home.
+
+Every entry performs a fresh ordinary `atPut` lookup and dispatch after that
+entry's key and value have completed. The returned value of `atPut` is ignored.
+Therefore mutation of the result's delegation or `atPut` behavior by an earlier
+insertion is observable by later insertions. Key evaluation, value evaluation,
+hash/equality callbacks reached by ordinary `atPut`, and insertion itself all
+retain their ordinary Error, suspension, cancellation, and control-flow
+semantics.
+
+Construction is fail-fast and non-transactional. If any step fails or leaves by
+non-normal control transfer, no later entry is evaluated or inserted, and
+effects or successful insertions already completed are not rolled back.
+
+The empty form `%{}` still performs ordinary `Map` lookup and zero-argument
+invocation and returns that invocation result; it merely performs no insertion.
+
+`Map` is intentionally shadow-sensitive. The selected factory may return any
+object. Map construction then requires only that each reached ordinary
+`atPut(key, value)` dispatch succeed. Consequently syntax alone does not
+guarantee a fresh standard Map when `Map` has been shadowed or customized. When
+ordinary lookup selects the standard prelude `Map` factory, the normal standard
+Map factory and `atPut` contracts apply.
+
+The key before `:` is an expression, not an implicit String name:
+
+```protos
+name: "language"
+
+%{
+    name: "Protos"
+}
+```
+
+uses the value of `name` as the key. A String key must be written explicitly:
+
+```protos
+%{
+    "name": "Protos"
+}
+```
+
+The `:` inside a Map construction entry is a contextual key/value separator. It
+does not create a slot. This keeps object construction and keyed construction
+visually related while preserving their different state domains:
+
+```protos
+{ name: value }   // slot creation in an Object body
+%{ name: value }  // evaluated key/value insertion
+```
+
+Entries written on different logical source lines are separated by `NEWLINE`.
+Entries on the same logical source line are separated by `;`:
+
+```protos
+%{
+    "a": 1
+    "b": 2
+}
+
+%{ "a": 1; "b": 2 }
+```
+
+Leading, trailing, and consecutive `;` are syntax errors. Comma is not a Map
+construction entry separator. A newline immediately after the entry `:` is a
+continuation newline and belongs to that entry rather than separating entries.
+
+Because Map construction is a primary expression, ordinary postfix syntax
+composes mechanically:
+
+```protos
+%{ "answer": 42 }["answer"]
+```
+
+D136 adds no spread/merge entry, comprehension, generic keyed-collection
+protocol, expected-type conversion, implicit String key conversion, Association
+value, or dedicated `IdentityMap` construction syntax. `IdentityMap()` remains
+ordinary explicit invocation. A future extension may add syntax only through a
+separate normative revision.
+
+Expression-position Map construction and pattern-position Map syntax are
+separate grammar owners. D136 changes no matching semantics, including the
+existing Map-pattern entry separators, openness/exactness, remainder, snapshot,
+capture, or `IdentityMap` matching rules.
 
 ## 13. Parenthesized Expressions
 

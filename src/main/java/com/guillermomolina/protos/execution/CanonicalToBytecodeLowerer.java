@@ -34,6 +34,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMapConstruction;
 import com.guillermomolina.protos.semantic.ast.CanonicalMatch;
 import com.guillermomolina.protos.semantic.ast.CanonicalMatchPattern;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
@@ -541,6 +542,14 @@ final class CanonicalToBytecodeLowerer {
             bytecodeObjectBodyTarget(object);
             return;
         }
+        if (expression instanceof CanonicalMapConstruction map) {
+            validateSupportedDefaultExpression(map.factory());
+            for (CanonicalMapConstruction.Entry entry : map.entries()) {
+                validateSupportedDefaultExpression(entry.key());
+                validateSupportedDefaultExpression(entry.value());
+            }
+            return;
+        }
         if (expression instanceof CanonicalMember member) {
             validateSupportedDefaultExpression(member.receiver());
             return;
@@ -748,6 +757,7 @@ final class CanonicalToBytecodeLowerer {
                 || expression instanceof CanonicalSuperSend
                 || expression instanceof CanonicalReturn
                 || expression instanceof CanonicalObject
+                || expression instanceof CanonicalMapConstruction
                 || expression instanceof CanonicalCompose
                 || expression instanceof CanonicalMatch
                 || expression instanceof CanonicalGuardedArmBody) {
@@ -941,6 +951,16 @@ final class CanonicalToBytecodeLowerer {
             builder.endSourceSection();
             return;
         }
+        if (expression instanceof CanonicalMapConstruction map) {
+            emitBodyMapConstruction(
+                    builder,
+                    map,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
         if (expression instanceof CanonicalObject object) {
             emitBodyObjectLiteral(
                     builder,
@@ -1087,6 +1107,16 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
             return;
         }
+        if (expression instanceof CanonicalMapConstruction map) {
+            emitDefaultMapConstruction(
+                    builder,
+                    map,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
         if (expression instanceof CanonicalObject object) {
             emitDefaultObjectLiteral(
                     builder,
@@ -1176,6 +1206,159 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
+
+    private void emitBodyMapConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMapConstruction map,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        emitMapConstruction(
+                builder,
+                map,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue,
+                false);
+    }
+
+    private void emitDefaultMapConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMapConstruction map,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        emitMapConstruction(
+                builder,
+                map,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue,
+                true);
+    }
+
+    private void emitMapConstruction(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMapConstruction map,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            boolean defaultContext) {
+        requireDefaultScratch(
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        BytecodeLocal mapValue =
+                builder.createLocal(
+                        defaultContext
+                                ? "defaultMapConstructionValue"
+                                : "mapConstructionValue",
+                        null);
+        BytecodeLocal insertionResult =
+                builder.createLocal(
+                        defaultContext
+                                ? "defaultMapConstructionInsertionResult"
+                                : "mapConstructionInsertionResult",
+                        null);
+
+        CanonicalCall factoryCall =
+                new CanonicalCall(
+                        map.factory(),
+                        java.util.List.of(),
+                        map.span());
+        if (defaultContext) {
+            emitComposedDefaultCall(
+                    builder,
+                    factoryCall,
+                    mapValue,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+        } else {
+            emitComposedCall(
+                    builder,
+                    factoryCall,
+                    mapValue,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+        }
+
+        for (CanonicalMapConstruction.Entry entry : map.entries()) {
+            BytecodeLocal key =
+                    builder.createLocal(
+                            defaultContext
+                                    ? "defaultMapConstructionKey"
+                                    : "mapConstructionKey",
+                            null);
+            BytecodeLocal value =
+                    builder.createLocal(
+                            defaultContext
+                                    ? "defaultMapConstructionEntryValue"
+                                    : "mapConstructionEntryValue",
+                            null);
+
+            if (defaultContext) {
+                emitDefaultExpressionToLocal(
+                        builder,
+                        entry.key(),
+                        key,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+                emitDefaultExpressionToLocal(
+                        builder,
+                        entry.value(),
+                        value,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+            } else {
+                emitBodyExpressionToLocal(
+                        builder,
+                        entry.key(),
+                        key,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+                emitBodyExpressionToLocal(
+                        builder,
+                        entry.value(),
+                        value,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+            }
+
+            builder.beginStoreLocal(preparedCall);
+            builder.beginPrepareSendArguments();
+            builder.emitLoadLocal(mapValue);
+            builder.emitLoadConstant("atPut");
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(key);
+            builder.emitLoadLocal(value);
+            builder.endPrepareSendArguments();
+            builder.endStoreLocal();
+
+            emitPreparedInvocationForRuntime(
+                    builder,
+                    insertionResult,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+        }
+
+        builder.beginStoreLocal(result);
+        builder.emitLoadLocal(mapValue);
+        builder.endStoreLocal();
+    }
 
     private void emitBodyMatch(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -4241,6 +4424,14 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalObject object) {
             object.parent().ifPresent(this::validateSupportedExpression);
             bytecodeObjectBodyTarget(object);
+            return;
+        }
+        if (expression instanceof CanonicalMapConstruction map) {
+            validateSupportedExpression(map.factory());
+            for (CanonicalMapConstruction.Entry entry : map.entries()) {
+                validateSupportedExpression(entry.key());
+                validateSupportedExpression(entry.value());
+            }
             return;
         }
         if (expression instanceof CanonicalCompose compose) {

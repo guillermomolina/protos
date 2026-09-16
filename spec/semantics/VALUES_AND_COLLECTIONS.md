@@ -352,6 +352,40 @@ object.foo[index]: value
 ```
 
 `object.foo` and `object["foo"]` are not equivalent unless the object's own `at` implementation deliberately makes them behave that way. Reflection facilities, if they provide dynamic slot access or creation, remain separate from `[]`.
+## Map Construction and Sequential Keyed Insertion
+
+The Map construction syntax defined by `../PROTOS_GRAMMAR.md` uses only the
+existing ordinary invocation and indexed-mutation protocols. It introduces no
+second Map storage model.
+
+When ordinary lookup of `Map` selects the standard prelude Map factory, the
+initial zero-argument invocation produces the ordinary standard Map result
+defined by that factory. Each source entry is then inserted by a separate
+ordinary `atPut(key, value)` dispatch on that result. Standard Map hashing,
+equality, representative-key, insertion-order, mutation, comparison-scope, and
+open/closed/frozen rules therefore apply at the exact insertion where they would
+apply to an explicit indexed assignment.
+
+In particular, equal or duplicate source keys receive no construction-specific
+rule. They behave exactly as sequential standard Map `atPut` operations would
+behave: an already-matching key is updated according to the existing Map
+contract, while the surrounding construction continues only after that
+insertion completes normally.
+
+The construction syntax itself does not require the factory result to own
+standard Map keyed-entry state. If ordinary lookup selects a shadowing or custom
+`Map`, the selected value is invoked normally and later `atPut` dispatches are
+ordinary dispatches on whatever object that invocation returned. Such a result
+does not acquire standard Map state merely because it was produced by `%{...}`.
+
+No Association object is materialized or exposed by construction. Key/value
+pairing is source structure consumed by the sequential construction operation,
+not a new Core value family.
+
+`IdentityMap` remains a distinct explicit factory whose identity-key law is
+unchanged. D136 does not make `%{...}` select `IdentityMap`, infer a keyed
+collection type from context, or add generic `%Factory{...}` syntax.
+
 ## Standard Array Indexed Semantics
 
 ### Standard Array construction through ordinary invocation

@@ -890,3 +890,7 @@ network/network-prototype.protos	boolean	true
 collections/array-construction-syntax-basic.protos	boolean	true
 collections/array-construction-syntax-spread-order.protos	boolean	true
 collections/array-construction-syntax-shadowing.protos	integer	402
+collections/map-construction-syntax-basic.protos	boolean	true
+collections/map-construction-syntax-order.protos	boolean	true
+collections/map-construction-syntax-redispatch.protos	boolean	true
+collections/map-construction-syntax-factory-first.protos	boolean	true

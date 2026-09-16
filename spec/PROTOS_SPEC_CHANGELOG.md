@@ -9,6 +9,42 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.414] - 2026-09-16
+
+### D136 — Map populated construction syntax
+- Adds expression-position `%{...}` Map construction as a primary expression.
+- Construction resolves ordinary shadow-sensitive `Map`, invokes it exactly once
+  with zero arguments before entry evaluation, then processes entries strictly
+  left-to-right as key evaluation, value evaluation, and one fresh ordinary
+  `atPut` dispatch before the next entry.
+- Entry key/value evaluation remains in the enclosing activation; construction
+  creates no guest-visible temporary binding, Closure, lexical scope,
+  construction activation, receiver change, or non-local-return home.
+- Empty `%{}` still performs ordinary `Map()` lookup/invocation. Custom or
+  shadowed `Map` may return any object supporting the reached `atPut` dispatches;
+  syntax itself does not guarantee standard-Map freshness.
+- Construction is fail-fast and non-transactional. Earlier effects/insertions
+  are not rolled back when a later key, value, hash/equality callback,
+  insertion, Error, cancellation, suspension, or control transfer interrupts
+  construction.
+- Entry layout follows ordinary sequential-body style: newline between logical
+  lines and `;` on one line. Comma is not an entry separator; leading/trailing/
+  consecutive `;` are invalid. Bare key expressions are evaluated rather than
+  converted to String names.
+- Adds no Association value, spread/merge/comprehension form, generic keyed
+  literal protocol, implicit key conversion, `IdentityMap` sugar, or matching
+  semantic change.
+
+### Compatibility and implementation state
+- Normative changes are confined to `PROTOS_GRAMMAR.md` and
+  `semantics/VALUES_AND_COLLECTIONS.md`.
+- Existing standard Map factory, `atPut`, equality/hash, insertion-order,
+  mutation, comparison-scope and matching contracts remain authoritative.
+- I040/#543 implements the syntax with dedicated surface/canonical construction
+  forms and equivalent direct-AST/C-prime execution, plus parser/tooling
+  regressions and Protos/Test-Tool conformance.
+- Implementation version becomes `0.3.3-SNAPSHOT`.
+
 ## [0.1.413] - 2026-09-16
 
 ### D130 — Array construction syntax as ordinary-call sugar

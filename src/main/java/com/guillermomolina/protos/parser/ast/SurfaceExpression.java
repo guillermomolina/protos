@@ -28,6 +28,7 @@ public sealed interface SurfaceExpression
                 SurfaceMember,
                 SurfaceCall,
                 SurfaceArrayConstruction,
+                SurfaceMapConstruction,
                 SurfaceIndex,
                 SurfaceUnary,
                 SurfaceBinary,

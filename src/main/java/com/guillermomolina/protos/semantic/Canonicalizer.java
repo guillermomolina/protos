@@ -19,6 +19,7 @@ package com.guillermomolina.protos.semantic;
 
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
+import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
@@ -52,6 +53,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMapConstruction;
 import com.guillermomolina.protos.semantic.ast.CanonicalMatch;
 import com.guillermomolina.protos.semantic.ast.CanonicalMatchPattern;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
@@ -84,6 +86,7 @@ public final class Canonicalizer {
             case SurfaceBinary binary -> lowerBinary(binary);
             case SurfaceCall call -> lowerCall(call);
             case SurfaceArrayConstruction array -> lowerArrayConstruction(array);
+            case SurfaceMapConstruction map -> lowerMapConstruction(map);
             case SurfaceClosure closure -> lowerClosure(closure);
             case SurfaceUnary unary -> lowerUnary(unary);
             case SurfaceSequence sequence ->
@@ -225,6 +228,24 @@ public final class Canonicalizer {
                 new CanonicalLookup("Array", array.span()),
                 canonicalizeArguments(array.arguments()),
                 array.span());
+    }
+
+    private CanonicalExpression lowerMapConstruction(
+            SurfaceMapConstruction map) {
+        return new CanonicalMapConstruction(
+                new CanonicalLookup("Map", map.span()),
+                map.entries().stream()
+                        .map(this::canonicalizeMapConstructionEntry)
+                        .toList(),
+                map.span());
+    }
+
+    private CanonicalMapConstruction.Entry canonicalizeMapConstructionEntry(
+            SurfaceMapConstruction.Entry entry) {
+        return new CanonicalMapConstruction.Entry(
+                canonicalize(entry.key()),
+                canonicalize(entry.value()),
+                entry.span());
     }
 
     private CanonicalExpression lowerCall(SurfaceCall call) {

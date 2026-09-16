@@ -567,6 +567,78 @@ which element references were captured for that traversal.
 
 The callback itself uses ordinary polymorphic invocation.
 
+## `%{...}` constructs a Map sequentially
+
+For the common equality-keyed case, Protos has concise populated Map
+construction:
+
+```protos
+m: %{
+    "language": "Protos"
+    "version": 1
+}
+```
+
+The same construction can use `;` when entries share one source line:
+
+```protos
+m: %{ "language": "Protos"; "version": 1 }
+```
+
+This is not a bag of prebuilt Association values. Conceptually it performs:
+
+```text
+m = Map()
+m["language"] = "Protos"
+m["version"] = 1
+return m
+```
+
+with one important precision: the explanatory `m` is not a source-level hidden
+slot. `Map()` happens first, then each key and value is evaluated in the
+surrounding activation and inserted before the next entry begins.
+
+That sequential rule means guest behavior can observe the order. If the first
+insertion changes the result's `atPut` behavior, the second entry uses the new
+behavior. Errors and non-local control stop construction without rolling back
+effects or insertions that already completed.
+
+`Map` remains an ordinary lookup, just as `Array` does for `[a, b]`. Shadowing
+`Map` therefore changes what `%{...}` invokes. The syntax does not force the
+standard Core Map or promise freshness when a custom binding is selected.
+
+Keys are expressions:
+
+```protos
+key: "language"
+
+m: %{
+    key: "Protos"
+}
+```
+
+Here the key is the value `"language"`. To use the literal String `"key"`, write
+it explicitly.
+
+Map construction is a primary expression, so postfix indexing works directly:
+
+```protos
+%{ "answer": 42 }["answer"]
+```
+
+`IdentityMap` deliberately stays explicit:
+
+```protos
+identity: IdentityMap()
+```
+
+It has a different key law and does not receive syntax merely because it exposes
+a similar indexing protocol. `%{...}` means ordinary `Map` construction today;
+there is no generic `%Factory{...}` form in the current language.
+
+Expression construction and Map matching are separate contexts. The matching
+chapter retains its own pattern grammar and semantics.
+
 ## Map is keyed by equality
 
 The standard `Map` family uses the key's ordinary equality/hash protocols.

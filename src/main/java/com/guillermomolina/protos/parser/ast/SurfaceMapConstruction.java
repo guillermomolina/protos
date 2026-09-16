@@ -15,11 +15,29 @@
  * the specific language governing rights and limitations under the License.
  */
 
-package com.guillermomolina.protos.semantic.ast;
+package com.guillermomolina.protos.parser.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.List;
+import java.util.Objects;
 
-public sealed interface CanonicalExpression
-        permits CanonicalAssign, CanonicalCall, CanonicalClosure, CanonicalCompose, CanonicalCreate, CanonicalGuardedArmBody, CanonicalIdentity, CanonicalNotIdentity, CanonicalIndexedAssign, CanonicalIntrinsic, CanonicalLiteral, CanonicalLookup, CanonicalMapConstruction, CanonicalMatch, CanonicalMember, CanonicalObject, CanonicalReturn, CanonicalSend, CanonicalSequence, CanonicalSpread, CanonicalSuperSend {
-    SourceSpan span();
+public record SurfaceMapConstruction(
+        List<Entry> entries,
+        SourceSpan span)
+        implements SurfaceExpression {
+    public SurfaceMapConstruction {
+        entries = List.copyOf(Objects.requireNonNull(entries, "entries"));
+        Objects.requireNonNull(span, "span");
+    }
+
+    public record Entry(
+            SurfaceExpression key,
+            SurfaceExpression value,
+            SourceSpan span) {
+        public Entry {
+            Objects.requireNonNull(key, "key");
+            Objects.requireNonNull(value, "value");
+            Objects.requireNonNull(span, "span");
+        }
+    }
 }

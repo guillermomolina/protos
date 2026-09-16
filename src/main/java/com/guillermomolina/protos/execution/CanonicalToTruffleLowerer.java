@@ -34,6 +34,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMapConstruction;
 import com.guillermomolina.protos.semantic.ast.CanonicalMatch;
 import com.guillermomolina.protos.semantic.ast.CanonicalMatchPattern;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
@@ -88,6 +89,9 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalMatch match) {
             return lowerBasicMatch(match);
+        }
+        if (expression instanceof CanonicalMapConstruction map) {
+            return lowerMapConstruction(map);
         }
         if (expression instanceof CanonicalObject object) {
             ProtosExpressionNode parentNode =
@@ -162,6 +166,25 @@ public final class CanonicalToTruffleLowerer {
         throw new UnsupportedOperationException(
                 "Canonical expression is not supported by this Truffle lowering slice: "
                         + expression.getClass().getSimpleName());
+    }
+
+    private ProtosExpressionNode lowerMapConstruction(
+            CanonicalMapConstruction map) {
+        ProtosExpressionNode[] keys =
+                map.entries().stream()
+                        .map(CanonicalMapConstruction.Entry::key)
+                        .map(this::lower)
+                        .toArray(ProtosExpressionNode[]::new);
+        ProtosExpressionNode[] values =
+                map.entries().stream()
+                        .map(CanonicalMapConstruction.Entry::value)
+                        .map(this::lower)
+                        .toArray(ProtosExpressionNode[]::new);
+        return new ProtosMapConstructionNode(
+                map.span(),
+                lower(map.factory()),
+                keys,
+                values);
     }
 
     private ProtosExpressionNode lowerBasicMatch(CanonicalMatch match) {

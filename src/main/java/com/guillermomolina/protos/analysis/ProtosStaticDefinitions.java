@@ -20,6 +20,7 @@ package com.guillermomolina.protos.analysis;
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
+import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -110,6 +111,17 @@ final class ProtosStaticDefinitions {
                 case SurfaceArrayConstruction array -> {
                     analyzeArguments(array.arguments(), facts);
                     opaqueInvocationBarrier(facts);
+                }
+                case SurfaceMapConstruction map -> {
+                    // D136 performs ordinary Map() invocation before the first
+                    // source entry, so generation-1 exact-origin facts cannot
+                    // survive into entry evaluation without an effect proof.
+                    opaqueInvocationBarrier(facts);
+                    for (SurfaceMapConstruction.Entry entry : map.entries()) {
+                        analyze(entry.key(), facts);
+                        analyze(entry.value(), facts);
+                        opaqueInvocationBarrier(facts);
+                    }
                 }
                 case SurfaceIndex index -> {
                     analyze(index.receiver(), facts);

@@ -18,8 +18,29 @@
 package com.guillermomolina.protos.semantic.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.List;
+import java.util.Objects;
 
-public sealed interface CanonicalExpression
-        permits CanonicalAssign, CanonicalCall, CanonicalClosure, CanonicalCompose, CanonicalCreate, CanonicalGuardedArmBody, CanonicalIdentity, CanonicalNotIdentity, CanonicalIndexedAssign, CanonicalIntrinsic, CanonicalLiteral, CanonicalLookup, CanonicalMapConstruction, CanonicalMatch, CanonicalMember, CanonicalObject, CanonicalReturn, CanonicalSend, CanonicalSequence, CanonicalSpread, CanonicalSuperSend {
-    SourceSpan span();
+/** Backend-neutral representation of the ratified D136 sequential Map construction. */
+public record CanonicalMapConstruction(
+        CanonicalExpression factory,
+        List<Entry> entries,
+        SourceSpan span)
+        implements CanonicalExpression {
+    public CanonicalMapConstruction {
+        Objects.requireNonNull(factory, "factory");
+        entries = List.copyOf(Objects.requireNonNull(entries, "entries"));
+        Objects.requireNonNull(span, "span");
+    }
+
+    public record Entry(
+            CanonicalExpression key,
+            CanonicalExpression value,
+            SourceSpan span) {
+        public Entry {
+            Objects.requireNonNull(key, "key");
+            Objects.requireNonNull(value, "value");
+            Objects.requireNonNull(span, "span");
+        }
+    }
 }

@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
@@ -148,6 +149,47 @@ class ProtosParserPostfixFoundationTest {
         assertThrows(
                 ParseError.class,
                 () -> new ProtosParser("[first,\n]").parseProgram());
+    }
+
+    @Test
+    void mapConstructionUsesSequentialLayoutAndRemainsVisibleInSurfaceAst() {
+        String source =
+                "%{\n"
+                        + "  \"first\": value\n"
+                        + "  other: call()\n"
+                        + "}";
+
+        SurfaceSequence program = new ProtosParser(source).parseProgram();
+        SurfaceMapConstruction map = assertInstanceOf(
+                SurfaceMapConstruction.class,
+                program.expressions().get(0));
+
+        assertEquals(2, map.entries().size());
+        assertEquals(new SourceSpan(0, source.length()), map.span());
+    }
+
+    @Test
+    void mapConstructionSupportsSemicolonAndOrdinaryPostfixIndexing() {
+        SurfaceSequence program =
+                new ProtosParser("%{ \"a\": 1; \"b\": 2 }[\"a\"]").parseProgram();
+
+        SurfaceIndex index = assertInstanceOf(
+                SurfaceIndex.class,
+                program.expressions().get(0));
+        SurfaceMapConstruction map = assertInstanceOf(
+                SurfaceMapConstruction.class,
+                index.receiver());
+        assertEquals(2, map.entries().size());
+    }
+
+    @Test
+    void mapConstructionRejectsCommaEntriesAndTrailingSemicolon() {
+        assertThrows(
+                ParseError.class,
+                () -> new ProtosParser("%{ \"a\": 1, \"b\": 2 }").parseProgram());
+        assertThrows(
+                ParseError.class,
+                () -> new ProtosParser("%{ \"a\": 1; }").parseProgram());
     }
 
     @Test

@@ -23,6 +23,7 @@ import com.guillermomolina.protos.lexer.TokenType;
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
+import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -1112,6 +1113,7 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
             case SUPER -> parseSuperMessageSend();
             case LBRACKET -> parseArrayConstruction();
             case LBRACE -> parseObjectBody(null);
+            case PERCENT -> parseMapConstruction();
             case LPAREN -> cursor.matchingParenthesisFollowedBy(TokenType.FAT_ARROW)
                     ? parseParameterListClosure()
                     : parseParenthesized();
@@ -1149,6 +1151,54 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
                 new SourceSpan(
                         open.span().startOffset(),
                         close.span().endOffset()));
+    }
+
+    private SurfaceExpression parseMapConstruction() {
+        TokenOccurrence percent = cursor.consume(TokenType.PERCENT, "'%'");
+        cursor.consume(TokenType.LBRACE, "'{' after '%' in Map construction");
+        consumeNewlines();
+
+        List<SurfaceMapConstruction.Entry> entries = new ArrayList<>();
+        if (!cursor.at(TokenType.RBRACE)) {
+            parseMapConstructionLine(entries);
+
+            while (cursor.at(TokenType.NEWLINE)) {
+                consumeNewlines();
+                if (!cursor.at(TokenType.RBRACE)) {
+                    parseMapConstructionLine(entries);
+                }
+            }
+        }
+
+        TokenOccurrence close = cursor.consume(TokenType.RBRACE, "'}'");
+        return new SurfaceMapConstruction(
+                entries,
+                new SourceSpan(
+                        percent.span().startOffset(),
+                        close.span().endOffset()));
+    }
+
+    private void parseMapConstructionLine(
+            List<SurfaceMapConstruction.Entry> entries) {
+        entries.add(parseMapConstructionEntry());
+
+        while (cursor.at(TokenType.SEMICOLON)) {
+            cursor.advance();
+            entries.add(parseMapConstructionEntry());
+        }
+    }
+
+    private SurfaceMapConstruction.Entry parseMapConstructionEntry() {
+        SurfaceExpression key = parseBinaryExpressionFoundation();
+        cursor.consume(TokenType.COLON, "':' after Map construction key");
+        consumeContinuationNewlines();
+        SurfaceExpression value = parseExpressionFoundation();
+        return new SurfaceMapConstruction.Entry(
+                key,
+                value,
+                new SourceSpan(
+                        key.span().startOffset(),
+                        value.span().endOffset()));
     }
 
     private SurfaceExpression parseBareParameterClosure() {

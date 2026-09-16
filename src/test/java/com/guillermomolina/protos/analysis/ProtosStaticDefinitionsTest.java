@@ -69,6 +69,21 @@ class ProtosStaticDefinitionsTest {
     }
 
     @Test
+    void mapConstructionFactoryInvocationInvalidatesFactsBeforeFirstEntry() {
+        String source =
+                "f: (value) => {\n"
+                        + "  %{\n"
+                        + "    value: value\n"
+                        + "  }\n"
+                        + "}";
+        int keyReference = source.indexOf("value", source.indexOf("%{"));
+        int valueReference = source.indexOf("value", keyReference + 1);
+
+        assertTrue(definition(source, keyReference).isEmpty());
+        assertTrue(definition(source, valueReference).isEmpty());
+    }
+
+    @Test
     void assignmentTargetIsDeferredButAssignmentDoesNotChangeExistingOrigin() {
         String source = "f: (value) => {\n  value = 2\n  value\n}";
         int assignmentTarget = source.indexOf("value", source.indexOf("=>"));

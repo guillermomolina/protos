@@ -14,12 +14,29 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
+package com.guillermomolina.protos.execution;
 
-package com.guillermomolina.protos.semantic.ast;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.source.SourceSpan;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
 
-public sealed interface CanonicalExpression
-        permits CanonicalAssign, CanonicalCall, CanonicalClosure, CanonicalCompose, CanonicalCreate, CanonicalGuardedArmBody, CanonicalIdentity, CanonicalNotIdentity, CanonicalIndexedAssign, CanonicalIntrinsic, CanonicalLiteral, CanonicalLookup, CanonicalMapConstruction, CanonicalMatch, CanonicalMember, CanonicalObject, CanonicalReturn, CanonicalSend, CanonicalSequence, CanonicalSpread, CanonicalSuperSend {
-    SourceSpan span();
+class CanonicalMapConstructionExecutionTest {
+    @Test
+    void directAstBackendExecutesMapConstruction() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"));
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        Object result =
+                new ProtosSourceCompiler()
+                        .compile("%{ \"answer\": 42 }[\"answer\"] == 42")
+                        .call(activation);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
 }
