@@ -404,7 +404,12 @@ def build(args: argparse.Namespace) -> Path:
                 f"optimizing_runtime={EXPECTED_OPTIMIZING_RUNTIME}",
                 "runtime_authority=pom.xml",
                 "runtime_projection=target/runtime",
-                "runtime_evidence=docs/project/work/DIST002/DIST002_TOOLCHAIN_ALIGNMENT.md",
+                (
+                    "runtime_evidence=https://github.com/guillermomolina/"
+                    "protos-project-docs/blob/"
+                    "ee0da2bfae717299600e369b4f11998f3395f42f/"
+                    "docs/project/work/DIST002/DIST002_TOOLCHAIN_ALIGNMENT.md"
+                ),
                 "unsupported_runtime_override=PROTOS_ALLOW_UNSUPPORTED_RUNTIME=1",
             ]
         ),
