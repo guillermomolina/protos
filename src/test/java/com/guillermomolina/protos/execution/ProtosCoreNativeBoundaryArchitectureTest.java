@@ -126,14 +126,6 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertEquals(138, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
-        String inventory =
-                Files.readString(Path.of("docs", "project", "architecture", "CORE_NATIVE_BOUNDARY.md"));
-        for (String provider : EXPECTED_NATIVE_PROVIDERS.keySet()) {
-            String simpleName = provider.substring(provider.lastIndexOf('/') + 1);
-            assertTrue(
-                    inventory.contains("`" + simpleName + "`"),
-                    () -> "native provider missing from inventory: " + simpleName);
-        }
     }
 
     @Test

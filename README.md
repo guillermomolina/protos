@@ -3,11 +3,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/guillermomolina/protos/actions?query=workflow%3ACI+branch%3Amain">
-    <img src="https://raw.githubusercontent.com/guillermomolina/protos/badges/ci.svg" alt="CI status" title="Latest CI result on main">
-  </a>
-  <a href="https://github.com/guillermomolina/protos/actions?query=workflow%3ACI+branch%3Amain">
-    <img src="https://raw.githubusercontent.com/guillermomolina/protos/badges/tests.svg" alt="Test suite status" title="Latest test suite result on main">
+  <a href="https://github.com/guillermomolina/protos/actions/workflows/tests.yml?query=branch%3Amain">
+    <img src="https://github.com/guillermomolina/protos/actions/workflows/tests.yml/badge.svg?branch=main" alt="CI status" title="CI status on main">
   </a>
 </p>
 

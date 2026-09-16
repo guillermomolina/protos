@@ -1,28 +1,188 @@
-name: CI (suspended)
+name: CI
 
 on:
+  push:
+    branches:
+      - main
+  pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# GITHUB017 / #492
-# Automatic repository test CI is intentionally suspended while TOOL005 / #468
-# completes the repository-wide Test Tool execution path. Do not re-enable
-# push/pull_request triggers or test/distribution execution until that blocker
-# is closed and GITHUB017 performs the explicit reactivation validation.
-#
-# This workflow deliberately publishes no passing test signal while suspended.
+# Main receives many small publication commits. Keep one CI run executing and
+# at most the newest pending run for the same event/ref. Never kill an executing
+# validation merely because a newer commit arrived.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  suspended:
-    name: Tests suspended pending TOOL005
+  test:
+    timeout-minutes: 60
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol10-20260825
+      options: --user 0
+
+    env:
+      PROTOS_PRIMARY_JDK_FEATURE: "25"
+      PROTOS_PRIMARY_JDK_VERSION: "25.0.4.1"
+      PROTOS_MAVEN_VERSION: "3.9.9"
+
     steps:
-      - name: Explain suspension
+      - name: Provision CI bootstrap tools
         shell: bash
         run: |
-          echo "AUTOMATIC_TEST_CI=SUSPENDED"
-          echo "BLOCKED_BY=TOOL005/#468"
-          echo "TRACKING=GITHUB017/#492"
-          echo "NO_TESTS_EXECUTED=YES"
+          set -euo pipefail
+          microdnf install -y \
+            findutils \
+            diffutils \
+            git \
+            gzip \
+            tar \
+            unzip \
+            xz \
+            maven \
+            procps \
+            make \
+            python3
+          microdnf clean all
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trust checked-out workspace for Git
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git status --porcelain=v1 --untracked-files=all >/dev/null
+          echo "CI_GIT_SAFE_DIRECTORY_CHECK: PASS"
+
+      - name: Verify selected toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          properties="$(java -XshowSettings:properties -version 2>&1)"
+          feature="$(sed -n 's/^[[:space:]]*java\.specification\.version = //p' <<<"$properties" | head -n 1)"
+          version="$(sed -n 's/^[[:space:]]*java\.version = //p' <<<"$properties" | head -n 1)"
+          printf '%s\n' "$properties" | grep -Ei 'graalvm|java\.vendor|java\.vm\.name|java\.runtime\.name' | grep -Fqi GraalVM
+          test "$feature" = "$PROTOS_PRIMARY_JDK_FEATURE"
+          test "$version" = "$PROTOS_PRIMARY_JDK_VERSION"
+          test "$(mvn --version | sed -n '1s/^Apache Maven \([^[:space:]]*\).*/\1/p')" = "$PROTOS_MAVEN_VERSION"
+          python3 tools/verify_toolchain.py --mode check --scope development
+          echo "CI_PRIMARY_TOOLCHAIN_CHECK: PASS java.version=$version maven=$PROTOS_MAVEN_VERSION"
+
+      # GITHUB017: the Makefile is the canonical repository test policy.
+      # Keep CI orchestration thin; test selection, Java parallelism and
+      # Protos Test Tool execution belong to the repository Makefile.
+      - name: Run repository tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4
+          echo "CI_REPOSITORY_TESTS: PASS"
+
+  # PERF007: the test job is the single owner of repository JUnit validation.
+  # This job consumes that success and validates only the built distribution artifact.
+  distribution:
+    name: Build and validate portable distribution
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: test
+    # Do not cancel an executing distribution gate when main advances.
+    # With the default single pending slot, newer pushes coalesce to the latest
+    # pending distribution while the current validation is allowed to finish.
+    concurrency:
+      group: distribution-snapshot-${{ github.ref }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol10-20260825
+      options: --user 0
+
+    env:
+      PROTOS_PRIMARY_JDK_FEATURE: "25"
+      PROTOS_PRIMARY_JDK_VERSION: "25.0.4.1"
+      PROTOS_MAVEN_VERSION: "3.9.9"
+
+    steps:
+      - name: Provision CI bootstrap tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          microdnf install -y \
+            findutils \
+            diffutils \
+            git \
+            gzip \
+            tar \
+            unzip \
+            xz \
+            maven \
+            procps \
+            make \
+            python3
+          microdnf clean all
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Trust checked-out workspace for Git
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git status --porcelain=v1 --untracked-files=all >/dev/null
+          echo "CI_GIT_SAFE_DIRECTORY_CHECK: PASS"
+
+      - name: Verify selected toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          properties="$(java -XshowSettings:properties -version 2>&1)"
+          feature="$(sed -n 's/^[[:space:]]*java\.specification\.version = //p' <<<"$properties" | head -n 1)"
+          version="$(sed -n 's/^[[:space:]]*java\.version = //p' <<<"$properties" | head -n 1)"
+          printf '%s\n' "$properties" | grep -Ei 'graalvm|java\.vendor|java\.vm\.name|java\.runtime\.name' | grep -Fqi GraalVM
+          test "$feature" = "$PROTOS_PRIMARY_JDK_FEATURE"
+          test "$version" = "$PROTOS_PRIMARY_JDK_VERSION"
+          test "$(mvn --version | sed -n '1s/^Apache Maven \([^[:space:]]*\).*/\1/p')" = "$PROTOS_MAVEN_VERSION"
+          python3 tools/verify_toolchain.py --mode check
+          echo "CI_PRIMARY_TOOLCHAIN_CHECK: PASS java.version=$version maven=$PROTOS_MAVEN_VERSION"
+
+      - name: Build and validate portable distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          make dist-validate
+          echo "CI_PORTABLE_DISTRIBUTION: PASS"
+
+      - name: Prepare snapshot artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(find "$GITHUB_WORKSPACE/target/distributions" -maxdepth 1 -type f -name 'protos-*-posix-jvm.zip' | sort | tail -n 1)"
+          test -n "$archive"
+          test -f "$archive"
+          (cd "$(dirname "$archive")" && sha256sum "$(basename "$archive")") > "$archive.sha256"
+          (
+            cd "$(dirname "$archive")"
+            sha256sum -c "$(basename "$archive").sha256"
+          )
+          echo "DIST_ARCHIVE=$archive" >> "$GITHUB_ENV"
+          echo "DIST_ARCHIVE_CHECKSUM=$archive.sha256" >> "$GITHUB_ENV"
+          echo "DIST_ARTIFACT_NAME=protos-snapshot-$GITHUB_SHA" >> "$GITHUB_ENV"
+          echo "CI_SNAPSHOT_CHECKSUM: $(cat "$archive.sha256")"
+
+      - name: Upload development snapshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.DIST_ARTIFACT_NAME }}
+          path: |
+            ${{ env.DIST_ARCHIVE }}
+            ${{ env.DIST_ARCHIVE_CHECKSUM }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

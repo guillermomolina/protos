@@ -32,6 +32,10 @@ final class ProtosTestToolJClosureReconciliationTest {
                 Files.readString(
                         Path.of(".github", "workflows", "tests.yml"),
                         StandardCharsets.UTF_8);
+        String makefile =
+                Files.readString(
+                        Path.of("Makefile"),
+                        StandardCharsets.UTF_8);
 
         boolean suspended =
                 workflow.contains("name: CI (suspended)")
@@ -77,26 +81,29 @@ final class ProtosTestToolJClosureReconciliationTest {
             return;
         }
 
-        int javaFirst = workflow.indexOf("- name: Run impact-aware tests");
-        int checkoutBuild = workflow.indexOf("- name: Build checkout CLI for Protos Test Tool");
-        int protosSecond = workflow.indexOf("- name: Run Protos Test Tool directly");
+        int repositoryTests = workflow.indexOf("- name: Run repository tests");
 
-        assertTrue(javaFirst >= 0, "Java/runtime validation stage must remain explicit");
         assertTrue(
-                checkoutBuild > javaFirst,
-                "the checkout CLI build for Test Tool must run after Java/runtime validation");
+                repositoryTests >= 0,
+                "active CI must expose the repository test stage explicitly");
         assertTrue(
-                protosSecond > checkoutBuild,
-                "the public Protos Test Tool must run directly after its checkout CLI build");
+                workflow.contains("make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4"),
+                "active CI must delegate repository test execution to the canonical Makefile target");
         assertTrue(
-                workflow.contains("python3 scripts/publication_validation.py"),
-                "the Java-first stage must keep the repository publication validator");
+                makefile.contains("test: test-java test-protos"),
+                "the canonical Makefile test target must retain Java then Protos test ownership");
         assertTrue(
-                workflow.contains("mvn -DskipTests package"),
-                "the second-stage path must build the checkout CLI without rerunning JUnit");
-        assertTrue(
-                workflow.contains("bin/protos test --jobs 2"),
-                "CI must execute the public Test Tool directly through the checkout launcher");
+                makefile.contains("bin/protos test --jobs $(PROTOS_TEST_JOBS)"),
+                "the Makefile must execute the public Protos Test Tool directly");
+        assertFalse(
+                workflow.contains("- name: Run impact-aware tests"),
+                "active CI must not retain the superseded publication-validator test topology");
+        assertFalse(
+                workflow.contains("- name: Build checkout CLI for Protos Test Tool"),
+                "active CI must not duplicate the Makefile checkout-build policy");
+        assertFalse(
+                workflow.contains("- name: Run Protos Test Tool directly"),
+                "active CI must not duplicate Protos Test Tool execution outside the Makefile");
         assertFalse(
                 workflow.contains("-Dprotos.testToolCheckpoint=true"),
                 "CI must not route the complete Test Tool corpus through a JUnit property");
