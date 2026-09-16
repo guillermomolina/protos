@@ -138,6 +138,25 @@ grep -Fx 'test' "$stdout_file" >/dev/null || {
     fail "Test Tool argument marker missing"
 }
 
+# TEST001-H: the extracted launcher must complete a non-empty official Test Tool
+# invocation. Do not freeze the current repository case count: RepositorySuite
+# remains the selection authority and may grow independently of this smoke.
+aggregate_line=$(grep -E '^[0-9][0-9]* passed, 0 failed$' "$stderr_file" | tail -n 1 || true)
+[ -n "$aggregate_line" ] || {
+    echo "--- test stdout ---" >&2
+    cat "$stdout_file" >&2 || true
+    echo "--- test stderr ---" >&2
+    cat "$stderr_file" >&2 || true
+    fail "Test Tool aggregate success summary missing"
+}
+
+passed_count=$(printf '%s\n' "$aggregate_line" | sed 's/ passed, 0 failed$//')
+case "$passed_count" in
+    ''|*[!0-9]*) fail "Test Tool aggregate success count is malformed" ;;
+esac
+[ "$passed_count" -gt 0 ] ||
+    fail "Test Tool completed without executing any selected cases"
+
 if [ "$runtime_mode" = fallback-isolated ]; then
     grep -F 'unsupported runtime override enabled' "$stderr_file" >/dev/null ||
         fail "unsupported-host Test Tool smoke did not report runtime override"
@@ -146,4 +165,6 @@ fi
 echo "DIST_B4A_OUTSIDE_CHECKOUT_CHECK: PASS"
 echo "DIST_B4A_RUNTIME_ISOLATION_CHECK: PASS mode=$runtime_mode"
 echo "DIST_BUNDLED_TEST_TOOL_CHECK: PASS"
+echo "TEST001_H_PORTABLE_REPOSITORY_SUITE_CHECK: PASS passed=$passed_count failed=0"
+echo "DISTRIBUTION_TEST_TOOL_VALIDATED: YES"
 echo "DIST001_B4A_SMOKE: PASS"
