@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
@@ -25,64 +26,25 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Run repository tests in development container
         uses: devcontainers/ci@v0.3
         with:
           configFile: .devcontainer/devcontainer.json
-          push: never
+          imageName: ghcr.io/guillermomolina/protos-devcontainer
+          imageTag: ci
+          cacheFrom: ghcr.io/guillermomolina/protos-devcontainer:ci
+          push: filter
+          refFilterForPush: refs/heads/main
+          eventFilterForPush: push
           runCmd: |
             set -euo pipefail
             python3 tools/verify_toolchain.py --mode check --scope development
             make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4
             echo "CI_REPOSITORY_TESTS: PASS"
-
-  distribution:
-    name: Build and validate portable distribution
-    if: ${{ github.event_name != 'pull_request' }}
-    needs: test
-    concurrency:
-      group: distribution-snapshot-${{ github.ref }}
-      cancel-in-progress: false
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Build and validate distribution in development container
-        uses: devcontainers/ci@v0.3
-        with:
-          configFile: .devcontainer/devcontainer.json
-          push: never
-          runCmd: |
-            set -euo pipefail
-            python3 tools/verify_toolchain.py --mode check
-            make dist-validate
-            echo "CI_PORTABLE_DISTRIBUTION: PASS"
-
-      - name: Prepare snapshot artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          archive="$(find "$GITHUB_WORKSPACE/target/distributions" -maxdepth 1 -type f -name 'protos-*-posix-jvm.zip' | sort | tail -n 1)"
-          test -n "$archive"
-          test -f "$archive"
-          (cd "$(dirname "$archive")" && sha256sum "$(basename "$archive")") > "$archive.sha256"
-          (
-            cd "$(dirname "$archive")"
-            sha256sum -c "$(basename "$archive").sha256"
-          )
-          echo "DIST_ARCHIVE=$archive" >> "$GITHUB_ENV"
-          echo "DIST_ARCHIVE_CHECKSUM=$archive.sha256" >> "$GITHUB_ENV"
-          echo "DIST_ARTIFACT_NAME=protos-snapshot-$GITHUB_SHA" >> "$GITHUB_ENV"
-
-      - name: Upload development snapshot
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ env.DIST_ARTIFACT_NAME }}
-          path: |
-            ${{ env.DIST_ARCHIVE }}
-            ${{ env.DIST_ARCHIVE_CHECKSUM }}
-          if-no-files-found: error
-          retention-days: 14
-          compression-level: 0

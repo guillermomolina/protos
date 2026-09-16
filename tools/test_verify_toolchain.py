@@ -73,31 +73,21 @@ def ci_workflow(
     test_feature,
     test_version,
     test_maven,
-    distribution_image,
-    distribution_feature,
-    distribution_version,
-    distribution_maven,
-    include_distribution=True,
 ):
-    text = "jobs:\n" + ci_job("test", test_image, test_feature, test_version, test_maven)
-    if include_distribution:
-        text += ci_job(
-            "distribution",
-            distribution_image,
-            distribution_feature,
-            distribution_version,
-            distribution_maven,
-        )
-    return text
+    return "jobs:\n" + ci_job(
+        "test",
+        test_image,
+        test_feature,
+        test_version,
+        test_maven,
+    )
 
 
 def make_fixture(
     root,
     *,
     development_drift=False,
-    distribution_drift=False,
     old_c_state=False,
-    missing_distribution_job=False
 ):
     selected_image = TOOLCHAIN["graalvm"]["container_image"]
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
@@ -165,20 +155,12 @@ def make_fixture(
     test_maven = "3.9.8" if development_drift else "3.9.9"
 
     if old_c_state:
-        distribution_image = "ghcr.io/graalvm/graalvm-community:22-ol8"
-        distribution_feature = "22"
-        distribution_version = "22.0.0"
-        distribution_maven = "3.9.8"
         dist_components = "24.0.0"
         feature = "22"
         java_version = "22"
         graal_release = "24.0.0"
         launcher = "expected_feature=$(sed -n 's/^java_feature=//p' \"$RUNTIME_META\")\n"
     else:
-        distribution_image = "ghcr.io/graalvm/graalvm-community:25-ol10" if distribution_drift else selected_image
-        distribution_feature = "24" if distribution_drift else "25"
-        distribution_version = "24" if distribution_drift else "25.0.4.1"
-        distribution_maven = "3.9.8" if distribution_drift else "3.9.9"
         dist_components = "25.3.4.1"
         feature = "25"
         java_version = "25.0.4.1"
@@ -195,11 +177,6 @@ actual_version=25.0.4.1
             test_feature,
             test_version,
             test_maven,
-            distribution_image,
-            distribution_feature,
-            distribution_version,
-            distribution_maven,
-            include_distribution=not missing_distribution_job,
         ),
     )
 
@@ -278,36 +255,6 @@ def main():
                 result,
             )
 
-        root = tmp / "distribution-drift"
-        make_fixture(root, distribution_drift=True)
-        result = run(verifier, root, "check")
-        require(result.returncode == 1, "distribution drift did not fail closed", result)
-        require(
-            "ci.distribution.devcontainer" in result.stdout,
-            "distribution drift did not identify ci.distribution.devcontainer",
-            result,
-        )
-
-        root = tmp / "missing-distribution-job"
-        make_fixture(root, missing_distribution_job=True)
-        result = run(verifier, root, "check", "development")
-        require(
-            result.returncode == 0,
-            "missing distribution job must not break development scope",
-            result,
-        )
-        result = run(verifier, root, "check")
-        require(
-            result.returncode == 1,
-            "missing distribution job did not fail all-surface verification",
-            result,
-        )
-        require(
-            "ci.distribution.devcontainer" in result.stdout,
-            "missing distribution job did not identify ci.distribution.devcontainer",
-            result,
-        )
-
         root = tmp / "pre-c"
         make_fixture(root, old_c_state=True)
         result = run(verifier, root, "check", "development")
@@ -327,7 +274,6 @@ def main():
             "pom.shade_multi_release",
             "pom.shade_services",
             "pom.shade_signature_filter",
-            "ci.distribution.devcontainer",
             "pom.runtime_plane.graph_roots",
             "pom.runtime_plane.shade_externalization",
             "dist.runtime_pom_absent",

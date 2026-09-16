@@ -332,12 +332,6 @@ def audit_bindings(root, contract):
         workflow_job_devcontainer_contract(ci_workflow, "test"),
     ))
     rows.append((
-        "ci.distribution.devcontainer",
-        expected_ci_devcontainer,
-        workflow_job_devcontainer_contract(ci_workflow, "distribution"),
-    ))
-
-    rows.append((
         "dist.runtime_pom_absent",
         "absent",
         "absent" if not (root / "dist" / "runtime-pom.xml").exists() else "present",
