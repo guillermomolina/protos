@@ -1,3 +1,7 @@
+## 0.3.1-SNAPSHOT
+
+- Establish `GITHUB020 — Formal work closure-evidence and durable-publication contract` (GitHub #536). Require every formal Issue closure to carry a compact evidence-backed closure summary and an explicit durable-record decision, while keeping publication to `protos-project-docs` conditional on whether durable project knowledge would otherwise be lost or an owning work-item contract explicitly requires it. Required durable publication remains fail-closed with exact revision identities; `Protos Development` remains a derived scheduling dashboard rather than evidence authority. Governance only; no specification, executable behavior, runtime architecture, or implementation-version change.
+
 ## 0.3.0
 
 - Ratify `D133 — Test Tool per-case CaseAuthority scheduling boundary` (GitHub #519) as Candidate B′. Keep CaseSpec logical/inert, materialize a physical case-scoped CaseAuthority only at scheduling admission, preserve D108 aggregation/progress/cancellation semantics, and keep project-tree authority separate from generic D077/D098 resources. Governance/tooling decision only; no specification or version change.

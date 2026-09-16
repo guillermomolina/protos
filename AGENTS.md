@@ -2249,6 +2249,92 @@ If GitHub mutation is unavailable, report the exact Issue update still required
 instead of omitting it silently or moving that execution history into the
 changelog.
 
+<!-- GITHUB020 FORMAL-WORK-CLOSURE-EVIDENCE -->
+#### Formal work closure-evidence gate
+
+Closing a formal Protos Issue is a coordination transaction with an explicit
+evidence decision. A closed Issue, Project `Done` state, successful commit, or
+passing validation is not by itself proof that every required closure artifact
+has been published.
+
+Before closing any formal work item, the coordinating agent MUST establish:
+
+```text
+ISSUE_CLOSURE_COMMENT=PASS
+CLOSURE_EVIDENCE_IDENTIFIED=PASS
+DURABLE_RECORD_DECISION=REQUIRED|NOT_REQUIRED
+PROJECT_RECORD_REVISION=<exact SHA>|NOT_APPLICABLE
+REQUIRED_DURABLE_PUBLICATION=PASS|NOT_APPLICABLE
+```
+
+The final Issue closure comment is mandatory for every formal work item. It MUST
+summarize the completed outcome and identify the exact publication, validation,
+decision, external evidence, or other stable identities needed to understand why
+the closure criteria are satisfied. It SHOULD remain compact and MUST NOT merely
+paste raw terminal or CI logs.
+
+A separate durable project record is conditional, not automatic.
+
+Set `DURABLE_RECORD_DECISION=REQUIRED` when closure creates, changes, selects, or
+depends on project knowledge that would not remain adequately recoverable from
+the owning product repository state, exact Git history, and the Issue execution
+history alone. A durable record is also required whenever the owning work-item
+contract explicitly requires one.
+
+Routine work whose complete durable result is already represented by published
+product artifacts, tests, Git history, maintained documentation where applicable,
+and a precise Issue closure comment MAY use:
+
+```text
+DURABLE_RECORD_DECISION=NOT_REQUIRED
+PROJECT_RECORD_REVISION=NOT_APPLICABLE
+REQUIRED_DURABLE_PUBLICATION=NOT_APPLICABLE
+```
+
+Do not create one Markdown file per formal Issue merely for symmetry.
+
+When a durable record is required:
+
+- a maintained record primarily owned by the formal work item belongs under
+  `guillermomolina/protos-project-docs:docs/project/work/<formal-work-item>/`;
+- immutable or snapshot-like supporting evidence belongs under
+  `guillermomolina/protos-project-docs:docs/project/evidence/<formal-work-item>/`
+  only when retaining that evidence is itself useful;
+- raw logs MUST NOT be copied merely to manufacture evidence when stable run,
+  artifact, commit, release, or external identities are sufficient;
+- the durable record MUST identify exact revisions whenever its claims are
+  revision-coupled; a moving `main` reference is insufficient;
+- after publication, the coordinating agent MUST record the exact
+  `PROJECT_RECORD_REVISION` and any other repository revision required by the
+  closure claim; and
+- the owning Issue MUST remain open until the required durable publication has
+  succeeded and has been re-read.
+
+A prepared file, failed launcher, unpushed commit, Issue comment, or Project
+field does not satisfy `REQUIRED_DURABLE_PUBLICATION=PASS`.
+
+`DURABLE_RECORD_DECISION=NOT_REQUIRED` is itself an evidence-backed closure
+conclusion, not a way to skip the closure-evidence gate. The coordinating agent
+MUST be able to identify the repository and Issue evidence that makes an
+additional durable project record unnecessary.
+
+The `Protos Development` Project remains a derived scheduling/dashboard surface.
+It is not closure-evidence authority. Agents MUST NOT create or populate a
+Project `Evidence` field merely to mirror Issue or repository evidence, and a
+Project field MUST NOT substitute for the Issue closure summary or a required
+durable project publication.
+
+Existing stronger closure contracts remain stronger. In particular, Dxxx/PLATxxx
+approval and ratification publication requirements, explicit work-item closure
+contracts, release evidence requirements, and cross-repository publication
+contracts are not weakened by this general rule.
+
+This rule is prospective. Do not bulk-create durable records for historical
+closed Issues merely to make old closures visually uniform. Reconcile an older
+closure only when current bounded work identifies durable project knowledge that
+is still useful to preserve.
+
+
 
 The standard isolated direct-to-`main` publication workflow remains valid. Moving
 project coordination to GitHub does not by itself require every agent-generated
