@@ -31,7 +31,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
-import com.guillermomolina.protos.semantic.ast.CanonicalMatch;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
@@ -101,7 +100,6 @@ final class ProtosBytecodeClosureExecutionPlan {
                         && !(defaultExpression instanceof CanonicalClosure)
                         && !(defaultExpression instanceof CanonicalObject)
                         && !(defaultExpression instanceof CanonicalLookup)
-                        && !(defaultExpression instanceof CanonicalMatch)
                         && !(defaultExpression instanceof CanonicalIntrinsic)
                         && !(defaultExpression instanceof CanonicalMember)
                         && !(defaultExpression instanceof CanonicalIdentity)

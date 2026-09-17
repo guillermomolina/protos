@@ -118,60 +118,13 @@ class ProtosStaticReferencesTest {
     }
 
     @Test
-    void supportsSingletonMatchBinderAndAliasSeeds() {
-        String binderSource =
-                "subject match {\n"
-                        + "  case @value => value\n"
-                        + "}";
-        int binderDeclarationName = binderSource.indexOf("value");
-        int binderReference = binderSource.lastIndexOf("value");
-
-        ProtosStaticReferenceResult binder =
-                references(binderSource, binderDeclarationName).orElseThrow();
-        assertTrue(slice(binderSource, binder.target().span()).startsWith("@value"));
-        assertEquals(
-                List.of(new SourceSpan(
-                        binderReference,
-                        binderReference + "value".length())),
-                binder.occurrences().stream()
-                        .map(ProtosStaticReferenceResult.Occurrence::span)
-                        .toList());
-
-        String aliasSource =
-                "subject match {\n"
-                        + "  case @whole: 1 => whole\n"
-                        + "  case _ => 0\n"
-                        + "}";
-        int aliasDeclarationName = aliasSource.indexOf("whole");
-        int aliasReference = aliasSource.lastIndexOf("whole");
-
-        ProtosStaticReferenceResult alias =
-                references(aliasSource, aliasDeclarationName).orElseThrow();
-        assertTrue(slice(aliasSource, alias.target().span()).startsWith("@whole:"));
-        assertEquals(
-                List.of(new SourceSpan(
-                        aliasReference,
-                        aliasReference + "whole".length())),
-                alias.occurrences().stream()
-                        .map(ProtosStaticReferenceResult.Occurrence::span)
-                        .toList());
-    }
-
-    @Test
-    void ambiguousOrUnprovenReferenceSeedReturnsNoResult() {
+    void unprovenReferenceAfterOpaqueBarrierReturnsNoResult() {
         String source =
-                "subject match {\n"
-                        + "  case (@item: 1 | @item: 2) => item\n"
-                        + "  case _ => 0\n"
-                        + "}";
-        assertTrue(references(source, source.lastIndexOf("item")).isEmpty());
-
-        String afterBarrier =
                 "f: (value) => {\n"
                         + "  sink(value)\n"
                         + "  value\n"
                         + "}";
-        assertTrue(references(afterBarrier, afterBarrier.lastIndexOf("value")).isEmpty());
+        assertTrue(references(source, source.lastIndexOf("value")).isEmpty());
     }
 
     @Test

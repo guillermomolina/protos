@@ -29,8 +29,6 @@ import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
-import com.guillermomolina.protos.parser.ast.SurfaceMatch;
-import com.guillermomolina.protos.parser.ast.SurfaceMatchPattern;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
@@ -43,12 +41,10 @@ import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 
 /**
  * D110 generation-1 exact definition proof over one parser-authoritative snapshot.
@@ -148,7 +144,6 @@ final class ProtosStaticDefinitions {
                     analyze(nonLocalReturn.expression(), facts);
                     facts.clear();
                 }
-                case SurfaceMatch match -> analyzeMatch(match, facts);
                 case SurfaceSlotCreation creation -> {
                     analyzeMutationTarget(creation.target(), facts);
                     analyze(creation.value(), facts);
@@ -222,7 +217,7 @@ final class ProtosStaticDefinitions {
 
             // Object construction is not the current Closure activation. Direct
             // object-body reads therefore cannot consume the caller's local-origin
-            // facts in G4-A1. Nested Closures/match arms are still discoverable.
+            // facts in G4-A1. Nested Closures are still discoverable.
             Facts constructionFacts = new Facts();
             for (SurfaceObjectItem item : object.items()) {
                 analyze(item.expression(), constructionFacts);
@@ -256,198 +251,6 @@ final class ProtosStaticDefinitions {
             }
 
             analyze(closure.body(), activation);
-        }
-
-        private void analyzeMatch(SurfaceMatch match, Facts enclosingFacts) {
-            analyze(match.subject(), enclosingFacts);
-            if (result != null) {
-                return;
-            }
-
-            for (SurfaceMatch.Arm arm : match.arms()) {
-                scanPatternExpressions(arm.pattern());
-                if (result != null) {
-                    return;
-                }
-
-                Facts armFacts = exactArmFacts(arm.pattern());
-                arm.guard().ifPresent(guard -> analyze(guard, armFacts));
-                if (result != null) {
-                    return;
-                }
-                analyze(arm.body(), armFacts);
-                if (result != null) {
-                    return;
-                }
-            }
-
-            // Matching may invoke ordinary matcher/guard/body Closures. Without a
-            // complete interprocedural effect proof, enclosing local origins are
-            // no longer exact after the matching expression.
-            enclosingFacts.clear();
-        }
-
-        private void scanPatternExpressions(SurfaceMatchPattern pattern) {
-            switch (pattern) {
-                case SurfaceMatchPattern.Binder ignored -> {
-                }
-                case SurfaceMatchPattern.Wildcard ignored -> {
-                }
-                case SurfaceMatchPattern.Alias alias -> scanPatternExpressions(alias.pattern());
-                case SurfaceMatchPattern.Group group -> scanPatternExpressions(group.pattern());
-                case SurfaceMatchPattern.Or orPattern -> {
-                    for (SurfaceMatchPattern alternative : orPattern.alternatives()) {
-                        scanPatternExpressions(alternative);
-                        if (result != null) {
-                            return;
-                        }
-                    }
-                }
-                case SurfaceMatchPattern.Value value ->
-                        analyze(value.matcher(), new Facts());
-                case SurfaceMatchPattern.ArrayPattern array -> {
-                    for (SurfaceMatchPattern item : array.prefix()) {
-                        scanPatternExpressions(item);
-                    }
-                    array.remainder()
-                            .flatMap(SurfaceMatchPattern.Remainder::pattern)
-                            .ifPresent(this::scanPatternExpressions);
-                    for (SurfaceMatchPattern item : array.suffix()) {
-                        scanPatternExpressions(item);
-                    }
-                }
-                case SurfaceMatchPattern.MapPattern map -> {
-                    for (SurfaceMatchPattern.MapEntry entry : map.entries()) {
-                        analyze(entry.key(), new Facts());
-                        scanPatternExpressions(entry.valuePattern());
-                    }
-                    map.remainder()
-                            .flatMap(SurfaceMatchPattern.Remainder::pattern)
-                            .ifPresent(this::scanPatternExpressions);
-                }
-            }
-        }
-
-        private Facts exactArmFacts(SurfaceMatchPattern pattern) {
-            Facts facts = new Facts();
-            for (Map.Entry<String, Provenance> entry : provenance(pattern).entrySet()) {
-                SourceSpan singleton = entry.getValue().completeSingleton();
-                if (singleton != null) {
-                    facts.put(entry.getKey(), singleton);
-                }
-            }
-            return facts;
-        }
-
-        private Map<String, Provenance> provenance(SurfaceMatchPattern pattern) {
-            if (pattern instanceof SurfaceMatchPattern.Binder binder) {
-                return singletonBinding(binder.name(), binder.span());
-            }
-            if (pattern instanceof SurfaceMatchPattern.Wildcard) {
-                return Map.of();
-            }
-            if (pattern instanceof SurfaceMatchPattern.Value value) {
-                LinkedHashMap<String, Provenance> bindings = new LinkedHashMap<>();
-                value.captureInterface().ifPresent(capture -> {
-                    for (String name : capture.requiredNames()) {
-                        bindings.put(name, Provenance.incomplete());
-                    }
-                    capture.restName().ifPresent(name ->
-                            bindings.put(name, Provenance.incomplete()));
-                });
-                return bindings;
-            }
-            if (pattern instanceof SurfaceMatchPattern.Group group) {
-                return provenance(group.pattern());
-            }
-            if (pattern instanceof SurfaceMatchPattern.Alias alias) {
-                LinkedHashMap<String, Provenance> bindings =
-                        new LinkedHashMap<>(provenance(alias.pattern()));
-                mergeSequential(
-                        bindings,
-                        alias.name(),
-                        Provenance.singleton(alias.span()));
-                return bindings;
-            }
-            if (pattern instanceof SurfaceMatchPattern.Or orPattern) {
-                return alternativeProvenance(orPattern.alternatives());
-            }
-            if (pattern instanceof SurfaceMatchPattern.ArrayPattern array) {
-                LinkedHashMap<String, Provenance> bindings = new LinkedHashMap<>();
-                for (SurfaceMatchPattern item : array.prefix()) {
-                    mergeSequential(bindings, provenance(item));
-                }
-                array.remainder()
-                        .flatMap(SurfaceMatchPattern.Remainder::pattern)
-                        .ifPresent(item -> mergeSequential(bindings, provenance(item)));
-                for (SurfaceMatchPattern item : array.suffix()) {
-                    mergeSequential(bindings, provenance(item));
-                }
-                return bindings;
-            }
-            if (pattern instanceof SurfaceMatchPattern.MapPattern map) {
-                LinkedHashMap<String, Provenance> bindings = new LinkedHashMap<>();
-                for (SurfaceMatchPattern.MapEntry entry : map.entries()) {
-                    mergeSequential(bindings, provenance(entry.valuePattern()));
-                }
-                map.remainder()
-                        .flatMap(SurfaceMatchPattern.Remainder::pattern)
-                        .ifPresent(item -> mergeSequential(bindings, provenance(item)));
-                return bindings;
-            }
-            throw new AssertionError("unknown surface match pattern: " + pattern.getClass().getName());
-        }
-
-        private Map<String, Provenance> alternativeProvenance(
-                List<SurfaceMatchPattern> alternatives) {
-            LinkedHashSet<String> names = new LinkedHashSet<>();
-            List<Map<String, Provenance>> branches = alternatives.stream()
-                    .map(this::provenance)
-                    .toList();
-            for (Map<String, Provenance> branch : branches) {
-                names.addAll(branch.keySet());
-            }
-
-            LinkedHashMap<String, Provenance> result = new LinkedHashMap<>();
-            for (String name : names) {
-                LinkedHashSet<SourceSpan> origins = new LinkedHashSet<>();
-                boolean complete = true;
-                for (Map<String, Provenance> branch : branches) {
-                    Provenance candidate = branch.get(name);
-                    if (candidate == null) {
-                        complete = false;
-                        continue;
-                    }
-                    complete &= candidate.complete();
-                    origins.addAll(candidate.origins());
-                }
-                result.put(name, new Provenance(origins, complete));
-            }
-            return result;
-        }
-
-        private Map<String, Provenance> singletonBinding(String name, SourceSpan span) {
-            LinkedHashMap<String, Provenance> result = new LinkedHashMap<>();
-            result.put(name, Provenance.singleton(span));
-            return result;
-        }
-
-        private void mergeSequential(
-                LinkedHashMap<String, Provenance> destination,
-                Map<String, Provenance> source) {
-            for (Map.Entry<String, Provenance> entry : source.entrySet()) {
-                mergeSequential(destination, entry.getKey(), entry.getValue());
-            }
-        }
-
-        private void mergeSequential(
-                LinkedHashMap<String, Provenance> destination,
-                String name,
-                Provenance provenance) {
-            Provenance previous = destination.putIfAbsent(name, provenance);
-            if (previous != null) {
-                destination.put(name, previous.conflictedWith(provenance));
-            }
         }
 
         private boolean isLazyBoolean(SurfaceBinary binary) {
@@ -500,30 +303,4 @@ final class ProtosStaticDefinitions {
         }
     }
 
-    private record Provenance(Set<SourceSpan> origins, boolean complete) {
-        Provenance {
-            origins = Set.copyOf(Objects.requireNonNull(origins, "origins"));
-        }
-
-        static Provenance singleton(SourceSpan origin) {
-            return new Provenance(Set.of(origin), true);
-        }
-
-        static Provenance incomplete() {
-            return new Provenance(Set.of(), false);
-        }
-
-        Provenance conflictedWith(Provenance other) {
-            LinkedHashSet<SourceSpan> combined = new LinkedHashSet<>(origins);
-            combined.addAll(other.origins);
-            return new Provenance(combined, false);
-        }
-
-        SourceSpan completeSingleton() {
-            if (!complete || origins.size() != 1) {
-                return null;
-            }
-            return origins.iterator().next();
-        }
-    }
 }

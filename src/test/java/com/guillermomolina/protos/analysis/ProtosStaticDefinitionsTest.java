@@ -121,57 +121,6 @@ class ProtosStaticDefinitionsTest {
     }
 
     @Test
-    void resolvesSingletonMatchBinderAndAliasOrigins() {
-        String binderSource =
-                "subject match {\n"
-                        + "  case @value => value\n"
-                        + "}";
-        int binderReference = binderSource.lastIndexOf("value");
-        ProtosStaticDefinitionResult binder = definition(binderSource, binderReference).orElseThrow();
-        assertEquals("@value", slice(binderSource, binder.targets().get(0).span()));
-
-        String aliasSource =
-                "subject match {\n"
-                        + "  case @whole: 1 => whole\n"
-                        + "  case _ => 0\n"
-                        + "}";
-        int aliasReference = aliasSource.lastIndexOf("whole");
-        ProtosStaticDefinitionResult alias = definition(aliasSource, aliasReference).orElseThrow();
-        assertTrue(slice(aliasSource, alias.targets().get(0).span()).startsWith("@whole:"));
-    }
-
-    @Test
-    void matchGuardInvocationInvalidatesBinderBeforeBody() {
-        String source =
-                "subject match {\n"
-                        + "  case @value when predicate(value) => value\n"
-                        + "  case _ => 0\n"
-                        + "}";
-        int guardReference = source.indexOf("value", source.indexOf("predicate"));
-        int bodyReference = source.lastIndexOf("value");
-
-        assertTrue(definition(source, guardReference).isPresent());
-        assertTrue(definition(source, bodyReference).isEmpty());
-    }
-
-    @Test
-    void failsClosedForMultiOriginOrAndCaptureInterfaceBindings() {
-        String orSource =
-                "subject match {\n"
-                        + "  case (@item: 1 | @item: 2) => item\n"
-                        + "  case _ => 0\n"
-                        + "}";
-        assertTrue(definition(orSource, orSource.lastIndexOf("item")).isEmpty());
-
-        String captureSource =
-                "subject match {\n"
-                        + "  case opaque captures(item) => item\n"
-                        + "  case _ => 0\n"
-                        + "}";
-        assertTrue(definition(captureSource, captureSource.lastIndexOf("item")).isEmpty());
-    }
-
-    @Test
     void sessionResultRetainsExactSnapshotFreshness() {
         ProtosStaticAnalysisSession session = new ProtosStaticAnalysisSession();
         session.openWorkspace("workspace");

@@ -1,3 +1,20 @@
+## 0.3.24-SNAPSHOT
+
+- Advance `I041-C — remove the superseded dedicated matching implementation`
+  (GitHub #550). Remove the pre-D131 `subject match { ... }` language mechanism
+  completely after the ordinary protocol-first replacement became available.
+  Delete the dedicated surface and canonical Match ASTs, match coverage model,
+  parser grammar, canonicalization/lowering paths, Truffle nodes, Bytecode
+  lowering and Match-specific Bytecode operations, together with their obsolete
+  Java execution/analysis tests and retained conformance corpus. Remove the 38
+  retired matching cases from the primary Test Tool manifest. Preserve
+  `Object.match`, `Array.match`, `Map.match`, `Any.match`, and `Capture.match` as
+  ordinary D131 protocol behavior; `match`, `case`, `when`, `exact`, and
+  `captures` remain ordinary identifiers. Retain an explicit parser regression
+  proving that the removed dedicated syntax is rejected while ordinary
+  `pattern.match(subject)` remains valid. Specification remains at revision
+  `0.1.417`; implementation version becomes `0.3.24-SNAPSHOT`.
+
 ## 0.3.23-SNAPSHOT
 
 - Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541)

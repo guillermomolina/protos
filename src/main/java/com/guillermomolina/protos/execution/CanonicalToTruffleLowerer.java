@@ -27,7 +27,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
-import com.guillermomolina.protos.semantic.ast.CanonicalGuardedArmBody;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
@@ -35,8 +34,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMapConstruction;
-import com.guillermomolina.protos.semantic.ast.CanonicalMatch;
-import com.guillermomolina.protos.semantic.ast.CanonicalMatchPattern;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
@@ -86,9 +83,6 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalSequence sequence) {
             return lowerSequence(sequence);
-        }
-        if (expression instanceof CanonicalMatch match) {
-            return lowerBasicMatch(match);
         }
         if (expression instanceof CanonicalMapConstruction map) {
             return lowerMapConstruction(map);
@@ -187,267 +181,6 @@ public final class CanonicalToTruffleLowerer {
                 values);
     }
 
-    private ProtosExpressionNode lowerBasicMatch(CanonicalMatch match) {
-        ProtosMatchNode.ArmNode[] arms =
-                match.arms().stream()
-                        .map(this::lowerBasicMatchArm)
-                        .toArray(ProtosMatchNode.ArmNode[]::new);
-        return new ProtosMatchNode(match.span(), lower(match.subject()), arms);
-    }
-
-    private ProtosMatchNode.ArmNode lowerBasicMatchArm(CanonicalMatch.Arm arm) {
-        ProtosMatchNode.PatternNode patternNode =
-                lowerExecutableMatchPattern(arm.pattern());
-        java.util.List<CanonicalParameter> parameters =
-                parametersForMatchPattern(arm.pattern());
-
-        CanonicalSequence invocationBody = arm.body();
-        if (arm.guard().isPresent()) {
-            CanonicalExpression guard = arm.guard().orElseThrow();
-            com.guillermomolina.protos.source.SourceSpan guardedSpan =
-                    new com.guillermomolina.protos.source.SourceSpan(
-                            guard.span().startOffset(),
-                            arm.body().span().endOffset());
-            CanonicalGuardedArmBody guardedBody =
-                    new CanonicalGuardedArmBody(guard, arm.body(), guardedSpan);
-            invocationBody =
-                    new CanonicalSequence(java.util.List.of(guardedBody), guardedSpan);
-        }
-
-        CanonicalClosure bodyDefinition =
-                new CanonicalClosure(parameters, invocationBody, invocationBody.span());
-        ProtosExpressionNode body =
-                new ProtosClosureLiteralNode(
-                        invocationBody.span(),
-                        bodyDefinition,
-                        lowerClosurePlan(bodyDefinition));
-        return new ProtosMatchNode.ArmNode(patternNode, body);
-    }
-
-    private ProtosMatchNode.PatternNode lowerExecutableMatchPattern(
-            CanonicalMatchPattern pattern) {
-        if (pattern instanceof CanonicalMatchPattern.Wildcard) {
-            return new ProtosMatchNode.WildcardPatternNode();
-        }
-        if (pattern instanceof CanonicalMatchPattern.Binder) {
-            return new ProtosMatchNode.BinderPatternNode();
-        }
-        if (pattern instanceof CanonicalMatchPattern.Value value) {
-            return new ProtosMatchNode.ValuePatternNode(lower(value.matcher()));
-        }
-        if (pattern instanceof CanonicalMatchPattern.Alias alias) {
-            return new ProtosMatchNode.AliasPatternNode(
-                    lowerExecutableMatchPattern(alias.pattern()));
-        }
-        if (pattern instanceof CanonicalMatchPattern.Or orPattern) {
-            ProtosMatchNode.PatternNode[] alternatives =
-                    orPattern.alternatives().stream()
-                            .map(this::lowerExecutableMatchPattern)
-                            .toArray(ProtosMatchNode.PatternNode[]::new);
-            return new ProtosMatchNode.OrPatternNode(alternatives);
-        }
-        if (pattern instanceof CanonicalMatchPattern.ArrayPattern array) {
-            ProtosMatchNode.PatternNode[] prefix =
-                    array.prefix().stream()
-                            .map(this::lowerExecutableMatchPattern)
-                            .toArray(ProtosMatchNode.PatternNode[]::new);
-            ProtosMatchNode.PatternNode remainder = null;
-            if (array.remainder().isPresent()
-                    && array.remainder().orElseThrow().pattern().isPresent()) {
-                remainder =
-                        lowerExecutableMatchPattern(
-                                array.remainder()
-                                        .orElseThrow()
-                                        .pattern()
-                                        .orElseThrow());
-            }
-            ProtosMatchNode.PatternNode[] suffix =
-                    array.suffix().stream()
-                            .map(this::lowerExecutableMatchPattern)
-                            .toArray(ProtosMatchNode.PatternNode[]::new);
-            return new ProtosMatchNode.ArrayPatternNode(
-                    prefix,
-                    array.remainder().isPresent(),
-                    remainder,
-                    suffix);
-        }
-        if (pattern instanceof CanonicalMatchPattern.MapPattern map) {
-            ProtosExpressionNode[] keyNodes =
-                    map.entries().stream()
-                            .map(CanonicalMatchPattern.MapEntry::key)
-                            .map(this::lower)
-                            .toArray(ProtosExpressionNode[]::new);
-            ProtosMatchNode.PatternNode[] valuePatterns =
-                    map.entries().stream()
-                            .map(CanonicalMatchPattern.MapEntry::valuePattern)
-                            .map(this::lowerExecutableMatchPattern)
-                            .toArray(ProtosMatchNode.PatternNode[]::new);
-            ProtosMatchNode.PatternNode remainder = null;
-            if (map.remainder().isPresent()
-                    && map.remainder().orElseThrow().pattern().isPresent()) {
-                remainder =
-                        lowerExecutableMatchPattern(
-                                map.remainder()
-                                        .orElseThrow()
-                                        .pattern()
-                                        .orElseThrow());
-            }
-            return new ProtosMatchNode.MapPatternNode(
-                    map.exact(),
-                    keyNodes,
-                    valuePatterns,
-                    map.remainder().isPresent(),
-                    remainder);
-        }
-
-        throw new UnsupportedOperationException(
-                "I038-D4 does not yet lower "
-                        + pattern.getClass().getSimpleName()
-                        + " match patterns");
-    }
-
-    private java.util.List<CanonicalParameter> parametersForMatchPattern(
-            CanonicalMatchPattern pattern) {
-        MatchParameterAccumulator parameters = new MatchParameterAccumulator();
-        appendMatchParameters(pattern, parameters);
-        return parameters.snapshot();
-    }
-
-    private void appendMatchParameters(
-            CanonicalMatchPattern pattern,
-            MatchParameterAccumulator parameters) {
-        if (pattern instanceof CanonicalMatchPattern.Wildcard) {
-            return;
-        }
-        if (pattern instanceof CanonicalMatchPattern.Binder binder) {
-            parameters.addRequired(binder.name(), binder.span());
-            return;
-        }
-        if (pattern instanceof CanonicalMatchPattern.Value value) {
-            if (value.captureInterface().isEmpty()) {
-                return;
-            }
-
-            CanonicalMatchPattern.CaptureInterface capture =
-                    value.captureInterface().orElseThrow();
-            for (String name : capture.requiredNames()) {
-                parameters.addRequired(name, capture.span());
-            }
-            capture.restName()
-                    .ifPresent(name -> parameters.addRest(name, capture.span()));
-            return;
-        }
-        if (pattern instanceof CanonicalMatchPattern.Alias alias) {
-            parameters.addRequired(alias.name(), alias.span());
-            appendMatchParameters(alias.pattern(), parameters);
-            return;
-        }
-        if (pattern instanceof CanonicalMatchPattern.Or orPattern) {
-            java.util.List<CanonicalParameter> common =
-                    parametersForMatchPattern(orPattern.alternatives().get(0));
-            for (int index = 1; index < orPattern.alternatives().size(); index++) {
-                java.util.List<CanonicalParameter> candidate =
-                        parametersForMatchPattern(orPattern.alternatives().get(index));
-                if (!sameMatchParameterInterface(common, candidate)) {
-                    throw new IllegalStateException(
-                            "D090 OR binding-interface mismatch escaped parser validation");
-                }
-            }
-            for (CanonicalParameter parameter : common) {
-                if (parameter.rest()) {
-                    parameters.addRest(parameter.name(), parameter.span());
-                } else {
-                    parameters.addRequired(parameter.name(), parameter.span());
-                }
-            }
-            return;
-        }
-        if (pattern instanceof CanonicalMatchPattern.ArrayPattern array) {
-            for (CanonicalMatchPattern item : array.prefix()) {
-                appendMatchParameters(item, parameters);
-            }
-            array.remainder()
-                    .flatMap(CanonicalMatchPattern.Remainder::pattern)
-                    .ifPresent(item -> appendMatchParameters(item, parameters));
-            for (CanonicalMatchPattern item : array.suffix()) {
-                appendMatchParameters(item, parameters);
-            }
-            return;
-        }
-        if (pattern instanceof CanonicalMatchPattern.MapPattern map) {
-            for (CanonicalMatchPattern.MapEntry entry : map.entries()) {
-                appendMatchParameters(entry.valuePattern(), parameters);
-            }
-            map.remainder()
-                    .flatMap(CanonicalMatchPattern.Remainder::pattern)
-                    .ifPresent(item -> appendMatchParameters(item, parameters));
-            return;
-        }
-
-        throw new UnsupportedOperationException(
-                "I038-D4 does not yet build arm parameters for "
-                        + pattern.getClass().getSimpleName()
-                        + " match patterns");
-    }
-
-    private static boolean sameMatchParameterInterface(
-            java.util.List<CanonicalParameter> left,
-            java.util.List<CanonicalParameter> right) {
-        if (left.size() != right.size()) {
-            return false;
-        }
-        for (int index = 0; index < left.size(); index++) {
-            CanonicalParameter leftParameter = left.get(index);
-            CanonicalParameter rightParameter = right.get(index);
-            if (!leftParameter.name().equals(rightParameter.name())
-                    || leftParameter.rest() != rightParameter.rest()) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private static final class MatchParameterAccumulator {
-        private final java.util.ArrayList<CanonicalParameter> parameters =
-                new java.util.ArrayList<>();
-        private boolean dynamicTail;
-
-        void addRequired(
-                String name,
-                com.guillermomolina.protos.source.SourceSpan span) {
-            if (dynamicTail) {
-                throw new IllegalStateException(
-                        "D103 non-terminal dynamic capture segment escaped parser validation");
-            }
-            parameters.add(
-                    new CanonicalParameter(
-                            name,
-                            java.util.Optional.empty(),
-                            false,
-                            span));
-        }
-
-        void addRest(
-                String name,
-                com.guillermomolina.protos.source.SourceSpan span) {
-            if (dynamicTail) {
-                throw new IllegalStateException(
-                        "multiple dynamic capture tails escaped D103 validation");
-            }
-            parameters.add(
-                    new CanonicalParameter(
-                            name,
-                            java.util.Optional.empty(),
-                            true,
-                            span));
-            dynamicTail = true;
-        }
-
-        java.util.List<CanonicalParameter> snapshot() {
-            return java.util.List.copyOf(parameters);
-        }
-    }
-
     public ProtosClosureExecutionPlan lowerClosurePlan(CanonicalClosure closure) {
         ProtosExpressionNode[] defaultNodes =
                 closure.parameters().stream()
@@ -467,12 +200,6 @@ public final class CanonicalToTruffleLowerer {
     }
 
     private ProtosExpressionNode lowerCallable(CanonicalExpression expression) {
-        if (expression instanceof CanonicalGuardedArmBody guarded) {
-            return new ProtosGuardedArmBodyNode(
-                    guarded.span(),
-                    lowerCallable(guarded.guard()),
-                    lowerCallable(guarded.body()));
-        }
         if (expression instanceof CanonicalIntrinsic intrinsic
                 && intrinsic.kind() == CanonicalIntrinsic.Kind.ARGS) {
             return new ProtosArgsNode(intrinsic.span());

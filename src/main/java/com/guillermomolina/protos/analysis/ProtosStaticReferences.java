@@ -29,8 +29,6 @@ import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
-import com.guillermomolina.protos.parser.ast.SurfaceMatch;
-import com.guillermomolina.protos.parser.ast.SurfaceMatchPattern;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
@@ -205,8 +203,6 @@ final class ProtosStaticReferences {
                 }
                 case SurfaceNonLocalReturn nonLocalReturn ->
                         collect(nonLocalReturn.expression());
-                case SurfaceMatch match ->
-                        collectMatch(match);
                 case SurfaceSlotCreation creation -> {
                     collect(creation.target());
                     collect(creation.value());
@@ -243,50 +239,6 @@ final class ProtosStaticReferences {
                 parameter.defaultValue().ifPresent(this::collect);
             }
             collect(closure.body());
-        }
-
-        private void collectMatch(SurfaceMatch match) {
-            collect(match.subject());
-            for (SurfaceMatch.Arm arm : match.arms()) {
-                collectPattern(arm.pattern());
-                arm.guard().ifPresent(this::collect);
-                collect(arm.body());
-            }
-        }
-
-        private void collectPattern(SurfaceMatchPattern pattern) {
-            switch (pattern) {
-                case SurfaceMatchPattern.Binder binder ->
-                        addDeclaration(binder.name(), binder.span());
-                case SurfaceMatchPattern.Wildcard ignored -> {
-                }
-                case SurfaceMatchPattern.Alias alias -> {
-                    addDeclaration(alias.name(), alias.span());
-                    collectPattern(alias.pattern());
-                }
-                case SurfaceMatchPattern.Group group ->
-                        collectPattern(group.pattern());
-                case SurfaceMatchPattern.Or orPattern ->
-                        orPattern.alternatives().forEach(this::collectPattern);
-                case SurfaceMatchPattern.Value value ->
-                        collect(value.matcher());
-                case SurfaceMatchPattern.ArrayPattern array -> {
-                    array.prefix().forEach(this::collectPattern);
-                    array.remainder()
-                            .flatMap(SurfaceMatchPattern.Remainder::pattern)
-                            .ifPresent(this::collectPattern);
-                    array.suffix().forEach(this::collectPattern);
-                }
-                case SurfaceMatchPattern.MapPattern map -> {
-                    for (SurfaceMatchPattern.MapEntry entry : map.entries()) {
-                        collect(entry.key());
-                        collectPattern(entry.valuePattern());
-                    }
-                    map.remainder()
-                            .flatMap(SurfaceMatchPattern.Remainder::pattern)
-                            .ifPresent(this::collectPattern);
-                }
-            }
         }
 
         private void addDeclaration(String name, SourceSpan originSpan) {

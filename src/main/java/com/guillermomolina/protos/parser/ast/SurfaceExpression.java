@@ -32,7 +32,6 @@ public sealed interface SurfaceExpression
                 SurfaceIndex,
                 SurfaceUnary,
                 SurfaceBinary,
-                SurfaceMatch,
                 SurfaceNonLocalReturn,
                 SurfaceSlotCreation,
                 SurfaceAssignment,
