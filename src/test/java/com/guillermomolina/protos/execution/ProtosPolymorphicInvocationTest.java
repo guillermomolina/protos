@@ -46,13 +46,12 @@ class ProtosPolymorphicInvocationTest {
         ProtosActivation activation = prelude.newModuleActivation();
 
         Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                """
-                                Thing: {}
-                                Thing()
-                                """)
-                        .call(activation);
+                ProtosTestExecutionSupport.evaluate(
+                        """
+                        Thing: {}
+                        Thing()
+                        """,
+                        activation);
 
         ProtosObjectValue thing =
                 assertInstanceOf(
@@ -78,13 +77,12 @@ class ProtosPolymorphicInvocationTest {
         activation.context().createLocalSlot("xs", prelude.newArray(List.of(first, second)));
 
         Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                """
-                                f: (...items) => items
-                                f(...xs)
-                                """)
-                        .call(activation);
+                ProtosTestExecutionSupport.evaluate(
+                        """
+                        f: (...items) => items
+                        f(...xs)
+                        """,
+                        activation);
 
         ProtosArrayValue rest = assertInstanceOf(ProtosArrayValue.class, result);
         assertEquals(BigInteger.valueOf(2), rest.indexedSize());

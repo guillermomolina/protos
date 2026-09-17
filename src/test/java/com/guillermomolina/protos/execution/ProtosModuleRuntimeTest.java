@@ -73,12 +73,19 @@ class ProtosModuleRuntimeTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation actor = prelude.newModuleActivation();
 
-        Object module = new ProtosSourceCompiler().compile("import(\"m\")").call(actor);
+        Object module =
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"m\")",
+                        actor);
         assertInstanceOf(ProtosObjectValue.class, module);
         assertEquals(1, resolver.resolveCalls.get());
 
-        assertThrows(ProtosSignalException.class,
-                () -> new ProtosSourceCompiler().compile("fake: String {}\nimport(fake)").call(actor));
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosTestExecutionSupport.evaluate(
+                                "fake: String {}\nimport(fake)",
+                                actor));
         assertEquals(1, resolver.resolveCalls.get(), "invalid semantic domain must fail before resolution");
     }
 
@@ -97,18 +104,17 @@ class ProtosModuleRuntimeTest {
         ProtosActivation actor = prelude.newModuleActivation();
 
         Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                "importerOnly: 7\n"
-                                        + "mid: import(\"mid\")\n"
-                                        + "transitiveMissing: Error.handle(() => mid.secret, "
-                                        + "(caught) => caught.parent() === SlotNotFound)\n"
-                                        + "(mid.parent() === Context).and() {\n"
-                                        + "    (mid.dep.secret == 9).and() {\n"
-                                        + "        mid.notInherited.and() { transitiveMissing }\n"
-                                        + "    }\n"
-                                        + "}")
-                        .call(actor);
+                ProtosTestExecutionSupport.evaluate(
+                        "importerOnly: 7\n"
+                                + "mid: import(\"mid\")\n"
+                                + "transitiveMissing: Error.handle(() => mid.secret, "
+                                + "(caught) => caught.parent() === SlotNotFound)\n"
+                                + "(mid.parent() === Context).and() {\n"
+                                + "    (mid.dep.secret == 9).and() {\n"
+                                + "        mid.notInherited.and() { transitiveMissing }\n"
+                                + "    }\n"
+                                + "}",
+                        actor);
 
         assertSame(ProtosBooleanValue.TRUE, result);
         assertEquals(java.util.List.of("<root>", "mid"), resolver.resolvedFrom);
@@ -128,16 +134,15 @@ class ProtosModuleRuntimeTest {
         ProtosActivation actor = prelude.newModuleActivation();
 
         Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                "empty: import(\"\")\n"
-                                        + "a: import(\"β/../A\")\n"
-                                        + "same: import(\"alias-a\")\n"
-                                        + "b: import(\"b\")\n"
-                                        + "(empty.value == 2).and() {\n"
-                                        + "    (a === same).and() { a !== b }\n"
-                                        + "}")
-                        .call(actor);
+                ProtosTestExecutionSupport.evaluate(
+                        "empty: import(\"\")\n"
+                                + "a: import(\"β/../A\")\n"
+                                + "same: import(\"alias-a\")\n"
+                                + "b: import(\"b\")\n"
+                                + "(empty.value == 2).and() {\n"
+                                + "    (a === same).and() { a !== b }\n"
+                                + "}",
+                        actor);
 
         assertSame(ProtosBooleanValue.TRUE, result);
         assertEquals(
@@ -156,10 +161,16 @@ class ProtosModuleRuntimeTest {
                 .module("b", "a: import(\"a\")\naBefore: a.before");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation actor = prelude.newModuleActivation();
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
-
-        ProtosObjectValue a1 = (ProtosObjectValue) compiler.compile("import(\"a\")").call(actor);
-        ProtosObjectValue a2 = (ProtosObjectValue) compiler.compile("import(\"alias-a\")").call(actor);
+        ProtosObjectValue a1 =
+                (ProtosObjectValue)
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"a\")",
+                                actor);
+        ProtosObjectValue a2 =
+                (ProtosObjectValue)
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"alias-a\")",
+                                actor);
 
         assertSame(a1, a2, "distinct spellings resolving to one ModuleKey must share one Actor-local instance");
         assertEquals(1, resolver.loads("a"), "A must execute/load once even through A -> B -> A");
@@ -172,13 +183,21 @@ class ProtosModuleRuntimeTest {
     void cachesAreActorLocal() throws Exception {
         MemoryResolver resolver = new MemoryResolver().module("m", "value: 1");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
         ProtosActivation actorA = prelude.newModuleActivation();
         ProtosActivation actorB = prelude.newModuleActivation();
 
-        Object a1 = compiler.compile("import(\"m\")").call(actorA);
-        Object a2 = compiler.compile("import(\"m\")").call(actorA);
-        Object b1 = compiler.compile("import(\"m\")").call(actorB);
+        Object a1 =
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"m\")",
+                        actorA);
+        Object a2 =
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"m\")",
+                        actorA);
+        Object b1 =
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"m\")",
+                        actorB);
 
         assertSame(a1, a2);
         assertNotSame(a1, b1);
@@ -197,10 +216,17 @@ class ProtosModuleRuntimeTest {
         }.module("retry", "ignored");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation actor = prelude.newModuleActivation();
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
-
-        assertThrows(ProtosSignalException.class, () -> compiler.compile("import(\"retry\")").call(actor));
-        ProtosObjectValue recovered = (ProtosObjectValue) compiler.compile("import(\"retry\")").call(actor);
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"retry\")",
+                                actor));
+        ProtosObjectValue recovered =
+                (ProtosObjectValue)
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"retry\")",
+                                actor);
         assertTrue(recovered.hasLocalSlot("ok"));
         assertEquals(2, resolver.loads("retry"), "retry must re-load/re-evaluate after eviction");
     }
@@ -214,8 +240,12 @@ class ProtosModuleRuntimeTest {
             @Override public ProtosModuleSource loadSource(ProtosModuleKey key) { return ProtosModuleSource.fromCharacters(key, ""); }
         };
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        assertThrows(ProtosSignalException.class,
-                () -> new ProtosSourceCompiler().compile("import(\"x\")").call(prelude.newModuleActivation()));
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"x\")",
+                                prelude.newModuleActivation()));
     }
 
     static class MemoryResolver implements ProtosModuleResolver {

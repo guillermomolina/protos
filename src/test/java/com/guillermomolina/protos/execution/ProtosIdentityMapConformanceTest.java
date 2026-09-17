@@ -61,7 +61,9 @@ class ProtosIdentityMapConformanceTest {
     }
 
     private static Object exec(ProtosPrelude prelude, String source) {
-        return new ProtosSourceCompiler().compile(source).call(prelude.newModuleActivation());
+        return ProtosTestExecutionSupport.evaluate(
+                source,
+                prelude.newModuleActivation());
     }
 
     private static ProtosPrelude core() throws IOException {

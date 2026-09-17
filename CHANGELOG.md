@@ -1,3 +1,19 @@
+## 0.3.20-SNAPSHOT
+
+- Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
+  ratified PLAT035 by migrating another retained-Java runtime and representation
+  block from direct `ProtosSourceCompiler.compile(...).call(...)` legacy-AST
+  execution to the canonical Bytecode-backed
+  `ProtosTestExecutionSupport.evaluate(...)` boundary. Migrate IdentityMap
+  represented-value/bootstrap-binding coverage and the ModuleRuntime resolver,
+  namespace, canonical-key cache, Actor-local cache, retry/eviction, and
+  host-failure translation harnesses. In `ProtosPolymorphicInvocationTest`,
+  migrate the represented Object.call parent-materialization and call-spread
+  representation cases while deliberately retaining the dedicated nested-call
+  compiler/lowering test on `ProtosSourceCompiler`. No Protos-visible language,
+  specification, Standard Library, or production runtime semantics change.
+  Implementation version becomes `0.3.20-SNAPSHOT`.
+
 ## 0.3.19-SNAPSHOT
 
 - Advance `PERF009-B — Quarantined Java test normalization and reintegration`
