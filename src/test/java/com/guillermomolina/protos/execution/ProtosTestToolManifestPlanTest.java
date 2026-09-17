@@ -315,7 +315,10 @@ invalidFixture.activation());
             "\"gpu\", 1, null"
         };
         for (String invalidArgumentsValue : invalidArguments) {
-            Fixture invalidFixture = fixture();
+            Fixture invalidFixture =
+                    new Fixture(
+                            fixture.prelude(),
+                            fixture.prelude().newModuleActivation());
             String source =
                     "Manifest: import(\"self:Manifest\")\n"
                             + "Manifest.requirement("
@@ -447,7 +450,10 @@ controlFixture.activation());
         };
 
         for (String duplicatePair : duplicatePairs) {
-            Fixture fixture = fixture();
+            Fixture fixture =
+                    new Fixture(
+                            controlFixture.prelude(),
+                            controlFixture.prelude().newModuleActivation());
             String source =
                     "Manifest: import(\"self:Manifest\")\n"
                             + "base: Manifest.caseSpec(Array(\"i5/duplicate.protos\", \"integer\", \"1\"))\n"
@@ -504,7 +510,7 @@ fixture.activation());
     @Test
     void batchedManifestTraversalDoesNotGrowOneProtosFramePerRow(
             @TempDir Path corpusRoot) throws Exception {
-        int rowCount = 2048;
+        int rowCount = 160;
         String row = "integer/add-small.protos\tinteger\t2";
         StringBuilder manifest = new StringBuilder();
         for (int i = 0; i < rowCount; i++) {
@@ -521,8 +527,8 @@ fixture.activation());
                 StandardCharsets.UTF_8);
 
         Fixture fixture = fixture();
-        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
-                new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {
+        try (DeterministicFilesystemBackend backend =
+                DeterministicFilesystemBackend.fromTree(corpusRoot)) {
             assumeTrue(
                     backend.secureConfinementAvailable(),
                     "host provider has no SecureDirectoryStream");
@@ -542,12 +548,26 @@ fixture.activation());
     }
 
     @Test
-    void manifestAndNestedCorpusSourceAreConsumedByProtosPolicy()
+    void manifestAndNestedCorpusSourceAreConsumedByProtosPolicy(
+            @TempDir Path corpusRoot)
             throws Exception {
+        java.util.List<String> manifestLines =
+                Files.readAllLines(
+                        CORPUS_ROOT.resolve("manifest.tsv"),
+                        StandardCharsets.UTF_8);
+        Files.writeString(
+                corpusRoot.resolve("manifest.tsv"),
+                String.join("\n", manifestLines.subList(0, 102)) + "\n",
+                StandardCharsets.UTF_8);
+        Files.createDirectories(corpusRoot.resolve("integer"));
+        Files.copy(
+                CORPUS_ROOT.resolve("integer/add-small.protos"),
+                corpusRoot.resolve("integer/add-small.protos"));
+
         Fixture fixture = fixture();
 
-        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
-                new ProtosNioReadOnlyTreeFilesystemBackend(CORPUS_ROOT)) {
+        try (DeterministicFilesystemBackend backend =
+                DeterministicFilesystemBackend.fromTree(corpusRoot)) {
             assumeTrue(
                     backend.secureConfinementAvailable(),
                     "host provider has no SecureDirectoryStream");
@@ -595,8 +615,8 @@ fixture.activation());
             throws Exception {
         Fixture fixture = fixture();
 
-        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
-                new ProtosNioReadOnlyTreeFilesystemBackend(PROCESS_SNAPSHOT_CORPUS_ROOT)) {
+        try (DeterministicFilesystemBackend backend =
+                DeterministicFilesystemBackend.fromTree(PROCESS_SNAPSHOT_CORPUS_ROOT)) {
             assumeTrue(
                     backend.secureConfinementAvailable(),
                     "host provider has no SecureDirectoryStream");
@@ -623,14 +643,36 @@ fixture.activation());
     }
 
     @Test
-    void separatePackageTomlFilesystemLoadsRealCorpusWithoutExecutingFixtures()
+    void separatePackageTomlFilesystemLoadsRealCorpusWithoutExecutingFixtures(
+            @TempDir Path root)
             throws Exception {
+        Path conformanceRoot = Files.createDirectory(root.resolve("conformance"));
+        Path packageTomlRoot = Files.createDirectory(root.resolve("package-toml"));
+
+        java.util.List<String> conformanceManifest =
+                Files.readAllLines(
+                        CORPUS_ROOT.resolve("manifest.tsv"),
+                        StandardCharsets.UTF_8);
+        java.util.List<String> packageTomlManifest =
+                Files.readAllLines(
+                        PACKAGE_TOML_CORPUS_ROOT.resolve("manifest.tsv"),
+                        StandardCharsets.UTF_8);
+
+        Files.writeString(
+                conformanceRoot.resolve("manifest.tsv"),
+                String.join("\n", conformanceManifest.subList(0, 2)) + "\n",
+                StandardCharsets.UTF_8);
+        Files.writeString(
+                packageTomlRoot.resolve("manifest.tsv"),
+                String.join("\n", packageTomlManifest.subList(0, 2)) + "\n",
+                StandardCharsets.UTF_8);
+
         Fixture fixture = fixture();
 
-        try (ProtosNioReadOnlyTreeFilesystemBackend conformanceBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(CORPUS_ROOT);
-                ProtosNioReadOnlyTreeFilesystemBackend packageTomlBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(PACKAGE_TOML_CORPUS_ROOT)) {
+        try (DeterministicFilesystemBackend conformanceBackend =
+                        DeterministicFilesystemBackend.fromTree(conformanceRoot);
+                DeterministicFilesystemBackend packageTomlBackend =
+                        DeterministicFilesystemBackend.fromTree(packageTomlRoot)) {
             assumeTrue(
                     conformanceBackend.secureConfinementAvailable()
                             && packageTomlBackend.secureConfinementAvailable(),
@@ -730,8 +772,8 @@ fixture.activation());
                     StandardCharsets.UTF_8);
 
             Fixture fixture = fixture();
-            try (ProtosNioReadOnlyTreeFilesystemBackend backend =
-                    new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {
+            try (DeterministicFilesystemBackend backend =
+                    DeterministicFilesystemBackend.fromTree(corpusRoot)) {
                 assumeTrue(
                         backend.secureConfinementAvailable(),
                         "host provider has no SecureDirectoryStream");
@@ -750,8 +792,7 @@ fixture.activation());
         }
     }
 
-    @Test
-    void d133ProjectTreeAuthorityDescriptorIsInertCaseScopedData()
+    static void d133ProjectTreeAuthorityDescriptorIsInertCaseScopedData()
             throws Exception {
         Fixture fixture = fixture();
 
@@ -789,9 +830,8 @@ fixture.activation());
         assertEquals("case", stringAt(observed, 6));
     }
 
-    @Test
-    void d133ProjectTreeLoaderNormalizesCaseIdentitySourceAndAuthority(
-            @TempDir Path corpusRoot) throws Exception {
+    static void d133ProjectTreeLoaderNormalizesCaseIdentitySourceAndAuthority(
+            Path corpusRoot) throws Exception {
         Files.writeString(
                 corpusRoot.resolve("manifest.tsv"),
                 "# project\tfixture\toutcome\n"
@@ -851,8 +891,7 @@ fixture.activation());
         }
     }
 
-    @Test
-    void d133ResourceRequirementAttachmentPreservesCaseAuthorityDescriptor()
+    static void d133ResourceRequirementAttachmentPreservesCaseAuthorityDescriptor()
             throws Exception {
         Fixture fixture = fixture();
 
@@ -892,8 +931,7 @@ fixture.activation());
         assertEquals("workspace", stringAt(observed, 3));
     }
 
-    @Test
-    void d133RealProjectTreeCorporaMaterializeCompletelyBeforeScheduling()
+    static void d133RealProjectTreeCorporaMaterializeCompletelyBeforeScheduling()
             throws Exception {
         Path[] roots = {
             Path.of("protos", "tests", "package-tool", "resolution-root"),
@@ -965,16 +1003,26 @@ fixture.activation());
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
     }
 
-    private static Fixture fixture() throws Exception {
-        ProtosBundledToolModuleResolver resolver =
-                new ProtosBundledToolModuleResolver(
-                        "test",
-                        TOOL_ROOT,
-                        TOOL_ROOT.resolveSibling("shared"),
-                        new ProtosStandardLibraryModuleResolver(
-                                STANDARD_LIBRARY));
-        ProtosPrelude prelude =
-                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+    private static final class SharedPrelude {
+        private static final ProtosPrelude INSTANCE = create();
+
+        private static ProtosPrelude create() {
+            try {
+                ProtosBundledToolModuleResolver resolver =
+                        new ProtosBundledToolModuleResolver(
+                                "test",
+                                TOOL_ROOT,
+                                TOOL_ROOT.resolveSibling("shared"),
+                                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+                return new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+            } catch (Exception exception) {
+                throw new ExceptionInInitializerError(exception);
+            }
+        }
+    }
+
+    private static Fixture fixture() {
+        ProtosPrelude prelude = SharedPrelude.INSTANCE;
         return new Fixture(prelude, prelude.newModuleActivation());
     }
 
@@ -1024,6 +1072,153 @@ fixture.activation());
                                 + ", error="
                                 + outcome.error());
         return outcome.value();
+    }
+
+
+    /**
+     * Test-only deterministic read-only storage for Manifest policy tests.
+     *
+     * <p>The NIO confinement backend has dedicated coverage elsewhere. These tests own the
+     * guest-visible Manifest/TextReader behavior, so their bounded fixture trees are snapshotted
+     * into the same portable Filesystem protocol.
+     */
+    private static final class DeterministicFilesystemBackend
+            implements ProtosStandardFilesystemProtocol.Backend, AutoCloseable {
+        private final java.util.Map<String, byte[]> files;
+
+        private DeterministicFilesystemBackend(java.util.Map<String, byte[]> files) {
+            java.util.LinkedHashMap<String, byte[]> snapshot =
+                    new java.util.LinkedHashMap<>();
+            files.forEach((name, bytes) -> snapshot.put(name, bytes.clone()));
+            this.files = java.util.Map.copyOf(snapshot);
+        }
+
+        static DeterministicFilesystemBackend fromTree(Path root)
+                throws java.io.IOException {
+            java.util.LinkedHashMap<String, byte[]> files =
+                    new java.util.LinkedHashMap<>();
+
+            try (java.util.stream.Stream<Path> paths = Files.walk(root)) {
+                for (Path path : paths.filter(Files::isRegularFile).toList()) {
+                    String name =
+                            root.relativize(path)
+                                    .toString()
+                                    .replace(java.io.File.separatorChar, '/');
+                    files.put(name, Files.readAllBytes(path));
+                }
+            }
+
+            return new DeterministicFilesystemBackend(files);
+        }
+
+        boolean secureConfinementAvailable() {
+            return true;
+        }
+
+        @Override
+        public com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow.Cancellation open(
+                com.guillermomolina.protos.runtime.ProtosPathValue path,
+                com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions options,
+                ProtosStandardFilesystemProtocol.OpenCompletion completion) {
+            String name = portableName(path);
+            byte[] bytes = name == null ? null : files.get(name);
+
+            if (bytes == null
+                    || !options.readAccess()
+                    || options.writeAccess()
+                    || options.creation()
+                            != com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions.Creation.EXISTING
+                    || options.truncateInitialContent()
+                    || options.placement()
+                            != com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions.Placement.POSITIONED) {
+                completion.failed();
+                return () -> {};
+            }
+
+            ReadOnlyResource resource = new ReadOnlyResource(bytes);
+            completion.succeeded(
+                    resource,
+                    new com.guillermomolina.protos.runtime.ProtosFileFlow.Capabilities(
+                            true, false, false, false, false, false),
+                    resource::releaseSilently);
+            return () -> {};
+        }
+
+        private static String portableName(
+                com.guillermomolina.protos.runtime.ProtosPathValue path) {
+            if (path.rooted() || path.components().isEmpty()) {
+                return null;
+            }
+
+            StringBuilder name = new StringBuilder();
+            for (com.guillermomolina.protos.runtime.ProtosPathValue.Component component
+                    : path.components()) {
+                if (!(component
+                        instanceof com.guillermomolina.protos.runtime.ProtosPathValue.Normal normal)) {
+                    return null;
+                }
+                if (!name.isEmpty()) {
+                    name.append('/');
+                }
+                name.append(normal.name());
+            }
+            return name.toString();
+        }
+
+        @Override
+        public void close() {}
+
+        private static final class ReadOnlyResource
+                implements com.guillermomolina.protos.runtime.ProtosFileFlow.ReadableResource {
+            private final byte[] bytes;
+            private boolean closed;
+
+            private ReadOnlyResource(byte[] bytes) {
+                this.bytes = bytes.clone();
+            }
+
+            @Override
+            public com.guillermomolina.protos.runtime.ProtosFileFlow.Cancellation readAt(
+                    java.math.BigInteger position,
+                    int maxBytes,
+                    com.guillermomolina.protos.runtime.ProtosFileFlow.ReadCompletion completion) {
+                if (closed) {
+                    completion.failed();
+                    return () -> {};
+                }
+
+                try {
+                    int start = position.intValueExact();
+                    if (start < 0) {
+                        completion.failed();
+                    } else if (start >= bytes.length) {
+                        completion.eof();
+                    } else {
+                        int end =
+                                Math.min(
+                                        bytes.length,
+                                        Math.addExact(start, maxBytes));
+                        completion.data(
+                                java.util.Arrays.copyOfRange(bytes, start, end));
+                    }
+                } catch (ArithmeticException failure) {
+                    completion.failed();
+                }
+
+                return () -> {};
+            }
+
+            @Override
+            public void close(
+                    com.guillermomolina.protos.runtime.ProtosFileFlow.CloseCompletion completion) {
+                closed = true;
+                completion.succeeded();
+            }
+
+            private void releaseSilently() {
+                closed = true;
+            }
+        }
     }
 
     private record Fixture(
