@@ -1,3 +1,17 @@
+## 0.3.9-SNAPSHOT
+
+- Restore `TOOL006 — public Test Tool resource-requirements wiring` (GitHub
+  #473). Public `Main.protos` now applies the existing D094/D091
+  `resource-requirements.toml` join to complete manifest-backed corpus plans
+  before progress counting and D108 scheduling. True sidecar absence preserves
+  the resource-free path; valid requirements reach the existing
+  binding/reservation/provider machinery. Reconcile the historical I8C guard
+  that kept `ResourceRequirements` out of public Main and strengthen I8D5C
+  public-cutover evidence for join ordering. TOOL005 non-manifest loaders remain
+  outside this bounded restoration. No Protos language/specification, resource
+  schema, catalog, provider, reservation, scheduling, reporting or CLI semantics
+  change. Implementation version becomes `0.3.9-SNAPSHOT`.
+
 ## 0.3.8-SNAPSHOT
 
 - Publish `I040-C — D136 F-prime Map-construction cutover`. Reconcile `%{...}`

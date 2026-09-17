@@ -17,7 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,10 +39,9 @@ final class ProtosTestToolI8CResourceRoundSchedulingTest {
                     "tooling",
                     "tool002-i8c-resource-round-scheduling.protos");
     private static final Path RUNNER = TOOL_ROOT.resolve("Runner.protos");
-    private static final Path MAIN = TOOL_ROOT.resolve("Main.protos");
 
     @Test
-    void fixedHWindowsUseStableResourceRoundsWithoutChangingPublicMain()
+    void fixedHWindowsUseStableResourceRounds()
             throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
@@ -72,8 +70,5 @@ prelude.newModuleActivation());
         assertTrue(runner.contains("ResourceReservation.release("));
         assertTrue(runner.contains("windowResults[resultWindowIndex] ="));
 
-        String main = Files.readString(MAIN, StandardCharsets.UTF_8);
-        assertFalse(main.contains("runBoundedWithResources"));
-        assertFalse(main.contains("ResourceRequirements"));
     }
 }

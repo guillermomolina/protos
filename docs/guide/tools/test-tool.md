@@ -512,27 +512,29 @@ and infrastructure evidence.
 
 ## Resource-guide status
 
-The resource-aware architecture itself is extensively implemented and ratified,
-but the DOC005-C audit found a current public wiring regression: the present
-`Main.protos` loads the four manifests and invokes the resource-aware Runner
-without first attaching the implemented `resource-requirements.toml` sidecar.
+The public `protos test` path now applies the already-ratified
+`resource-requirements.toml` join to manifest-backed corpus plans before progress
+counting and D108 scheduling. True absence preserves the complete plan unchanged;
+a present sidecar remains fail-closed under the existing D094 acquisition,
+schema and D091 referential-join rules.
 
-That mismatch is tracked by
-[`TOOL006 / #473`](https://github.com/guillermomolina/protos/issues/473).
+[`TOOL006 / #473`](https://github.com/guillermomolina/protos/issues/473)
+restores this public wiring; it does not introduce new resource syntax, catalog,
+provider, reservation or scheduling semantics.
 
-For that reason this guide intentionally does **not** publish a complete
-resource-backed user recipe yet. DOC005-C remains blocked until the already
-published resource-requirements wiring is restored and validated.
+A complete resource-backed user recipe remains owned by DOC005-C. This chapter
+does not invent that documentation surface merely because the implementation
+blocker has been removed.
 
 ## Where to go next
 
 This chapter now covers the current Test Tool fundamentals plus the published
 result/diagnostic/exit-status and CI surface.
 
-Resource requirements/catalogs and provider/profile semantics are the remaining
-user-facing layer. That DOC005-C section is temporarily blocked by TOOL006/#473
-so the guide does not claim a resource-backed command path that current `main`
-does not actually wire end to end.
+Resource requirements/catalogs and provider/profile semantics remain the next
+user-facing documentation layer under DOC005-C. TOOL006 removes the public
+wiring blocker so that owning documentation slice can now describe the
+resource-backed command path from executable evidence.
 
 Repository-wide suite/corpus routing remains separate work under TOOL005 and will
 be reconciled only after its implementation is published.

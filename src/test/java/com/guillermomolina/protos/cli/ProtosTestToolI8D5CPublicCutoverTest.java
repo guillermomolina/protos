@@ -81,8 +81,28 @@ prelude.newModuleActivation());
     }
 
     @Test
-    void publicMainUsesD108ForAllFourOwnedPlansAndReturnsOneFinalOutcome() throws Exception {
+    void publicMainUsesD108ForAllOwnedPlansAndReturnsOneFinalOutcome() throws Exception {
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
+
+        int requirementsJoin =
+                main.indexOf("ResourceRequirements.loadFromCorpus(");
+        int progressStart =
+                main.indexOf("suiteProgress: startProgress(");
+        int d108 =
+                main.indexOf("Runner.runD108WithResources(");
+
+        assertTrue(
+                main.contains(
+                        "ResourceRequirements: import(\"self:ResourceRequirements\")"));
+        assertTrue(
+                main.contains(
+                        "resourceRequirementsApplies: planLoader === \"manifest\""));
+        assertTrue(
+                main.contains(
+                        "(planLoader === \"package-toml\").ifTrue(() => {"));
+        assertTrue(requirementsJoin >= 0);
+        assertTrue(progressStart > requirementsJoin);
+        assertTrue(d108 > progressStart);
 
         assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
         assertEquals(0, occurrences(main, "Runner.runBounded("));

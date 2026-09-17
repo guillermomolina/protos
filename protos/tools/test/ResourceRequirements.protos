@@ -201,9 +201,8 @@ attachToPlan: (plan, declarations) => {
 
 // TOOL002-I6E: D094 exact corpus-root resource-requirements sidecar acquisition.
 //
-// This remains a private Test Tool planning helper. Public Main wiring stays
-// deferred until D076 resource admission/reservation can prevent a resourceful
-// CaseSpec from starting without its complete required-resource reservation.
+// This is the Test Tool planning helper used by public Main for manifest-backed
+// corpus roots before Progress observes the plan and before D108 scheduling.
 readCorpusRequirementsText: (filesystem) => {
     file: filesystem.open(
         Path.relative().child("resource-requirements.toml")

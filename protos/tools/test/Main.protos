@@ -18,6 +18,7 @@ Runner: import("self:Runner")
 Progress: import("self:Progress")
 Options: import("self:Options")
 ResourceCatalog: import("self:ResourceCatalog")
+ResourceRequirements: import("self:ResourceRequirements")
 SuiteGraph: import("self:SuiteGraph")
 RepositorySuite: import("self:RepositorySuite")
 RepositoryCorpusPlans: import("self:RepositoryCorpusPlans")
@@ -189,6 +190,17 @@ planIndex: 0
     })
     (suitePlan === null).ifTrue(() => {
         Error().signal()
+    })
+
+    resourceRequirementsApplies: planLoader === "manifest"
+    (planLoader === "package-toml").ifTrue(() => {
+        resourceRequirementsApplies = true
+    })
+    resourceRequirementsApplies.ifTrue(() => {
+        suitePlan = ResourceRequirements.loadFromCorpus(
+            corpusBinding.filesystem,
+            suitePlan
+        )
     })
 
     planned: {
