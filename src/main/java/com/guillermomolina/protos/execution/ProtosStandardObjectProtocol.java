@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -25,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -32,6 +34,7 @@ import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 public final class ProtosStandardObjectProtocol {
     private static final ProtosNativeClosureBody STANDARD_CALL_BODY =
@@ -46,6 +49,10 @@ public final class ProtosStandardObjectProtocol {
             ProtosStandardObjectProtocol::whileLoop;
     private static final ProtosClosureValue STANDARD_WHILE =
             ProtosClosureValue.nativeClosure(STANDARD_WHILE_BODY);
+    private static final ProtosNativeClosureBody STANDARD_CASE_OF_BODY =
+            ProtosStandardObjectProtocol::caseOf;
+    private static final ProtosClosureValue STANDARD_CASE_OF =
+            ProtosClosureValue.nativeClosure(STANDARD_CASE_OF_BODY);
 
     private ProtosStandardObjectProtocol() {}
 
@@ -179,6 +186,11 @@ public final class ProtosStandardObjectProtocol {
             object.createLocalSlot(
                     "while",
                     STANDARD_WHILE);
+        }
+        if (!object.hasLocalSlot("caseOf")) {
+            object.createLocalSlot(
+                    "caseOf",
+                    STANDARD_CASE_OF);
         }
     }
 
@@ -342,6 +354,52 @@ public final class ProtosStandardObjectProtocol {
             throw invalid(activation);
         }
         return receiver.aliasLocalSlot(sourceName.value(), aliasName.value());
+    }
+
+    private static Object caseOf(
+            ProtosActivation activation,
+            List<?> supplied) {
+        if (supplied.size() != 1
+                || !(supplied.get(0) instanceof ProtosMapValue cases)) {
+            throw invalid(activation);
+        }
+
+        Object subject = activation.receiver();
+        List<Map.Entry<Object, Object>> observed = cases.associationSnapshot();
+
+        for (Map.Entry<Object, Object> association : observed) {
+            Object outcome =
+                    ProtosInvocation.invokeMessage(
+                            association.getKey(),
+                            "match",
+                            List.of(subject),
+                            activation);
+
+            if (outcome == ProtosBooleanValue.FALSE) {
+                continue;
+            }
+
+            if (outcome == ProtosBooleanValue.TRUE) {
+                return ProtosInvocation.invoke(
+                        association.getValue(),
+                        List.of(),
+                        activation);
+            }
+
+            if (outcome instanceof ProtosArrayValue captures) {
+                List<Object> snapshot = captures.indexedSnapshot();
+                if (!snapshot.isEmpty()) {
+                    return ProtosInvocation.invoke(
+                            association.getValue(),
+                            snapshot,
+                            activation);
+                }
+            }
+
+            throw invalid(activation);
+        }
+
+        throw invalid(activation);
     }
 
     private static Object whileLoop(ProtosActivation activation, List<?> supplied) {

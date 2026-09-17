@@ -1,3 +1,23 @@
+## 0.3.16-SNAPSHOT
+
+- Advance `I041-B2 — ordinary Object.caseOf publication` (GitHub #550).
+  Publish the ratified D131 `caseOf` behavior as an ordinary `Object` message.
+  Require an eligible normal standard Map as the case carrier, establish one
+  shallow insertion-ordered association snapshot before matcher execution, and
+  attempt each observed matcher exactly once through ordinary
+  `matcher.match(subject)` dispatch. Canonical `false` continues, canonical
+  `true` invokes the selected callable with zero arguments, and a non-empty
+  standard Array spreads positional captures into the selected callable.
+  Invalid reached matcher outcomes, an invalid selected callable, an ineligible
+  case carrier, and no successful case signal ordinary Error. Preserve selected
+  callable results unchanged, including `null`, and perform no eager validation
+  of unreached matchers or callables. Extend the audited native Object boundary
+  only for this representation-owned operation and add focal evidence covering
+  case order, capture spreading, null preservation, lazy validation,
+  case-carrier snapshot mutation, invalid outcomes, selected-callable
+  validation, non-Map carrier, and no-match behavior. Specification remains at
+  revision `0.1.417`; implementation version becomes `0.3.16-SNAPSHOT`.
+
 ## 0.3.15-SNAPSHOT
 
 - Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
