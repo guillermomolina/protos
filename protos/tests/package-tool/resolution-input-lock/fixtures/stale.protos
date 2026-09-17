@@ -13,6 +13,23 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Command: import("self:ManifestCommand")
-model: Command.load(filesystem)
-(model.package.id == "large") && (model.exports.size() == 0)
+Version: import("self:ReleaseVersion")
+LockFile: import("self:LockFile")
+
+manifest: (versionText) => {
+    {
+        packageId: "root"
+        version: Version.parse(versionText)
+        compatibility: null
+        dependencies: Array()
+    }
+}
+
+root:
+    {
+        languageCompatibility: "0.1"
+        root: manifest("1.0.1")
+        members: Array()
+    }
+
+LockFile.isStale(projectTreeFilesystem, root)

@@ -48,6 +48,10 @@ final class ProtosTestToolCorpusRegistryTest {
         Path lockRoot = Files.createDirectories(tempDirectory.resolve("lock"));
         Path resolutionInputRoot =
                 Files.createDirectories(tempDirectory.resolve("resolution-input"));
+        Path contentIdentityRoot =
+                Files.createDirectories(tempDirectory.resolve("content-identity"));
+        Path resolutionInputLockRoot =
+                Files.createDirectories(tempDirectory.resolve("resolution-input-lock"));
         Path resolutionRootRoot =
                 Files.createDirectories(tempDirectory.resolve("resolution-root"));
         Path executionPlanRoot =
@@ -73,6 +77,10 @@ final class ProtosTestToolCorpusRegistryTest {
                         new ProtosNioReadOnlyTreeFilesystemBackend(lockRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend resolutionInputBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(resolutionInputRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend contentIdentityBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(contentIdentityRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend resolutionInputLockBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(resolutionInputLockRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend resolutionRootBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(resolutionRootRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend executionPlanBackend =
@@ -91,10 +99,22 @@ final class ProtosTestToolCorpusRegistryTest {
             installFilesystem(fixture, "packageToolVersionFilesystem", versionBackend);
             installFilesystem(fixture, "packageToolLockFilesystem", lockBackend);
             installFilesystem(fixture, "packageToolResolutionInputFilesystem", resolutionInputBackend);
+            installFilesystem(fixture, "packageToolContentIdentityFilesystem", contentIdentityBackend);
+            installFilesystem(fixture, "packageToolResolutionInputLockFilesystem", resolutionInputLockBackend);
             installFilesystem(fixture, "packageToolResolutionRootFilesystem", resolutionRootBackend);
             installFilesystem(fixture, "packageToolExecutionPlanFilesystem", executionPlanBackend);
             installFilesystem(fixture, "packageToolProjectProjectionFilesystem", projectProjectionBackend);
 
+            fixture.activation()
+                    .context()
+                    .createLocalSlot(
+                            ProtosTestCaseAuthorityExecutionScope.CONTENT_IDENTITY_SLOT,
+                            new ProtosStringValue("content-identity-case-authority"));
+            fixture.activation()
+                    .context()
+                    .createLocalSlot(
+                            ProtosTestCaseAuthorityExecutionScope.RESOLUTION_INPUT_LOCK_SLOT,
+                            new ProtosStringValue("resolution-input-lock-case-authority"));
             fixture.activation()
                     .context()
                     .createLocalSlot(
@@ -120,7 +140,7 @@ final class ProtosTestToolCorpusRegistryTest {
                                     .readLocalSlot(ProtosTestCorpusRegistry.REGISTRY_SLOT)
                                     .orElseThrow());
             assertTrue(registry.isFrozen());
-            assertEquals(18, registry.localSlotsSnapshot().size());
+            assertEquals(20, registry.localSlotsSnapshot().size());
 
             assertBinding(fixture.activation(), registry, "protos/corpus/conformance",
                     "manifest", "filesystem");
@@ -196,6 +216,18 @@ final class ProtosTestToolCorpusRegistryTest {
                     "protos/corpus/package-tool/resolution-input",
                     "protos/package-tool/resolution-input",
                     "packageToolResolutionInputFilesystem");
+            assertProjectTreeBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/package-tool/content-identity",
+                    "protos/package-tool/content-identity",
+                    "packageToolContentIdentityFilesystem");
+            assertProjectTreeBinding(
+                    fixture.activation(),
+                    registry,
+                    "protos/corpus/package-tool/resolution-input-lock",
+                    "protos/package-tool/resolution-input-lock",
+                    "packageToolResolutionInputLockFilesystem");
             assertProjectTreeBinding(
                     fixture.activation(),
                     registry,

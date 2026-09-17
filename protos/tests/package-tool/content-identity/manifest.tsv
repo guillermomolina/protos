@@ -1,0 +1,13 @@
+# case	fixture	expected
+minimal	digest-minimal.protos	true
+ordering	digest-ordering.protos	true
+binary	digest-binary.protos	true
+varuint-boundaries	digest-varuint-boundaries.protos	true
+exact-case-upper	digest-exact-case-upper.protos	true
+exact-case-lower	digest-exact-case-lower.protos	true
+minimal	verify-minimal.protos	true
+ordering	verify-ordering.protos	true
+binary	verify-binary.protos	true
+varuint-boundaries	verify-varuint-boundaries.protos	true
+exact-case-upper	verify-exact-case-upper.protos	true
+exact-case-lower	verify-exact-case-lower.protos	true

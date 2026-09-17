@@ -73,6 +73,8 @@ phaseNames: Array(
     "package-tool-version",
     "package-tool-lock",
     "package-tool-resolution-input",
+    "package-tool-content-identity",
+    "package-tool-resolution-input-lock",
     "package-tool-resolution-root",
     "package-tool-execution-plan",
     "package-tool-project-projection"

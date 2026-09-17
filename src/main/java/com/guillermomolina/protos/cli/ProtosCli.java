@@ -260,6 +260,10 @@ public final class ProtosCli {
                 testsRoot.resolve("package-tool").resolve("lock");
         Path packageToolResolutionInputRoot =
                 testsRoot.resolve("package-tool").resolve("resolution-input");
+        Path packageToolContentIdentityRoot =
+                testsRoot.resolve("package-tool").resolve("content-identity");
+        Path packageToolResolutionInputLockRoot =
+                testsRoot.resolve("package-tool").resolve("resolution-input-lock");
         Path packageToolResolutionRootRoot =
                 testsRoot.resolve("package-tool").resolve("resolution-root");
         Path packageToolExecutionPlanRoot =
@@ -324,6 +328,14 @@ public final class ProtosCli {
                                 new ProtosNioReadOnlyTreeFilesystemBackend(
                                         packageToolResolutionInputRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend
+                        packageToolContentIdentityFilesystemBackend =
+                                new ProtosNioReadOnlyTreeFilesystemBackend(
+                                        packageToolContentIdentityRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend
+                        packageToolResolutionInputLockFilesystemBackend =
+                                new ProtosNioReadOnlyTreeFilesystemBackend(
+                                        packageToolResolutionInputLockRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend
                         packageToolResolutionRootFilesystemBackend =
                                 new ProtosNioReadOnlyTreeFilesystemBackend(
                                         packageToolResolutionRootRoot);
@@ -350,6 +362,8 @@ public final class ProtosCli {
                                         actorPrelude,
                                         groupPrelude,
                                         packagePrelude,
+                                        packageToolContentIdentityRoot.resolve("cases"),
+                                        packageToolResolutionInputLockRoot.resolve("cases"),
                                         packageToolResolutionRootRoot.resolve("cases"),
                                         packageToolExecutionPlanRoot.resolve("cases"),
                                         packageToolProjectProjectionRoot.resolve("cases"));
@@ -385,6 +399,14 @@ public final class ProtosCli {
                                     session,
                                     "packageToolResolutionInputFilesystem",
                                     packageToolResolutionInputFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageToolContentIdentityFilesystem",
+                                    packageToolContentIdentityFilesystemBackend);
+                            installBundledToolFilesystem(
+                                    session,
+                                    "packageToolResolutionInputLockFilesystem",
+                                    packageToolResolutionInputLockFilesystemBackend);
                             installBundledToolFilesystem(
                                     session,
                                     "packageToolResolutionRootFilesystem",

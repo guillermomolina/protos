@@ -82,58 +82,46 @@ digest: (bytes) => {
         )
     }
 
-    bitwise3: (left, middle, right, selector) => {
+    xor3Table: Array(0, 1, 2, 3, 1, 0, 3, 2, 2, 3, 0, 1, 3, 2, 1, 0, 1, 0, 3, 2, 0, 1, 2, 3, 3, 2, 1, 0, 2, 3, 0, 1, 2, 3, 0, 1, 3, 2, 1, 0, 0, 1, 2, 3, 1, 0, 3, 2, 3, 2, 1, 0, 2, 3, 0, 1, 1, 0, 3, 2, 0, 1, 2, 3)
+    chooseTable: Array(0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 1, 2, 3, 0, 0, 2, 2, 1, 1, 3, 3, 0, 0, 2, 2, 1, 1, 3, 3, 0, 1, 0, 1, 0, 1, 0, 1, 2, 3, 2, 3, 2, 3, 2, 3, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3)
+    majorityTable: Array(0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 2, 2, 0, 1, 2, 3, 0, 1, 0, 1, 1, 1, 1, 1, 0, 1, 2, 3, 1, 1, 3, 3, 0, 0, 2, 2, 0, 1, 2, 3, 2, 2, 2, 2, 2, 3, 2, 3, 0, 1, 2, 3, 1, 1, 3, 3, 2, 3, 2, 3, 3, 3, 3, 3)
+
+    bitwisePair3: (left, middle, right, table) => {
         a: word32(left)
         b: word32(middle)
         c: word32(right)
         place: 1
         result: 0
+        remaining: 16
 
-        consume: null
-        consume = (remaining) => {
-            (remaining > 0).ifTrue(() => {
-                aBit: a.mod(2)
-                bBit: b.mod(2)
-                cBit: c.mod(2)
+        (() => remaining > 0).while() {
+            aPair: a.mod(4)
+            bPair: b.mod(4)
+            cPair: c.mod(4)
 
-                result = result + selector(aBit, bBit, cBit) * place
-                a = a.div(2)
-                b = b.div(2)
-                c = c.div(2)
-                place = place * 2
+            index: aPair * 16 + bPair * 4 + cPair
+            result = result + table[index] * place
 
-                consume(remaining - 1)
-            })
+            a = a.div(4)
+            b = b.div(4)
+            c = c.div(4)
+            place = place * 4
+            remaining = remaining - 1
         }
 
-        consume(32)
         result
     }
 
     xor3: (left, middle, right) => {
-        bitwise3(left, middle, right, (aBit, bBit, cBit) => {
-            (aBit + bBit + cBit).mod(2)
-        })
+        bitwisePair3(left, middle, right, xor3Table)
     }
 
     choose: (x, y, z) => {
-        bitwise3(x, y, z, (xBit, yBit, zBit) => {
-            selected: zBit
-            (xBit == 1).ifTrue(() => {
-                selected = yBit
-            })
-            selected
-        })
+        bitwisePair3(x, y, z, chooseTable)
     }
 
     majority: (x, y, z) => {
-        bitwise3(x, y, z, (xBit, yBit, zBit) => {
-            selected: 0
-            ((xBit + yBit + zBit) >= 2).ifTrue(() => {
-                selected = 1
-            })
-            selected
-        })
+        bitwisePair3(x, y, z, majorityTable)
     }
 
     upperSigma0: (value) => {

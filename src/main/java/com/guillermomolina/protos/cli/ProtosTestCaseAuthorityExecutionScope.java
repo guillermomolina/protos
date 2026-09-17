@@ -34,6 +34,12 @@ import java.util.Objects;
  * D077/D098 resource accounting.
  */
 final class ProtosTestCaseAuthorityExecutionScope implements AutoCloseable {
+    static final String CONTENT_IDENTITY_SLOT =
+            "packageToolContentIdentityCaseAuthorityExecutionAsync";
+
+    static final String RESOLUTION_INPUT_LOCK_SLOT =
+            "packageToolResolutionInputLockCaseAuthorityExecutionAsync";
+
     static final String RESOLUTION_ROOT_SLOT =
             "packageToolResolutionRootCaseAuthorityExecutionAsync";
 
@@ -56,6 +62,8 @@ final class ProtosTestCaseAuthorityExecutionScope implements AutoCloseable {
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosAsyncExactExecutionFacility.Submission submission,
             ProtosPrelude packagePrelude,
+            Path contentIdentityCases,
+            Path resolutionInputLockCases,
             Path resolutionRootCases,
             Path executionPlanCases,
             Path projectProjectionCases) {
@@ -63,6 +71,8 @@ final class ProtosTestCaseAuthorityExecutionScope implements AutoCloseable {
         Objects.requireNonNull(runtimeHost, "runtimeHost");
         Objects.requireNonNull(submission, "submission");
         Objects.requireNonNull(packagePrelude, "packagePrelude");
+        Objects.requireNonNull(contentIdentityCases, "contentIdentityCases");
+        Objects.requireNonNull(resolutionInputLockCases, "resolutionInputLockCases");
         Objects.requireNonNull(resolutionRootCases, "resolutionRootCases");
         Objects.requireNonNull(executionPlanCases, "executionPlanCases");
         Objects.requireNonNull(projectProjectionCases, "projectProjectionCases");
@@ -71,6 +81,24 @@ final class ProtosTestCaseAuthorityExecutionScope implements AutoCloseable {
                 new ArrayList<>();
 
         try {
+            facilities.add(
+                    ProtosTestCaseAuthorityExecutionFacility.install(
+                            activation,
+                            CONTENT_IDENTITY_SLOT,
+                            packagePrelude,
+                            contentIdentityCases,
+                            runtimeHost,
+                            submission));
+
+            facilities.add(
+                    ProtosTestCaseAuthorityExecutionFacility.install(
+                            activation,
+                            RESOLUTION_INPUT_LOCK_SLOT,
+                            packagePrelude,
+                            resolutionInputLockCases,
+                            runtimeHost,
+                            submission));
+
             facilities.add(
                     ProtosTestCaseAuthorityExecutionFacility.install(
                             activation,

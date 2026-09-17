@@ -131,6 +131,18 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                                         "protos",
                                         "tests",
                                         "package-tool",
+                                        "content-identity",
+                                        "cases"),
+                                Path.of(
+                                        "protos",
+                                        "tests",
+                                        "package-tool",
+                                        "resolution-input-lock",
+                                        "cases"),
+                                Path.of(
+                                        "protos",
+                                        "tests",
+                                        "package-tool",
                                         "resolution-root",
                                         "cases"),
                                 Path.of(
@@ -163,6 +175,8 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                     "packageResourceExecutionAsync",
                     "packageResourceExecutionInspectAsync",
                     ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT,
+                    ProtosTestCaseAuthorityExecutionScope.CONTENT_IDENTITY_SLOT,
+                    ProtosTestCaseAuthorityExecutionScope.RESOLUTION_INPUT_LOCK_SLOT,
                     ProtosTestCaseAuthorityExecutionScope.RESOLUTION_ROOT_SLOT,
                     ProtosTestCaseAuthorityExecutionScope.EXECUTION_PLAN_SLOT,
                     ProtosTestCaseAuthorityExecutionScope.PROJECT_PROJECTION_SLOT)) {

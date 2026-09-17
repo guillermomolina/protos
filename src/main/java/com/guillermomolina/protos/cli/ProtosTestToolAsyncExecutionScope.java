@@ -164,6 +164,8 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             ProtosPrelude actorPrelude,
             ProtosPrelude groupPrelude,
             ProtosPrelude packagePrelude,
+            Path contentIdentityCases,
+            Path resolutionInputLockCases,
             Path resolutionRootCases,
             Path executionPlanCases,
             Path projectProjectionCases) {
@@ -182,6 +184,8 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                             runtimeHost,
                             scope.submission,
                             packagePrelude,
+                            contentIdentityCases,
+                            resolutionInputLockCases,
                             resolutionRootCases,
                             executionPlanCases,
                             projectProjectionCases);

@@ -103,6 +103,20 @@ final class ProtosTestCorpusRegistry {
                 "case-outcomes",
                 "packageToolResolutionInputFilesystem",
                 "protos/package-tool/resolution-input");
+        addProjectTreeBinding(
+                registry,
+                activation,
+                "protos/corpus/package-tool/content-identity",
+                "packageToolContentIdentityFilesystem",
+                "protos/package-tool/content-identity",
+                ProtosTestCaseAuthorityExecutionScope.CONTENT_IDENTITY_SLOT);
+        addProjectTreeBinding(
+                registry,
+                activation,
+                "protos/corpus/package-tool/resolution-input-lock",
+                "packageToolResolutionInputLockFilesystem",
+                "protos/package-tool/resolution-input-lock",
+                ProtosTestCaseAuthorityExecutionScope.RESOLUTION_INPUT_LOCK_SLOT);
                 addProjectTreeBinding(
                 registry,
                 activation,

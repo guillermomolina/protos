@@ -1,0 +1,3 @@
+# case	fixture	expected
+fresh	fresh.protos	true
+stale	stale.protos	true

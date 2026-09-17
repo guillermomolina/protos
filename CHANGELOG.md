@@ -1,3 +1,27 @@
+## 0.3.25-SNAPSHOT
+
+- Advance `PERF009-B — Quarantined Java test normalization and reintegration`
+  (GitHub #546) by reintegrating the former
+  `ProtosPackageToolProtosTest` quarantine into the ordinary Java lane while
+  preserving or strengthening its semantic and integration coverage. Move the
+  six frozen positive ContentIdentity digest and verification vectors into the
+  canonical Test Tool project-tree corpus, and move filesystem-backed fresh/stale resolution-input
+  lock checks into a dedicated project-tree corpus. Preserve the TextReader
+  multi-chunk regression with valid TOML larger than the 8192-byte read-ahead
+  boundary without retaining hundreds of parser-scale exports. Split the
+  remaining 26 Java host/runtime tests by their existing responsibilities into
+  Manifest, metadata persistence/lock, filesystem security, and ContentIdentity
+  integration classes with shared harness support. Across five repeated
+  comparable runs, the maximum observed class times are 1.975 s, 1.941 s,
+  0.066 s, and 2.216 s respectively, with maximum individual test time
+  1.347 s; all satisfy the PERF009 `< 5 s` class and `< 2 s` per-test budgets.
+  Retain the pure-Protos SHA-256 implementation while replacing recursive
+  per-bit ternary operations with semantically equivalent 2-bit lookup-table
+  processing. Remove the former Package Tool class from the slow-test
+  quarantine, leaving four quarantined Java classes. No Protos-visible
+  language, specification, package-format, or Standard Library semantics
+  change. Implementation version becomes `0.3.25-SNAPSHOT`.
+
 ## 0.3.24-SNAPSHOT
 
 - Advance `I041-C — remove the superseded dedicated matching implementation`

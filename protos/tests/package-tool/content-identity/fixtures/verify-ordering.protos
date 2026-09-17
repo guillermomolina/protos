@@ -1,0 +1,10 @@
+Identity: import("self:ContentIdentity")
+
+captured: projectTreeFilesystem.captureTree(Path.relative()).value()
+expected: {
+    method: "protos-package-tree-v1"
+    algorithm: "sha256"
+    hex: "a4e71028b12d648a10729e5dedf947d8bfbff1e6c8e1b95bb04ac170f5682e67"
+}
+
+Identity.verify(captured, expected) === captured

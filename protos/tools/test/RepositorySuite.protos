@@ -85,6 +85,16 @@ root: SuiteGraph.suite(
             "protos/test/package"
         ),
         SuiteGraph.leaf(
+            "protos/package-tool/content-identity",
+            "protos/corpus/package-tool/content-identity",
+            "protos/test/package"
+        ),
+        SuiteGraph.leaf(
+            "protos/package-tool/resolution-input-lock",
+            "protos/corpus/package-tool/resolution-input-lock",
+            "protos/test/package"
+        ),
+        SuiteGraph.leaf(
             "protos/package-tool/resolution-root",
             "protos/corpus/package-tool/resolution-root",
             "protos/test/package"
