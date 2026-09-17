@@ -1,3 +1,25 @@
+## 0.3.18-SNAPSHOT
+
+- Advance `I041-B3 — structural Array.match publication` (GitHub #550).
+  Publish the ratified D131 structural matching protocol on ordinary standard
+  Array values. Require the matcher receiver to own standard Array indexed state;
+  return canonical `false` for an ineligible subject or an exact-length mismatch;
+  and take one shallow snapshot of both matcher and subject Arrays before any
+  child matcher is invoked. Invoke reached children exactly once from left to
+  right through ordinary `matcherElement.match(subjectElement)` dispatch.
+  Canonical `false` fails immediately, canonical `true` contributes no captures,
+  and each non-empty standard Array result contributes its shallowly observed
+  outer elements to the positional capture sequence without flattening captured
+  Array values themselves. Invalid reached matcher outcomes signal ordinary
+  Error. Return canonical `true` when no captures are produced, otherwise return
+  one new standard Array containing the captures in child/capture order. Extend
+  the audited native Array representation boundary for the required state
+  snapshot and add focal coverage for eligibility, exact length, evaluation
+  order, fail-fast behavior, capture composition, matcher/subject snapshot
+  stability, child-capture carrier stability, invalid outcomes, and inherited
+  behavior on an ineligible receiver. Specification remains at revision
+  `0.1.417`; implementation version becomes `0.3.18-SNAPSHOT`.
+
 ## 0.3.17-SNAPSHOT
 
 - Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under

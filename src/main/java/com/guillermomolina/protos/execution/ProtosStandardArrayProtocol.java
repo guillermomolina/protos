@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
@@ -29,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -37,6 +39,10 @@ public final class ProtosStandardArrayProtocol {
             ProtosStandardArrayProtocol::each;
     private static final ProtosClosureValue STANDARD_EACH =
             ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
+    private static final ProtosNativeClosureBody STANDARD_MATCH_BODY =
+            ProtosStandardArrayProtocol::match;
+    private static final ProtosClosureValue STANDARD_MATCH =
+            ProtosClosureValue.nativeClosure(STANDARD_MATCH_BODY);
 
     private ProtosStandardArrayProtocol() {}
 
@@ -120,6 +126,70 @@ public final class ProtosStandardArrayProtocol {
                         }));
 
         arrayPrototype.createLocalSlot("each", STANDARD_EACH);
+        arrayPrototype.createLocalSlot("match", STANDARD_MATCH);
+    }
+
+    private static Object match(
+            ProtosActivation activation,
+            List<?> supplied) {
+        ProtosArrayValue matcher = requireArrayReceiver(activation);
+        if (supplied.size() != 1) {
+            throw invalid(activation);
+        }
+
+        Object subjectValue = supplied.get(0);
+        if (!(subjectValue instanceof ProtosArrayValue subject)) {
+            return ProtosBooleanValue.FALSE;
+        }
+
+        List<Object> matcherSnapshot = matcher.indexedSnapshot();
+        List<Object> subjectSnapshot = subject.indexedSnapshot();
+
+        if (matcherSnapshot.size() != subjectSnapshot.size()) {
+            return ProtosBooleanValue.FALSE;
+        }
+
+        List<Object> captures = new ArrayList<>();
+
+        for (int index = 0; index < matcherSnapshot.size(); index++) {
+            Object outcome =
+                    ProtosInvocation.invokeMessage(
+                            matcherSnapshot.get(index),
+                            "match",
+                            List.of(subjectSnapshot.get(index)),
+                            activation);
+
+            if (outcome == ProtosBooleanValue.FALSE) {
+                return ProtosBooleanValue.FALSE;
+            }
+
+            if (outcome == ProtosBooleanValue.TRUE) {
+                continue;
+            }
+
+            if (outcome instanceof ProtosArrayValue childCaptures) {
+                List<Object> observedCaptures =
+                        childCaptures.indexedSnapshot();
+                if (observedCaptures.isEmpty()) {
+                    throw invalid(activation);
+                }
+                captures.addAll(observedCaptures);
+                continue;
+            }
+
+            throw invalid(activation);
+        }
+
+        if (captures.isEmpty()) {
+            return ProtosBooleanValue.TRUE;
+        }
+
+        return activation.prelude()
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "standard Array.match requires an owning Core prelude"))
+                .newArray(captures);
     }
 
     private static Object each(ProtosActivation activation, List<?> supplied) {
