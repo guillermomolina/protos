@@ -27,6 +27,10 @@ public final class ProtosStandardMapProtocol {
          ProtosStandardMapProtocol::each;
  private static final ProtosClosureValue STANDARD_EACH =
          ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
+ private static final ProtosNativeClosureBody STANDARD_MATCH_BODY =
+         ProtosStandardMapProtocol::match;
+ private static final ProtosClosureValue STANDARD_MATCH =
+         ProtosClosureValue.nativeClosure(STANDARD_MATCH_BODY);
 
  private ProtosStandardMapProtocol(){}
 
@@ -151,7 +155,7 @@ public final class ProtosStandardMapProtocol {
           && isCanonicalMapHome(home, caller);
  }
  public static void install(ProtosObjectValue p){
-  for(String s:List.of("call","at","atPut","containsKey","remove","size","each"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core Map already defines "+s);
+  for(String s:List.of("call","at","atPut","containsKey","remove","size","each","match"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core Map already defines "+s);
   p.createLocalSlot("call",ProtosClosureValue.nativeClosure(STANDARD_CALL_BODY));
   p.createLocalSlot("at", STANDARD_AT);
   p.createLocalSlot("containsKey", STANDARD_CONTAINS_KEY);
@@ -159,6 +163,7 @@ public final class ProtosStandardMapProtocol {
   p.createLocalSlot("remove", STANDARD_REMOVE);
   p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return new ProtosIntegerValue(BigInteger.valueOf(m.keyedSize()));}));
   p.createLocalSlot("each", STANDARD_EACH);
+  p.createLocalSlot("match", STANDARD_MATCH);
  }
  static ProtosSlotLookupResult selectFactoryCallForMapConstruction(
          Object factory,
@@ -288,6 +293,80 @@ public final class ProtosStandardMapProtocol {
    ProtosInvocation.invoke(block, List.of(entry.getKey(), entry.getValue()), a);
   }
   return m;
+ }
+
+ private static Object match(ProtosActivation a, List<?> x) {
+  ProtosMapValue matcher = map(a);
+  arity(a, x, 1);
+
+  Object subjectValue = x.get(0);
+  if (!(subjectValue instanceof ProtosMapValue subject)) {
+   return ProtosBooleanValue.FALSE;
+  }
+
+  List<StableAssociation> matcherSnapshot = stableSnapshot(matcher);
+  List<StableAssociation> subjectSnapshot = stableSnapshot(subject);
+
+  List<Object> childMatchers = new ArrayList<>();
+  List<Object> selectedValues = new ArrayList<>();
+
+  for (StableAssociation requirement : matcherSnapshot) {
+   BigInteger queryHash = queryHash(subject, requirement.key(), a);
+   int subjectIndex =
+           findStableAssociationIndex(
+                   subject,
+                   subjectSnapshot,
+                   requirement.key(),
+                   queryHash,
+                   a);
+   if (subjectIndex < 0) {
+    return ProtosBooleanValue.FALSE;
+   }
+
+   childMatchers.add(requirement.value());
+   selectedValues.add(subjectSnapshot.get(subjectIndex).value());
+  }
+
+  List<Object> captures = new ArrayList<>();
+
+  for (int index = 0; index < childMatchers.size(); index++) {
+   Object outcome =
+           ProtosInvocation.invokeMessage(
+                   childMatchers.get(index),
+                   "match",
+                   List.of(selectedValues.get(index)),
+                   a);
+
+   if (outcome == ProtosBooleanValue.FALSE) {
+    return ProtosBooleanValue.FALSE;
+   }
+
+   if (outcome == ProtosBooleanValue.TRUE) {
+    continue;
+   }
+
+   if (outcome instanceof ProtosArrayValue childCaptures) {
+    List<Object> observedCaptures = childCaptures.indexedSnapshot();
+    if (observedCaptures.isEmpty()) {
+     throw err(a);
+    }
+    captures.addAll(observedCaptures);
+    continue;
+   }
+
+   throw err(a);
+  }
+
+  if (captures.isEmpty()) {
+   return ProtosBooleanValue.TRUE;
+  }
+
+  return a.prelude()
+          .orElseThrow(
+                  () ->
+                          new IllegalStateException(
+                                  "standard Map.match requires an owning Core prelude"))
+          .newArray(captures);
  }
  private static ProtosMapValue.Entry find(ProtosMapValue m,Object k,ProtosActivation a){
   return find(m,k,hash(m,k,a),a);

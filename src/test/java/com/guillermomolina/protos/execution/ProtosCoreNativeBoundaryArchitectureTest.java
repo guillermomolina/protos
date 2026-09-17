@@ -51,7 +51,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
     private static final Map<String, Integer> EXPECTED_NATIVE_PROVIDERS =
             Map.ofEntries(
-                    Map.entry("execution/ProtosStandardMapProtocol.java", 7),
+                    Map.entry("execution/ProtosStandardMapProtocol.java", 8),
                     Map.entry("execution/ProtosStandardHashSupport.java", 3),
                     Map.entry("execution/ProtosStandardFileProtocol.java", 10),
                     Map.entry("execution/ProtosStandardFilesystemProtocol.java", 1),
@@ -123,7 +123,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(36, actualCore.size());
-        assertEquals(140, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(141, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -227,7 +227,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Map",
                 prelude.mapPrototype(),
-                Set.of("call", "at", "atPut", "containsKey", "remove", "size", "each"));
+                Set.of("call", "at", "atPut", "containsKey", "remove", "size", "each", "match"));
         assertNativeSelectors(
                 "IdentityMap",
                 prelude.identityMapPrototype(),

@@ -1,3 +1,29 @@
+## 0.3.21-SNAPSHOT
+
+- Advance `I041-B4 — structural Map.match publication` (GitHub #550).
+  Publish the ratified D131 open/subset structural matching protocol on ordinary
+  normal standard Map values. Require the matcher receiver to own normal
+  standard Map keyed-entry state and return canonical `false` for an ineligible
+  subject or a missing required association. Establish stable shallow
+  observations of matcher and subject associations before any requirement
+  search or nested value matching; preserve representative key references,
+  recorded hashes, mapped values, and insertion order for the attempt. Resolve
+  every matcher requirement against the observed subject associations using the
+  existing normal Map query-side `hash` / `==` law before invoking the first
+  mapped-value child matcher. Ignore unrelated subject associations, then invoke
+  resolved child matchers exactly once in matcher insertion order through
+  ordinary `childMatcher.match(selectedMappedValue)` dispatch. Canonical
+  `false` fails immediately, canonical `true` contributes no captures, and each
+  non-empty standard Array result contributes its shallowly observed outer
+  elements to the positional capture sequence without flattening captured Array
+  values themselves. Invalid reached matcher outcomes signal ordinary Error.
+  Return canonical `true` when no captures are produced, otherwise return one
+  new standard Array in child/capture order. Extend focal coverage for open
+  subset behavior, eligibility, complete pre-resolution, matcher order, stable
+  observation, normal Map key law, hash count, capture composition, capture
+  carrier stability, and invalid outcomes. Specification remains at revision
+  `0.1.417`; implementation version becomes `0.3.21-SNAPSHOT`.
+
 ## 0.3.20-SNAPSHOT
 
 - Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
