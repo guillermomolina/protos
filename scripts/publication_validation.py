@@ -158,6 +158,37 @@ def invoke_source_style_guard(repo, base, head):
     return completed.stdout.strip()
 
 
+
+def invoke_legacy_execution_guard(repo, base, head):
+    guard = Path(repo) / "scripts" / "legacy_execution_guard.py"
+    if not guard.is_file():
+        raise PublicationValidationError(
+            "repository legacy-execution guard is missing: " + str(guard)
+        )
+    completed = subprocess.run(
+        [
+            sys.executable,
+            str(guard),
+            "--repo",
+            str(repo),
+            "--base",
+            str(base),
+            "--head",
+            str(head),
+        ],
+        cwd=str(repo),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if completed.returncode != 0:
+        detail = completed.stderr.strip() or completed.stdout.strip()
+        raise PublicationValidationError(
+            "repository legacy-execution guard failed"
+            + ((": " + detail) if detail else "")
+        )
+    return completed.stdout.strip()
+
 def invoke_selector(repo, base, head, top_level_closure):
     selector = Path(repo) / "scripts" / "validation_impact.py"
     if not selector.is_file():
@@ -216,6 +247,11 @@ def run(repo, base, head, top_level_closure=False):
     try:
         candidate = verify_candidate_state(repo, head)
         source_style_output = invoke_source_style_guard(repo, base, candidate)
+        legacy_execution_output = invoke_legacy_execution_guard(
+            repo,
+            base,
+            candidate,
+        )
         selection = invoke_selector(
             repo,
             base,
@@ -233,6 +269,9 @@ def run(repo, base, head, top_level_closure=False):
     if source_style_output:
         print(source_style_output)
     print("SOURCE_STYLE_PREVENTION_GATE: PASS")
+    if legacy_execution_output:
+        print(legacy_execution_output)
+    print("LEGACY_EXECUTION_PREVENTION_GATE: PASS")
     print("VALIDATION_IMPACT: " + impact)
     print("AFFECTED_TEST_SET: " + tests)
     print("VALIDATION_REASON: " + selection["reason"])

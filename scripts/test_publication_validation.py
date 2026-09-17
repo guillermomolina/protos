@@ -32,6 +32,7 @@ HELPER_PATH = HERE / "publication_validation.py"
 SELECTOR_PATH = HERE / "validation_impact.py"
 STYLE_GUARD_PATH = HERE / "source_style_guard.py"
 STYLE_EXCEPTIONS_PATH = HERE / "source_style_exceptions.json"
+LEGACY_GUARD_PATH = HERE / "legacy_execution_guard.py"
 
 SPEC = importlib.util.spec_from_file_location(
     "publication_validation",
@@ -75,6 +76,10 @@ class PublicationValidationTest(unittest.TestCase):
         shutil.copyfile(str(SELECTOR_PATH), str(scripts / "validation_impact.py"))
         shutil.copyfile(str(STYLE_GUARD_PATH), str(scripts / "source_style_guard.py"))
         shutil.copyfile(str(STYLE_EXCEPTIONS_PATH), str(scripts / "source_style_exceptions.json"))
+        shutil.copyfile(
+            str(LEGACY_GUARD_PATH),
+            str(scripts / "legacy_execution_guard.py"),
+        )
         (self.repo / "tracked.txt").write_text("base\n", encoding="utf-8")
 
         subprocess.run(
@@ -231,6 +236,21 @@ class PublicationValidationTest(unittest.TestCase):
 
     def test_missing_source_style_guard_fails_before_maven(self):
         candidate = self.commit_files({"scripts/source_style_guard.py": None})
+        self.assertEqual(2, self.run_helper(candidate))
+        self.assertEqual([], self.maven_calls())
+
+    def test_legacy_execution_regression_fails_before_maven(self):
+        candidate = self.commit_files({
+            "src/main/java/com/guillermomolina/protos/LegacyProbe.java":
+                "final class LegacyProbe { ProtosExpressionNode node; }\n",
+        })
+        self.assertEqual(2, self.run_helper(candidate))
+        self.assertEqual([], self.maven_calls())
+
+    def test_missing_legacy_execution_guard_fails_before_maven(self):
+        candidate = self.commit_files({
+            "scripts/legacy_execution_guard.py": None,
+        })
         self.assertEqual(2, self.run_helper(candidate))
         self.assertEqual([], self.maven_calls())
 
