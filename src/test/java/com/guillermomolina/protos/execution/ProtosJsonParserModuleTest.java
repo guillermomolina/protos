@@ -96,13 +96,12 @@ class ProtosJsonParserModuleTest {
         activation.context().createLocalSlot("input", new ProtosStringValue(input));
         return assertInstanceOf(
                 ProtosObjectValue.class,
-                new ProtosSourceCompiler()
-                        .compile(
-                                """
-                                JSON: import("std:json/JSON")
-                                JSON.parse(input)
-                                """)
-                        .call(activation));
+                ProtosTestExecutionSupport.evaluate(
+                        """
+                        JSON: import("std:json/JSON")
+                        JSON.parse(input)
+                        """,
+                        activation));
     }
 
     private static Object value(ProtosObjectValue node, String expectedKind) {

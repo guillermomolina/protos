@@ -38,9 +38,9 @@ final class ProtosMathIntegerModuleTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         Object imported =
-                new ProtosSourceCompiler()
-                        .compile("import(\"std:math/Integer\")")
-                        .call(prelude.newModuleActivation());
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:math/Integer\")",
+                        prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
         assertEquals(Set.of("gcd", "lcm", "factorial", "pow", "powMod"), module.localSlotsSnapshot().keySet());

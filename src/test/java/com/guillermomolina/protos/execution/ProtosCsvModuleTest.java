@@ -41,9 +41,9 @@ final class ProtosCsvModuleTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         Object imported =
-                new ProtosSourceCompiler()
-                        .compile("import(\"std:csv/CSV\")")
-                        .call(prelude.newModuleActivation());
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:csv/CSV\")",
+                        prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
         assertEquals(
@@ -57,22 +57,24 @@ final class ProtosCsvModuleTest {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
-        ProtosActivation actorA = prelude.newModuleActivation();
+         ProtosActivation actorA = prelude.newModuleActivation();
         ProtosActivation actorB = prelude.newModuleActivation();
 
         ProtosObjectValue moduleA1 =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        compiler.compile("import(\"std:csv/CSV\")").call(actorA));
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:csv/CSV\")", actorA));
         ProtosObjectValue moduleA2 =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        compiler.compile("import(\"std:csv/CSV\")").call(actorA));
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:csv/CSV\")", actorA));
         ProtosObjectValue moduleB =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        compiler.compile("import(\"std:csv/CSV\")").call(actorB));
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:csv/CSV\")", actorB));
 
         assertSame(moduleA1, moduleA2, "one Actor must reuse its Actor-local CSV module instance");
         assertNotSame(
@@ -81,20 +83,20 @@ final class ProtosCsvModuleTest {
                 "different Actors must not share a mutable Standard Library module instance");
 
         Object parserA1 =
-                compiler.compile(
-                                "CSV_A1: import(\"std:csv/CSV\")\n"
-                                        + "CSV_A1.rowParser((row) => { null })")
-                        .call(actorA);
+                ProtosTestExecutionSupport.evaluate(
+                        "CSV_A1: import(\"std:csv/CSV\")\n"
+                                + "CSV_A1.rowParser((row) => { null })",
+                        actorA);
         Object parserA2 =
-                compiler.compile(
-                                "CSV_A2: import(\"std:csv/CSV\")\n"
-                                        + "CSV_A2.rowParser((row) => { null })")
-                        .call(actorA);
+                ProtosTestExecutionSupport.evaluate(
+                        "CSV_A2: import(\"std:csv/CSV\")\n"
+                                + "CSV_A2.rowParser((row) => { null })",
+                        actorA);
         Object parserB =
-                compiler.compile(
-                                "CSV_B: import(\"std:csv/CSV\")\n"
-                                        + "CSV_B.rowParser((row) => { null })")
-                        .call(actorB);
+                ProtosTestExecutionSupport.evaluate(
+                        "CSV_B: import(\"std:csv/CSV\")\n"
+                                + "CSV_B.rowParser((row) => { null })",
+                        actorB);
 
         assertInstanceOf(ProtosObjectValue.class, parserA1);
         assertInstanceOf(ProtosObjectValue.class, parserA2);

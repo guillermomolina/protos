@@ -35,26 +35,25 @@ class ProtosCollectionsSetModuleTest {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
 
         ProtosMapValue set =
                 assertInstanceOf(
                         ProtosMapValue.class,
-                        compiler.compile(
-                                        """
-                                        Set: import("std:collections/Set")
-                                        Set()
-                                        """)
-                                .call(prelude.newModuleActivation()));
+                        ProtosTestExecutionSupport.evaluate(
+                                """
+                                Set: import("std:collections/Set")
+                                Set()
+                                """,
+                                prelude.newModuleActivation()));
         ProtosIdentityMapValue identitySet =
                 assertInstanceOf(
                         ProtosIdentityMapValue.class,
-                        compiler.compile(
-                                        """
-                                        IdentitySet: import("std:collections/IdentitySet")
-                                        IdentitySet()
-                                        """)
-                                .call(prelude.newModuleActivation()));
+                        ProtosTestExecutionSupport.evaluate(
+                                """
+                                IdentitySet: import("std:collections/IdentitySet")
+                                IdentitySet()
+                                """,
+                                prelude.newModuleActivation()));
 
         assertSame(prelude.mapPrototype(), set.parent().orElseThrow());
         assertSame(prelude.identityMapPrototype(), identitySet.parent().orElseThrow());
@@ -65,13 +64,18 @@ class ProtosCollectionsSetModuleTest {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
         var actorA = prelude.newModuleActivation();
         var actorB = prelude.newModuleActivation();
 
-        Object first = compiler.compile("import(\"std:collections/Set\")").call(actorA);
-        Object repeated = compiler.compile("import(\"std:collections/Set\")").call(actorA);
-        Object otherActor = compiler.compile("import(\"std:collections/Set\")").call(actorB);
+        Object first =
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:collections/Set\")", actorA);
+        Object repeated =
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:collections/Set\")", actorA);
+        Object otherActor =
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:collections/Set\")", actorB);
 
         assertSame(first, repeated);
         assertNotSame(first, otherActor);

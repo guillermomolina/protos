@@ -1,3 +1,16 @@
+## 0.3.10-SNAPSHOT
+
+- Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
+  ratified PLAT035 by migrating the first bounded retained-Java semantic-harness
+  block from direct `ProtosSourceCompiler.compile(...).call(...)` legacy-AST
+  execution to the canonical Bytecode-backed
+  `ProtosTestExecutionSupport.evaluate(...)` boundary. Migrate the URI, CSV,
+  JSON parser stress, Integer math, and Collections Set harnesses while
+  preserving Java ownership, existing Activations, Actor-local module
+  caching/isolation, assertions, and stress coverage. No Protos-visible
+  semantics, specification, Standard Library behavior, or production runtime
+  behavior changes. Implementation version becomes `0.3.10-SNAPSHOT`.
+
 ## 0.3.9-SNAPSHOT
 
 - Restore `TOOL006 — public Test Tool resource-requirements wiring` (GitHub
