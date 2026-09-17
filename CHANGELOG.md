@@ -1,3 +1,15 @@
+## 0.3.14-SNAPSHOT
+
+- Fix checkout/developer execution after implementation-version changes. Repair
+  the PERF009 Java slow-test exclusion list after TOML parser reintegration and
+  make `bin/protos` select the exact artifact identified by Maven build metadata
+  instead of choosing among stale `target/protos-*.jar` files by lexicographic
+  filename order. This prevents an older implementation jar from executing
+  against newer Core sources when multiple build artifacts remain in `target/`.
+  No Protos-visible language, specification, Standard Library, or production
+  runtime semantics change. Implementation version becomes
+  `0.3.14-SNAPSHOT`.
+
 ## 0.3.13-SNAPSHOT
 
 - Advance `PERF009-B — Quarantined Java test normalization and reintegration`

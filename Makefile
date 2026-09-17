@@ -12,7 +12,7 @@ PROTOS_TEST_JOBS ?= 8
 # Temporary PERF009 quarantine.
 # These Java suites were measured above 5 seconds and are excluded from the
 # ordinary developer/CI path until PERF009 is resolved and they are reevaluated.
-JAVA_SLOW_TEST_EXCLUDES := **/.java,**/ProtosTomlEncoderModuleTest.java,**/ProtosPackageToolProtosTest.java,**/ProtosExternalPackagePlanningPreflightTest.java,**/ProtosWorkspaceRunCliTest.java,**/ProtosJsonParserModuleTest.java,**/ProtosPackageExecutionPlanAdapterTest.java
+JAVA_SLOW_TEST_EXCLUDES := **/ProtosTomlEncoderModuleTest.java,**/ProtosPackageToolProtosTest.java,**/ProtosExternalPackagePlanningPreflightTest.java,**/ProtosWorkspaceRunCliTest.java,**/ProtosJsonParserModuleTest.java,**/ProtosPackageExecutionPlanAdapterTest.java
 
 # DAP and the real GraalVM LSP tests own Graal tooling state and are not safe
 # in the class-parallel lane.

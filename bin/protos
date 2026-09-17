@@ -16,9 +16,24 @@ if [ -f "$ROOT/lib/protos.jar" ]; then
     JAR=$ROOT/lib/protos.jar
 else
     MODE=checkout
-    JAR=$(find "$ROOT/target" -maxdepth 1 -type f -name 'protos-*.jar' ! -name 'original-*' | sort | tail -n 1)
-    [ -n "${JAR:-}" ] || {
-        echo "protos: built jar not found; run 'mvn package' in $ROOT" >&2
+
+    POM_PROPERTIES=$ROOT/target/maven-archiver/pom.properties
+    [ -f "$POM_PROPERTIES" ] || {
+        echo "protos: Maven build metadata not found; run 'mvn package' in $ROOT" >&2
+        exit 1
+    }
+
+    artifact_id=$(sed -n 's/^artifactId=//p' "$POM_PROPERTIES" | head -n 1)
+    version=$(sed -n 's/^version=//p' "$POM_PROPERTIES" | head -n 1)
+
+    [ -n "$artifact_id" ] && [ -n "$version" ] || {
+        echo "protos: incomplete Maven build metadata: $POM_PROPERTIES" >&2
+        exit 1
+    }
+
+    JAR=$ROOT/target/$artifact_id-$version.jar
+    [ -f "$JAR" ] || {
+        echo "protos: expected built jar not found: $JAR; run 'mvn package' in $ROOT" >&2
         exit 1
     }
 fi
