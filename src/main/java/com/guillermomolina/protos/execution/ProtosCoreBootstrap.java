@@ -110,6 +110,12 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("Array.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("Any.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("Capture.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("String.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -285,6 +291,11 @@ public final class ProtosCoreBootstrap {
         }
         ProtosStandardArrayProtocol.install(arrayPrototype);
         ProtosParallelRuntime.installArrayParallel(arrayPrototype);
+
+        requirePrototype(
+                bootstrapContext, "Any", ProtosObjectValue.rootObject());
+        requirePrototype(
+                bootstrapContext, "Capture", ProtosObjectValue.rootObject());
 
         ProtosObjectValue stringPrototype =
                 requirePrototype(

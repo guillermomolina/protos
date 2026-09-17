@@ -16,6 +16,8 @@
 _corePreludeBindings: Context {
     Object: _coreRootObject
     Context: Context
+    Any: Any
+    Capture: Capture
     Number: Number
     Integer: Integer
     Float: Float

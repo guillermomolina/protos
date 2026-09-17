@@ -1,3 +1,17 @@
+## 0.3.11-SNAPSHOT
+
+- Advance `I041-B1 — standard matcher helper publication` (GitHub #550).
+  Publish the ratified D131 `Any` and `Capture` helper matchers as ordinary
+  frozen standard-prelude objects. Existing Core topology authority makes both
+  direct children of `Object`; no `Matcher`, `Pattern`, hidden intermediate
+  prototype, second matcher authority, or new matching capability is
+  introduced. `Any.match(subject)` returns canonical `true` and
+  `Capture.match(subject)` returns a one-element standard Array containing the
+  exact subject reference. Add bootstrap/publication evidence for prelude
+  visibility, direct-`Object` parentage, freezing, and exact helper behavior.
+  Specification remains at revision `0.1.417`; implementation version becomes
+  `0.3.11-SNAPSHOT`.
+
 ## 0.3.10-SNAPSHOT
 
 - Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under

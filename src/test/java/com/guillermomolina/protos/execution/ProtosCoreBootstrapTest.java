@@ -152,6 +152,8 @@ class ProtosCoreBootstrapTest {
                         "IOCapacityExhausted",
                         "EncodingError",
                         "LineTooLong",
+                        "Any",
+                        "Capture",
                         "Array",
                         "String",
                         "Encoding",

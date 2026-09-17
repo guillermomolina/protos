@@ -49,6 +49,8 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "Error.protos",
                     "InvalidReturn.protos",
                     "Array.protos",
+                    "Any.protos",
+                    "Capture.protos",
                     "String.protos",
                     "Encoding.protos",
                     "Map.protos",
