@@ -9,6 +9,38 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.416] - 2026-09-17
+
+### D131 / I041-A1 — Protocol-first matching semantic authority cutover
+- Replaces the dedicated Core v0.1 matching-language semantic model with the
+  ratified D131 Candidate C protocol-first foundation.
+- Retains the single public matcher authority `pattern.match(subject)`, inherited
+  `Object.match(subject) -> this == subject`, and the exact
+  `false | true | non-empty Array` matcher-result carrier.
+- Defines direct fixed exact-length structural recognition on standard
+  `Array.match` and open/subset structural recognition on normal standard
+  `Map.match`, including receiver eligibility, shallow attempt observation,
+  deterministic child order, normal Map key-search semantics, and positional
+  capture composition.
+- Defines the initial standard helper matchers `Any` and `Capture`.
+- Defines ordinary multi-way selection through `value.caseOf(cases)`, where
+  `cases` is a normal insertion-ordered Map of matcher keys to callable values;
+  normal Map hash/equality/unique-key semantics are deliberately part of that
+  representation.
+- Removes the dedicated match/case/when language, pattern-owned binding syntax,
+  OR/remainder/exact/alias/captures institutions, and matching-specific static
+  coverage framework from the normative Core v0.1 model.
+- Removed capabilities are not dormant compatibility features; future recovery
+  requires a new explicit decision.
+
+### Compatibility and implementation state
+- `semantics/MATCHING.md` is cut over normatively to D131 in I041-A1.
+- Grammar, parser/AST/lowering/runtime, tests/conformance, and programmer
+  documentation remain to be reconciled by later I041 slices; this temporary
+  normative/executable mismatch is owned by I041 and is not a compatibility
+  promise.
+- Implementation behavior and implementation version are unchanged by I041-A1.
+
 ## [0.1.415] - 2026-09-17
 
 ### D136 — F′ Map initial-association construction correction

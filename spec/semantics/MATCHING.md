@@ -2,147 +2,116 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-12
+Last updated: 2026-09-17
 
-This document is the primary normative owner of the ratified matching-protocol
-semantics introduced by D071-D075 and D078. D075 ratifies the exact named
-structural-projection request/result/failure contract, while D078 ratifies
-open/subset named-object matching and declines a generic complete-view/remainder
-protocol in Core v0.1. The latest matching specification revision is
-`0.1.409`.
-D093 now fixes the outer postfix matching-expression/arm/guard envelope in
-`PROTOS_GRAMMAR.md` and §3.7 fixes its lowering onto this semantic model. D095 now defines the Core v0.1 internal match-pattern grammar, binder/discard,
-Array/Map/remainder, OR, alias and opaque-matcher capture-interface source forms
-in `PROTOS_GRAMMAR.md`, with their semantic mapping in §3.8.
-D096 now defines Core v0.1 static exhaustiveness/redundancy analysis in §3.9 as a conservative tri-state proof layer. Optional/repetition/search pattern families remain separately unresolved.
+This document is the primary normative owner of Core v0.1 matching semantics.
+D131 supersedes the dedicated matching-language model introduced by D088,
+D090, D092, D093, D095, D096, D100 and D103.
+
+The latest matching specification revision is `0.1.416`.
+
+Core v0.1 matching is protocol-first. The language retains one ordinary matcher
+authority, ordinary callable invocation for selected bodies, direct structural
+matching on standard Array/Map values, two standard helper matchers (`Any` and
+`Capture`), and ordinary multi-way selection through `caseOf`.
+
+The dedicated `match` / `case` / `when` pattern language, pattern-owned binding
+syntax, OR/remainder/exact/alias/captures institutions, and matching-specific
+static coverage framework are not part of Core v0.1 under D131.
 
 ## 1. Scope and architectural boundary
 
-Protos matching is protocol-oriented rather than based on a closed compiler-owned
-pattern universe.
+Matching is defined through ordinary Protos objects, messages, standard
+collection state, Closures/callables, and ordinary Error/control behavior.
 
-Recognition policy belongs to the pattern side. A subject may separately expose
-an explicit logical structural view to generic structural patterns. These are
-distinct responsibilities: the pattern decides whether/how it recognizes a
-subject; the subject decides which logical structural components it chooses to
-expose.
+Matching introduces no class, record, struct, sealed variant, matcher registry,
+hidden pattern type, capture frame, mutable capture sink, callback/CPS matcher
+authority, or second recognition protocol.
 
-Matching introduces no class, record, struct, sealed-variant, matcher registry,
-hidden pattern type, or host-reflection institution.
-
-## 2. Pattern-owned recognition
-
-The required public matcher authority is the ordinary one-argument selector:
+The required public recognition authority is:
 
 ```text
 pattern.match(subject)
 ```
 
-There is exactly one required semantic matcher entry point. Core v0.1 does not
-require a paired `matches(subject)` predicate selector, a caller-visible
-recognition/extraction mode or hint, a callback/CPS matcher path, or a mutable
-capture sink.
+Recognition policy belongs to the matcher receiver.
+
+## 2. Matcher authority
 
 `match` uses ordinary Protos lookup, dispatch, argument evaluation, invocation,
 Error propagation, non-local control behavior, cancellation, and explicit
-suspension semantics. Matching adds no truthiness and no implicit `Future.value`
-or other implicit awaiting/adoption step.
+suspension semantics.
 
-The D093 standard matching-expression envelope evaluates its subject expression
-exactly once at the matching-expression boundary. Arms are semantically considered
-in source order, and the first arm accepted under D092 wins. Execution of a
-selected arm remains ordinary invocation of the selected callable / Closure
-according to the existing callable semantics.
+Matching adds no truthiness and performs no implicit Future adoption/awaiting.
 
-`PROTOS_GRAMMAR.md` owns the D093 postfix outer envelope. The concrete internal
-pattern grammar and binder spellings remain separately deferred.
+There is exactly one required matcher entry point:
 
-### 2.1 Default ordinary value-pattern behavior
+```text
+pattern.match(subject)
+```
 
-Core v0.1 supplies a standard root matcher behavior so an ordinary Protos value
-can act as an ordinary zero-capture value pattern without a hidden wrapper,
-literal-specific recognition path, matcher registry, or second public matching
-operator.
+Core v0.1 defines no paired `matches(subject)` predicate, recognition-only mode,
+matcher registry, capture sink, or alternative hidden matcher interface.
 
-The standard root selector is:
+### 2.1 Default ordinary matcher behavior
+
+Core v0.1 supplies the inherited standard root behavior:
 
 ```text
 Object.match(subject)
 ```
 
-When ordinary lookup selects this standard root behavior, the original matcher
-receiver remains the pattern value. For one invocation, the behavior performs
-**exactly one ordinary equality send with the original pattern receiver:**
+When ordinary lookup selects this standard root behavior, it performs exactly one
+ordinary equality send:
 
 ```text
 this == subject
 ```
 
-The equality result is returned unchanged. Under the existing equality contract,
-canonical `false` therefore becomes the D072 no-match result and canonical
-`true` becomes D072 successful recognition with zero captures. The standard
-root behavior never produces a capture Array.
+The result is returned unchanged.
 
-The equality operation is ordinary Protos behavior. Its lookup, dispatch,
-effects, Error behavior, non-local control, cancellation, and explicit suspension
-compose exactly as they do outside matching. The existing equality result
-contract remains authoritative: an invalid normal `==` result is an equality
-protocol violation and is not converted to mismatch or truthiness.
-
-The standard root matcher does **not**:
-
-- perform an `===` identity pre-check or shortcut;
-- call `subject == this` as a fallback or symmetry repair;
-- invoke `==` more than once for one root matcher invocation;
-- consult `hash`, `identityHashOf`, Map membership, or another indexing/hash
-  mechanism;
-- coerce a result, apply truthiness, retry, or reinterpret an Error as mismatch;
-- implicitly await or adopt a Future; or
-- introduce a special rule for Number, String, `true`, `false`, `null`, or
-  another literal/value family.
-
-An object that wants recognition semantics different from its ordinary semantic
-equality may override or shadow `match(subject)` through ordinary object behavior.
-That selected override is then the same D073 matcher authority and need not use
-`==` at all. This allows domain matchers such as ranges, regular expressions, or
-other abstractions to define recognition without redefining their ordinary
-equality relation.
-
-D081 defines the semantics of this ordinary value-pattern default; it does not
-select concrete matching grammar or which source expressions are admitted as
-value-pattern forms. A future syntax decision may denote an ordinary value as a
-pattern only by preserving the single `pattern.match(subject)` semantic path.
-
-Implementations may specialize standard built-in value cases, inline the root
-matcher/equality path, or build literal decision structures only when observable
-behavior is identical to ordinary lookup and the exactly-once `match`/`==`
-semantics above. In particular, an optimization must not skip an observable
-custom equality invocation merely because `this === subject` is already known.
-
-## 3. Matcher outcome and positional-capture carrier
-
-When the result of `pattern.match(subject)` is consumed as a matcher outcome, the
-normal result contract is exact:
+Therefore:
 
 ```text
-false        -> no match
-true         -> successful match with zero captures
-[x]          -> successful match with one positional capture
-[x, y, ...]  -> successful match with two-or-more positional captures
+false -> mismatch
+true  -> successful recognition with zero captures
 ```
 
-Only the canonical Boolean `false` denotes no match. Only the canonical Boolean
-`true` denotes successful recognition with zero captures. A successful matcher
-with captures returns a **non-empty standard Array** whose elements, in order,
-are the ordinary captured Protos values.
+The standard root behavior does not:
 
-Every captured element may itself be any ordinary Protos value, including
-`null`, either Boolean, an Array, Closure, Future, or arbitrary object. Therefore
-`[null]`, `[false]`, `[true]`, and `[[]]` are all unambiguous one-capture results.
-In particular a variadic/domain capture whose value is an empty Array is carried
-as `[[]]`; the empty outer Array is not a second spelling for zero captures.
+- perform an identity shortcut;
+- reverse equality;
+- retry equality;
+- call `hash`;
+- use Map membership;
+- coerce a result;
+- reinterpret Error as mismatch; or
+- implicitly await a Future.
 
-The following normal results are invalid matcher outcomes:
+An object may override/shadow `match(subject)` through ordinary Protos behavior to
+define recognition semantics independent of its equality semantics.
+
+## 3. Matcher outcome carrier
+
+When consumed as a matcher result, the exact normal result contract is:
+
+```text
+false        -> mismatch
+true         -> success with zero captures
+[x]          -> success with one positional capture
+[x, y, ...]  -> success with two-or-more positional captures
+```
+
+Only canonical `false` denotes mismatch.
+
+Only canonical `true` denotes success without captures.
+
+A successful matcher with captures returns a non-empty standard Array whose
+elements, in order, are ordinary captured Protos values.
+
+The empty Array is not another spelling of success-with-zero-captures.
+
+The following normal values are invalid matcher outcomes:
 
 ```text
 []
@@ -153,1533 +122,474 @@ any Future
 any ordinary object that is neither canonical Boolean nor a non-empty standard Array
 ```
 
-A standard matching consumer signals an ordinary `Error` when it receives an
-invalid normal matcher outcome. Error, non-local return, cancellation, explicit
-suspension behavior, and any other non-normal control transfer produced while
-invoking the matcher propagate according to the already-existing Protos rules;
-they are never encoded inside this result carrier.
+A standard matcher consumer signals an ordinary Error when it receives an invalid
+normal matcher outcome.
 
-A capture-producing matcher may return its non-empty Array even when a caller
-ultimately ignores those captures. This revision deliberately defines no second
-recognition-only semantic path. A later optional optimization protocol may be
-considered only by a separate decision and must not redefine the success
-relation established here.
+Error, non-local control, cancellation, suspension, and other non-normal behavior
+propagate under the ordinary Protos rules.
 
-### 3.1 Standard composite capture composition
+## 4. Standard composite capture composition
 
-For any standard composite pattern whose separately defined semantics evaluate an
-ordered set or sequence of child matcher attempts, each immediate child remains
-an **opaque ordinary matcher**. The composite invokes that child only through the
-D073 authority:
+A standard composite invokes each reached child only through:
 
 ```text
 child.match(childSubject)
 ```
 
-D083 does not create a new standard pattern taxonomy or concrete matching syntax.
-It defines how a standard composite that already has child attempts composes
-their D072 outcomes.
+Children execute in the deterministic order defined by that composite.
 
-For one standard composite attempt, child attempts occur in the composite's
-deterministic semantic child order. When that child domain is ordered, such as an
-ordered child list, the order is left-to-right. Each attempted child is invoked
-exactly once. A normal canonical `false` result makes the composite fail
-immediately; later children are not invoked.
+Each reached child is invoked exactly once.
 
-A successful child contributes captures according to its exact D072 result:
+A canonical `false` result fails the composite immediately; later children are
+not invoked.
+
+A successful child contributes captures as follows:
 
 ```text
-true         -> contribute zero captures
-[c1, ...]    -> contribute c1 ... cn in carrier order
+true       -> zero captures
+[c1, ...]  -> c1 ... cn in carrier order
 ```
 
-Only the **outer D072 carrier level** participates in this concatenation.
-Captured values are never recursively flattened merely because a capture value is itself an Array
-or another collection. For example:
+Only the outer matcher-result carrier is flattened.
+
+A captured Array remains one captured value. For example:
 
 ```text
 child -> [[1, 2]]
 ```
 
-publishes exactly one capture whose ordinary value is the Array `[1, 2]`. Amid
-other captures, a standard parent may therefore produce:
+contributes one capture whose value is `[1, 2]`.
+
+Before moving to the next child, the parent shallowly consumes the top-level
+references of a valid child capture Array. Later mutation of that carrier Array
+cannot retroactively change captures already observed by the current attempt.
+
+If all children succeed and no captures were contributed, the composite returns
+canonical `true`.
+
+If one or more captures were contributed, the composite returns one non-empty
+standard Array containing those references in composition order.
+
+## 5. Standard helper matchers
+
+Core v0.1 defines exactly two standard helper matcher objects.
+
+### 5.1 `Any`
 
 ```text
-[a, [1, 2], b]
+Any.match(subject) -> true
 ```
 
-but it must not reinterpret that result as:
+`Any` accepts every subject and contributes no capture.
+
+### 5.2 `Capture`
 
 ```text
-[a, 1, 2, b]
+Capture.match(subject) -> [subject]
 ```
 
-Likewise, `true` contributes no capture, `[true]` contributes one captured
-Boolean, `[false]` contributes one captured Boolean, and `[[]]` contributes one
-captured empty Array. The containing composite inserts no placeholder for a
-zero-capture child.
+`Capture` accepts every subject and contributes the subject as exactly one
+positional capture.
 
-Before invoking the next child, the standard composite shallowly consumes the
-top-level indexed element references of each valid child capture Array. Mutation
-of that carrier Array after this observation cannot retroactively change which
-capture references the current composite attempt has already observed. This is
-not a deep copy: a captured mutable object remains that same ordinary object.
+`Any` and `Capture` are ordinary standard matcher objects, not keywords and not
+dedicated pattern syntax.
 
-If every child succeeds and the concatenated capture sequence is empty, the
-composite returns canonical `true`. If every child succeeds and one or more
-captures were contributed, the composite returns one standard non-empty Array
-containing those capture references in composition order.
+Core v0.1 does not initially standardize `Or`, `Guard`, `Identity`, Array
+remainder combinators, exact-Map combinators, or Map-remainder combinators.
 
-An invalid normal child matcher outcome is an ordinary D072 protocol violation
-and causes `Error` at the consuming composite boundary; it is not mismatch or
-zero-capture success. Error, non-local control, cancellation, explicit
-suspension, and other non-normal behavior produced by a child propagate under
-ordinary Protos rules. Effects already performed by earlier attempted children
-are not rolled back when a later child mismatches or fails.
+## 6. Standard Array structural matching
 
-Aggregation is explicit at the pattern's public result boundary. A pattern that
-semantically wants several values to constitute **one capture** publishes an
-ordinary aggregate value as one D072 capture. For example, a future repetition
-or rest pattern that chooses to capture an Array `[v1, v2, v3]` as one value
-publishes:
+Ordinary standard Array values provide structural recognition through
+`Array.match(subject)`.
+
+This is direct standard behavior of semantically eligible Array receivers; there
+is no separate Array-pattern value family.
+
+### 6.1 Receiver eligibility
+
+The receiver must own standard Array indexed state.
+
+An ordinary object does not become an Array merely because it:
+
+- delegates to an Array;
+- inherits Array behavior;
+- defines `at`, `atPut`, `size`, `each`, iteration, or numeric-key behavior; or
+- copies Array-like slots.
+
+If ordinary lookup selects the standard Array `match` behavior for a receiver that
+does not own standard Array indexed state, invocation signals an ordinary
+invalid-receiver Error.
+
+This rule does not fall back silently to `Object.match`.
+
+### 6.2 Subject eligibility
+
+If the subject does not own standard Array indexed state,
+`Array.match(subject)` returns canonical `false`.
+
+String, Bytes, Map, iterators, generators, streams, and arbitrary user-defined
+indexable objects do not participate automatically.
+
+### 6.3 Fixed exact shape
+
+For one Array structural match attempt, the matcher Array and subject Array must
+have exactly the same indexed element count.
+
+A length mismatch returns canonical `false` before any child matcher invocation.
+
+Core v0.1 defines no Array remainder/rest matching in this model.
+
+### 6.4 Shallow observation
+
+After receiver/subject eligibility is established and before invoking any child,
+the attempt establishes one shallow logical observation of both:
+
+- the matcher Array's current indexed matcher references; and
+- the subject Array's current indexed subject references.
+
+The observation fixes the current lengths and corresponding top-level references
+for this attempt.
+
+Mutation of either original Array after that observation cannot change which
+matcher or subject references this attempt has already selected.
+
+The observation is shallow: referenced mutable objects remain the same objects.
+
+The standard implementation does not obtain shape/elements by sending ordinary
+`size`, `at`, `each`, iterator, or deconstruction messages.
+
+### 6.5 Child execution
+
+Children execute left-to-right by ascending Array index.
+
+For index `i`:
 
 ```text
-[[v1, v2, v3]]
+matcherElement[i].match(subjectElement[i])
 ```
 
-D083 does not choose repetition, optional, rest, or whole-subject pattern
-semantics themselves.
+is invoked exactly once when reached.
 
-Arbitrary user-defined `match(subject)` implementations remain constrained by
-D072 and their own documented behavior only. D083 does not require child-pattern
-topology introspection, a fixed capture arity, capture-name metadata, a
-`CaptureFrame`, a mutable capture sink, a callback/CPS path, or another matcher
-authority.
+Canonical `false` fails the Array match immediately.
 
-A future standard alternative/or-pattern form that exposes fixed source-level
-bindings must provide a stable binding interface across its successful
-alternatives, but D083 does not select the mechanism for proving or representing
-that stability. Source binding names, duplicate-name rules, whole-subject alias
-syntax, guard syntax, exhaustivity, and concrete match/arm grammar remain separate
-decisions.
+Successful child captures compose according to section 4.
 
-Implementations may inline or fuse standard composite layers, pre-size or
-eliminate intermediate carrier Arrays, or write captures directly into internal
-frame storage only when the observable result is equivalent to the semantics
-above. Such optimization must preserve matcher dispatch, required call count and
-order, Error/control/suspension behavior, shallow capture-value boundaries, and
-the prohibition on recursive flattening.
+If every child succeeds, the Array matcher returns `true` or the composed
+non-empty capture Array according to section 4.
 
-### 3.2 Standard Array sequence-pattern semantics
+## 7. Standard Map structural matching
 
-Core v0.1 standard sequence matching is a standard pattern-owned specialization
-for subjects that own **standard Array indexed state**. It does not define a
-generic positional-object view or infer sequence membership from ordinary
-indexing behavior.
+Ordinary normal standard Map values provide open/subset structural recognition
+through `Map.match(subject)`.
 
-An ordinary object does not become eligible for this standard sequence-pattern
-contract merely because it defines or inherits `at`, `atPut`, `size`, `each`, an
-iterator, numeric-key behavior, or other collection-like messages. Delegating to
-an Array or copying Array behavior likewise does not confer standard Array
-indexed state. `String`, `Bytes`, `Map`, iterators, generators, streams, and
-arbitrary user-defined indexable objects do not participate automatically.
+This is direct standard behavior of semantically eligible normal Map receivers;
+there is no separate Map-pattern value family.
 
-A standard sequence pattern presented with an ineligible subject returns
-canonical `false` as ordinary mismatch. D084 introduces no implicit conversion,
-registration table, `Sequence` family, host-type test, generic positional
-deconstruction protocol, or fallback call to a subject-side sequence view.
+### 7.1 Receiver eligibility
 
-#### 3.2.1 Fixed shape and one explicit remainder
+The receiver must own normal standard Map keyed-entry state.
 
-A standard sequence pattern with `N` fixed child components and no remainder
-component requires the subject Array's current indexed element count to be
-exactly `N`. A different length causes canonical `false` before any element
-child matcher is invoked. Fixed sequence matching is therefore exact-length by
-default; extra elements are not silently ignored.
+An ordinary object does not become a normal Map merely because it:
 
-A standard sequence pattern may contain **at most one semantic remainder component**.
-The remainder may occur between a fixed prefix and fixed suffix. For a pattern
-with `P` fixed prefix children and `S` fixed suffix children, the subject length
-must satisfy:
+- delegates to a Map;
+- inherits Map behavior;
+- defines `at`, `atPut`, `containsKey`, `size`, `each`, iteration, or Map-like
+  ordinary slots; or
+- copies Map-like behavior.
+
+If ordinary lookup selects the standard Map `match` behavior for a receiver that
+does not own normal standard Map keyed-entry state, invocation signals an ordinary
+invalid-receiver Error.
+
+`IdentityMap` does not participate automatically because its key relation is a
+different standard collection contract.
+
+### 7.2 Subject eligibility
+
+If the subject does not own normal standard Map keyed-entry state,
+`Map.match(subject)` returns canonical `false`.
+
+### 7.3 Stable shallow observation
+
+For one Map structural match attempt, before executing any matcher-key search or
+nested mapped-value matcher, the attempt establishes stable shallow observations
+of:
+
+- the matcher Map's current associations in matcher insertion order; and
+- the subject Map's current associations in subject insertion order.
+
+For each observed association, the semantic observation preserves the ordinary
+stored representative key reference, mapped value reference, recorded key hash,
+and relative insertion-order position.
+
+The observation is shallow. Keys and values are not cloned or frozen.
+
+Mutation of either Map's keyed-entry state after observation does not add, remove,
+replace, or reorder associations in the current attempt.
+
+### 7.4 Requirement interpretation
+
+Each matcher-Map association is one requirement:
 
 ```text
-length >= P + S
+query key -> mapped-value child matcher
 ```
 
-The remainder denotes exactly the contiguous unmatched middle range. It may
-contain zero elements. More than one semantic remainder component is outside the
-standard Core v0.1 sequence-pattern contract; Core does not choose a greediness,
-backtracking, split-distribution, or subsequence-search policy for such a form.
+Requirements are considered in matcher insertion order.
 
-A remainder component whose standard semantics merely accepts and discards the
-unmatched middle does not require that middle to be traversed or materialized.
-A remainder component that must itself receive the unmatched aggregate is given
-the remainder value defined below.
+The query-key position is an ordinary Map key value; it is not itself scanned as a
+matcher against subject keys.
 
-#### 3.2.2 Shallow logical observation before child matching
+Each requirement is resolved against the observed subject associations using the
+existing normal standard-Map key search law:
 
-For one standard sequence-pattern attempt, after standard Array receiver
-eligibility is established and before **any** nested sequence child matcher is
-invoked, the sequence matcher establishes one shallow logical observation of
-the subject Array state needed by that attempt.
-
-It determines the current indexed element count once for the attempt and
-captures the element references required by all fixed prefix/suffix positions.
-If a remainder child requires the unmatched aggregate, the unmatched middle
-element references are captured as part of the same pre-child observation. A
-discard-only remainder need not observe the middle element references.
-
-The observation is shallow. If an observed Array element is a mutable ordinary
-object, the same object reference is supplied to the child matcher; D084 does
-not deep-copy or freeze captured element values.
-
-Mutation of the original Array's indexed positions after this pre-child
-observation cannot change which element references the current sequence-pattern
-attempt has already selected. D084 introduces no transaction, deep snapshot,
-global lock, or new synchronization primitive around those ordinary element
-objects.
-
-The standard sequence matcher performs this Array observation through the
-standard Array semantic state. It **does not send ordinary `size`, `at`, `each`, iterator, or deconstruction messages**
-to determine the sequence shape or obtain the observed standard Array elements.
-This preserves the existing distinction between standard Array state and
-ordinary user-defined indexing protocols.
-
-#### 3.2.3 Remainder aggregate value
-
-When a remainder component must receive the unmatched range as one ordinary
-value, that value is a fresh **frozen standard Array** whose indexed elements are
-exactly the shallowly observed unmatched middle element references, in original
-ascending subject-index order.
-
-An empty unmatched range therefore produces a fresh frozen empty standard Array.
-Each semantically materialized remainder aggregate has distinct standard Array
-identity for that attempt. Freezing is shallow: mutable objects referenced by
-the remainder are not themselves frozen or cloned.
-
-An implementation may defer physical remainder construction, share backing
-storage, or use another internal representation only when the observable result
-is exactly that of the required fresh frozen standard Array, including its
-distinct identity, frozen behavior, element order, and independence from later
-indexed mutation of the original subject Array.
-
-If the remainder component merely accepts/discards any unmatched range and does
-not semantically require a remainder subject value, implementations must not be
-required to allocate such an Array merely to preserve an invisible artifact.
-
-#### 3.2.4 Child execution and D083 composition
-
-After the pre-child observation is established, child matchers execute in the
-standard sequence pattern's semantic left-to-right component order: fixed prefix
-children, the remainder child when one exists, then fixed suffix children.
-
-Each attempted child is invoked exactly once. Canonical `false`, invalid matcher
-outcomes, Error, non-local control, cancellation, explicit suspension, prior
-effects, and capture concatenation obey the existing D072/D073/D083 contracts.
-
-A remainder Array is one ordinary child subject. If a child matcher captures
-that Array as one value, D072 carries it as one capture and D083 preserves it as
-one capture. For example, a captured remainder value `[r1, r2]` may contribute:
-
-```text
-[[r1, r2]]
-```
-
-to a child result and remains the single captured Array value `[r1, r2]` in the
-containing composite's capture sequence. It is never recursively flattened into
-separate `r1` and `r2` captures.
-
-#### 3.2.5 Boundary and future evolution
-
-D084 defines standard finite Array sequence-pattern semantics only. It does not
-standardize:
-
-- Map/keyed patterns or Map remainder capture;
-- String- or Bytes-specific pattern semantics;
-- iterator, generator, stream, lazy, or infinite-sequence matching;
-- find/subsequence/search patterns;
-- repetition or optional-pattern semantics;
-- a generic user-extensible sequence observation protocol;
-- a standard `Sequence` semantic family;
-- source syntax for sequence components, rest, capture names, or arms; or
-- guard syntax, exhaustivity, identity-pattern syntax, or recognition-only fast paths.
-
-A user/library pattern may already define domain-specific sequence recognition
-through ordinary `pattern.match(subject)`. A future generic opt-in sequence
-protocol remains possible only through a separate explicit decision backed by
-concrete interoperability evidence.
-
-Implementations may specialize standard Array receiver tests, scalarize the
-pre-child observation into frame slots, avoid unused remainder work, fuse
-standard child matchers, or optimize fresh frozen remainder storage only when
-the observable behavior remains identical to this contract.
-
-### 3.3 Standard Map keyed-pattern semantics
-
-Core v0.1 standard keyed matching is a standard pattern-owned specialization for
-subjects that own **normal standard `Map` keyed-entry state**. It does not
-define a generic mapping capability or infer Map-pattern participation from
-ordinary indexing, member, or iteration behavior.
-
-An ordinary object does not become eligible for this standard Map-pattern
-contract merely because it defines or inherits `at`, `atPut`, `containsKey`,
-`size`, `each`, another iteration facility, String-keyed indexed contents, or
-Map-like ordinary slots. Delegating to a Map or copying Map behavior likewise
-does not confer standard Map keyed-entry state. `IdentityMap` does not
-participate automatically because its identity-key relation is a distinct
-standard collection contract.
-
-A standard Map pattern presented with an ineligible subject returns canonical
-`false` as ordinary mismatch. D086 introduces no implicit conversion, generic
-`Mapping` family, mapping registry, host-type test, generic keyed-projection
-protocol, or fallback call to subject-side mapping behavior.
-
-#### 3.3.1 Keyed requirements and stable association observation
-
-For one standard Map-pattern attempt, before any query-key `hash` / `==`
-behavior or nested mapped-value child matcher is executed, the matcher
-establishes one **stable shallow logical snapshot** of the subject Map's current
-associations.
-
-For every association in that snapshot, the semantic observation preserves:
-
-```text
-stored representative key reference
-mapped value reference
-recorded key hash
-relative insertion-order position
-```
-
-The observation is shallow. Keys and mapped values remain the same ordinary
-objects and are not cloned, frozen, or otherwise transformed merely because
-matching observes them.
-
-Mutation of the original Map's keyed-entry state after snapshot establishment
-does not add, remove, replace, or reorder associations in the current matching
-attempt. D086 introduces no transaction, rollback, global Map lock, or deep
-snapshot of contained key/value objects.
-
-The snapshot is semantic, not a required physical representation. An
-implementation may use copied association references, versioned/persistent
-table state, copy-on-write storage, retained generations, or another mechanism
-when the observable result is identical. A Map pattern that does not request a
-remainder is not required merely by D086 to allocate a public copied Map.
-
-Each standard keyed requirement consists semantically of:
-
-```text
-query key value
-mapped-value child pattern
-```
-
-The query key is an ordinary value used for Map key lookup. D086 does **not**
-make that position an arbitrary pattern scanned against every subject key.
-Which source forms construct or evaluate query-key values remains a separate
-surface-language decision.
-
-#### 3.3.2 Key resolution uses the existing normal-Map relation
-
-Each keyed requirement is resolved independently against the stable association
-snapshot using the existing normal standard-Map key-search relation from
-`VALUES_AND_COLLECTIONS.md`.
-
-For one keyed requirement, the matcher:
-
-1. computes the query key's current standard `hash` exactly once for that search;
-2. applies the existing standard Map hash-result and comparison-scope contracts;
-3. considers only snapshot associations whose recorded hash equals that query
-   hash;
-4. considers those candidates in snapshot insertion order;
-5. sends exactly one ordinary:
+1. compute the query key's current standard `hash` exactly once for that search;
+2. consider only observed subject associations whose recorded hash equals it;
+3. consider candidates in observed subject insertion order;
+4. invoke exactly one ordinary:
 
    ```text
    queryKey == storedRepresentativeKey
    ```
 
-   for each candidate that is actually compared;
-6. selects the first candidate whose comparison returns canonical `true`;
-7. continues to the next candidate on canonical `false`; and
-8. returns canonical `false` for the containing Map pattern when no candidate
-   matches.
+   for each candidate actually compared;
+5. select the first candidate whose equality result is canonical `true`;
+6. continue candidate search on canonical `false`;
+7. if no candidate matches, return canonical `false` for the containing Map match.
 
-The standard Map pattern does not reverse equality, try both directions,
-substitute `===`, recompute candidate recorded hashes, use `Object.match` as a
-key relation, or perform `containsKey` followed by `at`. Map's existing
-`hash` + query-side `==` search remains the sole standard key-equivalence
-authority for normal Map matching.
+The search does not reverse equality, substitute identity, recompute stored
+candidate hashes, invoke `Object.match` for key lookup, or perform
+`containsKey`/`at` as a replacement search protocol.
 
-`hash` and `==` remain ordinary Protos behavior. Their effects, Error,
-non-local control, cancellation, explicit suspension, invalid-result failures,
-and existing Map comparison-scope restrictions remain observable and propagate
-unchanged. Effects are not rolled back.
+A missing required association is mismatch, not the ordinary missing-key
+`Map.at` Error.
 
-A missing requested key is ordinary pattern mismatch, not the ordinary
-missing-key `Map.at` Error. Conversely, a present association whose mapped value
-is `null`, `false`, `true`, an Array, Closure, Future, or any other ordinary
-value remains present and supplies that exact value to its mapped-value child
-pattern.
+### 7.5 Resolve before child matching
 
-All keyed requirements are resolved and their selected mapped-value references
-are fixed before the first mapped-value child matcher is invoked. Later child
-effects therefore cannot change which subject associations or mapped-value
-references were selected for the current attempt.
+All required subject associations and their mapped-value references are resolved
+and fixed before the first mapped-value child matcher executes.
 
-#### 3.3.3 Repeated/equivalent keyed requirements
+Later matcher effects therefore cannot alter which subject values this attempt
+will supply to later mapped-value child matchers.
 
-Multiple keyed requirements may select the same snapshot association.
+### 7.6 Open/subset semantics and child execution
 
-Each requirement performs its own ordinary Map key search under §3.3.2. If two
-query key values both resolve to the same association, their mapped-value child
-patterns are repeated constraints on that same selected mapped-value reference.
+Unrelated subject associations are ignored.
 
-D086 introduces no duplicate-query-key validation pass or duplicate-key Error.
-For residue accounting, a subject association selected by one or more
-requirements counts as selected once.
+Core v0.1 defines no exact Map mode and no Map remainder capture.
 
-#### 3.3.4 Residue policy: open, exact, or matched remainder
+After all requirements resolve successfully, mapped-value child matchers execute
+in matcher requirement order.
 
-A standard Map pattern has one semantic residue policy:
+Each reached child is invoked exactly once as:
 
 ```text
-ignore          -> open/subset matching
-require-empty   -> exact keyed matching
-match-remainder -> match the unmatched associations as one Map value
+childMatcher.match(selectedMappedValue)
 ```
 
-`ignore` is the default. Every keyed requirement must resolve and every
-mapped-value child attempted later must succeed, but unrelated snapshot
-associations do not themselves cause mismatch. Consequently a zero-requirement
-open standard Map pattern recognizes any eligible normal standard Map.
+Canonical `false` fails the containing Map match immediately.
 
-For `require-empty`, structural resolution succeeds only when every snapshot
-association was selected by at least one keyed requirement. No remainder Map
-needs to be allocated merely to test that no unmatched association remains.
+Successful child captures compose according to section 4.
 
-For `match-remainder`, the residual association set is every snapshot
-association not selected by any keyed requirement. The remainder child receives
-the ordinary remainder value defined below.
+## 8. Ordinary multi-way selection with `caseOf`
 
-Residue policy does not change key equality, keyed-requirement search, or
-mapped-value selection. It only determines what the pattern requires of
-unselected snapshot associations.
-
-#### 3.3.5 Fresh frozen standard Map remainder
-
-When `match-remainder` semantically requires the residue value, that value is a
-fresh **frozen normal standard `Map`** containing exactly the unmatched snapshot
-associations in their original relative insertion order.
-
-For each retained association, remainder construction preserves:
-
-```text
-stored representative key reference
-mapped value reference
-recorded key hash
-relative insertion order
-```
-
-Remainder construction does not send ordinary user-visible `hash`, `==`,
-`atPut`, `each`, or another iteration/key protocol merely to rebuild those
-associations. In particular, a mutable stored key whose current `hash` has
-changed does not have its recorded hash silently recomputed while the remainder
-is created.
-
-An empty residual set produces a fresh frozen empty normal standard Map.
-
-The remainder is a distinct identity-bearing Map object for each semantically
-materialized attempt. Freezing is shallow: the representative key and mapped
-value objects are not recursively frozen or cloned.
-
-Implementations may defer physical remainder materialization until the
-remainder child is reached, share internal backing state, or use another
-representation only when observable behavior is exactly that of the required
-fresh frozen normal standard Map, including distinct Map identity, frozen
-behavior, preserved association state/order, and independence from later
-keyed-entry mutation of the original subject Map.
-
-An open/subset pattern that ignores residue must not be required to materialize
-a remainder Map. An exact pattern need only establish residual emptiness.
-
-#### 3.3.6 Child execution and D083 composition
-
-After structural key resolution and residue validation are complete,
-mapped-value child matchers execute in deterministic keyed-requirement order.
-Each attempted child is invoked exactly once and receives the mapped-value
-reference fixed during the snapshot-resolution phase.
-
-For `match-remainder`, the remainder child executes after the mapped-value
-children if all earlier children succeed. Implementations may therefore defer
-remainder materialization until that child is actually reached.
-
-Canonical `false`, invalid matcher outcomes, Error, non-local control,
-cancellation, explicit suspension, prior effects, and positional capture
-composition obey the existing D072/D073/D083 contracts.
-
-A remainder Map is one ordinary child subject. If a child matcher captures that
-Map as one value, D072 carries it as one capture and D083 preserves it as one
-capture. Its entries are never recursively converted into separate captures.
-
-#### 3.3.7 Boundary and future evolution
-
-D086 defines standard finite normal-Map keyed-pattern semantics only. It does not
-standardize:
-
-- `IdentityMap` keyed-pattern participation;
-- arbitrary key-pattern scanning/search across subject entries;
-- defaults or optional behavior for absent keys;
-- a generic user-extensible keyed-projection/mapping protocol;
-- keyed patterns for arbitrary `at`/`containsKey` objects;
-- Map-entry repetition, quantification, or search patterns;
-- concrete Map-pattern, exactness, remainder, key-expression, capture, or arm
-  syntax;
-- named capture/binding spelling or duplicate binding-name rules;
-- guard syntax, exhaustivity, identity-pattern syntax, or recognition-only fast paths.
-
-A user/library pattern may already define domain-specific keyed recognition
-through ordinary `pattern.match(subject)`. A future generic opt-in keyed
-observation protocol, `IdentityMap` specialization, or entry-search pattern
-remains possible only through a separate explicit decision backed by concrete
-use evidence.
-
-Implementations may specialize normal standard Map receiver checks, retain
-versioned snapshot state, optimize query lookup, scalarize selected values, test
-residual emptiness without materializing a Map, and lazily materialize remainder
-state only when all observable behavior remains identical to this contract.
-
-### 3.4 Capture-to-arm binding ABI
-
-D072/D083 remain the sole standard runtime capture representation. D088
-introduces no named matcher-result carrier, binding Map, `CaptureFrame`,
-`CaptureSignature`, capture-name registry, or required matcher-topology
-introspection.
-
-Once one candidate pattern has **completely succeeded** and its normal outcome
-has been validated under D072, the selected arm consumes that successful capture
-interface through **ordinary Protos callable/Closure invocation**.
-
-The capture-to-arm calling convention is:
-
-```text
-D072 result              selected-arm capture actuals
------------              ----------------------------
-true                     zero capture actual arguments
-[c1, ..., cn]            c1, ..., cn as n positional actual arguments
-```
-
-Each positional capture is passed as the exact ordinary captured value. A
-captured Array, Map, Closure, Future, or other aggregate/value remains one
-argument. D088 never recursively expands a capture merely because that captured
-value is itself a collection.
-
-#### 3.4.1 Binding commitment occurs only after complete success
-
-Source-visible arm bindings do not exist during tentative or incomplete
-matching.
-
-A containing pattern may perform ordinary matcher calls, produce intermediate
-captures, execute effects, and later mismatch. Such prior matcher effects remain
-governed by the existing D083 rules and are not rolled back, but no
-source-visible selected-arm binding state is created merely because an earlier
-subpattern already succeeded.
-
-The selected arm's ordinary invocation activation and its parameter bindings are
-established only after the candidate pattern has succeeded completely and its
-D072 carrier has been accepted.
-
-D088 therefore requires no tentative binding environment, mutation log, lexical
-rollback protocol, or binding transaction.
-
-#### 3.4.2 Source names belong to the arm/source interface
-
-A source-visible binding name belongs to the source arm/binding interface, not
-to arbitrary matcher metadata.
-
-For a fixed source binding interface, the language implementation establishes a
-deterministic ordered mapping from source binders to D072 capture positions.
-Those capture values become ordinary positional actual arguments of the
-selected arm, and ordinary Closure parameter binding makes the corresponding
-names ordinary parameter slots in the arm invocation activation.
-
-Concrete source syntax may later place binder names visually at nested
-structural pattern sites. Such syntax may compile those source sites to capture
-positions and ordinary arm parameters; it does not require the runtime
-`pattern.match(subject)` result to carry those names.
-
-Within one fixed source arm-binding interface, binding names are **linear**:
-each source binding name is declared at most once. Duplicate binder names do not
-implicitly mean equality, conjunction, shadowing, or last-write-wins behavior.
-Recognition constraints belong to patterns rather than to duplicate consumer
-names.
-
-#### 3.4.3 Fixed and dynamic capture arity
-
-A fixed arm-binding interface consumes captures positionally.
-
-When the producer's capture interface and the fixed consumer interface are
-statically/source-structurally known to be incompatible, an implementation
-should reject that source before execution rather than deliberately construct an
-arm invocation known to fail.
-
-Arbitrary matcher objects remain free to produce any D072-valid capture count
-allowed by their semantics. D088 does not require them to publish a fixed
-capture arity or capture-name/signature metadata.
-
-A consumer that intentionally accepts a variable number of captures may use the
-already-standard ordinary Closure rest-parameter semantics. Excess positional
-capture actuals then participate in the same ordinary rest binding used by any
-other Closure invocation, including its fresh frozen rest Array contract.
-
-D103 fixes the composition boundary for such variable interfaces. When an opaque
-matcher source interface contains `...rest`, the variable-arity segment that it
-contributes may appear in a composed pattern only when that segment is
-**terminal in the final ordered arm-binding interface**. A later binding
-position after that segment is a static source/interface error.
-
-Terminality is determined over the complete logical source binding order, not
-merely over the local `captures(...)` list. Implementations must not make a
-non-terminal dynamic segment work by reserving a fixed suffix and partitioning
-from both ends, by converting that segment into one aggregate capture, by
-padding/dropping captures, or by introducing a hidden richer carrier. The
-D072/D083 positional sequence remains authoritative and the selected arm remains
-an ordinary D088 invocation.
-
-This restriction does not apply to D084/D086 structural remainder values. A
-captured Array or Map remainder is one ordinary aggregate capture under the
-existing shallow composition rule, so it contributes one fixed binding position
-even when the source spelling uses `...`.
-
-If a candidate pattern has already succeeded but ordinary selected-arm
-invocation cannot accept the supplied capture arity, the resulting callable
-binding/arity failure is an **ordinary invocation Error**. It is not retroactive
-pattern mismatch and does not authorize trying a later arm.
-
-D088 introduces no implicit missing capture, placeholder argument, capture
-padding, silent capture dropping, or automatic aggregate conversion merely to
-make an incompatible arm callable.
-
-#### 3.4.4 Future alternative-pattern binding compatibility
-
-D088 does not define OR/alternative recognition, retry, ordering, side-effect,
-or backtracking semantics.
-
-It fixes the consumer-side invariant such a later standard alternative form must
-respect:
-
-> when several alternatives are exposed through one fixed source arm-binding
-> interface, every successful alternative must map its public captures onto the
-> same ordered logical arm-binding interface.
-
-Different alternatives may obtain a logical binding from different structural
-positions, but the selected arm must not receive a branch-dependent binding
-layout.
-
-This compatibility may be proved or rejected by source/compiler pattern
-structure. D088 does not require arbitrary runtime matcher objects to publish
-capture names solely to support future alternatives.
-
-#### 3.4.5 Ordinary invocation semantics remain authoritative
-
-After successful capture conversion into positional actual arguments, ordinary
-Closure/callable semantics remain authoritative for activation creation,
-parameter binding, `args`, rest binding, receiver/callable behavior, Error,
-non-local return, cancellation, explicit suspension, and all other ordinary
-invocation behavior.
-
-Passing a captured value to an arm preserves ordinary Protos argument-passing
-identity. D088 performs no cloning merely to create a binding.
-
-An implementation may specialize a known standard pattern and known arm,
-scalarize capture values directly into arm parameter/frame state, or eliminate
-an otherwise unobservable intermediate capture Array only when observable
-behavior is exactly equivalent to:
-
-```text
-pattern.match(subject)
-        ↓
-D072 validation / D083 capture sequence
-        ↓
-ordinary selected-arm invocation with positional capture actuals
-```
-
-Such specialization must preserve matcher dispatch, matcher call count/order,
-effects, Error/control/suspension behavior, aggregate capture boundaries,
-ordinary arm invocation behavior, and failures that would be observable from an
-invalid or incompatible result/interface.
-
-#### 3.4.6 Boundary and future evolution
-
-D088 does not standardize:
-
-- concrete internal pattern, binder, capture, alias, OR, or irrefutable/catch-all spelling; D093 owns the outer `match`/`case`/`when`/`=>` envelope;
-- OR/alternative recognition/backtracking semantics themselves;
-- whole-subject alias/binder semantics or spelling;
-- guard syntax or exhaustivity;
-- repetition or optional-pattern semantics;
-- sequence find/subsequence or stream matching;
-- named arguments or another callable parameter category;
-- a first-class pattern reflection API;
-- mandatory capture-name/arity/signature metadata on arbitrary matchers; or
-- parser/runtime implementation of the future matching surface.
-
-A future explicit whole-subject alias can remain additive by contributing the
-subject as one ordinary capture at a separately ratified position. Optional
-tooling/debug or pattern-introspection metadata can likewise map source names to
-capture positions without changing the D072/D083 runtime carrier or this
-capture-to-arm ABI.
-
-### 3.5 Standard ordered alternative-pattern semantics
-
-D090 defines the standard semantic behavior of an alternative-pattern composite
-without selecting concrete source syntax.
-
-For one alternative-pattern attempt, the alternatives have one deterministic
-semantic order. They are attempted in that order. Each attempted alternative is
-invoked exactly once through the existing D073 matcher authority:
-
-```text
-alternative.match(subject)
-```
-
-Every attempted alternative receives the same ordinary subject value supplied to
-the containing alternative-pattern attempt. The alternative composite does not
-re-evaluate, clone, freeze, snapshot, or otherwise replace that subject merely
-because an earlier alternative mismatched.
-
-#### 3.5.1 Ordered D072 outcome handling
-
-Each attempted alternative's normal result is consumed only through D072:
-
-```text
-alternative result       alternative-composite behavior
-------------------       ------------------------------
-false                    try the next alternative
-true                     succeed immediately with zero captures
-[c1, ..., cn]            succeed immediately with those captures
-```
-
-Only canonical `false` advances to the next alternative.
-
-A valid successful D072 result commits the alternative composite immediately.
-No later alternative is attempted after that success. D090 introduces no
-branch-success ranking, longest/best match, speculative comparison of several
-successful branches, or parallel race among alternatives.
-
-An invalid normal D072 result signals ordinary `Error` at the consuming
-alternative boundary. Error, non-local control, cancellation, explicit
-suspension, and other non-normal control behavior propagate normally from the
-currently attempted matcher and are not reinterpreted as mismatch.
-
-If the current alternative suspends, the containing alternative attempt
-suspends at that point. A later alternative is not started concurrently merely
-because it could eventually match.
-
-#### 3.5.2 Effects and first-success commitment
-
-Ordered alternative matching is not transactional.
-
-An attempted alternative may perform ordinary effects and later return canonical
-`false`. Those effects are not rolled back. The next alternative, if any,
-executes in the ordinary program state that exists after them.
-
-Once one alternative succeeds, selection for that alternative composite is
-final. A later failure outside the composite does not reopen it or continue with
-a later alternative. In particular, if a future matching surface places a guard
-or another outer condition after alternative recognition, failure of that later
-condition does not make D090 resume the already-successful alternative composite
-at its next branch.
-
-D090 does not define concrete guard syntax; D092 §3.6 owns guard evaluation,
-arm continuation, and terminal no-selection semantics.
-
-#### 3.5.3 Capture and binding interface
-
-D090 adds no new matcher-result carrier. D072/D083 remain authoritative.
-
-A successful alternative contributes the successful D072 capture interface to
-the containing matching operation. One capture remains one ordinary value;
-Array, Map, Closure, Future, remainder, or other aggregate captures are not
-recursively flattened merely because they crossed an alternative boundary.
-
-D088 remains authoritative for source-visible bindings and selected-arm
-invocation.
-
-When several alternatives are exposed through one fixed source arm-binding
-interface, every successful alternative must be projectable onto the same
-ordered logical D088 binding interface. Different alternatives may obtain a
-logical binding from different structural positions, but one selected arm must
-not receive a branch-dependent logical binding layout.
-
-That compatibility belongs to the source/consumer structure. D090 does not
-require arbitrary runtime matcher objects to publish capture names, fixed
-capture arity, a `CaptureSignature`, branch tag, binding Map, `CaptureFrame`, or
-matcher-topology metadata merely to participate in alternatives.
-
-Arbitrary matchers may retain dynamic D072 capture arity. A consumer
-intentionally accepting a variable number of captures may use ordinary Closure
-rest-parameter semantics. A fixed incompatibility that is provable from the
-source/pattern structure should be rejected before execution. If recognition
-has already succeeded and ordinary selected-arm invocation cannot accept the
-actual capture arity, D088's ordinary callable binding/arity `Error` applies; it
-does not retroactively become mismatch and does not cause another alternative
-to be attempted.
-
-#### 3.5.4 Nesting and optimization freedom
-
-Nested standard alternative composites are semantically associative with
-respect to their ordered attempt sequence. Grouping alternatives does not change
-the left-to-right sequence in which their leaf alternatives are attempted.
-Alternative choice is not commutative: reordering alternatives may change which
-matcher runs, which effects occur, or which successful result wins.
-
-Implementations may flatten nested standard alternative nodes, inline standard
-matchers, scalarize or eliminate unobservable intermediate capture carriers, or
-build specialized decision structures only when observable behavior is exactly
-equivalent to this section.
-
-Such optimization must preserve:
-
-- ordinary matcher authority and lookup/dispatch behavior;
-- the alternatives actually attempted and their semantic order;
-- exactly-once invocation of each attempted alternative;
-- first-success commitment;
-- D072 outcome validation;
-- ordinary effects and their visibility to later attempted alternatives;
-- Error, non-local control, cancellation, and explicit suspension behavior;
-- aggregate capture boundaries; and
-- D088 fixed/dynamic arm-binding behavior.
-
-In particular, an implementation may not replace effectful ordered matcher sends
-with an unordered hash/index lookup, parallel race, or speculative multi-branch
-execution merely because the alternatives appear otherwise optimizable.
-
-#### 3.5.5 Boundary and future evolution
-
-D090 does not standardize:
-
-- concrete alternative/OR, binder, or irrefutable/catch-all pattern grammar; D093 owns the outer `match`/`case`/`when`/`=>` envelope;
-- the spelling of an OR operator or whether one source spelling exists;
-- concrete guard syntax; D092 §3.6 defines guard evaluation, arm continuation,
-  and terminal no-selection semantics;
-- exhaustivity or redundancy checking;
-- repetition, optional, find, subsequence, or general backtracking patterns;
-- whole-subject alias semantics or syntax;
-- first-class Pattern reflection or mandatory capture-signature metadata;
-- recognition-only matcher fast paths; or
-- parser/runtime implementation of a future alternative-pattern surface.
-
-Optional tooling/debug metadata or a future explicit pattern-introspection
-protocol may describe source branches and logical binding projections without
-changing the standard D072/D083/D088/D090 runtime contracts.
-
-### 3.6 Standard guarded-arm selection and terminal no-selection
-
-D092 defines the standard semantic behavior of guards and arm continuation
-without selecting concrete source syntax.
-
-The subject expression of a future standard matching construct remains evaluated
-exactly once at the matching-expression boundary under §2. Arms are considered
-in their deterministic semantic source order. Each candidate arm begins by
-attempting its pattern through the existing D073 matcher authority against that
-same already-evaluated subject value.
-
-A canonical `false` pattern result is ordinary arm mismatch and proceeds directly
-to the next arm without evaluating that arm's guard or body. A valid successful
-D072 result establishes the candidate arm's D088 logical binding interface and
-then proceeds according to the guard rules below.
-
-#### 3.6.1 Guard evaluation and strict Boolean result
-
-An arm with no guard is accepted immediately after its pattern succeeds. D092
-does not model the absence of a guard as an implicit hidden Closure invocation or
-Boolean send.
-
-For a guarded arm, the guard is evaluated **exactly once** after complete pattern
-success and before the arm body is selected. The source-visible binders defined
-by that arm's D088 interface are available to the guard with the same ordinary
-captured values that the arm body would receive if selected.
-
-D092 does not add a second capture or binding carrier for guards. Implementations
-may realize those binder values through ordinary activation slots, arguments,
-frame state, or another internal representation, but the observable values and
-binding interface remain those defined by D088.
-
-Guard evaluation is ordinary Protos evaluation. Ordinary lookup, dispatch,
-effects, Error signaling, non-local control, cancellation, and explicit
-suspension semantics apply. There is no guard-specific pure/restricted
-sublanguage, whitelist, truthiness, coercion, implicit `Future.value()`, or other
-implicit await/adoption step.
-
-A normally completing guard must produce exactly one canonical Boolean:
-
-```text
-true     -> accept/select this arm
-false    -> reject this arm and continue with the next arm
-```
-
-Any other normal result signals an ordinary standard `Error` occurrence at the
-guard-result boundary. In particular `null`, Numbers, Strings, Arrays, ordinary
-objects, and Future values are invalid guard results rather than truthy/falsy
-values.
-
-Error, non-local control, cancellation, explicit suspension, and other non-normal
-control behavior from the guard propagate normally. They are not reinterpreted
-as canonical `false` and do not cause a later arm to be attempted.
-
-#### 3.6.2 Guard rejection, effects, and D090 commitment
-
-Canonical `false` rejects the **current arm**, not its already-successful pattern.
-The matching operation then considers the next arm in source order.
-
-Guard rejection never reopens a successful D090 alternative composite. If an
-alternative pattern has committed to one branch under §3.5 and the containing
-arm's guard later returns canonical `false`, the matching operation proceeds to
-the next arm. It does not resume the alternative composite at a later branch and
-does not invoke the successful pattern again.
-
-Matching and guard evaluation are not transactional. Effects already performed
-by a candidate pattern or its guard are not rolled back when the pattern
-mismatches or the guard returns canonical `false`. A later arm therefore observes
-the ordinary reachable program state that exists after those effects.
-
-The D088 source bindings belonging to a rejected candidate remain scoped to that
-arm's guard/body interface; they do not become ambient bindings for later arms.
-This requires no rollback mechanism because arm bindings are not installed as
-mutations of unrelated outer binding state.
-
-A later arm is attempted against the same subject value produced by the one
-matching-expression subject evaluation. D092 does not re-evaluate, clone, freeze,
-or snapshot the subject between arms merely because an earlier guard rejected an
-arm.
-
-#### 3.6.3 Selected-arm body and result
-
-A successful pattern with no guard, or a successful pattern whose guard returns
-canonical `true`, selects that arm.
-
-Only after this acceptance does the arm body execute. D088 remains authoritative
-for mapping the successful D072 capture interface to the arm's ordinary
-callable/Closure binding interface.
-
-The selected arm body's normal result is the normal result of the matching
-operation. Error, non-local control, cancellation, explicit suspension, and other
-non-normal control from the selected body propagate under the existing ordinary
-Protos rules. Such behavior does not resume arm search.
-
-If a selected body suspends, the matching operation suspends at that ordinary
-continuation point. A later arm is not speculatively or concurrently attempted.
-
-#### 3.6.4 Terminal no-selection
-
-If every arm either returns canonical `false` from pattern recognition or is
-rejected by a canonical-`false` guard, and no arm is selected, the matching
-operation signals one **fresh ordinary `Error`** under the standard failure
-occurrence rules in `ERRORS.md`.
-
-D092 introduces no `MatchFailure` standard Error prototype, no canonical-`null`
-fallback result, and no implicit default branch. A normal selected arm remains
-free to return `null`; that successful normal result is distinct from terminal
-no-selection.
-
-D092 does not select concrete catch-all/default syntax. If a future source
-surface provides `default`, `else`, wildcard, or equivalent catch-all spelling,
-that form must be semantically an ordinary irrefutable arm participating in the
-same ordered arm-selection rules rather than a privileged fallback mechanism
-that bypasses matching/guard semantics.
-
-General static exhaustivity is not required by D092. A compiler or tool may prove
-that a particular closed standard pattern set is exhaustive and optimize away an
-unreachable no-selection path, but that proof does not create a closed pattern
-universe or change the general runtime semantics for arbitrary matcher objects.
-
-#### 3.6.5 Optimization and scaling
-
-For an arm selected at position `k`, a straightforward implementation performs
-the ordered matcher attempts needed to reach that arm and evaluates guards only
-for successful candidate patterns. D092 requires no semantic per-arm rollback
-log, speculative binding environment, global guard registry, or parallel branch
-state.
-
-Implementations may inline standard patterns and guards, fuse pattern/binding/
-guard/body control flow, scalarize unobservable capture carriers, or build
-specialized decision structures only when observable behavior is identical.
-
-Such optimization must preserve:
-
-- one evaluation of the subject expression at the matching boundary;
-- semantic arm order and every observable matcher attempt;
-- D072 result validation and D088 binding values;
-- exactly one evaluation of each guard whose candidate pattern succeeds;
-- strict canonical-Boolean guard result handling;
-- ordinary effect visibility across rejected arms;
-- the D090 no-reopen rule;
-- Error, non-local control, cancellation, and explicit suspension behavior;
-- selected-arm body/result behavior; and
-- fresh ordinary Error behavior for reachable terminal no-selection.
-
-In particular, an implementation may not duplicate an effectful guard, move it
-before pattern success, evaluate later guards speculatively, or treat a guard
-failure/control transfer as ordinary arm rejection merely to simplify a decision
-tree.
-
-#### 3.6.6 Boundary and future evolution
-
-D092 does not standardize:
-
-- concrete internal pattern/binder/alias/OR/irrefutable syntax; D093 owns the outer postfix `match` envelope, explicit `case`, optional `when`, `=>`, and Closure-body arm shape;
-- exhaustivity or redundancy checking;
-- whole-subject alias semantics or syntax;
-- optional, repetition, find, subsequence, stream, or general backtracking
-  patterns;
-- first-class Pattern reflection or mandatory capture-signature metadata;
-- a pure/restricted guard sublanguage or effect system;
-- a dedicated no-match Error subtype;
-- recognition-only matcher fast paths; or
-- parser/runtime implementation of a future matching surface.
-
-### 3.7 D093 matching surface lowering contract
-
-The outer matching-expression surface is owned normatively by
-`../PROTOS_GRAMMAR.md`. D093 selects the postfix envelope:
+Core v0.1 multi-way matching selection is the ordinary message:
 
 ```protos
-subjectExpression match {
-    case PATTERN => armBody
-    case PATTERN when guardExpression => armBody
-}
+value.caseOf(cases)
 ```
 
-The concrete internal spelling of `PATTERN` remains separately deferred. This
-section owns only the semantic mapping from the D093 surface envelope onto the
-already-ratified D071-D092 matching semantics.
+`caseOf` is an ordinary selector, not a keyword and not dedicated grammar.
 
-The postfix spelling does **not** send a `match` message to the subject.
-Recognition remains pattern-owned through D073.
+### 8.1 Case carrier
 
-For one matching-expression evaluation:
+`cases` must be a normal standard Map.
 
-1. evaluate `subjectExpression` exactly once and retain that exact ordinary value
-   as the subject for the complete arm search;
-2. consider arms in deterministic source order;
-3. for each candidate arm, attempt its pattern against that subject only through
-   the existing D073 matcher authority;
-4. consume and validate the matcher outcome under D072/D083 and the applicable
-   standard pattern-family rules;
-5. on canonical `false`, continue to the next arm;
-6. on successful recognition, establish that arm's D088 logical binding
-   interface;
-7. if the arm has `when guardExpression`, evaluate that guard exactly once with
-   those logical bindings under D092:
-   - canonical `false` continues with the next **arm** and never reopens an
-     already-committed D090 alternative;
-   - canonical `true` accepts the arm;
-   - another normal result signals ordinary `Error`; and
-   - Error, non-local control, cancellation and explicit suspension propagate;
-8. invoke the accepted arm body exactly once through the ordinary D088
-   callable/Closure boundary;
-9. the selected arm body's normal result is the normal result of the complete
-   matching expression; non-normal behavior propagates and does not resume arm
-   search; and
-10. if no arm is selected, signal the fresh ordinary `Error` required by D092.
-
-A conceptual lowering may name the once-evaluated subject `S`, but `S` is not a
-user-visible source binding and D093 creates no hidden reflective matching
-environment.
-
-`case` is source structure only. D093 introduces no runtime `Case` object, arm
-descriptor, matching registry, second matcher operation, binding Map, capture
-frame, or default-handler mechanism.
-
-The `=>` source boundary reuses the existing Closure-body surface while D088
-remains authoritative for selected-arm capture-to-argument binding. This does not
-alter ordinary standalone Closure syntax or make a pattern an ordinary Closure
-parameter list.
-
-D093 adds no fallthrough. Once an arm is accepted, only that arm body is
-executed. A future catch-all source spelling must be an ordinary irrefutable
-pattern in a normal `case` arm; D093/D092 define no privileged `default` or
-`else` execution path.
-
-Implementations may lower the surface to a linear arm walk, fuse known standard
-patterns and guards, build decision trees/DAGs, use jump tables/indexes, scalarize
-unobservable capture carriers, or use Bytecode DSL control flow only when
-observable behavior remains identical to D071-D093. In particular they must
-preserve exactly-once subject evaluation, observable matcher order/count,
-effects, D090 first-success commitment, D092 guard behavior, D088 bindings,
-Error/control/cancellation/suspension and the selected result.
-
-D095 now owns the concrete Core v0.1 pattern productions, binder/discard,
-whole-current-subject alias, OR spelling and standard Array/Map source forms.
-D093/D095 still do not define exhaustivity/redundancy, optional/repetition/search/
-backtracking families, Pattern reflection, or a dedicated no-match Error subtype.
-
-### 3.8 D095 source-pattern mapping and binding rules
-
-D095 maps the concrete source grammar to the already-ratified matching semantics.
-
-- A `matcher-value-pattern` is evaluated exactly once when attempted; the exact
-  resulting ordinary value is invoked only through D073
-  `pattern.match(currentSubject)`.
-- `@name` is irrefutable success with exactly one capture containing the current
-  subsubject.
-- `_` is irrefutable success with zero captures.
-- `@name: nested` contributes the alias capture first, then composes nested
-  captures under D083; source binding still commits only after full success.
-- `[ ... ]` is exclusively the D084 standard Array pattern. Bare remainder `...`
-  discards; `...nested` applies `nested` to the one D084 fresh frozen remainder
-  Array.
-- `%{ ... }` is exclusively the D086 normal standard Map pattern and is
-  open/subset by default. `exact %{ ... }` selects require-empty residue.
-- For one Map attempt, establish the D086 stable shallow association snapshot
-  first; then evaluate query-key binary expressions exactly once left-to-right;
-  resolve every required key against that snapshot; only after all required keys
-  resolve invoke mapped-value child matchers in source order.
-- Map query-key effects are ordinary and not rolled back, but cannot redefine
-  the already-established association snapshot.
-- Bare Map remainder `...` discards; `...nested` applies `nested` to the one
-  D086 fresh frozen remainder Map.
-- Pattern `|` is exactly D090 ordered OR. Fixed successful alternatives expose
-  the same ordered logical binder-name sequence.
-- `captures(...)` names D072 positional captures only at the source consumer
-  boundary. It sends no message, changes no matcher metadata, and follows D088
-  required/rest binding semantics.
-- Duplicate fixed binder names are invalid and never imply equality or rebinding.
-
-D095 introduces no Pattern base class, extractor registry, CaptureSignature,
-BindingMap, CaptureFrame, generic object inspection, generic positional
-deconstruction, or generic sequence/keyed deconstruction protocol.
-
-### 3.9 D096 static coverage, exhaustiveness and redundancy contract
-
-Static coverage analysis is an **advisory proof layer** over the already-defined
-runtime matching semantics. It is not a second matcher authority and does not
-change D092 terminal no-selection behavior.
-
-The conceptual analysis result is:
+Its associations are interpreted as:
 
 ```text
-PROVEN_EXHAUSTIVE
-PROVEN_NON_EXHAUSTIVE
-UNKNOWN
+matcher -> callable
 ```
 
-A matching expression is valid Core v0.1 source in all three states, except for
-the syntax-stable structural unreachability errors defined below.
+The case carrier deliberately uses ordinary normal-Map semantics:
 
-`UNKNOWN` is not `PROVEN_NON_EXHAUSTIVE`. Failure to construct a proof, opaque
-matcher participation, or analysis-budget exhaustion must preserve that
-distinction.
+- insertion order determines case order;
+- matcher keys use normal Map `hash` / `==`;
+- equal/duplicate matcher keys cannot coexist as distinct cases;
+- there is no matching-specific parallel key identity/equality relation.
 
-#### 3.9.1 Static knowledge boundary
+If `cases` is not an eligible normal standard Map, `caseOf` signals ordinary
+Error.
 
-Coverage analysis may consume only source structure and language-owned static
-facts whose matching meaning is normatively fixed.
+### 8.2 Case observation
 
-It must not execute or semantically speculate about:
+At the beginning of one `caseOf` attempt, the current case associations are
+observed shallowly in insertion order.
 
-- arbitrary `pattern.match(subject)`;
-- D081 ordinary `==`;
-- Map key `hash` / `==`;
-- D095 Map query-key expressions;
-- D092 guards; or
-- arbitrary matcher implementation/delegation state.
+The matcher and callable references selected by that observation are fixed for the
+attempt.
 
-D095 `captures(...)` describes only the D088 consumer-side positional binding
-interface and contributes no coverage information.
+Later mutation of the original cases Map cannot add, remove, replace, or reorder
+cases in the current attempt.
 
-Core v0.1 requires no `Pattern`, `CoverageSignature`, matcher registry,
-reflection protocol, capture signature or closed matcher hierarchy.
+The observation is shallow: matcher/callable objects themselves are not cloned or
+frozen.
 
-#### 3.9.2 Universal irrefutable forms
+### 8.3 Selection algorithm
 
-The D095 `_` and `@name` patterns are universally irrefutable ordinary
-no-mismatch forms.
+Cases are attempted in observed insertion order.
 
-Parenthesized irrefutable patterns remain irrefutable. An alias
-`@name: nested` is irrefutable exactly when `nested` is irrefutable.
-
-A D090 OR is irrefutable when a reachable alternative under ordered D090
-semantics is syntactically universal-irrefutable. Earlier alternatives retain
-all ordinary Error/control/cancellation/suspension behavior.
-
-An **unguarded** universal-irrefutable arm establishes
-`PROVEN_EXHAUSTIVE` for ordinary no-selection reachability from that point.
-
-#### 3.9.3 Guards are opaque to positive coverage
-
-Every explicit D092 guard is opaque for positive exhaustiveness and subsumption
-proofs in Core v0.1.
-
-A guarded irrefutable pattern therefore does not prove totality and does not make
-later arms unreachable. Coverage analysis does not execute or assume the value
-of arbitrary guard expressions.
-
-#### 3.9.4 Syntax-stable structural unreachability errors
-
-Core source is invalid when an arm follows an unguarded syntactically
-universal-irrefutable arm, because the later arm can never be attempted through
-normal ordered matching.
-
-Within one D090 OR, an alternative following an already reachable syntactically
-universal-irrefutable alternative is likewise invalid.
-
-This source-error class is intentionally bounded to facts whose truth is fixed by
-the ratified source semantics. A future analyzer discovering richer semantic
-subsumption does not automatically create new source errors.
-
-#### 3.9.5 Richer warnings/lints
-
-A compiler may perform stronger sound usefulness/subsumption analysis over the
-analyzable standard pattern subset.
-
-A richer proven redundant arm/alternative is warning/lint territory, not a Core
-source-validity error.
-
-`PROVEN_NON_EXHAUSTIVE` may likewise produce a warning/lint and, when practical,
-a sound witness. D092 still defines actual runtime no-selection.
-
-`UNKNOWN` alone must not be reported as proven non-exhaustiveness.
-
-#### 3.9.6 Standard Array facts
-
-D084/D095 standard Array patterns may contribute conservative language-owned
-eligibility/shape facts: exact length, one-remainder minimum shape, and
-statically understood nested-irrefutable child positions.
-
-A shape with a bare accepting remainder can cover the eligible standard Array
-domain, but standard Array coverage alone does not cover arbitrary Protos values.
-
-Opaque child matchers keep the relevant subspace `UNKNOWN`.
-
-#### 3.9.7 Standard Map facts
-
-D086/D095 standard Map patterns may contribute only conservative facts.
-
-Because `%{}` is open/subset and contains no requirements, it covers every
-eligible normal standard `Map`.
-
-Because `exact %{}` requires empty residue, it covers only eligible empty normal
-standard Maps.
-
-Key-sensitive Map coverage is opaque whenever a proof would depend on query-key
-evaluation, `hash`, ordinary `==`, mutable key state or arbitrary child matchers.
-Coverage analysis never executes those operations.
-
-#### 3.9.8 D081 value patterns remain opaque
-
-Ordinary value-pattern source occurrences are not deduplicated or treated as
-algebraic constants merely because their source spelling is equal.
-
-Each matcher-value source is evaluated at its own attempt point and may select
-state-sensitive/effectful ordinary matcher behavior. Inherited D081 behavior may
-invoke ordinary pattern-side `==`.
-
-#### 3.9.9 Delegation is not a closed coverage universe
-
-Current prototype/delegation relationships never prove that the set of possible
-future values is closed.
-
-A future separately ratified enum/sealed/closed-domain facility may provide
-static coverage facts to D096 without changing arbitrary matcher behavior.
-
-#### 3.9.10 OR coverage and opacity
-
-D090 OR contributes the union of only those alternative coverage facts the
-analyzer understands soundly.
-
-Opaque alternatives do not denote an empty set. They keep the relevant proof
-`UNKNOWN` unless another independently sufficient fact proves the result, such as
-a later reachable universal `_`.
-
-Coverage reasoning never changes D090 order or first-success commitment.
-
-#### 3.9.11 Bounded analysis
-
-Usefulness/exhaustiveness analysis is resource-bounded.
-
-An implementation may use a pattern matrix, symbolic models or any other sound
-algorithm for the analyzable subset. If its analysis budget is exhausted, it must
-degrade proof precision to `UNKNOWN` rather than reject otherwise valid source.
-
-An implementation may diagnose that analysis precision was reduced.
-
-#### 3.9.12 Runtime and optimization boundary
-
-Coverage analysis never authorizes reordering, duplicating, merging,
-speculatively executing or eliminating observable arbitrary matcher/guard calls.
-
-A stable `PROVEN_EXHAUSTIVE` proof may justify eliminating only the unreachable
-final D092 no-selection branch when every fact used by that proof is stable for
-the generated code.
-
-An unguarded syntactically universal D095 pattern supplies such a stable fact.
-Future cross-module closed-domain proofs require their own versioning/closure
-guarantees or a defensive runtime fallback.
-
-## 4. Explicit structural deconstruction boundary
-
-Generic structural matching must not infer a subject's logical structure from
-its implementation or ordinary object topology.
-
-In particular, structural matching must not implicitly:
-
-- enumerate local slots;
-- treat ordinary delegated member lookup as structural fields;
-- infer semantic-family membership or structural shape from `parent()`;
-- treat indexed contents as ordinary object fields; or
-- reflect JVM, Truffle, native, or other host representation.
-
-This preserves the existing separation between object slots, delegation,
-semantic-family membership, indexed collection state, and host implementation
-machinery.
-
-## 5. Named selective logical projection
-
-For the subject-side half of generic object structural matching, the selected
-architecture is a **named, selective logical projection**.
-
-A generic structural matcher requests the logical field names it actually needs.
-The subject controls which logical names it exposes and what ordinary Protos
-values those names denote. A request for a subset of logical names does not, by
-language rule, require enumeration or materialization of a complete structural
-view.
-
-The required public projection selector is the ordinary variadic message:
+For each reached association:
 
 ```text
-subject.deconstructFields(...names)
+result = matcher.match(value)
 ```
 
-Here `field` means a logical matching field. It does not mean a local slot,
-delegated member, indexed entry, physical field, host-layout offset, or other
-representation detail. The selector name deliberately keeps named logical
-projection distinct from any future separately ratified positional
-subject-deconstruction capability.
-
-### 5.1 Request contract
-
-A standard generic structural-projection request supplies zero or more
-**pairwise-distinct semantic String values** as ordinary positional arguments.
-Their ordinary argument order is the correspondence order for a successful
-projection result. A dynamic standard Array of names may use the existing call
-spread mechanism; named projection introduces no request-object, request-Array,
-Map, Set, mode object, or second invocation mechanism.
-
-A conforming generic structural matcher forms the complete requested-name vector
-before projection and invokes `deconstructFields` once with that vector. It does
-not probe one field at a time, retry projection, or use `null`, a Boolean, a
-special Array, or another mode value to request a complete view.
-
-The standard root behavior is:
+The result is consumed exactly as follows:
 
 ```text
-Object.deconstructFields(...names) -> false
+false        -> continue to the next observed case
+true         -> invoke callable()
+[captures]   -> invoke callable(...captures)
+other normal -> Error
 ```
 
-for a valid request. Therefore an ordinary object that does not opt into named
-structural projection inherits a normal no-view result through ordinary
-delegation. An object opts in by ordinary overriding/shadowing of
-`deconstructFields`; no registry, protocol type, `respondsTo` institution,
-manual `parent()` traversal, or caught missing-lookup Error is required.
+A successful matcher commits immediately.
 
-Invalid request arguments are not structural mismatch. A standard consumer or
-standard root behavior that receives a non-String requested name or a duplicate
-requested name signals an ordinary `Error` at the violated protocol boundary.
+A selected callable result is returned unchanged as the complete `caseOf` result,
+including `null`, either Boolean, Array, Future, or any other ordinary value.
 
-### 5.2 Normal result carrier
+If no matcher succeeds, `caseOf` signals one fresh ordinary Error.
 
-For a valid request, the normal result contract is exact:
+Effects performed by earlier failed matchers are not rolled back.
 
-```text
-false        -> subject exposes no named structural view for this attempt
-null         -> named structural view exists, but at least one requested logical name is unavailable
-true         -> successful projection of zero requested names
-[v1, ...]    -> successful projection of N > 0 requested names
+Error, non-local control, cancellation, and suspension from a reached matcher or
+selected callable propagate ordinarily.
+
+### 8.4 No eager whole-table validation
+
+`caseOf` defines no eager validation pass over all matcher or callable values.
+
+An unreached matcher or callable does not fail merely because it would be invalid
+if reached.
+
+Matcher-result validation happens when that matcher is actually reached.
+
+Callable validity/arity behavior is consumed when that callable is actually
+selected and invoked.
+
+## 9. Capture names and selected bodies
+
+Matching owns positional capture values, not source binding names.
+
+Capture names belong to ordinary callable/Closure parameters.
+
+For example:
+
+```protos
+value.caseOf(%{
+    [1, Capture]: x => x
+    Any: () => null
+})
 ```
 
-Only canonical `false` denotes no exposed named structural view. Only canonical
-`null` denotes participation in named structural projection with one or more
-requested logical names unavailable. Both outcomes make the containing generic
-structural pattern fail normally; they remain distinct inside the projection
-protocol so absence of the capability is not conflated with absence of a
-requested logical field.
+When `[1, Capture]` succeeds with one capture `[v]`, the selected callable is
+invoked under ordinary call spread/parameter-binding semantics as though with
+one ordinary positional argument `v`.
 
-For a request containing zero names, canonical `true` is the only successful
-normal result. An empty outer Array is invalid rather than a second spelling of
-zero-name success.
+Matching defines no selected-arm binding ABI, fixed capture-name metadata,
+duplicate pattern-binding rule, OR binding-name equivalence rule, or
+`captures(...)` binding form.
 
-For a successful request containing `N > 0` names, the result must be a standard
-non-empty Array of exactly `N` elements. Result elements correspond **one-to-one**
-to requested names in request order:
+## 10. Removed dedicated matching-language institutions
 
-```text
-result[i] -> logical value for requested name names[i]
-```
+D131 removes the following from Core v0.1:
 
-Each projected value is an ordinary Protos value and may itself be `null`,
-`false`, `true`, an Array, Closure, Future, or arbitrary object. Thus `[null]`
-means successful projection of one logical field whose value is `null`; it is not
-the missing-field sentinel.
+- postfix `subject match { ... }` grammar;
+- `case` arm grammar;
+- `when` guard grammar and matching-specific guard/body delimiter rules;
+- `@name` binder syntax;
+- `_` wildcard syntax;
+- dedicated Array-pattern grammar;
+- Array remainder/rest pattern forms and residual Array aggregate semantics;
+- dedicated Map-pattern grammar;
+- exact Map mode;
+- Map remainder forms and residual Map aggregate semantics;
+- alias pattern syntax;
+- OR pattern syntax/capability as an initial standard institution;
+- OR binding-name/interface equivalence;
+- fixed and dynamic `captures(...)`;
+- D103 complete-arm dynamic-rest terminality;
+- matching-specific selected-arm binding ABI;
+- dedicated static coverage/exhaustiveness/redundancy framework; and
+- pattern-arm structural unreachability source-error machinery.
 
-Any other normal result is invalid projection output. This includes an Array of
-the wrong length, an empty Array, `true` for a nonzero request, a Number, String,
-Map, Future, or arbitrary object outside the exact carrier above. A standard
-structural-matching consumer signals an ordinary `Error` at that protocol
-boundary rather than silently interpreting invalid output as mismatch.
+These are not dormant Core v0.1 features.
 
-### 5.3 Exactly-once observation and shallow snapshot
+Future explicit decisions may add ordinary matcher/combinator capabilities or
+syntax when concrete use justifies them. Future sugar should preserve
+`pattern.match(subject)` as the recognition authority unless that authority is
+itself explicitly reopened by a later decision.
 
-For one generic structural-projection attempt, the consumer:
+## 11. Optimization freedom
 
-1. forms the complete ordered request;
-2. invokes `deconstructFields` **exactly once**;
-3. completes and validates that invocation before any nested field subpattern is executed;
-4. for a successful Array result, captures a **shallow ordered snapshot** of the returned Array's indexed element references immediately; and
-5. runs nested field subpatterns against that captured ordered value sequence.
+Implementations may inline standard matcher behaviors, scalarize unobservable
+capture carriers, fuse composite loops, retain versioned/persistent snapshots, or
+use other internal representations only when observable behavior remains exactly
+equivalent to this specification.
 
-The consumer does not re-read the returned Array after nested matching begins and
-does not re-invoke the subject to refresh a field. Mutating or aliasing the result
-Array after the snapshot therefore cannot change which projected references the
-current attempt observes. This is not a deep copy: if a projected value is itself
-a mutable object, nested matching observes that same ordinary object.
+Optimizations must preserve:
 
-`deconstructFields` remains ordinary Protos behavior. Error, non-local return,
-cancellation, and explicit suspension propagate according to the existing
-language rules. Matching adds no implicit await, adoption, retry, transaction,
-or atomicity guarantee around an explicitly suspending projection method.
+- ordinary matcher lookup/dispatch;
+- matcher invocation order and exactly-once counts;
+- ordinary equality/hash direction and call counts where specified;
+- shallow observation boundaries;
+- capture composition and no-recursive-flattening;
+- first-success `caseOf` commitment;
+- ordinary Error/control/cancellation/suspension behavior; and
+- selected callable invocation semantics.
 
-### 5.4 Representation and future-capability boundary
+## 12. Authority reconciliation
 
-Physical/internal field reordering is not observable through this contract.
-Adding an implementation cache, helper slot, method slot, delegated behavior, or
-other non-projected state does not automatically alter the subject's logical
-matching structure.
+D131 supersedes the Core v0.1 public institutions selected by D088, D090, D092,
+D093, D095, D096, D100, and D103 where those decisions define the removed
+dedicated pattern-language/binding/guard/OR/static-analysis surface.
 
-Core v0.1 does not impose a universal positional product layout on ordinary
-objects. Domain-specific positional extraction remains possible through ordinary
-pattern-owned `match(subject)` behavior and its D072 capture carrier. Array, Map,
-Bytes, and other indexed contents remain governed by their existing collection
-and indexing semantics rather than being reclassified as object fields.
+The following foundations remain authoritative where consistent with D131:
 
-D078 resolves generic **named-object** complete-view/remainder behavior for
-Core v0.1 by standardizing **open/subset matching without generic remainder
-capture**. This does not add a special full-view argument, sentinel, or mode to
-`deconstructFields`, and it does not add a second complete-view authority.
+- D071 — matcher-based multi-way matching architecture, rehomed in ordinary
+  `caseOf`;
+- D072 — exact matcher outcome/capture carrier;
+- D073 — ordinary `pattern.match(subject)` invocation authority;
+- D081 — inherited `Object.match(subject) -> this == subject`;
+- D083 — ordered composite capture composition.
 
-D080 resolves the generic positional subject-deconstruction question for
-Core v0.1: arbitrary objects do **not** acquire a universal positional product
-layout or a required subject-side positional deconstruction protocol. Positional
-domain extraction remains available through pattern-owned `match(subject)`, and
-intrinsically ordered values remain governed by their own collection/indexing
-semantics.
+D084 remains authoritative only for the retained correctness principles now owned
+by fixed `Array.match`: standard Array state eligibility, exact fixed-length
+recognition, shallow pre-child observation, deterministic child order, ordinary
+child matcher invocation, and capture composition. Its remainder/rest institutions
+are superseded for Core v0.1 by D131.
 
-### 5.5 Open/subset named-object matching
+D086 remains authoritative only for the retained correctness principles now owned
+by open/subset `Map.match`: normal standard Map eligibility, stable association
+observation, ordinary normal-Map key search, missing-key mismatch, resolution
+before nested child matching, deterministic requirement order, open/subset
+residue policy, and capture composition. Its exact/remainder institutions are
+superseded for Core v0.1 by D131.
 
-Generic named object structural matching is **open/subset**. Only logical field
-names explicitly requested through the D075 `deconstructFields(...names)`
-operation participate in that structural attempt.
+D075/D078 named structural-projection machinery is not required by the D131
+standard Array/Map matching path. Any remaining normative use outside this
+matching model is unaffected until independently reconciled.
 
-A subject may expose additional logical fields that the pattern did not request.
-Those unrequested logical fields:
+## 13. Transition requirement
 
-- do not cause the structural pattern to fail;
-- are not enumerated or materialized merely because matching occurs;
-- do not become captures implicitly; and
-- do not become observable through slots, delegated lookup, indexed state,
-  prototype ancestry, host reflection, or another fallback path.
+The specification cutover does not by itself preserve compatibility with the
+removed matching language.
 
-Core v0.1 does not standardize a generic named-object `**rest`-like capture, a
-complete logical-field schema, or a required complete-view operation. In
-particular it requires no `deconstructAllFields`, `deconstructFieldNames`,
-`deconstructFieldsAndRest`, `DeconstructionView`, or equivalent second
-deconstruction authority.
+Implementation follow-up must remove parser, AST/lowering, runtime, tests,
+conformance and documentation for rejected behavior rather than leaving dormant
+acceptance paths.
 
-A future whole-subject binding facility, if separately ratified, may bind the
-original subject without requiring logical-field enumeration. D078 does not
-select such syntax or binding semantics.
-
-Collection-specific Map/sequence matching and remainder behavior is owned
-by the separately ratified collection-specific contracts where defined;
-D078 itself does not select or redefine those semantics.
-
-A future complete logical-view facility may be considered only through a
-separate explicit decision backed by concrete use evidence. Such a facility must
-not silently redefine the D075 selective projection contract or make existing
-open/subset patterns observe newly added logical fields.
-
-### 5.6 Positional subject-deconstruction boundary
-
-Core v0.1 does **not** require arbitrary objects to expose a generic positional logical-deconstruction protocol.
-
-The generic subject-side structural protocol for ordinary record/object-like
-matching remains the named selective D075 operation:
-
-```text
-subject.deconstructFields(...names)
-```
-
-D080 introduces no required `deconstruct()`, `deconstructPositions`,
-`componentN`, ordered positional-schema metadata, dedicated positional-view
-object, or request-polymorphic deconstruction selector.
-
-No positional order is inferred from local slots, delegated members, source or
-declaration order, D075 request/name order, indexed state, prototype ancestry,
-host representation, or another reflective property. Adding or reordering
-ordinary implementation state therefore cannot silently alter a subject's
-generic positional matching contract, because Core defines no such contract.
-
-This boundary does not remove positional extraction from the language.
-A domain-specific pattern may use the already-ratified
-`pattern.match(subject)` authority and return ordinary D072 positional captures.
-Different patterns may therefore expose different legitimate domain views of
-the same subject without forcing the subject to choose one universal component
-ordering.
-
-Likewise, Array and other intrinsically ordered or future sequence/tuple-like
-values remain governed by their own collection/indexing semantics. D080 does
-not reclassify indexed contents as generic object fields and does not select
-future sequence-pattern syntax.
-
-An object or library may expose an ordinary domain API whose values have
-positional meaning. D080 only declines to elevate one such convention into a
-required generic matching protocol for arbitrary objects.
-
-A future opt-in subject-side positional protocol may be considered only by a
-separate explicit decision backed by ecosystem evidence that a shared positional
-contract provides independent value beyond pattern-owned extraction and
-collection semantics. Such a future protocol must not silently derive order
-from D075 named projection or redefine existing matching behavior.
-
-## 6. Effects, ordering, and implementation freedom
-
-Matching protocols are ordinary Protos behavior and may therefore have ordinary
-observable effects unless a later, narrower contract explicitly says otherwise.
-Implementations must not duplicate, omit, reorder, or replace observable matcher
-or structural-projection behavior merely because a specialized implementation is
-available.
-
-Implementations may inline, open-code, scalar-replace, build decision structures,
-cache semantically invisible implementation data, or otherwise specialize
-matching when and only when the resulting observable Protos behavior is
-equivalent to the ordinary protocol semantics.
-
-No global matcher registry, global structural-schema registry, shared mutable
-matching state, scheduler requirement, host reflection dependency, or runtime
-backend is mandated by this specification.
-
-## 7. Explicitly unresolved surface
-
-This revision intentionally does not select:
-
-- a `match` keyword or expression grammar;
-- case/arm/default syntax;
-- which source expressions or future surface forms denote ordinary value patterns;
-- guard syntax or exhaustivity;
-- a standard built-in pattern taxonomy;
-- named capture/binding syntax;
-- repetition and optional-pattern semantics;
-- sequence find/subsequence and iterator/stream pattern semantics;
-- whole-subject alias/binding syntax and semantics;
-- a recognition-only matcher fast path.
-
-Until those questions are separately ratified, implementations and libraries
-must not treat them as implied by D071-D075 or D078.
+Until those executable slices are complete, the repository may temporarily contain
+implementation behavior that is ahead of or behind this normative cutover. That
+transitional mismatch is owned by I041 and must be eliminated before I041 closes.
