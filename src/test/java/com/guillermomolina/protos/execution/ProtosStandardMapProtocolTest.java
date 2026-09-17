@@ -25,20 +25,20 @@ class ProtosStandardMapProtocolTest {
         ProtosMapValue map = new ProtosMapValue(prelude.mapPrototype());
         activation.context().createLocalSlot("m", map);
 
-        new ProtosSourceCompiler().compile("m.atPut(1,1)").call(activation);
+        ProtosTestExecutionSupport.evaluate("m.atPut(1,1)", activation);
 
         map.close();
-        new ProtosSourceCompiler().compile("m.atPut(1,2)").call(activation);
+        ProtosTestExecutionSupport.evaluate("m.atPut(1,2)", activation);
         assertThrows(
                 ProtosSignalException.class,
-                () -> new ProtosSourceCompiler().compile("m.atPut(2,2)").call(activation));
+                () -> ProtosTestExecutionSupport.evaluate("m.atPut(2,2)", activation));
         assertThrows(
                 ProtosSignalException.class,
-                () -> new ProtosSourceCompiler().compile("m.remove(1)").call(activation));
+                () -> ProtosTestExecutionSupport.evaluate("m.remove(1)", activation));
 
         map.freeze();
         assertThrows(
                 ProtosSignalException.class,
-                () -> new ProtosSourceCompiler().compile("m.atPut(1,3)").call(activation));
+                () -> ProtosTestExecutionSupport.evaluate("m.atPut(1,3)", activation));
     }
 }

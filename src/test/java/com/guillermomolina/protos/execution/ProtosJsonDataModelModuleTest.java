@@ -47,9 +47,10 @@ class ProtosJsonDataModelModuleTest {
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
-
-        Object module = compiler.compile("import(\"std:json/JSON\")").call(activation);
+        Object module =
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:json/JSON\")",
+                        activation);
         assertThrows(
                 ProtosSignalException.class,
                 () -> ProtosActorValueTransfer.snapshotValue(module, activation));
@@ -57,18 +58,18 @@ class ProtosJsonDataModelModuleTest {
         ProtosObjectValue source =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        compiler.compile(
-                                        """
-                                        JSON: import("std:json/JSON")
-                                        JSON.object(
-                                            "name", JSON.string("Ada"),
-                                            "numbers", JSON.array(
-                                                JSON.number(10, -1),
-                                                JSON.number(1, 0)
-                                            )
-                                        )
-                                        """)
-                                .call(activation));
+                        ProtosTestExecutionSupport.evaluate(
+                                """
+                                JSON: import("std:json/JSON")
+                                JSON.object(
+                                    "name", JSON.string("Ada"),
+                                    "numbers", JSON.array(
+                                        JSON.number(10, -1),
+                                        JSON.number(1, 0)
+                                    )
+                                )
+                                """,
+                                activation));
 
         ProtosObjectValue copied =
                 assertInstanceOf(

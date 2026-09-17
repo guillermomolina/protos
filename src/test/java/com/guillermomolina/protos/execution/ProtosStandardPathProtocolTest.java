@@ -26,10 +26,9 @@ class ProtosStandardPathProtocolTest {
         var prelude = core();
         var represented =
                 (ProtosPathValue)
-                        new ProtosSourceCompiler()
-                                .compile(
-                                        "Path.relative().child(\"a/b\").parentComponent().child(\"c\")")
-                                .call(prelude.newModuleActivation());
+                        ProtosTestExecutionSupport.evaluate(
+                                "Path.relative().child(\"a/b\").parentComponent().child(\"c\")",
+                                prelude.newModuleActivation());
 
         assertFalse(represented.rooted());
         assertEquals(
@@ -41,9 +40,9 @@ class ProtosStandardPathProtocolTest {
 
         var rooted =
                 (ProtosPathValue)
-                        new ProtosSourceCompiler()
-                                .compile("Path.rooted()")
-                                .call(prelude.newModuleActivation());
+                        ProtosTestExecutionSupport.evaluate(
+                                "Path.rooted()",
+                                prelude.newModuleActivation());
         assertTrue(rooted.rooted());
         assertTrue(rooted.components().isEmpty());
     }
@@ -55,9 +54,9 @@ class ProtosStandardPathProtocolTest {
         var prelude = core();
         var value =
                 (ProtosPathValue)
-                        new ProtosSourceCompiler()
-                                .compile("Path.relative()")
-                                .call(prelude.newModuleActivation());
+                        ProtosTestExecutionSupport.evaluate(
+                                "Path.relative()",
+                                prelude.newModuleActivation());
 
         assertSame(
                 prelude.pathPrototype(),
@@ -67,9 +66,9 @@ class ProtosStandardPathProtocolTest {
         activation.context().createLocalSlot("value", value);
         var withParent =
                 (ProtosPathValue)
-                        new ProtosSourceCompiler()
-                                .compile("value.parentComponent()")
-                                .call(activation);
+                        ProtosTestExecutionSupport.evaluate(
+                                "value.parentComponent()",
+                                activation);
 
         assertSame(
                 prelude.pathPrototype(),

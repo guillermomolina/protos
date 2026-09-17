@@ -38,15 +38,14 @@ class ProtosStandardArrayFactoryTest {
 
         ProtosArrayValue result =
                 (ProtosArrayValue)
-                        new ProtosSourceCompiler()
-                                .compile(
-                                        """
-                                        MyArray: Array {
-                                            label: 9
-                                        }
-                                        MyArray(10, 20)
-                                        """)
-                                .call(activation);
+                        ProtosTestExecutionSupport.evaluate(
+                                """
+                                MyArray: Array {
+                                    label: 9
+                                }
+                                MyArray(10, 20)
+                                """,
+                                activation);
 
         Object myArray = activation.context().readLocalSlot("MyArray").orElseThrow();
         assertFalse(result.isClosed());

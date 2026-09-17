@@ -1,3 +1,17 @@
+## 0.3.17-SNAPSHOT
+
+- Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
+  ratified PLAT035 by migrating retained-Java representation and lifecycle
+  harnesses from direct `ProtosSourceCompiler.compile(...).call(...)`
+  legacy-AST execution to the canonical Bytecode-backed
+  `ProtosTestExecutionSupport.evaluate(...)` boundary. Migrate Map lifecycle,
+  Path representation, Array factory materialization, and JSON actor-transfer
+  coverage while preserving Java ownership of represented-value state,
+  prototype/lookup identity, close/freeze semantics, Actor graph-transfer
+  assertions, and host-side runtime inspection. No Protos-visible language,
+  specification, Standard Library, or production runtime semantics change.
+  Implementation version becomes `0.3.17-SNAPSHOT`.
+
 ## 0.3.16-SNAPSHOT
 
 - Advance `I041-B2 — ordinary Object.caseOf publication` (GitHub #550).
