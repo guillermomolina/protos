@@ -4,6 +4,9 @@ import com.guillermomolina.protos.runtime.*; import java.math.BigInteger; import
 public final class ProtosStandardMapProtocol {
  enum StructuredReadLookupKind { AT, CONTAINS_KEY }
 
+ private static final ProtosNativeClosureBody STANDARD_CALL_BODY =
+         ProtosStandardMapProtocol::call;
+
  private static final ProtosNativeClosureBody STANDARD_AT_BODY =
          ProtosStandardMapProtocol::at;
  private static final ProtosClosureValue STANDARD_AT =
@@ -149,7 +152,7 @@ public final class ProtosStandardMapProtocol {
  }
  public static void install(ProtosObjectValue p){
   for(String s:List.of("call","at","atPut","containsKey","remove","size","each"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core Map already defines "+s);
-  p.createLocalSlot("call",ProtosClosureValue.nativeClosure((a,x)->{arity(a,x,0);if(!(a.receiver() instanceof ProtosObjectValue r)||!delegatesTo(r,p))throw err(a);return new ProtosMapValue(r);}));
+  p.createLocalSlot("call",ProtosClosureValue.nativeClosure(STANDARD_CALL_BODY));
   p.createLocalSlot("at", STANDARD_AT);
   p.createLocalSlot("containsKey", STANDARD_CONTAINS_KEY);
   p.createLocalSlot("atPut", STANDARD_AT_PUT);
@@ -157,6 +160,67 @@ public final class ProtosStandardMapProtocol {
   p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return new ProtosIntegerValue(BigInteger.valueOf(m.keyedSize()));}));
   p.createLocalSlot("each", STANDARD_EACH);
  }
+ static ProtosMapValue constructForMapConstruction(
+         Object factory,
+         ProtosActivation caller) {
+  ProtosPrelude prelude = caller.prelude().orElseThrow();
+  ProtosSlotLookupResult selected;
+  try {
+   selected = ProtosValueLookup.lookup(factory, "call", prelude)
+           .orElseThrow(() -> err(caller));
+  } catch (UnsupportedOperationException unsupportedRepresentation) {
+   throw err(caller);
+  }
+  if (!(selected.value() instanceof ProtosClosureValue behavior)
+          || behavior.nativeBody().orElse(null) != STANDARD_CALL_BODY
+          || !isCanonicalMapHome(selected.home(), caller)) {
+   throw err(caller);
+  }
+  Object result =
+          ProtosClosureInvoker.invokeImmediateMethod(
+                  behavior,
+                  factory,
+                  selected.home(),
+                  List.of(),
+                  caller);
+  if (!(result instanceof ProtosMapValue map)) {
+   throw err(caller);
+  }
+  return map;
+ }
+
+ static void defineInitialAssociationForMapConstruction(
+         ProtosMapValue map,
+         Object key,
+         Object value,
+         ProtosActivation caller) {
+  if (!map.isOpen() || map.comparisonActive()) {
+   throw err(caller);
+  }
+  BigInteger recordedHash = hash(map, key, caller);
+  if (find(map, key, recordedHash, caller) != null) {
+   throw err(caller);
+  }
+  if (!map.isOpen() || map.comparisonActive()) {
+   throw err(caller);
+  }
+  map.append(key, recordedHash, value);
+ }
+
+ private static Object call(ProtosActivation a, List<?> x) {
+  arity(a, x, 0);
+  Object canonical =
+          a.prelude()
+                  .map(prelude -> prelude.bindings().readLocalSlot("Map").orElse(null))
+                  .orElse(null);
+  if (!(canonical instanceof ProtosObjectValue p)
+          || !(a.receiver() instanceof ProtosObjectValue r)
+          || !delegatesTo(r, p)) {
+   throw err(a);
+  }
+  return new ProtosMapValue(r);
+ }
+
  private static Object at(ProtosActivation a, List<?> x) {
   ProtosMapValue m = map(a);
   arity(a, x, 1);
