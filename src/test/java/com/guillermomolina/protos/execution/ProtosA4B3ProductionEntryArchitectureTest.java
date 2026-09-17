@@ -73,10 +73,14 @@ final class ProtosA4B3ProductionEntryArchitectureTest {
         assertTrue(moduleRuntime.contains("process.callInExecutionHostForRuntime("));
         assertTrue(moduleRuntime.contains("materializeModuleSource(source)"));
         assertFalse(moduleRuntime.contains(".parsePublic(source.source())"));
-        assertTrue(moduleRuntime.contains("is not a production Process"));
+        assertFalse(moduleRuntime.contains("compiler.compile(source).call(activation);"));
+        assertTrue(moduleRuntime.contains("ProtosPolyglotExecutionContext.open("));
+        assertTrue(moduleRuntime.contains("executionContext.callEntered("));
         assertTrue(initialModule.contains("process.callInExecutionHostForRuntime("));
         assertTrue(initialModule.contains("materializeModuleSource(source)"));
         assertFalse(initialModule.contains("parsePublic(source.source())"));
-        assertTrue(initialModule.contains("not reachable from a production driver"));
+        assertTrue(initialModule.contains("ProtosPolyglotExecutionContext.open("));
+        assertTrue(initialModule.contains("executionContext.executeModuleSource(source, activation)"));
+        assertFalse(initialModule.contains("new ProtosSourceCompiler().compile(source)"));
     }
 }
