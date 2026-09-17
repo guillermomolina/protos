@@ -95,6 +95,63 @@ a new agent encounters them. If the user explicitly asks to re-evaluate or
 reopen such a decision, treat it as open for the requested review and do not
 advance dependent new design work until the user approves the resulting choice.
 
+### Preserve owner-approved decision invariants through ratification
+<!-- GITHUB021 OWNER-DECISION-INVARIANT-PRESERVATION -->
+
+During an active substantive decision, an explicit project-owner statement that
+establishes a semantic or architectural invariant, rejects a previously assumed
+model, or corrects the agent's model of the decision is part of the decision's
+approval history. Record such a materially constraining invariant in the active
+decision/work record as soon as practical so later candidate construction and
+ratification can review it directly.
+
+This rule is deliberately bounded. Do not transcribe every conversational remark
+or exploratory preference into permanent policy. Record explicit owner decisions
+and model corrections that materially constrain the active decision, including
+the boundary they establish and enough context to distinguish the approved
+invariant from surrounding unresolved questions.
+
+A later candidate, recommendation, implementation strategy, lowering, pseudocode
+model, analogy, or ratification summary MUST NOT silently contradict an already
+owner-approved invariant merely because the contradiction is embedded inside a
+larger candidate. If later evidence genuinely warrants changing, narrowing, or
+removing that invariant, identify the exact conflict, the previously approved
+invariant, and the proposed replacement consequence, then explicitly reopen that
+point for project-owner decision before dependent work proceeds.
+
+Implementation models are not semantic authority. A lowering such as
+"construct X by repeatedly invoking operation Y", host/runtime pseudocode, or an
+implementation analogy may be useful evidence for evaluation order, effects, or
+feasibility, but it does not become the language/design contract unless the
+semantic equivalence itself was explicitly selected. Preserve the existing
+specification-authority and semantics-before-implementation rules when moving
+between semantic reasoning and implementation machinery.
+
+Before requesting final project-owner approval of an exact `Dxxx`/`PLATxxx`
+candidate, and again before publishing its durable ratification record when one
+is required, perform an invariant/delta consistency check against the explicit
+owner-approved invariants recorded for that decision. The review MUST surface:
+
+- each applicable recorded invariant and whether the candidate preserves it;
+- any observable consequence that changes, narrows, or contradicts one;
+- any materially new semantic/architectural consequence introduced by candidate
+  refinement since the earlier owner decision; and
+- the explicit approval provenance for every reopened invariant whose value
+  changed.
+
+The consistency check passes only when the candidate preserves the applicable
+invariants or every conflicting invariant has been explicitly reopened and the
+replacement consequence explicitly approved. Approval of a candidate name,
+label, bundle, or summary does not retroactively approve a hidden contradictory
+consequence that was not surfaced. Exact-candidate approval remains exact in
+scope.
+
+D136/#542 is the motivating failure mode, not a semantic resolution inside this
+policy. If the active record says that `%{...}` defines construction-time initial
+Map associations and a later model claims that `%{...}` is semantically repeated
+post-construction `atPut`, the conflict must be surfaced and reopened; the later
+model cannot silently supersede the recorded invariant.
+
 ## Exhaustive comparative research for Dxxx and PLATxxx
 <!-- GITHUB010 EXHAUSTIVE-DECISION-RESEARCH -->
 
@@ -1083,6 +1140,7 @@ NATIVE_PARENT=PASS|NOT_APPLICABLE
 EFFECTIVE_PRIORITY=RESOLVED|INTENTIONALLY_UNSET
 PROJECT_ROUTING=PASS
 DECISION_APPROVAL_PROVENANCE=PASS|NOT_APPLICABLE
+DECISION_INVARIANT_CONSISTENCY=PASS|NOT_APPLICABLE
 REQUIRED_DURABLE_PUBLICATION=PASS|NOT_APPLICABLE
 ```
 
@@ -1134,6 +1192,15 @@ to repair coordination state are never approval of an unrelated pending design.
 The agent MUST NOT manufacture an owner-approval comment as provenance. If exact
 approval provenance is absent or ambiguous, fail closed at `status:needs-decision`.
 
+For a `Dxxx`/`PLATxxx` with recorded owner-approved invariants,
+`DECISION_INVARIANT_CONSISTENCY=PASS` requires the GITHUB021 invariant/delta
+check before exact-candidate approval is treated as sufficient for ratification.
+A candidate that contradicts an applicable invariant without explicitly
+reopening and re-approving that point MUST remain unresolved even when other
+parts of the candidate were approved. Use `NOT_APPLICABLE` only when the decision
+has no recorded owner-approved invariant to compare; do not use it to bypass a
+known conflict or a missing check.
+
 Owner selection and durable ratification are separate postconditions. When an
 approved Dxxx/PLATxxx requires a durable ratification/publication record, that
 record belongs in `guillermomolina/protos-project-docs`, and the Issue MUST remain
@@ -1156,6 +1223,8 @@ therefore:
 ```text
 exact owner approval
     -> DECISION_APPROVAL_PROVENANCE=PASS
+invariant/delta consistency check
+    -> DECISION_INVARIANT_CONSISTENCY=PASS|NOT_APPLICABLE
 bounded publication to guillermomolina/protos-project-docs
     -> PROJECT_RECORD_REVISION=<exact SHA>
 re-read exact durable record at PROJECT_RECORD_REVISION
