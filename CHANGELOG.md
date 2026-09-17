@@ -1,3 +1,17 @@
+## 0.3.15-SNAPSHOT
+
+- Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
+  ratified PLAT035 by migrating the retained-Java Collections execution block
+  from direct `ProtosSourceCompiler.compile(...).call(...)` legacy-AST execution
+  to the canonical Bytecode-backed `ProtosTestExecutionSupport.evaluate(...)`
+  boundary. Migrate Set algebra and mutation coverage, Array algorithm and
+  reduce/sort callback-ordering coverage, and Standard Library resolver
+  import/caching/error coverage while preserving Java ownership, actor-local
+  Activations, native callbacks, assertions, and semantic coverage. No
+  Protos-visible semantics, specification, Standard Library behavior, or
+  production runtime behavior changes. Implementation version becomes
+  `0.3.15-SNAPSHOT`.
+
 ## 0.3.14-SNAPSHOT
 
 - Fix checkout/developer execution after implementation-version changes. Repair

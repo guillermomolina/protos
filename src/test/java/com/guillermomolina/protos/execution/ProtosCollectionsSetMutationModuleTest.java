@@ -97,13 +97,12 @@ class ProtosCollectionsSetMutationModuleTest {
         activation.context().createLocalSlot("values", values);
 
         Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                "Collection: import(\"std:collections/"
-                                        + module
-                                        + "\")\n"
-                                        + body)
-                        .call(activation);
+                ProtosTestExecutionSupport.evaluate(
+                        "Collection: import(\"std:collections/"
+                                + module
+                                + "\")\n"
+                                + body,
+                        activation);
         return assertInstanceOf(ProtosArrayValue.class, result);
     }
 

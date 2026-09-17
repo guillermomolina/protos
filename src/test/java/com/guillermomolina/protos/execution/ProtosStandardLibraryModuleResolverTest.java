@@ -187,19 +187,24 @@ class ProtosStandardLibraryModuleResolverTest {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(libraryRoot);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
         ProtosActivation actorA = prelude.newModuleActivation();
         ProtosActivation actorB = prelude.newModuleActivation();
 
         ProtosObjectValue first =
                 (ProtosObjectValue)
-                        compiler.compile("import(\"std:collections/Probe\")").call(actorA);
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:collections/Probe\")",
+                                actorA);
         ProtosObjectValue repeated =
                 (ProtosObjectValue)
-                        compiler.compile("import(\"std:collections/Probe\")").call(actorA);
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:collections/Probe\")",
+                                actorA);
         ProtosObjectValue otherActor =
                 (ProtosObjectValue)
-                        compiler.compile("import(\"std:collections/Probe\")").call(actorB);
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:collections/Probe\")",
+                                actorB);
 
         assertSame(first, repeated);
         assertNotSame(first, otherActor);
@@ -217,9 +222,9 @@ class ProtosStandardLibraryModuleResolverTest {
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        new ProtosSourceCompiler()
-                                .compile("import(\"std:collections/Missing\")")
-                                .call(prelude.newModuleActivation()));
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:collections/Missing\")",
+                                prelude.newModuleActivation()));
     }
 
     @Test

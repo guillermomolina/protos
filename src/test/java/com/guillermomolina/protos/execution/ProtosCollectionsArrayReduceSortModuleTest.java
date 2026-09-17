@@ -57,14 +57,13 @@ class ProtosCollectionsArrayReduceSortModuleTest {
             assertThrows(
                     ProtosSignalException.class,
                     () ->
-                            new ProtosSourceCompiler()
-                                    .compile(
-                                            """
-                                            Arrays: import("std:collections/Array")
-                                            Arrays.%s(wrongSource, callback)
-                                            """
-                                                    .formatted(operation))
-                                    .call(activation),
+                            ProtosTestExecutionSupport.evaluate(
+                                    """
+                                    Arrays: import("std:collections/Array")
+                                    Arrays.%s(wrongSource, callback)
+                                    """
+                                            .formatted(operation),
+                                    activation),
                     operation);
             assertEquals(0, calls.get(), operation);
         }

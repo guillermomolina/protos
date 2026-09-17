@@ -46,23 +46,23 @@ class ProtosCollectionsSetAlgebraModuleTest {
                     new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
             ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
             ProtosActivation activation = prelude.newModuleActivation();
-            ProtosSourceCompiler compiler = new ProtosSourceCompiler();
 
             Object moduleValue =
-                    compiler.compile("import(\"std:collections/" + module + "\")")
-                            .call(activation);
+                    ProtosTestExecutionSupport.evaluate(
+                            "import(\"std:collections/" + module + "\")",
+                            activation);
             assertThrows(
                     ProtosSignalException.class,
                     () -> ProtosActorValueTransfer.snapshotValue(moduleValue, activation));
 
             Object data =
-                    compiler.compile(
-                                    """
-                                    Collection: import("std:collections/%s")
-                                    Collection.union(Collection(1, 2), Collection(2, 3))
-                                    """
-                                            .formatted(module))
-                            .call(activation);
+                    ProtosTestExecutionSupport.evaluate(
+                            """
+                            Collection: import("std:collections/%s")
+                            Collection.union(Collection(1, 2), Collection(2, 3))
+                            """
+                                    .formatted(module),
+                            activation);
             ProtosObjectValue copied =
                     assertInstanceOf(
                             ProtosObjectValue.class,
