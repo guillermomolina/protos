@@ -9,6 +9,33 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.417] - 2026-09-17
+
+### D131 / I041-A2 — Remove dedicated matching grammar
+- Removes the dedicated postfix `match` expression, `case` arms, `when` guards,
+  binder/wildcard, Array/Map pattern, remainder, exact-Map, OR, alias and
+  `captures(...)` productions from the normative Core v0.1 grammar.
+- Restores the ordinary expression root to `slot-creation | assignment |
+  non-local-return | binary-expression`; matching no longer owns a separate
+  expression category.
+- `pattern.match(subject)` and `value.caseOf(cases)` are ordinary member/call
+  syntax rather than keywords or structural grammar forms.
+- `match`, `case`, `when`, `exact`, and `captures` no longer carry
+  matching-specific contextual structural meaning and remain ordinary
+  identifier/member-name spellings where otherwise admitted.
+- `_`, `@`, `|`, and `...` receive no matching-specific grammar under D131.
+- Ordinary Array construction under D130 and Map construction under D136 remain
+  the source forms used to build structural matcher values.
+
+### Compatibility and implementation state
+- `PROTOS_GRAMMAR.md` is normatively reconciled to the D131 protocol-first model.
+- Parser/AST/lowering/runtime behavior still accepts/implements the old matching
+  language until later I041 executable-removal slices; that temporary mismatch
+  is owned by I041 and is not a compatibility promise.
+- `semantics/MATCHING.md` remains the primary normative owner of matching
+  behavior from specification revision `0.1.416`.
+- Implementation behavior and implementation version are unchanged by I041-A2.
+
 ## [0.1.416] - 2026-09-17
 
 ### D131 / I041-A1 — Protocol-first matching semantic authority cutover

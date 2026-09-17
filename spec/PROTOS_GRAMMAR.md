@@ -152,19 +152,19 @@ This revision does not introduce contextual lexing. The lexer continues to token
 
 Names provided by the standard prelude, such as `Object`, `Future`, `Number`, `String`, `Map`, `IdentityMap`, or `Context`, are not reserved words. In particular, the standard prelude prototype `Context` is not a reserved word and is distinct from the reserved intrinsic `context`. Error object names are not reserved.
 
-Core v0.1 defines no additional reserved words such as `if`, `else`, `while`, `for`, `class`, `function`, `try`, `catch`, `throw`, `async`, or `await`.
+Core v0.1 defines no additional reserved words such as `if`, `else`, `while`,
+`for`, `class`, `function`, `try`, `catch`, `throw`, `async`, or `await`.
 
-D093 additionally uses `match`, `case`, and `when` as **contextual structural
-spellings** inside the separately defined matching-expression envelope. They are
-not added to the reserved-word set: lexical recognition still produces ordinary
-identifier tokens, and outside those exact structural positions the spellings
-remain ordinary identifiers/member names. In particular, D073's ordinary
-`pattern.match(subject)` selector remains ordinary member/call syntax.
+Under D131, `match`, `case`, `when`, `exact`, and `captures` have no
+matching-specific contextual structural meaning. They remain ordinary
+identifier/member-name spellings wherever the ordinary grammar admits those
+categories. In particular, D073's ordinary `pattern.match(subject)` selector is
+ordinary member/call syntax.
 
-D095 additionally gives `exact` and `captures` contextual structural meaning
-inside match-pattern syntax; neither becomes globally reserved. `_` is wildcard
-only in pattern position. Pattern `@`, `|`, `%{` and `...` do not change ordinary
-expression/operator grammar.
+`_` is no longer a matching wildcard. D131 introduces no matching-specific
+meaning for `@`, `|`, or `...`. Expression-position `%{...}` remains ordinary
+Map construction under D136; Array construction remains ordinary `[ ... ]`
+syntax under D130.
 
 
 ## 3. Literals
@@ -654,239 +654,49 @@ expression =
       slot-creation
     | assignment
     | non-local-return
-    | match-expression ;
+    | binary-expression ;
 ```
 
-### 7.1 Matching expressions and match-pattern grammar (D093/D095)
+### 7.1 Matching uses ordinary expression grammar (D131)
 
-D093 owns the outer postfix envelope. D095 completes its previous pattern
-parameter and activates the grammar normatively.
+D131 removes the dedicated Core v0.1 matching-expression and match-pattern
+grammar.
 
-```ebnf
-match-expression =
-    binary-expression,
-    [ contextual-match-marker, match-body ] ;
+There are no Core v0.1 grammar productions for:
 
-match-body =
-    "{",
-    [ newline-run ],
-    match-arm-line-items,
-    [ newline-run ],
-    "}" ;
+- postfix `subject match { ... }`;
+- `case` arms;
+- `when` guards;
+- `@name` binders or aliases;
+- `_` wildcard patterns;
+- Array-pattern or Map-pattern forms;
+- Array or Map remainder patterns;
+- `exact` Map patterns;
+- OR patterns;
+- `captures(...)`; or
+- matching-specific static binding interfaces.
 
-match-arm-line-items =
-    match-arm-line,
-    { newline-run, match-arm-line } ;
+Matching behavior is reached through ordinary expressions and ordinary messages:
 
-match-arm-line =
-    match-arm,
-    { ";", match-arm } ;
-
-match-arm =
-    contextual-case-marker,
-    match-pattern,
-    [ contextual-when-marker, match-guard-expression ],
-    "=>",
-    closure-body ;
-
-match-guard-expression =
-    expression ;
-
-The `match-guard-expression` production denotes the ordinary Protos expression
-grammar with one contextual source-form restriction required by D100. While
-parsing a `when` guard, the first `=>` at the guard's own structural nesting
-level is the match-arm delimiter. An ordinary Closure expression therefore may
-not be the **ungrouped root** of the guard.
-
-Grouping makes the Closure extent explicit, for example
-`case p when (x => y) => body`. Closures nested inside another delimited ordinary
-expression likewise remain ordinary and legal.
-
-Thus `case p when x => y => body` has exactly one Core v0.1 parse: guard `x`,
-the first `=>` as arm delimiter, and body `y => body`. This rule is structural,
-not line-oriented; newline/layout does not change arrow ownership. No
-rightmost-arrow rule, greedy root-Closure parse, arrow backtracking, type
-information, runtime guard value, or indentation may select the delimiter.
-D100 changes no D092 guard runtime semantics.
-
-match-pattern =
-    or-pattern ;
-
-or-pattern =
-    aliased-pattern,
-    { "|", aliased-pattern } ;
-
-aliased-pattern =
-      binder-alias-pattern
-    | primary-match-pattern ;
-
-binder-alias-pattern =
-    "@", identifier, ":", aliased-pattern ;
-
-primary-match-pattern =
-      binder-pattern
-    | wildcard-pattern
-    | array-pattern
-    | exact-map-pattern
-    | map-pattern
-    | parenthesized-match-pattern
-    | matcher-value-pattern, [ capture-interface ] ;
-
-binder-pattern =
-    "@", identifier ;
-
-wildcard-pattern =
-    "_" ;
-
-parenthesized-match-pattern =
-    "(", match-pattern, ")" ;
-
-matcher-value-pattern =
-    matcher-value-primary,
-    { postfix-operation } ;
-
-matcher-value-primary =
-      literal
-    | identifier
-    | intrinsic-reference ;
+```protos
+pattern.match(subject)
+value.caseOf(cases)
 ```
 
-Pattern `|` has the lowest precedence. `@name: pattern` aliases the current
-subsubject; aliasing a whole OR therefore uses parentheses:
-`@whole: (p1 | p2)`.
+Both forms use the existing member/call grammar. `match` and `caseOf` are
+ordinary message names, not keywords or structural markers.
 
-A matcher-value pattern is evaluated exactly once when that position is attempted
-and then participates only through D073.
+Structural matcher values are likewise built through ordinary expression forms.
+For example, `[1, Capture]` is an ordinary Array construction expression under
+D130, and `%{"name": Capture}` is an ordinary Map construction expression under
+D136. Their structural recognition behavior belongs to
+`semantics/MATCHING.md`, not to a separate pattern grammar.
 
-#### Array patterns
-
-```ebnf
-array-pattern =
-    "[",
-    [ layout ],
-    [ array-pattern-items ],
-    [ layout ],
-    "]" ;
-
-array-pattern-items =
-      array-fixed-items
-    | array-fixed-items, ",", [ layout ], array-remainder-item,
-      [ ",", [ layout ], array-fixed-items ]
-    | array-remainder-item,
-      [ ",", [ layout ], array-fixed-items ] ;
-
-array-fixed-items =
-    match-pattern,
-    { ",", [ layout ], match-pattern } ;
-
-array-remainder-item =
-    "...",
-    [ primary-match-pattern ] ;
-```
-
-At most one remainder is allowed. There is no trailing comma. Bare `...`
-discards the D084 remainder; `...nested` supplies the D084 remainder Array as the
-current subsubject to `nested`.
-
-#### Map patterns
-
-```ebnf
-map-pattern =
-    "%", map-pattern-body ;
-
-exact-map-pattern =
-    contextual-exact-marker, "%", map-pattern-body ;
-
-map-pattern-body =
-    "{",
-    [ layout ],
-    [ map-pattern-items ],
-    [ layout ],
-    "}" ;
-
-map-pattern-items =
-      map-pattern-entry,
-      { ",", [ layout ], map-pattern-entry },
-      [ ",", [ layout ], map-remainder-item ]
-    | map-remainder-item ;
-
-map-pattern-entry =
-    binary-expression,
-    ":",
-    match-pattern ;
-
-map-remainder-item =
-    "...",
-    [ primary-match-pattern ] ;
-```
-
-There is no trailing comma. At most one Map remainder is permitted and it is
-final. `%{}` is open/subset by D086; `exact %{}` requires empty residue.
-
-#### Opaque matcher capture interfaces
-
-```ebnf
-capture-interface =
-    contextual-captures-marker,
-    "(",
-    [ layout ],
-    capture-binding-items,
-    [ layout ],
-    ")" ;
-
-capture-binding-items =
-      capture-required-items,
-      [ ",", [ layout ], capture-rest-item ]
-    | capture-rest-item ;
-
-capture-required-items =
-    identifier,
-    { ",", [ layout ], identifier } ;
-
-capture-rest-item =
-    "...", identifier ;
-```
-
-`captures` is contextual and consumer-side only. Names are unique and a rest
-name, if present, is final. `captures()` is not admitted.
-
-#### Static binding validation
-
-Fixed binder names are unique and linear. Every successful D090 OR branch used
-with a fixed interface must expose the same ordered logical binder-name sequence.
-
-Under D103, a variable-arity capture segment introduced by
-`captures(required..., ...rest)` may occur in a composed pattern only when that
-segment is terminal in the **final ordered arm-binding interface**. Terminality
-is evaluated after applying the complete source binding order of aliases,
-structural children and opaque matcher capture interfaces; a later source
-binding position makes the dynamic segment non-terminal and the source invalid.
-
-A structural remainder binder such as Array `...@middle` is not a D103 dynamic
-segment: it contributes exactly one ordinary binding position whose value is the
-D084 fresh frozen remainder Array. The analogous D086 Map remainder likewise
-contributes one Map value. D103 therefore does not prohibit fixed source
-bindings after such an aggregate remainder binding.
-
-#### Expression activation
-
-With D095 the normative executable expression grammar is:
-
-```ebnf
-expression =
-      slot-creation
-    | assignment
-    | non-local-return
-    | match-expression ;
-```
-
-`match-expression` contains the ordinary `binary-expression` fallback, preserving
-all existing binary expressions when no contextual `match` suffix is present.
-
-This specification activation does not itself implement parser/runtime support.
+Removing the dedicated matching grammar does not reserve future syntax. A later
+explicit decision may add sugar over the protocol-first model, but Core v0.1
+contains no dormant parser grammar for the removed forms.
 
 Slot creation and assignment have the lowest precedence.
-
 
 > Root invariant: `Object` is the only object without a delegation parent; every other object has exactly one.
 
