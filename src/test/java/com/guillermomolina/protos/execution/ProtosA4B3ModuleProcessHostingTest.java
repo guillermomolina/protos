@@ -118,7 +118,7 @@ final class ProtosA4B3ModuleProcessHostingTest {
     }
 
     @Test
-    void productionModulePathsUsePublicParseAndRetainDirectCompilerOnlyForUnhostedStaging()
+    void productionModulePathsUsePublicParseAndUnhostedStagingUsesBytecodeBoundary()
             throws Exception {
         String moduleRuntime =
                 Files.readString(
@@ -138,13 +138,18 @@ final class ProtosA4B3ModuleProcessHostingTest {
         assertTrue(moduleRuntime.contains("materializeModuleSource(source)"));
         assertFalse(moduleRuntime.contains(".parsePublic(source.source())"));
         assertFalse(moduleRuntime.contains("compiler.compile(source).call(moduleActivation);"));
-        assertTrue(moduleRuntime.contains("return compiler.compile(source).call(activation);"));
+        assertFalse(moduleRuntime.contains("compiler.compile(source).call(activation);"));
+        assertTrue(moduleRuntime.contains("ProtosPolyglotExecutionContext.open("));
+        assertTrue(moduleRuntime.contains("executionContext.callEntered("));
+        assertTrue(moduleRuntime.contains("materializeModuleSource(source)"));
 
         assertTrue(canonical.contains("process.callInExecutionHostForRuntime("));
         assertTrue(canonical.contains("materializeModuleSource(source)"));
         assertFalse(canonical.contains("parsePublic(source.source())"));
-        assertTrue(canonical.contains("ProtosRootTaskExecution.execute("));
-        assertTrue(canonical.contains("new ProtosSourceCompiler().compile(source)"));
+        assertTrue(canonical.contains("process.callInExecutionHostForRuntime("));
+        assertTrue(canonical.contains("ProtosPolyglotExecutionContext.open("));
+        assertTrue(canonical.contains("executionContext.executeModuleSource(source, activation)"));
+        assertFalse(canonical.contains("new ProtosSourceCompiler().compile(source)"));
 
         assertTrue(workspace.contains("runtimeHost.hostProcess("));
         assertTrue(workspace.contains("ProtosCanonicalInitialModuleExecution.execute("));

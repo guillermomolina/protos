@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import com.oracle.truffle.api.source.Source;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
@@ -105,9 +106,9 @@ final class ProtosParallelPolyglotContextRoutingTest {
                                 }));
 
         ProtosFutureValue first =
-                (ProtosFutureValue) eval(caller, "firstProbe.parallel()");
+                (ProtosFutureValue) eval(hosted, caller, "firstProbe.parallel()");
         ProtosFutureValue second =
-                (ProtosFutureValue) eval(caller, "secondProbe.parallel()");
+                (ProtosFutureValue) eval(hosted, caller, "secondProbe.parallel()");
 
         try {
             assertTrue(
@@ -154,6 +155,7 @@ final class ProtosParallelPolyglotContextRoutingTest {
         ProtosFutureValue result =
                 (ProtosFutureValue)
                         eval(
+                                hosted,
                                 caller,
                                 "((mark, worker) => { mark(); worker.parallel().value() })"
                                         + ".parallel(outerMark, nestedProbe)");
@@ -167,8 +169,18 @@ final class ProtosParallelPolyglotContextRoutingTest {
                 ((ProtosIntegerValue) result.resolvedValue().orElseThrow()).value());
     }
 
-    private static Object eval(ProtosActivation activation, String source) {
-        return new ProtosSourceCompiler().compile(source).call(activation);
+    private static Object eval(
+            ProtosPolyglotProcessContext hosted,
+            ProtosActivation activation,
+            String characters) {
+        Source source =
+                Source.newBuilder(
+                                ProtosLanguage.ID,
+                                characters,
+                                "<parallel-context-routing>")
+                        .mimeType(ProtosLanguage.MIME_TYPE)
+                        .build();
+        return hosted.evaluatePersistent(source, activation);
     }
 
     private static void awaitResolved(ProtosFutureValue future, ProtosActivation caller) {

@@ -232,6 +232,28 @@ class ProtosModuleRuntimeTest {
     }
 
     @Test
+    void unhostedCanonicalModuleExecutesThroughBytecodePublicParse() throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver().module("direct", "value: 7");
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        ProtosObjectValue module =
+                new ProtosModuleRuntime(resolver)
+                        .loadCanonicalModule(
+                                new ProtosModuleKey("direct"),
+                                actor);
+
+        ProtosIntegerValue value =
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        module.readLocalSlot("value").orElseThrow());
+        assertEquals(java.math.BigInteger.valueOf(7), value.value());
+        assertEquals(1, resolver.loads("direct"));
+    }
+
+    @Test
     void resolverAndSourceFailuresBecomeCoreErrorsNotHostExceptions() throws Exception {
         ProtosModuleResolver resolver = new ProtosModuleResolver() {
             @Override public ProtosModuleKey resolve(String s, Optional<ProtosModuleKey> from) throws Exception {

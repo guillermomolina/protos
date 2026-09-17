@@ -70,11 +70,25 @@ final class ProtosTestToolManifestPlanTest {
     @Test
     void bundledManifestModuleCompilesBeforeAnyFilesystemPolicyRuns()
             throws Exception {
-        new ProtosSourceCompiler()
-                .compile(
-                        Files.readString(
-                                MANIFEST_MODULE,
-                                StandardCharsets.UTF_8));
+        String characters =
+                Files.readString(
+                        MANIFEST_MODULE,
+                        StandardCharsets.UTF_8);
+
+        try (org.graalvm.polyglot.Context context =
+                org.graalvm.polyglot.Context
+                        .newBuilder(ProtosLanguage.ID)
+                        .build()) {
+            org.graalvm.polyglot.Source source =
+                    org.graalvm.polyglot.Source
+                            .newBuilder(
+                                    ProtosLanguage.ID,
+                                    characters,
+                                    "Manifest.protos")
+                            .buildLiteral();
+
+            context.parse(source);
+        }
     }
 
     @Test

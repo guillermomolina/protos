@@ -1,3 +1,24 @@
+## 0.3.23-SNAPSHOT
+
+- Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541)
+  under ratified PLAT035 by removing another production and retained-Java
+  consumer block from the legacy executable-AST backend. Route Process
+  snapshot execution, canonical initial-module unhosted execution, and the
+  ModuleRuntime unhosted fallback through initialized Polyglot Contexts and
+  the canonical public-parse Bytecode path while preserving activation,
+  module-cache, signal, and Process-hosting behavior. Migrate TOML parser
+  module execution and Process-context parallel-routing coverage away from
+  direct `ProtosSourceCompiler.compile(...)`, and move the Test Tool Manifest
+  compile-only check to `Context.parse(...)` so it remains non-executing while
+  exercising the canonical frontend/Bytecode path. Update A4B3 architecture
+  evidence accordingly and add direct unhosted Bytecode coverage for initial
+  modules and ModuleRuntime. Deliberately retain legacy-backend-specific
+  compiler/lowering tests and `ProtosSourceFileLoader`, whose Core-bootstrap
+  ownership requires a separate retirement cut. The combined affected focal
+  set passes 40/40 tests. No Protos-visible language, specification, or
+  Standard Library semantics change. Implementation version becomes
+  `0.3.23-SNAPSHOT`.
+
 ## 0.3.22-SNAPSHOT
 
 - Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under

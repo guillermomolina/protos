@@ -60,6 +60,42 @@ final class ProtosCanonicalInitialModuleExecutionTest {
     }
 
     @Test
+    void unhostedInitialModuleExecutesThroughBytecodeBoundary() throws Exception {
+        ProtosModuleResolver resolver =
+                new ProtosModuleResolver() {
+                    @Override
+                    public ProtosModuleKey resolve(
+                            String exactSpecifier,
+                            Optional<ProtosModuleKey> importingModule) {
+                        return MAIN;
+                    }
+
+                    @Override
+                    public ProtosModuleSource loadSource(ProtosModuleKey key) {
+                        return ProtosModuleSource.fromCharacters(
+                                key,
+                                "true\n");
+                    }
+                };
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        var activation = prelude.newModuleActivation();
+
+        ProtosExecutionOutcome outcome =
+                ProtosCanonicalInitialModuleExecution.execute(
+                        prelude,
+                        resolver,
+                        MAIN,
+                        activation);
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        ProtosActorModuleState.ModuleRecord record =
+                activation.actorModuleState().lookup(MAIN).orElseThrow();
+        assertEquals(ProtosActorModuleState.InitializationState.READY, record.state());
+        assertSame(activation.context(), record.instance());
+    }
+
+    @Test
     void failedInitialModuleIsRemovedFromCache() throws Exception {
         ProtosModuleResolver resolver =
                 new ProtosModuleResolver() {

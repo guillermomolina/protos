@@ -11,6 +11,8 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Objects;
 
 /** Executes one already-canonical initial module in an already-created RootActor context. */
@@ -70,8 +72,9 @@ public final class ProtosCanonicalInitialModuleExecution {
     }
 
     /**
-     * Uses public parse for every hosted Process. The direct branch below is retained solely for
-     * deliberately unhosted Java semantic harnesses and is not reachable from a production driver.
+     * Uses public parse for every hosted Process. Deliberately unhosted Java semantic harnesses
+     * receive a fresh host-owned Polyglot context so source execution still terminates on the
+     * canonical Bytecode-backed public parse path.
      */
     private static ProtosExecutionOutcome executeSource(
             ProtosModuleSource source,
@@ -82,9 +85,13 @@ public final class ProtosCanonicalInitialModuleExecution {
                         .flatMap(actor -> actor.processForRuntime())
                         .orElse(null);
         if (process == null || process.executionHostForRuntime().isEmpty()) {
-            return ProtosRootTaskExecution.execute(
-                    new ProtosSourceCompiler().compile(source),
-                    activation);
+            try (ProtosPolyglotExecutionContext executionContext =
+                    ProtosPolyglotExecutionContext.open(
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream())) {
+                return executionContext.executeModuleSource(source, activation);
+            }
         }
         return process.callInExecutionHostForRuntime(
                 () -> {

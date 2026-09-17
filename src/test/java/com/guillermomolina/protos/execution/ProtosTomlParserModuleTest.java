@@ -230,9 +230,9 @@ final class ProtosTomlParserModuleTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
         activation.context().createLocalSlot("input", new ProtosStringValue(input));
-        return new ProtosSourceCompiler()
-                .compile("TOML: import(\"std:toml/TOML\")\n" + body)
-                .call(activation);
+        return ProtosTestExecutionSupport.evaluate(
+                "TOML: import(\"std:toml/TOML\")\n" + body,
+                activation);
     }
 
     private static void assertParseSignals(String input) throws Exception {
@@ -245,13 +245,12 @@ final class ProtosTomlParserModuleTest {
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        new ProtosSourceCompiler()
-                                .compile(
-                                        """
-                                        TOML: import("std:toml/TOML")
-                                        TOML.parse(input)
-                                        """)
-                                .call(activation),
+                        ProtosTestExecutionSupport.evaluate(
+                                """
+                                TOML: import("std:toml/TOML")
+                                TOML.parse(input)
+                                """,
+                                activation),
                 input);
     }
 
@@ -263,11 +262,10 @@ final class ProtosTomlParserModuleTest {
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        new ProtosSourceCompiler()
-                                .compile(
-                                        "TOML: import(\"std:toml/TOML\")\n"
-                                                + expression)
-                                .call(prelude.newModuleActivation()),
+                        ProtosTestExecutionSupport.evaluate(
+                                "TOML: import(\"std:toml/TOML\")\n"
+                                        + expression,
+                                prelude.newModuleActivation()),
                 expression);
     }
 }

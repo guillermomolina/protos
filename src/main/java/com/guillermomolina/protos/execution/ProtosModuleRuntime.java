@@ -15,6 +15,8 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.RootCallTarget;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -383,9 +385,9 @@ public final class ProtosModuleRuntime {
      *
      * <p>Module identity, Actor-local cache state and cache-before-execute remain entirely outside
      * this implementation placement helper. Process-backed production drivers bind their Process
-     * before guest execution and therefore use public parse. The direct branch remains only for
-     * deliberately unhosted/non-Process Java semantic harnesses; it is not a production Process
-     * entry architecture.
+     * before guest execution and therefore use public parse. Deliberately unhosted/non-Process
+     * Java semantic harnesses enter a fresh host-owned Polyglot context and use the same
+     * Bytecode-backed public parse path while preserving direct signal propagation.
      */
     private Object executeModuleSource(
             ProtosModuleSource source,
@@ -396,7 +398,21 @@ public final class ProtosModuleRuntime {
                         .flatMap(actor -> actor.processForRuntime())
                         .orElse(null);
         if (process == null || process.executionHostForRuntime().isEmpty()) {
-            return compiler.compile(source).call(activation);
+            try (ProtosPolyglotExecutionContext executionContext =
+                    ProtosPolyglotExecutionContext.open(
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream())) {
+                return executionContext.callEntered(
+                        () -> {
+                            ProtosLanguageContext languageContext =
+                                    ProtosLanguageContext.current();
+                            return languageContext
+                                    .parsePublic(
+                                            languageContext.materializeModuleSource(source))
+                                    .call(activation);
+                        });
+            }
         }
         return process.callInExecutionHostForRuntime(
                 () -> {

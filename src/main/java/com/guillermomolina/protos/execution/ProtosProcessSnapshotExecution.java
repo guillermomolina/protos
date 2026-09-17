@@ -15,7 +15,9 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.oracle.truffle.api.source.Source;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.Objects;
 
@@ -84,11 +86,19 @@ public final class ProtosProcessSnapshotExecution {
                         empty.provisionCapabilityForRuntime(
                                 prelude.processPrototype()));
 
-        try {
-            return ProtosExecutionOutcome.completed(
-                    new ProtosSourceCompiler().compile(source).call(activation));
-        } catch (ProtosSignalException signal) {
-            return ProtosExecutionOutcome.failed(signal.error());
+        Source exactSource =
+                Source.newBuilder(
+                                ProtosLanguage.ID,
+                                source,
+                                "<process-snapshot>")
+                        .mimeType(ProtosLanguage.MIME_TYPE)
+                        .build();
+        try (ProtosPolyglotExecutionContext executionContext =
+                ProtosPolyglotExecutionContext.open(
+                        InputStream.nullInputStream(),
+                        OutputStream.nullOutputStream(),
+                        OutputStream.nullOutputStream())) {
+            return executionContext.execute(exactSource, activation);
         }
     }
 
