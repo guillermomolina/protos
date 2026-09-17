@@ -17,12 +17,12 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ExplodeLoop;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 
 /** Executes D136 Map construction without introducing a guest-visible temporary binding. */
@@ -58,15 +58,18 @@ public final class ProtosMapConstructionNode extends ProtosExpressionNode {
         ProtosActivation caller = ProtosFrameArguments.activation(frame);
 
         Object factory = factoryNode.execute(frame);
-        Object result = ProtosInvocation.invoke(factory, List.of(), caller);
+        ProtosMapValue result =
+                ProtosStandardMapProtocol.constructForMapConstruction(
+                        factory,
+                        caller);
 
         for (int index = 0; index < keyNodes.length; index++) {
             Object key = keyNodes[index].execute(frame);
             Object value = valueNodes[index].execute(frame);
-            ProtosInvocation.invokeMessage(
+            ProtosStandardMapProtocol.defineInitialAssociationForMapConstruction(
                     result,
-                    "atPut",
-                    List.of(key, value),
+                    key,
+                    value,
                     caller);
         }
         return result;

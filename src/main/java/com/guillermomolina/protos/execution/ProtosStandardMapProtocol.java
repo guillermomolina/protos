@@ -160,7 +160,7 @@ public final class ProtosStandardMapProtocol {
   p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return new ProtosIntegerValue(BigInteger.valueOf(m.keyedSize()));}));
   p.createLocalSlot("each", STANDARD_EACH);
  }
- static ProtosMapValue constructForMapConstruction(
+ static ProtosSlotLookupResult selectFactoryCallForMapConstruction(
          Object factory,
          ProtosActivation caller) {
   ProtosPrelude prelude = caller.prelude().orElseThrow();
@@ -176,6 +176,25 @@ public final class ProtosStandardMapProtocol {
           || !isCanonicalMapHome(selected.home(), caller)) {
    throw err(caller);
   }
+  return selected;
+ }
+
+ static ProtosMapValue requireMapConstructionResult(
+         Object result,
+         ProtosActivation caller) {
+  if (!(result instanceof ProtosMapValue map)) {
+   throw err(caller);
+  }
+  return map;
+ }
+
+ static ProtosMapValue constructForMapConstruction(
+         Object factory,
+         ProtosActivation caller) {
+  ProtosSlotLookupResult selected =
+          selectFactoryCallForMapConstruction(factory, caller);
+  ProtosClosureValue behavior =
+          (ProtosClosureValue) selected.value();
   Object result =
           ProtosClosureInvoker.invokeImmediateMethod(
                   behavior,
@@ -183,10 +202,7 @@ public final class ProtosStandardMapProtocol {
                   selected.home(),
                   List.of(),
                   caller);
-  if (!(result instanceof ProtosMapValue map)) {
-   throw err(caller);
-  }
-  return map;
+  return requireMapConstructionResult(result, caller);
  }
 
  static void defineInitialAssociationForMapConstruction(

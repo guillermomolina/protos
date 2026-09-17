@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 class ProtosMapConstructionFPrimeBytecodeFoundationTest {
 
     @Test
-    void bytecodeConstructionFactoryOperationUsesFPrimeEligibility()
+    void bytecodeConstructionFactoryPreparationUsesFPrimeEligibility()
             throws Exception {
         ProtosPrelude prelude = prelude();
         ProtosActivation activation = prelude.newModuleActivation();
@@ -29,12 +29,29 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
         ProtosObjectValue inherited =
                 new ProtosObjectValue(prelude.mapPrototype());
 
-        ProtosMapValue result =
+        ProtosBytecodeRootNode.PreparedClosureCall prepared =
                 ProtosBytecodeRootNode
-                        .ConstructMapForMapConstruction
+                        .PrepareMapConstructionFactoryCall
                         .perform(activation, inherited);
 
-        assertSame(inherited, result.parent().orElseThrow());
+        assertSame(inherited, prepared.activation().receiver());
+
+        ProtosMapValue produced = new ProtosMapValue(inherited);
+
+        assertSame(
+                produced,
+                ProtosBytecodeRootNode
+                        .FinishMapConstructionFactoryCall
+                        .perform(activation, produced));
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosBytecodeRootNode
+                                .FinishMapConstructionFactoryCall
+                                .perform(
+                                        activation,
+                                        ProtosBooleanValue.TRUE));
 
         ProtosObjectValue copied =
                 new ProtosObjectValue(prelude.mapPrototype());
@@ -49,7 +66,7 @@ class ProtosMapConstructionFPrimeBytecodeFoundationTest {
                 ProtosSignalException.class,
                 () ->
                         ProtosBytecodeRootNode
-                                .ConstructMapForMapConstruction
+                                .PrepareMapConstructionFactoryCall
                                 .perform(activation, copied));
     }
 

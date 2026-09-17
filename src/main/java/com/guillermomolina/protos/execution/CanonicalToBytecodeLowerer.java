@@ -1255,41 +1255,63 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
 
+        BytecodeLocal factoryValue =
+                builder.createLocal(
+                        defaultContext
+                                ? "defaultMapConstructionFactory"
+                                : "mapConstructionFactory",
+                        null);
         BytecodeLocal mapValue =
                 builder.createLocal(
                         defaultContext
                                 ? "defaultMapConstructionValue"
                                 : "mapConstructionValue",
                         null);
-        BytecodeLocal insertionResult =
+        BytecodeLocal factoryResult =
                 builder.createLocal(
                         defaultContext
-                                ? "defaultMapConstructionInsertionResult"
-                                : "mapConstructionInsertionResult",
+                                ? "defaultMapConstructionFactoryResult"
+                                : "mapConstructionFactoryResult",
                         null);
 
-        CanonicalCall factoryCall =
-                new CanonicalCall(
-                        map.factory(),
-                        java.util.List.of(),
-                        map.span());
         if (defaultContext) {
-            emitComposedDefaultCall(
+            emitDefaultExpressionToLocal(
                     builder,
-                    factoryCall,
-                    mapValue,
+                    map.factory(),
+                    factoryValue,
                     preparedCall,
                     childResult,
                     resumeValue);
         } else {
-            emitComposedCall(
+            emitBodyExpressionToLocal(
                     builder,
-                    factoryCall,
-                    mapValue,
+                    map.factory(),
+                    factoryValue,
                     preparedCall,
                     childResult,
                     resumeValue);
         }
+
+        builder.beginStoreLocal(preparedCall);
+        builder.beginPrepareMapConstructionFactoryCall();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(factoryValue);
+        builder.endPrepareMapConstructionFactoryCall();
+        builder.endStoreLocal();
+
+        emitPreparedInvocationForRuntime(
+                builder,
+                factoryResult,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(mapValue);
+        builder.beginFinishMapConstructionFactoryCall();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(factoryResult);
+        builder.endFinishMapConstructionFactoryCall();
+        builder.endStoreLocal();
 
         for (CanonicalMapConstruction.Entry entry : map.entries()) {
             BytecodeLocal key =
@@ -1303,6 +1325,18 @@ final class CanonicalToBytecodeLowerer {
                             defaultContext
                                     ? "defaultMapConstructionEntryValue"
                                     : "mapConstructionEntryValue",
+                            null);
+            BytecodeLocal initialDefinition =
+                    builder.createLocal(
+                            defaultContext
+                                    ? "defaultMapInitialDefinition"
+                                    : "mapInitialDefinition",
+                            null);
+            BytecodeLocal callbackResult =
+                    builder.createLocal(
+                            defaultContext
+                                    ? "defaultMapInitialDefinitionCallbackResult"
+                                    : "mapInitialDefinitionCallbackResult",
                             null);
 
             if (defaultContext) {
@@ -1337,22 +1371,97 @@ final class CanonicalToBytecodeLowerer {
                         resumeValue);
             }
 
-            builder.beginStoreLocal(preparedCall);
-            builder.beginPrepareSendArguments();
-            builder.emitLoadLocal(mapValue);
-            builder.emitLoadConstant("atPut");
+            builder.beginStoreLocal(initialDefinition);
+            builder.beginPrepareMapInitialDefinition();
             builder.emitLoadArgument(0);
+            builder.emitLoadLocal(mapValue);
             builder.emitLoadLocal(key);
             builder.emitLoadLocal(value);
-            builder.endPrepareSendArguments();
+            builder.endPrepareMapInitialDefinition();
+            builder.endStoreLocal();
+
+            builder.beginEnterMapInitialDefinitionComparison();
+            builder.emitLoadLocal(initialDefinition);
+            builder.endEnterMapInitialDefinitionComparison();
+
+            builder.beginTryFinally(
+                    () -> {
+                        builder.beginLeaveMapInitialDefinitionComparison();
+                        builder.emitLoadLocal(initialDefinition);
+                        builder.endLeaveMapInitialDefinitionComparison();
+                    });
+
+            builder.beginBlock();
+
+            builder.beginStoreLocal(preparedCall);
+            builder.beginPrepareMapInitialDefinitionHashCall();
+            builder.emitLoadLocal(initialDefinition);
+            builder.endPrepareMapInitialDefinitionHashCall();
             builder.endStoreLocal();
 
             emitPreparedInvocationForRuntime(
                     builder,
-                    insertionResult,
+                    callbackResult,
                     preparedCall,
                     childResult,
                     resumeValue);
+
+            builder.endBlock();
+            builder.endTryFinally();
+
+            builder.beginAcceptMapInitialDefinitionHashResult();
+            builder.emitLoadLocal(initialDefinition);
+            builder.emitLoadLocal(callbackResult);
+            builder.endAcceptMapInitialDefinitionHashResult();
+
+            builder.beginWhile();
+
+            builder.beginMapInitialDefinitionNeedsEquality();
+            builder.emitLoadLocal(initialDefinition);
+            builder.endMapInitialDefinitionNeedsEquality();
+
+            builder.beginBlock();
+
+            builder.beginEnterMapInitialDefinitionComparison();
+            builder.emitLoadLocal(initialDefinition);
+            builder.endEnterMapInitialDefinitionComparison();
+
+            builder.beginTryFinally(
+                    () -> {
+                        builder.beginLeaveMapInitialDefinitionComparison();
+                        builder.emitLoadLocal(initialDefinition);
+                        builder.endLeaveMapInitialDefinitionComparison();
+                    });
+
+            builder.beginBlock();
+
+            builder.beginStoreLocal(preparedCall);
+            builder.beginPrepareMapInitialDefinitionEqualityCall();
+            builder.emitLoadLocal(initialDefinition);
+            builder.endPrepareMapInitialDefinitionEqualityCall();
+            builder.endStoreLocal();
+
+            emitPreparedInvocationForRuntime(
+                    builder,
+                    callbackResult,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+
+            builder.endBlock();
+            builder.endTryFinally();
+
+            builder.beginAcceptMapInitialDefinitionEqualityResult();
+            builder.emitLoadLocal(initialDefinition);
+            builder.emitLoadLocal(callbackResult);
+            builder.endAcceptMapInitialDefinitionEqualityResult();
+
+            builder.endBlock();
+            builder.endWhile();
+
+            builder.beginFinishMapInitialDefinition();
+            builder.emitLoadLocal(initialDefinition);
+            builder.endFinishMapInitialDefinition();
         }
 
         builder.beginStoreLocal(result);

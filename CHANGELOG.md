@@ -1,3 +1,17 @@
+## 0.3.8-SNAPSHOT
+
+- Publish `I040-C — D136 F-prime Map-construction cutover`. Reconcile `%{...}`
+  with the owner-approved D136 initial-association model across the normative
+  specification, direct AST execution, C-prime continuation execution,
+  conformance corpus, and programmer guide. Construction now requires canonical
+  standard Map factory behavior selected directly or by inheritance, creates a
+  fresh standard Map with the actual factory receiver as parent, defines each
+  initial association without `atPut` dispatch, and signals `Error` for a
+  duplicate/equal initial key under the normal Map hash/directed-equality query
+  law. Later indexed assignment remains ordinary `atPut`. Specification
+  revision becomes `0.1.415`; implementation version becomes
+  `0.3.8-SNAPSHOT`.
+
 ## 0.3.7-SNAPSHOT
 
 - Advance `PERF009-B — Quarantined Java test normalization and reintegration` (GitHub #546) by reintegrating `ProtosTestToolManifestPlanTest` into the ordinary Java lane. Bound the retained Manifest workloads to the minimum scales that preserve their regression properties, replace incidental host-NIO cost in Manifest-policy cases with deterministic read-only test storage, and separate the D133 project-tree responsibility into `ProtosTestToolProjectTreePlanTest` so independently schedulable correctness responsibilities remain independently bounded. Repeated evidence keeps `ProtosTestToolManifestPlanTest` at 3.158–3.344 s per class with a 0.686 s maximum testcase and `ProtosTestToolProjectTreePlanTest` at 1.825–1.878 s with a 0.857 s maximum testcase, satisfying the existing `< 5 s` class quarantine threshold and `< 2.0 s` hard ordinary-test budget. Remove `ProtosTestToolManifestPlanTest` from `JAVA_SLOW_TEST_EXCLUDES`; the class-parallel Java lane passes 1829 tests with zero failures or errors. No Protos-visible semantics, specification, Standard Library behavior, or production runtime behavior changes. Implementation version becomes `0.3.7-SNAPSHOT`.

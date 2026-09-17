@@ -9,6 +9,37 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.415] - 2026-09-17
+
+### D136 — F′ Map initial-association construction correction
+- Supersedes the `0.1.414` E′ interpretation of `%{...}` while preserving the
+  already-ratified source syntax and layout.
+- `%{...}` defines construction-time initial Map associations; it is not
+  repeated post-construction `atPut` dispatch.
+- Ordinary `Map` and `call` lookup remain observable, but construction accepts
+  only the canonical standard Map factory behavior selected directly or by
+  inheritance/delegation. A nearer arbitrary or copied `call` behavior signals
+  `Error` before that behavior or any entry executes.
+- The eligible factory is invoked once with zero arguments and produces a fresh
+  standard normal Map whose parent is the actual factory receiver.
+- Each entry evaluates key then value exactly once before initial association
+  definition. The query key's hash is then computed exactly once and prior
+  equal-hash initial associations are tested in insertion order using directed
+  `queryKey == storedRepresentativeKey`.
+- A duplicate/equal initial key signals `Error`; it does not replace the first
+  representative or value.
+- Initial association definition does not dispatch `atPut`. Later
+  `map[key] = value` remains ordinary `atPut` mutation and is unchanged.
+- No Association value, generic keyed-literal protocol, `IdentityMap` syntax,
+  or matching semantic change is introduced.
+
+### Compatibility and implementation state
+- `PROTOS_GRAMMAR.md` and `semantics/VALUES_AND_COLLECTIONS.md` are reconciled
+  to the owner-approved F′ D136 record.
+- I040-C cuts both direct AST and C-prime Map-construction execution over to the
+  same F′ semantics and replaces the stale E′ conformance expectations.
+- Implementation version becomes `0.3.8-SNAPSHOT`.
+
 ## [0.1.414] - 2026-09-16
 
 ### D136 — Map populated construction syntax

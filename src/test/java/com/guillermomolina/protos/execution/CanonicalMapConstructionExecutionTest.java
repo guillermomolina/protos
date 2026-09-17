@@ -17,10 +17,12 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -38,5 +40,65 @@ class CanonicalMapConstructionExecutionTest {
                         .call(activation);
 
         assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void directAstBackendRejectsDuplicateInitialKey() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"));
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        new ProtosSourceCompiler()
+                                .compile("%{ \"key\": 1; \"key\": 2 }")
+                                .call(activation));
+    }
+
+    @Test
+    void directAstBackendUsesInheritedFactoryAndBypassesAtPut()
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"));
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        Object result =
+                new ProtosSourceCompiler()
+                        .compile(
+                                "DerivedMap: Map {\n"
+                                        + "    marker: 7\n"
+                                        + "    atPut: (key, value) => value\n"
+                                        + "}\n"
+                                        + "Map: DerivedMap\n"
+                                        + "mapping: %{ \"first\": 1; \"second\": 2 }\n"
+                                        + "(mapping.marker == 7) && "
+                                        + "(mapping[\"first\"] == 1) && "
+                                        + "(mapping[\"second\"] == 2)")
+                        .call(activation);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void directAstBackendRejectsArbitraryShadowFactory()
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"));
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        new ProtosSourceCompiler()
+                                .compile(
+                                        "Map: () => { "
+                                                + "{ atPut: (key, value) => value } "
+                                                + "}\n"
+                                                + "%{ \"key\": 1 }")
+                                .call(activation));
     }
 }

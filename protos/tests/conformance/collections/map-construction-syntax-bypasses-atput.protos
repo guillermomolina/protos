@@ -3,27 +3,26 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
-firstCalls: 0
-secondCalls: 0
 
-Map: () => {
-    {
-        atPut: (key, value) => {
-            firstCalls = firstCalls + 1
+DerivedMap: Map {
+    marker: 7
 
-            this.atPut = (nextKey, nextValue) => {
-                secondCalls = secondCalls + 1
-                nextValue
-            }
-
-            value
-        }
+    atPut: (key, value) => {
+        ^999
     }
 }
 
-%{
-    "first": 1
-    "second": 2
+run: () => {
+    Map: DerivedMap
+
+    mapping: %{
+        "first": 1
+        "second": 2
+    }
+
+    (mapping.marker == 7) &&
+        (mapping["first"] == 1) &&
+        (mapping["second"] == 2)
 }
 
-(firstCalls == 1) && (secondCalls == 1)
+run()

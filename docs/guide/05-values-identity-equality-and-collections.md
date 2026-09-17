@@ -567,7 +567,7 @@ which element references were captured for that traversal.
 
 The callback itself uses ordinary polymorphic invocation.
 
-## `%{...}` constructs a Map sequentially
+## `%{...}` defines a Map's initial associations
 
 For the common equality-keyed case, Protos has concise populated Map
 construction:
@@ -579,35 +579,46 @@ m: %{
 }
 ```
 
-The same construction can use `;` when entries share one source line:
+Entries may also share a line with `;`:
 
 ```protos
 m: %{ "language": "Protos"; "version": 1 }
 ```
 
-This is not a bag of prebuilt Association values. Conceptually it performs:
+This syntax creates a standard Map and defines its initial associations. It is
+important not to read it as hidden repeated indexed assignment.
 
-```text
-m = Map()
-m["language"] = "Protos"
-m["version"] = 1
-return m
+Construction first looks up ordinary `Map`. The selected `call` behavior must be
+the canonical standard Map factory behavior, either directly or inherited
+through ordinary delegation.
+
+That means ordinary prototype specialization works:
+
+```protos
+MyMap: Map {
+    label: "custom"
+}
+
+Map: MyMap
+
+m: %{ "answer": 42 }
 ```
 
-with one important precision: the explanatory `m` is not a source-level hidden
-slot. `Map()` happens first, then each key and value is evaluated in the
-surrounding activation and inserted before the next entry begins.
+The resulting Map is fresh standard Map state whose parent is `MyMap`.
 
-That sequential rule means guest behavior can observe the order. If the first
-insertion changes the result's `atPut` behavior, the second entry uses the new
-behavior. Errors and non-local control stop construction without rolling back
-effects or insertions that already completed.
+A nearer custom `call` override is different. It does not become construction
+authority merely because it is named `Map` or happens to return an indexable
+object. `%{...}` rejects that factory before executing the custom `call` and
+before evaluating entries.
 
-`Map` remains an ordinary lookup, just as `Array` does for `[a, b]`. Shadowing
-`Map` therefore changes what `%{...}` invokes. The syntax does not force the
-standard Core Map or promise freshness when a custom binding is selected.
+For every entry, Protos evaluates the key and then the value. Only after both
+finish normally does it define the initial association.
 
-Keys are expressions:
+Initial definition uses normal Map hashing and directed equality, but it does
+**not** send `atPut`. An `atPut` override on an otherwise eligible Map prototype
+therefore cannot intercept initial construction.
+
+Keys remain ordinary expressions:
 
 ```protos
 key: "language"
@@ -617,8 +628,30 @@ m: %{
 }
 ```
 
-Here the key is the value `"language"`. To use the literal String `"key"`, write
-it explicitly.
+The key above is the value `"language"`. A bare key name is not converted
+implicitly to a String.
+
+Duplicate/equal initial keys are errors:
+
+```protos
+%{
+    "version": 1
+    "version": 2
+}
+```
+
+does not mean "last value wins". The second initial definition conflicts with
+the first under the normal Map key-selection law and signals Error.
+
+This differs deliberately from later indexed mutation:
+
+```protos
+m: %{ "version": 1 }
+m["version"] = 2
+```
+
+The second line is ordinary indexed assignment and therefore ordinary `atPut`.
+Standard Map mutation may replace the existing value there.
 
 Map construction is a primary expression, so postfix indexing works directly:
 
@@ -632,12 +665,11 @@ Map construction is a primary expression, so postfix indexing works directly:
 identity: IdentityMap()
 ```
 
-It has a different key law and does not receive syntax merely because it exposes
-a similar indexing protocol. `%{...}` means ordinary `Map` construction today;
-there is no generic `%Factory{...}` form in the current language.
+It has a different key law and receives no `%{...}` syntax. There is also no
+generic `%Factory{...}` form.
 
-Expression construction and Map matching are separate contexts. The matching
-chapter retains its own pattern grammar and semantics.
+Expression construction and Map matching remain separate contexts with separate
+semantics.
 
 ## Map is keyed by equality
 

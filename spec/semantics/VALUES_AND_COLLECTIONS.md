@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 
 This document is the primary normative owner of Core immutable value families, equality/identity, indexed access, and standard collection/value protocols; callable and general control-flow semantics are owned by their dedicated modules.
 
@@ -352,39 +352,107 @@ object.foo[index]: value
 ```
 
 `object.foo` and `object["foo"]` are not equivalent unless the object's own `at` implementation deliberately makes them behave that way. Reflection facilities, if they provide dynamic slot access or creation, remain separate from `[]`.
-## Map Construction and Sequential Keyed Insertion
+## Map Construction and Initial Association Definition
 
-The Map construction syntax defined by `../PROTOS_GRAMMAR.md` uses only the
-existing ordinary invocation and indexed-mutation protocols. It introduces no
-second Map storage model.
+The `%{...}` syntax defined by `../PROTOS_GRAMMAR.md` constructs initial
+association state for a standard Map. It is not syntactic sugar for repeated
+post-construction indexed assignment and does not dispatch `atPut` while
+establishing those initial associations.
 
-When ordinary lookup of `Map` selects the standard prelude Map factory, the
-initial zero-argument invocation produces the ordinary standard Map result
-defined by that factory. Each source entry is then inserted by a separate
-ordinary `atPut(key, value)` dispatch on that result. Standard Map hashing,
-equality, representative-key, insertion-order, mutation, comparison-scope, and
-open/closed/frozen rules therefore apply at the exact insertion where they would
-apply to an explicit indexed assignment.
+Construction first resolves the ordinary identifier `Map` in the enclosing
+activation. It then performs ordinary `call` lookup on the resulting object.
 
-In particular, equal or duplicate source keys receive no construction-specific
-rule. They behave exactly as sequential standard Map `atPut` operations would
-behave: an already-matching key is updated according to the existing Map
-contract, while the surrounding construction continues only after that
-insertion completes normally.
+That selected behavior is eligible for `%{...}` construction only when it is
+the canonical standard Map factory behavior selected from the canonical
+standard Map home, either directly or through ordinary inheritance/delegation.
+An object that delegates to the canonical Map and inherits that factory behavior
+is therefore eligible. A nearer arbitrary `call` override is not eligible.
+Copying or locally defining equivalent-looking factory behavior does not make
+that nearer behavior canonical.
 
-The construction syntax itself does not require the factory result to own
-standard Map keyed-entry state. If ordinary lookup selects a shadowing or custom
-`Map`, the selected value is invoked normally and later `atPut` dispatches are
-ordinary dispatches on whatever object that invocation returned. Such a result
-does not acquire standard Map state merely because it was produced by `%{...}`.
+Ineligible construction signals `Error` before executing the selected custom
+`call` behavior and before evaluating any source entry.
+
+For an eligible receiver, the canonical standard Map factory is invoked exactly
+once with zero arguments. It produces a fresh open standard normal Map whose
+delegation parent is the actual factory invocation receiver. Consequently an
+ordinary prototype that delegates to the canonical Map and inherits its standard
+factory behavior composes with `%{...}` construction while retaining itself as
+the parent of the new Map.
+
+Each source entry is processed strictly in source order:
+
+1. evaluate the key expression exactly once in the enclosing activation;
+2. evaluate the value expression exactly once in the enclosing activation;
+3. only after both evaluations complete normally, define one initial
+   association in the constructed Map.
+
+Initial association definition uses the normal standard Map query-selection law
+but does not perform `atPut` dispatch.
+
+For each initial association, the exact evaluated key is the query key. Its
+ordinary standard-Map `hash` result is computed exactly once. Existing initial
+associations whose recorded hash differs are skipped without equality
+comparison. Equal-hash candidates are considered in their existing
+source/insertion order, and each comparison is the directed ordinary equality
+query:
+
+```text
+queryKey == storedRepresentativeKey
+```
+
+The first canonical `true` result denotes an already-defined initial key and
+construction signals `Error`. The existing representative key and value remain
+unchanged. A canonical `false` result continues to the next equal-hash
+candidate. Invalid hash or equality results, Errors, suspension, cancellation,
+non-local return, or other control transfer propagate according to their
+ordinary semantics.
+
+If no existing initial association matches, the constructed Map records the
+exact query key as the representative key, together with the hash already
+computed for that query and the evaluated value.
+
+Therefore duplicate/equal source keys are a construction-time conflict rather
+than replacement:
+
+```protos
+%{
+    "name": "first"
+    "name": "second"
+}
+```
+
+signals `Error`; it does not produce a Map whose `"name"` value is `"second"`.
+
+The value expression is evaluated before the hash/equality search for that
+entry. Effects already completed by factory lookup/invocation, earlier entries,
+the current key expression, or the current value expression are not rolled back
+when later hashing, equality, duplicate detection, or another transfer aborts
+construction.
+
+Construction performs no compile-time duplicate-key rejection. Equality remains
+behavioral and may depend on runtime values, so duplicate detection is the
+runtime standard Map query law defined above.
+
+After construction, ordinary indexed assignment is unchanged:
+
+```protos
+map[key] = value
+```
+
+continues to lower to ordinary `atPut(key, value)` dispatch and may replace an
+already-matching standard Map entry according to the existing Map mutation
+contract. Construction-time initial definition and later indexed mutation are
+therefore intentionally distinct operations.
 
 No Association object is materialized or exposed by construction. Key/value
-pairing is source structure consumed by the sequential construction operation,
-not a new Core value family.
+pairing is source structure consumed by the construction operation, not a new
+Core value family or public protocol.
 
 `IdentityMap` remains a distinct explicit factory whose identity-key law is
 unchanged. D136 does not make `%{...}` select `IdentityMap`, infer a keyed
-collection type from context, or add generic `%Factory{...}` syntax.
+collection type from context, add generic `%Factory{...}` syntax, or change Map
+matching semantics.
 
 ## Standard Array Indexed Semantics
 

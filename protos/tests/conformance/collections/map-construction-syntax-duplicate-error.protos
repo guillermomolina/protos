@@ -4,28 +4,7 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-name: "language"
-
-mapping: %{
-    name: "Protos"
-    "version": 1
+%{
+    "key": 1
+    "key": 2
 }
-
-inline: %{ "left": 10; "right": 20 }
-empty: %{}
-
-holder: {
-    key: "answer"
-    make: () => %{
-        this.key: 42
-    }
-}
-
-(mapping.size() == 2) &&
-    (mapping["language"] == "Protos") &&
-    (mapping["version"] == 1) &&
-    (inline["left"] == 10) &&
-    (inline["right"] == 20) &&
-    (empty.size() == 0) &&
-    (%{ "value": 7 }["value"] == 7) &&
-    (holder.make()["answer"] == 42)

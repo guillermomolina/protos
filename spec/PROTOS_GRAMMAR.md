@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-16
+Last updated: 2026-09-17
 ## Prelude Binding Note
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.
@@ -1098,123 +1098,62 @@ map-construction-entry =
     expression ;
 ```
 
-Map construction is a primary expression with a sequential keyed-construction
-contract. `%{}` does not create a privileged collection literal and does not
-bypass ordinary lookup or message dispatch.
+The `%{...}` form is a primary expression. Entry syntax and layout are
+independent of Map-pattern syntax.
 
-Evaluation begins by resolving the ordinary identifier `Map` in the enclosing
-activation and invoking the selected value exactly once with zero positional
-arguments. This lookup and invocation complete before any source entry key or
-value expression is evaluated. If lookup or invocation fails or transfers
-control, no entry expression is evaluated.
+An entry has a key expression, `:`, and a value expression. A logical newline
+separates entries on different source lines; `;` separates entries written on
+the same source line. Comma is not an entry separator. Leading, trailing, and
+consecutive `;` separators are invalid.
 
-The exact observable construction order for entries `k1: v1`, `k2: v2`, ... is:
-
-```text
-result = ordinary lookup Map, then ordinary Map()
-
-evaluate k1
-evaluate v1
-ordinary result.atPut(k1, v1)
-
-evaluate k2
-evaluate v2
-ordinary result.atPut(k2, v2)
-
-...
-
-return result
-```
-
-The pseudocode variable `result` is explanatory only. Source Map construction
-creates no guest-visible temporary slot, Closure, lexical scope, construction
-activation, or hidden receiver. Entry key and value expressions execute in the
-same enclosing activation in which the `%{...}` expression occurs. In
-particular, construction does not change `this`, `context`, lexical parent,
-method home, or non-local-return home.
-
-Every entry performs a fresh ordinary `atPut` lookup and dispatch after that
-entry's key and value have completed. The returned value of `atPut` is ignored.
-Therefore mutation of the result's delegation or `atPut` behavior by an earlier
-insertion is observable by later insertions. Key evaluation, value evaluation,
-hash/equality callbacks reached by ordinary `atPut`, and insertion itself all
-retain their ordinary Error, suspension, cancellation, and control-flow
-semantics.
-
-Construction is fail-fast and non-transactional. If any step fails or leaves by
-non-normal control transfer, no later entry is evaluated or inserted, and
-effects or successful insertions already completed are not rolled back.
-
-The empty form `%{}` still performs ordinary `Map` lookup and zero-argument
-invocation and returns that invocation result; it merely performs no insertion.
-
-`Map` is intentionally shadow-sensitive. The selected factory may return any
-object. Map construction then requires only that each reached ordinary
-`atPut(key, value)` dispatch succeed. Consequently syntax alone does not
-guarantee a fresh standard Map when `Map` has been shadowed or customized. When
-ordinary lookup selects the standard prelude `Map` factory, the normal standard
-Map factory and `atPut` contracts apply.
-
-The key before `:` is an expression, not an implicit String name:
+For example:
 
 ```protos
-name: "language"
+%{}
 
 %{
-    name: "Protos"
-}
-```
-
-uses the value of `name` as the key. A String key must be written explicitly:
-
-```protos
-%{
-    "name": "Protos"
-}
-```
-
-The `:` inside a Map construction entry is a contextual key/value separator. It
-does not create a slot. This keeps object construction and keyed construction
-visually related while preserving their different state domains:
-
-```protos
-{ name: value }   // slot creation in an Object body
-%{ name: value }  // evaluated key/value insertion
-```
-
-Entries written on different logical source lines are separated by `NEWLINE`.
-Entries on the same logical source line are separated by `;`:
-
-```protos
-%{
-    "a": 1
-    "b": 2
+    key1: value1
+    key2: value2
 }
 
-%{ "a": 1; "b": 2 }
+%{ key1: value1; key2: value2 }
 ```
 
-Leading, trailing, and consecutive `;` are syntax errors. Comma is not a Map
-construction entry separator. A newline immediately after the entry `:` is a
-continuation newline and belongs to that entry rather than separating entries.
+The key is an expression. A bare identifier in key position is evaluated
+normally; it is not converted implicitly to a String.
 
-Because Map construction is a primary expression, ordinary postfix syntax
-composes mechanically:
+Map construction first resolves the ordinary identifier `Map` in the enclosing
+activation and then performs ordinary `call` lookup on that value. Construction
+is eligible only when that lookup selects the canonical standard Map factory
+behavior, either directly on the standard Map object or through ordinary
+inheritance/delegation from it. A nearer arbitrary `call` override, including a
+locally copied equivalent-looking factory Closure, is not eligible and signals
+`Error` before that custom behavior or any source entry executes.
 
-```protos
-%{ "answer": 42 }["answer"]
-```
+The eligible factory behavior is invoked exactly once with zero arguments. Its
+result is the fresh standard normal Map defined by the standard Map factory, with
+the actual factory invocation receiver as its delegation parent. Empty `%{}`
+still performs lookup, eligibility checking, and this one factory invocation.
 
-D136 adds no spread/merge entry, comprehension, generic keyed-collection
-protocol, expected-type conversion, implicit String key conversion, Association
-value, or dedicated `IdentityMap` construction syntax. `IdentityMap()` remains
-ordinary explicit invocation. A future extension may add syntax only through a
-separate normative revision.
+Entries are then processed strictly left-to-right. For each entry the key
+expression is evaluated exactly once, then the value expression exactly once,
+both in the enclosing activation. After both complete normally, the pair defines
+one construction-time initial Map association according to the standard Map key
+law. This initial-definition operation is not an `atPut` message send and cannot
+be intercepted by an `atPut` override.
 
-Expression-position Map construction and pattern-position Map syntax are
-separate grammar owners. D136 changes no matching semantics, including the
-existing Map-pattern entry separators, openness/exactness, remainder, snapshot,
-capture, or `IdentityMap` matching rules.
+Duplicate/equal initial keys, hashing/equality behavior, failure propagation,
+and representative-key rules are defined normatively by
+`semantics/VALUES_AND_COLLECTIONS.md`. Construction does not perform compile-time
+duplicate detection.
+
+Map construction introduces no guest-visible temporary binding, Closure, lexical
+scope, construction activation, receiver change, Association value, generic
+keyed-literal protocol, spread/merge/comprehension form, or `IdentityMap`
+construction syntax.
+
+Expression-position `%{...}` and pattern-position Map syntax are separate
+grammar owners. This section changes no Map-pattern syntax or matching semantics.
 
 ## 13. Parenthesized Expressions
 

@@ -3,33 +3,25 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
-factoryCalls: 0
-insertions: 0
-keys: Array(null, null)
-values: Array(null, null)
 
-Map: () => {
-    factoryCalls = factoryCalls + 1
+trace: Array(null, null, null, null)
+step: 0
 
-    {
-        atPut: (key, value) => {
-            keys[insertions] = key
-            values[insertions] = value
-            insertions = insertions + 1
-            value
-        }
-    }
+record: (marker, result) => {
+    trace[step] = marker
+    step = step + 1
+    result
 }
 
-result: %{
-    10: 20
-    insertions: 30
+mapping: %{
+    record(1, "first"): record(2, 10)
+    record(3, "second"): record(4, 20)
 }
 
-(factoryCalls == 1) &&
-    (insertions == 2) &&
-    (keys[0] == 10) &&
-    (values[0] == 20) &&
-    (keys[1] == 1) &&
-    (values[1] == 30) &&
-    (result !== null)
+(step == 4) &&
+    (trace[0] == 1) &&
+    (trace[1] == 2) &&
+    (trace[2] == 3) &&
+    (trace[3] == 4) &&
+    (mapping["first"] == 10) &&
+    (mapping["second"] == 20)

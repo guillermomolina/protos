@@ -2294,14 +2294,36 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
 
     @Operation
-    public static final class ConstructMapForMapConstruction {
+    public static final class PrepareMapConstructionFactoryCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                ProtosActivation activation,
+                Object factory) {
+            ProtosSlotLookupResult selected =
+                    ProtosStandardMapProtocol
+                            .selectFactoryCallForMapConstruction(
+                                    factory,
+                                    activation);
+
+            return prepareImmediateMethodCall(
+                    (ProtosClosureValue) selected.value(),
+                    factory,
+                    selected.home(),
+                    List.of(),
+                    activation);
+        }
+    }
+
+    @Operation
+    public static final class FinishMapConstructionFactoryCall {
         @Specialization
         public static ProtosMapValue perform(
                 ProtosActivation activation,
-                Object factory) {
-            return ProtosStandardMapProtocol.constructForMapConstruction(
-                    factory,
-                    activation);
+                Object result) {
+            return ProtosStandardMapProtocol
+                    .requireMapConstructionResult(
+                            result,
+                            activation);
         }
     }
 
