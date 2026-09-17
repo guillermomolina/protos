@@ -161,7 +161,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
     }
 
     @Test
-    void foreignContextBytecodeTemplateReprojectsBeforeLegacyInvocation() throws Exception {
+    void foreignContextBytecodeTemplateReprojectsToBytecodeBeforeSynchronousInvocation() throws Exception {
         try (Engine engine = Engine.create(ProtosLanguage.ID);
                 ProtosPolyglotExecutionContext firstContext =
                         ProtosPolyglotExecutionContext.open(
@@ -247,33 +247,26 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                                         module))
                                         .value());
 
-                        ProtosClosureExecutionPlan projected =
+                        assertEquals(
+                                1,
                                 ProtosLanguageContext.current()
-                                        .projectedExecutionPlanForTesting(rebound);
-                        assertNotSame(template, projected);
-                        assertFalse(
-                                projected.isBytecodeBackendForRuntime(),
-                                "legacy synchronous foreign-Context invocation receives a temporary AST fallback");
-                        assertSame(
-                                ProtosLanguageContext.current().languageForTesting(),
-                                projected.language().orElseThrow(),
-                                "entered-Context AST fallback must be owned by that Context language");
-                        assertSame(
-                                template.source().orElse(null),
-                                projected.source().orElse(null),
-                                "entered-Context AST fallback must preserve exact Source identity");
+                                        .projectedBytecodeExecutionPlanCountForTesting(),
+                                "foreign-Context synchronous invocation must create one Context-local Bytecode projection");
+                        assertTrue(
+                                template.isBytecodeBackendForRuntime(),
+                                "semantic/template Closure remains Bytecode-backed");
                         return null;
                     });
         }
 
         System.out.println(
-                "PERF006_B6A6A1R_BYTECODE_TO_CONTEXT_OWNED_AST_FALLBACK=PASS");
+                "PERF006_B6A6A1R_FOREIGN_CONTEXT_BYTECODE_PROJECTION=PASS");
         System.out.println(
-                "PERF006_B6A6A1R_TRUFFLE_SHARING_LAYER_REUSE=NO");
+                "PERF006_B6A6A1R_LEGACY_AST_PROJECTION=NO");
     }
 
     @Test
-    void bytecodeTemplateUsesEnteredContextLegacyAstFallback() throws Exception {
+    void bytecodeTemplateUsesEnteredContextBytecodeDirectly() throws Exception {
         Source source =
                 Source.newBuilder(
                                 ProtosLanguage.ID,
@@ -319,13 +312,11 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                         assertEquals(
                                 BigInteger.valueOf(42),
                                 assertInstanceOf(ProtosIntegerValue.class, value).value());
-                        ProtosClosureExecutionPlan projected =
+                        assertEquals(
+                                0,
                                 ProtosLanguageContext.current()
-                                        .projectedExecutionPlanForTesting(closure);
-                        assertTrue(projected != null);
-                        assertFalse(
-                                projected.isBytecodeBackendForRuntime(),
-                                "legacy synchronous caller must receive the temporary AST fallback");
+                                        .projectedBytecodeExecutionPlanCountForTesting(),
+                                "already Context-owned Bytecode template must execute without reprojection");
                         assertTrue(
                                 closure.executionPlan()
                                         .orElseThrow()
@@ -335,7 +326,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                     });
         }
 
-        System.out.println("PERF006_B6A6A1R_LEGACY_AST_FALLBACK=PASS");
+        System.out.println("PERF006_B6A6A1R_CURRENT_CONTEXT_BYTECODE_DIRECT=PASS");
     }
 
     @Test

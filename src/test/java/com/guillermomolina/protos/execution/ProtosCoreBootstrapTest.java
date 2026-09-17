@@ -197,6 +197,35 @@ class ProtosCoreBootstrapTest {
     }
 
     @Test
+    void sourceBackedCoreClosureSurvivesTemporaryBootstrapHostAndReprojectsToBytecode()
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"));
+
+        ProtosObjectValue any =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        prelude.bindings()
+                                .readLocalSlot("Any")
+                                .orElseThrow());
+        ProtosClosureValue match =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        any.readLocalSlot("match").orElseThrow());
+
+        assertTrue(match.executionPlan().orElseThrow().isBytecodeBackendForRuntime());
+        assertTrue(match.requiresContextLocalExecutionProjectionForRuntime());
+
+        Object result =
+                ProtosTestExecutionSupport.evaluate(
+                        "Any.match(123)",
+                        prelude.newModuleActivation());
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
     void guestCannotAssignFrozenPreludeBindingButCanShadowLocally() throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()

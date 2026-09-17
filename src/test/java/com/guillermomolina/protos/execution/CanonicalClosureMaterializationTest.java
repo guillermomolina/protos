@@ -24,16 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
-import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
-import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CanonicalClosureMaterializationTest {
-    private final CanonicalToTruffleLowerer lowerer =
-            new CanonicalToTruffleLowerer();
-
     @Test
     void closureCapturesCurrentThenExistingLexicalContextsByReference() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -48,9 +42,10 @@ class CanonicalClosureMaterializationTest {
 
         ProtosClosureValue closure =
                 (ProtosClosureValue)
-                        ProtosExecution.createCallTarget(
-                                        lowerer.lower(closure()))
-                                .call(activation);
+                        ProtosTestExecutionSupport.evaluate(
+                                "closure-materialization-capture.protos",
+                                "() => null",
+                                activation);
 
         assertSame(current, closure.capturedLexicalContexts().get(0));
         assertSame(outer, closure.capturedLexicalContexts().get(1));
@@ -75,9 +70,10 @@ class CanonicalClosureMaterializationTest {
 
         ProtosClosureValue closure =
                 (ProtosClosureValue)
-                        ProtosExecution.createCallTarget(
-                                        lowerer.lower(closure()))
-                                .call(construction);
+                        ProtosTestExecutionSupport.evaluate(
+                                "closure-materialization-construction.protos",
+                                "() => null",
+                                construction);
 
         assertSame(
                 lexical,
@@ -97,18 +93,22 @@ class CanonicalClosureMaterializationTest {
                         List.of(),
                         new ProtosObjectValue(root));
 
-        var target =
-                ProtosExecution.createCallTarget(
-                        lowerer.lower(closure()));
-
-        Object first = target.call(activation);
-        Object second = target.call(activation);
+        Object first =
+                ProtosTestExecutionSupport.evaluate(
+                        "closure-materialization-fresh.protos",
+                        "() => null",
+                        activation);
+        Object second =
+                ProtosTestExecutionSupport.evaluate(
+                        "closure-materialization-fresh.protos",
+                        "() => null",
+                        activation);
 
         assertNotSame(first, second);
     }
 
     @Test
-    void closureMaterializationDoesNotExecuteOrLowerItsBody() {
+    void closureMaterializationDoesNotExecuteItsBody() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosActivation activation =
                 new ProtosActivation(
@@ -116,22 +116,17 @@ class CanonicalClosureMaterializationTest {
                         List.of(),
                         new ProtosObjectValue(root));
 
-        CanonicalClosure definition = closure();
-
-        ProtosClosureValue value =
+        ProtosClosureValue closure =
                 (ProtosClosureValue)
-                        ProtosExecution.createCallTarget(
-                                        lowerer.lower(definition))
-                                .call(activation);
+                        ProtosTestExecutionSupport.evaluate(
+                                "closure-materialization-body.protos",
+                                "() => missing",
+                                activation);
 
-        assertSame(definition, value.definition());
-    }
-
-    private CanonicalClosure closure() {
-        SourceSpan span = new SourceSpan(0, 2);
-        return new CanonicalClosure(
-                List.of(),
-                new CanonicalSequence(List.of(), span),
-                span);
+        assertTrue(closure.definition() != null);
+        assertTrue(
+                closure.executionPlan()
+                        .orElseThrow()
+                        .isBytecodeBackendForRuntime());
     }
 }

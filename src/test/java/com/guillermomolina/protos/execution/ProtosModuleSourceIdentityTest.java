@@ -110,17 +110,13 @@ class ProtosModuleSourceIdentityTest {
     }
 
     @Test
-    void sourceOnlyStagingCompilationBuildsLiteralSourceFromNeutralFacts() {
+    void hostedMaterializationBuildsLiteralSourceFromNeutralFacts() {
         ProtosModuleSource moduleSource =
                 ProtosModuleSource.fromCharacters(
                         new ProtosModuleKey("test:source-owned"),
                         "1");
 
-        com.oracle.truffle.api.RootCallTarget target =
-                (com.oracle.truffle.api.RootCallTarget)
-                        new ProtosSourceCompiler().compile(moduleSource);
-        ProtosRootNode rootNode = (ProtosRootNode) target.getRootNode();
-        Source source = rootNode.source().orElseThrow();
+        Source source = materialize(moduleSource);
 
         assertEquals("1", source.getCharacters().toString());
         assertEquals("test:source-owned", source.getName());

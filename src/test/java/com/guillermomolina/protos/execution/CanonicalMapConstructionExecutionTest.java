@@ -28,22 +28,22 @@ import org.junit.jupiter.api.Test;
 
 class CanonicalMapConstructionExecutionTest {
     @Test
-    void directAstBackendExecutesMapConstruction() throws Exception {
+    void bytecodeBackendExecutesMapConstruction() throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()
                         .bootstrap(Path.of("protos", "lib", "core"));
         ProtosActivation activation = prelude.newModuleActivation();
 
         Object result =
-                new ProtosSourceCompiler()
-                        .compile("%{ \"answer\": 42 }[\"answer\"] == 42")
-                        .call(activation);
+                ProtosTestExecutionSupport.evaluate(
+                        "%{ \"answer\": 42 }[\"answer\"] == 42",
+                        activation);
 
         assertSame(ProtosBooleanValue.TRUE, result);
     }
 
     @Test
-    void directAstBackendRejectsDuplicateInitialKey() throws Exception {
+    void bytecodeBackendRejectsDuplicateInitialKey() throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()
                         .bootstrap(Path.of("protos", "lib", "core"));
@@ -52,13 +52,13 @@ class CanonicalMapConstructionExecutionTest {
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        new ProtosSourceCompiler()
-                                .compile("%{ \"key\": 1; \"key\": 2 }")
-                                .call(activation));
+                        ProtosTestExecutionSupport.evaluate(
+                                "%{ \"key\": 1; \"key\": 2 }",
+                                activation));
     }
 
     @Test
-    void directAstBackendUsesInheritedFactoryAndBypassesAtPut()
+    void bytecodeBackendUsesInheritedFactoryAndBypassesAtPut()
             throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()
@@ -66,39 +66,37 @@ class CanonicalMapConstructionExecutionTest {
         ProtosActivation activation = prelude.newModuleActivation();
 
         Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                "DerivedMap: Map {\n"
-                                        + "    marker: 7\n"
-                                        + "    atPut: (key, value) => value\n"
+                ProtosTestExecutionSupport.evaluate(
+                        "DerivedMap: Map {\n"
+                                + "    marker: 7\n"
+                                + "    atPut: (key, value) => value\n"
+                                + "}\n"
+                                + "Map: DerivedMap\n"
+                                + "mapping: %{ \"first\": 1; \"second\": 2 }\n"
+                                + "(mapping.marker == 7) && "
+                                + "(mapping[\"first\"] == 1) && "
+                                + "(mapping[\"second\"] == 2)",
+                        activation);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void bytecodeBackendRejectsArbitraryShadowFactory()
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"));
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosTestExecutionSupport.evaluate(
+                                "Map: () => { "
+                                        + "{ atPut: (key, value) => value } "
                                         + "}\n"
-                                        + "Map: DerivedMap\n"
-                                        + "mapping: %{ \"first\": 1; \"second\": 2 }\n"
-                                        + "(mapping.marker == 7) && "
-                                        + "(mapping[\"first\"] == 1) && "
-                                        + "(mapping[\"second\"] == 2)")
-                        .call(activation);
-
-        assertSame(ProtosBooleanValue.TRUE, result);
-    }
-
-    @Test
-    void directAstBackendRejectsArbitraryShadowFactory()
-            throws Exception {
-        ProtosPrelude prelude =
-                new ProtosCoreBootstrap()
-                        .bootstrap(Path.of("protos", "lib", "core"));
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        assertThrows(
-                ProtosSignalException.class,
-                () ->
-                        new ProtosSourceCompiler()
-                                .compile(
-                                        "Map: () => { "
-                                                + "{ atPut: (key, value) => value } "
-                                                + "}\n"
-                                                + "%{ \"key\": 1 }")
-                                .call(activation));
+                                        + "%{ \"key\": 1 }",
+                                activation));
     }
 }

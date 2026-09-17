@@ -24,16 +24,12 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
-import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
-import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ExtractedClosureBindingExecutionTest {
-    private final CanonicalToTruffleLowerer lowerer = new CanonicalToTruffleLowerer();
-
     @Test
     void inheritedClosureReadBindsDynamicReceiverAndLookupHome() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -43,11 +39,14 @@ class ExtractedClosureBindingExecutionTest {
         ProtosObjectValue definitionReceiver = new ProtosObjectValue(root);
 
         ProtosClosureValue stored =
-                new ProtosClosureValue(closure(), List.of(lexical), definitionReceiver);
+                new ProtosClosureValue(
+                        closure(),
+                        List.of(lexical),
+                        definitionReceiver);
         animal.createLocalSlot("speak", stored);
 
         ProtosClosureValue extracted =
-                (ProtosClosureValue) execute(member("speak"), activation(dog));
+                (ProtosClosureValue) execute("this.speak", activation(dog));
 
         assertSame(dog, extracted.capturedReceiver());
         assertSame(animal, extracted.methodHome().orElseThrow());
@@ -61,23 +60,19 @@ class ExtractedClosureBindingExecutionTest {
         ProtosObjectValue home = new ProtosObjectValue(root);
         ProtosObjectValue receiver = new ProtosObjectValue(home);
         ProtosClosureValue stored =
-                new ProtosClosureValue(closure(), List.of(), home);
+                new ProtosClosureValue(
+                        closure(),
+                        List.of(),
+                        home);
         home.createLocalSlot("f", stored);
 
         ProtosClosureValue extracted =
-                (ProtosClosureValue) execute(member("f"), activation(receiver));
+                (ProtosClosureValue) execute("this.f", activation(receiver));
 
         assertSame(home, stored.capturedReceiver());
         assertTrue(stored.methodHome().isEmpty());
         assertSame(receiver, extracted.capturedReceiver());
         assertSame(home, extracted.methodHome().orElseThrow());
-    }
-
-    private CanonicalMember member(String name) {
-        return new CanonicalMember(
-                new CanonicalIntrinsic(CanonicalIntrinsic.Kind.THIS, new SourceSpan(0, 4)),
-                name,
-                new SourceSpan(0, name.length() + 5));
     }
 
     private CanonicalClosure closure() {
@@ -96,8 +91,11 @@ class ExtractedClosureBindingExecutionTest {
     }
 
     private Object execute(
-            CanonicalMember expression,
+            String source,
             ProtosActivation activation) {
-        return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
+        return ProtosTestExecutionSupport.evaluate(
+                "extracted-closure-binding-bytecode-test.protos",
+                source,
+                activation);
     }
 }

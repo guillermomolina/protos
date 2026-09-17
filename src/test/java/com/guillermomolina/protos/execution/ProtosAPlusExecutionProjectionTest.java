@@ -18,7 +18,6 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -30,6 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Path;
@@ -72,7 +72,57 @@ class ProtosAPlusExecutionProjectionTest {
     }
 
     @Test
-    void twoProcessContextsProjectOneSharedRootClosureToDistinctCallTargetsAndOverlap()
+    void enteredContextPreparedInvocationExecutesSharedRootClosureThroughBytecode()
+            throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosClosureValue notEquals = rootClosure("!=");
+
+        ProtosObjectValue receiver =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        receiver.createLocalSlot(
+                "==",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> ProtosBooleanValue.TRUE));
+
+        ProtosObjectValue argument =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosActivation caller = prelude.newModuleActivation();
+
+        try (ProtosPolyglotExecutionContext context =
+                ProtosPolyglotExecutionContext.open(
+                        InputStream.nullInputStream(),
+                        OutputStream.nullOutputStream(),
+                        OutputStream.nullOutputStream())) {
+            Object result =
+                    context.callEntered(
+                            () -> {
+                                ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                                        ProtosBytecodeRootNode.PrepareSendArguments.perform(
+                                                receiver,
+                                                "!=",
+                                                caller,
+                                                new Object[] {argument});
+
+                                assertFalse(prepared.isNative());
+
+                                Object entered =
+                                        ProtosBytecodeRootNode.EnterClosureCall.indirect(
+                                                prepared,
+                                                IndirectCallNode.create());
+
+                                return ProtosBytecodeRootNode.FinishClosureCall.perform(
+                                        prepared,
+                                        entered);
+                            });
+
+            assertSame(ProtosBooleanValue.FALSE, result);
+        }
+
+        assertSame(notEquals, rootClosure("!="));
+    }
+
+    @Test
+    void twoProcessContextsProjectOneSharedRootClosureThroughBytecodeAndOverlap()
             throws Exception {
         ProtosPrelude firstPrelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosPrelude secondPrelude = new ProtosCoreBootstrap().bootstrap(CORE);
@@ -121,29 +171,14 @@ class ProtosAPlusExecutionProjectionTest {
             assertSame(ProtosBooleanValue.FALSE, first.get(10, TimeUnit.SECONDS));
             assertSame(ProtosBooleanValue.FALSE, second.get(10, TimeUnit.SECONDS));
 
-            ProtosClosureExecutionPlan firstPlan =
-                    firstLanguageContext.projectedExecutionPlanForTesting(notEquals);
-            ProtosClosureExecutionPlan secondPlan =
-                    secondLanguageContext.projectedExecutionPlanForTesting(notEquals);
-            assertNotNull(firstPlan);
-            assertNotNull(secondPlan);
-            assertEquals(1, firstLanguageContext.projectedExecutionPlanCountForTesting());
-            assertEquals(1, secondLanguageContext.projectedExecutionPlanCountForTesting());
-            assertNotSame(template, firstPlan);
-            assertNotSame(template, secondPlan);
-            assertNotSame(firstPlan, secondPlan);
-            assertNotSame(
-                    firstPlan.parameterBindingTargetForTesting(),
-                    secondPlan.parameterBindingTargetForTesting());
-            assertNotSame(firstPlan.bodyTargetForTesting(), secondPlan.bodyTargetForTesting());
-            assertSame(
-                    firstLanguageContext.languageForTesting(),
-                    firstPlan.language().orElseThrow());
-            assertSame(
-                    secondLanguageContext.languageForTesting(),
-                    secondPlan.language().orElseThrow());
-            assertSame(template.source().orElse(null), firstPlan.source().orElse(null));
-            assertSame(template.source().orElse(null), secondPlan.source().orElse(null));
+            assertEquals(
+                    1,
+                    firstLanguageContext
+                            .projectedBytecodeExecutionPlanCountForTesting());
+            assertEquals(
+                    1,
+                    secondLanguageContext
+                            .projectedBytecodeExecutionPlanCountForTesting());
             assertSame(template, notEquals.executionPlan().orElseThrow());
             } finally {
                 releaseEquality.countDown();

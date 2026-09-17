@@ -26,15 +26,10 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
-import com.guillermomolina.protos.semantic.ast.CanonicalMember;
-import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CanonicalMemberReadExecutionTest {
-    private final CanonicalToTruffleLowerer lowerer = new CanonicalToTruffleLowerer();
-
     @Test
     void memberReadReturnsExactLocalValue() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -42,7 +37,7 @@ class CanonicalMemberReadExecutionTest {
         Object value = new ProtosStringValue("Rex");
         receiver.createLocalSlot("name", value);
 
-        assertSame(value, execute(member("name"), activation(receiver)));
+        assertSame(value, execute("this.name", activation(receiver)));
     }
 
     @Test
@@ -53,7 +48,7 @@ class CanonicalMemberReadExecutionTest {
         Object inherited = new ProtosStringValue("animal");
         animal.createLocalSlot("kind", inherited);
 
-        assertSame(inherited, execute(member("kind"), activation(dog)));
+        assertSame(inherited, execute("this.kind", activation(dog)));
     }
 
     @Test
@@ -63,7 +58,7 @@ class CanonicalMemberReadExecutionTest {
         ProtosSignalException signal =
                 assertThrows(
                         ProtosSignalException.class,
-                        () -> execute(member("missing"), activation(receiver)));
+                        () -> execute("this.missing", activation(receiver)));
 
         assertSame(
                 ProtosTestPrelude.slotNotFoundPrototype(),
@@ -78,30 +73,14 @@ class CanonicalMemberReadExecutionTest {
         ProtosActivation activation =
                 ProtosTestPrelude.activation(context, List.of(), new ProtosObjectValue(root));
 
-        CanonicalMember expression =
-                new CanonicalMember(
-                        new com.guillermomolina.protos.semantic.ast.CanonicalLookup(
-                                "value", new SourceSpan(0, 5)),
-                        "name",
-                        new SourceSpan(0, 10));
-
         ProtosSignalException signal =
                 assertThrows(
                         ProtosSignalException.class,
-                        () -> execute(expression, activation));
+                        () -> execute("value.name", activation));
 
         assertSame(
                 ProtosTestPrelude.slotNotFoundPrototype(),
                 signal.error().parent().orElseThrow());
-    }
-
-    private CanonicalMember member(String name) {
-        return new CanonicalMember(
-                new CanonicalIntrinsic(
-                        CanonicalIntrinsic.Kind.THIS,
-                        new SourceSpan(0, 4)),
-                name,
-                new SourceSpan(0, name.length() + 5));
     }
 
     private ProtosActivation activation(ProtosObjectValue receiver) {
@@ -112,8 +91,11 @@ class CanonicalMemberReadExecutionTest {
     }
 
     private Object execute(
-            CanonicalMember expression,
+            String source,
             ProtosActivation activation) {
-        return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
+        return ProtosTestExecutionSupport.evaluate(
+                "member-read-bytecode-test.protos",
+                source,
+                activation);
     }
 }

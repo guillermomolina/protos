@@ -50,6 +50,44 @@ FAMILY_PATTERNS = OrderedDict((
         "expression_node",
         re.compile(r"\bProtosExpressionNode\b"),
     ),
+    (
+        "retired_ast_backend",
+        re.compile(
+            r"\b(?:"
+            r"CanonicalToTruffleLowerer|"
+            r"ProtosArgsNode|"
+            r"ProtosArgumentItem|"
+            r"ProtosArgumentVectorNode|"
+            r"ProtosBareAssignNode|"
+            r"ProtosBareCreateNode|"
+            r"ProtosCallNode|"
+            r"ProtosClosureLiteralNode|"
+            r"ProtosComposeNode|"
+            r"ProtosConstantNode|"
+            r"ProtosExecution|"
+            r"ProtosExpressionNode|"
+            r"ProtosGuardedArmBodyNode|"
+            r"ProtosIdentityNode|"
+            r"ProtosIndexedAssignNode|"
+            r"ProtosIntrinsicNode|"
+            r"ProtosLookupNode|"
+            r"ProtosMapConstructionNode|"
+            r"ProtosMatchNode|"
+            r"ProtosMemberAssignNode|"
+            r"ProtosMemberCreateNode|"
+            r"ProtosMemberReadNode|"
+            r"ProtosNotIdentityNode|"
+            r"ProtosObjectLiteralNode|"
+            r"ProtosParameterBindingNode|"
+            r"ProtosReturnNode|"
+            r"ProtosRootFactory|"
+            r"ProtosRootNode|"
+            r"ProtosSendNode|"
+            r"ProtosSequenceNode|"
+            r"ProtosSuperSendNode"
+            r")\b"
+        ),
+    ),
 ))
 
 

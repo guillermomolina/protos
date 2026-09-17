@@ -383,24 +383,24 @@ public final class ProtosParallelRuntime {
                             ()->x.executionPlan()
                                     .<java.util.function.Supplier<ProtosClosureExecutionPlan>>map(
                                             existing->()->{
-                                                if(existing.isBytecodeBackendForRuntime()){
-                                                    ProtosLanguageContext context=
-                                                            ProtosLanguageContext.currentIfEnteredForRuntime();
-                                                    if(context==null
-                                                            || !ProtosPolyglotExecutionContext
-                                                                    .hasEnteredContextForRuntime()){
-                                                        throw new IllegalStateException(
-                                                                "P Bytecode Closure rematerialization "
-                                                                        + "requires the retained Process Context");
-                                                    }
-                                                    return context.bytecodeExecutionPlanForDefinition(
-                                                            definition,existing);
+                                                ProtosLanguageContext context=
+                                                        ProtosLanguageContext.currentIfEnteredForRuntime();
+                                                if(context==null
+                                                        || !ProtosPolyglotExecutionContext
+                                                                .hasEnteredContextForRuntime()){
+                                                    throw new IllegalStateException(
+                                                            "P source Closure Bytecode rematerialization "
+                                                                    + "requires the retained Process Context");
                                                 }
-                                                return existing.rebuild(definition);
+                                                return context.bytecodeExecutionPlanForDefinition(
+                                                        definition,existing);
                                             })
                                     .orElseGet(
-                                            ()->()->new CanonicalToTruffleLowerer()
-                                                    .lowerClosurePlan(definition)));
+                                            ()->()->{
+                                                throw new IllegalStateException(
+                                                        "P source Closure rematerialization requires "
+                                                                + "a prepared execution-plan template");
+                                            }));
                 }
                 ProtosClosureValue y=x.parallelProjectionDeferred(
                         List.of(p.newExecutionContext()),ProtosNullValue.INSTANCE,p,rematerializer);

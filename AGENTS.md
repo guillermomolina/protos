@@ -3728,4 +3728,33 @@ the evidence for why coverage belongs in one lane or is intentionally split.
 
 Legacy Java/JUnit tests that predate this rule are not required to migrate
 opportunistically during unrelated work. Their bounded repository-wide
-reconciliation is owned separately by TEST002.
+reconciliation is owned separately by TEST002.\n\n## Guest execution backend and Java execution tests
+<!-- AUD012 PLAT035 BYTECODE-ONLY-EXECUTION -->
+
+PLAT035 establishes Truffle Bytecode DSL as the only executable Protos backend.
+The canonical AST remains the backend-independent semantic representation; it is
+not an executable fallback.
+
+The retired executable-AST backend, including `CanonicalToTruffleLowerer`,
+`ProtosExpressionNode`, `ProtosRootNode`, `ProtosRootFactory`,
+`ProtosExecution`, and the associated legacy execution-node tree, MUST NOT be
+reintroduced.
+
+Production and production-representative guest execution must run inside the
+appropriate initialized Polyglot/Process execution context and use the canonical
+Bytecode-backed execution boundary. Source-backed closures crossing Context
+ownership boundaries must be rematerialized for the entered
+`ProtosLanguageContext`; a CallTarget owned by another Context must not be reused.
+
+`ProtosSourceCompiler` itself is not globally forbidden: compiler/frontend,
+backend, compile-only, architecture, or other explicitly bounded implementation
+tests may legitimately exercise it. New direct Java guest-entry paths must not be
+introduced merely for convenience. Ordinary Java semantic tests that need real
+guest execution should use the established hosted/test execution boundary unless
+the test is explicitly about a lower-level compiler or execution component.
+
+`scripts/legacy_execution_guard.py` is the fail-closed repository prevention
+gate for growth of direct/legacy execution dependencies and for reintroduction
+of the retired executable-AST backend. Do not weaken, bypass, or reset that gate
+to accommodate a new dependency; classify and justify the execution path or use
+the canonical Bytecode-backed boundary.\n

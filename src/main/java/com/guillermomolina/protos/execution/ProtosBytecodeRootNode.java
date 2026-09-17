@@ -118,7 +118,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * Bytecode equivalent of the existing ProtosLookupNode operation.
+     * Bytecode operation for unqualified lexical lookup.
      *
      * <p>The activation is loaded from frame argument 0 by the lowerer, preserving
      * the established Protos root calling convention.</p>
@@ -4356,8 +4356,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         ProtosLanguageContext enteredContext =
                 ProtosLanguageContext.currentIfEnteredForRuntime();
         if (enteredContext != null) {
+            boolean foreignContextPlan =
+                    template.language().orElseThrow()
+                            != enteredContext.languageForRuntime();
             if (closure.requiresContextLocalExecutionProjectionForRuntime()
-                    || !template.isBytecodeBackendForRuntime()) {
+                    || foreignContextPlan) {
                 if (template.source().isEmpty()) {
                     return null;
                 }
@@ -4369,7 +4372,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return null;
         }
 
-        return template.isBytecodeBackendForRuntime() ? template : null;
+        return template;
     }
 
     @Operation
@@ -5208,6 +5211,41 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    static PreparedClosureCall prepareSynchronousSourceClosureForRuntime(
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation activation) {
+        java.util.Objects.requireNonNull(closure, "closure");
+        java.util.Objects.requireNonNull(supplied, "supplied");
+        java.util.Objects.requireNonNull(activation, "activation");
+
+        if (closure.nativeBody().isPresent()) {
+            throw new IllegalArgumentException(
+                    "synchronous source Closure preparation requires a non-native Closure");
+        }
+        if (activation.task().isPresent()) {
+            throw new IllegalArgumentException(
+                    "synchronous source Closure preparation cannot own a Task");
+        }
+        if (!ProtosPolyglotExecutionContext.hasEnteredContextForRuntime()
+                || ProtosLanguageContext.currentIfEnteredForRuntime() == null) {
+            throw new IllegalStateException(
+                    "synchronous source Closure preparation requires an entered host Context");
+        }
+
+        ProtosClosureExecutionPlan template =
+                closure.executionPlanForRuntimeInvocation();
+        if (template.source().isEmpty()) {
+            throw new UnsupportedOperationException(
+                    "synchronous Bytecode Closure preparation requires exact source");
+        }
+
+        return finishPreparingComposedCallByImplementation(
+                closure,
+                supplied,
+                activation);
+    }
+
     private static PreparedClosureCall finishPreparingComposedCallByImplementation(
             ProtosClosureValue closure,
             List<?> supplied,
@@ -5307,17 +5345,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         ProtosClosureExecutionPlan plan = closure.executionPlanForRuntimeInvocation();
         ProtosLanguageContext enteredContext =
                 ProtosLanguageContext.currentIfEnteredForRuntime();
-        if (enteredContext != null
-                && (closure.requiresContextLocalExecutionProjectionForRuntime()
-                        || !plan.isBytecodeBackendForRuntime())) {
-            if (plan.source().isEmpty()) {
-                throw new UnsupportedOperationException(
-                        "C-prime composition cannot project a source-less AST Closure plan");
+        if (enteredContext != null) {
+            boolean foreignContextPlan =
+                    plan.language().orElseThrow()
+                            != enteredContext.languageForRuntime();
+            if (closure.requiresContextLocalExecutionProjectionForRuntime()
+                    || foreignContextPlan) {
+                if (plan.source().isEmpty()) {
+                    throw new UnsupportedOperationException(
+                            "Bytecode composition cannot project a source-less Closure plan");
+                }
+                plan =
+                        enteredContext.bytecodeExecutionPlanForEnteredClosure(
+                                closure,
+                                plan);
             }
-            plan =
-                    enteredContext.bytecodeExecutionPlanForEnteredClosure(
-                            closure,
-                            plan);
         }
         if (!plan.isBytecodeBackendForRuntime()) {
             throw new UnsupportedOperationException(

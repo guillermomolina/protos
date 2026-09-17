@@ -26,14 +26,10 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
-import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CanonicalLookupExecutionTest {
-    private final CanonicalToTruffleLowerer lowerer = new CanonicalToTruffleLowerer();
-
     @Test
     void canonicalLookupReadsCurrentContext() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -42,7 +38,7 @@ class CanonicalLookupExecutionTest {
         Object value = new ProtosStringValue("local");
         current.createLocalSlot("name", value);
 
-        assertSame(value, execute(lookup("name"), activation(current, List.of(), receiver)));
+        assertSame(value, execute("name", activation(current, List.of(), receiver)));
     }
 
     @Test
@@ -58,7 +54,7 @@ class CanonicalLookupExecutionTest {
 
         assertSame(
                 lexicalValue,
-                execute(lookup("name"), activation(current, List.of(captured), receiver)));
+                execute("name", activation(current, List.of(captured), receiver)));
     }
 
     @Test
@@ -70,7 +66,7 @@ class CanonicalLookupExecutionTest {
         Object inherited = new ProtosStringValue("inherited");
         prototype.createLocalSlot("name", inherited);
 
-        assertSame(inherited, execute(lookup("name"), activation(current, List.of(), receiver)));
+        assertSame(inherited, execute("name", activation(current, List.of(), receiver)));
     }
 
     @Test
@@ -80,19 +76,18 @@ class CanonicalLookupExecutionTest {
                 activation(new ProtosObjectValue(root), List.of(), new ProtosObjectValue(root));
 
         ProtosSignalException signal =
-                assertThrows(ProtosSignalException.class, () -> execute(lookup("missing"), activation));
+                assertThrows(ProtosSignalException.class, () -> execute("missing", activation));
 
         assertSame(
                 ProtosTestPrelude.slotNotFoundPrototype(),
                 signal.error().parent().orElseThrow());
     }
 
-    private Object execute(CanonicalLookup expression, ProtosActivation activation) {
-        return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
-    }
-
-    private CanonicalLookup lookup(String name) {
-        return new CanonicalLookup(name, new SourceSpan(0, name.length()));
+    private Object execute(String source, ProtosActivation activation) {
+        return ProtosTestExecutionSupport.evaluate(
+                "lookup-bytecode-test.protos",
+                source,
+                activation);
     }
 
     private ProtosActivation activation(

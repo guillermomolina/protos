@@ -40,10 +40,24 @@ class ProtosSourceFileLoaderTest {
         try {
             Files.writeString(file, "41\n42", StandardCharsets.UTF_8);
 
-            Object result =
-                    new ProtosSourceFileLoader()
-                            .load(file)
-                            .call(freshTopLevelActivation());
+            Object result;
+            try (ProtosPolyglotExecutionContext context =
+                    ProtosPolyglotExecutionContext.open(
+                            java.io.InputStream.nullInputStream(),
+                            java.io.OutputStream.nullOutputStream(),
+                            java.io.OutputStream.nullOutputStream())) {
+                result =
+                        context.callEntered(
+                                () -> {
+                                    try {
+                                        return new ProtosSourceFileLoader()
+                                                .load(file)
+                                                .call(freshTopLevelActivation());
+                                    } catch (IOException failure) {
+                                        throw new java.io.UncheckedIOException(failure);
+                                    }
+                                });
+            }
 
             ProtosIntegerValue integer =
                     assertInstanceOf(ProtosIntegerValue.class, result);

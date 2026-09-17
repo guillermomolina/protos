@@ -26,17 +26,10 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
-import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
-import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
-import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class CanonicalBareSlotMutationExecutionTest {
-    private final CanonicalToTruffleLowerer lowerer = new CanonicalToTruffleLowerer();
-
     @Test
     void bareCreationCreatesOnlyInCurrentContextAndReturnsValue() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -47,11 +40,7 @@ class CanonicalBareSlotMutationExecutionTest {
                 ProtosTestPrelude.activation(current, List.of(captured), receiver);
 
         Object result = execute(
-                new CanonicalCreate(
-                        Optional.empty(),
-                        "x",
-                        literal("created"),
-                        new SourceSpan(0, 1)),
+                "x: \"created\"",
                 activation);
 
         assertSame(result, current.readLocalSlot("x").orElseThrow());
@@ -70,11 +59,7 @@ class CanonicalBareSlotMutationExecutionTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () -> execute(
-                                new CanonicalCreate(
-                                        Optional.empty(),
-                                        "x",
-                                        literal("duplicate"),
-                                        new SourceSpan(0, 1)),
+                                "x: \"duplicate\"",
                                 activation));
 
         assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
@@ -95,9 +80,9 @@ class CanonicalBareSlotMutationExecutionTest {
         ProtosActivation activation =
                 ProtosTestPrelude.activation(current, List.of(captured), receiver);
 
-        Object currentValue = execute(assign("current", "c"), activation);
-        Object capturedValue = execute(assign("captured", "l"), activation);
-        Object receiverValue = execute(assign("receiver", "r"), activation);
+        Object currentValue = execute("current = \"c\"", activation);
+        Object capturedValue = execute("captured = \"l\"", activation);
+        Object receiverValue = execute("receiver = \"r\"", activation);
 
         assertSame(currentValue, current.readLocalSlot("current").orElseThrow());
         assertSame(capturedValue, captured.readLocalSlot("captured").orElseThrow());
@@ -117,7 +102,7 @@ class CanonicalBareSlotMutationExecutionTest {
         ProtosSignalException signal =
                 assertThrows(
                         ProtosSignalException.class,
-                        () -> execute(assign("x", "nope"), activation));
+                        () -> execute("x = \"nope\"", activation));
 
         assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
         assertSame(ProtosBooleanValue.TRUE, current.readLocalSlot("x").orElseThrow());
@@ -138,7 +123,7 @@ class CanonicalBareSlotMutationExecutionTest {
         ProtosSignalException signal =
                 assertThrows(
                         ProtosSignalException.class,
-                        () -> execute(assign("inherited", "nope"), activation));
+                        () -> execute("inherited = \"nope\"", activation));
 
         assertSame(
                 ProtosTestPrelude.slotNotFoundPrototype(),
@@ -147,23 +132,11 @@ class CanonicalBareSlotMutationExecutionTest {
     }
 
     private Object execute(
-            com.guillermomolina.protos.semantic.ast.CanonicalExpression expression,
+            String source,
             ProtosActivation activation) {
-        return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
-    }
-
-    private CanonicalAssign assign(String name, String value) {
-        return new CanonicalAssign(
-                Optional.empty(),
-                name,
-                literal(value),
-                new SourceSpan(0, 1));
-    }
-
-    private CanonicalLiteral literal(String value) {
-        return new CanonicalLiteral(
-                CanonicalLiteral.Kind.STRING,
-                value,
-                new SourceSpan(0, value.length()));
+        return ProtosTestExecutionSupport.evaluate(
+                "bare-slot-mutation-bytecode-test.protos",
+                source,
+                activation);
     }
 }

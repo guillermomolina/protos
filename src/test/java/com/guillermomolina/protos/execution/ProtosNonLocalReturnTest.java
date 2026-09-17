@@ -71,16 +71,12 @@ class ProtosNonLocalReturnTest {
     private static ProtosClosureValue closure(
             ProtosPrelude prelude,
             String source) {
-        CanonicalExpression canonical =
-                new Canonicalizer()
-                        .canonicalize(
-                                new ProtosParser(source).parseProgram());
-        ProtosExpressionNode lowered =
-                new CanonicalToTruffleLowerer().lower(canonical);
         return assertInstanceOf(
                 ProtosClosureValue.class,
-                ProtosExecution.createCallTarget(lowered)
-                        .call(prelude.newModuleActivation()));
+                ProtosTestExecutionSupport.evaluate(
+                        "non-local-return-test.protos",
+                        source,
+                        prelude.newModuleActivation()));
     }
 
     private static ProtosPrelude corePrelude() throws IOException {

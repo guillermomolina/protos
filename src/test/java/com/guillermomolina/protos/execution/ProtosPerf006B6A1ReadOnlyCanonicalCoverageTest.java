@@ -36,7 +36,6 @@ import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
-import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
 import java.math.BigInteger;
@@ -50,34 +49,63 @@ final class ProtosPerf006B6A1ReadOnlyCanonicalCoverageTest {
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void memberIdentityAndIntrinsicsMatchAstBackend() throws Exception {
+    void memberIdentityAndIntrinsicsExecuteThroughBytecode() throws Exception {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
             ProtosActivation module = activation(prelude, domain);
-            ProtosObjectValue token = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            ProtosObjectValue other = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue token =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue other =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue object =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+
             object.createLocalSlot("value", token);
             module.context().createLocalSlot("obj", object);
             module.context().createLocalSlot("a", token);
             module.context().createLocalSlot("b", other);
 
-            assertSame(token, executeAst(scope.language(), module, "obj.value", "b6a1-member-ast.protos"));
-            assertSame(token, executeBytecode(scope.language(), module, "obj.value", "b6a1-member-bytecode.protos"));
-            assertSame(ProtosBooleanValue.TRUE, executeAst(scope.language(), module, "a === a", "b6a1-id-ast.protos"));
-            assertSame(ProtosBooleanValue.TRUE, executeBytecode(scope.language(), module, "a === a", "b6a1-id-bytecode.protos"));
-            assertSame(ProtosBooleanValue.TRUE, executeAst(scope.language(), module, "a !== b", "b6a1-not-id-ast.protos"));
-            assertSame(ProtosBooleanValue.TRUE, executeBytecode(scope.language(), module, "a !== b", "b6a1-not-id-bytecode.protos"));
-            assertSame(module.receiver(), executeAst(scope.language(), module, "this", "b6a1-this-ast.protos"));
-            assertSame(module.receiver(), executeBytecode(scope.language(), module, "this", "b6a1-this-bytecode.protos"));
-            assertSame(module.context(), executeAst(scope.language(), module, "context", "b6a1-context-ast.protos"));
-            assertSame(module.context(), executeBytecode(scope.language(), module, "context", "b6a1-context-bytecode.protos"));
+            assertSame(
+                    token,
+                    executeBytecode(
+                            scope.language(),
+                            module,
+                            "obj.value",
+                            "b6a1-member-bytecode.protos"));
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    executeBytecode(
+                            scope.language(),
+                            module,
+                            "a === a",
+                            "b6a1-id-bytecode.protos"));
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    executeBytecode(
+                            scope.language(),
+                            module,
+                            "a !== b",
+                            "b6a1-not-id-bytecode.protos"));
+            assertSame(
+                    module.receiver(),
+                    executeBytecode(
+                            scope.language(),
+                            module,
+                            "this",
+                            "b6a1-this-bytecode.protos"));
+            assertSame(
+                    module.context(),
+                    executeBytecode(
+                            scope.language(),
+                            module,
+                            "context",
+                            "b6a1-context-bytecode.protos"));
         }
 
-        System.out.println("PERF006_B6A1_MEMBER_READ_PARITY=PASS");
-        System.out.println("PERF006_B6A1_IDENTITY_PARITY=PASS");
-        System.out.println("PERF006_B6A1_INTRINSIC_THIS_CONTEXT_PARITY=PASS");
+        System.out.println("PERF006_B6A1_MEMBER_READ_BYTECODE=PASS");
+        System.out.println("PERF006_B6A1_IDENTITY_BYTECODE=PASS");
+        System.out.println("PERF006_B6A1_INTRINSIC_THIS_CONTEXT_BYTECODE=PASS");
     }
 
     @Test
@@ -270,19 +298,6 @@ final class ProtosPerf006B6A1ReadOnlyCanonicalCoverageTest {
                                 current,
                                 root.getCallTarget(),
                                 activation));
-    }
-
-    private static Object executeAst(
-            ProtosLanguage language,
-            ProtosActivation activation,
-            String characters,
-            String sourceName)
-            throws Exception {
-        Source source = source(characters, sourceName);
-        ProtosRootFactory roots = ProtosRootFactory.sourceBound(language, source);
-        CanonicalToTruffleLowerer lowerer = new CanonicalToTruffleLowerer(roots);
-        CallTarget target = roots.createCallTarget(lowerer.lower(canonicalize(characters)));
-        return target.call(activation);
     }
 
     private static Object executeBytecode(

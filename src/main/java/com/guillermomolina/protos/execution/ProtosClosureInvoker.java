@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
 import java.util.List;
 import java.util.Objects;
 
@@ -183,30 +184,45 @@ public final class ProtosClosureInvoker {
             boolean hostedEnteredContext =
                     enteredContext != null
                             && ProtosPolyglotExecutionContext.hasEnteredContextForRuntime();
-            boolean needsEnteredContextProjection =
-                    closure.requiresContextLocalExecutionProjectionForRuntime()
-                            || template.language().isEmpty()
-                            || template.isBytecodeBackendForRuntime();
-            ProtosClosureExecutionPlan plan;
-            if (hostedEnteredContext && needsEnteredContextProjection) {
-                plan = enteredContext.executionPlanForEnteredClosure(closure, template);
-            } else if (hostedEnteredContext
-                    || (enteredContext != null
-                            && !template.isBytecodeBackendForRuntime())) {
-                plan = template;
-            } else {
-                plan =
-                        template.rebuildAstForLegacyFallback(
-                                Objects.requireNonNull(
-                                        closure.definition(),
-                                        "legacy fallback Closure definition"));
+
+            if (hostedEnteredContext) {
+                if (template.source().isEmpty()) {
+                    throw new UnsupportedOperationException(
+                            "source-less legacy Closure cannot execute through "
+                                    + "the Bytecode-only runtime");
+                }
+                return invokePreparedSourceBytecode(
+                        closure,
+                        supplied,
+                        activation);
             }
-            if (plan.isBytecodeBackendForRuntime()) {
-                throw new IllegalStateException(
-                        "direct legacy/oracle invocation must materialize an AST execution plan");
+
+            if (template.source().isEmpty()) {
+                throw new UnsupportedOperationException(
+                        "unhosted source-less legacy Closure cannot execute after "
+                                + "AST backend retirement");
             }
-            plan.bind(activation);
-            return plan.executeBody(activation);
+
+            /*
+             * Outside an entered Process Context, create a bounded host solely
+             * for this synchronous source-backed invocation. Any Bytecode plan
+             * observed here necessarily belongs to no currently entered host,
+             * so require destination-Context projection before entry.
+             */
+            closure.requireContextLocalExecutionProjectionForRuntime();
+
+            try (ProtosPolyglotExecutionContext temporaryHost =
+                    ProtosPolyglotExecutionContext.open(
+                            java.io.InputStream.nullInputStream(),
+                            java.io.OutputStream.nullOutputStream(),
+                            java.io.OutputStream.nullOutputStream())) {
+                return temporaryHost.callEntered(
+                        () ->
+                                invokePreparedSourceBytecode(
+                                        closure,
+                                        supplied,
+                                        activation));
+            }
         } catch (ProtosSignalException transfer) {
             ProtosCoreErrors.selectHandlerIfNeeded(activation, transfer);
             throw transfer;
@@ -224,5 +240,25 @@ public final class ProtosClosureInvoker {
                 returnHome.complete();
             }
         }
+    }
+
+    private static Object invokePreparedSourceBytecode(
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation activation) {
+        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                ProtosBytecodeRootNode.prepareSynchronousSourceClosureForRuntime(
+                        closure,
+                        supplied,
+                        activation);
+
+        Object entered =
+                ProtosBytecodeRootNode.EnterClosureCall.indirect(
+                        prepared,
+                        IndirectCallNode.create());
+
+        return ProtosBytecodeRootNode.FinishClosureCall.perform(
+                prepared,
+                entered);
     }
 }

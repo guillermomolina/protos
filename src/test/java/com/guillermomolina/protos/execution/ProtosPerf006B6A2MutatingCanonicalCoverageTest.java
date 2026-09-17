@@ -35,7 +35,6 @@ import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
-import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
@@ -48,48 +47,46 @@ final class ProtosPerf006B6A2MutatingCanonicalCoverageTest {
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void bareAndExplicitSlotMutationMatchAstBackendAndReturnExactRhs() throws Exception {
+    void bareAndExplicitSlotMutationReturnExactRhsThroughBytecode() throws Exception {
         try (LanguageScope scope = languageScope()) {
             ProtosPrelude prelude = core();
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosActivation ast = activation(prelude, domain);
-            ProtosActivation bytecode = activation(prelude, domain);
-            ProtosObjectValue astToken = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            ProtosObjectValue bytecodeToken = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            ProtosObjectValue astObject = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            ProtosObjectValue bytecodeObject = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            ProtosObjectValue astOld = new ProtosObjectValue(ProtosObjectValue.rootObject());
-            ProtosObjectValue bytecodeOld = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosActivation module = activation(prelude, domain);
 
-            astObject.createLocalSlot("value", astOld);
-            bytecodeObject.createLocalSlot("value", bytecodeOld);
-            ast.context().createLocalSlot("token", astToken);
-            ast.context().createLocalSlot("obj", astObject);
-            bytecode.context().createLocalSlot("token", bytecodeToken);
-            bytecode.context().createLocalSlot("obj", bytecodeObject);
+            ProtosObjectValue token =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue object =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            ProtosObjectValue old =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-            Object astResult = executeAst(
-                    scope.language(),
-                    ast,
-                    "x: token\nx = token\nobj.created: token\nobj.value = token",
-                    "b6a2-slot-mutation-ast.protos");
-            Object bytecodeResult = executeBytecode(
-                    scope.language(),
-                    bytecode,
-                    "x: token\nx = token\nobj.created: token\nobj.value = token",
-                    "b6a2-slot-mutation-bytecode.protos");
+            object.createLocalSlot("value", old);
+            module.context().createLocalSlot("token", token);
+            module.context().createLocalSlot("obj", object);
 
-            assertSame(astToken, astResult);
-            assertSame(bytecodeToken, bytecodeResult);
-            assertSame(astToken, ast.context().readLocalSlot("x").orElseThrow());
-            assertSame(bytecodeToken, bytecode.context().readLocalSlot("x").orElseThrow());
-            assertSame(astToken, astObject.readLocalSlot("created").orElseThrow());
-            assertSame(bytecodeToken, bytecodeObject.readLocalSlot("created").orElseThrow());
-            assertSame(astToken, astObject.readLocalSlot("value").orElseThrow());
-            assertSame(bytecodeToken, bytecodeObject.readLocalSlot("value").orElseThrow());
+            Object result =
+                    executeBytecode(
+                            scope.language(),
+                            module,
+                            "x: token\n"
+                                    + "x = token\n"
+                                    + "obj.created: token\n"
+                                    + "obj.value = token",
+                            "b6a2-slot-mutation-bytecode.protos");
+
+            assertSame(token, result);
+            assertSame(
+                    token,
+                    module.context().readLocalSlot("x").orElseThrow());
+            assertSame(
+                    token,
+                    object.readLocalSlot("created").orElseThrow());
+            assertSame(
+                    token,
+                    object.readLocalSlot("value").orElseThrow());
         }
 
-        System.out.println("PERF006_B6A2_SLOT_MUTATION_PARITY=PASS");
+        System.out.println("PERF006_B6A2_SLOT_MUTATION_BYTECODE=PASS");
         System.out.println("PERF006_B6A2_SLOT_MUTATION_EXACT_RHS=PASS");
     }
 
@@ -340,19 +337,6 @@ final class ProtosPerf006B6A2MutatingCanonicalCoverageTest {
                         current,
                         root.getCallTarget(),
                         activation));
-    }
-
-    private static Object executeAst(
-            ProtosLanguage language,
-            ProtosActivation activation,
-            String characters,
-            String sourceName)
-            throws Exception {
-        Source source = source(characters, sourceName);
-        ProtosRootFactory roots = ProtosRootFactory.sourceBound(language, source);
-        CanonicalToTruffleLowerer lowerer = new CanonicalToTruffleLowerer(roots);
-        CallTarget target = roots.createCallTarget(lowerer.lower(canonicalize(characters)));
-        return target.call(activation);
     }
 
     private static Object executeBytecode(

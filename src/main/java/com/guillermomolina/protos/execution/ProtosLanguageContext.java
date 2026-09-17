@@ -35,13 +35,9 @@ final class ProtosLanguageContext {
 
     private final ProtosLanguage language;
     private final TruffleLanguage.Env env;
-    private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
-            sharedExecutionPlans = new ConcurrentHashMap<>();
-
     /*
-     * PERF006-B6A6A1 keeps the historical AST projection cache as the B6B oracle and
-     * owns a separate C-prime projection cache. Both are Context-local and disappear
-     * with this ProtosLanguageContext; neither changes semantic Closure identity.
+     * PLAT035 leaves one Context-local executable projection cache: Bytecode.
+     * Semantic Closure identity remains independent from the executable projection.
      */
     private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
             sharedBytecodeExecutionPlans = new ConcurrentHashMap<>();
@@ -156,20 +152,6 @@ final class ProtosLanguageContext {
         }
     }
 
-    ProtosClosureExecutionPlan executionPlanForEnteredClosure(
-            ProtosClosureValue closure, ProtosClosureExecutionPlan template) {
-        Objects.requireNonNull(closure, "closure");
-        Objects.requireNonNull(template, "template");
-        return sharedExecutionPlans.computeIfAbsent(
-                template,
-                ignored ->
-                        template.rebuildAstForLanguage(
-                                Objects.requireNonNull(
-                                        closure.definition(),
-                                        "entered Closure definition"),
-                                language));
-    }
-
     ProtosClosureExecutionPlan bytecodeExecutionPlanForEnteredClosure(
             ProtosClosureValue closure, ProtosClosureExecutionPlan template) {
         Objects.requireNonNull(closure, "closure");
@@ -196,30 +178,6 @@ final class ProtosLanguageContext {
         return sharedBytecodeExecutionPlans.computeIfAbsent(
                 template,
                 ignored -> template.rebuildBytecodeForLanguage(definition, language));
-    }
-
-    ProtosClosureExecutionPlan executionPlanForSharedClosure(ProtosClosureValue closure) {
-        Objects.requireNonNull(closure, "closure");
-        if (!closure.requiresContextLocalExecutionProjectionForRuntime()) {
-            throw new IllegalArgumentException(
-                    "Closure does not require Context-local execution projection");
-        }
-        ProtosClosureExecutionPlan template =
-                closure.executionPlan()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "shared Closure has no execution-plan template"));
-        return executionPlanForEnteredClosure(closure, template);
-    }
-
-    ProtosClosureExecutionPlan projectedExecutionPlanForTesting(ProtosClosureValue closure) {
-        Objects.requireNonNull(closure, "closure");
-        return closure.executionPlan().map(sharedExecutionPlans::get).orElse(null);
-    }
-
-    int projectedExecutionPlanCountForTesting() {
-        return sharedExecutionPlans.size();
     }
 
     int projectedBytecodeExecutionPlanCountForTesting() {

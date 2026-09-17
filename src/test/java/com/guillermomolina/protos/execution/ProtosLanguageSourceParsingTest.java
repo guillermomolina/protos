@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.net.URI;
@@ -42,23 +41,5 @@ class ProtosLanguageSourceParsingTest {
 
             assertTrue(parsed.canExecute());
         }
-    }
-
-    @Test
-    void sourceBoundRootFactoryRetainsTheExactTruffleSourceAndLanguageIdentity() {
-        ProtosLanguage language = new ProtosLanguage();
-        com.oracle.truffle.api.source.Source source =
-                com.oracle.truffle.api.source.Source
-                        .newBuilder(
-                                ProtosLanguage.ID,
-                                "1\n2",
-                                "source-owned.protos")
-                        .uri(URI.create("memory:///source-owned.protos"))
-                        .build();
-
-        ProtosRootFactory roots = ProtosRootFactory.sourceBound(language, source);
-
-        assertSame(language, roots.language().orElseThrow());
-        assertSame(source, roots.source().orElseThrow());
     }
 }

@@ -34,7 +34,6 @@ import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
 import com.guillermomolina.protos.source.SourceSpan;
-import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
 import com.oracle.truffle.api.source.SourceSection;
@@ -47,26 +46,59 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void canonicalLiteralAndSequenceSubsetMatchesTheCurrentAstBackend() throws Exception {
+    void canonicalLiteralAndSequenceSubsetExecutesThroughBytecode() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                assertEquivalent("true");
-                assertEquivalent("false");
-                assertEquivalent("null");
-                assertEquivalent("\"hello\"");
-                assertEquivalent("92233720368547758081234567890");
-                assertEquivalent("0xFF");
-                assertEquivalent("1.25");
-                assertEquivalent("\"discarded\"\nfalse\n0x2A");
+                assertSame(ProtosBooleanValue.TRUE, executeBytecodeValue("true"));
+                assertSame(ProtosBooleanValue.FALSE, executeBytecodeValue("false"));
+                assertSame(ProtosNullValue.INSTANCE, executeBytecodeValue("null"));
+
+                assertEquals(
+                        "hello",
+                        assertInstanceOf(
+                                        ProtosStringValue.class,
+                                        executeBytecodeValue("\"hello\""))
+                                .value());
+
+                assertEquals(
+                        new java.math.BigInteger("92233720368547758081234567890"),
+                        assertInstanceOf(
+                                        ProtosIntegerValue.class,
+                                        executeBytecodeValue(
+                                                "92233720368547758081234567890"))
+                                .value());
+
+                assertEquals(
+                        java.math.BigInteger.valueOf(255),
+                        assertInstanceOf(
+                                        ProtosIntegerValue.class,
+                                        executeBytecodeValue("0xFF"))
+                                .value());
+
+                assertEquals(
+                        Double.doubleToRawLongBits(1.25d),
+                        Double.doubleToRawLongBits(
+                                assertInstanceOf(
+                                                ProtosFloatValue.class,
+                                                executeBytecodeValue("1.25"))
+                                        .value()));
+
+                assertEquals(
+                        java.math.BigInteger.valueOf(42),
+                        assertInstanceOf(
+                                        ProtosIntegerValue.class,
+                                        executeBytecodeValue(
+                                                "\"discarded\"\nfalse\n0x2A"))
+                                .value());
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B1_LITERAL_EQUIVALENCE=PASS");
-        System.out.println("PERF006_B1_SEQUENCE_EQUIVALENCE=PASS");
+        System.out.println("PERF006_B1_LITERAL_BYTECODE=PASS");
+        System.out.println("PERF006_B1_SEQUENCE_BYTECODE=PASS");
     }
 
     @Test
@@ -86,13 +118,11 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                 CanonicalSequence sequence =
                         new CanonicalSequence(List.of(), new SourceSpan(0, 0));
 
-                Object ast = executeAst(language, source, sequence);
                 Object bytecode =
                         new CanonicalToBytecodeLowerer(language, source)
                                 .lower(sequence)
                                 .call();
 
-                assertSame(ProtosNullValue.INSTANCE, ast);
                 assertSame(ProtosNullValue.INSTANCE, bytecode);
             } finally {
                 context.leave();
@@ -187,23 +217,18 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
         System.out.println("PERF006_B1_UNSUPPORTED_FAIL_CLOSED=PASS");
     }
 
-    private static void assertEquivalent(String characters) throws Exception {
+    private static Object executeBytecodeValue(String characters) throws Exception {
         ProtosLanguage language = LANGUAGE_REF.get(null);
         Source source =
                 Source.newBuilder(
                                 ProtosLanguage.ID,
                                 characters,
-                                "perf006-b1-equivalence.protos")
+                                "perf006-b1-bytecode.protos")
                         .build();
         CanonicalSequence sequence = canonicalize(characters);
-
-        Object ast = executeAst(language, source, sequence);
-        Object bytecode =
-                new CanonicalToBytecodeLowerer(language, source)
-                        .lower(sequence)
-                        .call();
-
-        assertEquivalentValue(ast, bytecode);
+        return new CanonicalToBytecodeLowerer(language, source)
+                .lower(sequence)
+                .call();
     }
 
     private static CanonicalSequence canonicalize(String characters) {
@@ -211,56 +236,5 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                 new ProtosParser(characters).parseProgram();
         return (CanonicalSequence)
                 new Canonicalizer().canonicalize(surface);
-    }
-
-    private static Object executeAst(
-            ProtosLanguage language,
-            Source source,
-            CanonicalSequence sequence) {
-        ProtosRootFactory roots =
-                ProtosRootFactory.sourceBound(language, source);
-        CanonicalToTruffleLowerer lowerer =
-                new CanonicalToTruffleLowerer(roots);
-        CallTarget target =
-                roots.createCallTarget(lowerer.lower(sequence));
-        return target.call();
-    }
-
-    private static void assertEquivalentValue(Object ast, Object bytecode) {
-        assertEquals(ast.getClass(), bytecode.getClass());
-
-        if (ast == ProtosBooleanValue.TRUE
-                || ast == ProtosBooleanValue.FALSE
-                || ast == ProtosNullValue.INSTANCE) {
-            assertSame(ast, bytecode);
-            return;
-        }
-
-        if (ast instanceof ProtosIntegerValue astInteger) {
-            ProtosIntegerValue bytecodeInteger =
-                    assertInstanceOf(ProtosIntegerValue.class, bytecode);
-            assertEquals(astInteger.value(), bytecodeInteger.value());
-            return;
-        }
-
-        if (ast instanceof ProtosFloatValue astFloat) {
-            ProtosFloatValue bytecodeFloat =
-                    assertInstanceOf(ProtosFloatValue.class, bytecode);
-            assertEquals(
-                    Double.doubleToRawLongBits(astFloat.value()),
-                    Double.doubleToRawLongBits(bytecodeFloat.value()));
-            return;
-        }
-
-        if (ast instanceof ProtosStringValue astString) {
-            ProtosStringValue bytecodeString =
-                    assertInstanceOf(ProtosStringValue.class, bytecode);
-            assertEquals(astString.value(), bytecodeString.value());
-            return;
-        }
-
-        throw new AssertionError(
-                "PERF006-B1 comparison does not know value family "
-                        + ast.getClass().getName());
     }
 }

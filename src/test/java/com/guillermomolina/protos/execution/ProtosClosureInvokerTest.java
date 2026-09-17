@@ -22,14 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
-import com.guillermomolina.protos.semantic.Canonicalizer;
-import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -48,24 +45,32 @@ class ProtosClosureInvokerTest {
     }
 
     @Test
-    void completesOwnedReturnHomeAfterNormalInvocation() {
+    void preparedBytecodeInvocationCompletesOwnedReturnHome() {
         ProtosClosureValue closure = closure("() => null");
 
         ProtosActivation activation =
                 ProtosActivation.forClosureInvocation(closure, List.of());
         ProtosReturnHome home = activation.returnHome().orElseThrow();
+
         assertTrue(home.isActive());
 
-        ProtosClosureExecutionPlan plan =
-                closure.executionPlan().orElseThrow();
-        try {
-            plan.bind(activation);
-            plan.executeBody(activation);
-        } finally {
-            if (activation.ownsReturnHome() && home.isActive()) {
-                home.complete();
-            }
-        }
+        ProtosTestExecutionSupport.callEntered(
+                () -> {
+                    ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                            ProtosBytecodeRootNode.prepareSynchronousSourceClosureForRuntime(
+                                    closure,
+                                    List.of(),
+                                    activation);
+
+                    Object entered =
+                            ProtosBytecodeRootNode.EnterClosureCall.indirect(
+                                    prepared,
+                                    com.oracle.truffle.api.nodes.IndirectCallNode.create());
+
+                    return ProtosBytecodeRootNode.FinishClosureCall.perform(
+                            prepared,
+                            entered);
+                });
 
         assertFalse(home.isActive());
     }
@@ -90,16 +95,12 @@ class ProtosClosureInvokerTest {
     }
 
     private static ProtosClosureValue closure(String source) {
-        CanonicalExpression canonical =
-                new Canonicalizer()
-                        .canonicalize(
-                                new ProtosParser(source).parseProgram());
-        ProtosExpressionNode lowered =
-                new CanonicalToTruffleLowerer().lower(canonical);
         return assertInstanceOf(
                 ProtosClosureValue.class,
-                ProtosExecution.createCallTarget(lowered)
-                        .call(moduleActivation()));
+                ProtosTestExecutionSupport.evaluate(
+                        "closure-invoker-test.protos",
+                        source,
+                        moduleActivation()));
     }
 
     private static ProtosActivation moduleActivation() {

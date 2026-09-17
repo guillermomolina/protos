@@ -1,3 +1,23 @@
+## 0.3.27-SNAPSHOT
+
+- Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
+  ratified PLAT035 by completing retirement of the legacy executable-AST
+  backend. Remove `CanonicalToTruffleLowerer` and the
+  `ProtosExpressionNode`/`ProtosRootNode` execution tree, collapse Closure
+  execution planning onto the Truffle Bytecode DSL backend, and require
+  source-backed execution crossing Polyglot Context ownership boundaries to be
+  rematerialized through the entered `ProtosLanguageContext`. Migrate retained
+  execution tests to the Bytecode-backed boundaries where appropriate and
+  remove tests whose only subject was the retired AST backend. Strengthen the
+  fail-closed legacy-execution guard with an explicit retired-backend symbol
+  family and record the PLAT035 execution/test-placement rule in `AGENTS.md`.
+  Final source/test rescan finds no references to the retired backend classes.
+  After reconciliation with current `main`, the affected execution focal set
+  passes 33/33 tests; the Java lane passes 1849/1849, the separately executed
+  DAP/LSP set passes 3/3, packaging succeeds, and the Protos Test Tool suites
+  pass 1292/1292. No Protos-visible language, specification, or Standard
+  Library semantics change. Implementation version becomes `0.3.27-SNAPSHOT`.
+
 ## 0.3.26-SNAPSHOT
 
 - Advance `I041-D — D131 matching conformance reconciliation` (GitHub #550).

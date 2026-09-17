@@ -187,6 +187,31 @@ final class NewLegacyTest {
             result["violations"],
         )
 
+    def test_retired_ast_backend_symbol_reintroduction_fails(self):
+        self.write(
+            "src/test/java/example/RetiredBackendTest.java",
+            """
+package example;
+
+final class RetiredBackendTest {
+    ProtosRootFactory factory;
+}
+""",
+        )
+        head = self.commit("reintroduce retired AST backend")
+
+        result = self.check(head)
+
+        self.assertIn(
+            (
+                "src/test/java/example/RetiredBackendTest.java",
+                "retired_ast_backend",
+                0,
+                1,
+            ),
+            result["violations"],
+        )
+
     def test_existing_file_growth_fails(self):
         path = "src/main/java/example/Legacy.java"
         original = (

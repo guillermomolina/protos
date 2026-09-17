@@ -92,9 +92,9 @@ class ProtosPolymorphicInvocationTest {
     }
 
     /**
-     * Deliberately Java-side: the purpose of this test is the compiler/lowering
-     * path for a nested call expression inside a Closure, not merely the source
-     * result 99.
+     * Deliberately Java-side: the purpose of this test is the canonical Bytecode
+     * lowering path for a nested call expression inside a Closure, not merely
+     * the source result 99.
      */
     @Test
     void nestedCallInsideClosureUsesCallableLowering() throws IOException {
@@ -113,9 +113,9 @@ class ProtosPolymorphicInvocationTest {
     }
 
     private static Object execute(ProtosPrelude prelude, String source) {
-        return new ProtosSourceCompiler()
-                .compile(source)
-                .call(prelude.newModuleActivation());
+        return ProtosTestExecutionSupport.evaluate(
+                source,
+                prelude.newModuleActivation());
     }
 
     private static ProtosPrelude corePrelude() throws IOException {

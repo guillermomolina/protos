@@ -17,48 +17,39 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.guillermomolina.protos.source.SourceSpan;
-import com.oracle.truffle.api.Truffle;
-import com.oracle.truffle.api.frame.FrameDescriptor;
-import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.api.interop.InteropLibrary;
-import com.oracle.truffle.api.interop.NodeLibrary;
-import com.oracle.truffle.api.interop.UnknownIdentifierException;
-import com.oracle.truffle.api.interop.UnsupportedMessageException;
-import com.oracle.truffle.api.source.Source;
-import org.junit.jupiter.api.Test;
-
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-final class ProtosI026EScopeTest {
-    private static final SourceSpan SPAN = new SourceSpan(0, 1);
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
-    private final NodeLibrary nodes = NodeLibrary.getUncached();
+final class ProtosI026EScopeTest {
     private final InteropLibrary interop = InteropLibrary.getUncached();
 
     @Test
-    void nodeScopeUsesExactActivationFromFrameArgumentZero() throws Exception {
+    void debuggerScopeExposesExactActivationLanguageAndDisplayIdentity()
+            throws Exception {
         ProtosStringValue value = new ProtosStringValue("current");
         ProtosObjectValue context = objectWith("current", value);
         ProtosActivation activation =
-                new ProtosActivation(context, List.of(), ProtosObjectValue.rootObject());
-        VirtualFrame frame = frame(activation);
-        DummyNode node = adopted(new DummyNode());
+                new ProtosActivation(
+                        context,
+                        List.of(),
+                        ProtosObjectValue.rootObject());
 
-        assertTrue(nodes.hasScope(node, frame));
-        Object scope = nodes.getScope(node, frame, true);
+        Object scope = new ProtosDebuggerScope(activation);
 
         assertTrue(interop.isScope(scope));
         assertTrue(interop.hasMembers(scope));
@@ -71,35 +62,59 @@ final class ProtosI026EScopeTest {
     @Test
     void flattenedNamesPreserveLookupPrecedenceAndShadowingDuplicates()
             throws Exception {
-        ProtosStringValue currentShadow = new ProtosStringValue("current-shadow");
-        ProtosStringValue lexicalOneShadow = new ProtosStringValue("lexical-one-shadow");
-        ProtosStringValue lexicalTwoShadow = new ProtosStringValue("lexical-two-shadow");
-        ProtosStringValue receiverShadow = new ProtosStringValue("receiver-shadow");
-        ProtosStringValue parentShadow = new ProtosStringValue("parent-shadow");
+        ProtosStringValue currentShadow =
+                new ProtosStringValue("current-shadow");
+        ProtosStringValue lexicalOneShadow =
+                new ProtosStringValue("lexical-one-shadow");
+        ProtosStringValue lexicalTwoShadow =
+                new ProtosStringValue("lexical-two-shadow");
+        ProtosStringValue receiverShadow =
+                new ProtosStringValue("receiver-shadow");
+        ProtosStringValue parentShadow =
+                new ProtosStringValue("parent-shadow");
 
-        ProtosObjectValue receiverParent = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        receiverParent.createLocalSlot("parentOnly", new ProtosStringValue("parent"));
+        ProtosObjectValue receiverParent =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        receiverParent.createLocalSlot(
+                "parentOnly",
+                new ProtosStringValue("parent"));
         receiverParent.createLocalSlot("shadow", parentShadow);
 
-        ProtosObjectValue receiver = new ProtosObjectValue(receiverParent);
-        receiver.createLocalSlot("receiverOnly", new ProtosStringValue("receiver"));
+        ProtosObjectValue receiver =
+                new ProtosObjectValue(receiverParent);
+        receiver.createLocalSlot(
+                "receiverOnly",
+                new ProtosStringValue("receiver"));
         receiver.createLocalSlot("shadow", receiverShadow);
 
-        ProtosObjectValue lexicalOne = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        lexicalOne.createLocalSlot("lexicalOneOnly", new ProtosStringValue("lexical-one"));
+        ProtosObjectValue lexicalOne =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        lexicalOne.createLocalSlot(
+                "lexicalOneOnly",
+                new ProtosStringValue("lexical-one"));
         lexicalOne.createLocalSlot("shadow", lexicalOneShadow);
 
-        ProtosObjectValue lexicalTwo = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        lexicalTwo.createLocalSlot("lexicalTwoOnly", new ProtosStringValue("lexical-two"));
+        ProtosObjectValue lexicalTwo =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        lexicalTwo.createLocalSlot(
+                "lexicalTwoOnly",
+                new ProtosStringValue("lexical-two"));
         lexicalTwo.createLocalSlot("shadow", lexicalTwoShadow);
 
-        ProtosObjectValue context = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        context.createLocalSlot("currentOnly", new ProtosStringValue("current"));
+        ProtosObjectValue context =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        context.createLocalSlot(
+                "currentOnly",
+                new ProtosStringValue("current"));
         context.createLocalSlot("shadow", currentShadow);
 
         ProtosActivation activation =
-                new ProtosActivation(context, List.of(lexicalOne, lexicalTwo), receiver);
-        Object scope = nodes.getScope(adopted(new DummyNode()), frame(activation), true);
+                new ProtosActivation(
+                        context,
+                        List.of(lexicalOne, lexicalTwo),
+                        receiver);
+
+        Object scope = new ProtosDebuggerScope(activation);
 
         List<String> names = memberNames(scope);
         assertTrue(names.size() >= 10);
@@ -112,31 +127,44 @@ final class ProtosI026EScopeTest {
                         "parentOnly", "shadow"),
                 names.subList(0, 10));
 
-        assertSame(currentShadow, activation.lookup("shadow").orElseThrow());
-        assertSame(currentShadow, interop.readMember(scope, "shadow"));
+        assertSame(
+                currentShadow,
+                activation.lookup("shadow").orElseThrow());
+        assertSame(
+                currentShadow,
+                interop.readMember(scope, "shadow"));
         assertEquals(
                 "parent",
-                interop.asString(interop.readMember(scope, "parentOnly")));
+                interop.asString(
+                        interop.readMember(scope, "parentOnly")));
     }
 
     @Test
     void scopeReadUsesOrdinaryReceiverDelegationWithoutLexicalParentFiction()
             throws Exception {
-        ProtosStringValue inherited = new ProtosStringValue("inherited");
-        ProtosObjectValue receiverParent = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosStringValue inherited =
+                new ProtosStringValue("inherited");
+
+        ProtosObjectValue receiverParent =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         receiverParent.createLocalSlot("inherited", inherited);
-        ProtosObjectValue receiver = new ProtosObjectValue(receiverParent);
+
+        ProtosObjectValue receiver =
+                new ProtosObjectValue(receiverParent);
+
         ProtosActivation activation =
                 new ProtosActivation(
-                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        new ProtosObjectValue(
+                                ProtosObjectValue.rootObject()),
                         List.of(),
                         receiver);
 
-        Object scope = nodes.getScope(adopted(new DummyNode()), frame(activation), false);
+        Object scope = new ProtosDebuggerScope(activation);
 
         assertSame(
                 activation.lookup("inherited").orElseThrow(),
                 interop.readMember(scope, "inherited"));
+
         assertFalse(interop.hasScopeParent(scope));
         assertThrows(
                 UnsupportedMessageException.class,
@@ -144,83 +172,51 @@ final class ProtosI026EScopeTest {
     }
 
     @Test
-    void scopeIsReadOnlyAndInventsNoNamedReceiver() throws Exception {
+    void scopeIsReadOnly() throws Exception {
         ProtosObjectValue context =
-                objectWith("name", new ProtosStringValue("value"));
+                objectWith(
+                        "name",
+                        new ProtosStringValue("value"));
+
         ProtosActivation activation =
-                new ProtosActivation(context, List.of(), ProtosObjectValue.rootObject());
-        VirtualFrame frame = frame(activation);
-        DummyNode node = adopted(new DummyNode());
-        Object scope = nodes.getScope(node, frame, true);
+                new ProtosActivation(
+                        context,
+                        List.of(),
+                        ProtosObjectValue.rootObject());
+
+        Object scope = new ProtosDebuggerScope(activation);
 
         assertFalse(interop.isMemberModifiable(scope, "name"));
         assertFalse(interop.isMemberInsertable(scope, "newName"));
         assertFalse(interop.isMemberRemovable(scope, "name"));
+
         assertThrows(
                 UnsupportedMessageException.class,
-                () -> interop.writeMember(
-                        scope, "name", new ProtosStringValue("replacement")));
+                () ->
+                        interop.writeMember(
+                                scope,
+                                "name",
+                                new ProtosStringValue("replacement")));
+
         assertSame(
                 activation.lookup("name").orElseThrow(),
                 interop.readMember(scope, "name"));
-
-        assertFalse(nodes.hasReceiverMember(node, frame));
-        assertThrows(
-                UnsupportedMessageException.class,
-                () -> nodes.getReceiverMember(node, frame));
     }
 
     @Test
-    void lexicalAccessWithoutARealActivationFrameFailsClosed() {
-        DummyNode node = adopted(new DummyNode());
+    void accidentalHostOnlyValueNeverLeavesTheScope()
+            throws Exception {
+        ProtosObjectValue context =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        context.createLocalSlot("hostOnly", new Object());
 
-        assertFalse(nodes.hasScope(node, null));
-        assertThrows(
-                UnsupportedMessageException.class,
-                () -> nodes.getScope(node, null, true));
-
-        VirtualFrame hostOnly =
-                Truffle.getRuntime()
-                        .createVirtualFrame(
-                                new Object[] {new Object()},
-                                FrameDescriptor.newBuilder().build());
-        assertFalse(nodes.hasScope(node, hostOnly));
-        assertThrows(
-                UnsupportedMessageException.class,
-                () -> nodes.getScope(node, hostOnly, true));
-    }
-
-    @Test
-    void generatedInstrumentationWrapperPreservesDelegateScopeBridge() throws Exception {
-        DummyNode guest = new DummyNode();
-        guest.markStatementTagForLowering();
-        ProtosExpressionNode wrapper =
-                (ProtosExpressionNode) guest.createWrapper(null);
-        adoptRoot(wrapper);
-
-        assertTrue(guest.getRootNode() instanceof ProtosRootNode);
-        assertTrue(guest.isInstrumentable());
-
-        ProtosStringValue value = new ProtosStringValue("wrapped");
         ProtosActivation activation =
                 new ProtosActivation(
-                        objectWith("wrapped", value),
+                        context,
                         List.of(),
                         ProtosObjectValue.rootObject());
-        VirtualFrame frame = frame(activation);
 
-        assertTrue(nodes.hasScope(guest, frame));
-        Object scope = nodes.getScope(guest, frame, true);
-        assertSame(value, interop.readMember(scope, "wrapped"));
-    }
-
-    @Test
-    void accidentalHostOnlyValueNeverLeavesTheScope() throws Exception {
-        ProtosObjectValue context = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        context.createLocalSlot("hostOnly", new Object());
-        ProtosActivation activation =
-                new ProtosActivation(context, List.of(), ProtosObjectValue.rootObject());
-        Object scope = nodes.getScope(adopted(new DummyNode()), frame(activation), true);
+        Object scope = new ProtosDebuggerScope(activation);
 
         assertTrue(memberNames(scope).contains("hostOnly"));
         assertFalse(interop.isMemberReadable(scope, "hostOnly"));
@@ -238,63 +234,45 @@ final class ProtosI026EScopeTest {
         assertEquals(
                 1,
                 Arrays.stream(ProtosDebuggerScope.class.getDeclaredFields())
-                        .filter(field -> !Modifier.isStatic(field.getModifiers()))
+                        .filter(
+                                field ->
+                                        !Modifier.isStatic(
+                                                field.getModifiers()))
                         .count());
+
         assertTrue(
                 Arrays.stream(ProtosDebuggerScope.class.getDeclaredFields())
-                        .filter(field -> !Modifier.isStatic(field.getModifiers()))
-                        .allMatch(field -> field.getType() == ProtosActivation.class));
-    }
-
-    private static <T extends ProtosExpressionNode> T adopted(T node) {
-        node.markStatementTagForLowering();
-        adoptRoot(node);
-        assertTrue(node.isInstrumentable());
-        return node;
-    }
-
-    private static void adoptRoot(ProtosExpressionNode node) {
-        Source source =
-                Source.newBuilder(
-                                ProtosLanguage.ID,
-                                "x",
-                                "i026-e1-scope-test.protos")
-                        .build();
-        new ProtosRootNode(null, source, node).getCallTarget();
-        assertTrue(node.getRootNode() instanceof ProtosRootNode);
-    }
-
-    private VirtualFrame frame(ProtosActivation activation) {
-        return Truffle.getRuntime()
-                .createVirtualFrame(
-                        new Object[] {activation},
-                        FrameDescriptor.newBuilder().build());
+                        .filter(
+                                field ->
+                                        !Modifier.isStatic(
+                                                field.getModifiers()))
+                        .allMatch(
+                                field ->
+                                        field.getType()
+                                                == ProtosActivation.class));
     }
 
     private List<String> memberNames(Object scope) throws Exception {
         Object members = interop.getMembers(scope);
         long size = interop.getArraySize(members);
-        ArrayList<String> result = new ArrayList<>((int) size);
+        ArrayList<String> result =
+                new ArrayList<>((int) size);
+
         for (long i = 0; i < size; i++) {
-            result.add(interop.asString(interop.readArrayElement(members, i)));
+            result.add(
+                    interop.asString(
+                            interop.readArrayElement(members, i)));
         }
+
         return List.copyOf(result);
     }
 
-    private static ProtosObjectValue objectWith(String name, Object value) {
-        ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
+    private static ProtosObjectValue objectWith(
+            String name,
+            Object value) {
+        ProtosObjectValue object =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         object.createLocalSlot(name, value);
         return object;
-    }
-
-    private static final class DummyNode extends ProtosExpressionNode {
-        DummyNode() {
-            super(SPAN);
-        }
-
-        @Override
-        protected Object executeDirect(VirtualFrame frame) {
-            return null;
-        }
     }
 }

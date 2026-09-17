@@ -21,22 +21,15 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.semantic.Canonicalizer;
-import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CanonicalCompositionExecutionTest {
-    private final Canonicalizer canonicalizer = new Canonicalizer();
-    private final CanonicalToTruffleLowerer lowerer =
-            new CanonicalToTruffleLowerer();
-
     @Test
     void compositionCopiesLocalBindingsAndMakesThemVisibleToLaterItems() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -146,13 +139,9 @@ class CanonicalCompositionExecutionTest {
     private Object execute(
             String source,
             ProtosActivation activation) {
-        CanonicalExpression expression =
-                canonicalizer.canonicalize(
-                        new ProtosParser(source)
-                                .parseProgram()
-                                .expressions()
-                                .get(0));
-        return ProtosExecution.createCallTarget(lowerer.lower(expression))
-                .call(activation);
+        return ProtosTestExecutionSupport.evaluate(
+                "composition-execution-bytecode-test.protos",
+                source,
+                activation);
     }
 }

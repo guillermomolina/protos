@@ -51,6 +51,34 @@ public final class ProtosCoreBootstrap {
         Objects.requireNonNull(coreDirectory, "coreDirectory");
         Objects.requireNonNull(moduleResolver, "moduleResolver");
 
+        if (ProtosPolyglotExecutionContext.hasEnteredContextForRuntime()) {
+            return bootstrapEntered(coreDirectory, moduleResolver);
+        }
+
+        try (ProtosPolyglotExecutionContext bootstrapHost =
+                ProtosPolyglotExecutionContext.open(
+                        java.io.InputStream.nullInputStream(),
+                        java.io.OutputStream.nullOutputStream(),
+                        java.io.OutputStream.nullOutputStream())) {
+            try {
+                return bootstrapHost.callEntered(
+                        () -> {
+                            try {
+                                return bootstrapEntered(coreDirectory, moduleResolver);
+                            } catch (IOException failure) {
+                                throw new java.io.UncheckedIOException(failure);
+                            }
+                        });
+            } catch (java.io.UncheckedIOException failure) {
+                throw failure.getCause();
+            }
+        }
+    }
+
+    private ProtosPrelude bootstrapEntered(
+            Path coreDirectory,
+            ProtosModuleResolver moduleResolver)
+            throws IOException {
         publishStandardRoot(coreDirectory);
 
         ProtosObjectValue bootstrapContext =
@@ -582,6 +610,11 @@ public final class ProtosCoreBootstrap {
             enqueueStandardObjects(
                     pending, object.localSlotsSnapshot().values().toArray());
             if (object instanceof ProtosClosureValue closure) {
+                if (closure.definition() != null
+                        && closure.executionPlan().isPresent()
+                        && closure.nativeBody().isEmpty()) {
+                    closure.requireContextLocalExecutionProjectionForRuntime();
+                }
                 enqueueStandardObjects(
                         pending, closure.capturedLexicalContexts().toArray());
                 enqueueStandardObjects(pending, closure.capturedReceiver());

@@ -25,52 +25,72 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-class ProtosArgsNodeTest {
+class ProtosArgsIntrinsicTest {
     private static final SourceSpan SPAN = new SourceSpan(0, 0);
 
     @Test
-    void returnsExactFreshFrozenCallerSuppliedArray() {
+    void bytecodeArgsReturnsExactFreshFrozenCallerSuppliedArray() {
         ProtosObjectValue contextPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue arrayPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+
+        ProtosObjectValue bindings =
+                new ProtosObjectValue(contextPrototype);
         bindings.createLocalSlot("Context", contextPrototype);
         bindings.createLocalSlot(
-                "Error", new ProtosObjectValue(ProtosObjectValue.rootObject()));
+                "Error",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
         bindings.createLocalSlot("Array", arrayPrototype);
         bindings.freeze();
-        ProtosPrelude prelude = new ProtosPrelude(bindings, contextPrototype);
 
-        Object supplied = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosPrelude prelude =
+                new ProtosPrelude(bindings, contextPrototype);
+
+        Object supplied =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+
         CanonicalClosure definition =
                 new CanonicalClosure(
                         List.of(),
                         new CanonicalSequence(List.of(), SPAN),
                         SPAN);
+
         ProtosClosureValue closure =
                 new ProtosClosureValue(
                         definition,
                         List.of(),
-                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        new ProtosObjectValue(
+                                ProtosObjectValue.rootObject()),
                         null,
                         null,
                         prelude);
+
         ProtosActivation activation =
-                ProtosActivation.forClosureInvocation(closure, List.of(supplied));
-        ProtosArrayValue expected = activation.arguments().orElseThrow();
+                ProtosActivation.forClosureInvocation(
+                        closure,
+                        List.of(supplied));
+
+        ProtosArrayValue expected =
+                activation.arguments().orElseThrow();
 
         Object actual =
-                ProtosExecution.createCallTarget(new ProtosArgsNode(SPAN))
-                        .call(activation);
+                ProtosBytecodeRootNode.LoadIntrinsic.perform(
+                        activation,
+                        CanonicalIntrinsic.Kind.ARGS);
 
         assertSame(expected, actual);
-        assertSame(ProtosObjectValue.MutationState.FROZEN, expected.mutationState());
-        assertSame(arrayPrototype, expected.parent().orElseThrow());
+        assertSame(
+                ProtosObjectValue.MutationState.FROZEN,
+                expected.mutationState());
+        assertSame(
+                arrayPrototype,
+                expected.parent().orElseThrow());
     }
 }

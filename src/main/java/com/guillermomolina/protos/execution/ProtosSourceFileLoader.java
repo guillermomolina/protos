@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -25,19 +26,22 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 public final class ProtosSourceFileLoader {
-    private final ProtosSourceCompiler compiler;
-
-    public ProtosSourceFileLoader() {
-        this(new ProtosSourceCompiler());
-    }
-
-    ProtosSourceFileLoader(ProtosSourceCompiler compiler) {
-        this.compiler = Objects.requireNonNull(compiler, "compiler");
-    }
+    public ProtosSourceFileLoader() {}
 
     public CallTarget load(Path path) throws IOException {
         Objects.requireNonNull(path, "path");
-        String source = Files.readString(path, StandardCharsets.UTF_8);
-        return compiler.compile(source);
+        String characters = Files.readString(path, StandardCharsets.UTF_8);
+
+        ProtosLanguageContext context =
+                ProtosLanguageContext.currentIfEnteredForRuntime();
+        if (context == null
+                || !ProtosPolyglotExecutionContext.hasEnteredContextForRuntime()) {
+            throw new IllegalStateException(
+                    "source-file loading requires an entered Protos host Context");
+        }
+
+        Source source =
+                context.materializeFileSource(path, characters);
+        return context.parsePublic(source);
     }
 }

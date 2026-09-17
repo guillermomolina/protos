@@ -27,18 +27,15 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.oracle.truffle.api.source.Source;
 import java.math.BigInteger;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosSourceCompilerTest {
     @Test
-    void compilesCompleteSourceThroughParserCanonicalizerAndLowerer() {
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
-
-        Object result =
-                compiler.compile("1\n2")
-                        .call(freshTopLevelActivation());
+    void compilesCompleteSourceThroughParserCanonicalizerAndBytecodeLowerer() {
+        Object result = compileAndCall("1\n2");
 
         ProtosIntegerValue integer =
                 assertInstanceOf(ProtosIntegerValue.class, result);
@@ -47,11 +44,7 @@ class ProtosSourceCompilerTest {
 
     @Test
     void compiledObjectSourceUsesOrdinaryObjectExecution() {
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
-
-        Object result =
-                compiler.compile("{ value: 7 }")
-                        .call(freshTopLevelActivation());
+        Object result = compileAndCall("{ value: 7 }");
 
         ProtosObjectValue object =
                 assertInstanceOf(ProtosObjectValue.class, result);
@@ -67,11 +60,46 @@ class ProtosSourceCompilerTest {
 
     @Test
     void parserFailuresPropagateWithoutCreatingAnExecutionTarget() {
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
-
         assertThrows(
                 ParseError.class,
-                () -> compiler.compile("name\n)"));
+                () ->
+                        ProtosTestExecutionSupport.callEntered(
+                                () -> {
+                                    ProtosLanguageContext context =
+                                            ProtosLanguageContext.current();
+                                    Source source =
+                                            Source.newBuilder(
+                                                            ProtosLanguage.ID,
+                                                            "name\n)",
+                                                            "source-compiler-invalid.protos")
+                                                    .mimeType(ProtosLanguage.MIME_TYPE)
+                                                    .build();
+                                    return new ProtosSourceCompiler()
+                                            .compileBytecode(
+                                                    source,
+                                                    context.languageForTesting());
+                                }));
+    }
+
+    private static Object compileAndCall(String characters) {
+        ProtosActivation activation = freshTopLevelActivation();
+        return ProtosTestExecutionSupport.callEntered(
+                () -> {
+                    ProtosLanguageContext context =
+                            ProtosLanguageContext.current();
+                    Source source =
+                            Source.newBuilder(
+                                            ProtosLanguage.ID,
+                                            characters,
+                                            "source-compiler-test.protos")
+                                    .mimeType(ProtosLanguage.MIME_TYPE)
+                                    .build();
+                    return new ProtosSourceCompiler()
+                            .compileBytecode(
+                                    source,
+                                    context.languageForTesting())
+                            .call(activation);
+                });
     }
 
     private static ProtosActivation freshTopLevelActivation() {

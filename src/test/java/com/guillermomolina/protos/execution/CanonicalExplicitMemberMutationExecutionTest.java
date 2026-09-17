@@ -25,18 +25,10 @@ import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
-import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
-import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
-import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
-import com.guillermomolina.protos.source.SourceSpan;
 import java.util.List;
-import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class CanonicalExplicitMemberMutationExecutionTest {
-    private final CanonicalToTruffleLowerer lowerer = new CanonicalToTruffleLowerer();
-
     @Test
     void explicitCreationCreatesLocalSlotAndReturnsRhs() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -45,13 +37,7 @@ class CanonicalExplicitMemberMutationExecutionTest {
                 ProtosTestPrelude.activation(new ProtosObjectValue(root), List.of(), receiver);
 
         Object result = execute(
-                new CanonicalCreate(
-                        Optional.of(new CanonicalIntrinsic(
-                                CanonicalIntrinsic.Kind.THIS,
-                                new SourceSpan(0, 4))),
-                        "x",
-                        literal("created"),
-                        new SourceSpan(0, 10)),
+                "this.x: \"created\"",
                 activation);
 
         assertSame(result, receiver.readLocalSlot("x").orElseThrow());
@@ -70,13 +56,7 @@ class CanonicalExplicitMemberMutationExecutionTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () -> execute(
-                                new CanonicalAssign(
-                                        Optional.of(new CanonicalIntrinsic(
-                                                CanonicalIntrinsic.Kind.THIS,
-                                                new SourceSpan(0, 4))),
-                                        "alive",
-                                        literal("nope"),
-                                        new SourceSpan(0, 10)),
+                                "this.alive = \"nope\"",
                                 activation));
 
         assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
@@ -92,13 +72,7 @@ class CanonicalExplicitMemberMutationExecutionTest {
                 ProtosTestPrelude.activation(new ProtosObjectValue(root), List.of(), receiver);
 
         Object result = execute(
-                new CanonicalAssign(
-                        Optional.of(new CanonicalIntrinsic(
-                                CanonicalIntrinsic.Kind.THIS,
-                                new SourceSpan(0, 4))),
-                        "name",
-                        literal("updated"),
-                        new SourceSpan(0, 12)),
+                "this.name = \"updated\"",
                 activation);
 
         assertSame(result, receiver.readLocalSlot("name").orElseThrow());
@@ -116,28 +90,18 @@ class CanonicalExplicitMemberMutationExecutionTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () -> execute(
-                                new CanonicalCreate(
-                                        Optional.of(new com.guillermomolina.protos.semantic.ast.CanonicalLookup(
-                                                "value",
-                                                new SourceSpan(0, 5))),
-                                        "x",
-                                        literal("created"),
-                                        new SourceSpan(0, 10)),
+                                "value.x: \"created\"",
                                 activation));
 
         assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
     }
 
     private Object execute(
-            com.guillermomolina.protos.semantic.ast.CanonicalExpression expression,
+            String source,
             ProtosActivation activation) {
-        return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
-    }
-
-    private CanonicalLiteral literal(String value) {
-        return new CanonicalLiteral(
-                CanonicalLiteral.Kind.STRING,
-                value,
-                new SourceSpan(0, value.length()));
+        return ProtosTestExecutionSupport.evaluate(
+                "explicit-member-mutation-bytecode-test.protos",
+                source,
+                activation);
     }
 }

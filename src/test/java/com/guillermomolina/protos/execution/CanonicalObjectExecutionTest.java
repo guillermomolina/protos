@@ -20,21 +20,14 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
-import com.guillermomolina.protos.semantic.Canonicalizer;
-import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class CanonicalObjectExecutionTest {
-    private final Canonicalizer canonicalizer = new Canonicalizer();
-    private final CanonicalToTruffleLowerer lowerer =
-            new CanonicalToTruffleLowerer();
-
     @Test
     void bareObjectUsesObjectAsParentAndReturnsConstructedObject() {
         ProtosObjectValue enclosingContext =
@@ -104,13 +97,9 @@ class CanonicalObjectExecutionTest {
     private Object execute(
             String source,
             ProtosActivation activation) {
-        CanonicalExpression expression =
-                canonicalizer.canonicalize(
-                        new ProtosParser(source)
-                                .parseProgram()
-                                .expressions()
-                                .get(0));
-        return ProtosExecution.createCallTarget(lowerer.lower(expression))
-                .call(activation);
+        return ProtosTestExecutionSupport.evaluate(
+                "object-execution-bytecode-test.protos",
+                source,
+                activation);
     }
 }

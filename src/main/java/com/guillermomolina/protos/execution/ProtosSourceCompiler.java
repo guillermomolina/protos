@@ -21,59 +21,15 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
-import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
 
 public final class ProtosSourceCompiler {
     private final Canonicalizer canonicalizer;
-    private final CanonicalToTruffleLowerer lowerer;
 
     public ProtosSourceCompiler() {
-        this(new Canonicalizer(), new CanonicalToTruffleLowerer());
-    }
-
-    ProtosSourceCompiler(
-            Canonicalizer canonicalizer,
-            CanonicalToTruffleLowerer lowerer) {
-        this.canonicalizer = Objects.requireNonNull(canonicalizer, "canonicalizer");
-        this.lowerer = Objects.requireNonNull(lowerer, "lowerer");
-    }
-
-    public CallTarget compile(String source) {
-        Objects.requireNonNull(source, "source");
-        Source exactSource =
-                Source.newBuilder(ProtosLanguage.ID, source, "<direct>")
-                        .mimeType(ProtosLanguage.MIME_TYPE)
-                        .build();
-        ProtosRootFactory roots = ProtosRootFactory.sourceOnly(exactSource);
-        CanonicalToTruffleLowerer sourceLowerer =
-                lowerer.withRootFactory(roots);
-        return compileCharacters(source, sourceLowerer, roots);
-    }
-
-    public CallTarget compile(ProtosModuleSource moduleSource) {
-        Objects.requireNonNull(moduleSource, "moduleSource");
-        Source source = moduleSource.literalSource();
-        ProtosRootFactory roots = ProtosRootFactory.sourceOnly(source);
-        CanonicalToTruffleLowerer sourceLowerer = lowerer.withRootFactory(roots);
-        return compileCharacters(
-                source.getCharacters().toString(),
-                sourceLowerer,
-                roots);
-    }
-
-    CallTarget compile(Source source, ProtosLanguage language) {
-        Objects.requireNonNull(source, "source");
-        Objects.requireNonNull(language, "language");
-
-        ProtosRootFactory roots = ProtosRootFactory.sourceBound(language, source);
-        CanonicalToTruffleLowerer sourceLowerer = lowerer.withRootFactory(roots);
-        return compileCharacters(
-                source.getCharacters().toString(),
-                sourceLowerer,
-                roots);
+        this.canonicalizer = new Canonicalizer();
     }
 
     RootCallTarget compileBytecode(Source source, ProtosLanguage language) {
@@ -93,13 +49,4 @@ public final class ProtosSourceCompiler {
                 helper.getCallTarget());
     }
 
-    private CallTarget compileCharacters(
-            String characters,
-            CanonicalToTruffleLowerer activeLowerer,
-            ProtosRootFactory roots) {
-        SurfaceSequence surface = new ProtosParser(characters).parseProgram();
-        CanonicalSequence canonical =
-                (CanonicalSequence) canonicalizer.canonicalize(surface);
-        return roots.createCallTarget(activeLowerer.lower(canonical));
-    }
 }

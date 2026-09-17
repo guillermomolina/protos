@@ -108,7 +108,7 @@ final class ProtosPerf006B2AClosureActivationTest {
     }
 
     @Test
-    void bytecodeClosureBodyMatchesAstClosureLookupResult() throws Exception {
+    void bytecodeClosureBodyPreservesCapturedLexicalLookup() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -119,7 +119,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         characters,
-                                        "perf006-b2a-differential.protos")
+                                        "perf006-b2a-bytecode-capture.protos")
                                 .build();
 
                 ProtosActivation module = moduleActivation();
@@ -133,16 +133,6 @@ final class ProtosPerf006B2AClosureActivationTest {
                                 CanonicalClosure.class,
                                 canonical.expressions().get(0));
 
-                ProtosExpressionNode astNode =
-                        new CanonicalToTruffleLowerer().lower(canonical);
-                ProtosClosureValue astClosure =
-                        assertInstanceOf(
-                                ProtosClosureValue.class,
-                                ProtosExecution.createCallTarget(astNode)
-                                        .call(module));
-                Object astResult =
-                        ProtosClosureInvoker.invoke(astClosure, List.of());
-
                 ProtosClosureValue bytecodeSemanticClosure =
                         new ProtosClosureValue(
                                 definition,
@@ -151,6 +141,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                                 module.methodHome().orElse(null),
                                 module.returnHome().orElse(null),
                                 module.prelude().orElseThrow());
+
                 ProtosActivation bytecodeActivation =
                         ProtosActivation.forClosureInvocation(
                                 bytecodeSemanticClosure,
@@ -159,6 +150,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                                 module.actorModuleState(),
                                 module.currentModuleKey().orElse(null),
                                 module.executionDomain());
+
                 Object bytecodeResult =
                         new ProtosBytecodeClosureExecutionPlan(
                                         definition,
@@ -166,14 +158,14 @@ final class ProtosPerf006B2AClosureActivationTest {
                                         source)
                                 .executeActivation(bytecodeActivation);
 
-                assertSame(captured, astResult);
-                assertSame(astResult, bytecodeResult);
+                assertSame(captured, bytecodeResult);
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2A_AST_BYTECODE_CLOSURE_BODY_EQUIVALENCE=PASS");
+        System.out.println(
+                "PERF006_B2A_BYTECODE_CLOSURE_BODY_CAPTURE_LOOKUP=PASS");
     }
 
     @Test
