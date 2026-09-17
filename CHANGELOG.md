@@ -1,3 +1,19 @@
+## 0.3.13-SNAPSHOT
+
+- Advance `PERF009-B — Quarantined Java test normalization and reintegration`
+  (GitHub #546) by reintegrating the TOML parser coverage into the ordinary
+  Java lane. Replace the quarantined monolithic `ProtosTomlParserStressTest`
+  with eight bounded, responsibility-specific regression classes covering
+  nested values, flat documents, paths, lexical keys, string/trivia scanning,
+  integers, float/temporal tokens, and arrays of tables. Remove
+  `ProtosTomlParserStressTest` from `JAVA_SLOW_TEST_EXCLUDES` and delete the
+  superseded stress class. Repeated cold-JVM validation satisfies the existing
+  `< 2.0 s` hard per-test budget and `< 5 s` class threshold for all eight
+  final classes; the Java lane passes and the full test suite passes with zero
+  failures. No Protos-visible semantics, specification, Standard Library
+  behavior, or production runtime behavior changes. Implementation version
+  becomes `0.3.13-SNAPSHOT`.
+
 ## 0.3.12-SNAPSHOT
 
 - Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
