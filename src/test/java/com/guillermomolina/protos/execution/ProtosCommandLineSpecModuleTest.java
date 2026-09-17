@@ -45,9 +45,9 @@ final class ProtosCommandLineSpecModuleTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         Object imported =
-                new ProtosSourceCompiler()
-                        .compile("import(\"std:cli/CommandLine\")")
-                        .call(prelude.newModuleActivation());
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:cli/CommandLine\")",
+                        prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
         assertEquals(Set.of("option", "positional", "command", "parse", "renderHelp"), module.localSlotsSnapshot().keySet());
@@ -557,7 +557,7 @@ final class ProtosCommandLineSpecModuleTest {
         String source = "CommandLine: import(\"std:cli/CommandLine\")\n" + body;
         assertThrows(
                 ProtosSignalException.class,
-                () -> new ProtosSourceCompiler().compile(source).call(prelude.newModuleActivation()),
+                () -> ProtosTestExecutionSupport.evaluate(source, prelude.newModuleActivation()),
                 body);
     }
 
@@ -565,7 +565,7 @@ final class ProtosCommandLineSpecModuleTest {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return new ProtosSourceCompiler().compile(source).call(prelude.newModuleActivation());
+        return ProtosTestExecutionSupport.evaluate(source, prelude.newModuleActivation());
     }
 
     private static String stringSlot(ProtosObjectValue object, String name) {

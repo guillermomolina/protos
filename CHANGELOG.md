@@ -1,3 +1,16 @@
+## 0.3.12-SNAPSHOT
+
+- Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
+  ratified PLAT035 by migrating a second retained-Java semantic-harness block
+  from direct `ProtosSourceCompiler.compile(...).call(...)` legacy-AST execution
+  to the canonical Bytecode-backed `ProtosTestExecutionSupport.evaluate(...)`
+  boundary. Migrate InvalidSuper execution coverage and the CommandLine module,
+  specification-model, and result-model harnesses while preserving Java
+  ownership, existing Activations, assertions, error signaling, and semantic
+  coverage. No Protos-visible semantics, specification, Standard Library
+  behavior, or production runtime behavior changes. Implementation version
+  becomes `0.3.12-SNAPSHOT`.
+
 ## 0.3.11-SNAPSHOT
 
 - Advance `I041-B1 — standard matcher helper publication` (GitHub #550).

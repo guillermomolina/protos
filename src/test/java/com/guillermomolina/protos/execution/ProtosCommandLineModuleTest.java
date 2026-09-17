@@ -38,9 +38,9 @@ final class ProtosCommandLineModuleTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         Object imported =
-                new ProtosSourceCompiler()
-                        .compile("import(\"std:cli/CommandLine\")")
-                        .call(prelude.newModuleActivation());
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:cli/CommandLine\")",
+                        prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
         assertEquals(

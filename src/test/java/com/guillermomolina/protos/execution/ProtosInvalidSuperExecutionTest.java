@@ -184,7 +184,7 @@ final class ProtosInvalidSuperExecutionTest {
     }
 
     private static Object execute(ProtosActivation activation, String source) {
-        return new ProtosSourceCompiler().compile(source).call(activation);
+        return ProtosTestExecutionSupport.evaluate(source, activation);
     }
 
     private static ProtosPrelude corePrelude() throws IOException {
