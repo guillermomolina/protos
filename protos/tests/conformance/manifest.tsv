@@ -857,3 +857,10 @@ collections/map-construction-syntax-order.protos	boolean	true
 collections/map-construction-syntax-bypasses-atput.protos	boolean	true
 collections/map-construction-syntax-factory-first.protos	error	-
 collections/map-construction-syntax-duplicate-error.protos	error	-
+matching/object-match-receiver-equality.protos	boolean	true
+matching/any-match.protos	boolean	true
+matching/capture-match.protos	integer	42
+matching/array-match-capture.protos	integer	42
+matching/map-match-open-subset-capture.protos	integer	42
+matching/case-of-capture.protos	integer	42
+matching/case-of-no-selection-error.protos	error	-

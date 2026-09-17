@@ -1,0 +1,26 @@
+state: {
+    matcherCalls: 0
+    subjectCalls: 0
+}
+
+MatcherBase: {
+    equalTo: (other) => {
+        state.matcherCalls = state.matcherCalls + 1
+        true
+    }
+}
+Matcher: MatcherBase.alias("equalTo", "==")
+
+SubjectBase: {
+    equalTo: (other) => {
+        state.subjectCalls = state.subjectCalls + 1
+        false
+    }
+}
+Subject: SubjectBase.alias("equalTo", "==")
+
+matched: Matcher.match(Subject)
+
+matched &&
+    state.matcherCalls == 1 &&
+    state.subjectCalls == 0

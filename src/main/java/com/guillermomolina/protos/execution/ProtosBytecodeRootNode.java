@@ -768,12 +768,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return moduleInitialization.immediateResult();
         }
         boolean isStructuredObjectCall() { return structuredObjectCall; }
+        boolean isStructuredCaseOf() {
+            return nativeBody != null
+                    && ProtosStandardObjectProtocol.isStandardCaseOfImplementation(nativeBody);
+        }
+        boolean isStructuredMapMatch() {
+            return nativeBody != null
+                    && ProtosStandardMapProtocol.isStandardMatchImplementation(nativeBody);
+        }
         boolean isStructuredImportCall() { return structuredImportRuntime != null; }
         boolean isStructuredEnsure() { return structuredEnsure; }
         boolean isStructuredErrorHandler() { return structuredErrorHandler; }
         boolean isStructuredWhile() { return structuredWhile; }
         boolean isStructuredBoolean() { return structuredBoolean != null; }
         boolean isStructuredArrayEach() { return structuredArrayEach; }
+        boolean isStructuredArrayMatch() {
+            return nativeBody != null
+                    && ProtosStandardArrayProtocol.isStandardMatchImplementation(nativeBody);
+        }
         boolean isStructuredBytesEach() { return structuredBytesEach; }
         boolean isStructuredProcessArgumentsEach() { return structuredProcessArgumentsEach; }
         boolean isStructuredEnvironmentEach() { return structuredEnvironmentEach; }
@@ -785,12 +797,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         boolean requiresStructuredDispatch() {
             return structuredObjectCall
+                    || isStructuredCaseOf()
+                    || isStructuredMapMatch()
                     || structuredImportRuntime != null
                     || structuredEnsure
                     || structuredErrorHandler
                     || structuredWhile
                     || structuredBoolean != null
                     || structuredArrayEach
+                    || isStructuredArrayMatch()
                     || structuredBytesEach
                     || structuredProcessArgumentsEach
                     || structuredEnvironmentEach
@@ -799,6 +814,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || structuredMapReadLookup != null
                     || structuredMapAtPut
                     || structuredMapRemove;
+        }
+
+        PreparedMapMatchCall prepareStructuredMapMatch() {
+            if (!isStructuredMapMatch()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured Map.match capability");
+            }
+            return new PreparedMapMatchCall(
+                    activation.receiver(),
+                    supplied,
+                    activation);
+        }
+
+        PreparedCaseOfCall prepareStructuredCaseOf() {
+            if (!isStructuredCaseOf()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured Object.caseOf capability");
+            }
+            return new PreparedCaseOfCall(
+                    activation.receiver(),
+                    supplied,
+                    activation);
         }
 
         PreparedStandardObjectCall prepareStructuredObjectCall() {
@@ -931,6 +968,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
+        PreparedArrayMatchCall prepareStructuredArrayMatch() {
+            if (!isStructuredArrayMatch()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured Array.match capability");
+            }
+            return new PreparedArrayMatchCall(
+                    activation.receiver(),
+                    supplied,
+                    activation);
+        }
+
         PreparedBytesEachCall prepareStructuredBytesEach() {
             if (!structuredBytesEach) {
                 throw new IllegalStateException(
@@ -1026,12 +1074,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         "prepared Closure call is not native");
             }
             if (structuredObjectCall
+                    || isStructuredCaseOf()
+                    || isStructuredMapMatch()
                     || structuredImportRuntime != null
                     || structuredEnsure
                     || structuredErrorHandler
                     || structuredWhile
                     || structuredBoolean != null
                     || structuredArrayEach
+                    || isStructuredArrayMatch()
                     || structuredBytesEach
                     || structuredProcessArgumentsEach
                     || structuredEnvironmentEach
@@ -1101,6 +1152,157 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             complete();
             return result;
+        }
+    }
+
+
+    static final class PreparedCaseOfCall {
+        private final Object subject;
+        private final List<java.util.Map.Entry<Object, Object>> cases;
+        private final ProtosActivation activation;
+        private int index;
+        private Object selectedAction;
+        private List<Object> selectedArguments;
+
+        PreparedCaseOfCall(
+                Object subject,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.subject = java.util.Objects.requireNonNull(subject, "subject");
+            this.activation =
+                    java.util.Objects.requireNonNull(
+                            activation,
+                            "activation");
+
+            if (supplied.size() != 1
+                    || !(supplied.get(0) instanceof ProtosMapValue caseMap)) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+
+            this.cases =
+                    List.copyOf(
+                            caseMap.associationSnapshot());
+        }
+
+        boolean needsMatcher() {
+            return selectedAction == null && index < cases.size();
+        }
+
+        PreparedClosureCall prepareMatcher() {
+            if (!needsMatcher()) {
+                throw new IllegalStateException(
+                        "Object.caseOf matcher requested after selection or exhaustion");
+            }
+
+            return prepareSend(
+                    cases.get(index).getKey(),
+                    "match",
+                    activation,
+                    List.of(subject));
+        }
+
+        void acceptMatcher(Object outcome) {
+            if (!needsMatcher()) {
+                throw new IllegalStateException(
+                        "Object.caseOf matcher outcome accepted after selection or exhaustion");
+            }
+
+            if (outcome == ProtosBooleanValue.FALSE) {
+                index++;
+                return;
+            }
+
+            if (outcome == ProtosBooleanValue.TRUE) {
+                selectedAction = cases.get(index).getValue();
+                selectedArguments = List.of();
+                return;
+            }
+
+            if (outcome instanceof ProtosArrayValue captures) {
+                List<Object> snapshot = captures.indexedSnapshot();
+
+                if (snapshot.isEmpty()) {
+                    throw ProtosCoreErrors.signal(
+                            activation,
+                            ProtosCoreErrors.newError(activation));
+                }
+
+                selectedAction = cases.get(index).getValue();
+                selectedArguments = List.copyOf(snapshot);
+                return;
+            }
+
+            throw ProtosCoreErrors.signal(
+                    activation,
+                    ProtosCoreErrors.newError(activation));
+        }
+
+        PreparedClosureCall prepareSelectedAction() {
+            if (selectedAction == null) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+
+            return prepareClosureCall(
+                    selectedAction,
+                    selectedArguments,
+                    activation);
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredCaseOfCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredCaseOf();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredCaseOfCall {
+        @Specialization
+        public static PreparedCaseOfCall perform(
+                PreparedClosureCall prepared) {
+            return prepared.prepareStructuredCaseOf();
+        }
+    }
+
+    @Operation
+    public static final class StructuredCaseOfNeedsMatcher {
+        @Specialization
+        public static boolean perform(PreparedCaseOfCall prepared) {
+            return prepared.needsMatcher();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredCaseOfMatcherCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedCaseOfCall prepared) {
+            return prepared.prepareMatcher();
+        }
+    }
+
+    @Operation
+    public static final class AcceptStructuredCaseOfMatcherOutcome {
+        @Specialization
+        public static void perform(
+                PreparedCaseOfCall prepared,
+                Object outcome) {
+            prepared.acceptMatcher(outcome);
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredCaseOfActionCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedCaseOfCall prepared) {
+            return prepared.prepareSelectedAction();
         }
     }
 
@@ -1618,6 +1820,176 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+
+    static final class PreparedArrayMatchCall {
+        private final ProtosActivation activation;
+        private final List<Object> matcherSnapshot;
+        private final List<Object> subjectSnapshot;
+        private final List<Object> captures = new ArrayList<>();
+        private int index;
+        private boolean mismatch;
+
+        PreparedArrayMatchCall(
+                Object receiver,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.activation =
+                    java.util.Objects.requireNonNull(
+                            activation,
+                            "activation");
+
+            if (!(receiver instanceof ProtosArrayValue matcher)
+                    || supplied.size() != 1) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+
+            Object subjectValue = supplied.get(0);
+            if (!(subjectValue instanceof ProtosArrayValue subject)) {
+                matcherSnapshot = List.of();
+                subjectSnapshot = List.of();
+                mismatch = true;
+                return;
+            }
+
+            matcherSnapshot = matcher.indexedSnapshot();
+            subjectSnapshot = subject.indexedSnapshot();
+
+            if (matcherSnapshot.size() != subjectSnapshot.size()) {
+                mismatch = true;
+            }
+        }
+
+        boolean hasNext() {
+            return !mismatch && index < matcherSnapshot.size();
+        }
+
+        PreparedClosureCall prepareCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Array.match child requested after terminal outcome");
+            }
+
+            return prepareSend(
+                    matcherSnapshot.get(index),
+                    "match",
+                    activation,
+                    List.of(subjectSnapshot.get(index)));
+        }
+
+        void acceptCurrent(Object outcome) {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Array.match child outcome accepted after terminal outcome");
+            }
+
+            if (outcome == ProtosBooleanValue.FALSE) {
+                mismatch = true;
+                return;
+            }
+
+            if (outcome == ProtosBooleanValue.TRUE) {
+                index++;
+                return;
+            }
+
+            if (outcome instanceof ProtosArrayValue childCaptures) {
+                List<Object> observedCaptures =
+                        childCaptures.indexedSnapshot();
+
+                if (observedCaptures.isEmpty()) {
+                    throw ProtosCoreErrors.signal(
+                            activation,
+                            ProtosCoreErrors.newError(activation));
+                }
+
+                captures.addAll(observedCaptures);
+                index++;
+                return;
+            }
+
+            throw ProtosCoreErrors.signal(
+                    activation,
+                    ProtosCoreErrors.newError(activation));
+        }
+
+        Object finish() {
+            if (hasNext()) {
+                throw new IllegalStateException(
+                        "Array.match finished before snapshot exhaustion");
+            }
+
+            if (mismatch) {
+                return ProtosBooleanValue.FALSE;
+            }
+
+            if (captures.isEmpty()) {
+                return ProtosBooleanValue.TRUE;
+            }
+
+            return activation
+                    .prelude()
+                    .orElseThrow(
+                            () ->
+                                    new IllegalStateException(
+                                            "standard Array.match requires an owning Core prelude"))
+                    .newArray(captures);
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredArrayMatchCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredArrayMatch();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredArrayMatchCall {
+        @Specialization
+        public static PreparedArrayMatchCall perform(
+                PreparedClosureCall prepared) {
+            return prepared.prepareStructuredArrayMatch();
+        }
+    }
+
+    @Operation
+    public static final class StructuredArrayMatchHasNext {
+        @Specialization
+        public static boolean perform(PreparedArrayMatchCall prepared) {
+            return prepared.hasNext();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredArrayMatchElementCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedArrayMatchCall prepared) {
+            return prepared.prepareCurrent();
+        }
+    }
+
+    @Operation
+    public static final class AcceptStructuredArrayMatchOutcome {
+        @Specialization
+        public static void perform(
+                PreparedArrayMatchCall prepared,
+                Object outcome) {
+            prepared.acceptCurrent(outcome);
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredArrayMatch {
+        @Specialization
+        public static Object perform(PreparedArrayMatchCall prepared) {
+            return prepared.finish();
+        }
+    }
+
     static final class PreparedBytesEachCall {
         private final ProtosBytesValue bytes;
         private final List<Object> snapshot;
@@ -2055,6 +2427,423 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
 
+
+
+    static final class PreparedMapMatchCall {
+        private final ProtosActivation activation;
+        private final ProtosMapValue subject;
+        private final List<ProtosStandardMapProtocol.StableAssociation> matcherSnapshot;
+        private final List<ProtosStandardMapProtocol.StableAssociation> subjectSnapshot;
+        private final List<Object> childMatchers = new ArrayList<>();
+        private final List<Object> selectedValues = new ArrayList<>();
+        private final List<Object> captures = new ArrayList<>();
+
+        private int requirementIndex;
+        private int candidateIndex;
+        private int childIndex;
+
+        private BigInteger queryHash;
+        private ProtosStandardMapProtocol.StableAssociation selectedAssociation;
+
+        private boolean hashAccepted;
+        private boolean comparisonEntered;
+        private boolean mismatch;
+
+        PreparedMapMatchCall(
+                Object receiver,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.activation =
+                    java.util.Objects.requireNonNull(
+                            activation,
+                            "activation");
+
+            if (!(receiver instanceof ProtosMapValue matcher)
+                    || supplied.size() != 1) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+
+            Object subjectValue = supplied.get(0);
+            if (!(subjectValue instanceof ProtosMapValue subjectMap)) {
+                subject = null;
+                matcherSnapshot = List.of();
+                subjectSnapshot = List.of();
+                mismatch = true;
+                return;
+            }
+
+            subject = subjectMap;
+            matcherSnapshot =
+                    ProtosStandardMapProtocol.stableSnapshot(matcher);
+            subjectSnapshot =
+                    ProtosStandardMapProtocol.stableSnapshot(subjectMap);
+        }
+
+        boolean hasRequirement() {
+            return !mismatch
+                    && requirementIndex < matcherSnapshot.size();
+        }
+
+        void enterComparison() {
+            if (!hasRequirement()) {
+                throw new IllegalStateException(
+                        "Map.match comparison entered without a current requirement");
+            }
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.match attempted to nest its own comparison scope");
+            }
+            subject.enterComparison();
+            comparisonEntered = true;
+        }
+
+        void leaveComparison() {
+            if (!comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.match comparison scope left without entry");
+            }
+            subject.leaveComparison();
+            comparisonEntered = false;
+        }
+
+        PreparedClosureCall prepareHash() {
+            if (!hasRequirement() || hashAccepted) {
+                throw new IllegalStateException(
+                        "Map.match hash requested in an invalid state");
+            }
+
+            return prepareSend(
+                    matcherSnapshot.get(requirementIndex).key(),
+                    "hash",
+                    activation,
+                    List.of());
+        }
+
+        void acceptHash(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.match hash accepted before comparison-scope exit");
+            }
+            if (!hasRequirement() || hashAccepted) {
+                throw new IllegalStateException(
+                        "Map.match hash accepted in an invalid state");
+            }
+
+            queryHash =
+                    ProtosStandardMapProtocol.requireHashResultForStructured(
+                            result,
+                            activation);
+            candidateIndex = 0;
+            selectedAssociation = null;
+            hashAccepted = true;
+        }
+
+        boolean needsEquality() {
+            requireHashAccepted();
+
+            if (selectedAssociation != null) {
+                return false;
+            }
+
+            while (candidateIndex < subjectSnapshot.size()
+                    && !subjectSnapshot.get(candidateIndex)
+                            .recordedHash()
+                            .equals(queryHash)) {
+                candidateIndex++;
+            }
+
+            return candidateIndex < subjectSnapshot.size();
+        }
+
+        PreparedClosureCall prepareEquality() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map.match equality requested without a candidate");
+            }
+
+            return prepareSend(
+                    matcherSnapshot.get(requirementIndex).key(),
+                    "==",
+                    activation,
+                    List.of(subjectSnapshot.get(candidateIndex).key()));
+        }
+
+        void acceptEquality(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.match equality accepted before comparison-scope exit");
+            }
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map.match equality accepted without a candidate");
+            }
+
+            boolean equal =
+                    ProtosStandardMapProtocol.requireEqualityResultForStructured(
+                            result,
+                            activation);
+
+            if (equal) {
+                selectedAssociation =
+                        subjectSnapshot.get(candidateIndex);
+            } else {
+                candidateIndex++;
+            }
+        }
+
+        void finishRequirement() {
+            requireHashAccepted();
+
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.match requirement finished with an active comparison scope");
+            }
+            if (needsEquality()) {
+                throw new IllegalStateException(
+                        "Map.match requirement finished before candidate exhaustion");
+            }
+
+            if (selectedAssociation == null) {
+                mismatch = true;
+                return;
+            }
+
+            ProtosStandardMapProtocol.StableAssociation requirement =
+                    matcherSnapshot.get(requirementIndex);
+
+            childMatchers.add(requirement.value());
+            selectedValues.add(selectedAssociation.value());
+
+            requirementIndex++;
+            candidateIndex = 0;
+            queryHash = null;
+            selectedAssociation = null;
+            hashAccepted = false;
+        }
+
+        boolean hasChildMatcher() {
+            return !mismatch && childIndex < childMatchers.size();
+        }
+
+        PreparedClosureCall prepareChildMatcher() {
+            if (!hasChildMatcher()) {
+                throw new IllegalStateException(
+                        "Map.match child matcher requested after terminal outcome");
+            }
+
+            return prepareSend(
+                    childMatchers.get(childIndex),
+                    "match",
+                    activation,
+                    List.of(selectedValues.get(childIndex)));
+        }
+
+        void acceptChildOutcome(Object outcome) {
+            if (!hasChildMatcher()) {
+                throw new IllegalStateException(
+                        "Map.match child outcome accepted after terminal outcome");
+            }
+
+            if (outcome == ProtosBooleanValue.FALSE) {
+                mismatch = true;
+                return;
+            }
+
+            if (outcome == ProtosBooleanValue.TRUE) {
+                childIndex++;
+                return;
+            }
+
+            if (outcome instanceof ProtosArrayValue childCaptures) {
+                List<Object> observedCaptures =
+                        childCaptures.indexedSnapshot();
+
+                if (observedCaptures.isEmpty()) {
+                    throw ProtosCoreErrors.signal(
+                            activation,
+                            ProtosCoreErrors.newError(activation));
+                }
+
+                captures.addAll(observedCaptures);
+                childIndex++;
+                return;
+            }
+
+            throw ProtosCoreErrors.signal(
+                    activation,
+                    ProtosCoreErrors.newError(activation));
+        }
+
+        Object finish() {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map.match finished with an active comparison scope");
+            }
+            if (hasRequirement()) {
+                throw new IllegalStateException(
+                        "Map.match finished before requirement resolution completed");
+            }
+            if (hasChildMatcher()) {
+                throw new IllegalStateException(
+                        "Map.match finished before child matcher exhaustion");
+            }
+
+            if (mismatch) {
+                return ProtosBooleanValue.FALSE;
+            }
+
+            if (captures.isEmpty()) {
+                return ProtosBooleanValue.TRUE;
+            }
+
+            return activation
+                    .prelude()
+                    .orElseThrow(
+                            () ->
+                                    new IllegalStateException(
+                                            "standard Map.match requires an owning Core prelude"))
+                    .newArray(captures);
+        }
+
+        private void requireHashAccepted() {
+            if (!hashAccepted) {
+                throw new IllegalStateException(
+                        "Map.match requirement used before hash acceptance");
+            }
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredMapMatchCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredMapMatch();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapMatchCall {
+        @Specialization
+        public static PreparedMapMatchCall perform(
+                PreparedClosureCall prepared) {
+            return prepared.prepareStructuredMapMatch();
+        }
+    }
+
+    @Operation
+    public static final class StructuredMapMatchHasRequirement {
+        @Specialization
+        public static boolean perform(PreparedMapMatchCall prepared) {
+            return prepared.hasRequirement();
+        }
+    }
+
+    @Operation
+    public static final class EnterStructuredMapMatchComparison {
+        @Specialization
+        public static void perform(PreparedMapMatchCall prepared) {
+            prepared.enterComparison();
+        }
+    }
+
+    @Operation
+    public static final class LeaveStructuredMapMatchComparison {
+        @Specialization
+        public static void perform(PreparedMapMatchCall prepared) {
+            prepared.leaveComparison();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapMatchHashCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedMapMatchCall prepared) {
+            return prepared.prepareHash();
+        }
+    }
+
+    @Operation
+    public static final class AcceptStructuredMapMatchHashResult {
+        @Specialization
+        public static void perform(
+                PreparedMapMatchCall prepared,
+                Object result) {
+            prepared.acceptHash(result);
+        }
+    }
+
+    @Operation
+    public static final class StructuredMapMatchNeedsEquality {
+        @Specialization
+        public static boolean perform(PreparedMapMatchCall prepared) {
+            return prepared.needsEquality();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapMatchEqualityCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedMapMatchCall prepared) {
+            return prepared.prepareEquality();
+        }
+    }
+
+    @Operation
+    public static final class AcceptStructuredMapMatchEqualityResult {
+        @Specialization
+        public static void perform(
+                PreparedMapMatchCall prepared,
+                Object result) {
+            prepared.acceptEquality(result);
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredMapMatchRequirement {
+        @Specialization
+        public static void perform(PreparedMapMatchCall prepared) {
+            prepared.finishRequirement();
+        }
+    }
+
+    @Operation
+    public static final class StructuredMapMatchHasChildMatcher {
+        @Specialization
+        public static boolean perform(PreparedMapMatchCall prepared) {
+            return prepared.hasChildMatcher();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapMatchChildCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedMapMatchCall prepared) {
+            return prepared.prepareChildMatcher();
+        }
+    }
+
+    @Operation
+    public static final class AcceptStructuredMapMatchChildOutcome {
+        @Specialization
+        public static void perform(
+                PreparedMapMatchCall prepared,
+                Object outcome) {
+            prepared.acceptChildOutcome(outcome);
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredMapMatch {
+        @Specialization
+        public static Object perform(PreparedMapMatchCall prepared) {
+            return prepared.finish();
+        }
+    }
 
     static final class PreparedMapReadLookupCall {
         private final ProtosStandardMapProtocol.StructuredReadLookupKind kind;

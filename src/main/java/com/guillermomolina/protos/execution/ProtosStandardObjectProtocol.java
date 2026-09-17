@@ -92,6 +92,11 @@ public final class ProtosStandardObjectProtocol {
         return closure.nativeBody().orElse(null) == STANDARD_WHILE_BODY;
     }
 
+    static boolean isStandardCaseOfImplementation(
+            ProtosNativeClosureBody body) {
+        return body == STANDARD_CASE_OF_BODY;
+    }
+
     public static void install() {
         ProtosObjectValue object = ProtosObjectValue.rootObject();
         ProtosStandardBooleanProtocol.install();

@@ -125,6 +125,77 @@ class ProtosCaseOfProtocolTest {
     }
 
     @Test
+    void attemptsCasesInMapInsertionOrder() throws Exception {
+        ProtosPrelude prelude = core();
+
+        Object result =
+                evaluate(
+                        prelude,
+                        """
+                        state: {
+                            count: 0
+                        }
+
+                        First: {
+                            match: (subject) => {
+                                state.count = state.count + 1
+                                false
+                            }
+                        }
+
+                        Second: {
+                            match: (subject) => state.count == 1
+                        }
+
+                        0.caseOf(%{
+                            First: () => false
+                            Second: () => true
+                        })
+                        """);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void normalMapKeyUniquenessDefinesCaseUniqueness() throws Exception {
+        ProtosPrelude prelude = core();
+
+        Object result =
+                evaluate(
+                        prelude,
+                        """
+                        cases: Map()
+                        cases[1] = () => false
+                        cases[1] = () => true
+
+                        1.caseOf(cases)
+                        """);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
+    void doesNotEagerlyValidateUnreachedMatcher() throws Exception {
+        ProtosPrelude prelude = core();
+
+        Object result =
+                evaluate(
+                        prelude,
+                        """
+                        Bad: {
+                            match: 99
+                        }
+
+                        1.caseOf(%{
+                            1: () => true
+                            Bad: () => false
+                        })
+                        """);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
+    @Test
     void rejectsInvalidReachedMatcherOutcome() throws Exception {
         ProtosPrelude prelude = core();
 

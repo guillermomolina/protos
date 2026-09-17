@@ -2138,6 +2138,16 @@ final class CanonicalToBytecodeLowerer {
                 childResult,
                 resumeValue);
 
+        BytecodeLocal structuredMapMatch =
+                builder.createLocal("structuredMapMatchCall", null);
+        BytecodeLocal structuredMapMatchChild =
+                builder.createLocal("structuredMapMatchChildCall", null);
+        BytecodeLocal structuredCaseOf =
+                builder.createLocal("structuredCaseOfCall", null);
+        BytecodeLocal structuredCaseOfMatcher =
+                builder.createLocal("structuredCaseOfMatcherCall", null);
+        BytecodeLocal structuredCaseOfAction =
+                builder.createLocal("structuredCaseOfActionCall", null);
         BytecodeLocal structuredObjectCall =
                 builder.createLocal("structuredObjectCall", null);
         BytecodeLocal structuredObjectCallChild =
@@ -2170,6 +2180,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredArrayEachCall", null);
         BytecodeLocal structuredArrayEachChild =
                 builder.createLocal("structuredArrayEachChildCall", null);
+        BytecodeLocal structuredArrayMatch =
+                builder.createLocal("structuredArrayMatchCall", null);
+        BytecodeLocal structuredArrayMatchChild =
+                builder.createLocal("structuredArrayMatchChildCall", null);
         BytecodeLocal structuredBytesEach =
                 builder.createLocal("structuredBytesEachCall", null);
         BytecodeLocal structuredBytesEachChild =
@@ -2202,6 +2216,295 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredMapRemoveCall", null);
         BytecodeLocal structuredMapRemoveChild =
                 builder.createLocal("structuredMapRemoveChildCall", null);
+
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredMapMatchCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredMapMatchCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredMapMatch);
+        builder.beginPrepareStructuredMapMatchCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredMapMatchCall();
+        builder.endStoreLocal();
+
+        /*
+         * Phase 1: resolve and freeze every required subject association.
+         * No nested value matcher is executed before this loop completes.
+         */
+        builder.beginWhile();
+        builder.beginStructuredMapMatchHasRequirement();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endStructuredMapMatchHasRequirement();
+
+        builder.beginBlock();
+
+        /* Hash callback under the subject comparison scope. */
+        builder.beginEnterStructuredMapMatchComparison();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endEnterStructuredMapMatchComparison();
+
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveStructuredMapMatchComparison();
+                    builder.emitLoadLocal(structuredMapMatch);
+                    builder.endLeaveStructuredMapMatchComparison();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredMapMatchChild);
+        builder.beginPrepareStructuredMapMatchHashCall();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endPrepareStructuredMapMatchHashCall();
+        builder.endStoreLocal();
+
+        emitScopedPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapMatchChild,
+                childResult,
+                resumeValue);
+
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptStructuredMapMatchHashResult();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredMapMatchHashResult();
+
+        /* Same-hash candidates are tested in subject insertion order. */
+        builder.beginWhile();
+        builder.beginStructuredMapMatchNeedsEquality();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endStructuredMapMatchNeedsEquality();
+
+        builder.beginBlock();
+
+        builder.beginEnterStructuredMapMatchComparison();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endEnterStructuredMapMatchComparison();
+
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginLeaveStructuredMapMatchComparison();
+                    builder.emitLoadLocal(structuredMapMatch);
+                    builder.endLeaveStructuredMapMatchComparison();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredMapMatchChild);
+        builder.beginPrepareStructuredMapMatchEqualityCall();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endPrepareStructuredMapMatchEqualityCall();
+        builder.endStoreLocal();
+
+        emitScopedPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapMatchChild,
+                childResult,
+                resumeValue);
+
+        builder.endBlock();
+        builder.endTryFinally();
+
+        builder.beginAcceptStructuredMapMatchEqualityResult();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredMapMatchEqualityResult();
+
+        builder.endBlock();
+        builder.endWhile();
+
+        builder.beginFinishStructuredMapMatchRequirement();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endFinishStructuredMapMatchRequirement();
+
+        builder.endBlock();
+        builder.endWhile();
+
+        /*
+         * Phase 2: only after all associations are fixed do value matchers run.
+         */
+        builder.beginWhile();
+        builder.beginStructuredMapMatchHasChildMatcher();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endStructuredMapMatchHasChildMatcher();
+
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredMapMatchChild);
+        builder.beginPrepareStructuredMapMatchChildCall();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endPrepareStructuredMapMatchChildCall();
+        builder.endStoreLocal();
+
+        emitScopedPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapMatchChild,
+                childResult,
+                resumeValue);
+
+        builder.beginAcceptStructuredMapMatchChildOutcome();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredMapMatchChildOutcome();
+
+        builder.endBlock();
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredMapMatch();
+        builder.emitLoadLocal(structuredMapMatch);
+        builder.endFinishStructuredMapMatch();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
+
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredCaseOfCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredCaseOfCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredCaseOf);
+        builder.beginPrepareStructuredCaseOfCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredCaseOfCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+        builder.beginStructuredCaseOfNeedsMatcher();
+        builder.emitLoadLocal(structuredCaseOf);
+        builder.endStructuredCaseOfNeedsMatcher();
+
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredCaseOfMatcher);
+        builder.beginPrepareStructuredCaseOfMatcherCall();
+        builder.emitLoadLocal(structuredCaseOf);
+        builder.endPrepareStructuredCaseOfMatcherCall();
+        builder.endStoreLocal();
+
+        emitScopedPreparedInvocation(
+                builder,
+                childResult,
+                structuredCaseOfMatcher,
+                childResult,
+                resumeValue);
+
+        builder.beginAcceptStructuredCaseOfMatcherOutcome();
+        builder.emitLoadLocal(structuredCaseOf);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredCaseOfMatcherOutcome();
+
+        builder.endBlock();
+        builder.endWhile();
+
+        builder.beginStoreLocal(structuredCaseOfAction);
+        builder.beginPrepareStructuredCaseOfActionCall();
+        builder.emitLoadLocal(structuredCaseOf);
+        builder.endPrepareStructuredCaseOfActionCall();
+        builder.endStoreLocal();
+
+        emitScopedPreparedInvocation(
+                builder,
+                result,
+                structuredCaseOfAction,
+                childResult,
+                resumeValue);
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
+
+        builder.beginIfThenElse();
+
+        builder.beginIsStructuredArrayMatchCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredArrayMatchCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredArrayMatch);
+        builder.beginPrepareStructuredArrayMatchCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredArrayMatchCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+        builder.beginStructuredArrayMatchHasNext();
+        builder.emitLoadLocal(structuredArrayMatch);
+        builder.endStructuredArrayMatchHasNext();
+
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredArrayMatchChild);
+        builder.beginPrepareStructuredArrayMatchElementCall();
+        builder.emitLoadLocal(structuredArrayMatch);
+        builder.endPrepareStructuredArrayMatchElementCall();
+        builder.endStoreLocal();
+
+        emitScopedPreparedInvocation(
+                builder,
+                childResult,
+                structuredArrayMatchChild,
+                childResult,
+                resumeValue);
+
+        builder.beginAcceptStructuredArrayMatchOutcome();
+        builder.emitLoadLocal(structuredArrayMatch);
+        builder.emitLoadLocal(childResult);
+        builder.endAcceptStructuredArrayMatchOutcome();
+
+        builder.endBlock();
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredArrayMatch();
+        builder.emitLoadLocal(structuredArrayMatch);
+        builder.endFinishStructuredArrayMatch();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
 
         builder.beginIfThenElse();
 
@@ -3243,6 +3546,15 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+        builder.endBlock();
+
+        builder.endIfThenElse();
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

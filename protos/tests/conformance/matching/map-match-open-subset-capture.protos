@@ -1,0 +1,9 @@
+matcher: Map()
+subject: Map()
+
+matcher["required"] = Capture
+
+subject["required"] = 42
+subject["extra"] = 99
+
+matcher.match(subject)[0]

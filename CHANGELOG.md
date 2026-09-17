@@ -1,3 +1,24 @@
+## 0.3.26-SNAPSHOT
+
+- Advance `I041-D — D131 matching conformance reconciliation` (GitHub #550).
+  Reconcile the retained matching evidence around the ratified protocol-first
+  model and make the ordinary `Array.match`, `Map.match`, and `Object.caseOf`
+  implementations safe on the production Task/C-prime execution path. Route
+  nested matcher, case action, Map key `hash`, and query-side `==` calls through
+  structured Bytecode dispatch instead of synchronous guest invocation inside a
+  Task. Preserve D131 ordering and observation rules: Array matcher/subject
+  snapshots remain shallow and left-to-right; Map matcher and subject
+  associations remain stable snapshots, all required associations are resolved
+  through the normal Map hash/equality law before the first mapped-value matcher,
+  and case selection remains insertion ordered with first-success commitment.
+  Add direct `Object.match` authority coverage, additional `caseOf` ordering,
+  uniqueness, and lazy-validation coverage, fresh-Process regressions for all
+  three structured paths, and seven protocol-first matching cases in the primary
+  Protos conformance manifest. The matching focal set passes 36/36 tests, the
+  authoritative Java lane passes 1861/1861, and the Protos Test Tool suites pass
+  1278/1278 with the primary manifest at 865/865. Specification remains at
+  revision `0.1.417`; implementation version becomes `0.3.26-SNAPSHOT`.
+
 ## 0.3.25-SNAPSHOT
 
 - Advance `PERF009-B — Quarantined Java test normalization and reintegration`

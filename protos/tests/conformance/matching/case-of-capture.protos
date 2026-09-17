@@ -1,0 +1,4 @@
+42.caseOf(%{
+    41: () => 0
+    Capture: value => value
+})

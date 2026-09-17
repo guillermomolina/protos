@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
@@ -90,6 +91,83 @@ final class ProtosFreshProcessExecutorTest {
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
         assertNull(outcome.value());
         assertNotNull(outcome.error());
+    }
+
+    @Test
+    void arrayMatchCaptureCompletesInFreshProcess() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+
+        ProtosExecutionOutcome outcome =
+                ProtosFreshProcessExecutor.execute(
+                        request(
+                                prelude,
+                                source("[1, Capture].match([1, 42])")));
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+
+        ProtosArrayValue captures =
+                assertInstanceOf(ProtosArrayValue.class, outcome.value());
+        assertEquals(BigInteger.ONE, captures.indexedSize());
+
+        ProtosIntegerValue captured =
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        captures.indexedAt(BigInteger.ZERO));
+        assertEquals(BigInteger.valueOf(42), captured.value());
+    }
+
+    @Test
+    void mapMatchCaptureCompletesInFreshProcess() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+
+        ProtosExecutionOutcome outcome =
+                ProtosFreshProcessExecutor.execute(
+                        request(
+                                prelude,
+                                source(
+                                        """
+                                        matcher: Map()
+                                        subject: Map()
+
+                                        matcher["a"] = Capture
+                                        subject["a"] = 42
+
+                                        matcher.match(subject)
+                                        """)));
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+
+        ProtosArrayValue captures =
+                assertInstanceOf(ProtosArrayValue.class, outcome.value());
+        assertEquals(BigInteger.ONE, captures.indexedSize());
+
+        ProtosIntegerValue captured =
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        captures.indexedAt(BigInteger.ZERO));
+        assertEquals(BigInteger.valueOf(42), captured.value());
+    }
+
+    @Test
+    void caseOfCaptureCompletesInFreshProcess() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+
+        ProtosExecutionOutcome outcome =
+                ProtosFreshProcessExecutor.execute(
+                        request(
+                                prelude,
+                                source(
+                                        """
+                                        42.caseOf(%{
+                                            Capture: value => value
+                                        })
+                                        """)));
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+
+        ProtosIntegerValue result =
+                assertInstanceOf(ProtosIntegerValue.class, outcome.value());
+        assertEquals(BigInteger.valueOf(42), result.value());
     }
 
     @Test

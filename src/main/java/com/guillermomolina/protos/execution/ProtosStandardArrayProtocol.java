@@ -50,6 +50,10 @@ public final class ProtosStandardArrayProtocol {
         return closure.nativeBody().orElse(null) == STANDARD_EACH_BODY;
     }
 
+    static boolean isStandardMatchImplementation(ProtosNativeClosureBody body) {
+        return body == STANDARD_MATCH_BODY;
+    }
+
     static boolean isCanonicalStandardEachSelection(
             ProtosClosureValue behavior,
             ProtosObjectValue home,
