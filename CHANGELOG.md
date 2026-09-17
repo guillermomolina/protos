@@ -1,3 +1,27 @@
+## 0.3.19-SNAPSHOT
+
+- Advance `PERF009-B — Quarantined Java test normalization and reintegration`
+  (GitHub #546) by reintegrating `ProtosTomlEncoderModuleTest` into the ordinary
+  Java lane. Share one Core bootstrap across the semantic encoder class and use
+  the canonical `ProtosTestExecutionSupport` execution boundary. Separate
+  ordinary nested encode/parse semantic round-trip coverage from the
+  input-depth recursion regression into
+  `ProtosTomlEncoderDeepContainerRegressionTest`. Historical pre-LIB010-C2
+  recursive encoder evidence establishes Array last-pass/first-fail depths
+  `74`/`75` and selected guard `139`, and inline
+  Table last-pass/first-fail depths `77`/`78` with selected
+  guard `142`; the selected guards reproduce `StackOverflowError`
+  against the prohibited historical implementation while the current iterative
+  encoder passes. Five fresh-JVM repetitions measure
+  `ProtosTomlEncoderModuleTest` at at most 3.498 s/class and
+  0.656 s/test and the deep-container regression class at at most
+  1.792 s/class and 1.036 s/test, satisfying the `< 5 s`
+  class quarantine threshold and `< 2.0 s` hard per-test budget with equivalent
+  or stronger regression ownership. Remove `ProtosTomlEncoderModuleTest` from
+  `JAVA_SLOW_TEST_EXCLUDES`. No Protos-visible language, specification,
+  Standard Library, or production runtime behavior changes. Implementation
+  version becomes `0.3.19-SNAPSHOT`.
+
 ## 0.3.18-SNAPSHOT
 
 - Advance `I041-B3 — structural Array.match publication` (GitHub #550).

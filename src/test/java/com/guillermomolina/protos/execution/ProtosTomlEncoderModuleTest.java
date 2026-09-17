@@ -13,11 +13,20 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.nio.file.Path;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 final class ProtosTomlEncoderModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
+    private static ProtosPrelude prelude;
+
+    @BeforeAll
+    static void bootstrapCore() throws Exception {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+    }
 
     @Test
     void encodesAllTenSemanticKindsWithDeterministicInlinePresentation() throws Exception {
@@ -157,12 +166,12 @@ final class ProtosTomlEncoderModuleTest {
     }
 
     @Test
-    void encodesVeryDeepArraysWithoutHostRecursiveTraversal() throws Exception {
+    void roundTripsNestedArraysAtOrdinaryDepth() throws Exception {
         Object result =
                 evaluate(
                         """
                         node: TOML.integer(7)
-                        remaining: 2048
+                        remaining: 32
                         (() => remaining > 0).while(() => {
                             node = TOML.array(node)
                             remaining = remaining - 1
@@ -170,7 +179,8 @@ final class ProtosTomlEncoderModuleTest {
 
                         parsed: TOML.parse(TOML.encode(TOML.table("deep", node)))
                         decoded: parsed.value["deep"]
-                        remaining = 2048
+
+                        remaining = 32
                         (() => remaining > 0).while(() => {
                             (decoded.kind === "array").ifFalse(() => {
                                 Error().signal()
@@ -188,12 +198,12 @@ final class ProtosTomlEncoderModuleTest {
     }
 
     @Test
-    void encodesVeryDeepInlineTablesWithoutHostRecursiveTraversal() throws Exception {
+    void roundTripsNestedInlineTablesAtOrdinaryDepth() throws Exception {
         Object result =
                 evaluate(
                         """
                         node: TOML.integer(9)
-                        remaining: 1024
+                        remaining: 32
                         (() => remaining > 0).while(() => {
                             node = TOML.table("a", node)
                             remaining = remaining - 1
@@ -201,7 +211,8 @@ final class ProtosTomlEncoderModuleTest {
 
                         parsed: TOML.parse(TOML.encode(TOML.table("deep", node)))
                         decoded: parsed.value["deep"]
-                        remaining = 1024
+
+                        remaining = 32
                         (() => remaining > 0).while(() => {
                             (decoded.kind === "table").ifFalse(() => {
                                 Error().signal()
@@ -251,12 +262,9 @@ final class ProtosTomlEncoderModuleTest {
     }
 
     private static Object evaluate(String body) throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return new ProtosSourceCompiler()
-                .compile("TOML: import(\"std:toml/TOML\")\n" + body)
-                .call(prelude.newModuleActivation());
+        return ProtosTestExecutionSupport.evaluate(
+                "TOML: import(\"std:toml/TOML\")\n" + body,
+                prelude.newModuleActivation());
     }
 
     private static void assertSignals(String body) throws Exception {
