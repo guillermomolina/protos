@@ -1,3 +1,7 @@
+## 0.3.6-SNAPSHOT
+
+- Publish `I040-B — F-prime C-prime Map-construction foundation`. Add the continuation-capable internal C-prime machinery required to construct through the canonical standard Map factory and define initial associations with normal Map hash and directed-equality semantics without `atPut` dispatch. Duplicate/equal initial keys are rejected rather than replaced, and the original representative association is preserved. This remains an internal foundation slice: production `%{...}` execution is not yet cut over to F-prime semantics. Specification unchanged. Implementation version becomes `0.3.6-SNAPSHOT`.
+
 ## 0.3.5-SNAPSHOT
 
 - Publish `I040-A — F-prime Map construction foundation` for D136 reconciliation. Give the canonical standard `Map.call` implementation stable internal provenance so `%{...}` construction can later admit the standard factory selected directly or through inheritance while rejecting copied or nearer arbitrary `call` behavior. Add an internal create-only initial-association operation that reuses normal Map `hash` and directed `==` query semantics, rejects an equal existing initial key instead of replacing it, preserves the first representative key and recorded hash, and bypasses `atPut`. This slice establishes internal runtime machinery only: production `%{...}` execution remains on the previous E-prime path until the coordinated AST/C-prime cutover. Specification unchanged. Implementation version becomes `0.3.5-SNAPSHOT`.

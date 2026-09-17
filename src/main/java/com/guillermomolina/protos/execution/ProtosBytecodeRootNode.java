@@ -2293,6 +2293,274 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
 
+    @Operation
+    public static final class ConstructMapForMapConstruction {
+        @Specialization
+        public static ProtosMapValue perform(
+                ProtosActivation activation,
+                Object factory) {
+            return ProtosStandardMapProtocol.constructForMapConstruction(
+                    factory,
+                    activation);
+        }
+    }
+
+    static final class PreparedMapInitialDefinition {
+        private final ProtosMapValue map;
+        private final Object key;
+        private final Object value;
+        private final ProtosActivation activation;
+        private BigInteger queryHash;
+        private List<ProtosMapValue.Entry> snapshot;
+        private int index;
+        private ProtosMapValue.Entry match;
+        private boolean hashAccepted;
+        private boolean comparisonEntered;
+
+        PreparedMapInitialDefinition(
+                Object receiver,
+                Object key,
+                Object value,
+                ProtosActivation activation) {
+            this.activation =
+                    java.util.Objects.requireNonNull(
+                            activation,
+                            "activation");
+
+            if (!(receiver instanceof ProtosMapValue mapValue)
+                    || !mapValue.isOpen()
+                    || mapValue.comparisonActive()) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+
+            this.map = mapValue;
+            this.key = java.util.Objects.requireNonNull(key, "key");
+            this.value = java.util.Objects.requireNonNull(value, "value");
+        }
+
+        void enterComparison() {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map initial definition attempted to nest its own comparison scope");
+            }
+            map.enterComparison();
+            comparisonEntered = true;
+        }
+
+        void leaveComparison() {
+            if (!comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map initial-definition comparison scope left without entry");
+            }
+            map.leaveComparison();
+            comparisonEntered = false;
+        }
+
+        PreparedClosureCall prepareHash() {
+            if (hashAccepted) {
+                throw new IllegalStateException(
+                        "Map initial-definition hash callback prepared after hash acceptance");
+            }
+            return prepareSend(
+                    key,
+                    "hash",
+                    activation,
+                    List.of());
+        }
+
+        void acceptHash(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map initial-definition hash accepted before comparison-scope exit");
+            }
+            if (hashAccepted) {
+                throw new IllegalStateException(
+                        "Map initial-definition hash accepted twice");
+            }
+
+            queryHash =
+                    ProtosStandardMapProtocol.requireHashResultForStructured(
+                            result,
+                            activation);
+            snapshot = List.copyOf(map.keyedSnapshot());
+            hashAccepted = true;
+        }
+
+        boolean needsEquality() {
+            requireHashAccepted();
+
+            if (match != null) {
+                return false;
+            }
+
+            while (index < snapshot.size()
+                    && !snapshot.get(index)
+                            .recordedHash()
+                            .equals(queryHash)) {
+                index++;
+            }
+
+            return index < snapshot.size();
+        }
+
+        PreparedClosureCall prepareEquality() {
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map initial-definition equality callback requested without a candidate");
+            }
+
+            return prepareSend(
+                    key,
+                    "==",
+                    activation,
+                    List.of(snapshot.get(index).key()));
+        }
+
+        void acceptEquality(Object result) {
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map initial-definition equality accepted before comparison-scope exit");
+            }
+            if (!needsEquality()) {
+                throw new IllegalStateException(
+                        "Map initial-definition equality accepted without a candidate");
+            }
+
+            boolean equal =
+                    ProtosStandardMapProtocol.requireEqualityResultForStructured(
+                            result,
+                            activation);
+
+            if (equal) {
+                match = snapshot.get(index);
+            } else {
+                index++;
+            }
+        }
+
+        void finish() {
+            requireHashAccepted();
+
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map initial definition finished with an active comparison scope");
+            }
+            if (needsEquality()) {
+                throw new IllegalStateException(
+                        "Map initial definition finished before candidate exhaustion");
+            }
+
+            if (match != null
+                    || !map.isOpen()
+                    || map.comparisonActive()) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+
+            map.append(key, queryHash, value);
+        }
+
+        private void requireHashAccepted() {
+            if (!hashAccepted) {
+                throw new IllegalStateException(
+                        "Map initial definition used before hash acceptance");
+            }
+        }
+    }
+
+    @Operation
+    public static final class PrepareMapInitialDefinition {
+        @Specialization
+        public static PreparedMapInitialDefinition perform(
+                ProtosActivation activation,
+                Object map,
+                Object key,
+                Object value) {
+            return new PreparedMapInitialDefinition(
+                    map,
+                    key,
+                    value,
+                    activation);
+        }
+    }
+
+    @Operation
+    public static final class EnterMapInitialDefinitionComparison {
+        @Specialization
+        public static void perform(
+                PreparedMapInitialDefinition prepared) {
+            prepared.enterComparison();
+        }
+    }
+
+    @Operation
+    public static final class LeaveMapInitialDefinitionComparison {
+        @Specialization
+        public static void perform(
+                PreparedMapInitialDefinition prepared) {
+            prepared.leaveComparison();
+        }
+    }
+
+    @Operation
+    public static final class PrepareMapInitialDefinitionHashCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedMapInitialDefinition prepared) {
+            return prepared.prepareHash();
+        }
+    }
+
+    @Operation
+    public static final class AcceptMapInitialDefinitionHashResult {
+        @Specialization
+        public static void perform(
+                PreparedMapInitialDefinition prepared,
+                Object result) {
+            prepared.acceptHash(result);
+        }
+    }
+
+    @Operation
+    public static final class MapInitialDefinitionNeedsEquality {
+        @Specialization
+        public static boolean perform(
+                PreparedMapInitialDefinition prepared) {
+            return prepared.needsEquality();
+        }
+    }
+
+    @Operation
+    public static final class PrepareMapInitialDefinitionEqualityCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedMapInitialDefinition prepared) {
+            return prepared.prepareEquality();
+        }
+    }
+
+    @Operation
+    public static final class AcceptMapInitialDefinitionEqualityResult {
+        @Specialization
+        public static void perform(
+                PreparedMapInitialDefinition prepared,
+                Object result) {
+            prepared.acceptEquality(result);
+        }
+    }
+
+    @Operation
+    public static final class FinishMapInitialDefinition {
+        @Specialization
+        public static void perform(
+                PreparedMapInitialDefinition prepared) {
+            prepared.finish();
+        }
+    }
+
     static final class PreparedMapAtPutCall {
         private final ProtosMapValue map;
         private final Object key;
