@@ -19,7 +19,7 @@ package com.guillermomolina.protos.conformance;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
-import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
+import com.guillermomolina.protos.execution.ProtosTestExecutionSupport;
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -91,7 +91,7 @@ final class ProtosFilesystemMaturityConformanceTest {
 
         assertSame(
                 ProtosBooleanValue.TRUE,
-                new ProtosSourceFileLoader().load(CASE_ROOT.resolve(source)).call(activation),
+                ProtosTestExecutionSupport.evaluateFile(CASE_ROOT.resolve(source), activation),
                 source);
     }
 

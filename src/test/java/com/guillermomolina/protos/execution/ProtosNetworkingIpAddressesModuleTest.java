@@ -43,9 +43,9 @@ final class ProtosNetworkingIpAddressesModuleTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         Object imported =
-                new ProtosSourceCompiler()
-                        .compile("import(\"std:network/IpAddresses\")")
-                        .call(prelude.newModuleActivation());
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:network/IpAddresses\")",
+                        prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
         assertEquals(

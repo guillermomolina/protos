@@ -122,8 +122,8 @@ final class ProtosTomlClosureConformanceTest {
         ProtosActivation activation = prelude.newModuleActivation();
         activation.context().createLocalSlot("input", new ProtosStringValue(input));
 
-        return new ProtosSourceCompiler()
-                .compile("TOML: import(\"std:toml/TOML\")\n" + body)
-                .call(activation);
+        return ProtosTestExecutionSupport.evaluate(
+                "TOML: import(\"std:toml/TOML\")\n" + body,
+                activation);
     }
 }

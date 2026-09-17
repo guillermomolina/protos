@@ -69,8 +69,8 @@ class ProtosArrayMatchExecutionTest {
     }
 
     private static Object execute(String name) throws Exception {
-        return new ProtosSourceCompiler()
-                .compile(Files.readString(MATCHING.resolve(name)))
-                .call(prelude.newModuleActivation());
+        return ProtosTestExecutionSupport.evaluate(
+                Files.readString(MATCHING.resolve(name)),
+                prelude.newModuleActivation());
     }
 }

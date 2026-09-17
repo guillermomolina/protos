@@ -52,9 +52,9 @@ class ProtosGuardMatchExecutionTest {
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosSignalException signalled = assertThrows(
                 ProtosSignalException.class,
-                () -> new ProtosSourceCompiler()
-                        .compile(source("guard-invalid-no-retry-error.protos"))
-                        .call(activation));
+                () -> ProtosTestExecutionSupport.evaluate(
+                        source("guard-invalid-no-retry-error.protos"),
+                        activation));
         assertSame(prelude.errorPrototype(), signalled.error().parent().orElseThrow());
         ProtosObjectValue state = (ProtosObjectValue) activation.lookup("state").orElseThrow();
         ProtosIntegerValue later = (ProtosIntegerValue) state.readLocalSlot("later").orElseThrow();
@@ -66,10 +66,14 @@ class ProtosGuardMatchExecutionTest {
         String source = source("guard-terminal-no-match-error.protos");
         ProtosSignalException first = assertThrows(
                 ProtosSignalException.class,
-                () -> new ProtosSourceCompiler().compile(source).call(prelude.newModuleActivation()));
+                () -> ProtosTestExecutionSupport.evaluate(
+                        source,
+                        prelude.newModuleActivation()));
         ProtosSignalException second = assertThrows(
                 ProtosSignalException.class,
-                () -> new ProtosSourceCompiler().compile(source).call(prelude.newModuleActivation()));
+                () -> ProtosTestExecutionSupport.evaluate(
+                        source,
+                        prelude.newModuleActivation()));
         assertSame(prelude.errorPrototype(), first.error().parent().orElseThrow());
         assertSame(prelude.errorPrototype(), second.error().parent().orElseThrow());
         assertNotSame(first.error(), second.error());

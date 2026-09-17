@@ -25,7 +25,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosNioConfinedFilesystemBackend;
-import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
+import com.guillermomolina.protos.execution.ProtosTestExecutionSupport;
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -208,7 +208,7 @@ final class ProtosFilesystemLanguageConformanceTest {
     }
 
     private static Object execute(String file, ProtosActivation activation) throws IOException {
-        return new ProtosSourceFileLoader().load(CASE_ROOT.resolve(file)).call(activation);
+        return ProtosTestExecutionSupport.evaluateFile(CASE_ROOT.resolve(file), activation);
     }
 
     private record Fixture(

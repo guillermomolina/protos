@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.execution.ProtosClosureInvoker;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
-import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;

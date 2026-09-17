@@ -203,13 +203,12 @@ class ProtosCoreBootstrapTest {
                         .bootstrap(Path.of("protos", "lib", "core"));
 
         Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                "original: Object\n"
-                                        + "blocked: Error.handle(() => { Object = 1 }, (caught) => true)\n"
-                                        + "Object: 7\n"
-                                        + "blocked.and() { (Object == 7).and() { original !== Object } }")
-                        .call(prelude.newModuleActivation());
+                ProtosTestExecutionSupport.evaluate(
+                        "original: Object\n"
+                                + "blocked: Error.handle(() => { Object = 1 }, (caught) => true)\n"
+                                + "Object: 7\n"
+                                + "blocked.and() { (Object == 7).and() { original !== Object } }",
+                        prelude.newModuleActivation());
 
         assertSame(ProtosBooleanValue.TRUE, result);
         assertSame(
@@ -274,15 +273,14 @@ class ProtosCoreBootstrapTest {
                         .bootstrap(Path.of("protos", "lib", "core"));
 
         Object result =
-                new ProtosSourceFileLoader()
-                        .load(
-                                Path.of(
-                                        "protos",
-                                        "tests",
-                                        "conformance",
-                                        "equality",
-                                        "object-match-dynamic-equality-exact-once.protos"))
-                        .call(prelude.newModuleActivation());
+                ProtosTestExecutionSupport.evaluateFile(
+                        Path.of(
+                                "protos",
+                                "tests",
+                                "conformance",
+                                "equality",
+                                "object-match-dynamic-equality-exact-once.protos"),
+                        prelude.newModuleActivation());
 
         assertSame(ProtosBooleanValue.TRUE, result);
     }
@@ -308,15 +306,14 @@ class ProtosCoreBootstrapTest {
                 org.junit.jupiter.api.Assertions.assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                new ProtosSourceFileLoader()
-                                        .load(
-                                                Path.of(
-                                                        "protos",
-                                                        "tests",
-                                                        "conformance",
-                                                        "object",
-                                                        "d049-root-object-frozen-error.protos"))
-                                        .call(prelude.newModuleActivation()));
+                                ProtosTestExecutionSupport.evaluateFile(
+                                        Path.of(
+                                                "protos",
+                                                "tests",
+                                                "conformance",
+                                                "object",
+                                                "d049-root-object-frozen-error.protos"),
+                                        prelude.newModuleActivation()));
 
         assertSame(prelude.errorPrototype(), failure.error().parent().orElseThrow());
         assertFalse(ProtosObjectValue.rootObject().hasLocalSlot("_d049Probe"));

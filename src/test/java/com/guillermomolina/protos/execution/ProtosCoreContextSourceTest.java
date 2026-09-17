@@ -38,9 +38,9 @@ class ProtosCoreContextSourceTest {
                         List.of(),
                         bootstrapContext);
 
-        new ProtosSourceFileLoader()
-                .load(Path.of("protos", "lib", "core", "Context.protos"))
-                .call(activation);
+        ProtosTestExecutionSupport.evaluateFile(
+                Path.of("protos", "lib", "core", "Context.protos"),
+                activation);
 
         ProtosObjectValue contextPrototype =
                 assertInstanceOf(

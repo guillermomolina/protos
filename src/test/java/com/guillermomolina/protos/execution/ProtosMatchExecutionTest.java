@@ -57,16 +57,16 @@ class ProtosMatchExecutionTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                new ProtosSourceCompiler()
-                                        .compile(source)
-                                        .call(prelude.newModuleActivation()));
+                                ProtosTestExecutionSupport.evaluate(
+                                        source,
+                                        prelude.newModuleActivation()));
         ProtosSignalException second =
                 assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                new ProtosSourceCompiler()
-                                        .compile(source)
-                                        .call(prelude.newModuleActivation()));
+                                ProtosTestExecutionSupport.evaluate(
+                                        source,
+                                        prelude.newModuleActivation()));
 
         assertSame(prelude.errorPrototype(), first.error().parent().orElseThrow());
         assertSame(prelude.errorPrototype(), second.error().parent().orElseThrow());
@@ -87,9 +87,9 @@ class ProtosMatchExecutionTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                new ProtosSourceCompiler()
-                                        .compile(source("capture-arity-no-retry-error.protos"))
-                                        .call(activation));
+                                ProtosTestExecutionSupport.evaluate(
+                                        source("capture-arity-no-retry-error.protos"),
+                                        activation));
 
         assertSame(prelude.errorPrototype(), signalled.error().parent().orElseThrow());
 
@@ -105,9 +105,9 @@ class ProtosMatchExecutionTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                new ProtosSourceCompiler()
-                                        .compile(source(name))
-                                        .call(prelude.newModuleActivation()));
+                                ProtosTestExecutionSupport.evaluate(
+                                        source(name),
+                                        prelude.newModuleActivation()));
         assertSame(prelude.errorPrototype(), signalled.error().parent().orElseThrow());
     }
 

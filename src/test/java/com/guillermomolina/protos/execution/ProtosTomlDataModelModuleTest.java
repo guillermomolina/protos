@@ -44,9 +44,9 @@ final class ProtosTomlDataModelModuleTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         Object imported =
-                new ProtosSourceCompiler()
-                        .compile("import(\"std:toml/TOML\")")
-                        .call(prelude.newModuleActivation());
+                ProtosTestExecutionSupport.evaluate(
+                        "import(\"std:toml/TOML\")",
+                        prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
         assertEquals(
@@ -187,7 +187,6 @@ final class ProtosTomlDataModelModuleTest {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
 
         ProtosActivation actorA = prelude.newModuleActivation();
         ProtosActivation actorB = prelude.newModuleActivation();
@@ -195,11 +194,15 @@ final class ProtosTomlDataModelModuleTest {
         ProtosObjectValue moduleA =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        compiler.compile("import(\"std:toml/TOML\")").call(actorA));
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:toml/TOML\")",
+                                actorA));
         ProtosObjectValue moduleB =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        compiler.compile("import(\"std:toml/TOML\")").call(actorB));
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:toml/TOML\")",
+                                actorB));
 
         assertNotSame(moduleA, moduleB);
         assertThrows(
@@ -209,22 +212,22 @@ final class ProtosTomlDataModelModuleTest {
         ProtosObjectValue source =
                 assertInstanceOf(
                         ProtosObjectValue.class,
-                        compiler.compile(
-                                        """
-                                        TOML: import("std:toml/TOML")
-                                        TOML.table(
-                                            "when",
-                                            TOML.offsetDateTime(
-                                                2026, 9, 12, 7, 32, 0, 0, 0, 120
-                                            ),
-                                            "items",
-                                            TOML.array(
-                                                TOML.string("a"),
-                                                TOML.integer(12345678901234567890)
-                                            )
-                                        )
-                                        """)
-                                .call(actorA));
+                        ProtosTestExecutionSupport.evaluate(
+                                """
+                                TOML: import("std:toml/TOML")
+                                TOML.table(
+                                    "when",
+                                    TOML.offsetDateTime(
+                                        2026, 9, 12, 7, 32, 0, 0, 0, 120
+                                    ),
+                                    "items",
+                                    TOML.array(
+                                        TOML.string("a"),
+                                        TOML.integer(12345678901234567890)
+                                    )
+                                )
+                                """,
+                                actorA));
 
         ProtosObjectValue copied =
                 assertInstanceOf(
@@ -240,15 +243,14 @@ final class ProtosTomlDataModelModuleTest {
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
 
         assertThrows(
                 ProtosSignalException.class,
                 () ->
-                        compiler.compile(
-                                        "TOML: import(\"std:toml/TOML\")\n"
-                                                + expression)
-                                .call(activation),
+                        ProtosTestExecutionSupport.evaluate(
+                                "TOML: import(\"std:toml/TOML\")\n"
+                                        + expression,
+                                activation),
                 expression);
     }
 
@@ -256,7 +258,9 @@ final class ProtosTomlDataModelModuleTest {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        return new ProtosSourceCompiler().compile(source).call(prelude.newModuleActivation());
+        return ProtosTestExecutionSupport.evaluate(
+                source,
+                prelude.newModuleActivation());
     }
 
     private static String stringSlot(ProtosObjectValue value, String slot) {

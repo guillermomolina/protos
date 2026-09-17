@@ -63,12 +63,10 @@ final class ProtosExactExecutionFacilityTest {
             throws Exception {
         Fixture fixture = fixture();
         Object result =
-                fixture.compiler
-                        .compile(
+                evaluate(fixture,
                                 Files.readString(
                                         FIXTURE,
-                                        StandardCharsets.UTF_8))
-                        .call(fixture.activation);
+                                        StandardCharsets.UTF_8));
 
         assertSame(ProtosBooleanValue.TRUE, result);
     }
@@ -79,10 +77,8 @@ final class ProtosExactExecutionFacilityTest {
         Fixture fixture = fixture();
 
         Object errorValue =
-                fixture.compiler
-                        .compile(
-                                "execution(\"1.definitelyMissing()\").error")
-                        .call(fixture.activation);
+                evaluate(fixture,
+                                "execution(\"1.definitelyMissing()\").error");
         ProtosObjectValue error =
                 assertInstanceOf(ProtosObjectValue.class, errorValue);
         assertSame(
@@ -93,17 +89,13 @@ final class ProtosExactExecutionFacilityTest {
                 error.parent().orElseThrow());
 
         Object stdoutValue =
-                fixture.compiler
-                        .compile("execution(\"42\").stdout")
-                        .call(fixture.activation);
+                evaluate(fixture, "execution(\"42\").stdout");
         ProtosBytesValue stdout =
                 assertInstanceOf(ProtosBytesValue.class, stdoutValue);
         assertEquals(java.math.BigInteger.ZERO, stdout.indexedSize());
 
         Object stderrValue =
-                fixture.compiler
-                        .compile("execution(\"42\").stderr")
-                        .call(fixture.activation);
+                evaluate(fixture, "execution(\"42\").stderr");
         ProtosBytesValue stderr =
                 assertInstanceOf(ProtosBytesValue.class, stderrValue);
         assertEquals(java.math.BigInteger.ZERO, stderr.indexedSize());
@@ -118,9 +110,7 @@ final class ProtosExactExecutionFacilityTest {
                 assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                fixture.compiler
-                                        .compile("execution(\"process\")")
-                                        .call(fixture.activation));
+                                evaluate(fixture, "execution(\"process\")"));
 
         assertSame(
                 ProtosCoreErrors.prototype(
@@ -136,8 +126,7 @@ final class ProtosExactExecutionFacilityTest {
         Fixture fixture = fixture();
 
         Object result =
-                fixture.compiler
-                        .compile(
+                evaluate(fixture,
                                 "observation: executionInspect("
                                         + "\"future: (() => { 42 }).future()\\n"
                                         + "() => { future.value() }\", "
@@ -145,8 +134,7 @@ final class ProtosExactExecutionFacilityTest {
                                         + ")\n"
                                         + "(observation.state === \"completed\") && "
                                         + "(observation.value === 42) && "
-                                        + "(observation.error === null)")
-                        .call(fixture.activation);
+                                        + "(observation.error === null)");
 
         assertSame(ProtosBooleanValue.TRUE, result);
     }
@@ -229,6 +217,12 @@ final class ProtosExactExecutionFacilityTest {
                                 ProtosExactExecutionFacility.INSPECTION_BOOTSTRAP_SLOT));
     }
 
+    private static Object evaluate(Fixture fixture, String source) {
+        return ProtosTestExecutionSupport.evaluate(
+                source,
+                fixture.activation);
+    }
+
     private static ProtosObjectValue inspectionObservation(
             Fixture fixture,
             Path sourcePath,
@@ -274,7 +268,7 @@ final class ProtosExactExecutionFacilityTest {
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosExactExecutionFacility.install(activation);
         ProtosExactExecutionFacility.installInspection(activation);
-        return new Fixture(prelude, activation, new ProtosSourceCompiler());
+        return new Fixture(prelude, activation);
     }
 
     private static final class WorkersResolver implements ProtosModuleResolver {
@@ -309,6 +303,5 @@ final class ProtosExactExecutionFacilityTest {
 
     private record Fixture(
             ProtosPrelude prelude,
-            ProtosActivation activation,
-            ProtosSourceCompiler compiler) {}
+            ProtosActivation activation) {}
 }

@@ -1,3 +1,25 @@
+## 0.3.22-SNAPSHOT
+
+- Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under
+  ratified PLAT035 by migrating the remaining straightforward retained-Java
+  semantic, representation, runtime, and conformance harness block away from
+  direct legacy-AST `ProtosSourceCompiler.compile(...).call(...)` and
+  `ProtosSourceFileLoader` execution routes onto the canonical Bytecode-backed
+  `ProtosTestExecutionSupport` boundary. Cover TOML data-model and closure
+  conformance, IP address/endpoint modules, retained structural matching
+  representation and error cases, Array lifecycle/callback behavior, Core
+  bootstrap and Context source behavior, the exact execution facility, and
+  filesystem language, maturity, and tree-surface conformance. Remove stale
+  `ProtosSourceFileLoader` imports from already-migrated Future observation and
+  integrated filesystem-tree harnesses. The final Block 6 rescan leaves direct
+  compiler uses only where they are compiler/backend, explicit Bytecode,
+  compile-only, architecture, PERF006, Context-routing, or legacy-backend
+  retirement evidence; those remain for the subsequent PLAT035 retirement
+  work. The combined affected Java set passes 58/58 focal tests. No
+  Protos-visible language, specification, Standard Library, or production
+  runtime semantics change. Implementation version becomes
+  `0.3.22-SNAPSHOT`.
+
 ## 0.3.21-SNAPSHOT
 
 - Advance `I041-B4 — structural Map.match publication` (GitHub #550).
