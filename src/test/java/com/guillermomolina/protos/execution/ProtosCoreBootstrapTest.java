@@ -72,6 +72,13 @@ class ProtosCoreBootstrapTest {
         assertSame(
                 ProtosObjectValue.rootObject(),
                 errorPrototype.parent().orElseThrow());
+        ProtosClosureValue fail =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        bindings.readLocalSlot("fail").orElseThrow());
+        assertNotNull(fail.definition());
+        assertTrue(fail.nativeBody().isEmpty());
+        assertTrue(fail.isFrozen());
         ProtosObjectValue invalidReturnPrototype =
                 prelude.invalidReturnPrototype();
         assertSame(
@@ -132,6 +139,7 @@ class ProtosCoreBootstrapTest {
                         "UInt64",
                         "Int64",
                         "Error",
+                        "fail",
                         "InvalidReturn",
                         "SlotNotFound",
                         "InvalidSuper",

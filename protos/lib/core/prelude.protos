@@ -30,6 +30,9 @@ _corePreludeBindings: Context {
     UInt64: UInt64
     Int64: Int64
     Error: Error
+    fail: () => {
+        Error().signal()
+    }
     InvalidReturn: InvalidReturn
     SlotNotFound: SlotNotFound
     InvalidSuper: InvalidSuper

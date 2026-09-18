@@ -1,3 +1,16 @@
+## 0.3.40-SNAPSHOT
+
+- Begin executable `I046-B — Add standard prelude fail callable` (GitHub #585)
+  under ratified D146 Candidate B-prime and specification revision `0.1.423`.
+  Add `fail` as an ordinary source-backed zero-argument Closure in the frozen
+  standard prelude. Each reached invocation creates and signals one fresh
+  generic Error with canonical standard `Error` parentage, while extraction,
+  caller-local `Error` shadowing, and ordinary local `fail` shadowing preserve
+  the ratified semantics. Add focused conformance for fresh identity/parentage,
+  canonical provenance under shadowing, and wrong arity. Bounded production
+  call-site migration remains subsequent I046 work. Implementation version
+  becomes `0.3.40-SNAPSHOT`.
+
 ## 0.3.39-SNAPSHOT
 
 - Complete `PERF009-C` (GitHub #559) by removing the fixed wall-clock

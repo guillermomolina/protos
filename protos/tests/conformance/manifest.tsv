@@ -523,6 +523,9 @@ error/handle-selected-inactive.protos	integer	46
 error/handle-wrong-arity.protos	error	-
 error/copied-signal-nonerror-receiver.protos	error	-
 error/ordinary-error-construction-fresh.protos	boolean	true
+error/fail-fresh-generic.protos	closure-error-parent-fresh	Error
+error/fail-shadowing.protos	boolean	true
+error/fail-wrong-arity.protos	error	-
 error/signal-deep-io-prototype.protos	error	-
 error/signal-instance.protos	error	-
 error/signal-invalid-return-instance.protos	error	-
