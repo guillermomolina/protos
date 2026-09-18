@@ -51,7 +51,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
     private static final Map<String, Integer> EXPECTED_NATIVE_PROVIDERS =
             Map.ofEntries(
-                    Map.entry("execution/ProtosStandardMapProtocol.java", 8),
+                    Map.entry("execution/ProtosStandardMapProtocol.java", 9),
                     Map.entry("execution/ProtosStandardHashSupport.java", 3),
                     Map.entry("execution/ProtosStandardFileProtocol.java", 10),
                     Map.entry("execution/ProtosStandardFilesystemProtocol.java", 1),
@@ -73,7 +73,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardByteIoProtocol.java", 12),
                     Map.entry("execution/ProtosStandardObjectProtocol.java", 14),
                     Map.entry("execution/ProtosStandardActorProtocol.java", 9),
-                    Map.entry("execution/ProtosStandardIdentityMapProtocol.java", 7),
+                    Map.entry("execution/ProtosStandardIdentityMapProtocol.java", 8),
                     Map.entry("execution/ProtosStandardStringProtocol.java", 5),
                     Map.entry("execution/ProtosStandardBufferedByteIoProtocol.java", 4),
                     Map.entry("execution/ProtosStandardErrorProtocol.java", 2),
@@ -126,7 +126,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(36, actualCore.size());
-        assertEquals(146, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(148, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -232,11 +232,11 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Map",
                 prelude.mapPrototype(),
-                Set.of("call", "at", "atPut", "containsKey", "remove", "size", "each", "match"));
+                Set.of("call", "at", "atIfAbsent", "atPut", "containsKey", "remove", "size", "each", "match"));
         assertNativeSelectors(
                 "IdentityMap",
                 prelude.identityMapPrototype(),
-                Set.of("call", "at", "atPut", "containsKey", "remove", "size", "each"));
+                Set.of("call", "at", "atIfAbsent", "atPut", "containsKey", "remove", "size", "each"));
         assertNativeSelectors(
                 "Path",
                 prelude.pathPrototype(),

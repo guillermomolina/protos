@@ -1,3 +1,19 @@
+## 0.3.49-SNAPSHOT
+
+- Implement `I049 — Implement Map.atIfAbsent expected-absence lookup` (GitHub
+  #598) under ratified D142 Candidate C and specification revision `0.1.421`.
+  Add standard `Map.atIfAbsent(key, fallback)` and
+  `IdentityMap.atIfAbsent(key, fallback)` with exactly one logical key search,
+  exact present-value return including `null` and `false`, and path-sensitive
+  ordinary zero-argument fallback invocation only on absence. Preserve normal
+  Map `hash` and directed `queryKey == storedKey` observability, IdentityMap
+  identity lookup without guest key callbacks, fallback suspension/resumption
+  without search replay, no second search after fallback, no implicit mutation,
+  and eligibility on closed/frozen maps. Keep existing `at` and `containsKey`
+  behavior unchanged, and add focused Protos conformance plus Bytecode
+  DSL/C-prime regression coverage. Implementation version becomes
+  `0.3.49-SNAPSHOT`.
+
 ## 0.3.48-SNAPSHOT
 
 - Implement `I050 — Implement D143 multiple-slot creation` (GitHub #599)

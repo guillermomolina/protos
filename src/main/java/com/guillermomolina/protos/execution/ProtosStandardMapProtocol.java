@@ -2,7 +2,7 @@
 package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.*; import java.math.BigInteger; import java.util.*;
 public final class ProtosStandardMapProtocol {
- enum StructuredReadLookupKind { AT, CONTAINS_KEY }
+ enum StructuredReadLookupKind { AT, CONTAINS_KEY, AT_IF_ABSENT }
 
  private static final ProtosNativeClosureBody STANDARD_CALL_BODY =
          ProtosStandardMapProtocol::call;
@@ -19,6 +19,10 @@ public final class ProtosStandardMapProtocol {
          ProtosStandardMapProtocol::containsKey;
  private static final ProtosClosureValue STANDARD_CONTAINS_KEY =
          ProtosClosureValue.nativeClosure(STANDARD_CONTAINS_KEY_BODY);
+ private static final ProtosNativeClosureBody STANDARD_AT_IF_ABSENT_BODY =
+         ProtosStandardMapProtocol::atIfAbsent;
+ private static final ProtosClosureValue STANDARD_AT_IF_ABSENT =
+         ProtosClosureValue.nativeClosure(STANDARD_AT_IF_ABSENT_BODY);
  private static final ProtosNativeClosureBody STANDARD_REMOVE_BODY =
          ProtosStandardMapProtocol::remove;
  private static final ProtosClosureValue STANDARD_REMOVE =
@@ -92,6 +96,9 @@ public final class ProtosStandardMapProtocol {
   if (body == STANDARD_CONTAINS_KEY_BODY) {
    return StructuredReadLookupKind.CONTAINS_KEY;
   }
+  if (body == STANDARD_AT_IF_ABSENT_BODY) {
+   return StructuredReadLookupKind.AT_IF_ABSENT;
+  }
   return null;
  }
 
@@ -116,7 +123,22 @@ public final class ProtosStandardMapProtocol {
   if (behavior == STANDARD_CONTAINS_KEY) {
    return StructuredReadLookupKind.CONTAINS_KEY;
   }
+  if (behavior == STANDARD_AT_IF_ABSENT) {
+   return StructuredReadLookupKind.AT_IF_ABSENT;
+  }
   return null;
+ }
+
+ static boolean isStandardAtIfAbsentImplementation(ProtosClosureValue closure) {
+  return closure.nativeBody().orElse(null) == STANDARD_AT_IF_ABSENT_BODY;
+ }
+
+ static boolean isCanonicalStandardAtIfAbsentSelection(
+         ProtosClosureValue behavior,
+         ProtosObjectValue home,
+         ProtosActivation caller) {
+  return behavior == STANDARD_AT_IF_ABSENT
+          && isCanonicalMapHome(home, caller);
  }
 
  static boolean isStandardAtPutImplementation(ProtosClosureValue closure) {
@@ -159,10 +181,11 @@ public final class ProtosStandardMapProtocol {
           && isCanonicalMapHome(home, caller);
  }
  public static void install(ProtosObjectValue p){
-  for(String s:List.of("call","at","atPut","containsKey","remove","size","each","match"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core Map already defines "+s);
+  for(String s:List.of("call","at","atPut","containsKey","atIfAbsent","remove","size","each","match"))if(p.hasLocalSlot(s))throw new IllegalStateException("Core Map already defines "+s);
   p.createLocalSlot("call",ProtosClosureValue.nativeClosure(STANDARD_CALL_BODY));
   p.createLocalSlot("at", STANDARD_AT);
   p.createLocalSlot("containsKey", STANDARD_CONTAINS_KEY);
+  p.createLocalSlot("atIfAbsent", STANDARD_AT_IF_ABSENT);
   p.createLocalSlot("atPut", STANDARD_AT_PUT);
   p.createLocalSlot("remove", STANDARD_REMOVE);
   p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{ProtosMapValue m=map(a);arity(a,x,0);return new ProtosIntegerValue(BigInteger.valueOf(m.keyedSize()));}));
@@ -287,6 +310,15 @@ public final class ProtosStandardMapProtocol {
   return find(m, x.get(0), a) == null
           ? ProtosBooleanValue.FALSE
           : ProtosBooleanValue.TRUE;
+ }
+ private static Object atIfAbsent(ProtosActivation a, List<?> x) {
+  ProtosMapValue m = map(a);
+  arity(a, x, 2);
+  ProtosMapValue.Entry entry = find(m, x.get(0), a);
+  if (entry != null) {
+   return entry.value();
+  }
+  return ProtosInvocation.invoke(x.get(1), List.of(), a);
  }
  private static Object each(ProtosActivation a, List<?> x) {
   ProtosMapValue m = map(a);

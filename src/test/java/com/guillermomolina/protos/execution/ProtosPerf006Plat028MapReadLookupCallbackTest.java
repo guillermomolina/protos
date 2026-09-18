@@ -324,23 +324,100 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
     }
 
     @Test
-    void canonicalRecognitionKeepsAtAndContainsKeyBoundToExactStandardHome() throws Exception {
+    void atIfAbsentFallbackSuspensionDoesNotReplayMapSearch() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosMapValue map = new ProtosMapValue(prelude.mapPrototype());
+            ProtosFutureValue gate =
+                    new ProtosFutureValue(prelude.futurePrototype(), domain);
+            ProtosObjectValue query = key();
+            ProtosObjectValue marker = key();
+            AtomicInteger hashCalls = new AtomicInteger();
+            AtomicInteger fallbackCalls = new AtomicInteger();
+
+            module.context().createLocalSlot("map", map);
+            module.context().createLocalSlot("query", query);
+            module.context().createLocalSlot("gate", gate);
+            module.context().createLocalSlot("marker", marker);
+            module.context().createLocalSlot(
+                    "fallbackProbe",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                fallbackCalls.incrementAndGet();
+                                return ProtosNullValue.INSTANCE;
+                            }));
+
+            query.createLocalSlot(
+                    "hash",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                hashCalls.incrementAndGet();
+                                return new ProtosIntegerValue(BigInteger.valueOf(7));
+                            }));
+
+            ProtosTask lookup =
+                    execute(
+                            domain,
+                            module,
+                            lowerRoot(
+                                    scope.language(),
+                                    "map.atIfAbsent(query, () => { "
+                                            + "fallbackProbe()\n"
+                                            + "gate.value()\n"
+                                            + "marker })",
+                                    "i049-map-at-if-absent-fallback-suspend.protos"));
+
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, lookup.state());
+            assertEquals(1, hashCalls.get());
+            assertEquals(1, fallbackCalls.get());
+            assertFalse(map.comparisonActive());
+            assertEquals(0, map.keyedSize());
+
+            assertTrue(gate.resolve(ProtosNullValue.INSTANCE, module));
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(ProtosTask.State.COMPLETED, lookup.state());
+            assertSame(marker, lookup.result().orElseThrow());
+            assertEquals(1, hashCalls.get());
+            assertEquals(1, fallbackCalls.get());
+            assertFalse(map.comparisonActive());
+            assertEquals(0, map.keyedSize());
+        }
+
+        System.out.println("I049_MAP_AT_IF_ABSENT_FALLBACK_SUSPEND_RESUME=PASS");
+        System.out.println("I049_MAP_AT_IF_ABSENT_SEARCH_REPLAY=NO");
+        System.out.println("I049_MAP_AT_IF_ABSENT_IMPLICIT_MUTATION=NO");
+    }
+
+    @Test
+    void canonicalRecognitionKeepsMapReadsBoundToExactStandardHome() throws Exception {
         ProtosPrelude prelude = core();
         ProtosObjectValue canonicalHome = prelude.mapPrototype();
         ProtosActivation caller = prelude.newModuleActivation();
         ProtosClosureValue at =
                 (ProtosClosureValue) canonicalHome.readLocalSlot("at").orElseThrow();
+        ProtosClosureValue atIfAbsent =
+                (ProtosClosureValue) canonicalHome.readLocalSlot("atIfAbsent").orElseThrow();
         ProtosClosureValue containsKey =
                 (ProtosClosureValue) canonicalHome.readLocalSlot("containsKey").orElseThrow();
         ProtosObjectValue aliasHome = new ProtosObjectValue(canonicalHome);
         aliasHome.createLocalSlot("at", at);
+        aliasHome.createLocalSlot("atIfAbsent", atIfAbsent);
         aliasHome.createLocalSlot("containsKey", containsKey);
         ProtosClosureValue copiedAt =
                 ProtosClosureValue.nativeClosure(at.nativeBody().orElseThrow());
+        ProtosClosureValue copiedAtIfAbsent =
+                ProtosClosureValue.nativeClosure(atIfAbsent.nativeBody().orElseThrow());
 
         assertEquals(
                 ProtosStandardMapProtocol.StructuredReadLookupKind.AT,
                 ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(at));
+        assertEquals(
+                ProtosStandardMapProtocol.StructuredReadLookupKind.AT_IF_ABSENT,
+                ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(atIfAbsent));
         assertEquals(
                 ProtosStandardMapProtocol.StructuredReadLookupKind.CONTAINS_KEY,
                 ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(containsKey));
@@ -348,19 +425,35 @@ final class ProtosPerf006Plat028MapReadLookupCallbackTest {
                 ProtosStandardMapProtocol.StructuredReadLookupKind.AT,
                 ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(copiedAt));
         assertEquals(
+                ProtosStandardMapProtocol.StructuredReadLookupKind.AT_IF_ABSENT,
+                ProtosStandardMapProtocol.structuredReadLookupKindForImplementation(
+                        copiedAtIfAbsent));
+
+        assertEquals(
                 ProtosStandardMapProtocol.StructuredReadLookupKind.AT,
                 ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
                         at, canonicalHome, caller));
         assertEquals(
+                ProtosStandardMapProtocol.StructuredReadLookupKind.AT_IF_ABSENT,
+                ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
+                        atIfAbsent, canonicalHome, caller));
+        assertEquals(
                 ProtosStandardMapProtocol.StructuredReadLookupKind.CONTAINS_KEY,
                 ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
                         containsKey, canonicalHome, caller));
+
         assertNull(
                 ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
                         at, aliasHome, caller));
         assertNull(
                 ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
+                        atIfAbsent, aliasHome, caller));
+        assertNull(
+                ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
                         copiedAt, canonicalHome, caller));
+        assertNull(
+                ProtosStandardMapProtocol.structuredReadLookupKindForCanonicalSelection(
+                        copiedAtIfAbsent, canonicalHome, caller));
     }
 
     private static ProtosObjectValue key() {

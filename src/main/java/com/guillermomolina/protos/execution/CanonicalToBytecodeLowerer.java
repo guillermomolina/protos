@@ -2364,6 +2364,10 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredEnvironmentEachCall", null);
         BytecodeLocal structuredEnvironmentEachChild =
                 builder.createLocal("structuredEnvironmentEachChildCall", null);
+        BytecodeLocal structuredIdentityMapAtIfAbsent =
+                builder.createLocal("structuredIdentityMapAtIfAbsentCall", null);
+        BytecodeLocal structuredIdentityMapAtIfAbsentChild =
+                builder.createLocal("structuredIdentityMapAtIfAbsentChildCall", null);
         BytecodeLocal structuredIdentityMapEach =
                 builder.createLocal("structuredIdentityMapEachCall", null);
         BytecodeLocal structuredIdentityMapEachChild =
@@ -3299,6 +3303,74 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
+        builder.beginIsStructuredIdentityMapAtIfAbsentCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredIdentityMapAtIfAbsentCall();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredIdentityMapAtIfAbsent);
+        builder.beginPrepareStructuredIdentityMapAtIfAbsentCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredIdentityMapAtIfAbsentCall();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+
+        builder.beginStructuredIdentityMapAtIfAbsentNeedsFallback();
+        builder.emitLoadLocal(structuredIdentityMapAtIfAbsent);
+        builder.endStructuredIdentityMapAtIfAbsentNeedsFallback();
+
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredIdentityMapAtIfAbsentChild);
+        builder.beginPrepareStructuredIdentityMapAtIfAbsentFallbackCall();
+        builder.emitLoadLocal(structuredIdentityMapAtIfAbsent);
+        builder.endPrepareStructuredIdentityMapAtIfAbsentFallbackCall();
+        builder.endStoreLocal();
+
+        emitScopedPreparedInvocation(
+                builder,
+                childResult,
+                structuredIdentityMapAtIfAbsentChild,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredIdentityMapAtIfAbsentFallback();
+        builder.emitLoadLocal(structuredIdentityMapAtIfAbsent);
+        builder.emitLoadLocal(childResult);
+        builder.endFinishStructuredIdentityMapAtIfAbsentFallback();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+
+        builder.beginBlock();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredIdentityMapAtIfAbsentPresent();
+        builder.emitLoadLocal(structuredIdentityMapAtIfAbsent);
+        builder.endFinishStructuredIdentityMapAtIfAbsentPresent();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+
+        builder.endIfThenElse();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginIfThenElse();
+
         builder.beginIsStructuredIdentityMapEachCall();
         builder.emitLoadLocal(preparedCall);
         builder.endIsStructuredIdentityMapEachCall();
@@ -3499,11 +3571,47 @@ final class CanonicalToBytecodeLowerer {
 
         builder.endWhile();
 
+        builder.beginIfThenElse();
+
+        builder.beginStructuredMapReadLookupNeedsFallback();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.endStructuredMapReadLookupNeedsFallback();
+
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredMapReadLookupChild);
+        builder.beginPrepareStructuredMapReadLookupFallbackCall();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.endPrepareStructuredMapReadLookupFallbackCall();
+        builder.endStoreLocal();
+
+        emitScopedPreparedInvocation(
+                builder,
+                childResult,
+                structuredMapReadLookupChild,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredMapReadLookupFallback();
+        builder.emitLoadLocal(structuredMapReadLookup);
+        builder.emitLoadLocal(childResult);
+        builder.endFinishStructuredMapReadLookupFallback();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+
+        builder.beginBlock();
+
         builder.beginStoreLocal(result);
         builder.beginFinishStructuredMapReadLookup();
         builder.emitLoadLocal(structuredMapReadLookup);
         builder.endFinishStructuredMapReadLookup();
         builder.endStoreLocal();
+
+        builder.endBlock();
+
+        builder.endIfThenElse();
 
         builder.endBlock();
         builder.endTryFinally();
@@ -3714,6 +3822,9 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

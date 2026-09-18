@@ -13,6 +13,7 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
@@ -150,33 +151,132 @@ final class ProtosPerf006Plat028IdentityMapEachCallbackTest {
     }
 
     @Test
-    void canonicalRecognitionRejectsCopiedStandardEachAtAnotherHome() throws Exception {
+    void atIfAbsentFallbackSuspensionDoesNotReplayIdentityLookup() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosIdentityMapValue identityMap = identityMap(prelude);
+            ProtosFutureValue gate =
+                    new ProtosFutureValue(prelude.futurePrototype(), domain);
+            ProtosObjectValue query = key();
+            ProtosObjectValue marker = key();
+            AtomicInteger keyCallbacks = new AtomicInteger();
+            AtomicInteger fallbackCalls = new AtomicInteger();
+
+            query.createLocalSlot(
+                    "hash",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                keyCallbacks.incrementAndGet();
+                                return new ProtosIntegerValue(BigInteger.valueOf(7));
+                            }));
+            query.createLocalSlot(
+                    "==",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                keyCallbacks.incrementAndGet();
+                                return ProtosBooleanValue.TRUE;
+                            }));
+
+            module.context().createLocalSlot("identityMap", identityMap);
+            module.context().createLocalSlot("query", query);
+            module.context().createLocalSlot("gate", gate);
+            module.context().createLocalSlot("marker", marker);
+            module.context().createLocalSlot(
+                    "fallbackProbe",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                fallbackCalls.incrementAndGet();
+                                return ProtosNullValue.INSTANCE;
+                            }));
+
+            ProtosTask lookup =
+                    execute(
+                            domain,
+                            module,
+                            lowerRoot(
+                                    scope.language(),
+                                    "identityMap.atIfAbsent(query, () => { "
+                                            + "fallbackProbe()\n"
+                                            + "gate.value()\n"
+                                            + "marker })",
+                                    "i049-identity-map-at-if-absent-fallback-suspend.protos"));
+
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, lookup.state());
+            assertEquals(0, keyCallbacks.get());
+            assertEquals(1, fallbackCalls.get());
+            assertEquals(0, identityMap.keyedSize());
+
+            assertTrue(gate.resolve(ProtosNullValue.INSTANCE, module));
+            assertTrue(domain.dispatchOne());
+
+            assertEquals(ProtosTask.State.COMPLETED, lookup.state());
+            assertSame(marker, lookup.result().orElseThrow());
+            assertEquals(0, keyCallbacks.get());
+            assertEquals(1, fallbackCalls.get());
+            assertEquals(0, identityMap.keyedSize());
+        }
+
+        System.out.println("I049_IDENTITY_MAP_AT_IF_ABSENT_FALLBACK_SUSPEND_RESUME=PASS");
+        System.out.println("I049_IDENTITY_MAP_AT_IF_ABSENT_KEY_CALLBACKS=0");
+        System.out.println("I049_IDENTITY_MAP_AT_IF_ABSENT_FALLBACK_REPLAY=NO");
+    }
+
+    @Test
+    void canonicalRecognitionRejectsCopiedStandardIdentityMapBehavior() throws Exception {
         ProtosPrelude prelude = core();
         ProtosObjectValue canonicalHome = prelude.identityMapPrototype();
         ProtosClosureValue each =
                 (ProtosClosureValue) canonicalHome.readLocalSlot("each").orElseThrow();
+        ProtosClosureValue atIfAbsent =
+                (ProtosClosureValue) canonicalHome.readLocalSlot("atIfAbsent").orElseThrow();
         ProtosActivation caller = prelude.newModuleActivation();
 
         ProtosObjectValue aliasHome = new ProtosObjectValue(canonicalHome);
         aliasHome.createLocalSlot("each", each);
-        ProtosClosureValue copiedBody =
+        aliasHome.createLocalSlot("atIfAbsent", atIfAbsent);
+        ProtosClosureValue copiedEach =
                 ProtosClosureValue.nativeClosure(each.nativeBody().orElseThrow());
+        ProtosClosureValue copiedAtIfAbsent =
+                ProtosClosureValue.nativeClosure(atIfAbsent.nativeBody().orElseThrow());
 
         assertTrue(ProtosStandardIdentityMapProtocol.isStandardEachImplementation(each));
-        assertTrue(ProtosStandardIdentityMapProtocol.isStandardEachImplementation(copiedBody));
+        assertTrue(ProtosStandardIdentityMapProtocol.isStandardEachImplementation(copiedEach));
+        assertTrue(
+                ProtosStandardIdentityMapProtocol.isStandardAtIfAbsentImplementation(
+                        atIfAbsent));
+        assertTrue(
+                ProtosStandardIdentityMapProtocol.isStandardAtIfAbsentImplementation(
+                        copiedAtIfAbsent));
+
         assertTrue(
                 ProtosStandardIdentityMapProtocol.isCanonicalStandardEachSelection(
                         each, canonicalHome, caller));
+        assertTrue(
+                ProtosStandardIdentityMapProtocol.isCanonicalStandardAtIfAbsentSelection(
+                        atIfAbsent, canonicalHome, caller));
+
         assertFalse(
                 ProtosStandardIdentityMapProtocol.isCanonicalStandardEachSelection(
                         each, aliasHome, caller));
         assertFalse(
+                ProtosStandardIdentityMapProtocol.isCanonicalStandardAtIfAbsentSelection(
+                        atIfAbsent, aliasHome, caller));
+        assertFalse(
                 ProtosStandardIdentityMapProtocol.isCanonicalStandardEachSelection(
-                        copiedBody, canonicalHome, caller));
+                        copiedEach, canonicalHome, caller));
+        assertFalse(
+                ProtosStandardIdentityMapProtocol.isCanonicalStandardAtIfAbsentSelection(
+                        copiedAtIfAbsent, canonicalHome, caller));
 
         System.out.println("PERF006_PLAT028_IDENTITY_MAP_EACH_EXACT_HOME=PASS");
         System.out.println("PERF006_PLAT028_IDENTITY_MAP_EACH_COPIED_HOME_PRIVILEGE=NO");
         System.out.println("PERF006_PLAT028_IDENTITY_MAP_EACH_COPIED_BODY_PRIVILEGE=NO");
+        System.out.println("I049_IDENTITY_MAP_AT_IF_ABSENT_EXACT_HOME=PASS");
+        System.out.println("I049_IDENTITY_MAP_AT_IF_ABSENT_COPIED_HOME_PRIVILEGE=NO");
+        System.out.println("I049_IDENTITY_MAP_AT_IF_ABSENT_COPIED_BODY_PRIVILEGE=NO");
     }
 
     private static ProtosIdentityMapValue identityMap(ProtosPrelude prelude) {

@@ -475,6 +475,10 @@ collections/map-each-order-return.protos	boolean	true
 collections/map-each-noninvokable-error.protos	error	-
 collections/map-each-wrong-arity-error.protos	error	-
 collections/identity-map-no-key-callbacks.protos	boolean	true
+collections/map-at-if-absent-present-lazy-exact.protos	null	-
+collections/map-at-if-absent-absent-single-search.protos	null	-
+collections/identity-map-at-if-absent-paths.protos	null	-
+collections/at-if-absent-state-and-callability.protos	null	-
 collections/identity-map-each-order-return.protos	boolean	true
 collections/identity-map-each-noninvokable-error.protos	error	-
 collections/identity-map-each-wrong-arity-error.protos	error	-

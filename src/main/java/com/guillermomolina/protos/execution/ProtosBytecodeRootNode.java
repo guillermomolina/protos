@@ -845,6 +845,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         boolean isStructuredBytesEach() { return structuredBytesEach; }
         boolean isStructuredProcessArgumentsEach() { return structuredProcessArgumentsEach; }
         boolean isStructuredEnvironmentEach() { return structuredEnvironmentEach; }
+        boolean isStructuredIdentityMapAtIfAbsent() {
+            return nativeBody != null
+                    && ProtosStandardIdentityMapProtocol
+                            .isStandardAtIfAbsentImplementation(nativeBody);
+        }
         boolean isStructuredIdentityMapEach() { return structuredIdentityMapEach; }
         boolean isStructuredMapEach() { return structuredMapEach; }
         boolean isStructuredMapReadLookup() { return structuredMapReadLookup != null; }
@@ -865,6 +870,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || structuredBytesEach
                     || structuredProcessArgumentsEach
                     || structuredEnvironmentEach
+                    || isStructuredIdentityMapAtIfAbsent()
                     || structuredIdentityMapEach
                     || structuredMapEach
                     || structuredMapReadLookup != null
@@ -1068,6 +1074,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
+        PreparedIdentityMapAtIfAbsentCall prepareStructuredIdentityMapAtIfAbsent() {
+            if (!isStructuredIdentityMapAtIfAbsent()) {
+                throw new IllegalStateException(
+                        "prepared Closure call has no structured IdentityMap.atIfAbsent capability");
+            }
+            return new PreparedIdentityMapAtIfAbsentCall(
+                    activation.receiver(),
+                    supplied,
+                    activation);
+        }
+
         PreparedIdentityMapEachCall prepareStructuredIdentityMapEach() {
             if (!structuredIdentityMapEach) {
                 throw new IllegalStateException(
@@ -1142,6 +1159,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     || structuredBytesEach
                     || structuredProcessArgumentsEach
                     || structuredEnvironmentEach
+                    || isStructuredIdentityMapAtIfAbsent()
                     || structuredIdentityMapEach
                     || structuredMapEach
                     || structuredMapReadLookup != null
@@ -2375,6 +2393,131 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
 
+    static final class PreparedIdentityMapAtIfAbsentCall {
+        private final ProtosIdentityMapValue.Entry match;
+        private final Object fallback;
+        private final ProtosActivation activation;
+        private boolean fallbackPrepared;
+
+        PreparedIdentityMapAtIfAbsentCall(
+                Object receiver,
+                List<?> supplied,
+                ProtosActivation activation) {
+            this.activation =
+                    java.util.Objects.requireNonNull(
+                            activation,
+                            "activation");
+
+            if (!(receiver instanceof ProtosIdentityMapValue map)
+                    || supplied.size() != 2) {
+                throw ProtosCoreErrors.signal(
+                        activation,
+                        ProtosCoreErrors.newError(activation));
+            }
+
+            Object key = supplied.get(0);
+            this.fallback = supplied.get(1);
+
+            this.match =
+                    ProtosStandardIdentityMapProtocol.findForStructured(
+                            map,
+                            key);
+        }
+
+        boolean needsFallback() {
+            return match == null;
+        }
+
+        PreparedClosureCall prepareFallback() {
+            if (!needsFallback() || fallbackPrepared) {
+                throw new IllegalStateException(
+                        "IdentityMap.atIfAbsent fallback requested in an invalid state");
+            }
+
+            fallbackPrepared = true;
+
+            return prepareClosureCall(
+                    fallback,
+                    List.of(),
+                    activation);
+        }
+
+        Object finishFallback(Object result) {
+            if (!needsFallback() || !fallbackPrepared) {
+                throw new IllegalStateException(
+                        "IdentityMap.atIfAbsent fallback result accepted in an invalid state");
+            }
+            return result;
+        }
+
+        Object finishPresent() {
+            if (needsFallback()) {
+                throw new IllegalStateException(
+                        "IdentityMap.atIfAbsent present path has no matching entry");
+            }
+            if (fallbackPrepared) {
+                throw new IllegalStateException(
+                        "IdentityMap.atIfAbsent present path prepared its fallback");
+            }
+            return match.value();
+        }
+    }
+
+    @Operation
+    public static final class IsStructuredIdentityMapAtIfAbsentCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredIdentityMapAtIfAbsent();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredIdentityMapAtIfAbsentCall {
+        @Specialization
+        public static PreparedIdentityMapAtIfAbsentCall perform(
+                PreparedClosureCall prepared) {
+            return prepared.prepareStructuredIdentityMapAtIfAbsent();
+        }
+    }
+
+    @Operation
+    public static final class StructuredIdentityMapAtIfAbsentNeedsFallback {
+        @Specialization
+        public static boolean perform(
+                PreparedIdentityMapAtIfAbsentCall prepared) {
+            return prepared.needsFallback();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredIdentityMapAtIfAbsentFallbackCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedIdentityMapAtIfAbsentCall prepared) {
+            return prepared.prepareFallback();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredIdentityMapAtIfAbsentFallback {
+        @Specialization
+        public static Object perform(
+                PreparedIdentityMapAtIfAbsentCall prepared,
+                Object result) {
+            return prepared.finishFallback(result);
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredIdentityMapAtIfAbsentPresent {
+        @Specialization
+        public static Object perform(
+                PreparedIdentityMapAtIfAbsentCall prepared) {
+            return prepared.finishPresent();
+        }
+    }
+
+
     static final class PreparedIdentityMapEachCall {
         private final ProtosIdentityMapValue identityMap;
         private final List<java.util.Map.Entry<Object, Object>> snapshot;
@@ -2905,6 +3048,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final ProtosStandardMapProtocol.StructuredReadLookupKind kind;
         private final ProtosMapValue map;
         private final Object key;
+        private final Object fallback;
         private final ProtosActivation activation;
         private BigInteger queryHash;
         private List<ProtosStandardMapProtocol.StableAssociation> snapshot;
@@ -2912,6 +3056,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private ProtosStandardMapProtocol.StableAssociation match;
         private boolean hashAccepted;
         private boolean comparisonEntered;
+        private boolean fallbackPrepared;
 
         PreparedMapReadLookupCall(
                 ProtosStandardMapProtocol.StructuredReadLookupKind kind,
@@ -2920,14 +3065,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation) {
             this.kind = java.util.Objects.requireNonNull(kind, "kind");
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            int expectedArity =
+                    kind == ProtosStandardMapProtocol.StructuredReadLookupKind.AT_IF_ABSENT
+                            ? 2
+                            : 1;
             if (!(receiver instanceof ProtosMapValue value)
-                    || supplied.size() != 1) {
+                    || supplied.size() != expectedArity) {
                 throw ProtosCoreErrors.signal(
                         activation,
                         ProtosCoreErrors.newError(activation));
             }
             this.map = value;
             this.key = supplied.get(0);
+            this.fallback =
+                    kind == ProtosStandardMapProtocol.StructuredReadLookupKind.AT_IF_ABSENT
+                            ? supplied.get(1)
+                            : null;
         }
 
         void enterComparison() {
@@ -3021,16 +3174,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
         }
 
+        boolean needsFallback() {
+            requireSearchComplete();
+            return kind == ProtosStandardMapProtocol.StructuredReadLookupKind.AT_IF_ABSENT
+                    && match == null;
+        }
+
+        PreparedClosureCall prepareFallback() {
+            if (!needsFallback() || fallbackPrepared) {
+                throw new IllegalStateException(
+                        "Map.atIfAbsent fallback requested in an invalid state");
+            }
+            fallbackPrepared = true;
+            return prepareClosureCall(
+                    fallback,
+                    List.of(),
+                    activation);
+        }
+
+        Object finishFallback(Object result) {
+            requireSearchComplete();
+            if (kind != ProtosStandardMapProtocol.StructuredReadLookupKind.AT_IF_ABSENT
+                    || match != null
+                    || !fallbackPrepared) {
+                throw new IllegalStateException(
+                        "Map.atIfAbsent fallback result accepted in an invalid state");
+            }
+            return result;
+        }
+
         Object finish() {
-            requireHashAccepted();
-            if (comparisonEntered) {
-                throw new IllegalStateException(
-                        "Map read lookup finished with an active comparison scope");
-            }
-            if (needsEquality()) {
-                throw new IllegalStateException(
-                        "Map read lookup finished before candidate exhaustion");
-            }
+            requireSearchComplete();
+
             return switch (kind) {
                 case AT -> {
                     if (match == null) {
@@ -3044,7 +3219,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         match == null
                                 ? ProtosBooleanValue.FALSE
                                 : ProtosBooleanValue.TRUE;
+                case AT_IF_ABSENT -> {
+                    if (match == null) {
+                        throw new IllegalStateException(
+                                "Map.atIfAbsent absent path requires its fallback result");
+                    }
+                    yield match.value();
+                }
             };
+        }
+
+        private void requireSearchComplete() {
+            requireHashAccepted();
+            if (comparisonEntered) {
+                throw new IllegalStateException(
+                        "Map read lookup finished with an active comparison scope");
+            }
+            if (needsEquality()) {
+                throw new IllegalStateException(
+                        "Map read lookup used before candidate exhaustion");
+            }
         }
 
         private void requireHashAccepted() {
@@ -3124,6 +3318,33 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static void perform(PreparedMapReadLookupCall prepared, Object result) {
             prepared.acceptEquality(result);
+        }
+    }
+
+    @Operation
+    public static final class StructuredMapReadLookupNeedsFallback {
+        @Specialization
+        public static boolean perform(PreparedMapReadLookupCall prepared) {
+            return prepared.needsFallback();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredMapReadLookupFallbackCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                PreparedMapReadLookupCall prepared) {
+            return prepared.prepareFallback();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredMapReadLookupFallback {
+        @Specialization
+        public static Object perform(
+                PreparedMapReadLookupCall prepared,
+                Object result) {
+            return prepared.finishFallback(result);
         }
     }
 
