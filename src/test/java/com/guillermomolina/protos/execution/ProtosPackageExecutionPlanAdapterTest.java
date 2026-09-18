@@ -84,43 +84,42 @@ final class ProtosPackageExecutionPlanAdapterTest {
     @Test
     void rejectsMalformedGenerationShapeLocationAndRuntimeAlias() throws Exception {
         try (Fixture fixture = fixture()) {
-            ProtosObjectValue badGeneration = (ProtosObjectValue) fixture.buildPlan();
-            badGeneration.assignLocalSlot(
+            ProtosObjectValue plan = (ProtosObjectValue) fixture.buildPlan();
+
+            Object generation = plan.readLocalSlot("generation").orElseThrow();
+            plan.assignLocalSlot(
                     "generation", new ProtosIntegerValue(BigInteger.valueOf(2)));
             assertThrows(
                     Exception.class,
-                    () -> ProtosPackageExecutionPlanAdapter.detach(badGeneration, PROJECT));
-        }
+                    () -> ProtosPackageExecutionPlanAdapter.detach(plan, PROJECT));
+            plan.assignLocalSlot("generation", generation);
 
-        try (Fixture fixture = fixture()) {
-            ProtosObjectValue badShape = (ProtosObjectValue) fixture.buildPlan();
-            badShape.createLocalSlot("unexpected", new ProtosStringValue("x"));
-            assertThrows(
-                    Exception.class,
-                    () -> ProtosPackageExecutionPlanAdapter.detach(badShape, PROJECT));
-        }
-
-        try (Fixture fixture = fixture()) {
-            ProtosObjectValue badLocation = (ProtosObjectValue) fixture.buildPlan();
             ProtosArrayValue packages =
-                    (ProtosArrayValue) badLocation.readLocalSlot("packages").orElseThrow();
-            ProtosObjectValue member = (ProtosObjectValue) packages.indexedAt(BigInteger.ONE);
+                    (ProtosArrayValue) plan.readLocalSlot("packages").orElseThrow();
+            ProtosObjectValue member =
+                    (ProtosObjectValue) packages.indexedAt(BigInteger.ONE);
+            Object location = member.readLocalSlot("location").orElseThrow();
             member.assignLocalSlot("location", new ProtosStringValue("../escape"));
             assertThrows(
                     Exception.class,
-                    () -> ProtosPackageExecutionPlanAdapter.detach(badLocation, PROJECT));
-        }
+                    () -> ProtosPackageExecutionPlanAdapter.detach(plan, PROJECT));
+            member.assignLocalSlot("location", location);
 
-        try (Fixture fixture = fixture()) {
-            ProtosObjectValue badAlias = (ProtosObjectValue) fixture.buildPlan();
             ProtosArrayValue dependencies =
-                    (ProtosArrayValue) badAlias.readLocalSlot("dependencies").orElseThrow();
+                    (ProtosArrayValue) plan.readLocalSlot("dependencies").orElseThrow();
             ProtosObjectValue edge =
                     (ProtosObjectValue) dependencies.indexedAt(BigInteger.ZERO);
+            Object alias = edge.readLocalSlot("alias").orElseThrow();
             edge.assignLocalSlot("alias", new ProtosStringValue("bad-name"));
             assertThrows(
                     Exception.class,
-                    () -> ProtosPackageExecutionPlanAdapter.detach(badAlias, PROJECT));
+                    () -> ProtosPackageExecutionPlanAdapter.detach(plan, PROJECT));
+            edge.assignLocalSlot("alias", alias);
+
+            plan.createLocalSlot("unexpected", new ProtosStringValue("x"));
+            assertThrows(
+                    Exception.class,
+                    () -> ProtosPackageExecutionPlanAdapter.detach(plan, PROJECT));
         }
     }
 

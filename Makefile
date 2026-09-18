@@ -6,21 +6,17 @@ PYTHON ?= python3
 SH ?= sh
 MVN_FLAGS ?=
 DIST_VALIDATE_FLAGS ?= --require-clean-source
-JAVA_TEST_JOBS ?= 8
+JAVA_TEST_JOBS ?= 6
 PROTOS_TEST_JOBS ?= 8
-
-# Temporary PERF009 quarantine.
-# These Java suites were measured above 5 seconds and are excluded from the
-# ordinary developer/CI path until PERF009 is resolved and they are reevaluated.
-JAVA_SLOW_TEST_EXCLUDES := **/ProtosExternalPackagePlanningPreflightTest.java,**/ProtosWorkspaceRunCliTest.java,**/ProtosJsonParserModuleTest.java,**/ProtosPackageExecutionPlanAdapterTest.java
 
 # DAP and the real GraalVM LSP tests own Graal tooling state and are not safe
 # in the class-parallel lane.
 JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosI026GLspCapabilityTest,ProtosI026GLspTransportTest
 JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosI026GLspCapabilityTest.java,**/ProtosI026GLspTransportTest.java
-JAVA_PARALLEL_EXCLUDES := $(JAVA_SLOW_TEST_EXCLUDES),$(JAVA_SERIAL_TEST_EXCLUDES)
+JAVA_PARALLEL_EXCLUDES := $(JAVA_SERIAL_TEST_EXCLUDES)
+JAVA_STRESS_TESTS := ProtosJsonParserStress
 
-.PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-protos check verify clean dist dist-validate
+.PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-java-stress test-protos check verify clean dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -29,7 +25,8 @@ help:
 		'  make compile        Compile production sources only (incremental)' \
 		'  make build          Clean and package without executing tests' \
 		'  make test           Run Java tests, then Protos tests' \
-		'  make test-java      Run the Java/JUnit test suite' \
+		'  make test-java      Run the ordinary Java/JUnit test suite' \
+		'  make test-java-stress  Run explicit Java stress validation' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
 		'  make check          Verify the toolchain, then run both test suites' \
 		'  make verify         Run a clean Maven verify lifecycle' \
@@ -64,6 +61,12 @@ test-java-parallel:
 
 test-java-serial:
 	$(MVN) $(MVN_FLAGS) -Dtest=$(JAVA_SERIAL_TESTS) test
+
+test-java-stress:
+	$(MVN) $(MVN_FLAGS) \
+		-Djunit.jupiter.execution.parallel.enabled=false \
+		-Dtest=$(JAVA_STRESS_TESTS) \
+		test
 
 test-protos:
 	$(MVN) $(MVN_FLAGS) package -DskipTests

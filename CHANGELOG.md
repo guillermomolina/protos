@@ -1,3 +1,27 @@
+## 0.3.29-SNAPSHOT
+
+- Complete `PERF009-B — Quarantined Java test normalization and reintegration`
+  (GitHub #546) by removing the remaining Java slow-test quarantine while
+  preserving the semantic and integration properties owned by the retained
+  tests. Normalize external-package planning failure coverage to construct and
+  retain only the borrowed custody actually exercised by that failure path, and
+  reuse one Core bootstrap when checking multiple borrowed custodies. Reuse one
+  real package execution plan across the independent malformed-generation,
+  shape, location, and runtime-alias rejection checks instead of rebuilding the
+  same expensive fixture for every corruption. Split JSON parser validation
+  into proportional ordinary correctness coverage and an explicit
+  `test-java-stress` surface that retains the original 2048-level nesting and
+  2048-element implementation-shape guards. Pin Maven Surefire 3.5.6 after
+  demonstrating that inherited 3.2.5 misattributes JUnit testcases between XML
+  suites under class-parallel execution while 3.5.6 reports 1853 parallel
+  testcases with zero suite/class mismatches. Tune the local Java-test default
+  from eight to six jobs from measured throughput/latency evidence; CI retains
+  its explicit four-job setting. Remove the PERF009 Java quarantine completely.
+  The explicit Java stress validation passes 2/2 tests and the full ordinary
+  validation passes, including 1292/1292 Protos tests. No Protos-visible
+  language, specification, package-format, or Standard Library semantics
+  change. Implementation version becomes `0.3.29-SNAPSHOT`.
+
 ## 0.3.28-SNAPSHOT
 
 - Implement `CLI009 — Direct-file local module resolution` (GitHub #555) under ratified D137

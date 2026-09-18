@@ -160,17 +160,18 @@ final class ProtosExternalPackagePlanningPreflightTest {
 
             assertNoFilesystem(rawPlan, new IdentityHashMap<>());
 
-            assertBorrowedCustodyStillOpen(fixture.aCustody);
-            assertBorrowedCustodyStillOpen(fixture.bCustody);
-            assertBorrowedCustodyStillOpen(fixture.cCustody);
+            assertBorrowedCustodiesStillOpen(
+                    fixture.aCustody,
+                    fixture.bCustody,
+                    fixture.cCustody);
         }
     }
 
     @Test
     void failedPlanningTerminatesProcessWithoutClosingBorrowedCustody()
             throws Exception {
-        try (Fixture fixture = createFixture("failure")) {
-            fixture.deleteOriginalSources();
+        try (FailureFixture fixture = createFailureFixture()) {
+            fixture.deleteOriginalSource();
             AtomicReference<ProtosProcessRuntime> observed = new AtomicReference<>();
 
             assertThrows(
@@ -181,7 +182,7 @@ final class ProtosExternalPackagePlanningPreflightTest {
                                     TOOL_ROOT,
                                     fixture.projectRoot,
                                     standardLibraryResolver(),
-                                    List.of(fixture.inputs().get(0)),
+                                    List.of(fixture.input()),
                                     observed::set));
 
             ProtosProcessRuntime process = observed.get();
@@ -191,10 +192,32 @@ final class ProtosExternalPackagePlanningPreflightTest {
                     process.lifecycleState());
             assertTrue(process.rootFilesystemForRuntime().isEmpty());
 
-            assertBorrowedCustodyStillOpen(fixture.aCustody);
-            assertBorrowedCustodyStillOpen(fixture.bCustody);
-            assertBorrowedCustodyStillOpen(fixture.cCustody);
+            assertBorrowedCustodiesStillOpen(fixture.aCustody);
         }
+    }
+
+    private FailureFixture createFailureFixture() throws Exception {
+        Path base = Files.createDirectories(temporaryRoot.resolve("failure"));
+        Path project = Files.createDirectories(base.resolve("project"));
+        Files.writeString(project.resolve("protos.toml"), ROOT_MANIFEST, StandardCharsets.UTF_8);
+        Files.writeString(project.resolve("protos.lock"), LOCK, StandardCharsets.UTF_8);
+
+        Path a = createExternal(base.resolve("a"), A_MANIFEST);
+
+        assumeSecureConfinement(project);
+        assumeSecureConfinement(a);
+
+        ProtosCapturedFilesystemCustody aCustody =
+                ProtosPackageContentVerification.captureAndVerify(
+                        CORE,
+                        TOOL_ROOT,
+                        a,
+                        standardLibraryResolver(),
+                        METHOD,
+                        ALGORITHM,
+                        A_HEX);
+
+        return new FailureFixture(project, a, aCustody);
     }
 
     private Fixture createFixture(String name) throws Exception {
@@ -271,12 +294,14 @@ final class ProtosExternalPackagePlanningPreflightTest {
         return new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
     }
 
-    private static void assertBorrowedCustodyStillOpen(
-            ProtosCapturedFilesystemCustody custody)
+    private static void assertBorrowedCustodiesStillOpen(
+            ProtosCapturedFilesystemCustody... custodies)
             throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosActivation activation = prelude.newModuleActivation();
-        assertDoesNotThrow(() -> custody.materialize(activation));
+        for (ProtosCapturedFilesystemCustody custody : custodies) {
+            assertDoesNotThrow(() -> custody.materialize(activation));
+        }
     }
 
     private static void assertNoFilesystem(
@@ -306,6 +331,36 @@ final class ProtosExternalPackagePlanningPreflightTest {
             for (Object slotValue : object.localSlotsSnapshot().values()) {
                 assertNoFilesystem(slotValue, seen);
             }
+        }
+    }
+
+    private static final class FailureFixture implements AutoCloseable {
+        private final Path projectRoot;
+        private final Path aRoot;
+        private final ProtosCapturedFilesystemCustody aCustody;
+
+        private FailureFixture(
+                Path projectRoot,
+                Path aRoot,
+                ProtosCapturedFilesystemCustody aCustody) {
+            this.projectRoot = projectRoot;
+            this.aRoot = aRoot;
+            this.aCustody = aCustody;
+        }
+
+        private ProtosExternalPackagePlanningPreflight.VerifiedExternalPackage input() {
+            return ProtosExternalPackagePlanningPreflight.VerifiedExternalPackage.registry(
+                    "external-a", "1.0.0", METHOD, ALGORITHM, A_HEX, aCustody);
+        }
+
+        private void deleteOriginalSource() throws Exception {
+            Files.delete(aRoot.resolve("protos.toml"));
+            Files.delete(aRoot);
+        }
+
+        @Override
+        public void close() {
+            aCustody.close();
         }
     }
 
