@@ -875,3 +875,13 @@ matching/array-match-capture.protos	integer	42
 matching/map-match-open-subset-capture.protos	integer	42
 matching/case-of-capture.protos	integer	42
 matching/case-of-no-selection-error.protos	error	-
+library/collections/range-order-and-return.protos	boolean	true
+library/collections/range-empty-does-not-inspect-callback.protos	boolean	true
+library/collections/range-bound-domain-rejection.protos	boolean	true
+library/collections/range-polymorphic-callable.protos	boolean	true
+library/collections/range-callback-error-propagation.protos	boolean	true
+library/collections/range-reached-noninvokable-callback-rejection.protos	boolean	true
+library/collections/range-bounds-evaluated-once.protos	boolean	true
+library/collections/range-unbounded-integer-endpoints.protos	boolean	true
+library/collections/range-nonlocal-return-propagation.protos	boolean	true
+library/collections/range-callback-argument-contract.protos	boolean	true

@@ -1,3 +1,20 @@
+## 0.3.44-SNAPSHOT
+
+- Implement `LIB017 — Integer ranges and progression iteration` (GitHub #570)
+  under the owner-approved G-prime decision. Add
+  `std:collections/Range` with `each(start, stop, block)` and
+  `reverseEach(start, stop, block)` over the same half-open `[start, stop)`
+  domain of ordinary unbounded Integer values. Preserve empty equal/reversed
+  bounds, ordinary polymorphic callback invocation, ignored callback results,
+  canonical `null` normal completion, and ordinary Error/non-local-control
+  propagation. Reject Float, fixed-width Integer-family, and delegated
+  Integer-lookalike bounds; keep host-width limits, proportional
+  materialization, first-class Range values, arbitrary step, generic
+  Iterable/Iterator integration, slicing, and range syntax out of this slice.
+  Add focused conformance coverage for traversal order, callback behavior,
+  strict bound domains, single bound evaluation, unbounded endpoints, and
+  control propagation. Implementation version becomes `0.3.44-SNAPSHOT`.
+
 ## 0.3.43-SNAPSHOT
 
 - Implement `I047 — Implement strict String.concat semantics` (GitHub #587)
