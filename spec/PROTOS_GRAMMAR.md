@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 ## Prelude Binding Note
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.
@@ -962,8 +962,9 @@ scope, construction activation, receiver change, Association value, generic
 keyed-literal protocol, spread/merge/comprehension form, or `IdentityMap`
 construction syntax.
 
-Expression-position `%{...}` and pattern-position Map syntax are separate
-grammar owners. This section changes no Map-pattern syntax or matching semantics.
+`%{...}` is expression-position Map construction only. D131 defines no
+pattern-position Map grammar; structural Map matching is ordinary
+`matcherMap.match(subject)` behavior owned by `semantics/MATCHING.md`.
 
 ## 13. Parenthesized Expressions
 

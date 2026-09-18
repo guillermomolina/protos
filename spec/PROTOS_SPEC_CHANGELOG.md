@@ -9,6 +9,27 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.418] - 2026-09-18
+
+### I041-E — D131 final grammar/documentation consistency correction
+- Removes one stale pre-D131 sentence in `PROTOS_GRAMMAR.md` that still referred
+  to a separate pattern-position Map grammar after revision `0.1.417` had
+  already removed that grammar.
+- Clarifies that `%{...}` is Map construction only and that structural Map
+  matching is ordinary `matcherMap.match(subject)` behavior owned by
+  `semantics/MATCHING.md`.
+- This is a consistency correction to the already-ratified D131 model; it
+  introduces no new matching syntax, semantics, matcher capability, or
+  implementation behavior.
+- Programmer-facing chapter 12 is reconciled from the superseded I038 dedicated
+  matching language to the protocol-first D131 surface.
+
+### Compatibility and implementation state
+- The dedicated pre-D131 matching syntax remains removed, not deprecated or
+  dormant.
+- Implementation behavior and implementation version are unchanged by this
+  specification/documentation-only revision.
+
 ## [0.1.417] - 2026-09-17
 
 ### D131 / I041-A2 — Remove dedicated matching grammar

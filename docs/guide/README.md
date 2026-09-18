@@ -73,7 +73,7 @@ language-teaching progression under DOC001.
 9. [Isolated parallel execution](09-isolated-parallel-execution.md)
 10. [Actors, ActorRefs, and Actor Groups](10-actors-actorrefs-and-groups.md)
 11. [Process, I/O, Filesystems, and Authority](11-process-io-filesystems-and-authority.md)
-12. [Matching expressions](12-matching-expressions.md)
+12. [Protocol-first matching and case selection](12-matching-expressions.md)
 
 ## Toolchain guides
 
@@ -143,12 +143,13 @@ specified-versus-runnable boundary. No independently READY Programming Guide
 slice remains: `DOC001-M` is blocked until TOOL001 and TOOL002 close, and
 `DOC001-N` remains the final consistency closure.
 
-`DOC004` is CLOSED with
-[chapter 12](12-matching-expressions.md), which explains the complete
-programmer-facing matching surface delivered by I038: pattern-owned
-`match(subject)` authority, captures/bindings, aliases, Array/Map patterns,
-ordered OR, guards, terminal no-selection, and the static source restrictions
-that materially affect matching programs.
+`DOC004` remains CLOSED with
+[chapter 12](12-matching-expressions.md), now reconciled by I041-E to the D131
+protocol-first model: ordinary `pattern.match(subject)` authority, standard
+`Any` and `Capture`, direct structural `Array.match` and `Map.match`, ordinary
+`value.caseOf(cases)`, positional captures, and explicit documentation that the
+superseded I038 dedicated pattern-language surface is no longer part of Core
+v0.1.
 
 ## Planned progression
 

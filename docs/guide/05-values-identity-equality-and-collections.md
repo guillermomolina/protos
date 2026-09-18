@@ -668,8 +668,9 @@ identity: IdentityMap()
 It has a different key law and receives no `%{...}` syntax. There is also no
 generic `%Factory{...}` form.
 
-Expression construction and Map matching remain separate contexts with separate
-semantics.
+Map construction and structural `Map.match(subject)` are separate operations
+with separate semantics. `%{...}` constructs a Map value; it is not pattern
+syntax.
 
 ## Map is keyed by equality
 
