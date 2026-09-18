@@ -9,6 +9,28 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.419] - 2026-09-18
+
+### I043 — D148 derived inequality semantics
+- Reconciles the normative specification with ratified D148 Candidate A-prime:
+  source `a != b` remains available but is the mandatory logical complement of
+  the receiver's validated ordinary `a == b` behavior.
+- Makes `==` the sole ordinary customization point for Core semantic equality.
+  Source `!=` no longer dispatches an ordinary selector named `!=`, and the
+  standard `Object` protocol no longer includes `Object.!=`.
+- Requires left-to-right exactly-once operand evaluation, exactly one ordinary
+  `==` invocation, the existing strict canonical-Boolean-or-Error equality
+  result boundary, and canonical Boolean inversion.
+- Preserves `===` / `!==`, Map/hash equality contracts, and the absence of
+  truthiness.
+
+### Compatibility and implementation state
+- Ordinary source using `a != b` retains its spelling and normal not-equal
+  meaning when it did not depend on an independently customized `!=` selector.
+- A structural slot named `!=` is no longer part of the Core equality protocol
+  and is not selected by source `a != b`.
+- Implementation is owned by I043 under ratified D148 A-prime.
+
 ## [0.1.418] - 2026-09-18
 
 ### I041-E — D131 final grammar/documentation consistency correction

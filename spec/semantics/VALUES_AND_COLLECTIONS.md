@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-17
+Last updated: 2026-09-18
 
 This document is the primary normative owner of Core immutable value families, equality/identity, indexed access, and standard collection/value protocols; callable and general control-flow semantics are owned by their dedicated modules.
 
@@ -2573,29 +2573,42 @@ has the corresponding properties because it delegates to semantic identity.
 
 ### Inequality semantics
 
-`!=` is the ordinary customizable inequality message protocol. `Object`
-provides its default behavior in terms of the receiver's current `==` behavior:
+`!=` is retained source syntax but is not an independently customizable
+inequality message protocol.
+
+For arbitrary expressions `a` and `b`, the language requires:
 
 ```text
-Object.!=(other):
-    result = this == other
-    return booleanNot(result)
+a != b  =  not (a == b)
 ```
 
-`booleanNot` accepts only canonical `true` or `false`; an error from `==` or an
-invalid equality result propagates rather than being interpreted through
-truthiness. Consequently, an object that overrides `==` but inherits the
-default `!=` automatically obtains the logical complement of its customized
-equality.
+with this exact semantic boundary:
 
-A program may override `!=` independently as ordinary object behavior. If it
-does, Core does not impose a global law that the custom `!=` must remain the
-complement of custom `==`; both operations retain their existing strict
-Boolean-result contracts. Code that requires complementary custom behavior must
-define it accordingly.
+1. evaluate `a` exactly once;
+2. evaluate `b` exactly once after `a`;
+3. invoke the receiver's ordinary customizable `==` behavior exactly once;
+4. require the `==` result to be canonical `true` or canonical `false`, or
+   propagate its Error/non-normal control result according to the existing
+   equality contract;
+5. return the opposite canonical Boolean.
 
-`!==` is different: it is the non-overridable logical complement of semantic
-identity `===`.
+No truthiness conversion is applied. A non-Boolean normal return from custom
+`==` signals the existing equality-result error before `!=` returns. The
+derived operation does not invoke `not()` on an arbitrary equality result.
+
+The `!=` source operator performs no ordinary lookup or send for a selector
+named `!=`. `Object` therefore provides no standard `!=` protocol slot, and a
+local or delegated slot structurally named `!=` does not affect source
+inequality.
+
+`==` remains the sole ordinary customization point for Core semantic equality.
+This does not require custom `==` to be globally symmetric, transitive, or
+reflexive where the existing equality model does not require those properties;
+it requires only that source `!=` be the logical complement of the selected
+valid `==` result.
+
+`!==` remains different: it is the non-overridable logical complement of
+semantic identity `===`.
 
 ```text
 a !== b  =  not (a === b)
@@ -2605,9 +2618,8 @@ a !== b  =  not (a === b)
 It returns canonical `true` exactly when `a === b` is false, and canonical
 `false` exactly when `a === b` is true.
 
-Therefore overriding `==` or `!=` cannot change `===` or `!==`, and overriding
-ordinary equality cannot change identity-sensitive mechanisms such as
-`IdentityMap`.
+Therefore overriding `==` cannot change `===` or `!==`, and ordinary equality
+customization cannot change identity-sensitive mechanisms such as `IdentityMap`.
 
 ### Default equality and hashing when Core defines no specialization
 

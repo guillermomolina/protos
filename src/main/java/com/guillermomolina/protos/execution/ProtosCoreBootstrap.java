@@ -503,7 +503,6 @@ public final class ProtosCoreBootstrap {
             validateRootSurface(object);
             requireContextLocalRootExecutionProjection(object, "init");
             requireContextLocalRootExecutionProjection(object, "==");
-            requireContextLocalRootExecutionProjection(object, "!=");
             requireContextLocalRootExecutionProjection(object, "match");
             freezeSharedStandardGraph(object);
             validatePublishedRoot(object);
@@ -530,15 +529,17 @@ public final class ProtosCoreBootstrap {
                         "caseOf",
                         "init",
                         "==",
-                        "!=",
                         "match");
         if (!object.localSlotsSnapshot().keySet().containsAll(expected)) {
             throw new IllegalStateException(
                     "standard Object root publication surface is incomplete");
         }
+        if (object.hasLocalSlot("!=")) {
+            throw new IllegalStateException(
+                    "standard Object root must not publish an independent != protocol");
+        }
         validateExistingSourceBackedClosure(object, "init");
         validateExistingSourceBackedClosure(object, "==");
-        validateExistingSourceBackedClosure(object, "!=");
         validateExistingSourceBackedClosure(object, "match");
     }
 
@@ -579,7 +580,6 @@ public final class ProtosCoreBootstrap {
         }
         validateContextLocalRootExecutionProjection(object, "init");
         validateContextLocalRootExecutionProjection(object, "==");
-        validateContextLocalRootExecutionProjection(object, "!=");
         validateContextLocalRootExecutionProjection(object, "match");
         for (Object value : object.localSlotsSnapshot().values()) {
             if (!(value instanceof ProtosClosureValue closure) || !closure.isFrozen()) {
@@ -676,14 +676,10 @@ public final class ProtosCoreBootstrap {
                 requireSourceBackedClosure(sourceContext, "_coreObjectEquals");
         ProtosClosureValue match =
                 requireSourceBackedClosure(sourceContext, "_coreObjectMatch");
-        ProtosClosureValue notEquals =
-                requireSourceBackedClosure(
-                        sourceContext, "_coreObjectNotEquals");
 
         sourceContext.removeLocalSlot("_coreObjectInit");
         sourceContext.removeLocalSlot("_coreObjectEquals");
         sourceContext.removeLocalSlot("_coreObjectMatch");
-        sourceContext.removeLocalSlot("_coreObjectNotEquals");
         if (!sourceContext.localSlotsSnapshot().isEmpty()) {
             throw new IllegalStateException(
                     "Core object source left unexpected bootstrap bindings");
@@ -694,16 +690,12 @@ public final class ProtosCoreBootstrap {
         synchronized (object) {
             validateExistingSourceBackedClosure(object, "init");
             validateExistingSourceBackedClosure(object, "==");
-            validateExistingSourceBackedClosure(object, "!=");
             validateExistingSourceBackedClosure(object, "match");
             if (!object.hasLocalSlot("init")) {
                 object.createLocalSlot("init", init);
             }
             if (!object.hasLocalSlot("==")) {
                 object.createLocalSlot("==", equals);
-            }
-            if (!object.hasLocalSlot("!=")) {
-                object.createLocalSlot("!=", notEquals);
             }
             if (!object.hasLocalSlot("match")) {
                 object.createLocalSlot("match", match);

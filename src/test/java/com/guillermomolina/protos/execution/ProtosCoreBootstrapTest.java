@@ -246,7 +246,7 @@ class ProtosCoreBootstrapTest {
     }
 
     @Test
-    void installsDerivedObjectBehaviorFromDistributableCoreSource()
+    void installsSourceBackedObjectBehaviorWithoutInequalityProtocol()
             throws IOException {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()
@@ -257,31 +257,30 @@ class ProtosCoreBootstrapTest {
                 assertSourceBackedObjectClosure(object, "init");
         ProtosClosureValue equals =
                 assertSourceBackedObjectClosure(object, "==");
-        ProtosClosureValue notEquals =
-                assertSourceBackedObjectClosure(object, "!=");
         ProtosClosureValue match =
                 assertSourceBackedObjectClosure(object, "match");
 
+        assertFalse(object.hasLocalSlot("!="));
+
         assertEquals(1, init.capturedLexicalContexts().size());
         assertEquals(1, equals.capturedLexicalContexts().size());
-        assertEquals(1, notEquals.capturedLexicalContexts().size());
         assertEquals(1, match.capturedLexicalContexts().size());
+
         assertSame(
                 init.capturedLexicalContexts().get(0),
                 equals.capturedLexicalContexts().get(0));
         assertSame(
                 init.capturedLexicalContexts().get(0),
-                notEquals.capturedLexicalContexts().get(0));
-        assertSame(
-                init.capturedLexicalContexts().get(0),
                 match.capturedLexicalContexts().get(0));
+
         ProtosObjectValue sourceContext =
                 init.capturedLexicalContexts().get(0);
+
         assertTrue(sourceContext.isFrozen());
         assertFalse(sourceContext.hasLocalSlot("_coreObjectInit"));
         assertFalse(sourceContext.hasLocalSlot("_coreObjectEquals"));
-        assertFalse(sourceContext.hasLocalSlot("_coreObjectNotEquals"));
         assertFalse(sourceContext.hasLocalSlot("_coreObjectMatch"));
+        assertFalse(sourceContext.hasLocalSlot("_coreObjectNotEquals"));
 
         ProtosObjectValue receiver = new ProtosObjectValue(object);
         assertSame(

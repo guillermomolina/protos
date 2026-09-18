@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.semantic.ast.CanonicalDerivedInequality;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
@@ -46,18 +47,18 @@ class CanonicalizerEqualityTest {
     }
 
     @Test
-    void lowersSemanticInequalityToOrdinaryInequalitySend() {
-        CanonicalSend inequality =
-                assertInstanceOf(CanonicalSend.class, canonicalizeOnly("a != b"));
+    void lowersSemanticInequalityToDerivedCanonicalNode() {
+        CanonicalDerivedInequality inequality =
+                assertInstanceOf(
+                        CanonicalDerivedInequality.class,
+                        canonicalizeOnly("a != b"));
 
-        assertEquals("!=", inequality.message());
         assertEquals(
                 "a",
-                assertInstanceOf(CanonicalLookup.class, inequality.receiver()).name());
-        assertEquals(1, inequality.arguments().size());
+                assertInstanceOf(CanonicalLookup.class, inequality.left()).name());
         assertEquals(
                 "b",
-                assertInstanceOf(CanonicalLookup.class, inequality.arguments().get(0)).name());
+                assertInstanceOf(CanonicalLookup.class, inequality.right()).name());
     }
 
     @Test

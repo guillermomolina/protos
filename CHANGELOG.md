@@ -1,3 +1,17 @@
+## 0.3.36-SNAPSHOT
+
+- Implement `I043 — Implement derived inequality semantics` (GitHub #582) under
+  ratified D148 Candidate A-prime. Keep the `!=` source operator while lowering
+  it to exactly one ordinary `==` invocation followed by strict canonical
+  Boolean validation and inversion. Remove the independent standard
+  `Object.!=` protocol and its source-backed Core bootstrap behavior, so a
+  structural slot named `!=` no longer changes source inequality. Preserve
+  `===` / `!==`, Map/hash equality semantics, left-to-right exactly-once
+  evaluation, Errors/control, and suspension behavior. Add focused Java and
+  Protos conformance coverage; the Protos suite remains green at 1301/1301.
+  Reconcile the normative specification at revision `0.1.419`. Implementation
+  version becomes `0.3.36-SNAPSHOT`.
+
 ## 0.3.35-SNAPSHOT
 
 - Complete the implementation slice for `PERF009-C — Post-quarantine

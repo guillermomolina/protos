@@ -44,6 +44,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
+import com.guillermomolina.protos.semantic.ast.CanonicalDerivedInequality;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
@@ -265,10 +266,9 @@ public final class Canonicalizer {
             case "||" -> lowerLazyBoolean(binary, "or");
             case "==" -> lowerEquality(binary);
             case "!=" ->
-                    new CanonicalSend(
+                    new CanonicalDerivedInequality(
                             canonicalize(binary.left()),
-                            "!=",
-                            List.of(canonicalize(binary.right())),
+                            canonicalize(binary.right()),
                             binary.span());
             case "===" ->
                     lowerIdentity(binary);

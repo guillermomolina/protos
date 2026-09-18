@@ -373,6 +373,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class ComplementEqualityResult {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                Object equalityResult) {
+            Object validated =
+                    ProtosStandardBooleanProtocol.requireBooleanResult(
+                            equalityResult,
+                            activation);
+            return validated == ProtosBooleanValue.TRUE
+                    ? ProtosBooleanValue.FALSE
+                    : ProtosBooleanValue.TRUE;
+        }
+    }
+
+    @Operation
     public static final class LoadIntrinsic {
         @Specialization
         public static Object perform(

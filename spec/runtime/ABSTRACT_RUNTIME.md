@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Informative — non-normative
-Last updated: 2026-09-04
+Last updated: 2026-09-18
 This document is an informative abstract execution model and pseudocode aid.
 
 It does not independently define observable Protos semantics. Normative behavior
@@ -3939,12 +3939,13 @@ comparison, or structural hashing is part of these defaults.
 
 ### Inequality evaluation
 
-The standard default inequality behavior inherited from `Object` is
-conceptually:
+Source inequality is a derived operation rather than an ordinary `!=` send.
+Conceptually, after the source operands have each been evaluated exactly once
+from left to right:
 
 ```text
-Object.!=(other):
-    result = send(this, "==", [other])
+function notEqual(left, right, activation):
+    result = send(left, "==", [right])
     result = requireBooleanEqualityResult(result)
 
     if result === true:
@@ -3953,16 +3954,16 @@ Object.!=(other):
     return true
 ```
 
-The `==` send is ordinary dynamic message dispatch. Therefore a receiver that
-overrides `==` but inherits `Object.!=` gets the complement of that override.
-Any error signaled by the `==` send propagates. A non-Boolean normal return from
-`==` signals the existing invalid-equality-result error before `!=` returns.
+The `==` send is ordinary dynamic message dispatch and occurs exactly once.
+Any Error or other non-normal control result from that send propagates. A
+non-Boolean normal return from `==` signals the existing invalid-equality-result
+error before inequality returns.
 
-An object may override the `!=` message itself; an explicit source-level
-`a != b` uses that ordinary message behavior and validates its result under the
-same equality Boolean-result contract.
+No lookup or invocation of a selector named `!=` occurs. The standard `Object`
+surface therefore does not publish an inequality protocol slot, and an ordinary
+slot structurally named `!=` cannot affect source `a != b`.
 
-Semantic identity inequality is primitive:
+Semantic identity inequality remains primitive:
 
 ```text
 function notIdentical(a, b):

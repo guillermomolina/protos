@@ -27,6 +27,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
+import com.guillermomolina.protos.semantic.ast.CanonicalDerivedInequality;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
@@ -329,6 +330,11 @@ final class CanonicalToBytecodeLowerer {
             validateSupportedDefaultExpression(identity.right());
             return;
         }
+        if (expression instanceof CanonicalDerivedInequality inequality) {
+            validateSupportedDefaultExpression(inequality.left());
+            validateSupportedDefaultExpression(inequality.right());
+            return;
+        }
         if (expression instanceof CanonicalCreate create) {
             create.target().ifPresent(this::validateSupportedDefaultExpression);
             validateSupportedDefaultExpression(create.value());
@@ -519,6 +525,7 @@ final class CanonicalToBytecodeLowerer {
             CanonicalExpression expression) {
         if (expression instanceof CanonicalCall
                 || expression instanceof CanonicalSend
+                || expression instanceof CanonicalDerivedInequality
                 || expression instanceof CanonicalSuperSend
                 || expression instanceof CanonicalReturn
                 || expression instanceof CanonicalObject
@@ -680,6 +687,20 @@ final class CanonicalToBytecodeLowerer {
             builder.endSourceSection();
             return;
         }
+        if (expression instanceof CanonicalDerivedInequality inequality) {
+            builder.beginSourceSection(
+                    inequality.span().startOffset(),
+                    inequality.span().length());
+            emitBodyDerivedInequality(
+                    builder,
+                    inequality,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            builder.endSourceSection();
+            return;
+        }
         if (expression instanceof CanonicalSuperSend send) {
             builder.beginSourceSection(
                     send.span().startOffset(),
@@ -830,6 +851,16 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
             return;
         }
+        if (expression instanceof CanonicalDerivedInequality inequality) {
+            emitDefaultDerivedInequality(
+                    builder,
+                    inequality,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
         if (expression instanceof CanonicalSuperSend send) {
             emitComposedDefaultSuperSend(
                     builder,
@@ -939,6 +970,74 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
+
+    private void emitBodyDerivedInequality(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalDerivedInequality inequality,
+            BytecodeLocal target,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal equalityResult =
+                builder.createLocal("derivedInequalityEqualityResult", null);
+
+        CanonicalSend equalitySend =
+                new CanonicalSend(
+                        inequality.left(),
+                        "==",
+                        java.util.List.of(inequality.right()),
+                        inequality.span());
+
+        emitComposedSend(
+                builder,
+                equalitySend,
+                equalityResult,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(target);
+        builder.beginComplementEqualityResult();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(equalityResult);
+        builder.endComplementEqualityResult();
+        builder.endStoreLocal();
+    }
+
+    private void emitDefaultDerivedInequality(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalDerivedInequality inequality,
+            BytecodeLocal target,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal equalityResult =
+                builder.createLocal(
+                        "defaultDerivedInequalityEqualityResult",
+                        null);
+
+        CanonicalSend equalitySend =
+                new CanonicalSend(
+                        inequality.left(),
+                        "==",
+                        java.util.List.of(inequality.right()),
+                        inequality.span());
+
+        emitComposedDefaultSend(
+                builder,
+                equalitySend,
+                equalityResult,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(target);
+        builder.beginComplementEqualityResult();
+        builder.emitLoadArgument(0);
+        builder.emitLoadLocal(equalityResult);
+        builder.endComplementEqualityResult();
+        builder.endStoreLocal();
+    }
 
     private void emitBodyMapConstruction(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -3785,6 +3884,11 @@ final class CanonicalToBytecodeLowerer {
         if (expression instanceof CanonicalNotIdentity identity) {
             validateSupportedExpression(identity.left());
             validateSupportedExpression(identity.right());
+            return;
+        }
+        if (expression instanceof CanonicalDerivedInequality inequality) {
+            validateSupportedExpression(inequality.left());
+            validateSupportedExpression(inequality.right());
             return;
         }
         if (expression instanceof CanonicalCreate create) {

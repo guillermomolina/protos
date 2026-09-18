@@ -136,7 +136,9 @@ equality/nonidentity-same-number.protos	boolean	false
 equality/nonidentity-cross-family.protos	boolean	true
 equality/nonidentity-distinct-objects.protos	boolean	true
 equality/canonical-null-booleans-identity.protos	boolean	true
-equality/invalid-custom-equality-default-inequality-error.protos	error	-
+equality/invalid-custom-equality-derived-inequality-error.protos	error	-
+equality/derived-inequality-ignores-custom-inequality-slot.protos	boolean	true
+equality/derived-inequality-evaluates-once.protos	boolean	true
 equality/object-match-dynamic-equality-exact-once.protos	boolean	true
 collections/map-replacement-keeps-size.protos	integer	2
 collections/map-remove-and-reinsert.protos	integer	3

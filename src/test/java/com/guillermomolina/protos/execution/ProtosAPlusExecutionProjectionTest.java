@@ -54,7 +54,6 @@ class ProtosAPlusExecutionProjectionTest {
         assertFalse(ProtosPolyglotExecutionContext.hasEnteredContextForRuntime());
         assertTrue(init.requiresContextLocalExecutionProjectionForRuntime());
         assertTrue(rootClosure("==").requiresContextLocalExecutionProjectionForRuntime());
-        assertTrue(rootClosure("!=").requiresContextLocalExecutionProjectionForRuntime());
         assertTrue(rootClosure("match").requiresContextLocalExecutionProjectionForRuntime());
         ProtosClosureValue boundInit =
                 (ProtosClosureValue)
@@ -75,7 +74,7 @@ class ProtosAPlusExecutionProjectionTest {
     void enteredContextPreparedInvocationExecutesSharedRootClosureThroughBytecode()
             throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosClosureValue notEquals = rootClosure("!=");
+        ProtosClosureValue match = rootClosure("match");
 
         ProtosObjectValue receiver =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -99,7 +98,7 @@ class ProtosAPlusExecutionProjectionTest {
                                 ProtosBytecodeRootNode.PreparedClosureCall prepared =
                                         ProtosBytecodeRootNode.PrepareSendArguments.perform(
                                                 receiver,
-                                                "!=",
+                                                "match",
                                                 caller,
                                                 new Object[] {argument});
 
@@ -115,10 +114,10 @@ class ProtosAPlusExecutionProjectionTest {
                                         entered);
                             });
 
-            assertSame(ProtosBooleanValue.FALSE, result);
+            assertSame(ProtosBooleanValue.TRUE, result);
         }
 
-        assertSame(notEquals, rootClosure("!="));
+        assertSame(match, rootClosure("match"));
     }
 
     @Test
@@ -126,8 +125,8 @@ class ProtosAPlusExecutionProjectionTest {
             throws Exception {
         ProtosPrelude firstPrelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosPrelude secondPrelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosClosureValue notEquals = rootClosure("!=");
-        ProtosClosureExecutionPlan template = notEquals.executionPlan().orElseThrow();
+        ProtosClosureValue match = rootClosure("match");
+        ProtosClosureExecutionPlan template = match.executionPlan().orElseThrow();
         ProtosProcessRuntime firstProcess =
                 new ProtosProcessRuntime(firstPrelude.actorRefPrototypeForRuntime());
         ProtosProcessRuntime secondProcess =
@@ -157,19 +156,19 @@ class ProtosAPlusExecutionProjectionTest {
                     carriers.submit(
                             () ->
                                     firstContext.callForRuntime(
-                                            () -> invokeNotEquals(firstPrelude, firstReceiver)));
+                                            () -> invokeMatch(firstPrelude, firstReceiver)));
             Future<Object> second =
                     carriers.submit(
                             () ->
                                     secondContext.callForRuntime(
-                                            () -> invokeNotEquals(secondPrelude, secondReceiver)));
+                                            () -> invokeMatch(secondPrelude, secondReceiver)));
 
             assertTrue(
                     bothInEquality.await(10, TimeUnit.SECONDS),
                     "both Process Contexts must overlap inside the shared source-backed behavior");
             releaseEquality.countDown();
-            assertSame(ProtosBooleanValue.FALSE, first.get(10, TimeUnit.SECONDS));
-            assertSame(ProtosBooleanValue.FALSE, second.get(10, TimeUnit.SECONDS));
+            assertSame(ProtosBooleanValue.TRUE, first.get(10, TimeUnit.SECONDS));
+            assertSame(ProtosBooleanValue.TRUE, second.get(10, TimeUnit.SECONDS));
 
             assertEquals(
                     1,
@@ -179,7 +178,7 @@ class ProtosAPlusExecutionProjectionTest {
                     1,
                     secondLanguageContext
                             .projectedBytecodeExecutionPlanCountForTesting());
-            assertSame(template, notEquals.executionPlan().orElseThrow());
+            assertSame(template, match.executionPlan().orElseThrow());
             } finally {
                 releaseEquality.countDown();
                 carriers.shutdownNow();
@@ -210,12 +209,12 @@ class ProtosAPlusExecutionProjectionTest {
         return receiver;
     }
 
-    private static Object invokeNotEquals(ProtosPrelude prelude, ProtosObjectValue receiver) {
+    private static Object invokeMatch(ProtosPrelude prelude, ProtosObjectValue receiver) {
         assertTrue(ProtosPolyglotExecutionContext.hasEnteredContextForRuntime());
         ProtosActivation caller = prelude.newModuleActivation();
         return ProtosInvocation.invokeMessage(
                 receiver,
-                "!=",
+                "match",
                 List.of(new ProtosObjectValue(ProtosObjectValue.rootObject())),
                 caller);
     }

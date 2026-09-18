@@ -1990,6 +1990,20 @@ means:
 !(a == b)
 ```
 
+This is a mandatory derived inequality operation, not ordinary dispatch of a
+message named `!=`. Evaluation preserves left-to-right and exactly-once operand
+semantics: evaluate `a`, then evaluate `b`, invoke the receiver's ordinary
+customizable `==` behavior exactly once, require the existing strict
+canonical-Boolean-or-Error equality result, and return the opposite canonical
+Boolean.
+
+A local or delegated slot whose structural name is `!=` is not selected by the
+`!=` source operator.
+
+The strict equality-result contract and the semantic relationship between `==`,
+`!=`, `===`, hashing, and collection equality are owned by
+`semantics/VALUES_AND_COLLECTIONS.md`.
+
 ## 23. Boolean Operator Laziness
 
 `&&` and `||` have one mandatory source lowering. For arbitrary operand
