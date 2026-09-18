@@ -1,3 +1,16 @@
+## 0.3.43-SNAPSHOT
+
+- Implement `I047 — Implement strict String.concat semantics` (GitHub #587)
+  under ratified D141 Candidate M1 and specification revision `0.1.424`. Add
+  ordinary variadic `String.concat` with strict semantic-String receiver and
+  argument domains, zero-argument semantic identity, exact scalar-sequence
+  concatenation, and no normalization or implicit textual conversion. Preserve
+  ordinary eager argument/spread evaluation before method-body validation,
+  reject invalid inputs without user callbacks or partial String results, keep
+  standard `+` unchanged, and keep `+` and `concat` as independent selectors.
+  Add focused conformance coverage and update the audited Java-native String
+  boundary. Implementation version becomes `0.3.43-SNAPSHOT`.
+
 ## 0.3.42-SNAPSHOT
 
 - Complete `I044 — Remove custom symbolic binary operators` (GitHub #583)

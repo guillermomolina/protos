@@ -397,6 +397,11 @@ string/at-out-of-range-error.protos	error	-
 string/at-string-error.protos	error	-
 string/at-wrong-arity-error.protos	error	-
 string/concat-exact.protos	boolean	true
+string/aggregate-concat-basic.protos	boolean	true
+string/aggregate-concat-evaluation-order.protos	boolean	true
+string/aggregate-concat-dispatch-independence.protos	boolean	true
+string/aggregate-concat-no-conversion-callbacks.protos	boolean	true
+string/aggregate-concat-strict-domain.protos	boolean	true
 string/concat-integer-error.protos	error	-
 string/concat-null-error.protos	error	-
 string/delegated-concat-receiver-error.protos	error	-

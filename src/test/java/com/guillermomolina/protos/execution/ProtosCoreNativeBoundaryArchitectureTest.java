@@ -74,7 +74,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardObjectProtocol.java", 14),
                     Map.entry("execution/ProtosStandardActorProtocol.java", 9),
                     Map.entry("execution/ProtosStandardIdentityMapProtocol.java", 7),
-                    Map.entry("execution/ProtosStandardStringProtocol.java", 3),
+                    Map.entry("execution/ProtosStandardStringProtocol.java", 4),
                     Map.entry("execution/ProtosStandardBufferedByteIoProtocol.java", 4),
                     Map.entry("execution/ProtosStandardErrorProtocol.java", 2),
                     Map.entry("execution/ProtosStandardImportProtocol.java", 1),
@@ -123,7 +123,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(36, actualCore.size());
-        assertEquals(141, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(142, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -218,7 +218,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "String",
                 prelude.stringPrototype(),
-                Set.of("size", "at", "+", "hash"));
+                Set.of("size", "at", "+", "concat", "hash"));
         assertNativeSelectors(
                 "Encoding",
                 prelude.encodingPrototype(),

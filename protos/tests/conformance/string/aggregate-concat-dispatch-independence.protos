@@ -1,0 +1,57 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+ok: true
+
+("hello" === ("hel" + "lo")).ifFalse(() => { ok = false })
+("hello" == ("hel" + "lo")).ifFalse(() => { ok = false })
+("é" !== "e\u{301}").ifFalse(() => { ok = false })
+("é" == "e\u{301}").ifTrue(() => { ok = false })
+
+ok
+
+Assertions: import("std:test/Assertions")
+
+// A local concat is ordinary message dispatch and overrides the inherited one.
+CustomConcat: String {
+    concat: (...items) => {
+        items.size()
+    }
+}
+
+Assertions.require(CustomConcat.concat("a", "b", "c") == 3)
+
+// Defining + independently must not make standard concat dispatch through +.
+CustomPlusSource: String {
+    combine: (other) => {
+        "custom-plus"
+    }
+}
+
+CustomPlus: CustomPlusSource.alias("combine", "+")
+
+Assertions.require((CustomPlus + "x") === "custom-plus")
+
+Assertions.signals(Error, () => {
+    CustomPlus.concat("x")
+})
+
+// Neither customization changes the canonical String operations.
+Assertions.require(("a" + "b") === "ab")
+Assertions.require("a".concat("b") === "ab")
+
+true

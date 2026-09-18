@@ -43,7 +43,8 @@ public final class ProtosStandardStringProtocol {
 
         if (stringPrototype.hasLocalSlot("size")
                 || stringPrototype.hasLocalSlot("at")
-                || stringPrototype.hasLocalSlot("+")) {
+                || stringPrototype.hasLocalSlot("+")
+                || stringPrototype.hasLocalSlot("concat")) {
             throw new IllegalStateException("Core String already defines a standard protocol slot");
         }
 
@@ -84,6 +85,26 @@ public final class ProtosStandardStringProtocol {
                                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                             }
                             return new ProtosStringValue(receiver.value() + right.value());
+                        }));
+
+        stringPrototype.createLocalSlot(
+                "concat",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            ProtosStringValue receiver = requireStringReceiver(activation);
+
+                            for (Object value : supplied) {
+                                if (!(value instanceof ProtosStringValue)) {
+                                    throw new ProtosSignalException(
+                                            ProtosCoreErrors.newError(activation));
+                                }
+                            }
+
+                            StringBuilder result = new StringBuilder(receiver.value());
+                            for (Object value : supplied) {
+                                result.append(((ProtosStringValue) value).value());
+                            }
+                            return new ProtosStringValue(result.toString());
                         }));
     }
 
