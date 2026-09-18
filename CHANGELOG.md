@@ -1,3 +1,19 @@
+## 0.3.32-SNAPSHOT
+
+- Implement the initial `LIB016 — Protos testing support library and Test Tool
+  boundary` public standard-library surface under the ratified LIB016-0 design.
+  Add `std:test/Assertions` with the ordinary `AssertionFailure` Error prototype,
+  `require(condition)`, and `signals(errorPrototype, body)`. Preserve the Core
+  Error model and Test Tool boundary: assertion failures are fresh ordinary
+  Error occurrences, `require` accepts only Boolean conditions, `signals`
+  delegates matching and propagation to ordinary `Error.handle`, and no TOOL002,
+  Core, parser, compiler, or runtime semantics change. Add focused conformance
+  coverage for the public surface, success/failure behavior, fresh assertion
+  failures, non-Boolean misuse, exact matching Error identity, missing expected
+  errors, and unchanged propagation of nonmatching Errors. Protos conformance
+  validation passes 1299/1299 cases. Implementation version becomes
+  `0.3.32-SNAPSHOT`.
+
 ## 0.3.31-SNAPSHOT
 
 - Implement `TOOL007-A2 — module source-documentation association`

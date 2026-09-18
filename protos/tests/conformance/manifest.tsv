@@ -234,6 +234,13 @@ library/collections/array-find-index-bad-callback-arity-error.protos	error	-
 library/collections/array-map-bad-callback-arity-error.protos	error	-
 library/collections/identity-set-each-bad-arity-error.protos	error	-
 library/collections/set-each-bad-arity-error.protos	error	-
+library/test/public-surface.protos	boolean	true
+library/test/require-true-null.protos	boolean	true
+library/test/require-failure-fresh.protos	boolean	true
+library/test/require-nonboolean-not-assertion-failure.protos	boolean	true
+library/test/signals-returns-exact-error.protos	boolean	true
+library/test/signals-missing-failure.protos	boolean	true
+library/test/signals-nonmatching-propagates-exact-error.protos	boolean	true
 library/json/array-object-shape-order.protos	boolean	true
 library/json/constructors-basic.protos	boolean	true
 library/json/import-cache.protos	boolean	true
