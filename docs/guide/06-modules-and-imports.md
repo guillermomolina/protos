@@ -213,6 +213,94 @@ This separation is important because the same Core module lifecycle can work
 with filesystem modules, bundled Standard Library modules, package modules, or
 other host-defined sources without changing the language model.
 
+## Direct-file execution supplies a local module namespace
+
+The official direct-file and debug-file CLI hosts add one concrete resolver
+domain without changing the Core meaning of `import`.
+
+Given:
+
+```text
+app/
+├── main.protos
+├── helper.protos
+└── lib/
+    └── parser.protos
+```
+
+running:
+
+```text
+protos app/main.protos
+```
+
+allows explicit local module specifiers:
+
+```protos
+Helper: import("./helper.protos")
+Parser: import("./lib/parser.protos")
+```
+
+`./` and `../` are interpreted relative to the **importing local source**, not
+relative to the process working directory.
+
+So if `lib/parser.protos` contains:
+
+```protos
+Helper: import("../helper.protos")
+```
+
+the import resolves inside the same selected local source tree.
+
+The direct entry's containing directory is the initial local-source root. A
+normalized import may move upward with `..` only while it remains inside that
+tree:
+
+```text
+main.protos -> ./lib/parser.protos       allowed
+lib/parser.protos -> ../helper.protos    allowed
+main.protos -> ../outside.protos         Error
+```
+
+The initial direct-file policy is intentionally exact:
+
+- `/` is the portable local-module separator;
+- no process-CWD fallback exists;
+- no `.protos` extension is appended implicitly;
+- no directory/index or search-path probing occurs;
+- component names must match exactly, including case;
+- imported symbolic-link/reparse traversal is not followed;
+- a local source-loading namespace does not grant a general guest `Filesystem`
+  capability.
+
+The direct entry itself has a canonical module identity before its first source
+expression executes. Therefore an ordinary cycle:
+
+```text
+main -> helper -> main
+```
+
+returns the already-existing partially initialized `main` module instance rather
+than executing the entry a second time.
+
+`protos debug <file>` uses the same local module namespace and identity rules as
+ordinary direct-file execution.
+
+Locationless execution does not invent a filesystem base. `-e`, the REPL, stdin,
+and generated/in-memory sources have no implicit `./` local namespace and do not
+fall back to the current working directory.
+
+This direct-file domain does **not** mean that every import is a relative path.
+Other resolver domains remain distinct:
+
+```protos
+Std: import("std:collections/Array")
+```
+
+Package execution continues to own `self:` and `dep:`. Absolute-file, `file:`,
+network/URL, Git, wider/multiple source-root, and similar domains remain possible
+future resolver additions rather than alternate meanings of `import`.
+
 ## Specifier, ModuleKey, and module instance are different concepts
 
 Module loading has three distinct layers:

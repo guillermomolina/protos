@@ -158,13 +158,21 @@ public final class ProtosCli {
             return 1;
         }
 
-        try (Session session =
-                debugSession(applicationArguments, in, out, err)) {
-            return evalFile(
-                    sourcePath,
-                    sourceText,
-                    session,
-                    err);
+        Path core = core();
+        try (ProtosDirectFileModuleResolver resolver =
+                        new ProtosDirectFileModuleResolver(
+                                sourcePath,
+                                sourceText,
+                                new ProtosStandardLibraryModuleResolver(core.getParent()));
+                Session session =
+                        debugSession(
+                                core,
+                                resolver,
+                                applicationArguments,
+                                in,
+                                out,
+                                err)) {
+            return evalCanonicalDirectFile(resolver, session, err);
         } catch (IOException | RuntimeException failure) {
             err.println("protos debug: " + failure.getMessage());
             return 1;
@@ -172,16 +180,17 @@ public final class ProtosCli {
     }
 
     private Session debugSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
             List<String> applicationArguments,
             InputStream in,
             PrintStream out,
             PrintStream err)
             throws IOException {
-        Path core = core();
         Session session =
                 createDebugSession(
                         core,
-                        new ProtosStandardLibraryModuleResolver(core.getParent()),
+                        moduleResolver,
                         applicationArguments,
                         in,
                         out,
@@ -675,8 +684,23 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws IOException {
-        try (Session session = session(applicationArguments, in, out, err)) {
-            return evalFile(sourcePath, characters, session, err);
+        Path core = core();
+        try (ProtosDirectFileModuleResolver resolver =
+                        new ProtosDirectFileModuleResolver(
+                                sourcePath,
+                                characters,
+                                new ProtosStandardLibraryModuleResolver(core.getParent()));
+                Session session =
+                        session(
+                                core,
+                                resolver,
+                                applicationArguments,
+                                in,
+                                out,
+                                err)) {
+            ProtosCliPrintFacility.install(
+                    session.activation(), session.process(), renderer);
+            return evalCanonicalDirectFile(resolver, session, err);
         }
     }
 
@@ -1162,14 +1186,35 @@ public final class ProtosCli {
         }
     }
 
-    private int evalFile(
-            Path sourcePath,
-            String characters,
+    private int evalCanonicalDirectFile(
+            ProtosDirectFileModuleResolver resolver,
             Session s,
             PrintStream err) {
         try {
-            executeStandaloneRootTask(s.executeFile(sourcePath, characters));
+            ProtosPrelude prelude =
+                    s.activation()
+                            .prelude()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "direct-file entry requires an owning Core prelude"));
+            executeStandaloneRootTask(
+                    ProtosCanonicalInitialModuleExecution.execute(
+                            prelude,
+                            resolver,
+                            resolver.entryModule(),
+                            s.activation()));
             return 0;
+        } catch (IOException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof ParseError parseError) {
+                err.println("Syntax error: " + parseError.getMessage());
+            } else if (cause instanceof ProtosSignalException signal) {
+                err.println("Error: " + diagnosticInspector.render(signal.error()));
+            } else {
+                err.println("Runtime error: " + e.getMessage());
+            }
+            return 1;
         } catch (ParseError e) {
             err.println("Syntax error: " + e.getMessage());
             return 1;
@@ -1253,6 +1298,9 @@ public final class ProtosCli {
                         + "without --jobs the Test Tool uses jobs = 1.\n"
                         + "Application arguments are available through process.args(); "
                         + "the file/source launcher identity is excluded.\n"
+                        + "Direct file/debug execution resolves explicit ./ and ../ module "
+                        + "specifiers relative to the importing source inside the selected "
+                        + "entry-directory tree; there is no CWD fallback or implicit extension.\n"
                         + "The CLI provisions stdin/stdout/stderr as byte streams with "
                         + "UTF-8 host-selected Encoding associations.\n"
                         + "File and -e execution write only explicit program output; "
@@ -1287,17 +1335,6 @@ public final class ProtosCli {
             }
             return processContext.execute(
                     Objects.requireNonNull(source, "source"), activation);
-        }
-
-        ProtosExecutionOutcome executeFile(Path path, CharSequence characters) {
-            if (processContext == null) {
-                throw new IllegalStateException(
-                        "session is not bound to a Polyglot Process Context");
-            }
-            return processContext.executeFile(
-                    Objects.requireNonNull(path, "path"),
-                    Objects.requireNonNull(characters, "characters"),
-                    activation);
         }
 
         ProtosExecutionOutcome executeModuleSource(ProtosModuleSource source) {

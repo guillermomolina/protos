@@ -121,6 +121,108 @@ final class ProtosCliTest {
     }
 
     @Test
+    void directFileLocalImportsAreCanonicalImporterRelativeAndConfined()
+            throws Exception {
+        Path root = Files.createTempDirectory("protos-cli009-");
+        Path source = root.resolve("main.protos");
+        Path helper = root.resolve("helper.protos");
+        Path b = root.resolve("b.protos");
+        Path caseTarget = root.resolve("CaseTarget.protos");
+        Path sub = Files.createDirectory(root.resolve("sub"));
+        Path a = sub.resolve("a.protos");
+        Path outside =
+                root.resolveSibling(
+                        root.getFileName().toString() + "-outside.protos");
+        try {
+            Files.writeString(
+                    source,
+                    "print(\"main\")\n"
+                            + "marker: Object()\n"
+                            + "Helper: import(\"./helper.protos\")\n"
+                            + "print(Helper.entryMarker === marker)\n",
+                    StandardCharsets.UTF_8);
+            Files.writeString(
+                    helper,
+                    "Main: import(\"./main.protos\")\n"
+                            + "entryMarker: Main.marker\n",
+                    StandardCharsets.UTF_8);
+
+            R cycle = run(source.toString());
+            assertEquals(0, cycle.c);
+            assertEquals("main\ntrue\n", cycle.o);
+            assertTrue(cycle.e.isBlank(), cycle.e);
+
+            Files.writeString(
+                    source,
+                    "A: import(\"./sub/a.protos\")\n"
+                            + "print(A.value)\n",
+                    StandardCharsets.UTF_8);
+            Files.writeString(
+                    a,
+                    "B: import(\"../b.protos\")\n"
+                            + "value: B.value\n",
+                    StandardCharsets.UTF_8);
+            Files.writeString(
+                    b,
+                    "value: \"nested\"\n",
+                    StandardCharsets.UTF_8);
+
+            R nested = run(source.toString());
+            assertEquals(0, nested.c);
+            assertEquals("nested\n", nested.o);
+            assertTrue(nested.e.isBlank(), nested.e);
+
+            Files.writeString(
+                    outside,
+                    "value: \"outside\"\n",
+                    StandardCharsets.UTF_8);
+            Files.writeString(
+                    source,
+                    "Outside: import(\"../"
+                            + outside.getFileName()
+                            + "\")\n",
+                    StandardCharsets.UTF_8);
+            R escape = run(source.toString());
+            assertEquals(1, escape.c);
+            assertTrue(escape.o.isBlank(), escape.o);
+            assertTrue(escape.e.startsWith("Error:"), escape.e);
+
+            Files.writeString(
+                    source,
+                    "Missing: import(\"./helper\")\n",
+                    StandardCharsets.UTF_8);
+            R noImplicitExtension = run(source.toString());
+            assertEquals(1, noImplicitExtension.c);
+            assertTrue(noImplicitExtension.e.startsWith("Error:"), noImplicitExtension.e);
+
+            Files.writeString(
+                    caseTarget,
+                    "value: 1\n",
+                    StandardCharsets.UTF_8);
+            Files.writeString(
+                    source,
+                    "WrongCase: import(\"./casetarget.protos\")\n",
+                    StandardCharsets.UTF_8);
+            R wrongCase = run(source.toString());
+            assertEquals(1, wrongCase.c);
+            assertTrue(wrongCase.e.startsWith("Error:"), wrongCase.e);
+
+            R locationless = run("-e", "import(\"./helper.protos\")");
+            assertEquals(1, locationless.c);
+            assertTrue(locationless.e.startsWith("Error:"), locationless.e);
+        } finally {
+            Files.deleteIfExists(a);
+            Files.deleteIfExists(sub);
+            Files.deleteIfExists(caseTarget);
+            Files.deleteIfExists(b);
+            Files.deleteIfExists(helper);
+            Files.deleteIfExists(source);
+            Files.deleteIfExists(root);
+            Files.deleteIfExists(outside);
+        }
+    }
+
+    @Test
     void packageSubcommandRunsBundledProtosToolWithProcessArgsStdoutAndRestrictedFilesystem() {
         R result = run("package");
 

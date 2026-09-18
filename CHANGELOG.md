@@ -1,3 +1,21 @@
+## 0.3.28-SNAPSHOT
+
+- Implement `CLI009 — Direct-file local module resolution` (GitHub #555) under ratified D137
+  Candidate B′. Add an official direct-file resolver domain for explicit `./`
+  and `../` module specifiers, resolve them relative to the importing local
+  source inside the selected entry-directory tree, preserve exact component
+  spelling and fail-closed no-follow confinement, and keep CWD lookup,
+  implicit extensions, index/search-path probing, absolute-file semantics and
+  general Filesystem authority absent. Give direct and debug file entries a
+  canonical `ModuleKey` before execution and route them through the existing
+  cache-before-execute initial-module lifecycle so `main -> helper -> main`
+  aliases the same partially initialized entry instance. Preserve `std:`
+  composition and leave package `self:`/`dep:` plus locationless `-e`/REPL
+  resolution unchanged. Add focused resolver, CLI cycle/confinement, debugger
+  parity and routing coverage and document the direct-file namespace. Core
+  language and package semantics remain unchanged. Implementation version
+  becomes `0.3.28-SNAPSHOT`.
+
 ## 0.3.27-SNAPSHOT
 
 - Advance `AUD012 — Direct Java guest-execution path audit` (GitHub #541) under

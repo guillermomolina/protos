@@ -56,15 +56,22 @@ final class ProtosLm009DPublicDebugCliTest {
     @Test
     void publicDebugCommandPublishesReadinessAndRoutesGuestStreamsThroughRealDap()
             throws Exception {
-        Path source = Files.createTempFile("protos-lm009-d2-", ".protos");
+        Path root = Files.createTempDirectory("protos-lm009-d2-");
+        Path source = root.resolve("main.protos");
+        Path helper = root.resolve("helper.protos");
         ByteArrayOutputStream controlOut = new ByteArrayOutputStream();
         ByteArrayOutputStream diagnostics = new ByteArrayOutputStream();
         AtomicInteger exitCode = new AtomicInteger(Integer.MIN_VALUE);
 
         Files.writeString(
+                helper,
+                "value: \"application-out\"\n",
+                StandardCharsets.UTF_8);
+        Files.writeString(
                 source,
-                "errorWriter: TextWriter(process.stderr(), process.stderrEncoding())\n"
-                        + "print(process.args().at(0))\n"
+                "Helper: import(\"./helper.protos\")\n"
+                        + "errorWriter: TextWriter(process.stderr(), process.stderrEncoding())\n"
+                        + "print(Helper.value)\n"
                         + "errorWriter.writeLine(process.args().at(1)).value()",
                 StandardCharsets.UTF_8);
 
@@ -176,7 +183,9 @@ final class ProtosLm009DPublicDebugCliTest {
                 cliThread.interrupt();
                 cliThread.join(TIMEOUT.toMillis());
             }
+            Files.deleteIfExists(helper);
             Files.deleteIfExists(source);
+            Files.deleteIfExists(root);
         }
     }
 

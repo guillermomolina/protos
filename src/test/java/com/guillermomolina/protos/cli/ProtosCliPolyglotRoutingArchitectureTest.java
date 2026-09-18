@@ -57,7 +57,9 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertFalse(source.contains("s.compiler.compile(input).call"));
         assertFalse(source.contains("s.compiler.compile(src)"));
         assertTrue(source.contains("Source.newBuilder(ProtosLanguage.ID"));
-        assertTrue(source.contains("processContext.executeFile("));
+        assertTrue(source.contains("ProtosDirectFileModuleResolver"));
+        assertTrue(source.contains("ProtosCanonicalInitialModuleExecution.execute("));
+        assertFalse(source.contains("processContext.executeFile("));
         assertTrue(source.contains("processContext.executeModuleSource("));
         assertFalse(source.contains("private static Source sourceFromPath("));
         assertFalse(source.contains(".uri(exact.toUri())"));
