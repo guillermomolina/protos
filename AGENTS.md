@@ -1013,6 +1013,61 @@ validation class, commit it there, re-check the publication base, and publish by
 a normal non-force Git fast-forward. Do not bypass that path by directly editing
 repository contents or moving Git refs through the GitHub connector/API.
 
+### Sole autonomous repository-publication exception
+<!-- GITHUB022 PROTOS-PROJECT-DOCS-PUBLICATION-EXCEPTION -->
+
+The project owner grants standing repository-publication authorization for
+exactly one repository: `guillermomolina/protos-project-docs`. This is the only
+repository an agent may autonomously publish repository-content changes to
+without obtaining another per-publication confirmation when the active task
+already requires a durable project-documentation publication.
+
+For `guillermomolina/protos-project-docs`, the normal isolated-worktree plus
+non-force Git fast-forward path remains preferred whenever network-capable Git
+transport is available. When normal Git transport is unavailable in the current
+execution environment but an authenticated GitHub connector/API has repository
+write capability, that repository alone MAY use the following bounded Git Data
+API publication fallback. This fallback is a governed publication path, not a
+general exemption from repository-write safety.
+
+The fallback MUST:
+
+1. read the current `main` ref and record its exact commit as
+   `PUBLICATION_BASE`;
+2. read the exact target files plus the base commit/tree required to construct
+   the bounded change;
+3. materialize the complete intended final bytes outside repository history and
+   perform the validation required by the definitive documentation/governance
+   delta before moving any ref;
+4. create only the blobs/tree/commit required for that validated delta, with the
+   new commit's sole parent exactly `PUBLICATION_BASE`;
+5. re-read `main` immediately before publication and abort if it no longer
+   equals `PUBLICATION_BASE`;
+6. update `refs/heads/main` only by a non-force update to that exact validated
+   commit; never force-update, merge, rebase, or guess through concurrent
+   movement;
+7. re-read `main`, the exact published commit, the changed-path set, and the
+   published target files after the ref update, and report the exact published
+   SHA; and
+8. preserve every applicable `AGENTS.md`, scope, validation, authority,
+   approval, and durable-record requirement exactly as the normal Git path
+   would.
+
+The API fallback MUST NOT use `create_file`, `update_file`, `create_blob`,
+`create_tree`, `create_commit`, `update_ref`, or equivalent mutations as
+capability or connectivity probes. It may invoke those operations only as the
+already-authorized publication transaction after all required read-only checks
+and pre-publication validation have succeeded. It MUST NOT create a temporary
+remote branch.
+
+This standing authorization is repository-specific, not content-type inference.
+It applies only when the repository coordinate is exactly
+`guillermomolina/protos-project-docs`. It does **not** authorize repository
+publication to `guillermomolina/protos`, any related Protos repository, a fork,
+or any other repository. Changes to those repositories continue to require their
+ordinary authorized Git publication path or a user-executed patch/launcher when
+the agent cannot perform that path itself.
+
 This restriction does **not** prohibit intended live GitHub coordination
 mutations governed elsewhere in this file, such as creating/updating Issues or
 Pull Requests, labels, assignees, native hierarchy/dependency relations, release
@@ -3471,7 +3526,10 @@ If a test contradicts the current specification, report the contradiction instea
 
 Operational boundaries
 
-Never commit or push changes unless the user explicitly requests it.
+Never commit or push changes unless the user explicitly requests it. The standing
+authorization in **Sole autonomous repository-publication exception** counts as
+explicit owner authorization only for publications to the exact repository
+`guillermomolina/protos-project-docs` within that section's bounded rules.
 
 Do not create releases, tags, branches, or pull requests unless explicitly requested.
 
