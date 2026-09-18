@@ -30,10 +30,6 @@ Manifest: import("self:Manifest")
 ResourceCatalog: import("self:ResourceCatalog")
 ResourceBinding: import("self:ResourceBinding")
 
-fail: () => {
-    Error().signal()
-}
-
 frozenTuple: (...items) => {
     items
 }

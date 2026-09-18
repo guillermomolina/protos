@@ -22,10 +22,6 @@
 Document: import("tool-shared:Toml10/TomlDocument")
 Manifest: import("self:Manifest")
 
-fail: () => {
-    Error().signal()
-}
-
 frozenTuple: (...items) => {
     items
 }

@@ -17,10 +17,6 @@ Schema: import("self:ManifestSchemaV1")
 Version: import("self:ReleaseVersion")
 Constraint: import("self:DependencyConstraint")
 
-fail: () => {
-    Error().signal()
-}
-
 readTextAt: (projectTreeFilesystem, path) => {
     file: projectTreeFilesystem.open(path).value()
     reader: TextReader.owning(file, Encoding.UTF8)

@@ -17,10 +17,6 @@ Syntax: import("self:LockSyntax")
 Version: import("self:ReleaseVersion")
 Arrays: import("std:collections/Array")
 
-fail: () => {
-    Error().signal()
-}
-
 emptyBytes: () => {
     Encoding.UTF8.encode("")
 }

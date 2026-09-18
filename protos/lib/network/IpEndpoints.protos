@@ -16,10 +16,6 @@ parse: (text) => {
     // Strict String-domain validation without conversion.
     ignoredStringValidation: text + ""
 
-    fail: () => {
-        Error().signal()
-    }
-
     size: text.size()
     (size == 0).ifTrue(() => {
         fail()
@@ -183,10 +179,6 @@ parse: (text) => {
 }
 
 format: (endpoint) => {
-    fail: () => {
-        Error().signal()
-    }
-
     IpEndpoint.recognizes(endpoint).ifFalse(() => {
         fail()
     })

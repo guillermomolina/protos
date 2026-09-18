@@ -16,10 +16,6 @@
 //! D122 Candidate F inert suite graph with D123 SuiteId, D126 CorpusId and D125
 //! ExecutionRequirementId validation in separate logical namespaces.
 
-fail: () => {
-    Error().signal()
-}
-
 validateString: (value) => {
     validated: "" + value
     (validated === value).ifFalse(() => {

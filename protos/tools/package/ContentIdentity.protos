@@ -17,10 +17,6 @@ Arrays: import("std:collections/Array")
 Files: import("std:io/Files")
 SHA256: import("std:crypto/SHA256")
 
-fail: () => {
-    Error().signal()
-}
-
 emptyBytes: () => {
     Encoding.UTF8.encode("")
 }

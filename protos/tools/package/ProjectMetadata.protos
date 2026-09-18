@@ -18,10 +18,6 @@ Files: import("std:io/Files")
 Root: import("self:ResolutionRoot")
 SHA256: import("std:crypto/SHA256")
 
-fail: () => {
-    Error().signal()
-}
-
 appendBytes: (target, source) => {
     source.each((octet) => {
         target.add(octet)

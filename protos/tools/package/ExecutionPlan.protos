@@ -22,10 +22,6 @@ Constraint: import("self:DependencyConstraint")
 Manifest: import("self:ManifestCommand")
 Version: import("self:ReleaseVersion")
 
-fail: () => {
-    Error().signal()
-}
-
 workspaceRef: (packageId) => {
     {
         kind: "workspace"

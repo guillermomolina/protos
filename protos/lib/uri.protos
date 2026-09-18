@@ -30,10 +30,6 @@ parse: (text) => {
     queryValue: null
     fragmentValue: null
 
-    fail: () => {
-        Error().signal()
-    }
-
     isAlpha: (octet) => {
         ((octet >= 65) && (octet <= 90)) ||
             ((octet >= 97) && (octet <= 122))
@@ -573,10 +569,6 @@ parse: (text) => {
 
 /// Serializes one validated seven-component RFC 3986 URI-reference record.
 format: (reference) => {
-    fail: () => {
-        Error().signal()
-    }
-
     // These ordinary lookups intentionally define the structural input boundary:
     // a caller may construct compatible data; no Uri prototype/class is required.
     schemeValue: reference.scheme
@@ -697,10 +689,6 @@ format: (reference) => {
 
 /// Resolves one RFC 3986 URI-reference against one absolute-URI base.
 resolve: (base, reference) => {
-    fail: () => {
-        Error().signal()
-    }
-
     // Reuse the already-published structural/syntax authority. resolve accepts
     // component data, not String arguments, and does not create a second grammar.
     ignoredBaseValidation: format(base)

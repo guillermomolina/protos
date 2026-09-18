@@ -16,10 +16,6 @@
 Version: import("self:ReleaseVersion")
 Constraint: import("self:DependencyConstraint")
 
-fail: () => {
-    Error().signal()
-}
-
 select: (constraint, candidates) => {
     found: false
     selected: null

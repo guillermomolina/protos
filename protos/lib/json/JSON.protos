@@ -135,10 +135,6 @@ parse: (text) => {
     ignoredStringValidation: text + ""
     source: Encoding.UTF8.encode(text)
 
-    fail: () => {
-        Error().signal()
-    }
-
     isWhitespace: (octet) => {
         result: octet == 32
         (octet == 9).ifTrue(() => { result = true })
@@ -1012,10 +1008,6 @@ parse: (text) => {
 
 encode: (root) => {
     output: Encoding.UTF8.encode("")
-
-    fail: () => {
-        Error().signal()
-    }
 
     emitAsciiText: (text) => {
         Encoding.UTF8.encode(text).each((octet) => {

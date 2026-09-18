@@ -27,10 +27,6 @@ keyPath: (text) => {
     index: 0
     length: source.size()
 
-    fail: () => {
-        Error().signal()
-    }
-
     peek: () => {
         result: -1
         (index < length).ifTrue(() => {
@@ -359,10 +355,6 @@ value: (text) => {
     source: Encoding.UTF8.encode(text)
     index: 0
     length: source.size()
-
-    fail: () => {
-        Error().signal()
-    }
 
     peek: () => {
         result: -1

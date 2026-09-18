@@ -7,10 +7,6 @@
 
 Manifest: import("self:Manifest")
 
-fail: () => {
-    Error().signal()
-}
-
 planFromEntries: (prefix, entries) => {
     cases: Array()
     entries.each((entry) => {

@@ -15,10 +15,6 @@
 
 Version: import("self:ReleaseVersion")
 
-fail: () => {
-    Error().signal()
-}
-
 emptyBytes: () => {
     Encoding.UTF8.encode("")
 }

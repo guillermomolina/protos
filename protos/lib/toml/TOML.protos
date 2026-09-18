@@ -458,10 +458,6 @@ table: (...nameNodePairs) => {
 encode: (rootTable) => {
     output: Encoding.UTF8.encode("")
 
-    fail: () => {
-        Error().signal()
-    }
-
     emitText: (text) => {
         ignoredStringValidation: text + ""
         Encoding.UTF8.encode(text).each((octet) => {
@@ -1204,10 +1200,6 @@ parse: (text) => {
         index: 0
         length: source.size()
 
-        fail: () => {
-            Error().signal()
-        }
-
         peek: () => {
             result: -1
             (index < length).ifTrue(() => {
@@ -1543,10 +1535,6 @@ parse: (text) => {
         source: Encoding.UTF8.encode(text)
         index: 0
         length: source.size()
-
-        fail: () => {
-            Error().signal()
-        }
 
         peek: () => {
             result: -1
@@ -3398,10 +3386,6 @@ parse: (text) => {
         multiline: false
         comment: false
 
-        fail: () => {
-            Error().signal()
-        }
-
         peek: () => {
             value: -1
             (index < length).ifTrue(() => {
@@ -3702,10 +3686,6 @@ parse: (text) => {
 
     documentTable: (text) => {
         items: documentStatements(text)
-
-        fail: () => {
-            Error().signal()
-        }
 
         node: (kind, value) => {
             result: {

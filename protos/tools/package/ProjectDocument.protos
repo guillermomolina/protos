@@ -17,10 +17,6 @@ Arrays: import("std:collections/Array")
 Root: import("self:ResolutionRoot")
 Syntax: import("self:LockSyntax")
 
-fail: () => {
-    Error().signal()
-}
-
 nonEmptyQstring: (text) => {
     bytes: Encoding.UTF8.encode(text)
     (bytes.size() == 0).ifTrue(() => {

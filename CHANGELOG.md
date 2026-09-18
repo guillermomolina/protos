@@ -1,3 +1,15 @@
+## 0.3.41-SNAPSHOT
+
+- Continue `I046-B — Add standard prelude fail callable` (GitHub #585) with the
+  bounded equivalent-source migration approved by D146. Remove 46 redundant
+  local zero-argument `fail` wrappers across 29 Standard Library and bundled
+  Tool source files where the wrapper was exactly `Error().signal()` and had no
+  additional state, alternate Error binding, reassignment, or value-observable
+  behavior. Those call sites now resolve the ordinary frozen-prelude `fail`
+  callable. Preserve stateful/custom local `fail` helpers, direct
+  `Error().signal()` sites, `error.signal()` identity semantics, and
+  `std:test/Assertions`. Implementation version becomes `0.3.41-SNAPSHOT`.
+
 ## 0.3.40-SNAPSHOT
 
 - Begin executable `I046-B — Add standard prelude fail callable` (GitHub #585)

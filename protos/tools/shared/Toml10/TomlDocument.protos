@@ -30,10 +30,6 @@ statements: (text) => {
     multiline: false
     comment: false
 
-    fail: () => {
-        Error().signal()
-    }
-
     peek: () => {
         value: -1
         (index < length).ifTrue(() => {
@@ -324,10 +320,6 @@ statements: (text) => {
 
 table: (text) => {
     items: statements(text)
-
-    fail: () => {
-        Error().signal()
-    }
 
     node: (kind, value) => {
         result: {

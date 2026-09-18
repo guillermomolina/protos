@@ -77,10 +77,6 @@ parse: (text) => {
     // Exercise the strict String receiver domain without changing the value.
     ignoredStringValidation: text + ""
 
-    fail: () => {
-        Error().signal()
-    }
-
     totalSize: text.size()
     (totalSize > 45).ifTrue(() => {
         fail()
@@ -430,10 +426,6 @@ parse: (text) => {
 }
 
 format: (address) => {
-    fail: () => {
-        Error().signal()
-    }
-
     IpAddress.recognizes(address).ifFalse(() => {
         fail()
     })

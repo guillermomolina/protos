@@ -18,10 +18,6 @@ Version: import("self:ReleaseVersion")
 Arrays: import("std:collections/Array")
 SHA256: import("std:crypto/SHA256")
 
-fail: () => {
-    Error().signal()
-}
-
 nonEmptyString: (text) => {
     encoded: Encoding.UTF8.encode(text)
     (encoded.size() == 0).ifTrue(() => {

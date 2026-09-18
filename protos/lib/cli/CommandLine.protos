@@ -17,10 +17,6 @@
 
 /// Canonicalizes one option descriptor into a fresh frozen OptionSpec record.
 option: (descriptor) => {
-    fail: () => {
-        Error().signal()
-    }
-
     required: (name) => {
         descriptor.hasSlot(name).ifFalse(() => {
             fail()
@@ -165,10 +161,6 @@ option: (descriptor) => {
 
 /// Canonicalizes one positional descriptor into a fresh frozen PositionalSpec record.
 positional: (descriptor) => {
-    fail: () => {
-        Error().signal()
-    }
-
     required: (name) => {
         descriptor.hasSlot(name).ifFalse(() => {
             fail()
@@ -234,10 +226,6 @@ positional: (descriptor) => {
 
 /// Canonicalizes one command descriptor and its complete nested specification graph.
 command: (descriptor) => {
-    fail: () => {
-        Error().signal()
-    }
-
     validateString: (value) => {
         validated: "" + value
         (validated === value).ifFalse(() => {
@@ -406,10 +394,6 @@ command: (descriptor) => {
 /// boundary, parent-minimum reservation, current-scope `--` escape and
 /// irreversible child scope transfer.
 parse: (specification, suppliedArguments) => {
-    fail: () => {
-        Error().signal()
-    }
-
     validateArray: (value) => {
         (value.parent() === Array).ifFalse(() => {
             fail()
@@ -947,10 +931,6 @@ parse: (specification, suppliedArguments) => {
 /// every value-bearing canonical specification already carries a non-empty
 /// presentation valueName.
 renderHelp: (rootSpec, commandPath) => {
-    fail: () => {
-        Error().signal()
-    }
-
     validateArray: (value) => {
         (value.parent() === Array).ifFalse(() => {
             fail()

@@ -20,10 +20,6 @@ Metadata: import("self:ProjectMetadata")
 Publication: import("self:MetadataPublication")
 Root: import("self:ResolutionRoot")
 
-fail: () => {
-    Error().signal()
-}
-
 workspaceRefMatches: (ref, packageId) => {
     matches: ref.kind == "workspace"
     matches.ifTrue(() => {
