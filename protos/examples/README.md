@@ -27,6 +27,7 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Use identity-keyed maps | `collections/identity-map.protos` |
 | Use structurally equal values as Map vs IdentityMap keys | `collections/path-keys.protos` |
 | Build and compare portable paths | `paths/portable-paths.protos` |
+| Import a neighboring direct-file module | `modules/direct-file-import/main.protos` |
 | Run work asynchronously and compose Futures | `concurrency/future-chain.protos` |
 | Observe the current Actor identity | `concurrency/actor-current.protos` |
 | Spawn an Actor and request a reply | `concurrency/actor-request-reply.protos` |

@@ -726,6 +726,12 @@ toolchain belong to their own project/library layer and are covered separately.
 
 The repository already contains real imports using multiple resolver domains.
 
+Direct-file local import:
+
+- [`../../protos/examples/modules/direct-file-import/main.protos`](../../protos/examples/modules/direct-file-import/main.protos)
+  imports the neighboring `helper.protos` with the explicit
+  `./helper.protos` direct-file spelling.
+
 Standard Library import:
 
 - [`../../protos/benchmarks/collections/array-map.protos`](../../protos/benchmarks/collections/array-map.protos)
