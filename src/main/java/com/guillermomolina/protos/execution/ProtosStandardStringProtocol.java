@@ -41,12 +41,26 @@ public final class ProtosStandardStringProtocol {
         Objects.requireNonNull(stringPrototype, "stringPrototype");
         requireUnicode17();
 
-        if (stringPrototype.hasLocalSlot("size")
+        if (stringPrototype.hasLocalSlot("recognizes")
+                || stringPrototype.hasLocalSlot("size")
                 || stringPrototype.hasLocalSlot("at")
                 || stringPrototype.hasLocalSlot("+")
                 || stringPrototype.hasLocalSlot("concat")) {
             throw new IllegalStateException("Core String already defines a standard protocol slot");
         }
+
+        stringPrototype.createLocalSlot(
+                "recognizes",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            if (activation.receiver() != stringPrototype) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            requireArity(activation, supplied.size(), 1);
+                            return ProtosBooleanValue.of(
+                                    supplied.get(0) instanceof ProtosStringValue);
+                        }));
 
         stringPrototype.createLocalSlot(
                 "size",

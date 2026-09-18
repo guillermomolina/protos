@@ -25,8 +25,7 @@ option: (descriptor) => {
     }
 
     validateString: (value) => {
-        validated: "" + value
-        (validated === value).ifFalse(() => {
+        String.recognizes(value).ifFalse(() => {
             fail()
         })
         value
@@ -90,7 +89,9 @@ option: (descriptor) => {
     }
 
     validateInteger: (value) => {
-        ignoredValidation: value.div(1)
+        Integer.recognizes(value).ifFalse(() => {
+            fail()
+        })
         value
     }
 
@@ -169,8 +170,7 @@ positional: (descriptor) => {
     }
 
     validateString: (value) => {
-        validated: "" + value
-        (validated === value).ifFalse(() => {
+        String.recognizes(value).ifFalse(() => {
             fail()
         })
         value
@@ -192,7 +192,9 @@ positional: (descriptor) => {
     }
 
     validateInteger: (value) => {
-        ignoredValidation: value.div(1)
+        Integer.recognizes(value).ifFalse(() => {
+            fail()
+        })
         value
     }
 
@@ -227,8 +229,7 @@ positional: (descriptor) => {
 /// Canonicalizes one command descriptor and its complete nested specification graph.
 command: (descriptor) => {
     validateString: (value) => {
-        validated: "" + value
-        (validated === value).ifFalse(() => {
+        String.recognizes(value).ifFalse(() => {
             fail()
         })
         value
@@ -272,7 +273,7 @@ command: (descriptor) => {
     }
 
     validateArray: (value) => {
-        (value.parent() === Array).ifFalse(() => {
+        Array.recognizes(value).ifFalse(() => {
             fail()
         })
         value
@@ -395,15 +396,14 @@ command: (descriptor) => {
 /// irreversible child scope transfer.
 parse: (specification, suppliedArguments) => {
     validateArray: (value) => {
-        (value.parent() === Array).ifFalse(() => {
+        Array.recognizes(value).ifFalse(() => {
             fail()
         })
         value
     }
 
     validateString: (value) => {
-        validated: "" + value
-        (validated === value).ifFalse(() => {
+        String.recognizes(value).ifFalse(() => {
             fail()
         })
         value
@@ -932,15 +932,14 @@ parse: (specification, suppliedArguments) => {
 /// presentation valueName.
 renderHelp: (rootSpec, commandPath) => {
     validateArray: (value) => {
-        (value.parent() === Array).ifFalse(() => {
+        Array.recognizes(value).ifFalse(() => {
             fail()
         })
         value
     }
 
     validateString: (value) => {
-        validated: "" + value
-        (validated === value).ifFalse(() => {
+        String.recognizes(value).ifFalse(() => {
             fail()
         })
         value

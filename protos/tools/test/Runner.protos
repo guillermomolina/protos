@@ -431,7 +431,9 @@ binary64PowerOfTwo: (exponent) => {
 
 floatFromExpectedBits: (rawBits) => {
     // Enforce the D3C2A domain: one ordinary unbounded Integer raw pattern.
-    rawBits.div(1)
+    Integer.recognizes(rawBits).ifFalse(() => {
+        policyError()
+    })
     (rawBits < 0).ifTrue(() => { policyError() })
     (rawBits > 18446744073709551615).ifTrue(() => { policyError() })
 
@@ -1266,7 +1268,9 @@ runBoundedSimpleWithLoader: (
     executorAsync,
     maxInFlight
 ) => {
-    maxInFlight.div(1)
+    Integer.recognizes(maxInFlight).ifFalse(() => {
+        policyError()
+    })
     (maxInFlight > 0).ifFalse(() => {
         policyError()
     })
@@ -1476,7 +1480,9 @@ runBoundedWithLoader: (
     inspectorExecutorAsync,
     maxInFlight
 ) => {
-    maxInFlight.div(1)
+    Integer.recognizes(maxInFlight).ifFalse(() => {
+        policyError()
+    })
     (maxInFlight > 0).ifFalse(() => {
         policyError()
     })
@@ -1593,7 +1599,9 @@ runBoundedWithResourcesWithLoader: (
     inspectorExecutorAsync,
     maxInFlight
 ) => {
-    maxInFlight.div(1)
+    Integer.recognizes(maxInFlight).ifFalse(() => {
+        policyError()
+    })
     (maxInFlight > 0).ifFalse(() => {
         policyError()
     })
@@ -1997,7 +2005,9 @@ runD108WithResourcesWithLoader: (
     terminalObserver = null,
     caseAuthorityExecutorAsync = null
 ) => {
-    maxInFlight.div(1)
+    Integer.recognizes(maxInFlight).ifFalse(() => {
+        policyError()
+    })
     (maxInFlight > 0).ifFalse(() => {
         policyError()
     })

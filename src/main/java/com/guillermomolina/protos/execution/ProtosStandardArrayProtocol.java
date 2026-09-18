@@ -67,6 +67,22 @@ public final class ProtosStandardArrayProtocol {
     public static void install(ProtosObjectValue arrayPrototype) {
         Objects.requireNonNull(arrayPrototype, "arrayPrototype");
 
+        if (arrayPrototype.hasLocalSlot("recognizes")) {
+            throw new IllegalStateException(
+                    "Core Array already defines a local recognizes slot");
+        }
+        arrayPrototype.createLocalSlot(
+                "recognizes",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            if (activation.receiver() != arrayPrototype
+                                    || supplied.size() != 1) {
+                                throw invalid(activation);
+                            }
+                            return ProtosBooleanValue.of(
+                                    supplied.get(0) instanceof ProtosArrayValue);
+                        }));
+
         if (arrayPrototype.hasLocalSlot("call")) {
             throw new IllegalStateException("Core Array already defines a local call slot");
         }

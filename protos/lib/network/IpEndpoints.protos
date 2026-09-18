@@ -13,8 +13,10 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 parse: (text) => {
-    // Strict String-domain validation without conversion.
-    ignoredStringValidation: text + ""
+    // Validate the exact semantic String family without conversion.
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
 
     size: text.size()
     (size == 0).ifTrue(() => {

@@ -72,7 +72,9 @@ appendToken: (tokens, bytes, quoted) => {
 }
 
 lineTokens: (text) => {
-    ignoredStringValidation: text + ""
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
     source: Encoding.UTF8.encode(text)
 
     // States:

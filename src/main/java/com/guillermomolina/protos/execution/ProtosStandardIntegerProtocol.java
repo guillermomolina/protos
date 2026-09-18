@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -32,6 +33,23 @@ public final class ProtosStandardIntegerProtocol {
     public static void install(ProtosObjectValue integerPrototype) {
         Objects.requireNonNull(integerPrototype, "integerPrototype");
         requireSourceBackedClosure(integerPrototype, "negated");
+
+        if (integerPrototype.hasLocalSlot("recognizes")) {
+            throw new IllegalStateException(
+                    "Core Integer already defines a local recognizes slot");
+        }
+        integerPrototype.createLocalSlot(
+                "recognizes",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            if (activation.receiver() != integerPrototype
+                                    || supplied.size() != 1) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            return ProtosBooleanValue.of(
+                                    supplied.get(0) instanceof ProtosIntegerValue);
+                        }));
 
         installBinary(integerPrototype, "+", java.math.BigInteger::add);
         installBinary(integerPrototype, "-", java.math.BigInteger::subtract);

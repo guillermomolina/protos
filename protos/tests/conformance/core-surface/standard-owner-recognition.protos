@@ -1,0 +1,153 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+
+// String: exact semantic family, not delegation.
+StringLike: String {}
+
+Assertions.require(String.recognizes("x") === true)
+Assertions.require(String.recognizes(StringLike) === false)
+Assertions.require(String.recognizes(String) === false)
+
+// Integer: ordinary unbounded family only.
+Assertions.require(Integer.recognizes(1) === true)
+Assertions.require(
+    Integer.recognizes(1234567890123456789012345678901234567890) === true
+)
+
+Assertions.require(Integer.recognizes(UInt8(1)) === false)
+Assertions.require(Integer.recognizes(Int8(1)) === false)
+Assertions.require(Integer.recognizes(UInt16(1)) === false)
+Assertions.require(Integer.recognizes(Int16(1)) === false)
+Assertions.require(Integer.recognizes(UInt32(1)) === false)
+Assertions.require(Integer.recognizes(Int32(1)) === false)
+Assertions.require(Integer.recognizes(UInt64(1)) === false)
+Assertions.require(Integer.recognizes(Int64(1)) === false)
+Assertions.require(Integer.recognizes(Integer) === false)
+
+// Float: exact semantic Float, with no numeric promotion.
+Assertions.require(Float.recognizes(1.0) === true)
+Assertions.require(Float.recognizes(1) === false)
+Assertions.require(Float.recognizes(Float) === false)
+
+// Array: receiver-owned standard indexed state, independent of parent/maturity.
+openArray: Array(1)
+
+closedArray: Array(2)
+closedArray.close()
+
+frozenArray: Array(3)
+frozenArray.freeze()
+
+MyArray: Array {
+    label: 9
+}
+descendantArray: MyArray(10, 20)
+
+ArrayLookalike: Array {}
+
+Assertions.require(Array.recognizes(openArray) === true)
+Assertions.require(Array.recognizes(closedArray) === true)
+Assertions.require(Array.recognizes(frozenArray) === true)
+Assertions.require(Array.recognizes(descendantArray) === true)
+Assertions.require(descendantArray.parent() === MyArray)
+Assertions.require(Array.recognizes(ArrayLookalike) === false)
+Assertions.require(Array.recognizes(Array) === false)
+
+// Exact canonical owner receiver.
+Assertions.signals(Error, () => { StringLike.recognizes("x") })
+
+IntegerLike: Integer {}
+Assertions.signals(Error, () => { IntegerLike.recognizes(1) })
+
+FloatLike: Float {}
+Assertions.signals(Error, () => { FloatLike.recognizes(1.0) })
+
+Assertions.signals(Error, () => { MyArray.recognizes(descendantArray) })
+
+// Exactly one supplied argument for every recognizer.
+assertArity: (owner) => {
+    Assertions.signals(Error, () => { owner.recognizes() })
+    Assertions.signals(Error, () => { owner.recognizes(null, null) })
+    null
+}
+
+assertArity(String)
+assertArity(Integer)
+assertArity(Float)
+assertArity(Array)
+
+// Recognition must not dispatch candidate behavior.
+calls: {
+    parent: 0
+    equality: 0
+    hash: 0
+    recognizes: 0
+}
+
+candidateSource: {
+    parent: () => {
+        calls.parent = calls.parent + 1
+        Object
+    }
+
+    equals: (other) => {
+        calls.equality = calls.equality + 1
+        true
+    }
+
+    hash: () => {
+        calls.hash = calls.hash + 1
+        1
+    }
+
+    recognizes: (value) => {
+        calls.recognizes = calls.recognizes + 1
+        true
+    }
+}
+
+candidate: candidateSource.alias("equals", "==")
+
+Assertions.require(String.recognizes(candidate) === false)
+Assertions.require(Integer.recognizes(candidate) === false)
+Assertions.require(Float.recognizes(candidate) === false)
+Assertions.require(Array.recognizes(candidate) === false)
+
+Assertions.require(calls.parent == 0)
+Assertions.require(calls.equality == 0)
+Assertions.require(calls.hash == 0)
+Assertions.require(calls.recognizes == 0)
+
+// No additional standard owner acquires an approved recognizer.
+//
+// Fixed-width Integer owners may find Integer.recognizes through ordinary
+// delegation, but exact-owner validation must reject them.
+Assertions.signals(Error, () => { UInt8.recognizes(UInt8(1)) })
+Assertions.signals(Error, () => { Int8.recognizes(Int8(1)) })
+Assertions.signals(Error, () => { UInt16.recognizes(UInt16(1)) })
+Assertions.signals(Error, () => { Int16.recognizes(Int16(1)) })
+Assertions.signals(Error, () => { UInt32.recognizes(UInt32(1)) })
+Assertions.signals(Error, () => { Int32.recognizes(Int32(1)) })
+Assertions.signals(Error, () => { UInt64.recognizes(UInt64(1)) })
+Assertions.signals(Error, () => { Int64.recognizes(Int64(1)) })
+
+Assertions.signals(Error, () => { Number.recognizes(1) })
+Assertions.signals(Error, () => { Map.recognizes(null) })
+Assertions.signals(Error, () => { IdentityMap.recognizes(null) })
+Assertions.signals(Error, () => { Bytes.recognizes(null) })
+
+true

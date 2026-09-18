@@ -22,7 +22,9 @@ node: (kind, value) => {
 }
 
 keyPath: (text) => {
-    ignoredStringValidation: text + ""
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
     source: Encoding.UTF8.encode(text)
     index: 0
     length: source.size()
@@ -351,7 +353,9 @@ keyPath: (text) => {
 }
 
 value: (text) => {
-    ignoredStringValidation: text + ""
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
     source: Encoding.UTF8.encode(text)
     index: 0
     length: source.size()

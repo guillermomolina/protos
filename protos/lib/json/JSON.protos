@@ -36,7 +36,9 @@ boolean: (value) => {
 }
 
 string: (value) => {
-    ignoredStringValidation: value + ""
+    String.recognizes(value).ifFalse(() => {
+        Error().signal()
+    })
 
     node: {
         kind: "string"
@@ -45,8 +47,12 @@ string: (value) => {
 }
 
 number: (coefficient, exponent) => {
-    ignoredCoefficientValidation: coefficient.div(1)
-    ignoredExponentValidation: exponent.div(1)
+    Integer.recognizes(coefficient).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(exponent).ifFalse(() => {
+        Error().signal()
+    })
 
     decimal: {
         coefficient: coefficient
@@ -90,8 +96,7 @@ object: (...nameNodePairs) => {
         wasExpectingName: expectingName
 
         wasExpectingName.ifTrue(() => {
-            validatedName: "" + entry
-            (validatedName === entry).ifFalse(() => {
+            String.recognizes(entry).ifFalse(() => {
                 Error().signal()
             })
             pendingName = entry
@@ -132,7 +137,9 @@ object: (...nameNodePairs) => {
 }
 
 parse: (text) => {
-    ignoredStringValidation: text + ""
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
     source: Encoding.UTF8.encode(text)
 
     isWhitespace: (octet) => {
@@ -1025,7 +1032,9 @@ encode: (root) => {
     }
 
     emitString: (text) => {
-        ignoredStringValidation: text + ""
+        String.recognizes(text).ifFalse(() => {
+            Error().signal()
+        })
 
         output.add(34)
         Encoding.UTF8.encode(text).each((octet) => {
@@ -1072,7 +1081,9 @@ encode: (root) => {
     }
 
     emitInteger: (value) => {
-        ignoredIntegerValidation: value.div(1)
+        Integer.recognizes(value).ifFalse(() => {
+            Error().signal()
+        })
 
         negative: value < 0
         magnitude: value
@@ -1130,8 +1141,12 @@ encode: (root) => {
             coefficient: value.coefficient
             exponent: value.exponent
 
-            ignoredCoefficientValidation: coefficient.div(1)
-            ignoredExponentValidation: exponent.div(1)
+            Integer.recognizes(coefficient).ifFalse(() => {
+                Error().signal()
+            })
+            Integer.recognizes(exponent).ifFalse(() => {
+                Error().signal()
+            })
 
             emitInteger(coefficient)
             (exponent == 0).ifFalse(() => {
@@ -1171,7 +1186,9 @@ encode: (root) => {
             output.add(123)
             first: true
             value.each((name, child) => {
-                ignoredNameValidation: name + ""
+                String.recognizes(name).ifFalse(() => {
+                    Error().signal()
+                })
 
                 first.ifFalse(() => {
                     output.add(44)
@@ -2043,7 +2060,9 @@ eventParser: (emit) => {
                 fail()
             })
 
-            ignoredStringValidation: text + ""
+            String.recognizes(text).ifFalse(() => {
+                Error().signal()
+            })
             Encoding.UTF8.encode(text).each((octet) => {
                 consumeOctet(octet)
             })
@@ -2319,7 +2338,9 @@ eventWriter: (emit) => {
             chunk = ""
             kind: event.kind
             value: event.value
-            ignoredKindValidation: kind + ""
+            String.recognizes(kind).ifFalse(() => {
+                Error().signal()
+            })
             handled: false
 
             (kind == "objectStart").ifTrue(() => {

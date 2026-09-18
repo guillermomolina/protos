@@ -13,7 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 string: (value) => {
-    ignoredValidation: "" + value
+    String.recognizes(value).ifFalse(() => {
+        Error().signal()
+    })
 
     {
         kind: "string"
@@ -22,7 +24,9 @@ string: (value) => {
 }
 
 integer: (value) => {
-    ignoredValidation: 0 + value
+    Integer.recognizes(value).ifFalse(() => {
+        Error().signal()
+    })
 
     {
         kind: "integer"
@@ -31,7 +35,9 @@ integer: (value) => {
 }
 
 float: (value) => {
-    ignoredValidation: 0.0 + value
+    Float.recognizes(value).ifFalse(() => {
+        Error().signal()
+    })
 
     {
         kind: "float"
@@ -429,7 +435,9 @@ table: (...nameNodePairs) => {
         wasExpectingName: expectingName
 
         wasExpectingName.ifTrue(() => {
-            ignoredNameValidation: "" + entry
+            String.recognizes(entry).ifFalse(() => {
+                Error().signal()
+            })
             pendingName = entry
             expectingName = false
         })
@@ -459,7 +467,9 @@ encode: (rootTable) => {
     output: Encoding.UTF8.encode("")
 
     emitText: (text) => {
-        ignoredStringValidation: text + ""
+        String.recognizes(text).ifFalse(() => {
+            Error().signal()
+        })
         Encoding.UTF8.encode(text).each((octet) => {
             output.add(octet)
         })
@@ -475,7 +485,9 @@ encode: (rootTable) => {
     }
 
     emitBasicString: (text) => {
-        ignoredStringValidation: text + ""
+        String.recognizes(text).ifFalse(() => {
+            Error().signal()
+        })
 
         output.add(34)
         Encoding.UTF8.encode(text).each((octet) => {
@@ -516,7 +528,9 @@ encode: (rootTable) => {
     }
 
     integerText: (value) => {
-        ignoredIntegerValidation: value.div(1)
+        Integer.recognizes(value).ifFalse(() => {
+            Error().signal()
+        })
 
         negative: value < 0
         magnitude: value
@@ -639,7 +653,9 @@ encode: (rootTable) => {
     }
 
     floatText: (value) => {
-        ignoredFloatValidation: 0.0 + value
+        Float.recognizes(value).ifFalse(() => {
+            Error().signal()
+        })
 
         positiveInfinity: 1.0 / 0.0
         negativeInfinity: 0.0 - positiveInfinity
@@ -857,8 +873,12 @@ encode: (rootTable) => {
         coefficient: fraction.coefficient
         digits: fraction.digits
 
-        ignoredCoefficientValidation: coefficient.div(1)
-        ignoredDigitsValidation: digits.div(1)
+        Integer.recognizes(coefficient).ifFalse(() => {
+            Error().signal()
+        })
+        Integer.recognizes(digits).ifFalse(() => {
+            Error().signal()
+        })
 
         result: ""
         (digits > 0).ifTrue(() => {
@@ -981,7 +1001,9 @@ encode: (rootTable) => {
         count: 0
 
         tableValue.each((name, child) => {
-            ignoredNameValidation: name + ""
+            String.recognizes(name).ifFalse(() => {
+                Error().signal()
+            })
             entries[count] = {
                 name: name
                 child: child
@@ -1179,7 +1201,9 @@ encode: (rootTable) => {
 
 
 parse: (text) => {
-    ignoredStringValidation: "" + text
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
 
     publicLocalDate: localDate
     publicLocalTime: localTime
@@ -1195,7 +1219,9 @@ parse: (text) => {
     }
 
     syntaxKeyPath: (text) => {
-        ignoredStringValidation: text + ""
+        String.recognizes(text).ifFalse(() => {
+            Error().signal()
+        })
         source: Encoding.UTF8.encode(text)
         index: 0
         length: source.size()
@@ -1531,7 +1557,9 @@ parse: (text) => {
     }
 
     syntaxValue: (text) => {
-        ignoredStringValidation: text + ""
+        String.recognizes(text).ifFalse(() => {
+            Error().signal()
+        })
         source: Encoding.UTF8.encode(text)
         index: 0
         length: source.size()
@@ -3337,7 +3365,9 @@ parse: (text) => {
     }
 
     documentStatements: (text) => {
-        ignoredStringValidation: text + ""
+        String.recognizes(text).ifFalse(() => {
+            Error().signal()
+        })
         source: Encoding.UTF8.encode(text)
         index: 0
         length: source.size()

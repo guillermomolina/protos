@@ -58,9 +58,11 @@ positiveIntegerValue: (node) => {
         fail()
     })
     value: node.value
-    // Reuse the ordinary unbounded-Integer receiver-domain check already used
-    // by Requirement units; no numeric coercion is permitted.
-    value.div(1)
+    // Validate the exact ordinary-Integer family without conversion or
+    // delegation.
+    Integer.recognizes(value).ifFalse(() => {
+        fail()
+    })
     (value <= 0).ifTrue(() => {
         fail()
     })

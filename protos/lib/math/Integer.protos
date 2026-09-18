@@ -17,10 +17,13 @@
 
 /// Returns the non-negative greatest common divisor of two ordinary Integers.
 gcd: (a, b) => {
-    // `div` has a strict ordinary-Integer receiver domain. These calls validate
-    // the supplied values without converting fixed-width or delegated lookalikes.
-    a.div(1)
-    b.div(1)
+    // Validate the exact ordinary-Integer family without conversion or delegation.
+    Integer.recognizes(a).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(b).ifFalse(() => {
+        Error().signal()
+    })
 
     left: a
     right: b
@@ -65,7 +68,9 @@ lcm: (a, b) => {
 /// Returns the exact factorial of a non-negative ordinary Integer.
 factorial: (n) => {
     // Preserve the strict ordinary-Integer family boundary without conversion.
-    n.div(1)
+    Integer.recognizes(n).ifFalse(() => {
+        Error().signal()
+    })
 
     (n < 0).ifTrue(() => {
         Error().signal()
@@ -98,8 +103,12 @@ factorial: (n) => {
 
 /// Returns the exact non-negative-integer power using exponentiation by squaring.
 pow: (base, exponent) => {
-    base.div(1)
-    exponent.div(1)
+    Integer.recognizes(base).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(exponent).ifFalse(() => {
+        Error().signal()
+    })
 
     (exponent < 0).ifTrue(() => {
         Error().signal()
@@ -126,9 +135,15 @@ pow: (base, exponent) => {
 
 /// Returns canonical mathematical modular exponentiation for a positive modulus.
 powMod: (base, exponent, modulus) => {
-    base.div(1)
-    exponent.div(1)
-    modulus.div(1)
+    Integer.recognizes(base).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(exponent).ifFalse(() => {
+        Error().signal()
+    })
+    Integer.recognizes(modulus).ifFalse(() => {
+        Error().signal()
+    })
 
     (exponent < 0).ifTrue(() => {
         Error().signal()

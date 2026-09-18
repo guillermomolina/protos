@@ -251,7 +251,9 @@ refEquals: (left, right) => {
 }
 
 documentLines: (text) => {
-    ignoredStringValidation: text + ""
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
     source: Encoding.UTF8.encode(text)
     lines: Array()
     current: emptyBytes()

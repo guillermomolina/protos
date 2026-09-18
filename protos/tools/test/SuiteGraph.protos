@@ -17,8 +17,7 @@
 //! ExecutionRequirementId validation in separate logical namespaces.
 
 validateString: (value) => {
-    validated: "" + value
-    (validated === value).ifFalse(() => {
+    String.recognizes(value).ifFalse(() => {
         fail()
     })
     value
@@ -95,7 +94,7 @@ validateExecutionRequirementId: (value) => {
 }
 
 validateArray: (value) => {
-    (value.parent() === Array).ifFalse(() => {
+    Array.recognizes(value).ifFalse(() => {
         fail()
     })
     value

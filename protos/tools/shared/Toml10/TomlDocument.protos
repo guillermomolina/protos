@@ -16,7 +16,9 @@
 Toml: import("tool-shared:Toml10/TomlSyntax")
 
 statements: (text) => {
-    ignoredStringValidation: text + ""
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
     source: Encoding.UTF8.encode(text)
     index: 0
     length: source.size()

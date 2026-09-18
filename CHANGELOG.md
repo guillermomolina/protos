@@ -1,3 +1,17 @@
+## 0.3.45-SNAPSHOT
+
+- Complete `I045-B — Add exact standard-owner recognizes predicates` (GitHub
+  #584) under ratified D147 Candidate B-prime and specification revision
+  `0.1.426`. Add exact canonical-owner `recognizes(value)` predicates for
+  `String`, ordinary unbounded `Integer`, `Float`, and standard-state `Array`.
+  Preserve mismatch-as-false behavior, strict owner/arity errors, fixed-width
+  Integer exclusion, Array recognition independent of immediate delegation
+  parent, and the no-candidate-dispatch/no-coercion contract. Migrate matching
+  Standard Library and bundled Tool family-validation probes to the new
+  predicates while preserving caller-specific failure behavior, and add focused
+  semantic and native-boundary coverage. Implementation version becomes
+  `0.3.45-SNAPSHOT`.
+
 ## 0.3.44-SNAPSHOT
 
 - Implement `LIB017 — Integer ranges and progression iteration` (GitHub #570)

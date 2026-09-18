@@ -279,17 +279,18 @@ resourceKeyValue: (key) => {
 }
 
 validateRequirementModeUnits: (mode, units) => {
-    // Exercise the strict semantic String receiver domain without converting
-    // the mode value. Unknown canonical String modes still fail below.
-    ignoredModeStringValidation: mode + ""
+    // Validate the exact semantic String family without conversion.
+    String.recognizes(mode).ifFalse(() => {
+        fail()
+    })
     known: false
 
     (mode == "shared").ifTrue(() => {
-        // Core Integer.div has the strict ordinary-unbounded-Integer receiver
-        // domain already used by the Standard Library for family validation.
-        // It rejects Float, fixed-width values and delegated lookalikes without
-        // converting the supplied units.
-        units.div(1)
+        // Validate the exact ordinary-Integer family without conversion or
+        // delegation.
+        Integer.recognizes(units).ifFalse(() => {
+            fail()
+        })
         (units <= 0).ifTrue(() => {
             fail()
         })

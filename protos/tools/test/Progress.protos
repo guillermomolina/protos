@@ -14,7 +14,9 @@ policyError: () => {
 }
 
 countText: (value) => {
-    value.div(1)
+    Integer.recognizes(value).ifFalse(() => {
+        policyError()
+    })
     (value < 0).ifTrue(() => {
         policyError()
     })
@@ -62,7 +64,9 @@ selectedCount: (plan) => {
 // State layout is private to this module:
 // [phaseName, total, completed, failed, step, nextMilestone, emitLine]
 begin: (phaseName, total, emitLine) => {
-    total.div(1)
+    Integer.recognizes(total).ifFalse(() => {
+        policyError()
+    })
     (total < 0).ifTrue(() => {
         policyError()
     })

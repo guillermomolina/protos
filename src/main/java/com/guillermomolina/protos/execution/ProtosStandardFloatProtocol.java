@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -31,6 +32,23 @@ public final class ProtosStandardFloatProtocol {
     public static void install(ProtosObjectValue floatPrototype) {
         Objects.requireNonNull(floatPrototype, "floatPrototype");
         requireSourceBackedClosure(floatPrototype, "negated");
+
+        if (floatPrototype.hasLocalSlot("recognizes")) {
+            throw new IllegalStateException(
+                    "Core Float already defines a local recognizes slot");
+        }
+        floatPrototype.createLocalSlot(
+                "recognizes",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            if (activation.receiver() != floatPrototype
+                                    || supplied.size() != 1) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            return ProtosBooleanValue.of(
+                                    supplied.get(0) instanceof ProtosFloatValue);
+                        }));
 
         installBinary(floatPrototype, "+", (left, right) -> left + right);
         installBinary(floatPrototype, "-", (left, right) -> left - right);

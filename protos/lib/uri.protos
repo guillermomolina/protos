@@ -17,8 +17,10 @@
 
 /// Parses one RFC 3986 URI-reference and preserves its accepted component spelling.
 parse: (text) => {
-    // Exercise the strict semantic String receiver domain without converting input.
-    ignoredStringValidation: text + ""
+    // Validate the exact semantic String family without conversion.
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
     source: Encoding.UTF8.encode(text)
     size: source.size()
 

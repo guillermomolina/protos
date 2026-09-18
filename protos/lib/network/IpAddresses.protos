@@ -14,9 +14,10 @@
 // the specific language governing rights and limitations under the License.
 v4: (a, b, c, d) => {
     requireComponent: (value) => {
-        // Use the existing strict ordinary-Integer receiver domain as the
-        // family gate. This validates rather than converts the supplied value.
-        value.div(1)
+        // Validate the exact ordinary-Integer family without conversion.
+        Integer.recognizes(value).ifFalse(() => {
+            Error().signal()
+        })
         (value < 0).ifTrue(() => {
             Error().signal()
         })
@@ -40,10 +41,11 @@ v4: (a, b, c, d) => {
 
 v6: (a, b, c, d, e, f, g, h) => {
     requireHextet: (value) => {
-        // Fixed-width values and delegated numeric lookalikes may find this
-        // selector through delegation, but the Core div protocol rejects any
-        // receiver that is not an actual ordinary unbounded Integer value.
-        value.div(1)
+        // Validate the exact ordinary-Integer family without conversion or
+        // delegation.
+        Integer.recognizes(value).ifFalse(() => {
+            Error().signal()
+        })
         (value < 0).ifTrue(() => {
             Error().signal()
         })
@@ -74,8 +76,10 @@ v6: (a, b, c, d, e, f, g, h) => {
 }
 
 parse: (text) => {
-    // Exercise the strict String receiver domain without changing the value.
-    ignoredStringValidation: text + ""
+    // Validate the exact semantic String family without conversion.
+    String.recognizes(text).ifFalse(() => {
+        Error().signal()
+    })
 
     totalSize: text.size()
     (totalSize > 45).ifTrue(() => {

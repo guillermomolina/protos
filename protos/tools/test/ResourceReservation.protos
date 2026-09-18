@@ -64,7 +64,9 @@ newState: (catalog) => {
         })
 
         capacity: ResourceCatalog.entryCapacity(entry)
-        capacity.div(1)
+        Integer.recognizes(capacity).ifFalse(() => {
+            fail()
+        })
         (capacity > 0).ifFalse(() => {
             fail()
         })

@@ -61,7 +61,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardNetworkProtocol.java", 2),
                     Map.entry("execution/ProtosStandardTcpConnectionProtocol.java", 7),
                     Map.entry("execution/ProtosStandardTcpListenerProtocol.java", 3),
-                    Map.entry("execution/ProtosStandardArrayProtocol.java", 6),
+                    Map.entry("execution/ProtosStandardArrayProtocol.java", 7),
                     Map.entry("execution/ProtosStandardProcessArgumentsProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEnvironmentProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEncodingProtocol.java", 2),
@@ -74,14 +74,14 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardObjectProtocol.java", 14),
                     Map.entry("execution/ProtosStandardActorProtocol.java", 9),
                     Map.entry("execution/ProtosStandardIdentityMapProtocol.java", 7),
-                    Map.entry("execution/ProtosStandardStringProtocol.java", 4),
+                    Map.entry("execution/ProtosStandardStringProtocol.java", 5),
                     Map.entry("execution/ProtosStandardBufferedByteIoProtocol.java", 4),
                     Map.entry("execution/ProtosStandardErrorProtocol.java", 2),
                     Map.entry("execution/ProtosStandardImportProtocol.java", 1),
-                    Map.entry("execution/ProtosStandardIntegerProtocol.java", 3),
+                    Map.entry("execution/ProtosStandardIntegerProtocol.java", 4),
                     Map.entry("execution/ProtosStandardFixedIntegerProtocol.java", 1),
                     Map.entry("execution/ProtosStandardFutureProtocol.java", 2),
-                    Map.entry("execution/ProtosStandardFloatProtocol.java", 1),
+                    Map.entry("execution/ProtosStandardFloatProtocol.java", 2),
                     Map.entry("execution/ProtosStandardBooleanProtocol.java", 1),
                     Map.entry("execution/ProtosStandardNumberEqualityProtocol.java", 1),
                     Map.entry("execution/ProtosParallelRuntime.java", 2),
@@ -123,7 +123,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(36, actualCore.size());
-        assertEquals(142, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(146, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -178,14 +178,14 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Integer",
                 prelude.integerPrototype(),
-                Set.of("call", "+", "-", "*", "/", "div", "mod"));
+                Set.of("call", "+", "-", "*", "/", "div", "mod", "recognizes"));
         assertSourceBacked(prelude.integerPrototype(), "negated");
         assertSourceBacked(prelude.integerPrototype(), "%");
 
         assertNativeSelectors(
                 "Float",
                 prelude.floatPrototype(),
-                Set.of("call", "+", "-", "*", "/"));
+                Set.of("call", "+", "-", "*", "/", "recognizes"));
         assertSourceBacked(prelude.floatPrototype(), "negated");
 
         for (ProtosFixedIntegerValue.Family family : ProtosFixedIntegerValue.Family.values()) {
@@ -214,11 +214,12 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         "parallelFilter",
                         "parallelFindIndex",
                         "parallelReduce",
-                        "parallelSort"));
+                        "parallelSort",
+                        "recognizes"));
         assertNativeSelectors(
                 "String",
                 prelude.stringPrototype(),
-                Set.of("size", "at", "+", "concat", "hash"));
+                Set.of("size", "at", "+", "concat", "recognizes", "hash"));
         assertNativeSelectors(
                 "Encoding",
                 prelude.encodingPrototype(),
