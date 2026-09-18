@@ -130,29 +130,30 @@ final class ProtosTomlDataModelModuleTest {
 
     @Test
     void constructorsFailClosedOnWrongFamiliesAndInvalidTemporalData() throws Exception {
-        assertSignals("TOML.string(1)");
-        assertSignals("TOML.integer(1.0)");
-        assertSignals("TOML.float(1)");
-        assertSignals("TOML.boolean(\"true\")");
-        assertSignals("TOML.localDate(0, 1, 1)");
-        assertSignals("TOML.localDate(10000, 1, 1)");
-        assertSignals("TOML.localDate(2023, 2, 29)");
-        assertSignals("TOML.localDate(2024, 4, 31)");
-        assertSignals("TOML.localTime(24, 0, 0, 0, 0)");
-        assertSignals("TOML.localTime(0, 60, 0, 0, 0)");
-        assertSignals("TOML.localTime(0, 0, 61, 0, 0)");
-        assertSignals("TOML.localDateTime(2026, 1, 1, 0, 0, 61, 0, 0)");
-        assertSignals("TOML.offsetDateTime(2026, 1, 1, 0, 0, 61, 0, 0, 0)");
-        assertSignals("TOML.localTime(0, 0, 0, 1, 0)");
-        assertSignals("TOML.localTime(0, 0, 0, 10, 1)");
-        assertSignals("TOML.offsetDateTime(2024, 1, 1, 0, 0, 0, 0, 0, 1440)");
-        assertSignals("TOML.array({\n"
-                + "    kind: \"unknown\"\n"
-                + "    value: null\n"
-                + "})");
-        assertSignals("TOML.table(\"x\", TOML.integer(1), \"x\", TOML.integer(2))");
-        assertSignals("TOML.table(\"dangling\")");
-        assertSignals("TOML.table(1, TOML.integer(1))");
+        assertSignalsTogether(
+                "TOML.string(1)",
+                "TOML.integer(1.0)",
+                "TOML.float(1)",
+                "TOML.boolean(\"true\")",
+                "TOML.localDate(0, 1, 1)",
+                "TOML.localDate(10000, 1, 1)",
+                "TOML.localDate(2023, 2, 29)",
+                "TOML.localDate(2024, 4, 31)",
+                "TOML.localTime(24, 0, 0, 0, 0)",
+                "TOML.localTime(0, 60, 0, 0, 0)",
+                "TOML.localTime(0, 0, 61, 0, 0)",
+                "TOML.localDateTime(2026, 1, 1, 0, 0, 61, 0, 0)",
+                "TOML.offsetDateTime(2026, 1, 1, 0, 0, 61, 0, 0, 0)",
+                "TOML.localTime(0, 0, 0, 1, 0)",
+                "TOML.localTime(0, 0, 0, 10, 1)",
+                "TOML.offsetDateTime(2024, 1, 1, 0, 0, 0, 0, 0, 1440)",
+                "TOML.array({\n"
+                        + "    kind: \"unknown\"\n"
+                        + "    value: null\n"
+                        + "})",
+                "TOML.table(\"x\", TOML.integer(1), \"x\", TOML.integer(2))",
+                "TOML.table(\"dangling\")",
+                "TOML.table(1, TOML.integer(1))");
     }
 
     @Test
@@ -238,20 +239,42 @@ final class ProtosTomlDataModelModuleTest {
         assertEquals("table", stringSlot(copied, "kind"));
     }
 
-    private static void assertSignals(String expression) throws Exception {
+    private static void assertSignalsTogether(String... expressions) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
 
-        assertThrows(
-                ProtosSignalException.class,
-                () ->
-                        ProtosTestExecutionSupport.evaluate(
-                                "TOML: import(\"std:toml/TOML\")\n"
-                                        + expression,
-                                activation),
-                expression);
+        StringBuilder source =
+                new StringBuilder(
+                        """
+                        TOML: import("std:toml/TOML")
+                        passed: true
+                        """);
+
+        for (String expression : expressions) {
+            source.append(
+                    """
+                    Error.handle(
+                        () => {
+                    """);
+            source.append(expression).append("\n");
+            source.append(
+                    """
+                            passed = false
+                        },
+                        (error) => { null }
+                    )
+                    """);
+        }
+
+        source.append("passed\n");
+
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                ProtosTestExecutionSupport.evaluate(
+                        source.toString(),
+                        activation));
     }
 
     private static Object evaluate(String source) throws Exception {

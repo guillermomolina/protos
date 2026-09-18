@@ -87,8 +87,20 @@ final class ProtosTestToolJClosureReconciliationTest {
                 repositoryTests >= 0,
                 "active CI must expose the repository test stage explicitly");
         assertTrue(
-                workflow.contains("make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4"),
-                "active CI must delegate repository test execution to the canonical Makefile target");
+                workflow.contains("make test-budget"),
+                "active CI must enforce the approved complete-validation budget");
+        assertTrue(
+                makefile.contains("test-budget:"),
+                "the Makefile must expose the complete-validation budget guard");
+        assertTrue(
+                makefile.contains("--budget-seconds 180"),
+                "the retained complete-validation budget must match PERF009-C owner approval");
+        assertTrue(
+                makefile.contains("--environment development-container-reference"),
+                "the budget must identify its reference execution environment");
+        assertTrue(
+                makefile.contains("$(MAKE) test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4"),
+                "the budget guard must delegate to the canonical complete repository command");
         assertTrue(
                 makefile.contains("test: test-java test-protos"),
                 "the canonical Makefile test target must retain Java then Protos test ownership");

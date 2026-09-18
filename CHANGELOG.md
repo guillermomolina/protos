@@ -1,3 +1,18 @@
+## 0.3.35-SNAPSHOT
+
+- Complete the implementation slice for `PERF009-C — Post-quarantine
+  full-suite budget and validation-routing retirement` (GitHub #559). Normalize
+  routine test workloads whose cost came from repeated guest bootstrap/execution
+  rather than the correctness property being proved, while preserving every
+  retained invalid-input and semantic case. Establish the owner-approved
+  180-second complete-repository validation budget for
+  `make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4`, add a fail-visible retained
+  budget guard used by CI, and retire the PERF007 `FULL:NON_TOOL` temporary Tool
+  quarantine so shared, unknown, unmapped, empty, and top-level closure deltas
+  again require complete Maven validation. Retain the independently justified
+  `TOOL_LOCAL:PACKAGE` and `TOOL_LOCAL:TEST` intermediate-publication routing.
+  Implementation version becomes `0.3.35-SNAPSHOT`.
+
 ## 0.3.34-SNAPSHOT
 
 - Reconcile the Standard Library documentation extractor with the D138

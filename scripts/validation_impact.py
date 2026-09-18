@@ -134,9 +134,9 @@ def classify_paths(paths, top_level_closure=False, kind_overrides=None):
 
     if not normalized:
         return Selection(
-            "FULL:NON_TOOL", "NON_TOOL",
-            "empty definitive delta receives broad non-Tool validation under the temporary PERF007 quarantine",
-            True,
+            "FULL", "ALL",
+            "empty definitive delta requires complete validation",
+            False,
         )
 
     tool_kinds = []
@@ -153,38 +153,25 @@ def classify_paths(paths, top_level_closure=False, kind_overrides=None):
     tools_touched = bool(tool_kinds)
 
     if top_level_closure:
-        if tools_touched:
-            return Selection(
-                "FULL", "ALL",
-                "top-level executable closure touches a Tool-owned surface and requires complete Maven validation",
-                False,
-            )
         return Selection(
-            "FULL:NON_TOOL", "NON_TOOL",
-            "top-level executable closure has no Tool-owned delta; PERF007 temporarily excludes Tool-owned suites",
-            True,
+            "FULL", "ALL",
+            "top-level executable closure requires complete Maven validation",
+            False,
         )
 
     if first_full_path is not None:
-        if tools_touched:
-            return Selection(
-                "FULL", "ALL",
-                "shared, unknown, or unmapped path plus a Tool-owned delta requires complete validation: "
-                + first_full_path,
-                False,
-            )
         return Selection(
-            "FULL:NON_TOOL", "NON_TOOL",
-            "shared, unknown, or unmapped delta receives broad non-Tool validation under PERF007: "
+            "FULL", "ALL",
+            "shared, unknown, or unmapped delta requires complete validation: "
             + first_full_path,
-            True,
+            False,
         )
 
     if not tool_kinds:
         return Selection(
-            "FULL:NON_TOOL", "NON_TOOL",
-            "no Tool-owned executable/test-impact path was present; PERF007 temporarily excludes Tool-owned suites",
-            True,
+            "FULL", "ALL",
+            "no bounded Tool-local ownership applies; complete validation is required",
+            False,
         )
 
     if len(tool_kinds) != 1:

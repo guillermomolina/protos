@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -133,9 +134,7 @@ final class ProtosTestToolResourceCatalogSchemaTest {
                     + "[[resource]]\nkey = \"gpu\"\ncapacity = 2\nscope = \"run\"\nprovider = \"other/provider\"\n"
         };
 
-        for (String document : invalidDocuments) {
-            assertFailed(document);
-        }
+        assertFailedTogether(invalidDocuments);
     }
 
     private static ProtosArrayValue parseCompleted(String document) throws Exception {
@@ -150,21 +149,36 @@ final class ProtosTestToolResourceCatalogSchemaTest {
         return assertInstanceOf(ProtosArrayValue.class, result);
     }
 
-    private static void assertFailed(String document) throws Exception {
+    private static void assertFailedTogether(String[] documents) throws Exception {
         Fixture fixture = fixture();
-        String source =
-                "Catalog: import(\"self:ResourceCatalog\")\n"
-                        + "Catalog.parse("
-                        + protosString(document)
-                        + ")";
-        ProtosExecutionOutcome outcome =
-                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
-source,
-fixture.prelude().newModuleActivation());
-        assertEquals(
-                ProtosExecutionOutcome.State.FAILED,
-                outcome.state(),
-                () -> "expected fail-closed catalog parse: " + document);
+        StringBuilder source =
+                new StringBuilder(
+                        """
+                        Catalog: import("self:ResourceCatalog")
+                        passed: true
+
+                        reject: (document) => {
+                            Error.handle(
+                                () => {
+                                    Catalog.parse(document)
+                                    passed = false
+                                },
+                                (error) => { null }
+                            )
+                        }
+                        """);
+
+        for (String document : documents) {
+            source.append("reject(")
+                    .append(protosString(document))
+                    .append(")\n");
+        }
+
+        source.append("passed\n");
+
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                completed(source.toString(), fixture));
     }
 
     private static Fixture fixture() throws Exception {

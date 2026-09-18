@@ -173,27 +173,19 @@ class PublicationValidationTest(unittest.TestCase):
         self.assertEqual(1, len(calls))
         self.assertIn("-Dtest=ProtosTestTool*Test,ProtosCliTest", calls[0])
 
-    def test_shared_path_runs_full_non_tool(self):
+    def test_shared_path_runs_full(self):
         candidate = self.commit_files({
             "src/main/java/com/guillermomolina/protos/Probe.java": "final class Probe {}\n",
         })
         self.assertEqual(0, self.run_helper(candidate))
-        calls = self.maven_calls()
-        self.assertEqual(1, len(calls))
-        self.assertIn("-Dsurefire.excludes=", calls[0])
-        self.assertIn("ProtosPackage*Test.java", calls[0])
-        self.assertIn("ProtosTestTool*Test.java", calls[0])
-        self.assertNotIn("ProtosCliTest", calls[0])
-        self.assertTrue(calls[0].endswith(" test"))
+        self.assertEqual(["test"], self.maven_calls())
 
-    def test_unknown_path_runs_full_non_tool(self):
+    def test_unknown_path_runs_full(self):
         candidate = self.commit_files({
             "future/executable/Probe.protos": "self\n",
         })
         self.assertEqual(0, self.run_helper(candidate))
-        calls = self.maven_calls()
-        self.assertEqual(1, len(calls))
-        self.assertIn("-Dsurefire.excludes=", calls[0])
+        self.assertEqual(["test"], self.maven_calls())
 
     def test_cross_tool_delta_runs_full(self):
         candidate = self.commit_files({
@@ -210,14 +202,12 @@ class PublicationValidationTest(unittest.TestCase):
         self.assertEqual(0, self.run_helper(candidate, top_level=True))
         self.assertEqual(["test"], self.maven_calls())
 
-    def test_top_level_closure_without_tool_change_runs_full_non_tool(self):
+    def test_top_level_closure_without_tool_change_runs_full(self):
         candidate = self.commit_files({
             "src/main/java/com/guillermomolina/protos/Probe.java": "final class Probe {}\n",
         })
         self.assertEqual(0, self.run_helper(candidate, top_level=True))
-        calls = self.maven_calls()
-        self.assertEqual(1, len(calls))
-        self.assertIn("-Dsurefire.excludes=", calls[0])
+        self.assertEqual(["test"], self.maven_calls())
 
     def test_shared_plus_package_tool_change_runs_complete_suite(self):
         candidate = self.commit_files({
@@ -314,13 +304,13 @@ require(true)
                 '"reason":"bad"}'
             )
 
-    def test_parser_accepts_consistent_full_non_tool_result(self):
-        data = HELPER.parse_selector_result(
-            '{"validation_impact":"FULL:NON_TOOL",'
-            '"affected_test_set":"NON_TOOL","full_test_suite":"SKIP_ALLOWED",'
-            '"reason":"temporary quarantine"}'
-        )
-        self.assertEqual("FULL:NON_TOOL", data["validation_impact"])
+    def test_parser_rejects_retired_full_non_tool_result(self):
+        with self.assertRaises(HELPER.PublicationValidationError):
+            HELPER.parse_selector_result(
+                '{"validation_impact":"FULL:NON_TOOL",'
+                '"affected_test_set":"NON_TOOL","full_test_suite":"SKIP_ALLOWED",'
+                '"reason":"retired quarantine"}'
+            )
 
 
 if __name__ == "__main__":

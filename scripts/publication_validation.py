@@ -28,17 +28,6 @@ class PublicationValidationError(Exception):
     pass
 
 
-# PERF007 temporary quarantine: these are the Tool-owned Java test families
-# already mapped by the deterministic selector. ProtosCliTest intentionally
-# remains in ordinary non-Tool validation because it is shared CLI smoke.
-NON_TOOL_SUREFIRE_EXCLUDES = (
-    "**/ProtosPackage*Test.java,"
-    "**/ProtosExternalPackage*Test.java,"
-    "**/ProtosWorkspace*Test.java,"
-    "**/ProtosTestTool*Test.java"
-)
-
-
 def _git(repo, *args):
     return subprocess.check_output(
         ["git", "-C", str(repo)] + list(args),
@@ -117,13 +106,6 @@ def parse_selector_result(text):
         if tests != "ALL" or full != "REQUIRED":
             raise PublicationValidationError(
                 "FULL selector result has inconsistent affected/full fields"
-            )
-        return data
-
-    if impact == "FULL:NON_TOOL":
-        if tests != "NON_TOOL" or full != "SKIP_ALLOWED":
-            raise PublicationValidationError(
-                "FULL:NON_TOOL selector result has inconsistent affected/full fields"
             )
         return data
 
@@ -229,15 +211,8 @@ def invoke_selector(repo, base, head, top_level_closure):
 
 
 def maven_command(selection):
-    impact = selection["validation_impact"]
-    if impact == "FULL":
+    if selection["validation_impact"] == "FULL":
         return ["mvn", "test"]
-    if impact == "FULL:NON_TOOL":
-        return [
-            "mvn",
-            "-Dsurefire.excludes=" + NON_TOOL_SUREFIRE_EXCLUDES,
-            "test",
-        ]
     return ["mvn", "-Dtest=" + selection["affected_test_set"], "test"]
 
 
@@ -276,16 +251,10 @@ def run(repo, base, head, top_level_closure=False):
     print("AFFECTED_TEST_SET: " + tests)
     print("VALIDATION_REASON: " + selection["reason"])
 
-    if impact == "FULL:NON_TOOL":
-        print("TOOL_TESTS: SKIPPED_TEMPORARY_PERF007")
-    else:
-        print("TOOL_TESTS: INCLUDED_BY_SELECTED_SCOPE")
+    print("TOOL_TESTS: INCLUDED_BY_SELECTED_SCOPE")
 
     if top_level_closure:
-        if impact == "FULL:NON_TOOL":
-            print("TOP_LEVEL_RECONCILIATION: REQUIRED_NON_TOOL_FULL")
-        else:
-            print("TOP_LEVEL_RECONCILIATION: REQUIRED_FULL")
+        print("TOP_LEVEL_RECONCILIATION: REQUIRED_FULL")
     else:
         print("TOP_LEVEL_RECONCILIATION: NOT_REQUIRED_FOR_THIS_CHILD_SLICE")
 
@@ -294,12 +263,6 @@ def run(repo, base, head, top_level_closure=False):
     if completed.returncode != 0:
         if impact == "FULL":
             print("FULL_TEST_SUITE: FAIL")
-        elif impact == "FULL:NON_TOOL":
-            print("AFFECTED_TESTS: FAIL")
-            print(
-                "FULL_TEST_SUITE: SKIPPED "
-                "(PERF007 temporary Tool-owned-suite quarantine)"
-            )
         else:
             print("AFFECTED_TESTS: FAIL")
             print(
@@ -311,12 +274,6 @@ def run(repo, base, head, top_level_closure=False):
     if impact == "FULL":
         print("AFFECTED_TESTS: INCLUDED_IN_FULL_SUITE")
         print("FULL_TEST_SUITE: PASS")
-    elif impact == "FULL:NON_TOOL":
-        print("AFFECTED_TESTS: PASS_NON_TOOL_BROAD_SUITE")
-        print(
-            "FULL_TEST_SUITE: SKIPPED "
-            "(PERF007 temporary Tool-owned-suite quarantine)"
-        )
     else:
         print("AFFECTED_TESTS: PASS")
         print(

@@ -16,7 +16,7 @@ JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosI026GLs
 JAVA_PARALLEL_EXCLUDES := $(JAVA_SERIAL_TEST_EXCLUDES)
 JAVA_STRESS_TESTS := ProtosJsonParserStress
 
-.PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-java-stress test-protos check verify clean dist dist-validate
+.PHONY: help toolchain compile build test test-budget test-java test-java-parallel test-java-serial test-java-stress test-protos check verify clean dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -25,6 +25,7 @@ help:
 		'  make compile        Compile production sources only (incremental)' \
 		'  make build          Clean and package without executing tests' \
 		'  make test           Run Java tests, then Protos tests' \
+		'  make test-budget    Run canonical CI validation under the approved 180 s budget' \
 		'  make test-java      Run the ordinary Java/JUnit test suite' \
 		'  make test-java-stress  Run explicit Java stress validation' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
@@ -46,6 +47,12 @@ build:
 	$(MVN) $(MVN_FLAGS) clean package -DskipTests
 
 test: test-java test-protos
+
+test-budget:
+	$(PYTHON) scripts/complete_validation_budget.py \
+		--budget-seconds 180 \
+		--environment development-container-reference \
+		-- $(MAKE) test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4
 
 test-java: test-java-parallel test-java-serial
 

@@ -180,7 +180,7 @@ final class ProtosTomlParserModuleTest {
 
     @Test
     void rejectsMalformedNumericTemporalStringAndOwnershipConflicts() throws Exception {
-        for (String input :
+        assertParseSignalsTogether(
                 new String[] {
                     "x = 01\n",
                     "x = 1.\n",
@@ -193,9 +193,7 @@ final class ProtosTomlParserModuleTest {
                     "x = { a = 1 }\nx.b = 2\n",
                     "x = {\n  a = 1\n  b = 2\n}\n",
                     "good = 1\nthis is not an assignment\n"
-                }) {
-            assertParseSignals(input);
-        }
+                });
 
         assertExpressionSignals("TOML.parse(1)");
     }
@@ -211,17 +209,22 @@ final class ProtosTomlParserModuleTest {
                                 + "    (root.value[\"value\"].value == 1)\n");
         assertSame(ProtosBooleanValue.TRUE, tabResult);
 
+        java.util.ArrayList<String> rejectedInputs = new java.util.ArrayList<>();
         for (int octet = 0; octet < 32; octet++) {
             if (octet == 9 || octet == 10 || octet == 13) {
                 continue;
             }
-            assertParseSignals("value = 1 # forbidden" + (char) octet + "control\n");
+            rejectedInputs.add(
+                    "value = 1 # forbidden" + (char) octet + "control\n");
         }
-        assertParseSignals("value = 1 # forbidden" + (char) 127 + "control\n");
+        rejectedInputs.add("value = 1 # forbidden" + (char) 127 + "control\n");
 
-        // Exercise a source-controlled quote run large enough to expose accidental
-        // input-proportional recursion if the structural hardening regresses.
-        assertParseSignals("value = " + "\"".repeat(16384) + "\n");
+        // Nine quotes are the smallest malformed run that opens a multiline
+        // string with three quotes and then exercises the run > 5 rejection.
+        // Structural coverage separately prevents recursive quote appending.
+        rejectedInputs.add("value = " + "\"".repeat(9) + "\n");
+
+        assertParseSignalsTogether(rejectedInputs.toArray(String[]::new));
     }
 
     private static Object evaluate(String input, String body) throws Exception {
@@ -233,6 +236,48 @@ final class ProtosTomlParserModuleTest {
         return ProtosTestExecutionSupport.evaluate(
                 "TOML: import(\"std:toml/TOML\")\n" + body,
                 activation);
+    }
+
+    private static void assertParseSignalsTogether(String[] inputs) throws Exception {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        StringBuilder source =
+                new StringBuilder(
+                        """
+                        TOML: import("std:toml/TOML")
+                        passed: true
+                        """);
+
+        for (int index = 0; index < inputs.length; index++) {
+            activation.context().createLocalSlot(
+                    "input" + index,
+                    new ProtosStringValue(inputs[index]));
+
+            source.append(
+                    """
+                    Error.handle(
+                        () => {
+                    """);
+            source.append("        TOML.parse(input").append(index).append(")\n");
+            source.append(
+                    """
+                            passed = false
+                        },
+                        (error) => { null }
+                    )
+                    """);
+        }
+
+        source.append("passed\n");
+
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                ProtosTestExecutionSupport.evaluate(
+                        source.toString(),
+                        activation));
     }
 
     private static void assertParseSignals(String input) throws Exception {

@@ -49,12 +49,6 @@ class ValidationImpactTest(unittest.TestCase):
         self.assertFalse(result.skip_allowed)
         self.assertEqual("ALL", result.test_set)
 
-    def assert_full_non_tool(self, paths, closure=False):
-        result = IMPACT.classify_paths(paths, top_level_closure=closure)
-        self.assertEqual("FULL:NON_TOOL", result.impact)
-        self.assertTrue(result.skip_allowed)
-        self.assertEqual("NON_TOOL", result.test_set)
-
     def test_package_source_is_local(self):
         self.assert_package(["protos/tools/package/LockDocument.protos"])
 
@@ -118,7 +112,7 @@ class ValidationImpactTest(unittest.TestCase):
         ])
 
     def test_protos_cli_path_remains_shared_without_delta_proof(self):
-        self.assert_full_non_tool([
+        self.assert_full([
             "src/main/java/com/guillermomolina/protos/cli/ProtosCli.java"
         ])
 
@@ -193,22 +187,22 @@ class ValidationImpactTest(unittest.TestCase):
                 ["git", "-C", directory, "rev-parse", "HEAD"], text=True).strip()
 
             result = IMPACT.classify_delta(directory, base, shared_head)
-            self.assertEqual("FULL:NON_TOOL", result.impact)
-            self.assertTrue(result.skip_allowed)
+            self.assertEqual("FULL", result.impact)
+            self.assertFalse(result.skip_allowed)
 
-    def test_shared_main_is_full_non_tool(self):
-        self.assert_full_non_tool([
+    def test_shared_main_requires_full(self):
+        self.assert_full([
             "src/main/java/com/guillermomolina/protos/execution/ProtosModuleRuntime.java"
         ])
 
-    def test_shared_library_is_full_non_tool(self):
-        self.assert_full_non_tool(["protos/lib/core/Object.protos"])
+    def test_shared_library_requires_full(self):
+        self.assert_full(["protos/lib/core/Object.protos"])
 
-    def test_unknown_tooling_fixture_is_full_non_tool(self):
-        self.assert_full_non_tool(["protos/tests/tooling/tool003-future.protos"])
+    def test_unknown_tooling_fixture_requires_full(self):
+        self.assert_full(["protos/tests/tooling/tool003-future.protos"])
 
-    def test_validation_infrastructure_is_full_non_tool(self):
-        self.assert_full_non_tool(["scripts/validation_impact.py"])
+    def test_validation_infrastructure_requires_full(self):
+        self.assert_full(["scripts/validation_impact.py"])
 
     def test_agents_change_is_full_even_with_package(self):
         self.assert_full([
@@ -222,17 +216,17 @@ class ValidationImpactTest(unittest.TestCase):
             "protos/tools/test/Runner.protos",
         ])
 
-    def test_unknown_path_is_full_non_tool(self):
-        self.assert_full_non_tool(["future/new-executable-surface/file.protos"])
+    def test_unknown_path_requires_full(self):
+        self.assert_full(["future/new-executable-surface/file.protos"])
 
-    def test_empty_delta_is_full_non_tool(self):
-        self.assert_full_non_tool([])
+    def test_empty_delta_requires_full(self):
+        self.assert_full([])
 
     def test_top_level_closure_with_tool_change_forces_full(self):
         self.assert_full(["protos/tools/package/LockDocument.protos"], closure=True)
 
-    def test_top_level_closure_without_tool_change_keeps_tools_quarantined(self):
-        self.assert_full_non_tool(
+    def test_top_level_closure_without_tool_change_forces_full(self):
+        self.assert_full(
             ["src/main/java/com/guillermomolina/protos/execution/ProtosModuleRuntime.java"],
             closure=True,
         )

@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -149,9 +150,7 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
                     + "[[requirement]]\ncase = \"a.protos\"\nkey = \"gpu\"\nmode = \"exclusive\"\n"
         };
 
-        for (String document : invalidDocuments) {
-            assertFailed(document);
-        }
+        assertFailedTogether(invalidDocuments);
     }
 
     private static ProtosArrayValue parseCompleted(String document) throws Exception {
@@ -166,18 +165,36 @@ final class ProtosTestToolResourceRequirementsSchemaTest {
         return assertInstanceOf(ProtosArrayValue.class, result);
     }
 
-    private static void assertFailed(String document) throws Exception {
+    private static void assertFailedTogether(String[] documents) throws Exception {
         Fixture fixture = fixture();
-        String source =
-                "Requirements: import(\"self:ResourceRequirements\")\n"
-                        + "Requirements.parse("
-                        + protosString(document)
-                        + ")";
-        ProtosExecutionOutcome outcome =
-                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
-source,
-fixture.prelude().newModuleActivation());
-        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(), document);
+        StringBuilder source =
+                new StringBuilder(
+                        """
+                        Requirements: import("self:ResourceRequirements")
+                        passed: true
+
+                        reject: (document) => {
+                            Error.handle(
+                                () => {
+                                    Requirements.parse(document)
+                                    passed = false
+                                },
+                                (error) => { null }
+                            )
+                        }
+                        """);
+
+        for (String document : documents) {
+            source.append("reject(")
+                    .append(protosString(document))
+                    .append(")\n");
+        }
+
+        source.append("passed\n");
+
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                completed(source.toString(), fixture));
     }
 
     private static Fixture fixture() throws Exception {

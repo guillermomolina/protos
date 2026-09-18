@@ -46,5 +46,5 @@ jobs:
           runCmd: |
             set -euo pipefail
             python3 tools/verify_toolchain.py --mode check --scope development
-            make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4
+            make test-budget
             echo "CI_REPOSITORY_TESTS: PASS"
