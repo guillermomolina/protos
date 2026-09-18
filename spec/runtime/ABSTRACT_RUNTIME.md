@@ -190,6 +190,38 @@ inline, specialize, or otherwise eliminate explicit checks when semantic-family
 membership is already proven, provided that incompatible receivers have the
 same observable failure behavior.
 
+The standard-owner recognition behaviors specified by
+`../semantics/VALUES_AND_COLLECTIONS.md` expose selected existing classifiers
+without changing those classifiers into a generic guest-visible type relation.
+
+Conceptually:
+
+```text
+function standardRecognizes(receiver, candidate, canonicalOwner, candidatePredicate):
+    require receiver is exactly canonicalOwner
+    return canonicalBoolean(candidatePredicate(candidate))
+```
+
+For the four ratified owners, `candidatePredicate` denotes respectively semantic
+String-family membership, ordinary unbounded Integer-family membership,
+semantic Float-family membership, or ownership of standard Array indexed state.
+These predicates are runtime semantic/state observations, not Protos message
+sends. They do not perform candidate lookup, `parent()` access, equality/hash
+dispatch, callback, conversion, or coercion.
+
+The exact-owner receiver check likewise does not grant recognition behavior to a
+descendant merely because ordinary lookup can find the standard owner's slot.
+For Array candidates, the state predicate is independent of the candidate's
+immediate delegation parent, so a genuine standard Array produced by a
+descendant Array factory remains recognized while an ordinary object that only
+delegates to `Array` does not.
+
+An implementation may represent these truths using any hidden metadata or
+representation that preserves the normative domains and does not expose
+SmallInteger/BigInteger distinctions, host numeric classes, Array storage
+classes, or other implementation categories as additional Core recognition
+surface.
+
 # 3. Local Slot Lookup
 
 ```text

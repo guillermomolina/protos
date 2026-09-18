@@ -238,6 +238,67 @@ delegation supplies standard String behavior through ordinary lookup; it does
 not make an ordinary object that merely delegates to `String` a semantic String
 value.
 
+### Exact standard-owner semantic-domain recognition
+
+Core publishes the ordinary selector `recognizes(value)` as standard local
+behavior on exactly these canonical standard owners:
+
+```text
+String
+Integer
+Float
+Array
+```
+
+Each of these four standard behaviors requires its exact canonical standard
+owner as receiver and accepts exactly one supplied argument. The candidate
+argument may be any Protos value. A matching candidate returns canonical `true`;
+a non-matching candidate returns canonical `false`.
+
+Recognition inspects only the owning Core semantic-family or standard-state
+truth defined below. It performs no message lookup or dispatch on the candidate,
+does not send `parent()` to the candidate, does not invoke candidate equality or
+hash behavior, invokes no callback, performs no conversion or coercion, and does
+not allocate a converted replacement value. Delegation does not confer
+recognition, and user-defined behavior cannot opt an object into one of these
+Core domains.
+
+An invalid receiver for one of these standard behaviors, or supplying any arity
+other than exactly one argument, follows the ordinary Error rules for invalid
+standard-behavior receivers and arity. Candidate mismatch itself is not an
+Error; it is canonical `false`.
+
+The four recognized domains are exactly:
+
+- `String.recognizes(value)` is `true` iff `value` is a semantic String value.
+  An ordinary object that merely delegates to `String` or to a String value is
+  not recognized, and `String.recognizes(String)` is `false`.
+- `Integer.recognizes(value)` is `true` iff `value` is an ordinary unbounded
+  Integer value as defined by this specification. Every fixed-width Integer
+  family is therefore rejected, including `UInt8`, `Int8`, `UInt16`, `Int16`,
+  `UInt32`, `Int32`, `UInt64`, and `Int64`. Internal SmallInteger/BigInteger or
+  equivalent representation choices are unobservable, and
+  `Integer.recognizes(Integer)` is `false`.
+- `Float.recognizes(value)` is `true` iff `value` is a semantic Float value.
+  Recognition performs no numeric promotion or conversion; in particular an
+  ordinary Integer is not a Float, and `Float.recognizes(Float)` is `false`.
+- `Array.recognizes(value)` is `true` iff `value` owns standard Array indexed
+  state. Immediate delegation parent identity is irrelevant. An ordinary object
+  that merely delegates to `Array` is not recognized, while a standard Array
+  produced by a descendant Array factory remains recognized even though its
+  immediate parent is that descendant factory. Open, closed, and frozen
+  standard Arrays are all recognized. `Array.recognizes(Array)` is `false`.
+
+No additional Core owner acquires `recognizes` by symmetry. In particular this
+contract adds no recognizer to `Number`, any fixed-width Integer-family owner,
+`Map`, `IdentityMap`, or `Bytes`, and introduces no generic semantic-membership
+query or first-class family descriptor.
+
+These predicates are intended for boundaries whose contract already requires
+one of the exact Core domains above. Ordinary protocol-oriented programming
+continues to rely on the protocol an object supports rather than on recognition
+as a general substitute for polymorphism.
+
 `true`, `false`, and `null` are canonical singleton values.
 
 Ordinary mutable objects, closures, arrays and other identity-bearing objects retain individual object identity even when their contents happen to be equal. The exact collection model is specified separately.

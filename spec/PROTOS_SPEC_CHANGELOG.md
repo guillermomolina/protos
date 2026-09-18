@@ -9,6 +9,50 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.426] - 2026-09-18
+
+### D147 / I045-A — Exact standard-owner `recognizes(value)` predicates
+- Adds the ordinary selector `recognizes(value)` as standard local behavior on
+  exactly the canonical standard owners `String`, `Integer`, `Float`, and
+  `Array`.
+- `String.recognizes` recognizes exactly semantic String values.
+- `Integer.recognizes` recognizes exactly ordinary unbounded Integer values;
+  all fixed-width Integer-family values are rejected and internal
+  SmallInteger/BigInteger representation is irrelevant.
+- `Float.recognizes` recognizes exactly semantic Float values and performs no
+  numeric promotion or conversion.
+- `Array.recognizes` recognizes ownership of standard Array indexed state;
+  immediate delegation-parent identity is irrelevant, descendant-factory
+  Arrays remain recognized, and ordinary delegation to `Array` is insufficient.
+- Each recognizer requires its exact canonical standard owner as receiver,
+  accepts exactly one arbitrary candidate value, returns canonical `true` or
+  `false`, and treats candidate mismatch as `false`.
+- Recognition performs no candidate message lookup/dispatch, `parent()` lookup,
+  equality/hash dispatch, callback, conversion, coercion, or delegation-based
+  membership inference.
+- Standard owner objects themselves are not thereby members of the domains they
+  recognize; in particular `String.recognizes(String)`,
+  `Integer.recognizes(Integer)`, `Float.recognizes(Float)`, and
+  `Array.recognizes(Array)` are all `false`.
+- Adds no recognizer to `Number`, fixed-width Integer owners, `Map`,
+  `IdentityMap`, `Bytes`, or any other owner by symmetry, and adds no generic
+  family/type descriptor or user-extensible recognition mechanism.
+- Normative owners changed by this revision:
+  `spec/semantics/OBJECT_MODEL.md` and
+  `spec/semantics/VALUES_AND_COLLECTIONS.md`.
+- Informative runtime pseudocode is reconciled in
+  `spec/runtime/ABSTRACT_RUNTIME.md`.
+
+### Compatibility and implementation state
+- This revision exposes already-approved exact Core semantic/state domains
+  without changing ordinary protocol-oriented polymorphism or making delegation
+  equivalent to semantic-family membership.
+- This is a specification-only publication. Executable implementation and
+  production probe migration remain I045-B follow-up work and must occur only
+  after this revision is published to `main`.
+- The Maven implementation version is unchanged by this revision.
+
+
 ## [0.1.425] - 2026-09-18
 
 ### D149 / I044 — Remove custom symbolic binary operators

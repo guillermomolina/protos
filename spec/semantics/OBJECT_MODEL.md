@@ -109,6 +109,13 @@ the family owner explicitly requires that relation; conversely, delegating to a
 family prototype does not confer semantic-family membership or receiver-owned
 state.
 
+Where a canonical standard owner explicitly publishes a recognition behavior for
+one of these domains, that behavior observes the owning semantic-family or
+receiver-state contract rather than delegation topology. The concrete Core
+recognizers and their exact recognized domains are owned by
+`VALUES_AND_COLLECTIONS.md`; this object-model rule does not create a generic
+membership relation, descriptor system, or user-extensible type registry.
+
 This rule is closed over the Core v0.1 standard surface: a conforming
 implementation may use arbitrary hidden implementation metadata or host
 inheritance internally, but no additional Protos-visible parent may appear in
