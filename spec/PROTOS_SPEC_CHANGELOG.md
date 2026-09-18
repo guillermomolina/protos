@@ -9,6 +9,43 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.421] - 2026-09-18
+
+### D142 — Standard Map expected-absence fallback
+- Adds the standard non-mutating `Map.atIfAbsent(key, fallback)` and
+  `IdentityMap.atIfAbsent(key, fallback)` protocols selected by ratified D142
+  Candidate C.
+- Requires exactly one logical key search under the receiver's existing key law:
+  normal `Map` retains deterministic query `hash` plus directed
+  `queryKey == storedKey`, while `IdentityMap` retains semantic identity-hash
+  plus `===` matching.
+- Preserves `ABSENT != PRESENT_WITH_NULL`: a present association returns its
+  exact stored value, including `null` or `false`, without validating or invoking
+  the fallback.
+- On absence, requires path-sensitive fallback callability and exactly one
+  ordinary zero-argument invocation whose exact normal result is returned.
+  Search/fallback effects, suspension, errors, and non-local control transfer
+  retain their existing semantics with no rollback.
+- Defines `atIfAbsent` itself as non-mutating. Fallback execution begins only
+  after the missing-key search completes, may perform ordinary mutations when
+  existing rules permit them, and never causes the outer operation to re-search
+  or reinterpret the established miss.
+- Adds no eager `atOr`, mutating `atIfAbsentPut`, implicit key/receiver callback
+  arguments, ambient Map default state, presence-result carrier, Optional/Maybe,
+  hidden sentinel, truthiness, syntax, transaction, or atomic compute/install
+  guarantee.
+
+### Compatibility and implementation state
+- Existing `at(key)`, indexed access, `containsKey`, `atPut`, `remove`, Map
+  insertion order, normal Map hashing/equality, IdentityMap identity matching,
+  receiver-domain, reentrancy, and open/closed/frozen semantics remain unchanged.
+- Normative changes are confined to `semantics/VALUES_AND_COLLECTIONS.md` plus
+  this global specification changelog entry.
+- This is a specification-only revision. Executable implementation of the new
+  selectors remains separate work, and the Maven implementation version is
+  unchanged by this revision.
+
+
 ## [0.1.420] - 2026-09-18
 
 ### D145 / I042 — Remove Closure `args` intrinsic

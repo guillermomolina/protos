@@ -2265,8 +2265,9 @@ creates ordinary Map keyed state; behavior inherited from `IdentityMap` creates
 IdentityMap keyed state.
 
 This rule does not weaken the standard keyed receiver-domain invariant.
-Inheriting or copying `at`, `atPut`, `containsKey`, `remove`, `each`, or other
-ordinary keyed behavior still does not confer keyed state on the receiver. The
+Inheriting or copying `at`, `atPut`, `containsKey`, `atIfAbsent`, `remove`,
+`each`, or other ordinary keyed behavior still does not confer keyed state on
+the receiver. The
 factory instead creates a distinct new object that owns that state.
 
 The standard Map factories do not send `init` to the created object and perform
@@ -2414,8 +2415,9 @@ keyed-entry state, unless that behavior is explicitly specified as generic over
 both standard Map kinds.
 
 This applies to the standard keyed protocols defined by Core, including `at`,
-`atPut`, `containsKey`, `remove`, `each`, and any other standard behavior whose
-normative semantics inspect or mutate the receiver's keyed-entry state.
+`atPut`, `containsKey`, `atIfAbsent`, `remove`, `each`, and any other standard
+behavior whose normative semantics inspect or mutate the receiver's keyed-entry
+state.
 
 For an incompatible receiver, invocation signals an `Error` after ordinary
 receiver/argument evaluation and ordinary message lookup have selected the
@@ -2786,9 +2788,71 @@ operation, or other key-search step signals, that error propagates; the
 missing-key rule applies only after a search completes normally with no match.
 
 Core introduces no special absence value and does not reserve any ordinary
-object as an out-of-band Map result. Libraries that want lookup-with-default,
-optional-result, or `ifAbsent` behavior may expose a distinct ordinary protocol
-without changing standard `at(key)` semantics.
+object as an out-of-band Map result. Optional-result carriers, hidden sentinels,
+and ambient receiver-wide default state are not implied by the standard missing-
+key rules.
+
+### Standard Map expected-absence fallback
+
+The standard non-mutating expected-absence selector for `Map` and `IdentityMap`
+is:
+
+```js
+map.atIfAbsent(key, fallback)
+```
+
+Receiver, `key`, and the argument expression that produces `fallback` are
+evaluated under the ordinary left-to-right, exactly-once invocation rules before
+the selected standard behavior begins. Evaluating a Closure literal therefore
+creates the Closure object but does not execute its body.
+
+After standard receiver-domain validation, `atIfAbsent` performs exactly one
+logical key search using the receiver's existing key-search law:
+
+- normal `Map` uses the existing query hash and directed
+  `queryKey == storedKey` semantics;
+- `IdentityMap` uses the existing semantic identity-hash and `===` semantics.
+
+If a matching association exists, `atIfAbsent` returns the exact stored value
+object. This includes `null`, `false`, and every other valid stored value. On
+this present path, `fallback` is neither callability-validated nor invoked.
+
+If key search completes normally with no matching association, `fallback` must
+be invokable through the ordinary polymorphic invocation protocol. It is invoked
+exactly once with zero positional arguments, and its exact normal result is
+returned unchanged. Callability validation is therefore path-sensitive; it does
+not suppress the earlier ordinary evaluation of the argument expression that
+produced the fallback object. No fallback arity is accepted implicitly: an
+arity or other invocation failure from the actual zero-argument call propagates
+normally.
+
+Search and fallback effects, suspension, errors, and ordinary non-local control
+transfer remain governed by their existing semantics. `atIfAbsent` performs no
+keyed-entry mutation itself and introduces no rollback. The fallback begins only
+after the missing-key search has completed; once invoked, it is ordinary Protos
+behavior and may mutate the same Map, another Map, the key, or other objects when
+those mutations are otherwise permitted by the existing state and reentrancy
+rules.
+
+`atIfAbsent` does not search the key again after fallback execution. If the
+fallback inserts, removes, closes, freezes, or otherwise affects the receiver
+after absence was established, the outer operation does not reinterpret that
+change; it returns the fallback's exact result if the fallback returns normally.
+The fallback receives neither the key nor the Map receiver as an implicit
+argument; code that needs them may capture them through ordinary closure
+semantics.
+
+No atomicity, key reservation, transaction, rollback, memoization, or
+compute-once guarantee is part of `atIfAbsent`. The selector does not define a
+mutating get-or-insert operation, an eager default-value selector, a presence-
+result carrier, `Optional`/`Maybe`, truthiness, a hidden absence sentinel, or new
+syntax. Such facilities require their own explicit contracts if standardized
+later.
+
+The one-search rule is observable semantics rather than a physical storage
+requirement. A conforming implementation may use any Map representation or
+indexing strategy that preserves the receiver's existing deterministic key law
+without beginning a second logical lookup for the same `atIfAbsent` invocation.
 
 ### Standard Map interaction with `close()` and `freeze()`
 
@@ -2822,9 +2886,11 @@ Map's own keyed-entry state and ordinary local slots; it does not close or freez
 stored keys or values and does not change their identity, equality, or hash
 behavior.
 
-Read-only Map operations, including `at(key)` and `containsKey(key)`, remain
-available on closed and frozen Maps and use the same deterministic key-search
-semantics.
+Read-only Map operations, including `at(key)`, `containsKey(key)`, and
+`atIfAbsent(key, fallback)`, remain available on closed and frozen Maps and use
+the same deterministic key-search semantics. Any mutation attempted by an
+invoked fallback remains subject to the receiver's then-current ordinary state
+rules.
 
 For `atPut(key, value)`, state validation is ordered as follows after ordinary
 receiver/argument evaluation:
@@ -2903,8 +2969,9 @@ at the end of insertion order and stores the query hash obtained for that
 operation.
 
 The same matching rule applies to standard operations such as direct lookup,
-`containsKey`, removal by key, and any later standard `Map` protocol that is
-defined in terms of finding a key. A library operation that deliberately wants
+`containsKey`, `atIfAbsent`, removal by key, and any later standard `Map`
+protocol that is defined in terms of finding a key. A library operation that
+deliberately wants
 different matching semantics must expose a distinct protocol rather than rely
 on implementation-specific `Map` internals.
 
@@ -3070,8 +3137,8 @@ semantic key after that removal is a new insertion and therefore appears at the
 end of insertion order.
 
 The same identity-key search rule applies to direct lookup, `containsKey`,
-removal by key, indexed insertion/update, and any later standard `IdentityMap`
-operation defined in terms of finding a key.
+`atIfAbsent`, removal by key, indexed insertion/update, and any later standard
+`IdentityMap` operation defined in terms of finding a key.
 
 Identity-hash collisions do not make distinct semantic identities match.
 Conversely, two values that are semantically identical under `===` denote the
