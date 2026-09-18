@@ -1,3 +1,16 @@
+## 0.3.30-SNAPSHOT
+
+- Implement `TOOL007-A1 — source-local documentation owner inventory`
+  (GitHub #556) under ratified D138 Candidate A′. Add the minimal
+  source-documentation ownership projection over the parser-authoritative
+  Surface AST, identifying the module source unit plus explicit named
+  `SurfaceSlotCreation` occurrences in source order, including nested and
+  member-target creations. Preserve occurrence-local identity so repeated
+  names remain distinct, while parameters and assignments remain outside the
+  independent documentation-owner model. Documentation comment association
+  (`//!` and `///`) remains deferred to subsequent TOOL007-A slices.
+  Implementation version becomes `0.3.30-SNAPSHOT`.
+
 ## 0.3.29-SNAPSHOT
 
 - Complete `PERF009-B — Quarantined Java test normalization and reintegration`
