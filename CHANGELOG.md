@@ -1,3 +1,15 @@
+## 0.3.39-SNAPSHOT
+
+- Complete `PERF009-C` (GitHub #559) by removing the fixed wall-clock
+  validation budget introduced during the post-quarantine validation work.
+  Restore GitHub CI to the canonical
+  `make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4` correctness path and remove
+  the `test-budget` target and timeout guard. Test execution has no fixed
+  duration acceptance threshold; proportional routine workloads remain governed
+  by `AGENTS.md`, while future measured performance regressions are investigated
+  when evidence shows a regression. Implementation version becomes
+  `0.3.39-SNAPSHOT`.
+
 ## 0.3.38-SNAPSHOT
 
 - Fix `BUG007 — PERF006 canonical coverage still expects removed args
