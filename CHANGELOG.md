@@ -1,3 +1,19 @@
+## 0.3.50-SNAPSHOT
+
+- Begin `LIB018 — Expand Protos testing support beyond the initial Assertions
+  surface` (GitHub #592) under the ratified LIB018-0 Candidate C-prime
+  authoring model. Add `std:test/Test` as the canonical ordinary Test-value
+  constructor: `Test(name, body)` requires a non-empty semantic String name and
+  returns one fresh frozen ordinary object exposing local `name` and zero-argument
+  `call` slots. Test invocation returns the exact body result and preserves exact
+  Error/control propagation, while body callability remains deferred until
+  invocation. Add no nominal Test runtime type, Suite abstraction, ambient
+  registration mechanism, fixture lifecycle, parameterization framework, or
+  Test Tool discovery/scheduling change. Add focused Protos conformance for the
+  Test value surface, freshness/frozen behavior, result/Error propagation,
+  invalid names, and deferred body validation. Implementation version becomes
+  `0.3.50-SNAPSHOT`.
+
 ## 0.3.49-SNAPSHOT
 
 - Implement `I049 — Implement Map.atIfAbsent expected-absence lookup` (GitHub

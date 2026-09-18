@@ -243,6 +243,12 @@ library/test/require-nonboolean-not-assertion-failure.protos	boolean	true
 library/test/signals-returns-exact-error.protos	boolean	true
 library/test/signals-missing-failure.protos	boolean	true
 library/test/signals-nonmatching-propagates-exact-error.protos	boolean	true
+library/test/test-value-surface.protos	boolean	true
+library/test/test-value-fresh-frozen.protos	boolean	true
+library/test/test-invocation-exact-result.protos	boolean	true
+library/test/test-invocation-exact-error.protos	boolean	true
+library/test/test-invalid-name.protos	boolean	true
+library/test/test-body-validation-deferred.protos	boolean	true
 library/json/array-object-shape-order.protos	boolean	true
 library/json/constructors-basic.protos	boolean	true
 library/json/import-cache.protos	boolean	true
