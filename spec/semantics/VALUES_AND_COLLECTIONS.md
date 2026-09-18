@@ -27,6 +27,79 @@ means the slot `x` exists and contains `null`.
 A failed lookup signals an error. It does not evaluate to `null`.
 
 `null` is a singleton object and may respond to messages like any other object.
+
+### Standard null-aware Object control
+
+The standard `Object` protocol provides the ordinary one-argument messages:
+
+```text
+ifNull(block)
+ifNotNull(block)
+```
+
+These selectors are standard local behavior on canonical `Object` and are
+reached through ordinary message lookup and dispatch. A custom object may define
+or override either selector through the ordinary slot rules.
+
+The standard behavior distinguishes canonical `null` solely by exact object
+identity of the original receiver. There is no truthiness rule. Delegating to
+canonical `null`, or otherwise inheriting behavior through it, does not make a
+distinct object null.
+
+Both operations accept exactly one supplied positional argument. Receiver and
+argument expressions are evaluated under the ordinary eager left-to-right call
+rules before invocation. The resulting callback object is callability-validated
+only on a branch that actually invokes it.
+
+For standard `ifNull(block)` behavior:
+
+```text
+receiver is canonical null
+    -> invoke block() exactly once
+    -> return its exact normal result
+
+receiver is not canonical null
+    -> do not callability-validate or invoke block
+    -> return the exact receiver
+```
+
+For standard `ifNotNull(block)` behavior:
+
+```text
+receiver is canonical null
+    -> do not callability-validate or invoke block
+    -> return canonical null
+
+receiver is not canonical null
+    -> invoke block(receiver) exactly once
+    -> return its exact normal result
+```
+
+The argument supplied to a reached `ifNotNull` callback is the exact original
+receiver. Callback invocation uses the ordinary polymorphic invocation protocol;
+the callback need not be a Closure.
+
+A reached callback's normal result is returned unchanged, including canonical
+`null`, Boolean values, ordinary objects, and Future values. These operations
+perform no implicit await, Future adoption, wrapping, conversion, or hidden
+suspension. Errors, non-local returns, and other ordinary control effects from a
+reached callback propagate according to the existing invocation and control
+rules.
+
+An unreachable callback is neither callability-validated nor invoked, but the
+argument expression that produced it has already been evaluated normally before
+dispatch. A non-invokable callback therefore signals only when its branch is
+actually reached.
+
+These operations do not change lookup or collection absence semantics. A failed
+member lookup still signals the ordinary `Error`; it does not become `null`.
+Map absence remains distinct from a present entry whose stored value is canonical
+`null`.
+
+Core v0.1 adds no optional-navigation syntax, null-coalescing syntax,
+`Optional`/`Maybe` value family, `undefined` value, truthiness rule, or
+failed-lookup-to-null conversion as part of this protocol.
+
 ## 16. Booleans
 
 Core v0.1 has exactly two semantic Boolean values: the canonical singleton

@@ -9,6 +9,40 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.427] - 2026-09-18
+
+### D144 / I048-A — Null-aware standard Object control
+- Adds ordinary standard `Object.ifNull(block)` and
+  `Object.ifNotNull(block)` behavior under ratified D144 Candidate B-prime.
+- Branch selection tests only exact canonical `null` identity of the original
+  receiver; there is no truthiness, and delegation to canonical `null` does not
+  confer null identity.
+- `null.ifNull(block)` invokes the reached callback exactly once with zero
+  supplied arguments and returns its exact normal result; non-null receivers do
+  not callability-validate or invoke the callback and return the exact receiver.
+- `null.ifNotNull(block)` does not callability-validate or invoke the callback
+  and returns canonical `null`; non-null receivers invoke the reached callback
+  exactly once with the exact receiver as its sole supplied argument and return
+  its exact normal result.
+- Preserves ordinary eager receiver/argument evaluation, path-sensitive
+  callability validation, polymorphic callback invocation, Error and non-local
+  control propagation, and unchanged Future results with no implicit await,
+  adoption, wrapping, conversion, or hidden suspension.
+- Preserves ordinary failed-lookup errors and D142 Map
+  absent-versus-present-with-null semantics.
+- Adds no optional-navigation or null-coalescing syntax, `Optional`/`Maybe`,
+  `undefined`, truthiness, failed-lookup-to-null conversion, or combined
+  null-aware operation.
+- Normative owner changed by this revision:
+  `spec/semantics/VALUES_AND_COLLECTIONS.md`.
+
+### Compatibility and implementation state
+- This is a specification-only publication of already-ratified D144 semantics.
+- Executable implementation remains I048 follow-up work and must occur only
+  after this revision is published to `main`.
+- The Maven implementation version is unchanged by this revision.
+
+
 ## [0.1.426] - 2026-09-18
 
 ### D147 / I045-A — Exact standard-owner `recognizes(value)` predicates
