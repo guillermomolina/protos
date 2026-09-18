@@ -16,7 +16,7 @@ base: {
 }
 
 child: base {
-    sum: (a, b) => {
+    sum: (...args) => {
         super.sum(...args)
     }
 }

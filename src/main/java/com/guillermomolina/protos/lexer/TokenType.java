@@ -26,7 +26,6 @@ public enum TokenType {
     // Reserved intrinsics
     THIS,
     CONTEXT,
-    ARGS,
     NULL,
     TRUE,
     FALSE,

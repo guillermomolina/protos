@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-08
+Last updated: 2026-09-18
 
 This document is the primary normative owner of execution contexts, lookup/control foundations, intrinsic execution references, evaluation order, iteration/loop control, and related execution semantics.
 
@@ -137,7 +137,7 @@ keeps:
 this === rex
 ```
 
-`this` is an intrinsic pseudo-identifier supplied by the current execution state. It is not an ordinary bare identifier and does not execute the unqualified-name algorithm in §6. The same distinction applies to the intrinsic pseudo-identifiers `context` and `args`. `super` is governed separately by §8 and is not a bare-name lookup.
+`this` is an intrinsic pseudo-identifier supplied by the current execution state. It is not an ordinary bare identifier and does not execute the unqualified-name algorithm in §6. The same distinction applies to the intrinsic pseudo-identifier `context`. The spelling `args` is an ordinary bare identifier and therefore does execute the unqualified-name algorithm in §6. `super` is governed separately by §8 and is not a bare-name lookup.
 ## 6. Unqualified Lookup
 
 An ordinary bare identifier expression such as:

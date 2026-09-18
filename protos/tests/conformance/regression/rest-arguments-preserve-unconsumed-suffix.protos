@@ -4,7 +4,8 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-inspect: (head, ...tail) => {
-    head + (args.size() * 100) + (tail.size() * 10) + tail[1]
+inspect: (head, ...args) => {
+    head + (args.size() * 10) + args[1]
 }
+
 inspect(10, 20, 30)

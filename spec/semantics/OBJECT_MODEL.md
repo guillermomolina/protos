@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-09
+Last updated: 2026-09-18
 
 This document is the primary normative owner of object identity as objects, delegation, slots, composition, and object open/closed/frozen state.
 
@@ -118,7 +118,7 @@ inheritance internally, but no additional Protos-visible parent may appear in
 
 Every Protos object may serve as the delegation parent of another object. There is no distinct "prototype object" category and no parentability capability, flag, type, predicate, or hidden classification. "Prototype" describes a role that an object plays when another object delegates to it; it is not a separate kind of object.
 
-The rule applies without exception to ordinary objects, built-in objects, immutable value objects, singleton values, execution-context objects, and every other Protos object. Consequently values such as `this`, `context`, `args`, `true`, `false`, `null`, Number values such as `42`, and String values such as `"hello"` may serve as delegation parents, as may the standard built-in prototype objects such as `Object`, `Number`, `Integer`, `Float`, and `String`.
+The rule applies without exception to ordinary objects, built-in objects, immutable value objects, singleton values, execution-context objects, and every other Protos object. Consequently values such as `this`, `context`, `true`, `false`, `null`, Number values such as `42`, String values such as `"hello"`, and values obtained through ordinary identifier lookup (including a binding named `args`) may serve as delegation parents, as may the standard built-in prototype objects such as `Object`, `Number`, `Integer`, `Float`, and `String`.
 
 The standard Boolean-family surface is owned by `VALUES_AND_COLLECTIONS.md`. This section does not introduce or require an additional family prototype; the canonical Boolean values `true` and `false` are already covered by the general parentability rule above.
 
@@ -162,7 +162,7 @@ args {
 }
 ```
 
-`this`, `context`, and `args` are valid directly as intrinsic references. `true`, `false`, `null`, numbers, and strings are literals and therefore require parentheses: `(true)`, `(42)`, and `("hello")` are valid parent expressions, while the direct forms `true`, `42`, and `"hello"` are not `parent-expression` forms. A parenthesized expression may compute a parent dynamically.
+`this` and `context` are valid directly as intrinsic references. `args` is also syntactically valid in this position, but only as an ordinary identifier and therefore follows ordinary unqualified lookup. `true`, `false`, `null`, numbers, and strings are literals and therefore require parentheses: `(true)`, `(42)`, and `("hello")` are valid parent expressions, while the direct forms `true`, `42`, and `"hello"` are not `parent-expression` forms. A parenthesized expression may compute a parent dynamically.
 
 Using an object as a delegation parent does not make the newly created object identical to that parent, and does not automatically give the child the parent's value semantics. For example:
 

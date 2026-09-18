@@ -24,8 +24,7 @@ public record CanonicalIntrinsic(Kind kind, SourceSpan span)
         implements CanonicalExpression {
     public enum Kind {
         THIS,
-        CONTEXT,
-        ARGS
+        CONTEXT
     }
 
     public CanonicalIntrinsic {

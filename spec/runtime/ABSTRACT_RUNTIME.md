@@ -754,7 +754,7 @@ The runtime may assume validated closure parameter metadata. Defensive implement
 
 The language uses a Smalltalk/Squeak-style **home activation** for `^`.
 
-Every invocation records the caller-supplied positional arguments before default substitution. The reserved intrinsic `args` exposes an immutable view of that original vector.
+Every invocation records the caller-supplied positional arguments before default substitution for arity/default/rest binding and other implementation-internal invocation needs. Core exposes no ambient guest intrinsic for that complete vector; `args` is an ordinary identifier.
 
 ```text
 function createActivation(
@@ -836,7 +836,7 @@ This is only an informative rendering of the normative algorithm in
 `../semantics/CALLABLES.md`. Parameter slots are created incrementally: a default
 observes earlier successfully bound parameters, while the current and later
 parameter names are not yet local slots and therefore follow ordinary bare-name
-lookup. Default substitution never changes `activation.arguments` / `args`.
+lookup. Default substitution never changes the implementation-internal `activation.arguments` vector.
 
 A method invocation dynamically supplies `receiver` and `methodHome` and
 establishes a fresh return home. A module-level function closure with no captured
@@ -2719,7 +2719,7 @@ The existing conceptual use:
 newStandardArrayWithElements(values)
 ```
 
-for runtime-created Arrays such as `args` and rest bindings remains valid; when
+for runtime-created Arrays such as rest bindings remains valid; when
 no explicit parent is shown there, it denotes the standard `Array` parent unless
 that surrounding rule explicitly specifies another parent.
 
@@ -2891,24 +2891,20 @@ Activation
     ...
 ```
 
-The intrinsic `args` resolves to an immutable ordinary collection representing `Activation.arguments`.
-
-For a receiver-aware send:
+`Activation.arguments` is implementation-internal invocation/binding state.
+It is not exposed through a guest intrinsic. For a receiver-aware send:
 
 ```js
 receiver.message(a, b)
 ```
 
-the invocation state is conceptually:
+the internal argument vector contains `[evaluated(a), evaluated(b)]`; the
+receiver is not inserted into that vector.
 
-```text
-this = receiver
-args = [evaluated(a), evaluated(b)]
-```
-
-The receiver is not inserted into `args`.
-
-Parameter binding proceeds from left to right. Caller-supplied arguments bind first. Missing parameters with default expressions evaluate those defaults in the new invocation context. The original `args` collection is not modified by default substitution.
+Parameter binding proceeds from left to right. Caller-supplied arguments bind
+first. Missing parameters with default expressions evaluate those defaults in
+the new invocation context. Default substitution does not modify the recorded
+caller-supplied vector.
 
 A trailing rest parameter receives an ordinary collection containing caller-supplied arguments that were not consumed by preceding positional parameters.
 
@@ -2922,7 +2918,7 @@ f(...values)
 
 becomes a normal invocation whose outgoing argument vector contains the elements produced by the spread operation.
 
-The runtime may optimize argument vectors, rest Arrays, and `args` Arrays, but observable semantics must remain those of the frozen standard Arrays defined above.
+The runtime may optimize internal argument vectors and rest Arrays, but the observable semantics of rest bindings must remain those of the frozen standard Arrays defined below.
 
 No dispatch by argument type is implied. These mechanisms support dynamic arity, forwarding, and user-defined helper protocols without introducing method-overload resolution.
 
@@ -2999,12 +2995,13 @@ Implementations may avoid materializing an intermediate snapshot object or even
 an intermediate outgoing vector when observable evaluation order, error timing,
 element identity, and expansion order remain exactly equivalent to this model.
 
-## Invocation argument Array representation
+## Rest-argument Array representation
 
-The conceptual `immutableArgumentCollection(values)` operation used by
-activation creation and rest-parameter binding produces a fresh standard Array
-whose indexed elements are exactly `values` in order, then freezes that Array
-before exposing it to Protos code.
+The conceptual `immutableArgumentCollection(values)` operation used for
+rest-parameter binding produces a fresh standard Array whose indexed elements
+are exactly `values` in order, then freezes that Array before exposing it to
+Protos code. An implementation may use the same helper internally for activation
+argument storage, but that internal use creates no guest-visible identity or API.
 
 Conceptually:
 
@@ -3019,19 +3016,12 @@ function immutableArgumentCollection(values):
 state and a fresh Array identity. `freeze(array)` has the ordinary shallow
 frozen-object meaning.
 
-Consequently:
-
-```text
-activation.arguments
-```
-
-is a fresh frozen standard Array for each activation, and every rest binding
-created by `bindParametersLeftToRight` is another fresh frozen standard Array.
-No `args` Array aliases the Array object of another invocation, and a rest Array
-does not reuse the current activation's `args` identity.
+Consequently every rest binding created by `bindParametersLeftToRight` is a
+fresh frozen standard Array. The representation and identity of internal
+`activation.arguments` state are not guest semantics.
 
 The runtime may scalar-replace, virtualize, cache backing storage, or otherwise
-avoid allocating a concrete Array object when those optimizations preserve
+avoid allocating a concrete rest Array object when those optimizations preserve
 fresh semantic identity if observed, standard Array lookup/receiver behavior,
 frozen mutation failure, element identity, ordering, `size`, and `each`.
 

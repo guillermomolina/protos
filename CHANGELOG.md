@@ -1,3 +1,15 @@
+## 0.3.37-SNAPSHOT
+
+- Implement `I042 — Remove Closure args intrinsic` under ratified D145
+  Candidate A. Remove bare `args` from the reserved/intrinsic lexer, parser,
+  surface/canonical and bytecode execution path; `args` is now an ordinary
+  identifier and may be used for parameters, rest parameters, local slots and
+  ordinary lookup. Preserve internal caller-supplied argument vectors required
+  for binding, preserve required/default/rest/spread behavior, and leave
+  `process.args()` unchanged. Replace obsolete ambient-`args` conformance with
+  ordinary-identifier/rest-forwarding coverage and reconcile specification
+  revision `0.1.420`. Implementation version becomes `0.3.37-SNAPSHOT`.
+
 ## 0.3.36-SNAPSHOT
 
 - Implement `I043 — Implement derived inequality semantics` (GitHub #582) under

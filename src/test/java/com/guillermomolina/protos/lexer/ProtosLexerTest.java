@@ -25,16 +25,24 @@ import org.junit.jupiter.api.Test;
 
 class ProtosLexerTest {
     @Test
-    void lexesExactlyTheSevenReservedWords() {
+    void lexesExactlyTheSixReservedWords() {
         assertTypes(
-            "this context args super true false null",
+            "this context super true false null",
             TokenType.THIS,
             TokenType.CONTEXT,
-            TokenType.ARGS,
             TokenType.SUPER,
             TokenType.TRUE,
             TokenType.FALSE,
             TokenType.NULL,
+            TokenType.EOF
+        );
+    }
+
+    @Test
+    void argsIsAnOrdinaryIdentifier() {
+        assertTypes(
+            "args",
+            TokenType.IDENTIFIER,
             TokenType.EOF
         );
     }

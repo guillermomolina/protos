@@ -289,7 +289,6 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
             }
             case THIS -> intrinsic(SurfaceIntrinsic.Kind.THIS);
             case CONTEXT -> intrinsic(SurfaceIntrinsic.Kind.CONTEXT);
-            case ARGS -> intrinsic(SurfaceIntrinsic.Kind.ARGS);
             case SUPER -> parseSuperMessageSend();
             case LBRACKET -> parseArrayConstruction();
             case LBRACE -> parseObjectBody(null);
@@ -638,7 +637,7 @@ private SurfaceExpression parseBinaryExpressionFoundation() {
     private TokenOccurrence consumeMemberName() {
         TokenType type = cursor.current().token().type();
         return switch (type) {
-            case IDENTIFIER, THIS, CONTEXT, ARGS, SUPER, TRUE, FALSE, NULL -> cursor.advance();
+            case IDENTIFIER, THIS, CONTEXT, SUPER, TRUE, FALSE, NULL -> cursor.advance();
             default -> throw ParseError.expected("a member name", cursor.current());
         };
     }

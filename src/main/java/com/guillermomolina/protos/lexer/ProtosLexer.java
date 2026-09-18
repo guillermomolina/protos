@@ -37,7 +37,6 @@ public final class ProtosLexer {
     private static final Map<String, TokenType> RESERVED_WORDS = Map.of(
             "this", TokenType.THIS,
             "context", TokenType.CONTEXT,
-            "args", TokenType.ARGS,
             "super", TokenType.SUPER,
             "true", TokenType.TRUE,
             "false", TokenType.FALSE,

@@ -23,8 +23,7 @@ import java.util.Objects;
 public record SurfaceIntrinsic(Kind kind, SourceSpan span) implements SurfaceExpression {
     public enum Kind {
         THIS,
-        CONTEXT,
-        ARGS
+        CONTEXT
     }
 
     public SurfaceIntrinsic {

@@ -1032,39 +1032,28 @@ through an explicit normative revision defining traversal order, failure,
 effects, suspension, mutation visibility, and interaction with existing
 collection protocols.
 
-### Invocation argument collections are frozen Arrays
+### Rest argument collections are frozen Arrays
 
-The ordinary immutable collection exposed by `args` is specifically a **fresh
-frozen standard `Array`** created for that invocation.
-
-Its indexed elements are exactly the caller-supplied positional argument
-objects, after evaluation and in source order. Its `size` is therefore the
-number of caller-supplied positional arguments. Default-parameter substitution
-does not append or replace elements in `args`.
-
-Each invocation has a distinct `args` Array identity, including zero-argument
-invocations. An implementation may avoid a physical allocation when escape,
-identity, reflection, and all other observable behavior remain exactly as if the
-fresh frozen Array existed.
-
-A rest parameter is likewise bound to a fresh frozen standard Array containing
+A rest parameter is bound to a **fresh frozen standard `Array`** containing
 exactly the remaining caller-supplied positional argument objects, in order.
-The rest Array is a distinct object from that invocation's `args` Array even
-when their contents happen to be the same, and distinct rest bindings created by
-different invocations are distinct objects.
+Distinct rest bindings created by different invocations are distinct objects,
+including empty rest Arrays.
 
-Because these objects are standard Arrays, their read behavior follows the
+Because rest bindings are standard Arrays, their read behavior follows the
 standard Array contracts for `at`, `size`, and `each`. Because they are frozen,
 standard `atPut`, ordinary slot mutation, slot creation/removal, and any other
 mutation prohibited by frozen-object semantics fail normally.
 
 Freezing is shallow: mutable argument objects are not frozen merely because a
-reference to them occurs in `args` or a rest Array. Parameter bindings and the
-argument Arrays therefore refer to the same supplied argument objects; no
-deep-copy or alias isolation is introduced.
+reference to them occurs in a rest Array. Parameter bindings and rest Arrays
+therefore refer to the same supplied argument objects; no deep-copy or alias
+isolation is introduced.
 
-This uses the existing Array and frozen-object mechanisms rather than defining a
-second privileged argument-collection object model.
+The complete caller-supplied positional vector may still exist as
+implementation-internal activation/binding state, but Core exposes no ambient
+guest collection for that complete vector. This uses the existing Array and
+frozen-object mechanisms for rest bindings rather than defining a second
+privileged argument-collection object model.
 
 ## Numeric Model
 

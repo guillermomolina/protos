@@ -118,7 +118,6 @@ public final class Canonicalizer {
         CanonicalIntrinsic.Kind kind = switch (intrinsic.kind()) {
             case THIS -> CanonicalIntrinsic.Kind.THIS;
             case CONTEXT -> CanonicalIntrinsic.Kind.CONTEXT;
-            case ARGS -> CanonicalIntrinsic.Kind.ARGS;
         };
         return new CanonicalIntrinsic(kind, intrinsic.span());
     }

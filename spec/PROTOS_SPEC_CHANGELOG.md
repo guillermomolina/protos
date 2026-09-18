@@ -9,6 +9,38 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.420] - 2026-09-18
+
+### D145 / I042 — Remove Closure `args` intrinsic
+- Removes the ambient Closure-invocation `args` intrinsic selected by D145
+  Candidate A. The spelling `args` is now an ordinary identifier throughout
+  Core source syntax and ordinary unqualified lookup.
+- Removes `args` from the reserved-word set and from `intrinsic-reference`.
+  `args` may therefore be used as a parameter name, rest-parameter name, local
+  slot name, captured binding, ordinary lookup name, and member name without a
+  contextual exception.
+- Preserves the caller-supplied positional vector as implementation-internal
+  activation/binding state where required for arity, required/default/rest
+  parameter binding, spread composition, dispatch, debugging, or equivalent
+  runtime machinery. That internal vector is no longer a guest-visible
+  semantic object merely by virtue of invocation.
+- Preserves required parameters, default parameters, rest parameters, call
+  spread, receiver binding, `this`, `context`, `super`, return homes, and
+  ordinary invocation semantics. A rest parameter continues to receive a
+  fresh frozen standard Array containing exactly the unconsumed caller-supplied
+  suffix.
+- Preserves `process.args()` unchanged. Process bootstrap argument snapshots are
+  a separate capability API and are not the removed Closure intrinsic.
+- Adds no replacement call-metadata API, parameter-suppliedness API, full-vector
+  capture marker, or reserved future meaning for the old spelling.
+
+### Compatibility and implementation state
+- Bare `args` no longer exposes the complete caller-supplied argument vector.
+  Existing source that needs forwarding must bind an ordinary parameter/rest
+  name explicitly, for example `(...args) => target(...args)`.
+- The parser/runtime removal and conformance reconciliation are owned by I042.
+- Implementation version becomes `0.3.37-SNAPSHOT`.
+
 ## [0.1.419] - 2026-09-18
 
 ### I043 — D148 derived inequality semantics

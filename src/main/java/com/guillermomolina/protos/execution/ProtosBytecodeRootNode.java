@@ -397,12 +397,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return switch (kind) {
                 case THIS -> activation.receiver();
                 case CONTEXT -> activation.context();
-                case ARGS ->
-                        activation.arguments()
-                                .orElseThrow(
-                                        () ->
-                                                new IllegalStateException(
-                                                        "args requires a Closure invocation activation"));
             };
         }
     }

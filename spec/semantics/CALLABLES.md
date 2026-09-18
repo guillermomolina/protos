@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-07
+Last updated: 2026-09-18
 
 This document is the primary normative owner of Closure values and capture, methods, invocation, arguments, receiver binding, and return/control behavior owned by callable execution. Lexical forms, trailing-closure attachment, operator parsing/precedence, and mandatory syntactic desugarings are owned by `../PROTOS_GRAMMAR.md`.
 
@@ -383,9 +383,11 @@ callable kind or a privileged dispatch path.
 This section is the primary normative owner of the argument vector and Closure
 parameter-binding algorithm. `../PROTOS_GRAMMAR.md` owns only the syntactic forms
 of ordinary, default, and rest parameters and of call spread. The standard Array
-representation used by `args`, rest bindings, and spread extraction is owned by
+representation used by rest bindings and spread extraction is owned by
 `VALUES_AND_COLLECTIONS.md`; that representation does not define a second
-binding algorithm.
+binding algorithm. The completed caller-supplied positional vector may remain
+available to the implementation as activation/binding state, but Core exposes
+no ambient guest identifier for that complete vector.
 
 ### Caller-supplied positional vector
 
@@ -439,12 +441,12 @@ active for the whole dynamic extent of parameter binding and body execution. A
 nested Closure invocation that uses a captured home uses that same captured home
 while binding defaults, exactly as it does while executing its body.
 
-The reserved intrinsic `args` is established from `supplied` before parameter
-binding begins. It denotes a fresh frozen standard Array containing exactly the
-`N` caller-supplied positional elements in order. It contains neither the
-receiver nor the caller activation, and it never contains values produced by
-default expressions. `args` is not an ordinary writable identifier and cannot be
-shadowed by a parameter or local slot.
+The completed `supplied` vector remains available to the parameter-binding
+algorithm and to implementation-internal activation machinery as needed. Core
+does not expose that complete vector through an ambient guest intrinsic or
+pseudo-identifier. The spelling `args` is an ordinary identifier and may be
+used by a parameter, rest parameter, local slot, captured binding, or ordinary
+lookup exactly like any other identifier.
 
 ### Normative parameter-binding algorithm
 
@@ -489,31 +491,26 @@ the later parameter's future value `1` merely because `b` appears in the
 signature.
 
 Because defaults execute in the real activation, they may observe the ordinary
-`this`, `context`, and `args` intrinsics and may perform any effects otherwise
+`this` and `context` intrinsics, perform ordinary bare-name lookup (including
+lookup of an in-scope binding named `args`), and perform any effects otherwise
 permitted to an ordinary expression. If a default explicitly creates a local
 slot whose name must later be established as a parameter slot, the later
 parameter-slot creation follows ordinary slot-creation conflict semantics; no
 special overwrite or parameter reservation occurs.
 
-### `args`, rest, and default interaction
+### Rest and default interaction
 
-`args` always denotes the complete flattened caller-supplied positional vector,
-including elements contributed by spread and any desugared trailing Closure.
-Defaults never add elements to `args`, replace elements in it, or shift positional
-assignment.
-
-A rest parameter contains only the still-unconsumed suffix of that same caller-
-supplied vector. Values produced by defaults are never inserted into rest. The
-rest Array is a distinct fresh frozen standard Array from `args`, including when
-both are empty or contain the same references. Both collections are shallow:
-the argument objects themselves retain their ordinary identities and aliasing.
+A rest parameter contains only the still-unconsumed suffix of the completed
+caller-supplied vector. Values produced by defaults are never inserted into
+rest. Each rest binding is a fresh frozen standard Array and is shallow: the
+argument objects themselves retain their ordinary identities and aliasing.
 
 For example, for `(a = 1, ...rest)`:
 
 ```text
-call()        -> args = [],       a = 1,  rest = []
-call(10)      -> args = [10],     a = 10, rest = []
-call(10, 20)  -> args = [10, 20], a = 10, rest = [20]
+call()        -> a = 1,  rest = []
+call(10)      -> a = 10, rest = []
+call(10, 20)  -> a = 10, rest = [20]
 ```
 
 ### Failure and control-transfer precedence
@@ -565,7 +562,7 @@ ordinary Actor-local scheduling rules apply.
 
 ### Representation and optimization boundary
 
-The fresh standard Arrays required for `args` and rest, and the spread snapshot
+The fresh standard Arrays required for rest bindings, and the spread snapshot
 semantics, are specified in `VALUES_AND_COLLECTIONS.md`. Implementations may
 scalar-replace, virtualize, share immutable backing storage, or otherwise avoid
 physical activation/Array copies only when `===`, reflection, mutation failure,
@@ -619,8 +616,8 @@ For a completed caller-supplied positional vector `supplied`, invoking target
    before any activation or parameter/default binding for that selected value.
 4. Directly activate that selected Closure in method role with `this === receiver`,
    the preserved `methodHome`, and `supplied` as its caller-supplied argument
-   vector. Activation, arity/default/rest binding, `args`, returns, Errors, and
-   explicit suspension then follow the ordinary Closure rules in this document.
+   vector. Activation, arity/default/rest binding, returns, Errors, and explicit
+   suspension then follow the ordinary Closure rules in this document.
 
 Steps 1–4 occur only after target evaluation and all ordinary/spread/trailing
 argument evaluation described above have completed. Thus an Error or non-local

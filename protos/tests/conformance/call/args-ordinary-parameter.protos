@@ -9,7 +9,6 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-f: (value) => args
+f: (args) => args
 
-snapshot: f(1)
-snapshot[0] = 2
+f(42)

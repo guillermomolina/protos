@@ -9,10 +9,9 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-value: {}
+f: () => {
+    args: 42
+    args
+}
 
-f: (item) => args
-snapshot: f(value)
-
-(snapshot.size() == 1) &&
-    (snapshot[0] === value)
+f()

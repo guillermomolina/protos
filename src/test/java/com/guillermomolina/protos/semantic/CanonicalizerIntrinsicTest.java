@@ -24,6 +24,7 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
+import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import org.junit.jupiter.api.Test;
 
 class CanonicalizerIntrinsicTest {
@@ -44,10 +45,10 @@ class CanonicalizerIntrinsicTest {
     }
 
     @Test
-    void lowersArgsToDedicatedCanonicalIntrinsic() {
-        CanonicalIntrinsic intrinsic =
-                assertInstanceOf(CanonicalIntrinsic.class, canonicalizeOnly("args"));
-        assertEquals(CanonicalIntrinsic.Kind.ARGS, intrinsic.kind());
+    void lowersArgsAsOrdinaryLookup() {
+        CanonicalLookup lookup =
+                assertInstanceOf(CanonicalLookup.class, canonicalizeOnly("args"));
+        assertEquals("args", lookup.name());
     }
 
     private Object canonicalizeOnly(String source) {

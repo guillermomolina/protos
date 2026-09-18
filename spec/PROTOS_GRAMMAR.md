@@ -70,19 +70,23 @@ año
 
 Identifier normalization applies to identifier spelling only and does not imply normalization of `String` values.
 
-Reserved intrinsic identifiers:
+Reserved words:
 
 The Core v0.1 reserved-word set is exactly:
 
 ```text
 this
 context
-args
 super
 true
 false
 null
 ```
+
+`args` is an ordinary identifier. It has no reserved or intrinsic meaning.
+Consequently it may be used wherever the grammar accepts `identifier`,
+including parameter names, rest-parameter names, bare slot names, and ordinary
+lookup expressions.
 
 Reserved-word recognition happens after lexical identifier recognition. The lexer first recognizes a valid Unicode identifier according to the identifier rules above. If the identifier spelling exactly matches one of the reserved words, it is tokenized as that reserved word rather than as an ordinary identifier. Reserved-word matching is case-sensitive. For example, `this` is reserved but `This` is an ordinary identifier.
 
@@ -95,14 +99,13 @@ member-name =
       identifier
     | "this"
     | "context"
-    | "args"
     | "super"
     | "true"
     | "false"
     | "null" ;
 ```
 
-`member-name` is used only where the grammar structurally expects a name immediately after `.`, in `member-suffix`, `member-expression`, and `super-message-send` (see Member Access, Calls, Indexing, and Postfix Expressions and Super Message Send). In that position a reserved spelling denotes an ordinary slot or message name and does not retain its expression-level intrinsic, literal, or special meaning. Therefore these are valid structural member accesses:
+`member-name` is used only where the grammar structurally expects a name immediately after `.`, in `member-suffix`, `member-expression`, and `super-message-send` (see Member Access, Calls, Indexing, and Postfix Expressions and Super Message Send). In that position a reserved spelling denotes an ordinary slot or message name and does not retain its expression-level intrinsic, literal, or special meaning. Ordinary identifiers such as `args` keep their ordinary name meaning. Therefore these are valid structural member accesses:
 
 ```text
 obj.name
@@ -132,7 +135,6 @@ Reserved words remain invalid wherever the grammar expects `identifier`: as para
 ```text
 this: value
 context: value
-args: value
 super: value
 true: value
 false: value
@@ -146,9 +148,18 @@ foo(super)
 f: super.foo
 ```
 
+By contrast, `args` is an ordinary identifier, so forms such as these are
+valid wherever the surrounding grammar otherwise permits them:
+
+```text
+args: value
+(args) => args
+(...args) => target(...args)
+```
+
 Bare `super`, `x: super`, `foo(super)`, and method extraction such as `f: super.foo` remain invalid; only the member-name position following the `.` of a valid `super-message-send` is generalized.
 
-This revision does not introduce contextual lexing. The lexer continues to tokenize the seven reserved spellings as their dedicated reserved tokens rather than as ordinary identifier tokens; it does not need to inspect whether a token follows `.` or to reclassify reserved tokens. The parser accepts either an identifier token or one of the seven reserved tokens when parsing `member-name`.
+This revision does not introduce contextual lexing. The lexer continues to tokenize the six reserved spellings as their dedicated reserved tokens rather than as ordinary identifier tokens; it does not need to inspect whether a token follows `.` or to reclassify reserved tokens. The parser accepts either an identifier token or one of the six reserved tokens when parsing `member-name`. The spelling `args` is tokenized as an ordinary identifier.
 
 Names provided by the standard prelude, such as `Object`, `Future`, `Number`, `String`, `Map`, `IdentityMap`, or `Context`, are not reserved words. In particular, the standard prelude prototype `Context` is not a reserved word and is distinct from the reserved intrinsic `context`. Error object names are not reserved.
 
@@ -825,11 +836,10 @@ The name following `super.` is a `member-name` (see Identifiers), so reserved-wo
 ```ebnf
 intrinsic-reference =
       "this"
-    | "context"
-    | "args" ;
+    | "context" ;
 ```
 
-`this`, `context`, and `args` are intrinsic references, not ordinary identifiers. `true`, `false`, and `null` are literals only (see Literals), and `super` is governed exclusively by `super-message-send` (see Super Message Send); none of them is an intrinsic reference.
+`this` and `context` are intrinsic references, not ordinary identifiers. `args` is an ordinary identifier and follows ordinary unqualified lookup. `true`, `false`, and `null` are literals only (see Literals), and `super` is governed exclusively by `super-message-send` (see Super Message Send); none of them is an intrinsic reference.
 
 ## 12.3 Array Construction Expressions
 
@@ -1094,7 +1104,7 @@ this {
 }
 ```
 
-The alternatives are intentionally broad. `this`, `context`, and `args` are valid through `intrinsic-reference`; identifiers and member expressions such as `Object` or `library.models.animal` are valid directly; and a parenthesized expression may compute a parent dynamically. Literals such as `true`, `false`, `null`, numbers, and strings are not themselves `parent-expression` forms, so a literal parent must be written as a parenthesized expression: `(true)`, `(42)`, and `("hello")` are valid while the direct spellings `true`, `42`, and `"hello"` are not.
+The alternatives are intentionally broad. `this` and `context` are valid through `intrinsic-reference`; ordinary identifiers such as `args`, plus member expressions such as `Object` or `library.models.animal`, are valid directly; and a parenthesized expression may compute a parent dynamically. Literals such as `true`, `false`, `null`, numbers, and strings are not themselves `parent-expression` forms, so a literal parent must be written as a parenthesized expression: `(true)`, `(42)`, and `("hello")` are valid while the direct spellings `true`, `42`, and `"hello"` are not.
 
 The grammar determines which source forms can denote a parent expression. Whether an evaluated parent expression is usable as a parent is not a separate grammar or runtime category: every successfully evaluated Protos expression produces a Protos object (see PROTOS_LANGUAGE_SPEC.md), and every Protos object may serve as another object's delegation parent. There is no parentability capability, classification, or secondary validation after evaluation.
 
@@ -1290,7 +1300,7 @@ The single-expression form is an exact mandatory desugaring of a braced Closure 
 x => expression       ==  x => { expression }
 ```
 
-The equivalence holds for every parameter form. It is exact with respect to all Closure semantics: lexical capture by reference, `this`, `context`, `args`, `super`, method binding and `methodHome`, captured-receiver behavior, return homes and non-local return `^`, evaluation behavior, Future/async behavior, and error propagation. Expression-bodied and braced Closures are the same kind of Closure; the desugaring introduces no new callable category, no new runtime concept, and no difference in invocation semantics. Protos continues to have exactly one executable language value kind: Closure.
+The equivalence holds for every parameter form. It is exact with respect to all Closure semantics: lexical capture by reference, `this`, `context`, ordinary identifier lookup (including bindings named `args`), `super`, method binding and `methodHome`, captured-receiver behavior, return homes and non-local return `^`, evaluation behavior, Future/async behavior, and error propagation. Expression-bodied and braced Closures are the same kind of Closure; the desugaring introduces no new callable category, no new runtime concept, and no difference in invocation semantics. Protos continues to have exactly one executable language value kind: Closure.
 
 An expression body is exactly one ordinary `expression`, never an `expression-sequence`. The body therefore ends exactly where that `expression` ends under the Expression Separators and Whitespace and Newlines rules: a `;` after the body expression is the inline expression separator, a separating logical `NEWLINE` after a complete body expression ends the Closure, and a closing `)`, `]`, or `}` or a list comma bounds the body when the Closure appears in a delimited position. Thus `x => print(x); foo()` is a Closure whose body is `print(x)`, followed by the separate expression `foo()` after the `;`; it is not a two-expression Closure body. Likewise:
 
@@ -1543,7 +1553,7 @@ The newlines between the final argument and the closing delimiter — a single n
 
 Argument expressions, including spread operands, are evaluated left-to-right.
 
-The reserved intrinsic `args` is not call syntax. It is supplied by invocation runtime semantics and is not an ordinary writable identifier.
+The spelling `args` has no call-syntax or invocation-intrinsic meaning. It is an ordinary identifier; a use such as `...args` therefore refers to an ordinary binding named `args`, commonly a rest parameter.
 
 ## 18. Member Access, Calls, Indexing, and Postfix Expressions
 
@@ -1574,7 +1584,7 @@ member-expression =
     ".", member-name ;
 ```
 
-The name following a member-access `.` is a `member-name`: an `identifier` or one of the seven reserved-word spellings, which in this structural position denote ordinary slot or message names (see Identifiers).
+The name following a member-access `.` is a `member-name`: an `identifier` or one of the six reserved-word spellings, which in this structural position denote ordinary slot or message names (see Identifiers). Because `args` is an ordinary identifier, `object.args` requires no reserved-word exception.
 
 Examples:
 
@@ -2629,8 +2639,7 @@ primary-expression =
 
 intrinsic-reference =
       "this"
-    | "context"
-    | "args" ;
+    | "context" ;
 
 super-message-send =
     "super", ".", member-name, argument-list ;
@@ -2675,7 +2684,6 @@ member-name =
       identifier
     | "this"
     | "context"
-    | "args"
     | "super"
     | "true"
     | "false"
@@ -3066,7 +3074,7 @@ f(a, ...values, z)
 
 argument expressions are evaluated left-to-right. A spread argument contributes the elements of its evaluated collection in iteration/index order defined by the spread protocol.
 
-The reserved intrinsic `args` is not special call syntax; it is an invocation-context binding exposed by runtime semantics and is not an ordinary writable identifier.
+`args` is not special call syntax and no invocation-context binding is created for that spelling. It is an ordinary identifier; spread forms such as `...args` read whatever ordinary binding named `args` is in scope.
 
 Default expressions are evaluated when an argument is absent, in parameter-binding order, in the invocation's execution context.
 

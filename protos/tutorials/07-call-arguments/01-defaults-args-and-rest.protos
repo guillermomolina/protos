@@ -7,16 +7,16 @@
 // Calls evaluate their supplied positional arguments before parameter binding.
 // A default can read an earlier parameter from the real invocation activation.
 next: (value, fallback = value + 1) => {
-    Array(args.size(), value, fallback)
+    Array(value, fallback)
 }
 
 defaulted: next(41)
 explicit: next(10, 99)
 
-// A rest parameter receives only the unconsumed supplied suffix. Defaults are
-// never inserted into args or into a rest Array.
-collect: (head = 1, ...tail) => {
-    Array(args.size(), head, tail.size())
+// A rest parameter receives only the unconsumed supplied suffix. The spelling
+// `args` below is an ordinary rest-parameter name, not an ambient call binding.
+collect: (head = 1, ...args) => {
+    Array(head, args.size())
 }
 
 rested: collect(10, 20, 30)
