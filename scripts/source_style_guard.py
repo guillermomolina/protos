@@ -40,6 +40,34 @@ FAMILY_PATTERNS = OrderedDict((
     ("negated", (re.compile(r"\.negated\s*\(\s*\)"),)),
 ))
 
+ASSERTION_FAMILIES = (
+    "test_assertion_require",
+    "test_assertion_signals",
+)
+ALL_FAMILIES = tuple(FAMILY_PATTERNS) + ASSERTION_FAMILIES
+
+# TEST003-A classified semantic shapes rather than helper names.
+# These patterns intentionally recognize only the proven legacy forms.
+LEGACY_REQUIRE_HELPER = re.compile(
+    r"\brequire:\(([A-Za-z_]\w*)\)=>\{"
+    r"\1\.ifFalse\(\(\)=>\{Error\(\)\.signal\(\)\}\)\}"
+)
+
+LEGACY_REJECT_HELPER = re.compile(
+    r"\breject:\(([A-Za-z_]\w*)\)=>\{"
+    r"Error\.handle\(\(\)=>\{\1\(\)false\},"
+    r"\([A-Za-z_]\w*\)=>\{true\}\)\}"
+)
+
+LEGACY_REQUIRE_REJECT_CALL = re.compile(
+    r"\brequire\(reject\(\(\)=>\{"
+)
+
+ASSERTIONS_REQUIRE_REJECT_CALL = re.compile(
+    r"\bAssertions\.require\(reject\(\(\)=>\{"
+)
+
+
 
 def _git(repo, *args):
     try:
@@ -167,10 +195,37 @@ def _markdown_source(text):
 def candidate_counts(path, text):
     source = _markdown_source(text) if path.endswith(".md") else text
     sanitized = _sanitize_protos(source)
-    return {
+
+    counts = {
         family: sum(len(pattern.findall(sanitized)) for pattern in patterns)
         for family, patterns in FAMILY_PATTERNS.items()
     }
+
+    counts["test_assertion_require"] = 0
+    counts["test_assertion_signals"] = 0
+
+    if path.startswith("protos/tests/") and path.endswith(".protos"):
+        compact = re.sub(r"\s+", "", sanitized)
+
+        require_helpers = len(LEGACY_REQUIRE_HELPER.findall(compact))
+        reject_helper_present = LEGACY_REJECT_HELPER.search(compact) is not None
+
+        counts["test_assertion_require"] = require_helpers
+
+        if reject_helper_present:
+            signals = len(
+                ASSERTIONS_REQUIRE_REJECT_CALL.findall(compact)
+            )
+
+            if require_helpers > 0:
+                signals += len(
+                    LEGACY_REQUIRE_REJECT_CALL.findall(compact)
+                )
+
+            counts["test_assertion_signals"] = signals
+
+    return counts
+
 
 
 def _changed_scoped_pairs(repo, base, head):
@@ -249,7 +304,7 @@ def check(repo, base, head):
         head_text = _show_text(repo, head, head_path)
         base_counts = candidate_counts(base_path or head_path, base_text)
         head_counts = candidate_counts(head_path, head_text)
-        for family in FAMILY_PATTERNS:
+        for family in ALL_FAMILIES:
             before = base_counts[family]
             after = head_counts[family]
             if after <= before:
@@ -279,10 +334,43 @@ def run(repo, base, head):
             path, family, before, after, reason))
     if result["violations"]:
         print("SOURCE_STYLE_GUARD: FAIL_CLOSED", file=sys.stderr)
+
+        assertion_violation = False
+        style_violation = False
+
         for path, family, before, after in result["violations"]:
-            print("SOURCE_STYLE_REGRESSION: path=%s family=%s base=%d head=%d" % (
-                path, family, before, after), file=sys.stderr)
-        print("SOURCE_STYLE_GUARD_HINT: use idiomatic surface syntax or add one reviewed exact exception", file=sys.stderr)
+            if family in ASSERTION_FAMILIES:
+                assertion_violation = True
+                print(
+                    "SOURCE_STYLE_ASSERTION_DUPLICATION: "
+                    "path=%s family=%s base=%d head=%d"
+                    % (path, family, before, after),
+                    file=sys.stderr,
+                )
+            else:
+                style_violation = True
+                print(
+                    "SOURCE_STYLE_REGRESSION: "
+                    "path=%s family=%s base=%d head=%d"
+                    % (path, family, before, after),
+                    file=sys.stderr,
+                )
+
+        if assertion_violation:
+            print(
+                "SOURCE_STYLE_ASSERTION_HINT: "
+                "use std:test/Assertions require/signals for the "
+                "proven assertion shapes",
+                file=sys.stderr,
+            )
+
+        if style_violation:
+            print(
+                "SOURCE_STYLE_GUARD_HINT: use idiomatic surface syntax "
+                "or add one reviewed exact exception",
+                file=sys.stderr,
+            )
+
         return 2
     print("SOURCE_STYLE_GUARD_SCANNED_CHANGED_FILES=%d" % result["scanned_changed_files"])
     print("SOURCE_STYLE_GUARD_EXCEPTION_ENTRIES=%d" % result["exceptions"])

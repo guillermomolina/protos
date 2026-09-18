@@ -234,6 +234,22 @@ class PublicationValidationTest(unittest.TestCase):
         self.assertEqual(2, self.run_helper(candidate))
         self.assertEqual([], self.maven_calls())
 
+    def test_assertion_duplication_fails_before_maven(self):
+        candidate = self.commit_files({
+            "protos/tests/library/probe.protos": """
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+require(true)
+""",
+        })
+
+        self.assertEqual(2, self.run_helper(candidate))
+        self.assertEqual([], self.maven_calls())
+
     def test_missing_source_style_guard_fails_before_maven(self):
         candidate = self.commit_files({"scripts/source_style_guard.py": None})
         self.assertEqual(2, self.run_helper(candidate))

@@ -15,7 +15,9 @@
 
 from __future__ import print_function
 
+from contextlib import redirect_stderr
 import importlib.util
+import io
 import json
 from pathlib import Path
 import shutil
@@ -125,6 +127,271 @@ class SourceStyleGuardTest(unittest.TestCase):
             ("protos/lib/Probe.protos", "not", 0, 1),
             ("protos/lib/Probe.protos", "negated", 0, 1),
         }, set(GUARD.check(self.repo, self.base, head)["violations"]))
+
+    def test_new_legacy_assertion_require_fails(self):
+        head = self.commit_files({
+            "protos/tests/library/probe.protos": """
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+require(true)
+""",
+        })
+
+        self.assertEqual(
+            [
+                (
+                    "protos/tests/library/probe.protos",
+                    "test_assertion_require",
+                    0,
+                    1,
+                )
+            ],
+            GUARD.check(self.repo, self.base, head)["violations"],
+        )
+
+    def test_existing_legacy_assertion_require_can_stay_flat(self):
+        path = self.repo / "protos/tests/library/legacy.protos"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            """
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+require(true)
+""",
+            encoding="utf-8",
+        )
+        self._commit("legacy")
+        base = self._rev("HEAD")
+
+        head = self.commit_files({
+            "protos/tests/library/legacy.protos": """
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+require(true)
+answer: 42
+""",
+        })
+
+        self.assertEqual(
+            [],
+            GUARD.check(self.repo, base, head)["violations"],
+        )
+
+    def test_new_legacy_expected_error_compound_fails(self):
+        head = self.commit_files({
+            "protos/tests/library/probe.protos": """
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+Assertions.require(reject(() => {
+    Error().signal()
+}))
+""",
+        })
+
+        self.assertEqual(
+            [
+                (
+                    "protos/tests/library/probe.protos",
+                    "test_assertion_signals",
+                    0,
+                    1,
+                )
+            ],
+            GUARD.check(self.repo, self.base, head)["violations"],
+        )
+
+    def test_isolated_reject_helper_is_permitted(self):
+        head = self.commit_files({
+            "protos/tests/library/probe.protos": """
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+result: reject(() => {
+    Error().signal()
+})
+
+result
+""",
+        })
+
+        self.assertEqual(
+            [],
+            GUARD.check(self.repo, self.base, head)["violations"],
+        )
+
+    def test_ratified_assertions_api_is_permitted(self):
+        head = self.commit_files({
+            "protos/tests/library/probe.protos": """
+Assertions: import("std:test/Assertions")
+
+Assertions.require(true)
+
+Assertions.signals(Error, () => {
+    Error().signal()
+})
+
+true
+""",
+        })
+
+        self.assertEqual(
+            [],
+            GUARD.check(self.repo, self.base, head)["violations"],
+        )
+
+    def test_final_value_test_is_permitted(self):
+        head = self.commit_files({
+            "protos/tests/conformance/example/final.protos": """
+answer: 40 + 2
+answer == 42
+""",
+        })
+
+        self.assertEqual(
+            [],
+            GUARD.check(self.repo, self.base, head)["violations"],
+        )
+
+    def test_manifest_driven_source_without_assertion_helper_is_permitted(self):
+        head = self.commit_files({
+            "protos/tests/conformance/example/manifest-owned.protos": """
+value: 40 + 2
+value
+""",
+        })
+
+        self.assertEqual(
+            [],
+            GUARD.check(self.repo, self.base, head)["violations"],
+        )
+
+    def test_legacy_require_reject_compound_fails(self):
+        head = self.commit_files({
+            "protos/tests/library/probe.protos": """
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+require(reject(() => {
+    Error().signal()
+}))
+""",
+        })
+
+        violations = GUARD.check(
+            self.repo,
+            self.base,
+            head,
+        )["violations"]
+
+        self.assertEqual(
+            {
+                (
+                    "protos/tests/library/probe.protos",
+                    "test_assertion_require",
+                    0,
+                    1,
+                ),
+                (
+                    "protos/tests/library/probe.protos",
+                    "test_assertion_signals",
+                    0,
+                    1,
+                ),
+            },
+            set(violations),
+        )
+
+    def test_unrelated_require_helper_is_permitted(self):
+        head = self.commit_files({
+            "protos/tests/library/probe.protos": """
+require: (value) => {
+    value + 1
+}
+
+require(41) == 42
+""",
+        })
+
+        self.assertEqual(
+            [],
+            GUARD.check(self.repo, self.base, head)["violations"],
+        )
+
+    def test_assertion_diagnostic_points_to_assertions(self):
+        head = self.commit_files({
+            "protos/tests/library/probe.protos": """
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+require(true)
+""",
+        })
+
+        stderr = io.StringIO()
+        with redirect_stderr(stderr):
+            result = GUARD.run(self.repo, self.base, head)
+
+        diagnostic = stderr.getvalue()
+
+        self.assertEqual(2, result)
+        self.assertIn(
+            "SOURCE_STYLE_ASSERTION_DUPLICATION:",
+            diagnostic,
+        )
+        self.assertIn("std:test/Assertions", diagnostic)
+        self.assertNotIn(
+            "add one reviewed exact exception",
+            diagnostic,
+        )
 
     def test_markdown_scans_only_protos_js_fences(self):
         head = self.commit_files({"docs/guide/99-test.md": "Inline `m.at(0)` prose.\n\n```bash\necho 'm.at(0)'\n```\n\n```protos\nm.at(0)\n```\n"})
