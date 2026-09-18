@@ -1,3 +1,16 @@
+## 0.3.47-SNAPSHOT
+
+- Implement `TOOL008 — Test Tool exact file-backed focal selection` (GitHub
+  #591) under ratified D151 Candidate B-prime. Add exact separate-token
+  `protos test --file FILE` selection over already-authoritative CaseSpecs,
+  resolving relative locators from the invocation working directory and
+  accepting absolute locators without turning physical paths into Test Tool
+  identity. Preserve authoritative TestPlan ordering and CaseSpec metadata,
+  reject arbitrary or zero-match source files, support multiple CaseSpecs for
+  one source, and continue through the existing D108 scheduler, resource,
+  result-classification and reporting paths. Implementation version becomes
+  `0.3.47-SNAPSHOT`.
+
 ## 0.3.46-SNAPSHOT
 
 - Implement `I048 — Implement Object null-aware control protocol` (GitHub #589)
