@@ -115,7 +115,7 @@ advance its revision.
 - The fixed standard operator surface, standard precedence ladder, and D148
   inequality semantics are unchanged.
 - Executable implementation is aligned in I044. Maven implementation version is
-  `0.3.41-SNAPSHOT`.
+  `0.3.42-SNAPSHOT`.
 
 
 ## [0.1.424] - 2026-09-18
