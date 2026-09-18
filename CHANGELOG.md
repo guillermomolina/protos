@@ -1,3 +1,14 @@
+## 0.3.34-SNAPSHOT
+
+- Reconcile the Standard Library documentation extractor with the D138
+  source-local documentation layer for `TOOL007` (GitHub #556). Remove the
+  extractor's duplicate `//!`/`///` parsing and association logic and delegate
+  authored documentation ownership and validation to
+  `ProtosSourceDocumentation`. Preserve D064/D067 publication semantics:
+  Standard Library artifacts continue to expose the top-level module surface,
+  while valid nested D138 documentation is accepted without creating additional
+  published symbols. Implementation version becomes `0.3.34-SNAPSHOT`.
+
 ## 0.3.33-SNAPSHOT
 
 - Implement `TOOL007-A3 — named slot source-documentation association`

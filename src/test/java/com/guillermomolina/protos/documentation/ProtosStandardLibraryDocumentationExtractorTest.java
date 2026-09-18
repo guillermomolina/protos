@@ -163,7 +163,7 @@ class ProtosStandardLibraryDocumentationExtractorTest {
                 () -> ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION));
 
         assertTrue(error.getMessage().contains(
-                "`///` must immediately precede a documentable top-level slot"));
+                "`///` must immediately precede a documentable named slot creation"));
     }
 
     @Test
@@ -182,20 +182,27 @@ class ProtosStandardLibraryDocumentationExtractorTest {
     }
 
     @Test
-    void nestedSymbolDocumentationIsRejected() throws Exception {
+    void nestedDocumentationIsValidButNotPublishedAsTopLevelSymbol() throws Exception {
         writeModule(
                 "collections/Nested",
                 """
                 holder: {
-                    /// Nested documentation is unsupported.
+                    /// Nested documentation.
                     nested: 1
                 }
                 next: 1
                 """);
 
-        assertThrows(
-                IllegalArgumentException.class,
-                () -> ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION));
+        ProtosStandardLibraryDocumentationExtractor.Extraction extraction =
+                ProtosStandardLibraryDocumentationExtractor.extract(temp, REVISION);
+
+        assertEquals(2, extraction.artifact().symbols().size());
+        assertTrue(extraction.artifact().symbols().stream()
+                .anyMatch(symbol -> symbol.identity().slotName().equals("holder")));
+        assertTrue(extraction.artifact().symbols().stream()
+                .anyMatch(symbol -> symbol.identity().slotName().equals("next")));
+        assertFalse(extraction.artifact().symbols().stream()
+                .anyMatch(symbol -> symbol.identity().slotName().equals("nested")));
     }
 
     @Test

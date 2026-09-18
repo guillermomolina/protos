@@ -28,8 +28,6 @@ import static com.guillermomolina.protos.documentation.ProtosDocumentationModel.
 import static com.guillermomolina.protos.documentation.ProtosDocumentationModel.Symbol;
 import static com.guillermomolina.protos.documentation.ProtosDocumentationModel.SymbolIdentity;
 
-import com.guillermomolina.protos.lexer.ProtosLexer;
-import com.guillermomolina.protos.lexer.ProtosLexer.LineCommentOccurrence;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -54,12 +52,17 @@ import java.util.Set;
 import java.util.stream.Stream;
 
 /**
- * D061/D062/D064/D067 Standard Library documentation extraction path.
+ * D061/D064/D067 Standard Library documentation extraction path.
  *
  * <p>This tool is intentionally Standard-Library-specific. It statically reads
  * canonical {@code protos/lib} source, excludes physical Core bootstrap source,
- * uses the real Protos parser for structural facts, associates only explicit
- * D062 documentation comments, and never executes a module.</p>
+ * uses the real Protos parser for structural facts, delegates source-local
+ * documentation ownership and association to the D138 documentation layer,
+ * and never executes a module.</p>
+ *
+ * <p>D064/D067 publication remains limited to the top-level Standard Library
+ * surface; valid nested D138 documentation is accepted without creating an
+ * additional published symbol.</p>
  */
 public final class ProtosStandardLibraryDocumentationExtractor {
     private static final String REPOSITORY = "guillermomolina/protos";
@@ -249,19 +252,19 @@ public final class ProtosStandardLibraryDocumentationExtractor {
             String source,
             StandardModuleIdentity moduleIdentity,
             String sourcePath) {
-        List<LineCommentOccurrence> comments = new ArrayList<>();
-        new ProtosLexer(source).tokenizeOccurrences(comments::add);
         SurfaceSequence program = new ProtosParser(source).parseProgram();
-
-        List<DocBlock> blocks = documentationBlocks(source, comments);
         List<TopLevelSlot> topLevelSlots = topLevelSlots(program);
-        int firstConstructOffset = program.expressions().isEmpty()
-                ? source.length()
-                : program.expressions().get(0).span().startOffset();
 
-        String moduleDocumentation = moduleDocumentation(blocks, firstConstructOffset);
-        Map<Integer, String> symbolDocumentation =
-                symbolDocumentation(source, blocks, topLevelSlots);
+        String moduleDocumentation =
+                ProtosSourceDocumentation.moduleDocumentation(source);
+
+        Map<Integer, String> symbolDocumentation = new HashMap<>();
+        for (ProtosSourceDocumentation.SlotDocumentation documented :
+                ProtosSourceDocumentation.slotDocumentation(source)) {
+            symbolDocumentation.put(
+                    documented.owner().span().startOffset(),
+                    documented.documentation());
+        }
 
         SourceProvenance moduleSource =
                 new SourceProvenance(sourcePath, sourceRange(source, new SourceSpan(0, source.length())));
@@ -271,7 +274,8 @@ public final class ProtosStandardLibraryDocumentationExtractor {
         for (TopLevelSlot slot : topLevelSlots) {
             SurfaceName name = (SurfaceName) slot.creation().target();
             SymbolIdentity identity = new SymbolIdentity(moduleIdentity, name.name());
-            String documentation = symbolDocumentation.get(slot.expressionSpan().startOffset());
+            String documentation =
+                    symbolDocumentation.get(slot.creation().span().startOffset());
             Callable callable = callable(slot.creation().value());
             SourceProvenance provenance =
                     new SourceProvenance(sourcePath, sourceRange(source, slot.expressionSpan()));
@@ -418,163 +422,6 @@ public final class ProtosStandardLibraryDocumentationExtractor {
         return new Callable(parameters, restParameter);
     }
 
-    private static List<DocBlock> documentationBlocks(
-            String source,
-            List<LineCommentOccurrence> comments) {
-        List<DocLine> lines = new ArrayList<>();
-        for (LineCommentOccurrence comment : comments) {
-            String text = comment.text();
-            DocKind kind = null;
-            if (text.startsWith("!")) {
-                kind = DocKind.MODULE;
-            } else if (text.startsWith("/")) {
-                kind = DocKind.SYMBOL;
-            }
-            if (kind == null) {
-                continue;
-            }
-            if (!isLineLeadingComment(source, comment.span().startOffset())) {
-                throw documentationError(
-                        "documentation markers must begin a documentation line",
-                        comment.span());
-            }
-            lines.add(new DocLine(kind, documentationLine(text), comment.span()));
-        }
-
-        List<DocBlock> blocks = new ArrayList<>();
-        for (DocLine line : lines) {
-            if (!blocks.isEmpty()) {
-                DocBlock previous = blocks.get(blocks.size() - 1);
-                if (previous.kind() == line.kind()
-                        && isSingleLogicalLineGap(
-                                source,
-                                previous.span().endOffset(),
-                                line.span().startOffset())) {
-                    blocks.set(
-                            blocks.size() - 1,
-                            new DocBlock(
-                                    previous.kind(),
-                                    previous.documentation() + "\n" + line.documentation(),
-                                    new SourceSpan(
-                                            previous.span().startOffset(),
-                                            line.span().endOffset())));
-                    continue;
-                }
-            }
-            blocks.add(new DocBlock(line.kind(), line.documentation(), line.span()));
-        }
-        return List.copyOf(blocks);
-    }
-
-    private static String documentationLine(String commentText) {
-        String body = commentText.substring(1);
-        return body.startsWith(" ") ? body.substring(1) : body;
-    }
-
-    private static String moduleDocumentation(
-            List<DocBlock> blocks,
-            int firstConstructOffset) {
-        DocBlock selected = null;
-        for (DocBlock block : blocks) {
-            if (block.kind() != DocKind.MODULE) {
-                continue;
-            }
-            if (block.span().startOffset() >= firstConstructOffset) {
-                throw documentationError("`//!` is only valid in the module preamble", block.span());
-            }
-            if (selected != null) {
-                throw documentationError("at most one `//!` module block is permitted", block.span());
-            }
-            selected = block;
-        }
-        return selected == null ? null : selected.documentation();
-    }
-
-    private static Map<Integer, String> symbolDocumentation(
-            String source,
-            List<DocBlock> blocks,
-            List<TopLevelSlot> slots) {
-        Map<Integer, String> documentation = new HashMap<>();
-        for (DocBlock block : blocks) {
-            if (block.kind() != DocKind.SYMBOL) {
-                continue;
-            }
-
-            TopLevelSlot target = null;
-            for (TopLevelSlot slot : slots) {
-                if (slot.expressionSpan().startOffset() > block.span().endOffset()) {
-                    target = slot;
-                    break;
-                }
-            }
-            if (target == null
-                    || !isSingleLogicalLineGap(
-                            source,
-                            block.span().endOffset(),
-                            target.expressionSpan().startOffset())) {
-                throw documentationError(
-                        "`///` must immediately precede a documentable top-level slot",
-                        block.span());
-            }
-
-            String previous = documentation.put(
-                    target.expressionSpan().startOffset(),
-                    block.documentation());
-            if (previous != null) {
-                throw documentationError(
-                        "multiple `///` blocks cannot document the same top-level slot",
-                        block.span());
-            }
-        }
-        return Map.copyOf(documentation);
-    }
-
-    private static boolean isLineLeadingComment(String source, int commentStart) {
-        int index = commentStart;
-        while (index > 0) {
-            char previous = source.charAt(index - 1);
-            if (previous == '\n' || previous == '\r') {
-                break;
-            }
-            index--;
-        }
-        while (index < commentStart) {
-            char current = source.charAt(index);
-            if (current != ' ' && current != '\t') {
-                return false;
-            }
-            index++;
-        }
-        return true;
-    }
-
-    private static boolean isSingleLogicalLineGap(String source, int from, int to) {
-        if (from < 0 || to < from || to > source.length() || from == to) {
-            return false;
-        }
-
-        int index = from;
-        if (source.charAt(index) == '\r') {
-            index++;
-            if (index < to && source.charAt(index) == '\n') {
-                index++;
-            }
-        } else if (source.charAt(index) == '\n') {
-            index++;
-        } else {
-            return false;
-        }
-
-        while (index < to) {
-            char current = source.charAt(index);
-            if (current != ' ' && current != '\t') {
-                return false;
-            }
-            index++;
-        }
-        return true;
-    }
-
     private static SourceRange sourceRange(String source, SourceSpan span) {
         Position start = position(source, span.startOffset());
         Position end = position(source, span.endOffset());
@@ -616,16 +463,6 @@ public final class ProtosStandardLibraryDocumentationExtractor {
             column++;
         }
         return new Position(line, column);
-    }
-
-    private static IllegalArgumentException documentationError(String message, SourceSpan span) {
-        return new IllegalArgumentException(
-                "documentation validation error at offsets "
-                        + span.startOffset()
-                        + ".."
-                        + span.endOffset()
-                        + ": "
-                        + message);
     }
 
     private static String exactCleanStandardLibraryRevision(Path repositoryRoot)
@@ -695,17 +532,6 @@ public final class ProtosStandardLibraryDocumentationExtractor {
             result.append(segment);
         }
         return result.toString();
-    }
-
-    private enum DocKind {
-        MODULE,
-        SYMBOL
-    }
-
-    private record DocLine(DocKind kind, String documentation, SourceSpan span) {
-    }
-
-    private record DocBlock(DocKind kind, String documentation, SourceSpan span) {
     }
 
     private record TopLevelSlot(SurfaceSlotCreation creation, SourceSpan expressionSpan) {
