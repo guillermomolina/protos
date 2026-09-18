@@ -24,3 +24,19 @@ _coreObjectEquals: (other) => {
 _coreObjectMatch: (subject) => {
     this == subject
 }
+
+/// Invokes `block()` exactly when the receiver is canonical `null`.
+ifNull: (block) => {
+    (this === null).ifTrueIfFalse(
+        () => { block() },
+        () => { this }
+    )
+}
+
+/// Invokes `block(this)` exactly when the receiver is not canonical `null`.
+ifNotNull: (block) => {
+    (this === null).ifTrueIfFalse(
+        () => { null },
+        () => { block(this) }
+    )
+}

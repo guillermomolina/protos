@@ -267,12 +267,18 @@ class ProtosCoreBootstrapTest {
                 assertSourceBackedObjectClosure(object, "==");
         ProtosClosureValue match =
                 assertSourceBackedObjectClosure(object, "match");
+        ProtosClosureValue ifNull =
+                assertSourceBackedObjectClosure(object, "ifNull");
+        ProtosClosureValue ifNotNull =
+                assertSourceBackedObjectClosure(object, "ifNotNull");
 
         assertFalse(object.hasLocalSlot("!="));
 
         assertEquals(1, init.capturedLexicalContexts().size());
         assertEquals(1, equals.capturedLexicalContexts().size());
         assertEquals(1, match.capturedLexicalContexts().size());
+        assertEquals(1, ifNull.capturedLexicalContexts().size());
+        assertEquals(1, ifNotNull.capturedLexicalContexts().size());
 
         assertSame(
                 init.capturedLexicalContexts().get(0),
@@ -289,6 +295,8 @@ class ProtosCoreBootstrapTest {
         assertFalse(sourceContext.hasLocalSlot("_coreObjectEquals"));
         assertFalse(sourceContext.hasLocalSlot("_coreObjectMatch"));
         assertFalse(sourceContext.hasLocalSlot("_coreObjectNotEquals"));
+        assertFalse(sourceContext.hasLocalSlot("ifNull"));
+        assertFalse(sourceContext.hasLocalSlot("ifNotNull"));
 
         ProtosObjectValue receiver = new ProtosObjectValue(object);
         assertSame(

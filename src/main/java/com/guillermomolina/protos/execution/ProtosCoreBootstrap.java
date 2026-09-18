@@ -676,10 +676,16 @@ public final class ProtosCoreBootstrap {
                 requireSourceBackedClosure(sourceContext, "_coreObjectEquals");
         ProtosClosureValue match =
                 requireSourceBackedClosure(sourceContext, "_coreObjectMatch");
+        ProtosClosureValue ifNull =
+                requireSourceBackedClosure(sourceContext, "ifNull");
+        ProtosClosureValue ifNotNull =
+                requireSourceBackedClosure(sourceContext, "ifNotNull");
 
         sourceContext.removeLocalSlot("_coreObjectInit");
         sourceContext.removeLocalSlot("_coreObjectEquals");
         sourceContext.removeLocalSlot("_coreObjectMatch");
+        sourceContext.removeLocalSlot("ifNull");
+        sourceContext.removeLocalSlot("ifNotNull");
         if (!sourceContext.localSlotsSnapshot().isEmpty()) {
             throw new IllegalStateException(
                     "Core object source left unexpected bootstrap bindings");
@@ -691,6 +697,8 @@ public final class ProtosCoreBootstrap {
             validateExistingSourceBackedClosure(object, "init");
             validateExistingSourceBackedClosure(object, "==");
             validateExistingSourceBackedClosure(object, "match");
+            validateExistingSourceBackedClosure(object, "ifNull");
+            validateExistingSourceBackedClosure(object, "ifNotNull");
             if (!object.hasLocalSlot("init")) {
                 object.createLocalSlot("init", init);
             }
@@ -699,6 +707,12 @@ public final class ProtosCoreBootstrap {
             }
             if (!object.hasLocalSlot("match")) {
                 object.createLocalSlot("match", match);
+            }
+            if (!object.hasLocalSlot("ifNull")) {
+                object.createLocalSlot("ifNull", ifNull);
+            }
+            if (!object.hasLocalSlot("ifNotNull")) {
+                object.createLocalSlot("ifNotNull", ifNotNull);
             }
         }
     }

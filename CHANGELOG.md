@@ -1,3 +1,19 @@
+## 0.3.46-SNAPSHOT
+
+- Implement `I048 — Implement Object null-aware control protocol` (GitHub #589)
+  under ratified D144 Candidate B-prime and specification revision `0.1.427`.
+  Add source-backed ordinary `Object.ifNull(block)` and
+  `Object.ifNotNull(block)` control messages using exact canonical-null
+  identity, with no truthiness and no null identity conferred by delegation.
+  Preserve eager argument-expression evaluation, branch-sensitive callback
+  validation, ordinary polymorphic callback invocation, exact receiver/result
+  identity, unchanged Future results with no implicit await/adoption, and
+  ordinary Error/non-local-control propagation. Keep failed lookup and D142 Map
+  absence semantics unchanged, retain ordinary custom overrides, document the
+  public selectors in distributable Core source, and add focused conformance
+  plus source-backed/native-boundary guards. Implementation version becomes
+  `0.3.46-SNAPSHOT`.
+
 ## 0.3.45-SNAPSHOT
 
 - Complete `I045-B — Add exact standard-owner recognizes predicates` (GitHub

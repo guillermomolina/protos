@@ -1,0 +1,131 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+
+// Canonical null selects ifNull and invokes its callback exactly once with
+// zero supplied arguments.
+ifNullCalls: 0
+ifNullMarker: {}
+ifNullResult: null.ifNull(() => {
+    ifNullCalls = ifNullCalls + 1
+    ifNullMarker
+})
+Assertions.require(ifNullCalls == 1)
+Assertions.require(ifNullResult === ifNullMarker)
+
+// Non-null ifNull neither validates nor invokes an unreachable callback.
+receiver: {}
+Assertions.require(receiver.ifNull(42) === receiver)
+
+// Canonical null ifNotNull neither validates nor invokes an unreachable callback.
+Assertions.require(null.ifNotNull(42) === null)
+
+// Non-null ifNotNull invokes through the ordinary polymorphic call protocol,
+// exactly once, with the exact original receiver.
+ifNotNullCalls: 0
+received: null
+
+callable: {
+    call: (value) => {
+        ifNotNullCalls = ifNotNullCalls + 1
+        received = value
+        ifNullMarker
+    }
+}
+
+Assertions.require(receiver.ifNotNull(callable) === ifNullMarker)
+Assertions.require(ifNotNullCalls == 1)
+Assertions.require(received === receiver)
+
+// Callback-producing argument expressions remain eager even when the callback
+// body is unreachable.
+argumentEvaluations: 0
+
+makeNonInvokable: () => {
+    argumentEvaluations = argumentEvaluations + 1
+    42
+}
+
+Assertions.require(receiver.ifNull(makeNonInvokable()) === receiver)
+Assertions.require(argumentEvaluations == 1)
+
+Assertions.require(null.ifNotNull(makeNonInvokable()) === null)
+Assertions.require(argumentEvaluations == 2)
+
+// A non-invokable callback signals only when its branch is actually reached.
+Assertions.signals(Error, () => {
+    null.ifNull(42)
+})
+
+Assertions.signals(Error, () => {
+    receiver.ifNotNull(42)
+})
+
+// Exact canonical null identity only. Delegating to null does not confer null
+// identity and therefore follows the non-null branch.
+NullDelegate: (null) {}
+
+nullDelegateCalls: 0
+nullDelegateResult: NullDelegate.ifNotNull((value) => {
+    nullDelegateCalls = nullDelegateCalls + 1
+    Assertions.require(value === NullDelegate)
+    value
+})
+
+Assertions.require(nullDelegateCalls == 1)
+Assertions.require(nullDelegateResult === NullDelegate)
+Assertions.require(NullDelegate.ifNull(42) === NullDelegate)
+
+// No truthiness: ordinary false-y-looking values are all non-null.
+Assertions.require(false.ifNull(42) === false)
+Assertions.require(0.ifNull(42) === 0)
+Assertions.require("".ifNull(42) == "")
+emptyArray: Array()
+Assertions.require(emptyArray.ifNull(42) === emptyArray)
+
+// Exact public arity remains one supplied argument.
+Assertions.signals(Error, () => { null.ifNull() })
+Assertions.signals(Error, () => { null.ifNull(1, 2) })
+Assertions.signals(Error, () => { null.ifNotNull() })
+Assertions.signals(Error, () => { null.ifNotNull(1, 2) })
+
+// The protocol is ordinary Object behavior and remains reflectively visible.
+Assertions.require(Object.hasSlot("ifNull") === true)
+Assertions.require(Object.hasSlot("ifNotNull") === true)
+
+// Failed lookup remains an ordinary Error; D144 does not convert it to null.
+Assertions.signals(Error, () => {
+    receiver.thisMemberDoesNotExist
+})
+
+// Custom overrides remain ordinary message behavior.
+customIfNullMarker: {}
+customIfNotNullMarker: {}
+
+Custom: {
+    ifNull: (block) => {
+        customIfNullMarker
+    }
+
+    ifNotNull: (block) => {
+        customIfNotNullMarker
+    }
+}
+
+Assertions.require(Custom.ifNull(42) === customIfNullMarker)
+Assertions.require(Custom.ifNotNull(42) === customIfNotNullMarker)
+
+true

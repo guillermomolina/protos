@@ -1,0 +1,99 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+
+receiver: {}
+
+// Normal callback results are returned unchanged.
+Assertions.require(null.ifNull(() => null) === null)
+Assertions.require(null.ifNull(() => true) === true)
+Assertions.require(receiver.ifNotNull((value) => false) === false)
+
+marker: {}
+Assertions.require(null.ifNull(() => marker) === marker)
+Assertions.require(receiver.ifNotNull((value) => marker) === marker)
+
+// A Future result is returned as the exact same Future. There is no implicit
+// await, adoption, wrapping, or replacement.
+firstFuture: (() => 41).future()
+secondFuture: (() => 42).future()
+
+Assertions.require(
+    null.ifNull(() => firstFuture) === firstFuture
+)
+
+Assertions.require(
+    receiver.ifNotNull((value) => secondFuture) === secondFuture
+)
+
+// Error identity and propagation remain ordinary on reached branches.
+ifNullFailure: Error()
+observedIfNullFailure: Assertions.signals(
+    Error,
+    () => {
+        null.ifNull(() => {
+            ifNullFailure.signal()
+        })
+    }
+)
+Assertions.require(observedIfNullFailure === ifNullFailure)
+
+ifNotNullFailure: Error()
+observedIfNotNullFailure: Assertions.signals(
+    Error,
+    () => {
+        receiver.ifNotNull((value) => {
+            Assertions.require(value === receiver)
+            ifNotNullFailure.signal()
+        })
+    }
+)
+Assertions.require(observedIfNotNullFailure === ifNotNullFailure)
+
+// Non-local return propagates unchanged through a reached ifNull callback.
+ifNullReturnMarker: {}
+ifNullAfter: 0
+
+ifNullOuter: () => {
+    null.ifNull(() => {
+        ^ifNullReturnMarker
+    })
+
+    ifNullAfter = ifNullAfter + 1
+    null
+}
+
+Assertions.require(ifNullOuter() === ifNullReturnMarker)
+Assertions.require(ifNullAfter == 0)
+
+// Non-local return propagates unchanged through a reached ifNotNull callback.
+ifNotNullReturnMarker: {}
+ifNotNullAfter: 0
+
+ifNotNullOuter: () => {
+    receiver.ifNotNull((value) => {
+        Assertions.require(value === receiver)
+        ^ifNotNullReturnMarker
+    })
+
+    ifNotNullAfter = ifNotNullAfter + 1
+    null
+}
+
+Assertions.require(ifNotNullOuter() === ifNotNullReturnMarker)
+Assertions.require(ifNotNullAfter == 0)
+
+true
