@@ -718,7 +718,7 @@ slot-creation =
     slot-creation-target, ":", expression;
 ```
 
-`:` is specifically the slot-creation operator. Its target must be a bare identifier or a member target (see Slot-Creation and Assignment Targets): the final postfix operation of the target may not be an index suffix.
+`:` is specifically the slot-creation operator. Its target may be an ordinary single-slot target or the D143 multiple-slot target defined under Slot-Creation and Assignment Targets. An ordinary member target may not end in an index suffix.
 
 Examples:
 
@@ -728,9 +728,10 @@ person.name: "Guille"
 this.cache: {}
 object[index].name: value
 foo().bar: value
+(a, b): values
 ```
 
-`:` always creates a new local slot at the selected destination.
+`:` always denotes slot creation. Ordinary targets create one slot at their selected destination. A D143 multiple-slot target creates two or more ordinary bare slots in the current slot-creation context according to `semantics/EXECUTION_AND_CONTROL.md`; it is not assignment, a tuple expression, or pattern syntax.
 
 These are syntax errors because the final target operation is an index suffix:
 
@@ -770,7 +771,12 @@ Slot creation and assignment have distinct target categories.
 ```ebnf
 slot-creation-target =
       identifier
-    | member-expression;
+    | member-expression
+    | multiple-slot-creation-target;
+
+multiple-slot-creation-target =
+    "(", identifier, ",", identifier,
+    { ",", identifier }, ")";
 
 assignment-target =
       identifier
@@ -781,7 +787,9 @@ indexed-target =
     postfix-expression, "[", expression, "]";
 ```
 
-A `slot-creation-target` is a bare identifier or a postfix chain whose **final** operation is a member suffix. An `assignment-target` may additionally end in an index suffix. The final postfix operation therefore determines which operator may follow the target: a final member target may participate in slot creation or assignment, while a final index target may participate only in indexed assignment, never in slot creation.
+A single-slot `slot-creation-target` is a bare identifier or a postfix chain whose **final** operation is a member suffix. D143 additionally admits `multiple-slot-creation-target`, containing exactly two or more bare identifier names, only as the target immediately preceding `:`. It admits no rest marker, defaults, holes, nested targets, member targets, or trailing comma. Duplicate names are syntactically valid and follow the runtime slot-conflict semantics owned by `semantics/EXECUTION_AND_CONTROL.md`.
+
+An `assignment-target` may additionally end in an index suffix, but it does not include `multiple-slot-creation-target`. The final postfix operation therefore determines which operator may follow an ordinary target: a final member target may participate in slot creation or assignment, while a final index target may participate only in indexed assignment, never in slot creation. The D143 parenthesized identifier list participates only in slot creation.
 
 Examples of valid targets:
 
@@ -791,10 +799,13 @@ person.name
 this.name
 context.value
 object[index].name
+(x, y)
 matrix[0]
 ```
 
 `object[index]` is an `indexed-target`, not a `slot-creation-target`, so `object[index]: value` is a syntax error. Chained postfix forms whose final operation is a member remain valid slot-creation targets, for example `object[index].name: value` and `foo().bar: value`. A final index target remains a valid assignment target, for example `object.name[index] = value`.
+
+The D143 target is not a primary or parenthesized expression. Consequently `(a, b)` by itself, `x: (a, b)`, `foo((a, b))`, `(a, b).name`, and `(a, b) = values` remain syntax errors. Existing Closure syntax such as `(a, b) => a + b` remains independently governed by the Closure grammar.
 
 ## 11. Non-local Return
 

@@ -226,6 +226,32 @@ this.x = value
 ```
 
 Those explicit member operations are governed by `OBJECT_MODEL.md`; they are not bare-name lookup and do not alter the lexical-parent relation.
+
+### D143 multiple bare slot creation from a standard Array prefix
+
+The grammar form:
+
+```protos
+(a, b): source
+```
+
+is one slot-creation expression with two or more bare target names. It does not create a tuple, pattern, hidden Closure activation, or separate binding namespace.
+
+For `N` target names, evaluation is exactly:
+
+1. Evaluate `source` exactly once. If that evaluation performs an Error or other control transfer, no target slot is created.
+2. Require the resulting object to own standard Array indexed state under `VALUES_AND_COLLECTIONS.md`. Merely inheriting or copying Array behavior is insufficient. Open, closed, and frozen eligible Arrays are equivalent for this read-only operation. An ineligible source signals an `Error` before any target slot is created.
+3. Require the current Array length to be at least `N`. A shorter Array signals an `Error` before any target slot is created. Extra elements are ignored and no remainder Array is created.
+4. Establish one shallow observation of exactly the first `N` indexed element references in ascending logical index order `0` through `N - 1`. This observation occurs before any target slot creation. It reads standard Array indexed state directly and performs no user-visible `at` send, iteration, matcher invocation, conversion, equality/hash operation, callback, or arbitrary-object deconstruction protocol. The observed element objects are not cloned or frozen.
+5. Create the target names strictly left-to-right in the current slot-creation context, each with the corresponding already-observed element reference, using the ordinary bare `:` local-creation/open/frozen/conflict rules applicable at that source position.
+6. If every target creation completes normally, the result of the entire expression is the exact original `source` result object.
+
+There is no duplicate-name preflight, target reservation, multi-slot transaction, or rollback. A duplicate name therefore follows ordinary left-to-right creation: an earlier occurrence may create its slot and a later occurrence may then fail because that local slot already exists. Likewise, if any later target creation fails for an ordinary slot-state or conflict reason, earlier successful creations remain. Effects already produced by evaluating `source` are not rolled back.
+
+The same current slot-creation destination used by ordinary bare `:` at that source position is used here. Thus activation-local, module-context, and object-body creation retain their existing distinctions; D143 introduces no new scope or receiver rule.
+
+D143 adds only multiple **creation**. There is no corresponding multiple-assignment form, and this rule adds no rest/remainder binding, nested/Map/object destructuring, wildcard/default/alias/OR/guard institution, matcher binding, or generic positional-deconstruction protocol.
+
 ## 8. `super`
 
 `super` is not another receiver and is not a first-class value. It is special lookup syntax.

@@ -9,6 +9,35 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.422] - 2026-09-18
+
+### D143 — Fixed-prefix standard-Array multiple slot creation
+- Adds the dedicated slot-creation target `(a, b): source` for two or more bare
+  identifiers while keeping `(a, b)` invalid as a general expression, tuple,
+  comma-expression, or reusable pattern.
+- Evaluates the right-hand side exactly once, requires receiver-owned standard
+  Array indexed state and `length >= targetCount`, then shallowly observes the
+  first `targetCount` element references in ascending index order before any
+  target slot is created. Extra elements are ignored and no remainder is built.
+- Creates target slots left-to-right with the existing ordinary bare `:` rules in
+  the current slot-creation context. There is no duplicate-name preflight,
+  transaction, or rollback; later creation failure leaves earlier successful
+  creations in place.
+- A successful expression returns the exact original right-hand-side object.
+- Adds no multiple assignment, rest/nested/Map/object destructuring, wildcard,
+  matcher-binding surface, or arbitrary-object positional-deconstruction
+  protocol. D080-A and D131-C remain preserved.
+- Normative owners changed by this revision:
+  `spec/PROTOS_GRAMMAR.md` and
+  `spec/semantics/EXECUTION_AND_CONTROL.md`.
+
+### Compatibility and implementation state
+- A previously invalid source form, `(a, b): source`, becomes valid with the
+  exact D143 semantics above.
+- Parser/runtime implementation is intentionally unchanged by this
+  specification-only publication and remains follow-up work.
+- Implementation version is unchanged.
+
 ## [0.1.421] - 2026-09-18
 
 ### D142 — Standard Map expected-absence fallback
