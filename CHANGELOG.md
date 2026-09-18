@@ -1,3 +1,16 @@
+## 0.3.33-SNAPSHOT
+
+- Implement `TOOL007-A3 — named slot source-documentation association`
+  (GitHub #556) under ratified D138 Candidate A′. Associate contiguous
+  line-leading `///` documentation blocks with exact source-local named
+  `SurfaceSlotCreation` owners, including nested and member-target creations.
+  Preserve distinct same-name occurrences, allow parenthesized grouping as a
+  transparent source boundary, and fail closed across blank lines, ordinary
+  comments, unrelated constructs, scope boundaries, non-owner forms, and
+  inline documentation markers. Standard Library documentation extractor
+  reconciliation remains deferred. Implementation version becomes
+  `0.3.33-SNAPSHOT`.
+
 ## 0.3.32-SNAPSHOT
 
 - Implement the initial `LIB016 — Protos testing support library and Test Tool

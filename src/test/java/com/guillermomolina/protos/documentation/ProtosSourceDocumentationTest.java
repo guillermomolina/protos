@@ -140,4 +140,138 @@ class ProtosSourceDocumentationTest {
                 () -> ProtosSourceDocumentation.moduleDocumentation(source));
     }
 
+    @Test
+    void associatesSlotDocumentationWithExactOwnersInSourceOrder() {
+        String source = """
+                /// Top documentation.
+                top: 1
+                container: () => {
+                    /// Nested documentation.
+                    nested: 2
+                }
+                /// Member documentation.
+                target.member: 3
+                """;
+
+        List<ProtosSourceDocumentation.SlotDocumentation> documentation =
+                ProtosSourceDocumentation.slotDocumentation(source);
+
+        assertEquals(
+                List.of("top", "nested", "member"),
+                documentation.stream()
+                        .map(entry -> entry.owner().name())
+                        .toList());
+        assertEquals(
+                List.of(
+                        "Top documentation.",
+                        "Nested documentation.",
+                        "Member documentation."),
+                documentation.stream()
+                        .map(ProtosSourceDocumentation.SlotDocumentation::documentation)
+                        .toList());
+    }
+
+    @Test
+    void treatsGroupingAsTransparentForSlotDocumentation() {
+        String source = """
+                /// Calls with `value`.
+                (call: (value) => value)
+                """;
+
+        List<ProtosSourceDocumentation.SlotDocumentation> documentation =
+                ProtosSourceDocumentation.slotDocumentation(source);
+
+        assertEquals(1, documentation.size());
+        assertEquals("call", documentation.get(0).owner().name());
+        assertEquals("Calls with `value`.", documentation.get(0).documentation());
+    }
+
+    @Test
+    void preservesDistinctSameNamedDocumentedOccurrences() {
+        String source = """
+                /// First value.
+                value: 1
+                holder: () => {
+                    /// Second value.
+                    value: 2
+                }
+                """;
+
+        List<ProtosSourceDocumentation.SlotDocumentation> values =
+                ProtosSourceDocumentation.slotDocumentation(source).stream()
+                        .filter(entry -> entry.owner().name().equals("value"))
+                        .toList();
+
+        assertEquals(2, values.size());
+        assertEquals(
+                source.indexOf("value: 1"),
+                values.get(0).owner().span().startOffset());
+        assertEquals(
+                source.indexOf("value: 2"),
+                values.get(1).owner().span().startOffset());
+    }
+
+    @Test
+    void rejectsBlankLineBetweenSlotDocumentationAndOwner() {
+        String source = """
+                /// Documentation.
+
+                value: 1
+                """;
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosSourceDocumentation.slotDocumentation(source));
+    }
+
+    @Test
+    void rejectsOrdinaryCommentBetweenSlotDocumentationAndOwner() {
+        String source = """
+                /// Documentation.
+                // ordinary comment
+                value: 1
+                """;
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosSourceDocumentation.slotDocumentation(source));
+    }
+
+    @Test
+    void rejectsSlotDocumentationBeforeNonOwner() {
+        String source = """
+                /// Not an owner.
+                existing = 1
+                """;
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosSourceDocumentation.slotDocumentation(source));
+    }
+
+    @Test
+    void rejectsSlotDocumentationThatWouldJumpScope() {
+        String source = """
+                holder: () => {
+                    /// No owner in this scope.
+                }
+                next: 1
+                """;
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosSourceDocumentation.slotDocumentation(source));
+    }
+
+    @Test
+    void rejectsInlineSlotDocumentationMarker() {
+        String source = """
+                value: 1 /// Not line-leading.
+                """;
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosSourceDocumentation.slotDocumentation(source));
+    }
+
 }

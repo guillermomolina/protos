@@ -29,10 +29,10 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * D138 source-local documentation ownership projection.
+ * D138 source-local documentation projection.
  *
- * <p>This layer identifies source owners only. Documentation comment association
- * is added by later TOOL007 slices.</p>
+ * <p>This layer identifies source owners and deterministically associates authored
+ * source documentation without changing Protos execution semantics.</p>
  */
 public final class ProtosSourceDocumentation {
     private ProtosSourceDocumentation() {
@@ -119,6 +119,89 @@ public final class ProtosSourceDocumentation {
         return documentation == null ? null : documentation.toString();
     }
 
+    /**
+     * Returns authored documentation associated with named slot-creation owners.
+     *
+     * <p>Each contiguous line-leading {@code ///} block must immediately precede
+     * its exact source-local owner. Parenthesized grouping is transparent; blank
+     * lines, ordinary comments, unrelated constructs, and non-owner forms break
+     * association and fail closed.</p>
+     */
+    public static List<SlotDocumentation> slotDocumentation(String source) {
+        String normalizedSource = source == null ? "" : source;
+
+        List<LineCommentOccurrence> comments = new ArrayList<>();
+        new ProtosLexer(normalizedSource).tokenizeOccurrences(comments::add);
+
+        List<SlotOwner> slots = owners(normalizedSource).slots();
+        List<SlotDocumentation> result = new ArrayList<>();
+
+        int commentIndex = 0;
+        while (commentIndex < comments.size()) {
+            LineCommentOccurrence first = comments.get(commentIndex);
+            if (!first.text().startsWith("/")) {
+                commentIndex++;
+                continue;
+            }
+            if (!isLineLeadingComment(normalizedSource, first.span().startOffset())) {
+                throw documentationError(
+                        "documentation markers must begin a documentation line",
+                        first.span());
+            }
+
+            StringBuilder documentation =
+                    new StringBuilder(documentationLine(first.text()));
+            SourceSpan blockSpan = first.span();
+            commentIndex++;
+
+            while (commentIndex < comments.size()) {
+                LineCommentOccurrence next = comments.get(commentIndex);
+                if (!next.text().startsWith("/")) {
+                    break;
+                }
+                if (!isLineLeadingComment(normalizedSource, next.span().startOffset())) {
+                    throw documentationError(
+                            "documentation markers must begin a documentation line",
+                            next.span());
+                }
+                if (!isSingleLogicalLineGap(
+                        normalizedSource,
+                        blockSpan.endOffset(),
+                        next.span().startOffset())) {
+                    break;
+                }
+
+                documentation.append('\n').append(documentationLine(next.text()));
+                blockSpan = new SourceSpan(
+                        blockSpan.startOffset(),
+                        next.span().endOffset());
+                commentIndex++;
+            }
+
+            SlotOwner target = null;
+            for (SlotOwner slot : slots) {
+                if (slot.span().startOffset() > blockSpan.endOffset()) {
+                    target = slot;
+                    break;
+                }
+            }
+
+            if (target == null
+                    || !isTransparentSlotGap(
+                            normalizedSource,
+                            blockSpan.endOffset(),
+                            target.span().startOffset())) {
+                throw documentationError(
+                        "`///` must immediately precede a documentable named slot creation",
+                        blockSpan);
+            }
+
+            result.add(new SlotDocumentation(target, documentation.toString()));
+        }
+
+        return List.copyOf(result);
+    }
+
     /** Owners belonging to one module source unit. */
     public record SourceOwners(
             SourceSpan sourceUnitSpan,
@@ -126,6 +209,16 @@ public final class ProtosSourceDocumentation {
         public SourceOwners {
             Objects.requireNonNull(sourceUnitSpan, "sourceUnitSpan");
             slots = List.copyOf(Objects.requireNonNull(slots, "slots"));
+        }
+    }
+
+    /** Authored documentation associated with one exact source-local slot owner. */
+    public record SlotDocumentation(
+            SlotOwner owner,
+            String documentation) {
+        public SlotDocumentation {
+            Objects.requireNonNull(owner, "owner");
+            Objects.requireNonNull(documentation, "documentation");
         }
     }
 
@@ -139,6 +232,55 @@ public final class ProtosSourceDocumentation {
             Objects.requireNonNull(span, "span");
             Objects.requireNonNull(selectionRange, "selectionRange");
         }
+    }
+
+    private static boolean isTransparentSlotGap(String source, int from, int to) {
+        if (from < 0 || to < from || to > source.length() || from == to) {
+            return false;
+        }
+
+        int index = from;
+        if (source.charAt(index) == '\r') {
+            index++;
+            if (index < to && source.charAt(index) == '\n') {
+                index++;
+            }
+        } else if (source.charAt(index) == '\n') {
+            index++;
+        } else {
+            return false;
+        }
+
+        boolean lineHasGrouping = false;
+        while (index < to) {
+            char current = source.charAt(index);
+            if (current == ' ' || current == '\t') {
+                index++;
+                continue;
+            }
+            if (current == '(') {
+                lineHasGrouping = true;
+                index++;
+                continue;
+            }
+            if (current == '\r' || current == '\n') {
+                if (!lineHasGrouping) {
+                    return false;
+                }
+                if (current == '\r') {
+                    index++;
+                    if (index < to && source.charAt(index) == '\n') {
+                        index++;
+                    }
+                } else {
+                    index++;
+                }
+                lineHasGrouping = false;
+                continue;
+            }
+            return false;
+        }
+        return true;
     }
 
     private static String documentationLine(String commentText) {
