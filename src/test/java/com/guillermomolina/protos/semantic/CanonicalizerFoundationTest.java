@@ -20,8 +20,10 @@ package com.guillermomolina.protos.semantic;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.parser.ProtosParser;
+import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
@@ -84,6 +86,25 @@ class CanonicalizerFoundationTest {
         assertEquals(
                 "second",
                 assertInstanceOf(CanonicalLookup.class, sequence.expressions().get(1)).name());
+    }
+
+    @Test
+    void rejectsUnsupportedBinarySurfaceNode() {
+        SurfaceBinary standard =
+                assertInstanceOf(SurfaceBinary.class, only("a + b"));
+        SurfaceBinary unsupported =
+                new SurfaceBinary(
+                        standard.left(),
+                        "|>",
+                        standard.right(),
+                        standard.span());
+
+        IllegalArgumentException error =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> canonicalizer.canonicalize(unsupported));
+
+        assertEquals("Unsupported binary operator: |>", error.getMessage());
     }
 
     private CanonicalExpression canonicalizeOnly(String source) {

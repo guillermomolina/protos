@@ -19,7 +19,7 @@ Freezing is shallow: because the prelude is shared between Actors, any Protos ob
 
 This document defines the lexical grammar, expression grammar, precedence rules, and mandatory syntactic desugarings of the language.
 
-For Closure syntax, trailing closures, and custom symbolic operators, this document is the primary normative owner of accepted source forms, tokenization/parsing constraints, precedence/associativity, attachment, and mandatory desugaring. The semantic behavior of the resulting ordinary Closure values and message sends is owned by the applicable semantic modules, especially `semantics/CALLABLES.md`.
+For Closure syntax, trailing closures, and the fixed standard symbolic operator surface, this document is the primary normative owner of accepted source forms, tokenization/parsing constraints, precedence/associativity, attachment, and mandatory desugaring. The semantic behavior of the resulting ordinary Closure values and message sends is owned by the applicable semantic modules, especially `semantics/CALLABLES.md`.
 
 It does not redefine the object model or runtime semantics specified in `PROTOS_LANGUAGE_SPEC.md`.
 
@@ -525,7 +525,7 @@ result: object
     .bar()
 ```
 
-is one expression, equivalent to `object.foo().bar()`. Conceptually, a logical newline immediately before a leading member-access `.` is consumed as continuation rather than as an expression separator. This exception is deliberate and specific: it does not generalize to binary operators, custom symbolic operators, `(`, `[`, `{`, `=>`, or any other token merely because that token could somehow be attached to the expression on the previous line. The `.` must have its ordinary structural/member-access meaning under the existing lexical and grammar rules; this rule does not alter decimal-dot tokenization or any other lexical rule.
+is one expression, equivalent to `object.foo().bar()`. Conceptually, a logical newline immediately before a leading member-access `.` is consumed as continuation rather than as an expression separator. This exception is deliberate and specific: it does not generalize to binary operators, `(`, `[`, `{`, `=>`, or any other token merely because that token could somehow be attached to the expression on the previous line. The `.` must have its ordinary structural/member-access meaning under the existing lexical and grammar rules; this rule does not alter decimal-dot tokenization or any other lexical rule.
 
 Indentation has no syntactic significance for these rules: the equivalences above hold regardless of indentation.
 
@@ -1815,8 +1815,7 @@ The normative operator/expression hierarchy preserves the existing precedence or
 
 ```ebnf
 binary-expression =
-      logical-or-expression
-    | custom-binary-expression ;
+    logical-or-expression ;
 
 logical-or-expression =
     logical-and-expression,
@@ -1862,12 +1861,6 @@ multiplicative-operator =
       "*"
     | "/"
     | "%" ;
-
-custom-binary-expression =
-    unary-expression,
-    custom-binary-operator,
-    unary-expression,
-    { custom-binary-operator, unary-expression } ;
 
 unary-expression =
       unary-operator, unary-expression
@@ -1928,37 +1921,42 @@ Binary operators associate left-to-right unless otherwise specified.
 
 Both slot creation and assignment evaluate to the value written.
 
-## 21.1 Custom Binary Operators
+## 21.1 Fixed Symbolic Operator Surface
 
-Custom symbolic binary operators are ordinary message-send syntax.
+Core v0.1 has no arbitrary custom symbolic binary operator syntax.
 
-All custom binary operators share one precedence level with each other and associate left-to-right.
+The accepted symbolic source surface is the fixed set owned by this grammar.
+The existing standard binary precedence ladder and associativity are unchanged,
+and parser precedence cannot be changed at runtime or by modules/imports.
 
-```js
-a @ b |> c
+Unsupported symbolic spellings such as:
+
+```text
+@
+|>
+!!
+^^
+--
+-!
+!-
 ```
 
-parses as:
+are invalid source unless an exact spelling is independently owned by another
+current grammar rule. Lexical recognition consumes the complete maximal
+symbolic spelling before classification. If that complete spelling is not one
+of the fixed standard/reserved symbolic tokens, lexing fails; it is not split
+into shorter standard tokens. Consequently `!!x`, `^^x`, `--x`, `-!x`, and
+`!-x` do not become stacked-prefix expressions.
 
-```js
-(a @ b) |> c
-```
+The symbolic-character recognition set used to find a maximal candidate run is
+only a lexical rejection boundary. It does not reserve a spare custom-operator
+set and does not make any non-standard spelling available for user-defined
+infix syntax.
 
-There is intentionally no implicit precedence relationship between custom binary operators and standard binary operator groups. Therefore mixed unparenthesized forms such as these are syntax errors:
-
-```js
-a + b @ c
-a @ b * c
-```
-
-Explicit grouping is required:
-
-```js
-(a + b) @ c
-a @ (b * c)
-```
-
-Parser precedence cannot be changed at runtime or by modules/imports. The lexical character set for custom symbolic operators is fixed by the Custom Operator Lexing rules.
+Ordinary named messages and calls remain the extensibility mechanism for
+user-defined behavior, including ordinary one-argument sends such as
+`receiver.run(argument)`. `Object.alias` remains unchanged; structural aliases
+do not make arbitrary symbolic spellings valid source operators.
 
 ## 22. Equality Lowering
 
@@ -2559,8 +2557,7 @@ indexed-target =
     postfix-expression, "[", expression, "]" ;
 
 binary-expression =
-      logical-or-expression
-    | custom-binary-expression ;
+    logical-or-expression ;
 
 logical-or-expression =
     logical-and-expression,
@@ -2606,24 +2603,6 @@ multiplicative-operator =
       "*"
     | "/"
     | "%" ;
-
-custom-binary-expression =
-    unary-expression,
-    custom-binary-operator,
-    unary-expression,
-    { custom-binary-operator, unary-expression } ;
-
-custom-binary-operator =
-    symbolic-operator-spelling ;
-
-symbolic-operator-spelling =
-    operator-character,
-    { operator-character } ;
-
-operator-character =
-      "!" | "$" | "%" | "&" | "*" | "+"
-    | "-" | "/" | "<" | "=" | ">" | "?"
-    | "@" | "\\" | "^" | "|" | "~" ;
 
 unary-expression =
       unary-operator, unary-expression
@@ -2862,9 +2841,7 @@ hexadecimal-digit =
     | "A" | "B" | "C" | "D" | "E" | "F" ;
 ```
 
-A parser may implement the expression portion using recursive descent plus Pratt parsing. Custom symbolic operators form their own precedence domain: mixing them with standard binary operators requires parentheses.
-
-A `custom-binary-operator` is a `symbolic-operator-spelling` that is not itself a reserved or standard symbolic token. Maximal-munch formation of the complete spelling and reserved-spelling classification are governed normatively by the Custom Operator Lexing rules: the complete maximal spelling is classified as a reserved/standard token when it exactly matches a reserved/standard spelling — including the exact one-character spellings `!` and `^` — and as `CUSTOM_OPERATOR` otherwise.
+A parser may implement the expression portion using recursive descent plus Pratt parsing. The fixed standard precedence ladder is the only symbolic binary precedence domain. Unsupported maximal symbolic spellings are lexical errors and therefore never enter the parser as operator tokens.
 
 `layout` denotes one or more consecutive logical `NEWLINE` tokens consumed as continuation inside a necessarily-incomplete delimited construct (see Whitespace and Newlines). It is formatting, not an element separator: commas are the only separators between list elements, and trailing commas are not permitted.
 
@@ -3567,7 +3544,7 @@ The EBNF describes the syntactic shape of parameter lists. A semantic validation
 
 This validation occurs before execution.
 
-## Custom Operator Lexing
+## Symbolic Operator Lexing
 
 **Ellipsis Token:**
 
@@ -3581,13 +3558,8 @@ This validation occurs before execution.
 
 **Maximal-Munch Tokenization:**
 
-Core v0.1 uses maximal-munch tokenization for symbolic operators. When multiple valid symbolic operator tokens can begin at the same source position, the lexer must consume the longest valid token.
-
-Standard punctuation and structural tokens defined by the grammar, such as parentheses, braces, brackets, commas, semicolons, colons, and periods, are tokenized separately from symbolic operators. The `...` ellipsis token is handled before ordinary period tokenization.
-
-**Custom Operator Character Alphabet:**
-
-Custom symbolic binary operators use the fixed character alphabet:
+Core v0.1 recognizes a maximal candidate symbolic spelling before deciding
+whether that spelling is valid. The candidate character set is:
 
 ```text
 ! $ % & * + - / < = > ? @ \ ^ | ~
@@ -3599,37 +3571,43 @@ Structural punctuation is excluded:
 . : ; , ( ) { } [ ]
 ```
 
-The lexer must prefer reserved and standard tokens before producing `CUSTOM_OPERATOR`.
+The candidate set is a lexical recognition boundary, not a set of available or
+reserved custom operators.
 
-Reserved and standard symbolic tokens include:
+The fixed reserved/standard symbolic tokens are:
 
 ```text
 =>  =  ==  ===  !=  !==  <=  >=  &&  ||
 +   -  *   /   %   <   >   !   ^
 ```
 
-The exact one-character spellings `!` and `^` are reserved/standard tokens and are never custom binary operators. They are classified as such wherever they appear; the grammar assigns their roles (prefix `!`, non-local-return `^`), not the lexer. Consequently `a ! b` and `a ^ b` are syntax errors rather than custom binary operator expressions.
+When a symbolic candidate run begins, the lexer consumes the longest consecutive
+run of candidate characters. The complete spelling is accepted only when it
+exactly matches one of the fixed tokens above. Every other complete spelling is
+a lexical error.
 
-The characters `!` and `^` remain members of the custom operator alphabet. Longer symbolic spellings containing them, such as `!!`, `^^`, `!^`, and `^!`, do not exactly match any reserved/standard spelling and are therefore `CUSTOM_OPERATOR` tokens, so `a !! b`, `a ^^ b`, `a !^ b`, and `a ^! b` are custom binary operator expressions.
-
-Symbolic token classification is purely lexical and does not depend on parser position. Maximal munch first forms the longest valid symbolic spelling at a source position; that complete spelling is then classified as a reserved/standard token when it exactly matches a reserved/standard spelling, and as `CUSTOM_OPERATOR` otherwise. A longer custom spelling is never broken up in order to prefer a shorter reserved/standard token, and there is no prefix-position exception. For example:
+Therefore a non-standard spelling is never recovered by splitting it into
+shorter valid tokens. In particular:
 
 ```text
 !x      -> ! IDENTIFIER("x")
-!!x     -> CUSTOM_OPERATOR("!!") IDENTIFIER("x")
 ^value  -> ^ IDENTIFIER("value")
-^^x     -> CUSTOM_OPERATOR("^^") IDENTIFIER("x")
-a ! b   -> IDENTIFIER("a") ! IDENTIFIER("b")
-a !! b  -> IDENTIFIER("a") CUSTOM_OPERATOR("!!") IDENTIFIER("b")
-a ^ b   -> IDENTIFIER("a") ^ IDENTIFIER("b")
-a ^^ b  -> IDENTIFIER("a") CUSTOM_OPERATOR("^^") IDENTIFIER("b")
+
+!!x     -> lexical error
+^^x     -> lexical error
+--x     -> lexical error
+-!x     -> lexical error
+!-x     -> lexical error
+
+a @ b   -> lexical error
+a |> b  -> lexical error
 ```
 
-Whether the resulting token sequence is syntactically valid is the parser's responsibility. `!x` parses as prefix `!` applied to `x`; `^value` parses as a non-local return of `value`. `!!x` and `^^x` are syntax errors because a custom binary operator requires a left operand; `a ! b` and `a ^ b` are syntax errors because `!` and `^` are not custom binary operator tokens; `a !! b` and `a ^^ b` parse as custom binary expressions with selectors `"!!"` and `"^^"`. The same maximal-munch rule applies to other adjacent symbolic spellings such as `^^x`, `--x`, `-!x`, and `!-x`; they are not split into stacked prefix operators. Explicitly nested prefix operations are written with structural punctuation, for example `!(!x)`.
+The exact one-character spellings `!` and `^` keep their existing grammar roles
+(prefix `!` and non-local return `^`). Explicit nesting of prefix operations
+continues to use ordinary structural syntax, for example `!(!x)`.
 
-Any remaining non-empty sequence made exclusively from operator characters may be tokenized as `CUSTOM_OPERATOR`. The characters `.`, `:`, and `;` never participate in a custom operator token.
-
-The normative lexical grammar for `custom-binary-operator` is:
+The normative lexical description of a candidate symbolic run is:
 
 ```ebnf
 operator-character =
@@ -3639,12 +3617,11 @@ operator-character =
 
 symbolic-operator-spelling =
     operator-character, { operator-character } ;
-
-custom-binary-operator =
-    symbolic-operator-spelling ;
 ```
 
-A `symbolic-operator-spelling` is the candidate maximal symbolic token: the longest non-empty sequence of consecutive `operator-character` code points that can begin at a source position. Classification applies to the complete maximal spelling: it is a `custom-binary-operator` only when it does not exactly match a reserved or standard symbolic token — including the exact one-character spellings `!` and `^` — as defined above. Reserved and standard operator spellings are classified according to their dedicated grammar roles rather than as custom operators.
+`symbolic-operator-spelling` describes only the maximal candidate run. It is a
+valid token only if the complete spelling exactly matches one of the fixed
+reserved/standard symbolic tokens listed above. Otherwise lexing fails.
 
 ## Decoding Policy Grammar Note
 

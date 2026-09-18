@@ -157,14 +157,7 @@ class ProtosLexerTest {
 
     @Test
     void javaSpecificCurrencyIdentifierCharactersAreNotProtosIdentifierCharacters() {
-        assertEquals(
-            List.of(
-                token(TokenType.CUSTOM_OPERATOR, "$"),
-                token(TokenType.IDENTIFIER, "name"),
-                token(TokenType.EOF, "")
-            ),
-            lex("$name")
-        );
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("$name"));
     }
 
     @Test
@@ -315,21 +308,19 @@ class ProtosLexerTest {
     }
 
     @Test
-    void classifiesCompleteMaximalSymbolicSpellings() {
-        assertEquals(
-            List.of(
-                token(TokenType.BANG, "!"),
-                token(TokenType.CUSTOM_OPERATOR, "!!"),
-                token(TokenType.CARET, "^"),
-                token(TokenType.CUSTOM_OPERATOR, "^^"),
-                token(TokenType.TRIPLE_EQUALS, "==="),
-                token(TokenType.CUSTOM_OPERATOR, "===="),
-                token(TokenType.NOT_EQUALS_2, "!=="),
-                token(TokenType.CUSTOM_OPERATOR, "!===@"),
-                token(TokenType.EOF, "")
-            ),
-            lex("! !! ^ ^^ === ==== !== !===@")
-        );
+    void rejectsNonstandardMaximalSymbolicSpellings() {
+        for (String source : List.of(
+                "@",
+                "|>",
+                "!!",
+                "^^",
+                "--",
+                "-!",
+                "!-",
+                "====",
+                "!===@")) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
     }
 
     @Test
@@ -359,47 +350,27 @@ class ProtosLexerTest {
         );
     }
 
+
     @Test
-    void dotColonAndSemicolonNeverJoinCustomOperators() {
-        assertEquals(
-            List.of(
-                token(TokenType.CUSTOM_OPERATOR, "@@"),
-                token(TokenType.DOT, "."),
-                token(TokenType.CUSTOM_OPERATOR, "??"),
-                token(TokenType.COLON, ":"),
-                token(TokenType.CUSTOM_OPERATOR, "~~"),
-                token(TokenType.SEMICOLON, ";"),
-                token(TokenType.CUSTOM_OPERATOR, "\\\\"),
-                token(TokenType.EOF, "")
-            ),
-            lex("@@.??:~~;\\\\")
-        );
+    void rejectsNonstandardSymbolicCharacterRuns() {
+        assertThrows(
+                ProtosLexer.LexicalError.class,
+                () -> lex("$?@\\~&|"));
     }
 
     @Test
-    void nonstandardOperatorAlphabetCharactersFormCustomOperators() {
-        assertEquals(
-            List.of(
-                token(TokenType.CUSTOM_OPERATOR, "$?@\\~&|"),
-                token(TokenType.EOF, "")
-            ),
-            lex("$?@\\~&|")
-        );
-    }
-
-    @Test
-    void maximalOperatorRunsAreClassifiedOnlyAfterTheCompleteSpellingIsKnown() {
-        assertEquals(
-            List.of(
-                token(TokenType.CUSTOM_OPERATOR, "=>="),
-                token(TokenType.CUSTOM_OPERATOR, "&&&"),
-                token(TokenType.CUSTOM_OPERATOR, "|||"),
-                token(TokenType.CUSTOM_OPERATOR, "+++"),
-                token(TokenType.CUSTOM_OPERATOR, "<=?"),
-                token(TokenType.EOF, "")
-            ),
-            lex("=>= &&& ||| +++ <=?")
-        );
+    void doesNotSplitUnsupportedMaximalSymbolicRunsIntoStandardTokens() {
+        for (String source : List.of(
+                "=>=",
+                "&&&",
+                "|||",
+                "+++",
+                "<=?",
+                "--",
+                "-!",
+                "!-")) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
     }
 
     @Test
@@ -599,22 +570,21 @@ class ProtosLexerTest {
     }
 
     @Test
-    void standardAndCustomOperatorsTerminateNumericTokens() {
+    void standardOperatorsTerminateNumericTokens() {
         assertEquals(
             List.of(
                 token(TokenType.NUMBER, "1"),
                 token(TokenType.FAT_ARROW, "=>"),
                 token(TokenType.NUMBER, "2"),
-                token(TokenType.NUMBER, "3"),
-                token(TokenType.CUSTOM_OPERATOR, "@@"),
-                token(TokenType.NUMBER, "4"),
                 token(TokenType.NUMBER, "5"),
                 token(TokenType.AND, "&&"),
                 token(TokenType.NUMBER, "6"),
                 token(TokenType.EOF, "")
             ),
-            lex("1=>2 3@@4 5&&6")
+            lex("1=>2 5&&6")
         );
+
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("3@@4"));
     }
 
     @Test
@@ -1035,13 +1005,13 @@ class ProtosLexerTest {
                 token(TokenType.RPAREN, ")"),
                 token(TokenType.FAT_ARROW, "=>"),
                 token(TokenType.IDENTIFIER, "x"),
-                token(TokenType.CUSTOM_OPERATOR, "|>"),
+                token(TokenType.PLUS, "+"),
                 token(TokenType.IDENTIFIER, "transform"),
                 token(TokenType.LPAREN, "("),
                 token(TokenType.RPAREN, ")"),
                 token(TokenType.EOF, "")
             ),
-            lex("map['answer'] = 42\n(x) => x |> transform()")
+            lex("map['answer'] = 42\n(x) => x + transform()")
         );
     }
 

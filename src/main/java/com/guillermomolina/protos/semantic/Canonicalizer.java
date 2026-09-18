@@ -276,12 +276,15 @@ public final class Canonicalizer {
                             canonicalize(binary.left()),
                             canonicalize(binary.right()),
                             binary.span());
-            default ->
+            case "+", "-", "*", "/", "%", "<", "<=", ">", ">=" ->
                     new CanonicalSend(
                             canonicalize(binary.left()),
                             binary.operator(),
                             List.of(canonicalize(binary.right())),
                             binary.span());
+            default ->
+                    throw new IllegalArgumentException(
+                            "Unsupported binary operator: " + binary.operator());
         };
     }
 

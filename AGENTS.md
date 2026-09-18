@@ -3060,7 +3060,7 @@ Do not silently reject syntax defined by the grammar because it is inconvenient 
 
 Preserve significant newlines according to the grammar. Protos does not use JavaScript-style Automatic Semicolon Insertion.
 
-Operator precedence, associativity, custom operators, contextual "...", trailing closures, indexed access, and assignment must follow the grammar rather than host-language conventions.
+Operator precedence, associativity, the fixed standard operator surface, contextual "...", trailing closures, indexed access, and assignment must follow the grammar rather than host-language conventions.
 
 When possible, keep parsing and semantic validation separate. A construct that is syntactically valid but semantically invalid should not require grammar distortion merely to reject it earlier.
 

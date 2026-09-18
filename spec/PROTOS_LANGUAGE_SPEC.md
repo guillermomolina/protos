@@ -29,6 +29,12 @@ The language has a uniform execution model. There is no fundamental semantic dis
 
 The language favors objects and messages over keywords and special syntactic constructs.
 
+Core v0.1 does not provide arbitrary custom symbolic binary operators. The
+accepted symbolic source surface and its precedence are fixed by
+`PROTOS_GRAMMAR.md`. Ordinary named messages/calls remain the extensibility
+mechanism for user-defined behavior, and `Object.alias` does not create new
+source-level operator spellings.
+
 ## 1.1 Identifier Syntax and Reserved Words
 
 The primary normative owner of identifier lexing, Unicode/NFC requirements, reserved words, and contextual member-name syntax is `PROTOS_GRAMMAR.md`. This heading remains as a compatibility/navigation anchor and is not an independent normative owner.
@@ -135,11 +141,11 @@ The primary normative contract formerly contained here has moved to `semantics/O
 
 The primary normative contract formerly contained here has moved to `semantics/VALUES_AND_COLLECTIONS.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
 
-## 21.1 Custom Symbolic Binary Operators
+## 21.1 Fixed Symbolic Operator Surface
 
-Custom symbolic operator lexing, parsing, precedence, associativity, and
-mandatory lowering are owned by `PROTOS_GRAMMAR.md`. The lowered ordinary
-message send obeys the applicable callable/object semantics. This heading is a
+The accepted symbolic source spellings, precedence, associativity, and lexical
+rejection rules are owned by `PROTOS_GRAMMAR.md`. Arbitrary custom symbolic
+binary operators are not part of Core v0.1. This heading is a
 compatibility/navigation anchor and is not an independent normative owner.
 ## 22. Open Objects
 

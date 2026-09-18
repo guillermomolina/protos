@@ -572,7 +572,10 @@ public final class ProtosLexer {
 
         String spelling = source.substring(start, pos);
         TokenType standard = STANDARD_SYMBOLIC_TOKENS.get(spelling);
-        return new Token(standard == null ? TokenType.CUSTOM_OPERATOR : standard, spelling);
+        if (standard == null) {
+            throw error("Unsupported symbolic operator '" + spelling + "'", start);
+        }
+        return new Token(standard, spelling);
     }
 
     private void skipHorizontalWhitespace() {

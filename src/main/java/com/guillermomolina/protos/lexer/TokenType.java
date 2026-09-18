@@ -65,9 +65,6 @@ public enum TokenType {
     ELLIPSIS,       // ...
     CARET,          // ^ (non-local return)
 
-    // Custom operators
-    CUSTOM_OPERATOR,
-
     // Control
     NEWLINE,
     EOF

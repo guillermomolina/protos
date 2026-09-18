@@ -9,6 +9,37 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.425] - 2026-09-18
+
+### D149 / I044 — Remove custom symbolic binary operators
+- Removes arbitrary custom symbolic binary operators from valid Protos source.
+- Removes the custom symbolic token/category, custom-binary grammar alternative,
+  custom precedence domain, and custom/standard mixing rule while preserving the
+  fixed standard symbolic surface and its existing precedence/associativity.
+- Defines unsupported maximal symbolic spellings as lexical errors. Former
+  custom spellings such as `@`, `|>`, `!!`, `^^`, `--`, `-!`, and `!-` are not
+  split into shorter standard tokens; `!!x`, `^^x`, `--x`, `-!x`, and `!-x`
+  therefore do not become stacked-prefix syntax.
+- Preserves D148-derived `!=`, ordinary named messages/calls including
+  one-argument sends, and `Object.alias`.
+- Introduces no direct symbolic declaration syntax, named-infix mechanism,
+  fixity/precedence declarations, precedence groups, or spare custom-operator
+  reservation.
+- Normative/public owners reconciled by this revision:
+  `spec/PROTOS_GRAMMAR.md`, `spec/PROTOS_LANGUAGE_SPEC.md`,
+  `spec/semantics/CALLABLES.md`, `spec/runtime/ABSTRACT_RUNTIME.md`, and
+  `README.md`.
+
+### Compatibility and implementation state
+- Source that relied on arbitrary custom symbolic binary operators is no longer
+  valid and must use ordinary named messages/calls or another independently
+  specified current language construct.
+- The fixed standard operator surface, standard precedence ladder, and D148
+  inequality semantics are unchanged.
+- Executable implementation is aligned in I044. Maven implementation version is
+  `0.3.41-SNAPSHOT`.
+
+
 ## [0.1.424] - 2026-09-18
 
 ### D141 — Strict variadic standard String `concat`

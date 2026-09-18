@@ -682,15 +682,23 @@ The sign bit is therefore part of Float semantic identity, unlike NaN payload di
 
 Parameter names in a closure signature must be unique. Duplicate required/default parameter names and collisions with the rest parameter are rejected before execution.
 
-## Custom Operator Alphabet
+## Symbolic Operator Surface
 
-Custom symbolic binary operators use the fixed character set:
+Protos accepts only its fixed standard/reserved symbolic spellings:
 
 ```text
-! $ % & * + - / < = > ? @ \ ^ | ~
+=>  =  ==  ===  !=  !==  <=  >=  &&  ||
++   -  *   /   %   <   >   !   ^
 ```
 
-Structural punctuation such as `.`, `:`, `;`, `,`, and brackets/braces/parentheses is excluded. Reserved and standard operator tokens are recognized before remaining symbolic sequences are classified as custom operators.
+There is no arbitrary custom symbolic binary operator syntax. A maximal symbolic
+run that is not one of those exact spellings is a lexical error rather than a
+sequence of shorter operators. For example, `@`, `|>`, `!!`, `^^`, `--`, `-!`,
+and `!-` are invalid source spellings.
+
+Ordinary named messages/calls remain available for user-defined behavior, and
+`Object.alias` does not make unsupported symbolic spellings valid source
+operators.
 
 ## Malformed Text Decoding
 

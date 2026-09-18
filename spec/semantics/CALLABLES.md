@@ -365,18 +365,20 @@ After that desugaring, the appended value is an ordinary parameterless
 error, and Future/task semantics as any other Closure passed explicitly in the
 same argument position. This document defines those callable semantics; it does
 not independently define when trailing-closure syntax parses.
-## 21.1 Custom Symbolic Binary Operators
+## 21.1 Fixed Symbolic Operator Calls
 
-The lexical alphabet, reserved spellings, maximal-munch classification,
-precedence restrictions, associativity, parse validity, and mandatory lowering
-of custom symbolic binary operators are owned by `../PROTOS_GRAMMAR.md`.
+The accepted symbolic source spellings, precedence, associativity, and lexical
+rejection rules are owned by `../PROTOS_GRAMMAR.md`. There is no arbitrary
+custom symbolic operator source form and no custom-operator callable kind.
 
-When the grammar lowers a valid custom symbolic binary operator expression to an
-ordinary one-argument message send, this document contributes no special
-operator invocation mechanism: ordinary message lookup, receiver binding,
-argument evaluation already fixed by the applicable semantic owners, and
-ordinary Closure invocation apply. A symbolic selector does not create a second
-callable kind or a privileged dispatch path.
+For fixed standard operators whose existing semantics lower to ordinary message
+sends, ordinary message lookup, receiver binding, argument evaluation, and
+ordinary Closure invocation apply. Other fixed operators retain their existing
+dedicated semantics.
+
+Ordinary named messages/calls, including one-argument sends, remain unchanged.
+`Object.alias` also remains unchanged and does not introduce new source-level
+symbolic operator syntax.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 

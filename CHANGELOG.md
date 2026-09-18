@@ -1,3 +1,16 @@
+## 0.3.42-SNAPSHOT
+
+- Complete `I044 — Remove custom symbolic binary operators` (GitHub #583)
+  under ratified D149 Candidate A. Remove arbitrary custom symbolic binary
+  source syntax, the `CUSTOM_OPERATOR` token/category, the custom-binary parser
+  path, custom precedence/mixing behavior, and the dedicated conformance and
+  canonicalization coverage. Preserve the fixed standard symbolic surface and
+  precedence ladder, D148-derived `!=`, ordinary named one-argument messages,
+  and `Object.alias`. Unsupported maximal symbolic spellings are lexical errors
+  and are not split into shorter standard operators; forms such as `!!x`,
+  `^^x`, `--x`, `-!x`, and `!-x` therefore remain invalid. Implementation
+  version becomes `0.3.42-SNAPSHOT`.
+
 ## 0.3.41-SNAPSHOT
 
 - Continue `I046-B — Add standard prelude fail callable` (GitHub #585) with the

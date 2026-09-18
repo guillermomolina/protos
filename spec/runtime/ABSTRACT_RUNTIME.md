@@ -4864,19 +4864,16 @@ Mutation of the key objects themselves is not intercepted by this mechanism.
 The already-defined recorded-hash and current-equality rules remain
 authoritative.
 
-## Custom Operator Runtime Note
+## Symbolic Operator Runtime Note
 
-Custom symbolic operators do not create a separate runtime dispatch mechanism. After lexing and parsing, a custom binary operator is an ordinary message selector.
+Arbitrary custom symbolic operators are not valid source and create no separate
+runtime dispatch path. The fixed standard operator surface retains its existing
+runtime semantics; operators that lower to ordinary sends use the ordinary
+message-dispatch machinery.
 
-For example:
-
-```js
-a |> b
-```
-
-lowers conceptually to an ordinary send whose selector is `"|>"`.
-
-The permitted symbolic character alphabet is a parser/lexer rule and is not mutable at runtime.
+Ordinary named messages/calls and `Object.alias` are unchanged. A structural
+alias does not cause an otherwise unsupported symbolic spelling to become valid
+source syntax.
 
 ## Future Cancellation Runtime Semantics
 

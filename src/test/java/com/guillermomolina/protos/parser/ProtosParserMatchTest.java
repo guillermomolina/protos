@@ -59,8 +59,8 @@ class ProtosParserMatchTest {
                 ParseError.class,
                 () ->
                         new ProtosParser(
-                                        "subject match {\\n"
-                                                + "case _ => 1\\n"
+                                        "subject match {\n"
+                                                + "case _ => 1\n"
                                                 + "}")
                                 .parseProgram());
     }
