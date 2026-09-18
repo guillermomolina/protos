@@ -18,6 +18,8 @@
 package com.guillermomolina.protos.documentation;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -81,4 +83,61 @@ class ProtosSourceDocumentationTest {
         assertEquals(source.indexOf("value: 1"), values.get(0).span().startOffset());
         assertEquals(source.indexOf("value: 2"), values.get(1).span().startOffset());
     }
+    @Test
+    void extractsContiguousModuleDocumentationFromPreamble() {
+        String source = """
+                // ordinary preamble comment
+
+                //! Module documentation.
+                //! Second line.
+                value: 1
+                """;
+
+        assertEquals(
+                "Module documentation.\nSecond line.",
+                ProtosSourceDocumentation.moduleDocumentation(source));
+    }
+
+    @Test
+    void returnsNullWhenModuleDocumentationIsAbsent() {
+        assertNull(ProtosSourceDocumentation.moduleDocumentation("value: 1\n"));
+    }
+
+    @Test
+    void rejectsModuleDocumentationAfterFirstConstruct() {
+        String source = """
+                value: 1
+                //! Too late.
+                """;
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosSourceDocumentation.moduleDocumentation(source));
+    }
+
+    @Test
+    void rejectsMultipleModuleDocumentationBlocks() {
+        String source = """
+                //! First block.
+
+                //! Second block.
+                value: 1
+                """;
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosSourceDocumentation.moduleDocumentation(source));
+    }
+
+    @Test
+    void rejectsInlineModuleDocumentationMarker() {
+        String source = """
+                value: 1 //! Not line-leading.
+                """;
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosSourceDocumentation.moduleDocumentation(source));
+    }
+
 }

@@ -1,3 +1,13 @@
+## 0.3.31-SNAPSHOT
+
+- Implement `TOOL007-A2 — module source-documentation association`
+  (GitHub #556) under ratified D138 Candidate A′. Add tooling-only extraction
+  of one contiguous line-leading `//!` documentation block from the module
+  preamble, preserving ordinary comment behavior for Protos execution. Reject
+  late module documentation, multiple module documentation blocks, and inline
+  documentation markers. Slot-level `///` association remains deferred to
+  TOOL007-A3. Implementation version becomes `0.3.31-SNAPSHOT`.
+
 ## 0.3.30-SNAPSHOT
 
 - Implement `TOOL007-A1 — source-local documentation owner inventory`

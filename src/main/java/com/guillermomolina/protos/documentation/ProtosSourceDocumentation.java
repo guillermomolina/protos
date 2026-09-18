@@ -19,6 +19,8 @@ package com.guillermomolina.protos.documentation;
 
 import com.guillermomolina.protos.analysis.ProtosDocumentSymbol;
 import com.guillermomolina.protos.analysis.ProtosDocumentSymbols;
+import com.guillermomolina.protos.lexer.ProtosLexer;
+import com.guillermomolina.protos.lexer.ProtosLexer.LineCommentOccurrence;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.ArrayList;
@@ -59,6 +61,64 @@ public final class ProtosSourceDocumentation {
                 slots);
     }
 
+    /**
+     * Returns authored module documentation from the current source snapshot.
+     *
+     * <p>A module documentation block is one contiguous sequence of line-leading
+     * {@code //!} comments in the module preamble. At most one block is valid.</p>
+     *
+     * @return authored module documentation, or {@code null} when absent
+     */
+    public static String moduleDocumentation(String source) {
+        String normalizedSource = source == null ? "" : source;
+
+        List<LineCommentOccurrence> comments = new ArrayList<>();
+        new ProtosLexer(normalizedSource).tokenizeOccurrences(comments::add);
+
+        var program = new ProtosParser(normalizedSource).parseProgram();
+        int firstConstructOffset = program.expressions().isEmpty()
+                ? normalizedSource.length()
+                : program.expressions().get(0).span().startOffset();
+
+        StringBuilder documentation = null;
+        SourceSpan previousLineSpan = null;
+
+        for (LineCommentOccurrence comment : comments) {
+            String text = comment.text();
+            if (!text.startsWith("!")) {
+                continue;
+            }
+            if (!isLineLeadingComment(normalizedSource, comment.span().startOffset())) {
+                throw documentationError(
+                        "documentation markers must begin a documentation line",
+                        comment.span());
+            }
+            if (comment.span().startOffset() >= firstConstructOffset) {
+                throw documentationError(
+                        "`//!` is only valid in the module preamble",
+                        comment.span());
+            }
+
+            if (documentation == null) {
+                documentation = new StringBuilder(documentationLine(text));
+            } else {
+                if (!isSingleLogicalLineGap(
+                        normalizedSource,
+                        previousLineSpan.endOffset(),
+                        comment.span().startOffset())) {
+                    throw documentationError(
+                            "at most one `//!` module block is permitted",
+                            comment.span());
+                }
+                documentation.append('\n').append(documentationLine(text));
+            }
+
+            previousLineSpan = comment.span();
+        }
+
+        return documentation == null ? null : documentation.toString();
+    }
+
     /** Owners belonging to one module source unit. */
     public record SourceOwners(
             SourceSpan sourceUnitSpan,
@@ -79,6 +139,69 @@ public final class ProtosSourceDocumentation {
             Objects.requireNonNull(span, "span");
             Objects.requireNonNull(selectionRange, "selectionRange");
         }
+    }
+
+    private static String documentationLine(String commentText) {
+        String body = commentText.substring(1);
+        return body.startsWith(" ") ? body.substring(1) : body;
+    }
+
+    private static boolean isLineLeadingComment(String source, int commentStart) {
+        int index = commentStart;
+        while (index > 0) {
+            char previous = source.charAt(index - 1);
+            if (previous == '\n' || previous == '\r') {
+                break;
+            }
+            index--;
+        }
+        while (index < commentStart) {
+            char current = source.charAt(index);
+            if (current != ' ' && current != '\t') {
+                return false;
+            }
+            index++;
+        }
+        return true;
+    }
+
+    private static boolean isSingleLogicalLineGap(String source, int from, int to) {
+        if (from < 0 || to < from || to > source.length() || from == to) {
+            return false;
+        }
+
+        int index = from;
+        if (source.charAt(index) == '\r') {
+            index++;
+            if (index < to && source.charAt(index) == '\n') {
+                index++;
+            }
+        } else if (source.charAt(index) == '\n') {
+            index++;
+        } else {
+            return false;
+        }
+
+        while (index < to) {
+            char current = source.charAt(index);
+            if (current != ' ' && current != '\t') {
+                return false;
+            }
+            index++;
+        }
+        return true;
+    }
+
+    private static IllegalArgumentException documentationError(
+            String message,
+            SourceSpan span) {
+        return new IllegalArgumentException(
+                "documentation validation error at offsets "
+                        + span.startOffset()
+                        + ".."
+                        + span.endOffset()
+                        + ": "
+                        + message);
     }
 
     private static void collect(
