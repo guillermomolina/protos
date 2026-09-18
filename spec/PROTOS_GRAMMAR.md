@@ -7,6 +7,12 @@ Last updated: 2026-09-18
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.
 
+The spelling `fail` is an ordinary identifier even though the standard prelude
+provides a binding with that name. It is not a keyword, reserved word, intrinsic
+reference, or special call form. `fail()` is parsed as ordinary identifier
+lookup followed by ordinary call syntax, and `fail: value` is ordinary slot
+creation that may shadow the prelude binding.
+
 Freezing is shallow: because the prelude is shared between Actors, any Protos object physically shared through it must be semantically immutable for the duration of that sharing, and mutable standard-library state remains Actor-local.
 
 ## 1. Scope

@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-09
+Last updated: 2026-09-18
 
 This document is the primary normative owner of module contexts, module identity, loading, caching, initialization, cycles, and module lifetime.
 
@@ -47,6 +47,20 @@ Object             // reads the prelude binding
 Object = myObject   // ERROR: the prelude binding is frozen
 Object: myObject    // OK: creates a module-local binding that shadows it
 ```
+
+The standard prelude also includes the ordinary binding `fail`. Its callable
+Error-signaling behavior is owned by `ERRORS.md`; this document owns only the
+binding and lookup consequences. `fail` follows the same frozen-prelude and
+ordinary-shadowing rules as other prelude names:
+
+```js
+fail              // reads the standard prelude callable
+fail = myFail      // ERROR: the prelude binding is frozen
+fail: myFail       // OK: creates a module-local binding that shadows it
+```
+
+The `fail` spelling is not privileged by the module system. A nearer lexical
+binding created with `:` shadows the standard binding normally.
 
 Freezing is shallow, so freezing the prelude is not by itself sufficient to make arbitrary objects referenced by its slots safe to share between Actors. The governing invariant is therefore:
 

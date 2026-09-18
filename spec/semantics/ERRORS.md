@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-06
+Last updated: 2026-09-18
 
 This document is the primary normative owner of Core Error objects, signaling, handling, propagation, identity, standard error-prototype taxonomy, and error-control semantics.
 
@@ -115,6 +115,36 @@ particular Error object exists, its identity is stable for as long as the object
 is observably reachable. `identityHashOf(error)` therefore has the same stability
 and collision rules as for other objects; fresh Error identity does not imply a
 unique numeric hash value.
+
+### Standard generic `fail()` callable
+
+The standard prelude provides `fail` as an ordinary callable that accepts exactly
+zero supplied arguments. A reached valid `fail()` invocation is one standard
+failure occurrence under the rules above: it creates one fresh ordinary Error
+object whose immediate delegation parent is the canonical standard `Error`
+prototype for the current Core environment, then enters the existing semantic
+signaling operation with that exact fresh object. The invocation never returns
+normally.
+
+The standard `fail` callable does not obtain `Error` through caller lexical
+lookup. A caller-local binding named `Error` therefore cannot change the category
+created by `fail()`, and extracting, storing, or passing the `fail` callable does
+not change its canonical Error provenance.
+
+Each reached valid invocation is distinct. Implementations must not pool or reuse
+a singleton Error where ordinary Error identity could observe two `fail()`
+occurrences as identical.
+
+Supplying any argument is not a valid `fail()` invocation. Such a call follows
+the ordinary standard-callable arity-failure path, and the generic failure
+occurrence described above must not be performed first.
+
+`fail()` adds no message, cause, payload, existing-Error, Error-prototype,
+rethrow/current-error, custom-subtype, or guest-visible stack/source facility.
+It adds no Error taxonomy category and does not change `Error.signal()`,
+`error.signal()`, handler selection, exact re-signaling identity, unwinding,
+`ensure`, Future failure identity, Actor/P boundary behavior, or the
+non-resumable Error model.
 
 ### Boundary crossing and recorded failures
 

@@ -9,6 +9,38 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.423] - 2026-09-18
+
+### D146 / I046-A — Standard prelude `fail()` semantics
+- Adds `fail` as one ordinary zero-argument standard-prelude callable.
+- Each reached valid `fail()` invocation creates one fresh generic standard
+  Error occurrence whose immediate parent is the canonical standard `Error`
+  prototype, then signals that exact object through the existing non-resumable
+  Error semantics.
+- The callable keeps canonical Error provenance under caller-local `Error`
+  shadowing and after extraction/storage; separate reached invocations preserve
+  distinct observable identity.
+- Supplied arguments follow the ordinary standard-callable arity-failure path
+  without first executing the generic failure occurrence.
+- Adds no syntax, keyword, reserved identifier, intrinsic, payload/cause/rethrow
+  shorthand, Error-taxonomy category, assertion meaning, or guest-visible
+  stack/source payload.
+- Preserves exact `Error.signal()` / `error.signal()` receiver identity,
+  handler matching, unwind/`ensure`, Future failure identity, Actor/P boundary
+  rules, and the existing shallow non-resumable Error model.
+- Normative owners changed by this revision:
+  `spec/semantics/ERRORS.md`, `spec/semantics/MODULES.md`, and
+  `spec/PROTOS_GRAMMAR.md`.
+
+### Compatibility and implementation state
+- A previously absent bare `fail` lookup is now specified to resolve to the
+  standard prelude callable when no nearer lexical binding shadows it.
+- Existing explicit local `fail` bindings remain valid and shadow the standard
+  prelude binding normally.
+- This is a specification-only publication. Executable implementation and any
+  bounded equivalent-source migration remain I046-B follow-up work.
+- The Maven implementation version is unchanged by this revision.
+
 ## [0.1.422] - 2026-09-18
 
 ### D143 — Fixed-prefix standard-Array multiple slot creation
