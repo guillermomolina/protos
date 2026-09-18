@@ -9,6 +9,43 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.424] - 2026-09-18
+
+### D141 — Strict variadic standard String `concat`
+- Adds ordinary standard receiver-oriented `String.concat` for zero or more
+  already-evaluated positional String values, including values contributed by
+  ordinary call spread. The original receiver and every supplied value must be
+  semantic Strings; delegation alone does not confer eligibility.
+- Preserves composition/conversion separation: `concat` performs no implicit
+  textual conversion, normalization, encoding/decoding, locale operation,
+  equality/hash dispatch, callback, mutation, or hidden suspension.
+- Defines the successful result as the exact receiver Unicode-scalar sequence
+  followed by every supplied String scalar sequence in positional order. The
+  zero-argument form therefore preserves the receiver's String semantic value.
+- Preserves ordinary call evaluation: receiver/target plus all explicit
+  arguments/spreads are evaluated under the existing left-to-right call rules
+  before standard `concat` validates the resulting supplied vector.
+- Keeps standard binary String `+` unchanged. `concat` is not repeated `+`
+  dispatch; the two selectors remain independent ordinary behaviors even though
+  `a.concat(b)` and standard `a + b` produce the same String semantic value for
+  valid standard String inputs.
+- Leaves physical construction strategy implementation-private and adds no
+  interpolation, syntactic sugar, implicit conversion protocol, collection join,
+  public StringBuilder, stream, rope, or iodata-like public abstraction.
+- Normative owner changed by this revision:
+  `spec/semantics/VALUES_AND_COLLECTIONS.md`.
+- Informative runtime pseudocode updated in:
+  `spec/runtime/ABSTRACT_RUNTIME.md`.
+
+### Compatibility and implementation state
+- Existing String literals, strict binary `+`, identity/equality/hash/indexing,
+  encoding semantics, and all source grammar remain unchanged.
+- This is a specification-only publication. Executable implementation of the new
+  `concat` selector is separate follow-up work; the Maven implementation version
+  is unchanged.
+- D141 intentionally defers syntactic sugar and textual conversion to separate
+  later decisions.
+
 ## [0.1.423] - 2026-09-18
 
 ### D146 / I046-A — Standard prelude `fail()` semantics

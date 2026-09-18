@@ -1623,6 +1623,68 @@ Ordinary lookup and overriding rules remain unchanged. Merely delegating to a
 String value or String-family prototype does not make an incompatible receiver
 a semantic String.
 
+### Standard String aggregate concatenation with `concat`
+
+The standard `String.concat` behavior is the ordinary variadic aggregate form
+of strict String composition. It is a standard local selector on canonical
+`String` and is reached by ordinary lookup. Selecting that standard behavior
+does not confer String-family membership on the original receiver.
+
+```protos
+"a".concat()
+"a".concat("b")
+"a".concat("b", "c", "d")
+"a".concat(...parts)
+```
+
+The original receiver must be a semantic String value. After the ordinary call
+rules have produced the complete caller-supplied positional vector, every
+supplied value must also be a semantic String value. Delegation to canonical
+`String`, possession of similarly named behavior, or another structural
+relationship does not satisfy either requirement. No Number, Boolean, `null`,
+Bytes value, ordinary object, prototype, or other non-String value is implicitly
+converted.
+
+Ordinary call evaluation is unchanged. The call receiver/target is evaluated
+first, then explicit argument and spread items are evaluated strictly
+left-to-right, including ordinary standard spread extraction, before Closure
+activation or parameter binding. Therefore all visible argument/spread effects
+that complete normally have already occurred before the selected standard
+`concat` behavior validates its receiver and supplied values. A failure during
+receiver/argument evaluation or spread extraction prevents `concat` invocation
+under the existing call rules.
+
+Once standard `concat` begins, it validates the original receiver and supplied
+values without invoking user behavior. Validation of supplied values follows
+their positional order. A validation failure signals `Error`, mutates no input,
+and exposes no partial String result.
+
+On success, the result is the String whose exact Unicode-scalar sequence is the
+receiver's scalar sequence followed, in positional order, by each supplied
+String's scalar sequence. The operation performs no Unicode normalization,
+grapheme transformation beyond later ordinary `size` / `at` observation, locale
+transformation, encoding or decoding, textual conversion, equality/hash
+dispatch, callback, mutation, or hidden suspension.
+
+Zero supplied values are valid. `s.concat()` therefore has exactly the scalar
+sequence of `s` and is semantically identical to `s` under existing String value
+identity. This does not require reuse of the same host object or physical String
+storage.
+
+Standard `concat` is **not** defined as repeated dispatch of `+`. Existing
+standard binary `+` is unchanged, and `+` and `concat` are independent ordinary
+selectors: defining, shadowing, or overriding one does not implicitly redefine
+the other. When standard behavior is selected and `b` is a semantic String,
+`a.concat(b)` and standard `a + b` denote the same String semantic value; this
+is result equivalence only, not a lowering, callback, or dispatch-equivalence
+rule.
+
+Implementations may construct the result using flat allocation, pre-sizing,
+ropes, slices, interning, storage sharing, or another representation strategy
+provided every observable rule above is preserved. Core `concat` does not
+standardize a mutable String builder, fragment tree, stream, or intermediate
+representation.
+
 ### Exact String semantic value and identity
 
 A Core `String` semantic value is exactly a finite sequence of Unicode scalar

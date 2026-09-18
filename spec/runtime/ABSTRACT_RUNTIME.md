@@ -1483,6 +1483,35 @@ The String-family receiver-domain rule applies to the original receiver. A
 non-String right operand signals `Error` after ordinary left-to-right operand
 evaluation and before any concatenation result is produced.
 
+Standard String `concat` is conceptually:
+
+```text
+function standardStringConcat(receiver, supplied):
+    leftString = requireSemanticString(receiver)
+
+    strings = []
+    for value in supplied in positional order:
+        strings.append(requireSemanticString(value))
+
+    return stringFromExactUnicodeScalarSequence(
+        unicodeScalars(leftString)
+        + unicodeScalars(strings[0])
+        + ...
+        + unicodeScalars(strings[n - 1])
+    )
+```
+
+The `supplied` vector already exists before the standard behavior runs under the
+normative ordinary-call rules in `../semantics/CALLABLES.md`; the pseudocode
+above does not re-evaluate argument or spread expressions. The empty vector
+therefore returns the semantic String value with exactly the receiver's scalar
+sequence. Validation invokes no guest behavior and a failure exposes no partial
+String result.
+
+This pseudocode illustrates the normative `concat` contract in
+`../semantics/VALUES_AND_COLLECTIONS.md`. It is not repeated ordinary `+`
+dispatch and does not constrain physical String representation or allocation.
+
 ## Equality and Comparison Result Validation
 
 Runtime implementations of the standard comparison protocol must validate their result when necessary:
