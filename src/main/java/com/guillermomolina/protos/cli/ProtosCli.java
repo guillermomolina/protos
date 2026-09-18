@@ -283,6 +283,71 @@ public final class ProtosCli {
         Path actorModulesRoot = actorRoot.resolve("modules");
         Path groupRoot = conformanceRoot.resolve("group");
         Path groupModulesRoot = groupRoot.resolve("modules");
+
+        List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                fileSelectionSourceRoots =
+                        List.of(
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/conformance",
+                                        conformanceRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/process-snapshot",
+                                        processSnapshotRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/actor",
+                                        actorRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/group",
+                                        groupRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/package-toml",
+                                        packageTomlRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/uri",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/csv",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/cli",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/math/integer",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/crypto/sha256",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/network/ip-addresses",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/library/network/ip-endpoints",
+                                        libraryRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/package-tool/version",
+                                        packageToolVersionRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/package-tool/lock",
+                                        packageToolLockRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/package-tool/resolution-input",
+                                        packageToolResolutionInputRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/package-tool/content-identity",
+                                        packageToolContentIdentityRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/package-tool/resolution-input-lock",
+                                        packageToolResolutionInputLockRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/package-tool/resolution-root",
+                                        packageToolResolutionRootRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/package-tool/execution-plan",
+                                        packageToolExecutionPlanRoot),
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "protos/corpus/package-tool/project-projection",
+                                        packageToolProjectProjectionRoot));
+
         Path packageToolRoot = distributionRoot.resolve("tools").resolve("package");
         ProtosModuleResolver standardLibraryResolver =
                 new ProtosStandardLibraryModuleResolver(core.getParent());
@@ -435,6 +500,10 @@ public final class ProtosCli {
                             ProtosTestToolCatalogAcquisitionFacility.install(
                                     session.activation,
                                     invocationWorkingDirectory);
+                            ProtosTestToolFileSelectionFacility.install(
+                                    session.activation,
+                                    invocationWorkingDirectory,
+                                    fileSelectionSourceRoots);
                             provisioned = true;
                             return executionScope::close;
                         } finally {

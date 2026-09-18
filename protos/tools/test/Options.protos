@@ -58,10 +58,22 @@ resourceCatalogOption: CommandLine.option({
     help: null
 })
 
+fileOption: CommandLine.option({
+    key: "file"
+    long: "file"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: "FILE"
+    help: null
+})
+
 commandSpec: CommandLine.command({
     name: "test"
     help: null
-    options: Array(jobsOption, resourceCatalogOption)
+    options: Array(jobsOption, resourceCatalogOption, fileOption)
     positionals: Array()
     subcommands: Array()
 })
@@ -69,10 +81,9 @@ commandSpec: CommandLine.command({
 // LIB011-E adapter boundary.
 //
 // Generic CommandLine parsing stays strict. TOOL002 historically ignores every
-// argument except the exact separate-token forms --jobs VALUE and
-// --resource-catalog PATH. Preserve that Tool-owned policy by projecting only
-// those recognized option/value token pairs before invoking the strict stdlib
-// parser.
+// argument except selected exact separate-token option/value forms. Preserve
+// that Tool-owned policy by projecting only those recognized option/value token
+// pairs before invoking the strict stdlib parser.
 //
 // A selected value token is projected literally and is never reinterpreted as a
 // second option merely because it begins with "-". Unknown tokens, including
@@ -137,7 +148,8 @@ projectArguments: (arguments) => {
         wasExpectingSelectedValue.ifFalse(() => {
             selected:
                 (argument === "--jobs") ||
-                (argument === "--resource-catalog")
+                (argument === "--resource-catalog") ||
+                (argument === "--file")
 
             selected.ifTrue(() => {
                 appendBuilt(builder, argument)
@@ -162,6 +174,7 @@ parse: (arguments) => {
 
     jobsValue: 1
     resourceCatalogPathValue: null
+    filePathValue: null
 
     parsed.command.options.each((occurrence) => {
         (occurrence.key == "jobs").ifTrue(() => {
@@ -171,9 +184,13 @@ parse: (arguments) => {
         (occurrence.key == "resourceCatalog").ifTrue(() => {
             resourceCatalogPathValue = occurrence.value
         })
+
+        (occurrence.key == "file").ifTrue(() => {
+            filePathValue = occurrence.value
+        })
     })
 
-    Array(jobsValue, resourceCatalogPathValue)
+    Array(jobsValue, resourceCatalogPathValue, filePathValue)
 }
 
 // D069: one positive logical Test Tool capacity value, defaulting to one.
@@ -186,4 +203,10 @@ jobs: (arguments) => {
 // PATH is returned verbatim; host path interpretation stays behind catalogAcquirer.
 resourceCatalogPath: (arguments) => {
     parse(arguments)[1]
+}
+
+// D151 B': zero or one exact invocation-local --file FILE locator token.
+// Host/controller path interpretation is deliberately outside this module.
+filePath: (arguments) => {
+    parse(arguments)[2]
 }
