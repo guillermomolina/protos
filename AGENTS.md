@@ -3747,6 +3747,24 @@ This placement rule does not require a global semantic-ownership registry,
 ownership manifest, or publication guard. The owning change and its tests provide
 the evidence for why coverage belongs in one lane or is intentionally split.
 
+### Protos test assertion authoring
+<!-- LIB016 NEW-PROTOS-TEST-ASSERTIONS -->
+
+New Protos tests MUST NOT define local assertion helpers that duplicate the
+semantics of the ratified `std:test/Assertions` operations. When a new test needs
+assertion-style Boolean failure, use `Assertions.require(condition)`. When it
+needs to assert that a body signals an Error matching a prototype, use
+`Assertions.signals(errorPrototype, body)`.
+
+This rule does not require every Protos test to import `std:test/Assertions`.
+Tests whose expected outcome is naturally expressed by the program's final value
+or by the corpus manifest/TestPlan expectation may continue to use those forms.
+Do not wrap them in assertions merely for stylistic uniformity.
+
+Existing Protos tests that predate this rule are not required to migrate
+opportunistically during unrelated work. Any repository-wide reconciliation of
+those tests must be handled as separately tracked work.
+
 Legacy Java/JUnit tests that predate this rule are not required to migrate
 opportunistically during unrelated work. Their bounded repository-wide
 reconciliation is owned separately by TEST002.\n\n## Guest execution backend and Java execution tests
