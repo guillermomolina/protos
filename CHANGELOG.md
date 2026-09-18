@@ -1,3 +1,12 @@
+## 0.3.38-SNAPSHOT
+
+- Fix `BUG007 — PERF006 canonical coverage still expects removed args
+  intrinsic` (GitHub #586). Remove the stale PERF006 B6A1 bytecode coverage
+  that still expected bare `args` to expose the caller-supplied argument vector
+  after I042/D145 removed `args` from the intrinsic model. Preserve all other
+  PERF006 B6A1 canonical/bytecode coverage and keep bare `args` as an ordinary
+  identifier. Implementation version becomes `0.3.38-SNAPSHOT`.
+
 ## 0.3.37-SNAPSHOT
 
 - Implement `I042 — Remove Closure args intrinsic` under ratified D145

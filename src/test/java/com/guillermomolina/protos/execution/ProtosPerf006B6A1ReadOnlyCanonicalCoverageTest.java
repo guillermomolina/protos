@@ -25,7 +25,6 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
-import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -38,7 +37,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.graalvm.polyglot.Context;
@@ -106,37 +104,6 @@ final class ProtosPerf006B6A1ReadOnlyCanonicalCoverageTest {
         System.out.println("PERF006_B6A1_MEMBER_READ_BYTECODE=PASS");
         System.out.println("PERF006_B6A1_IDENTITY_BYTECODE=PASS");
         System.out.println("PERF006_B6A1_INTRINSIC_THIS_CONTEXT_BYTECODE=PASS");
-    }
-
-    @Test
-    void argsIntrinsicUsesInvocationArgumentsOnBytecodeClosureRoot() throws Exception {
-        try (LanguageScope scope = languageScope()) {
-            ProtosPrelude prelude = core();
-            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-            ProtosActivation module = activation(prelude, domain);
-            ProtosObjectValue token = new ProtosObjectValue(ProtosObjectValue.rootObject());
-
-            module.context().createLocalSlot("token", token);
-            module.context().createLocalSlot(
-                    "entry",
-                    sourceClosure(
-                            scope.language(),
-                            module,
-                            "(x) => args",
-                            "b6a1-args-closure.protos"));
-
-            Object result =
-                    executeBytecode(
-                            scope.language(),
-                            module,
-                            "entry(token)",
-                            "b6a1-args-top.protos");
-            ProtosArrayValue arguments = assertInstanceOf(ProtosArrayValue.class, result);
-            assertEquals(BigInteger.ONE, arguments.indexedSize());
-            assertSame(token, arguments.indexedAt(BigInteger.ZERO));
-        }
-
-        System.out.println("PERF006_B6A1_INTRINSIC_ARGS=PASS");
     }
 
     @Test
