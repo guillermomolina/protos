@@ -3440,6 +3440,27 @@ Tests should validate Protos semantics rather than implementation accidents.
 
 Prefer small semantic tests that demonstrate observable language behavior.
 
+Routine developer and CI checks must use workloads proportional to the
+correctness property they prove.
+
+Do not retain benchmark-, stress-, profiling-, or diagnostic-scale workloads in
+ordinary tests merely because those workloads were useful when discovering a
+defect. When correctness depends on scale, retain the smallest evidence-backed
+workload that still distinguishes the prohibited implementation shape, and route
+larger diagnostic workloads to an explicit benchmark, stress, profiling, or
+other purpose-specific validation surface.
+
+Do not reduce semantic coverage, replace required integration evidence with
+mocks, skip failures, or introduce production fast paths solely to reduce test
+cost.
+
+Aggregate validation commands may legitimately be expensive because they compose
+many checks; optimize or reclassify unnecessarily expensive constituent checks
+rather than weakening the aggregate validation contract.
+
+Work items may establish stricter quantitative budgets for particular validation
+classes.
+
 When fixing a semantic bug, add or update a focused regression test when tests are part of the requested work.
 
 Where useful, test the same semantic rule through multiple execution paths, especially when Truffle specialization or optimized nodes could diverge from generic behavior.
