@@ -50,6 +50,53 @@ final class TokenCursor {
                 && tokens.get(index + 1).token().type() == type;
     }
 
+    boolean multipleSlotCreationTargetFollowedByColon() {
+        if (!at(TokenType.LPAREN)) {
+            return false;
+        }
+
+        int offset = skipNewlines(index + 1);
+        if (!typeAt(offset, TokenType.IDENTIFIER)) {
+            return false;
+        }
+
+        int targetCount = 1;
+        offset++;
+
+        while (typeAt(offset, TokenType.COMMA)) {
+            offset++;
+            offset = skipNewlines(offset);
+
+            if (!typeAt(offset, TokenType.IDENTIFIER)) {
+                return false;
+            }
+
+            targetCount++;
+            offset++;
+        }
+
+        offset = skipNewlines(offset);
+        if (targetCount < 2 || !typeAt(offset, TokenType.RPAREN)) {
+            return false;
+        }
+
+        offset++;
+        return typeAt(offset, TokenType.COLON);
+    }
+
+    private int skipNewlines(int offset) {
+        while (typeAt(offset, TokenType.NEWLINE)) {
+            offset++;
+        }
+        return offset;
+    }
+
+    private boolean typeAt(int offset, TokenType type) {
+        return offset >= 0
+                && offset < tokens.size()
+                && tokens.get(offset).token().type() == type;
+    }
+
     boolean matchingParenthesisFollowedBy(TokenType type) {
         if (!at(TokenType.LPAREN)) {
             return false;

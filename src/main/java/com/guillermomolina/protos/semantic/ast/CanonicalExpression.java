@@ -20,6 +20,6 @@ package com.guillermomolina.protos.semantic.ast;
 import com.guillermomolina.protos.source.SourceSpan;
 
 public sealed interface CanonicalExpression
-        permits CanonicalAssign, CanonicalCall, CanonicalClosure, CanonicalCompose, CanonicalCreate, CanonicalDerivedInequality, CanonicalIdentity, CanonicalNotIdentity, CanonicalIndexedAssign, CanonicalIntrinsic, CanonicalLiteral, CanonicalLookup, CanonicalMapConstruction, CanonicalMember, CanonicalObject, CanonicalReturn, CanonicalSend, CanonicalSequence, CanonicalSpread, CanonicalSuperSend {
+        permits CanonicalAssign, CanonicalCall, CanonicalClosure, CanonicalCompose, CanonicalCreate, CanonicalMultipleCreate, CanonicalDerivedInequality, CanonicalIdentity, CanonicalNotIdentity, CanonicalIndexedAssign, CanonicalIntrinsic, CanonicalLiteral, CanonicalLookup, CanonicalMapConstruction, CanonicalMember, CanonicalObject, CanonicalReturn, CanonicalSend, CanonicalSequence, CanonicalSpread, CanonicalSuperSend {
     SourceSpan span();
 }

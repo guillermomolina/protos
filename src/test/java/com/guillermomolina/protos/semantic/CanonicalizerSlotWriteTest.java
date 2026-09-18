@@ -27,6 +27,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalMultipleCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import org.junit.jupiter.api.Test;
 
@@ -54,6 +55,22 @@ class CanonicalizerSlotWriteTest {
         assertEquals(
                 "object",
                 assertInstanceOf(CanonicalLookup.class, create.target().orElseThrow()).name());
+    }
+
+    @Test
+    void lowersMultipleSlotCreationToDedicatedCanonicalOperation() {
+        CanonicalMultipleCreate create =
+                assertInstanceOf(
+                        CanonicalMultipleCreate.class,
+                        canonicalizeOnly("(first, second, third): values"));
+
+        assertEquals(3, create.names().size());
+        assertEquals("first", create.names().get(0));
+        assertEquals("second", create.names().get(1));
+        assertEquals("third", create.names().get(2));
+        assertEquals(
+                "values",
+                assertInstanceOf(CanonicalLookup.class, create.value()).name());
     }
 
     @Test

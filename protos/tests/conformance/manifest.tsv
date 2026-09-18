@@ -888,3 +888,4 @@ library/collections/range-bounds-evaluated-once.protos	boolean	true
 library/collections/range-unbounded-integer-endpoints.protos	boolean	true
 library/collections/range-nonlocal-return-propagation.protos	boolean	true
 library/collections/range-callback-argument-contract.protos	boolean	true
+control/multiple-slot-creation.protos	boolean	true

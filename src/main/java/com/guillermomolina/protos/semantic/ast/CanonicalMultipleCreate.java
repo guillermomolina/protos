@@ -18,30 +18,29 @@
 package com.guillermomolina.protos.semantic.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
-public record CanonicalObject(
-        Optional<CanonicalExpression> parent,
-        CanonicalSequence body,
+public record CanonicalMultipleCreate(
+        List<String> names,
+        CanonicalExpression value,
         SourceSpan span)
         implements CanonicalExpression {
-    public CanonicalObject {
-        Objects.requireNonNull(parent, "parent");
-        parent = parent.map(Objects::requireNonNull);
-        Objects.requireNonNull(body, "body");
-        Objects.requireNonNull(span, "span");
-    }
-
-    public java.util.Set<String> reservedLocalSlotNames() {
-        java.util.Set<String> names = new java.util.LinkedHashSet<>();
-        for (CanonicalExpression expression : body.expressions()) {
-            if (expression instanceof CanonicalCreate create && create.target().isEmpty()) {
-                names.add(create.name());
-            } else if (expression instanceof CanonicalMultipleCreate create) {
-                names.addAll(create.names());
+    public CanonicalMultipleCreate {
+        Objects.requireNonNull(names, "names");
+        names = List.copyOf(names);
+        if (names.size() < 2) {
+            throw new IllegalArgumentException(
+                    "multiple slot creation requires at least two names");
+        }
+        for (String name : names) {
+            Objects.requireNonNull(name, "name");
+            if (name.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "multiple slot-creation name must not be empty");
             }
         }
-        return java.util.Collections.unmodifiableSet(names);
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(span, "span");
     }
 }

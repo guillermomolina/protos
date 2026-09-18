@@ -316,6 +316,52 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class MultipleCreateLocalSlots {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                List<String> names,
+                Object source) {
+            if (!(source instanceof ProtosArrayValue array)) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+
+            int required = names.size();
+            if (array.indexedSize().compareTo(BigInteger.valueOf(required)) < 0) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+
+            /*
+             * D143 requires the complete fixed prefix to be shallow-observed
+             * before the first target slot is created. Do not use at,
+             * iteration, indexedSnapshot(), or any guest-visible protocol.
+             */
+            List<Object> observed = new ArrayList<>(required);
+            for (int index = 0; index < required; index++) {
+                observed.add(array.indexedAt(BigInteger.valueOf(index)));
+            }
+
+            ProtosObjectValue target = activation.context();
+            for (int index = 0; index < required; index++) {
+                try {
+                    target.createLocalSlot(names.get(index), observed.get(index));
+                } catch (IllegalStateException invalidMutation) {
+                    /*
+                     * Deliberately no rollback: D143 applies ordinary ':'
+                     * creation semantics left-to-right after extraction.
+                     */
+                    throw new ProtosSignalException(
+                            ProtosCoreErrors.newError(activation));
+                }
+            }
+
+            return source;
+        }
+    }
+
+    @Operation
     public static final class AssignLocalSlot {
         @Specialization
         public static Object perform(

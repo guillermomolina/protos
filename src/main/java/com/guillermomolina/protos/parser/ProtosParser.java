@@ -24,6 +24,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
+import com.guillermomolina.protos.parser.ast.SurfaceMultipleSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
@@ -98,11 +99,46 @@ public final class ProtosParser {
                     new SourceSpan(caret.span().startOffset(), expression.span().endOffset()));
         }
 
+        if (cursor.multipleSlotCreationTargetFollowedByColon()) {
+            return parseMultipleSlotCreation();
+        }
+
         SurfaceExpression expression = parseBinaryExpressionFoundation();
         return parseMutationSuffixFoundation(expression);
     }
 
-        private SurfaceExpression parseBinaryExpressionFoundation() {
+    private SurfaceExpression parseMultipleSlotCreation() {
+        TokenOccurrence open = cursor.consume(TokenType.LPAREN, "'('");
+        consumeNewlines();
+
+        List<SurfaceName> targets = new ArrayList<>();
+        targets.add(parseMultipleSlotCreationTargetName());
+
+        while (cursor.at(TokenType.COMMA)) {
+            cursor.advance();
+            consumeNewlines();
+            targets.add(parseMultipleSlotCreationTargetName());
+        }
+
+        consumeNewlines();
+        cursor.consume(TokenType.RPAREN, "')'");
+        cursor.consume(TokenType.COLON, "':' after multiple slot-creation target");
+        consumeContinuationNewlines();
+
+        SurfaceExpression value = parseExpressionFoundation();
+        return new SurfaceMultipleSlotCreation(
+                targets,
+                value,
+                new SourceSpan(open.span().startOffset(), value.span().endOffset()));
+    }
+
+    private SurfaceName parseMultipleSlotCreationTargetName() {
+        TokenOccurrence name =
+                cursor.consume(TokenType.IDENTIFIER, "a multiple slot-creation target name");
+        return new SurfaceName(name.token().lexeme(), name.span());
+    }
+
+    private SurfaceExpression parseBinaryExpressionFoundation() {
         return parseLogicalOrFoundation();
     }
 

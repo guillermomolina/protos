@@ -20,6 +20,7 @@ package com.guillermomolina.protos.semantic;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceArrayConstruction;
 import com.guillermomolina.protos.parser.ast.SurfaceMapConstruction;
+import com.guillermomolina.protos.parser.ast.SurfaceMultipleSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
@@ -44,6 +45,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
+import com.guillermomolina.protos.semantic.ast.CanonicalMultipleCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalDerivedInequality;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
@@ -88,6 +90,7 @@ public final class Canonicalizer {
             case SurfaceSequence sequence ->
                     new CanonicalSequence(canonicalizeAll(sequence.expressions()), sequence.span());
             case SurfaceSlotCreation creation -> lowerSlotCreation(creation);
+            case SurfaceMultipleSlotCreation creation -> lowerMultipleSlotCreation(creation);
             case SurfaceSuperSend superSend -> lowerSuperSend(superSend);
             default ->
                     throw new IllegalArgumentException(
@@ -212,6 +215,16 @@ public final class Canonicalizer {
         return new CanonicalCreate(
                 target.receiver(),
                 target.name(),
+                canonicalize(creation.value()),
+                creation.span());
+    }
+
+    private CanonicalExpression lowerMultipleSlotCreation(
+            SurfaceMultipleSlotCreation creation) {
+        return new CanonicalMultipleCreate(
+                creation.targets().stream()
+                        .map(SurfaceName::name)
+                        .toList(),
                 canonicalize(creation.value()),
                 creation.span());
     }

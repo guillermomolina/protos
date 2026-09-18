@@ -22,9 +22,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
+import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
+import com.guillermomolina.protos.parser.ast.SurfaceMultipleSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
@@ -42,6 +44,42 @@ class ProtosParserSlotAssignmentTest {
                 assertInstanceOf(SurfaceSlotCreation.class, only("object[index].name: value"));
         SurfaceMember target = assertInstanceOf(SurfaceMember.class, member.target());
         assertEquals("name", target.name());
+    }
+
+    @Test
+    void parsesMultipleBareSlotCreationWithoutGeneralizingCommaExpressions() {
+        SurfaceMultipleSlotCreation creation =
+                assertInstanceOf(
+                        SurfaceMultipleSlotCreation.class,
+                        only("(first, second, third): values"));
+
+        assertEquals(3, creation.targets().size());
+        assertEquals("first", creation.targets().get(0).name());
+        assertEquals("second", creation.targets().get(1).name());
+        assertEquals("third", creation.targets().get(2).name());
+        assertName("values", creation.value());
+
+        assertThrows(ParseError.class, () -> only("(first, second)"));
+        assertThrows(ParseError.class, () -> only("(first, second) = values"));
+        assertThrows(ParseError.class, () -> only("(first): values"));
+        assertThrows(ParseError.class, () -> only("(first,): values"));
+        assertThrows(ParseError.class, () -> only("(first, object.second): values"));
+
+        assertInstanceOf(
+                SurfaceClosure.class,
+                only("(first, second) => first"));
+    }
+
+    @Test
+    void multipleSlotCreationAllowsParenthesizedLayoutAndRhsContinuation() {
+        SurfaceMultipleSlotCreation creation =
+                assertInstanceOf(
+                        SurfaceMultipleSlotCreation.class,
+                        only("(\nfirst,\nsecond\n):\nvalues"));
+
+        assertEquals("first", creation.targets().get(0).name());
+        assertEquals("second", creation.targets().get(1).name());
+        assertName("values", creation.value());
     }
 
     @Test

@@ -36,6 +36,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.parser.ast.SurfaceObjectItem;
 import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.parser.ast.SurfaceMultipleSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
@@ -100,6 +101,8 @@ public final class ProtosDocumentSymbols {
             case SurfaceNonLocalReturn nonLocalReturn ->
                     collect(nonLocalReturn.expression(), destination);
             case SurfaceSlotCreation creation -> collectCreation(creation, destination);
+            case SurfaceMultipleSlotCreation creation ->
+                    collectMultipleCreation(creation, destination);
             case SurfaceAssignment assignment -> {
                 // '=' is never a symbol, but its subexpressions can still contain ':' creations.
                 collect(assignment.target(), destination);
@@ -128,6 +131,22 @@ public final class ProtosDocumentSymbols {
         for (SurfaceArgument argument : arguments) {
             collect(argument.expression(), destination);
         }
+    }
+
+    private static void collectMultipleCreation(
+            SurfaceMultipleSlotCreation creation,
+            List<ProtosDocumentSymbol> destination) {
+        for (SurfaceName target : creation.targets()) {
+            destination.add(new ProtosDocumentSymbol(
+                    target.name(),
+                    target.span(),
+                    target.span(),
+                    List.of()));
+        }
+
+        // The source expression is shared by every target; traverse it once
+        // rather than manufacturing duplicate symbol subtrees.
+        collect(creation.value(), destination);
     }
 
     private static void collectCreation(

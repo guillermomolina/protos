@@ -34,6 +34,7 @@ public sealed interface SurfaceExpression
                 SurfaceBinary,
                 SurfaceNonLocalReturn,
                 SurfaceSlotCreation,
+                SurfaceMultipleSlotCreation,
                 SurfaceAssignment,
                 SurfaceSuperSend,
                 SurfaceObject,

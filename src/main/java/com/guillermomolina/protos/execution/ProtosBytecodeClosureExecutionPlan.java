@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
+import com.guillermomolina.protos.semantic.ast.CanonicalMultipleCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalDerivedInequality;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
@@ -110,6 +111,7 @@ final class ProtosBytecodeClosureExecutionPlan {
                         && !(defaultExpression instanceof CanonicalSend)
                         && !(defaultExpression instanceof CanonicalReturn)
                         && !(defaultExpression instanceof CanonicalCreate)
+                        && !(defaultExpression instanceof CanonicalMultipleCreate)
                         && !(defaultExpression instanceof CanonicalAssign)
                         && !(defaultExpression instanceof CanonicalIndexedAssign)
                         && !(defaultExpression instanceof CanonicalSuperSend)) {

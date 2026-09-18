@@ -14,34 +14,25 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-
-package com.guillermomolina.protos.semantic.ast;
+package com.guillermomolina.protos.parser.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
-public record CanonicalObject(
-        Optional<CanonicalExpression> parent,
-        CanonicalSequence body,
+public record SurfaceMultipleSlotCreation(
+        List<SurfaceName> targets,
+        SurfaceExpression value,
         SourceSpan span)
-        implements CanonicalExpression {
-    public CanonicalObject {
-        Objects.requireNonNull(parent, "parent");
-        parent = parent.map(Objects::requireNonNull);
-        Objects.requireNonNull(body, "body");
-        Objects.requireNonNull(span, "span");
-    }
-
-    public java.util.Set<String> reservedLocalSlotNames() {
-        java.util.Set<String> names = new java.util.LinkedHashSet<>();
-        for (CanonicalExpression expression : body.expressions()) {
-            if (expression instanceof CanonicalCreate create && create.target().isEmpty()) {
-                names.add(create.name());
-            } else if (expression instanceof CanonicalMultipleCreate create) {
-                names.addAll(create.names());
-            }
+        implements SurfaceExpression {
+    public SurfaceMultipleSlotCreation {
+        Objects.requireNonNull(targets, "targets");
+        targets = List.copyOf(targets);
+        if (targets.size() < 2) {
+            throw new IllegalArgumentException(
+                    "multiple slot creation requires at least two target names");
         }
-        return java.util.Collections.unmodifiableSet(names);
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(span, "span");
     }
 }

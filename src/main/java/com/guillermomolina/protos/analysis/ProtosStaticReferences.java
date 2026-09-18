@@ -36,6 +36,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.parser.ast.SurfaceObjectItem;
 import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.parser.ast.SurfaceMultipleSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
@@ -205,6 +206,10 @@ final class ProtosStaticReferences {
                         collect(nonLocalReturn.expression());
                 case SurfaceSlotCreation creation -> {
                     collect(creation.target());
+                    collect(creation.value());
+                }
+                case SurfaceMultipleSlotCreation creation -> {
+                    creation.targets().forEach(this::collect);
                     collect(creation.value());
                 }
                 case SurfaceAssignment assignment -> {

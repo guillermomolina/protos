@@ -27,6 +27,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
+import com.guillermomolina.protos.semantic.ast.CanonicalMultipleCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalDerivedInequality;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
@@ -340,6 +341,10 @@ final class CanonicalToBytecodeLowerer {
             validateSupportedDefaultExpression(create.value());
             return;
         }
+        if (expression instanceof CanonicalMultipleCreate create) {
+            validateSupportedDefaultExpression(create.value());
+            return;
+        }
         if (expression instanceof CanonicalAssign assign) {
             assign.target().ifPresent(this::validateSupportedDefaultExpression);
             validateSupportedDefaultExpression(assign.value());
@@ -545,6 +550,7 @@ final class CanonicalToBytecodeLowerer {
                     || requiresComposedInvocation(identity.right());
         }
         if (expression instanceof CanonicalCreate
+                || expression instanceof CanonicalMultipleCreate
                 || expression instanceof CanonicalAssign
                 || expression instanceof CanonicalIndexedAssign) {
             return true;
@@ -809,6 +815,11 @@ final class CanonicalToBytecodeLowerer {
                     builder, create, target, preparedCall, childResult, resumeValue);
             return;
         }
+        if (expression instanceof CanonicalMultipleCreate create) {
+            emitBodyMultipleCreate(
+                    builder, create, target, preparedCall, childResult, resumeValue);
+            return;
+        }
         if (expression instanceof CanonicalAssign assign) {
             emitBodyAssign(
                     builder, assign, target, preparedCall, childResult, resumeValue);
@@ -952,6 +963,11 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalCreate create) {
             emitDefaultCreate(
+                    builder, create, target, preparedCall, childResult, resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalMultipleCreate create) {
+            emitDefaultMultipleCreate(
                     builder, create, target, preparedCall, childResult, resumeValue);
             return;
         }
@@ -1543,6 +1559,32 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
+    private void emitBodyMultipleCreate(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMultipleCreate create,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal source = builder.createLocal("multipleCreateSource", null);
+
+        emitBodyExpressionToLocal(
+                builder,
+                create.value(),
+                source,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(result);
+        builder.beginMultipleCreateLocalSlots();
+        builder.emitLoadArgument(0);
+        builder.emitLoadConstant(create.names());
+        builder.emitLoadLocal(source);
+        builder.endMultipleCreateLocalSlots();
+        builder.endStoreLocal();
+    }
+
     private void emitBodyAssign(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
@@ -1695,6 +1737,33 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadConstant(create.name());
         builder.emitLoadLocal(value);
         builder.endCreateLocalSlot();
+        builder.endStoreLocal();
+    }
+
+    private void emitDefaultMultipleCreate(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalMultipleCreate create,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        BytecodeLocal source =
+                builder.createLocal("defaultMultipleCreateSource", null);
+
+        emitDefaultExpressionToLocal(
+                builder,
+                create.value(),
+                source,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginStoreLocal(result);
+        builder.beginMultipleCreateLocalSlots();
+        builder.emitLoadArgument(0);
+        builder.emitLoadConstant(create.names());
+        builder.emitLoadLocal(source);
+        builder.endMultipleCreateLocalSlots();
         builder.endStoreLocal();
     }
 
@@ -3893,6 +3962,10 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalCreate create) {
             create.target().ifPresent(this::validateSupportedExpression);
+            validateSupportedExpression(create.value());
+            return;
+        }
+        if (expression instanceof CanonicalMultipleCreate create) {
             validateSupportedExpression(create.value());
             return;
         }

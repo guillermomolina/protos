@@ -1,3 +1,20 @@
+## 0.3.48-SNAPSHOT
+
+- Implement `I050 — Implement D143 multiple-slot creation` (GitHub #599)
+  under ratified D143 and specification revision `0.1.422`. Add dedicated
+  `(a, b): source` multiple-slot creation with one RHS evaluation, strict
+  receiver-owned standard Array indexed-state validation, complete short-source
+  preflight, ascending shallow observation of exactly the first N indexed
+  references before mutation, ignored extra elements, and ordinary bare-slot
+  creation left-to-right with deliberate no-rollback behavior. Return the exact
+  RHS object on success, preserve closure and object-body creation contexts,
+  reserve every target name against object composition, bypass user-visible
+  `at`/iteration/deconstruction protocols, and reject non-Array, inherited-only
+  Array lookalike, and short sources before creating any target slot. Add
+  focused parser/canonicalization coverage, Protos conformance coverage, and
+  Java runtime-mechanics regressions for preflight and partial effects.
+  Implementation version becomes `0.3.48-SNAPSHOT`.
+
 ## 0.3.47-SNAPSHOT
 
 - Implement `TOOL008 — Test Tool exact file-backed focal selection` (GitHub
