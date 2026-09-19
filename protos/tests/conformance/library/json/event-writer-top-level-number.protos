@@ -14,17 +14,29 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-output: ""
-writer: JSON.eventWriter((chunk) => { output = output + chunk })
-writer.feed({
-    kind: "number"
-    value: {
-        coefficient: 42
-        exponent: -7
-    }
-})
-writer.finish()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-output == "42e-7"
+tests: Array(
+    Test("event writer top level number", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
+
+            output: ""
+            writer: JSON.eventWriter((chunk) => { output = output + chunk })
+            writer.feed({
+                kind: "number"
+                value: {
+                    coefficient: 42
+                    exponent: -7
+                }
+            })
+            writer.finish()
+
+            output == "42e-7"
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

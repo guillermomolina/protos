@@ -14,8 +14,21 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-parser: JSON.eventParser((event) => { null })
-parser.feed("{\"a\":1,\"")
-parser.feed("a\":2}")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("event parser duplicate name error", () => {
+        JSON: import("std:json/JSON")
+
+        parser: JSON.eventParser((event) => { null })
+
+        parser.feed("{\"a\":1,\"")
+
+        Assertions.signals(Error, () => {
+            parser.feed("a\":2}")
+        })
+    })
+)
+tests.freeze()

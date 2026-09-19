@@ -15,5 +15,16 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
-JSON.number(1, 0.0)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("constructor number exponent float error", () => {
+        JSON: import("std:json/JSON")
+
+        Assertions.signals(Error, () => {
+            JSON.number(1, 0.0)
+        })
+    })
+)
+tests.freeze()

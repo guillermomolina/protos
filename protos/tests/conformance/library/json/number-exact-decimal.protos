@@ -15,24 +15,35 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-a: JSON.number(123, -2)
-b: JSON.number(10, -1)
-c: JSON.number(1, 0)
-d: JSON.number(0, 1000000)
+tests: Array(
+    Test("number exact decimal", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-a.value.probe: 9
+            a: JSON.number(123, -2)
+            b: JSON.number(10, -1)
+            c: JSON.number(1, 0)
+            d: JSON.number(0, 1000000)
 
-ok: true
-(a.kind == "number").ifFalse(() => { ok = false })
-(a.value.coefficient == 123).ifFalse(() => { ok = false })
-(a.value.exponent == -2).ifFalse(() => { ok = false })
-(b.value.coefficient == 10).ifFalse(() => { ok = false })
-(b.value.exponent == -1).ifFalse(() => { ok = false })
-(c.value.coefficient == 1).ifFalse(() => { ok = false })
-(c.value.exponent == 0).ifFalse(() => { ok = false })
-(d.value.coefficient == 0).ifFalse(() => { ok = false })
-(d.value.exponent == 1000000).ifFalse(() => { ok = false })
-(a.value.probe == 9).ifFalse(() => { ok = false })
-ok
+            a.value.probe: 9
+
+            ok: true
+            (a.kind == "number").ifFalse(() => { ok = false })
+            (a.value.coefficient == 123).ifFalse(() => { ok = false })
+            (a.value.exponent == -2).ifFalse(() => { ok = false })
+            (b.value.coefficient == 10).ifFalse(() => { ok = false })
+            (b.value.exponent == -1).ifFalse(() => { ok = false })
+            (c.value.coefficient == 1).ifFalse(() => { ok = false })
+            (c.value.exponent == 0).ifFalse(() => { ok = false })
+            (d.value.coefficient == 0).ifFalse(() => { ok = false })
+            (d.value.exponent == 1000000).ifFalse(() => { ok = false })
+            (a.value.probe == 9).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

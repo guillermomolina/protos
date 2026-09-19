@@ -15,5 +15,16 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
-JSON.parse(1)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("parse non string input error", () => {
+        JSON: import("std:json/JSON")
+
+        Assertions.signals(Error, () => {
+            JSON.parse(1)
+        })
+    })
+)
+tests.freeze()

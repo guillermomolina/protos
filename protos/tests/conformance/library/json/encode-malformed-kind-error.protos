@@ -14,9 +14,20 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-JSON.encode({
-    kind: "wat"
-    value: null
-})
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("encode malformed kind error", () => {
+        JSON: import("std:json/JSON")
+
+        Assertions.signals(Error, () => {
+            JSON.encode({
+                kind: "wat"
+                value: null
+            })
+        })
+    })
+)
+tests.freeze()

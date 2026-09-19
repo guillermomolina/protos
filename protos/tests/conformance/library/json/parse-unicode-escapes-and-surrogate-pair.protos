@@ -15,11 +15,22 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ascii: JSON.parse("\"\\u0041\"")
-music: JSON.parse("\"\\uD834\\uDD1E\"")
-emoji: JSON.parse("\"😀\"")
+tests: Array(
+    Test("parse unicode escapes and surrogate pair", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-((ascii.value == "A") && (music.value == "𝄞")) &&
-    (emoji.value == "😀")
+            ascii: JSON.parse("\"\\u0041\"")
+            music: JSON.parse("\"\\uD834\\uDD1E\"")
+            emoji: JSON.parse("\"😀\"")
+
+            ((ascii.value == "A") && (music.value == "𝄞")) &&
+                (emoji.value == "😀")
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

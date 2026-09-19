@@ -14,33 +14,45 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-output: ""
-writer: JSON.eventWriter((chunk) => {
-    output = output + chunk
-})
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-event: (kind, value) => {
-    {
-        kind: kind
-        value: value
-    }
-}
+tests: Array(
+    Test("event writer nested output", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-writer.feed(event("objectStart", null))
-writer.feed(event("name", "a"))
-writer.feed(event("arrayStart", null))
-writer.feed(event("boolean", true))
-writer.feed(event("string", "x\n\u{1F600}"))
-writer.feed(event("number", {
-    coefficient: -1230
-    exponent: -4
-}))
-writer.feed(event("arrayEnd", null))
-writer.feed(event("name", "b"))
-writer.feed(event("null", null))
-writer.feed(event("objectEnd", null))
-writer.finish()
+            output: ""
+            writer: JSON.eventWriter((chunk) => {
+                output = output + chunk
+            })
 
-output == "{\"a\":[true,\"x\\u000a\u{1F600}\",-1230e-4],\"b\":null}"
+            event: (kind, value) => {
+                {
+                    kind: kind
+                    value: value
+                }
+            }
+
+            writer.feed(event("objectStart", null))
+            writer.feed(event("name", "a"))
+            writer.feed(event("arrayStart", null))
+            writer.feed(event("boolean", true))
+            writer.feed(event("string", "x\n\u{1F600}"))
+            writer.feed(event("number", {
+                coefficient: -1230
+                exponent: -4
+            }))
+            writer.feed(event("arrayEnd", null))
+            writer.feed(event("name", "b"))
+            writer.feed(event("null", null))
+            writer.feed(event("objectEnd", null))
+            writer.finish()
+
+            output == "{\"a\":[true,\"x\\u000a\u{1F600}\",-1230e-4],\"b\":null}"
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

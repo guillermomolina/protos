@@ -14,22 +14,34 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-events: Map()
-count: 0
-parser: JSON.eventParser((event) => {
-    events[count] = event
-    count = count + 1
-})
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-parser.feed("-1")
-parser.feed("2.5e")
-parser.feed("+3")
-parser.finish()
+tests: Array(
+    Test("event parser top level number finish", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-event: events[0]
-(count == 1) &&
-    (event.kind == "number") &&
-    (event.value.coefficient == -125) &&
-    (event.value.exponent == 2)
+            events: Map()
+            count: 0
+            parser: JSON.eventParser((event) => {
+                events[count] = event
+                count = count + 1
+            })
+
+            parser.feed("-1")
+            parser.feed("2.5e")
+            parser.feed("+3")
+            parser.finish()
+
+            event: events[0]
+            (count == 1) &&
+                (event.kind == "number") &&
+                (event.value.coefficient == -125) &&
+                (event.value.exponent == 2)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

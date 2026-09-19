@@ -14,22 +14,34 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-output: ""
-writer: JSON.eventWriter((chunk) => {
-    output = output + chunk
-})
-parser: JSON.eventParser((event) => {
-    writer.feed(event)
-})
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-parser.feed(" {\"z\": [1, \"A\\uD83")
-parser.feed("D\\uDE00\", false], \"n\": 12.30e-2} ")
-parser.finish()
-writer.finish()
+tests: Array(
+    Test("event writer parser pipeline", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-node: JSON.parse(output)
-(node.value["z"].value[1].value == "A\u{1F600}") &&
-    (node.value["n"].value.coefficient == 1230) &&
-    (node.value["n"].value.exponent == -4)
+            output: ""
+            writer: JSON.eventWriter((chunk) => {
+                output = output + chunk
+            })
+            parser: JSON.eventParser((event) => {
+                writer.feed(event)
+            })
+
+            parser.feed(" {\"z\": [1, \"A\\uD83")
+            parser.feed("D\\uDE00\", false], \"n\": 12.30e-2} ")
+            parser.finish()
+            writer.finish()
+
+            node: JSON.parse(output)
+            (node.value["z"].value[1].value == "A\u{1F600}") &&
+                (node.value["n"].value.coefficient == 1230) &&
+                (node.value["n"].value.exponent == -4)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

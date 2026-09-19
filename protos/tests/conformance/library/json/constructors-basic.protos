@@ -15,29 +15,40 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-nullA: JSON.nullValue()
-nullB: JSON.nullValue()
-trueNode: JSON.boolean(true)
-falseNode: JSON.boolean(false)
-stringNode: JSON.string("Ada")
+tests: Array(
+    Test("constructors basic", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-nullA.probe: 1
-trueNode.probe: 2
-stringNode.probe: 3
+            nullA: JSON.nullValue()
+            nullB: JSON.nullValue()
+            trueNode: JSON.boolean(true)
+            falseNode: JSON.boolean(false)
+            stringNode: JSON.string("Ada")
 
-ok: true
-(nullA.kind == "null").ifFalse(() => { ok = false })
-(nullA.value === null).ifFalse(() => { ok = false })
-(nullA !== nullB).ifFalse(() => { ok = false })
-(trueNode.kind == "boolean").ifFalse(() => { ok = false })
-(trueNode.value === true).ifFalse(() => { ok = false })
-(falseNode.kind == "boolean").ifFalse(() => { ok = false })
-(falseNode.value === false).ifFalse(() => { ok = false })
-(stringNode.kind == "string").ifFalse(() => { ok = false })
-(stringNode.value == "Ada").ifFalse(() => { ok = false })
-(nullA.probe == 1).ifFalse(() => { ok = false })
-(trueNode.probe == 2).ifFalse(() => { ok = false })
-(stringNode.probe == 3).ifFalse(() => { ok = false })
-ok
+            nullA.probe: 1
+            trueNode.probe: 2
+            stringNode.probe: 3
+
+            ok: true
+            (nullA.kind == "null").ifFalse(() => { ok = false })
+            (nullA.value === null).ifFalse(() => { ok = false })
+            (nullA !== nullB).ifFalse(() => { ok = false })
+            (trueNode.kind == "boolean").ifFalse(() => { ok = false })
+            (trueNode.value === true).ifFalse(() => { ok = false })
+            (falseNode.kind == "boolean").ifFalse(() => { ok = false })
+            (falseNode.value === false).ifFalse(() => { ok = false })
+            (stringNode.kind == "string").ifFalse(() => { ok = false })
+            (stringNode.value == "Ada").ifFalse(() => { ok = false })
+            (nullA.probe == 1).ifFalse(() => { ok = false })
+            (trueNode.probe == 2).ifFalse(() => { ok = false })
+            (stringNode.probe == 3).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

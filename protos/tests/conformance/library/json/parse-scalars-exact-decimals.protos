@@ -15,35 +15,46 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-nullNode: JSON.parse("null")
-trueNode: JSON.parse("true")
-falseNode: JSON.parse("false")
-stringNode: JSON.parse("\"hello\"")
-zero: JSON.parse("0")
-negativeZero: JSON.parse("-0")
-integer: JSON.parse("123")
-decimal: JSON.parse("-12.3400e+2")
-largeExponent: JSON.parse("1e400")
+tests: Array(
+    Test("parse scalars exact decimals", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-ok: true
-(nullNode.kind == "null").ifFalse(() => { ok = false })
-(nullNode.value === null).ifFalse(() => { ok = false })
-(trueNode.kind == "boolean").ifFalse(() => { ok = false })
-(trueNode.value === true).ifFalse(() => { ok = false })
-(falseNode.kind == "boolean").ifFalse(() => { ok = false })
-(falseNode.value === false).ifFalse(() => { ok = false })
-(stringNode.kind == "string").ifFalse(() => { ok = false })
-(stringNode.value == "hello").ifFalse(() => { ok = false })
-(zero.value.coefficient == 0).ifFalse(() => { ok = false })
-(zero.value.exponent == 0).ifFalse(() => { ok = false })
-(negativeZero.value.coefficient == 0).ifFalse(() => { ok = false })
-(negativeZero.value.exponent == 0).ifFalse(() => { ok = false })
-(integer.value.coefficient == 123).ifFalse(() => { ok = false })
-(integer.value.exponent == 0).ifFalse(() => { ok = false })
-(decimal.value.coefficient == -123400).ifFalse(() => { ok = false })
-(decimal.value.exponent == -2).ifFalse(() => { ok = false })
-(largeExponent.value.coefficient == 1).ifFalse(() => { ok = false })
-(largeExponent.value.exponent == 400).ifFalse(() => { ok = false })
-ok
+            nullNode: JSON.parse("null")
+            trueNode: JSON.parse("true")
+            falseNode: JSON.parse("false")
+            stringNode: JSON.parse("\"hello\"")
+            zero: JSON.parse("0")
+            negativeZero: JSON.parse("-0")
+            integer: JSON.parse("123")
+            decimal: JSON.parse("-12.3400e+2")
+            largeExponent: JSON.parse("1e400")
+
+            ok: true
+            (nullNode.kind == "null").ifFalse(() => { ok = false })
+            (nullNode.value === null).ifFalse(() => { ok = false })
+            (trueNode.kind == "boolean").ifFalse(() => { ok = false })
+            (trueNode.value === true).ifFalse(() => { ok = false })
+            (falseNode.kind == "boolean").ifFalse(() => { ok = false })
+            (falseNode.value === false).ifFalse(() => { ok = false })
+            (stringNode.kind == "string").ifFalse(() => { ok = false })
+            (stringNode.value == "hello").ifFalse(() => { ok = false })
+            (zero.value.coefficient == 0).ifFalse(() => { ok = false })
+            (zero.value.exponent == 0).ifFalse(() => { ok = false })
+            (negativeZero.value.coefficient == 0).ifFalse(() => { ok = false })
+            (negativeZero.value.exponent == 0).ifFalse(() => { ok = false })
+            (integer.value.coefficient == 123).ifFalse(() => { ok = false })
+            (integer.value.exponent == 0).ifFalse(() => { ok = false })
+            (decimal.value.coefficient == -123400).ifFalse(() => { ok = false })
+            (decimal.value.exponent == -2).ifFalse(() => { ok = false })
+            (largeExponent.value.coefficient == 1).ifFalse(() => { ok = false })
+            (largeExponent.value.exponent == 400).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

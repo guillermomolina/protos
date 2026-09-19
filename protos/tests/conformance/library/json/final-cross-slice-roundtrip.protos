@@ -15,31 +15,42 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-source: "{\"n\":12345678901234567890e-7,\"s\":\"line\\n\\uD83D\\uDE00\",\"a\":[true,null]}"
-tree: JSON.parse(source)
-encoded: JSON.encode(tree)
+tests: Array(
+    Test("final cross slice roundtrip", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-output: ""
-writer: JSON.eventWriter((chunk) => {
-    output = output + chunk
-})
+            source: "{\"n\":12345678901234567890e-7,\"s\":\"line\\n\\uD83D\\uDE00\",\"a\":[true,null]}"
+            tree: JSON.parse(source)
+            encoded: JSON.encode(tree)
 
-parser: JSON.eventParser((event) => {
-    writer.feed(event)
-})
+            output: ""
+            writer: JSON.eventWriter((chunk) => {
+                output = output + chunk
+            })
 
-parser.feed(encoded)
-parser.finish()
-writer.finish()
+            parser: JSON.eventParser((event) => {
+                writer.feed(event)
+            })
 
-roundTripped: JSON.parse(output)
-ok: true
-(output == encoded).ifFalse(() => { ok = false })
-(roundTripped.kind == "object").ifFalse(() => { ok = false })
-(roundTripped.value["n"].kind == "number").ifFalse(() => { ok = false })
-(roundTripped.value["n"].value.coefficient == 12345678901234567890).ifFalse(() => { ok = false })
-(roundTripped.value["n"].value.exponent == -7).ifFalse(() => { ok = false })
-(roundTripped.value["a"].value.size() == 2).ifFalse(() => { ok = false })
-ok
+            parser.feed(encoded)
+            parser.finish()
+            writer.finish()
+
+            roundTripped: JSON.parse(output)
+            ok: true
+            (output == encoded).ifFalse(() => { ok = false })
+            (roundTripped.kind == "object").ifFalse(() => { ok = false })
+            (roundTripped.value["n"].kind == "number").ifFalse(() => { ok = false })
+            (roundTripped.value["n"].value.coefficient == 12345678901234567890).ifFalse(() => { ok = false })
+            (roundTripped.value["n"].value.exponent == -7).ifFalse(() => { ok = false })
+            (roundTripped.value["a"].value.size() == 2).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

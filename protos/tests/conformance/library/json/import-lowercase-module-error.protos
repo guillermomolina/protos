@@ -15,4 +15,14 @@
  * the specific language governing rights and limitations under the License.
  */
 
-import("std:json/json")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("import lowercase module error", () => {
+        Assertions.signals(Error, () => {
+            import("std:json/json")
+        })
+    })
+)
+tests.freeze()

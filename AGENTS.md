@@ -3193,6 +3193,12 @@ The current M2 domain states are:
   keep test behavior inside Test bodies rather than executing it during module
   discovery, and use the temporary `suite-native` manifest marker while the M2
   bridge exists.
+- `protos/tests/conformance/library/json/` — **MIGRATION_IN_PROGRESS**.
+  The 80 synchronous production sources outside the `text-adapter-*` family are
+  suite-native during this bounded TOOL009 M2 cutover. The 9 `text-adapter-*`
+  sources retain their incumbent ownership until their Future/streaming outcome
+  contract is migrated explicitly. Do not infer ownership for a new JSON test
+  from neighboring files while this state remains active.
 - Core and central language-semantics conformance domains — including
   `core-surface/` and other tests whose primary subject is Core/runtime language
   semantics — are **NOT_ADMITTED_DURING_ACTIVE_AUD009_REFACTORING**. Preserve

@@ -14,17 +14,29 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-seen: null
-parser: JSON.eventParser((event) => {
-    seen = event
-})
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-parser.feed("")
-parser.feed("false")
-parser.feed("")
-parser.finish()
+tests: Array(
+    Test("event parser empty feed", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-(seen.kind == "boolean") &&
-    (seen.value === false)
+            seen: null
+            parser: JSON.eventParser((event) => {
+                seen = event
+            })
+
+            parser.feed("")
+            parser.feed("false")
+            parser.feed("")
+            parser.finish()
+
+            (seen.kind == "boolean") &&
+                (seen.value === false)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

@@ -14,11 +14,23 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-text: "quote:\" slash:\\ tab:\t newline:\n noncharacter:\u{FDD0} face:\u{1F600}"
-encoded: JSON.encode(JSON.string(text))
-decoded: JSON.parse(encoded)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-(decoded.kind == "string") &&
-    (decoded.value == text)
+tests: Array(
+    Test("encode string roundtrip escapes unicode", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
+
+            text: "quote:\" slash:\\ tab:\t newline:\n noncharacter:\u{FDD0} face:\u{1F600}"
+            encoded: JSON.encode(JSON.string(text))
+            decoded: JSON.parse(encoded)
+
+            (decoded.kind == "string") &&
+                (decoded.value == text)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

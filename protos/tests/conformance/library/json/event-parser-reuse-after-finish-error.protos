@@ -14,9 +14,23 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-parser: JSON.eventParser((event) => { null })
-parser.feed("null")
-parser.finish()
-parser.feed("")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("event parser reuse after finish error", () => {
+        JSON: import("std:json/JSON")
+
+        parser: JSON.eventParser((event) => { null })
+
+        parser.feed("null")
+
+        parser.finish()
+
+        Assertions.signals(Error, () => {
+            parser.feed("")
+        })
+    })
+)
+tests.freeze()

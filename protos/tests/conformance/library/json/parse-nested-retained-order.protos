@@ -15,31 +15,42 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-root: JSON.parse("{\"a\":[1,true,null,\"x\"],\"b\":{\"c\":2}}")
+tests: Array(
+    Test("parse nested retained order", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-seen: Map()
-index: 0
-root.value.each((key, node) => {
-    seen[index] = key
-    index = index + 1
-})
+            root: JSON.parse("{\"a\":[1,true,null,\"x\"],\"b\":{\"c\":2}}")
 
-arrayNode: root.value["a"]
-nested: root.value["b"]
+            seen: Map()
+            index: 0
+            root.value.each((key, node) => {
+                seen[index] = key
+                index = index + 1
+            })
 
-ok: true
-(root.kind == "object").ifFalse(() => { ok = false })
-(index == 2).ifFalse(() => { ok = false })
-(seen[0] == "a").ifFalse(() => { ok = false })
-(seen[1] == "b").ifFalse(() => { ok = false })
-(arrayNode.kind == "array").ifFalse(() => { ok = false })
-(arrayNode.value.size() == 4).ifFalse(() => { ok = false })
-(arrayNode.value[0].value.coefficient == 1).ifFalse(() => { ok = false })
-(arrayNode.value[1].value === true).ifFalse(() => { ok = false })
-(arrayNode.value[2].value === null).ifFalse(() => { ok = false })
-(arrayNode.value[3].value == "x").ifFalse(() => { ok = false })
-(nested.kind == "object").ifFalse(() => { ok = false })
-(nested.value["c"].value.coefficient == 2).ifFalse(() => { ok = false })
-ok
+            arrayNode: root.value["a"]
+            nested: root.value["b"]
+
+            ok: true
+            (root.kind == "object").ifFalse(() => { ok = false })
+            (index == 2).ifFalse(() => { ok = false })
+            (seen[0] == "a").ifFalse(() => { ok = false })
+            (seen[1] == "b").ifFalse(() => { ok = false })
+            (arrayNode.kind == "array").ifFalse(() => { ok = false })
+            (arrayNode.value.size() == 4).ifFalse(() => { ok = false })
+            (arrayNode.value[0].value.coefficient == 1).ifFalse(() => { ok = false })
+            (arrayNode.value[1].value === true).ifFalse(() => { ok = false })
+            (arrayNode.value[2].value === null).ifFalse(() => { ok = false })
+            (arrayNode.value[3].value == "x").ifFalse(() => { ok = false })
+            (nested.kind == "object").ifFalse(() => { ok = false })
+            (nested.value["c"].value.coefficient == 2).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

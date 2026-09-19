@@ -15,25 +15,36 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-arrayNode: JSON.parse("[1]")
-objectNode: JSON.parse("{\"a\":1}")
+tests: Array(
+    Test("parse root containers", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-arrayNode.probe: true
-objectNode.probe: true
-objectNode.value["b"] = JSON.boolean(true)
+            arrayNode: JSON.parse("[1]")
+            objectNode: JSON.parse("{\"a\":1}")
 
-ok: true
-(arrayNode.kind == "array").ifFalse(() => { ok = false })
-(arrayNode.value.size() == 1).ifFalse(() => { ok = false })
-(arrayNode.value[0].kind == "number").ifFalse(() => { ok = false })
-(arrayNode.value[0].value.coefficient == 1).ifFalse(() => { ok = false })
-(arrayNode.value[0].value.exponent == 0).ifFalse(() => { ok = false })
-(objectNode.kind == "object").ifFalse(() => { ok = false })
-(objectNode.value["a"].kind == "number").ifFalse(() => { ok = false })
-(objectNode.value["a"].value.coefficient == 1).ifFalse(() => { ok = false })
-(objectNode.value["b"].value === true).ifFalse(() => { ok = false })
-(arrayNode.probe === true).ifFalse(() => { ok = false })
-(objectNode.probe === true).ifFalse(() => { ok = false })
-ok
+            arrayNode.probe: true
+            objectNode.probe: true
+            objectNode.value["b"] = JSON.boolean(true)
+
+            ok: true
+            (arrayNode.kind == "array").ifFalse(() => { ok = false })
+            (arrayNode.value.size() == 1).ifFalse(() => { ok = false })
+            (arrayNode.value[0].kind == "number").ifFalse(() => { ok = false })
+            (arrayNode.value[0].value.coefficient == 1).ifFalse(() => { ok = false })
+            (arrayNode.value[0].value.exponent == 0).ifFalse(() => { ok = false })
+            (objectNode.kind == "object").ifFalse(() => { ok = false })
+            (objectNode.value["a"].kind == "number").ifFalse(() => { ok = false })
+            (objectNode.value["a"].value.coefficient == 1).ifFalse(() => { ok = false })
+            (objectNode.value["b"].value === true).ifFalse(() => { ok = false })
+            (arrayNode.probe === true).ifFalse(() => { ok = false })
+            (objectNode.probe === true).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

@@ -14,14 +14,26 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-tree: JSON.object(
-    "b", JSON.number(2, 0),
-    "a", JSON.array(
-        JSON.boolean(true),
-        JSON.string("x")
-    )
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("encode nested retained order", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
+
+            tree: JSON.object(
+                "b", JSON.number(2, 0),
+                "a", JSON.array(
+                    JSON.boolean(true),
+                    JSON.string("x")
+                )
+            )
+
+            JSON.encode(tree) == "{\"b\":2,\"a\":[true,\"x\"]}"
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-
-JSON.encode(tree) == "{\"b\":2,\"a\":[true,\"x\"]}"
+tests.freeze()

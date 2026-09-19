@@ -15,6 +15,18 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
-node: JSON.parse("[1]")
-node.value[0] = JSON.nullValue()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("parse array payload frozen error", () => {
+        JSON: import("std:json/JSON")
+
+        node: JSON.parse("[1]")
+
+        Assertions.signals(Error, () => {
+            node.value[0] = JSON.nullValue()
+        })
+    })
+)
+tests.freeze()

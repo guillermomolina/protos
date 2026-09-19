@@ -15,24 +15,35 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-quote: JSON.parse("\"a\\\"b\"")
-backslash: JSON.parse("\"a\\\\b\"")
-slash: JSON.parse("\"\\/\"")
-newline: JSON.parse("\"\\n\"")
-carriage: JSON.parse("\"\\r\"")
-tab: JSON.parse("\"\\t\"")
-backspace: JSON.parse("\"\\b\"")
-formfeed: JSON.parse("\"\\f\"")
+tests: Array(
+    Test("parse basic escapes", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
 
-ok: true
-(quote.value == "a\"b").ifFalse(() => { ok = false })
-(backslash.value == "a\\b").ifFalse(() => { ok = false })
-(slash.value == "/").ifFalse(() => { ok = false })
-(newline.value == "\n").ifFalse(() => { ok = false })
-(carriage.value == "\r").ifFalse(() => { ok = false })
-(tab.value == "\t").ifFalse(() => { ok = false })
-(backspace.value == "\b").ifFalse(() => { ok = false })
-(formfeed.value == "\f").ifFalse(() => { ok = false })
-ok
+            quote: JSON.parse("\"a\\\"b\"")
+            backslash: JSON.parse("\"a\\\\b\"")
+            slash: JSON.parse("\"\\/\"")
+            newline: JSON.parse("\"\\n\"")
+            carriage: JSON.parse("\"\\r\"")
+            tab: JSON.parse("\"\\t\"")
+            backspace: JSON.parse("\"\\b\"")
+            formfeed: JSON.parse("\"\\f\"")
+
+            ok: true
+            (quote.value == "a\"b").ifFalse(() => { ok = false })
+            (backslash.value == "a\\b").ifFalse(() => { ok = false })
+            (slash.value == "/").ifFalse(() => { ok = false })
+            (newline.value == "\n").ifFalse(() => { ok = false })
+            (carriage.value == "\r").ifFalse(() => { ok = false })
+            (tab.value == "\t").ifFalse(() => { ok = false })
+            (backspace.value == "\b").ifFalse(() => { ok = false })
+            (formfeed.value == "\f").ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

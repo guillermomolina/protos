@@ -15,37 +15,48 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-one: JSON.number(1, 0)
-arrayNode: JSON.array(one, JSON.string("x"), JSON.nullValue())
-objectNode: JSON.object(
-    "first", one,
-    "second", arrayNode,
-    "third", JSON.boolean(true)
+tests: Array(
+    Test("array object shape order", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
+
+            one: JSON.number(1, 0)
+            arrayNode: JSON.array(one, JSON.string("x"), JSON.nullValue())
+            objectNode: JSON.object(
+                "first", one,
+                "second", arrayNode,
+                "third", JSON.boolean(true)
+            )
+
+            seen: Map()
+            index: 0
+            objectNode.value.each((key, node) => {
+                seen[index] = key
+                index = index + 1
+            })
+
+            objectNode.value["fourth"] = JSON.nullValue()
+
+            ok: true
+            (arrayNode.kind == "array").ifFalse(() => { ok = false })
+            (arrayNode.value.size() == 3).ifFalse(() => { ok = false })
+            (arrayNode.value[0] === one).ifFalse(() => { ok = false })
+            (arrayNode.value[1].kind == "string").ifFalse(() => { ok = false })
+            (arrayNode.value[2].kind == "null").ifFalse(() => { ok = false })
+            (objectNode.kind == "object").ifFalse(() => { ok = false })
+            (index == 3).ifFalse(() => { ok = false })
+            (seen[0] == "first").ifFalse(() => { ok = false })
+            (seen[1] == "second").ifFalse(() => { ok = false })
+            (seen[2] == "third").ifFalse(() => { ok = false })
+            (objectNode.value["first"] === one).ifFalse(() => { ok = false })
+            (objectNode.value["second"] === arrayNode).ifFalse(() => { ok = false })
+            (objectNode.value.containsKey("fourth")).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-
-seen: Map()
-index: 0
-objectNode.value.each((key, node) => {
-    seen[index] = key
-    index = index + 1
-})
-
-objectNode.value["fourth"] = JSON.nullValue()
-
-ok: true
-(arrayNode.kind == "array").ifFalse(() => { ok = false })
-(arrayNode.value.size() == 3).ifFalse(() => { ok = false })
-(arrayNode.value[0] === one).ifFalse(() => { ok = false })
-(arrayNode.value[1].kind == "string").ifFalse(() => { ok = false })
-(arrayNode.value[2].kind == "null").ifFalse(() => { ok = false })
-(objectNode.kind == "object").ifFalse(() => { ok = false })
-(index == 3).ifFalse(() => { ok = false })
-(seen[0] == "first").ifFalse(() => { ok = false })
-(seen[1] == "second").ifFalse(() => { ok = false })
-(seen[2] == "third").ifFalse(() => { ok = false })
-(objectNode.value["first"] === one).ifFalse(() => { ok = false })
-(objectNode.value["second"] === arrayNode).ifFalse(() => { ok = false })
-(objectNode.value.containsKey("fourth")).ifFalse(() => { ok = false })
-ok
+tests.freeze()

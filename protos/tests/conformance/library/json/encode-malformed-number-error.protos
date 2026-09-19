@@ -14,8 +14,21 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-JSON: import("std:json/JSON")
 
-tree: JSON.number(1, 0)
-tree.value.coefficient = 1.5
-JSON.encode(tree)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("encode malformed number error", () => {
+        JSON: import("std:json/JSON")
+
+        tree: JSON.number(1, 0)
+
+        tree.value.coefficient = 1.5
+
+        Assertions.signals(Error, () => {
+            JSON.encode(tree)
+        })
+    })
+)
+tests.freeze()

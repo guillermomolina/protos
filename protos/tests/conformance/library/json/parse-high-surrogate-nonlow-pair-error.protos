@@ -15,6 +15,18 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
-input: "\"\\uD834\\u0041\""
-JSON.parse(input)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("parse high surrogate nonlow pair error", () => {
+        JSON: import("std:json/JSON")
+
+        input: "\"\\uD834\\u0041\""
+
+        Assertions.signals(Error, () => {
+            JSON.parse(input)
+        })
+    })
+)
+tests.freeze()
