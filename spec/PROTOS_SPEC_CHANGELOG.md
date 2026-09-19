@@ -14,6 +14,38 @@ exact per-file history; normative documents do not carry independent
 merely to synchronize revision metadata.
 
 
+## [0.1.429] - 2026-09-19
+
+### D157 / I053 — Scalar Core String indexing with preserved grapheme capability
+- Defines every semantic `String` value as an exact ordered sequence of Unicode
+  scalar values.
+- Defines standard `String.size` as the exact semantic Integer count of Unicode
+  scalars and standard `String.at(index)` / bracket read as returning the
+  one-scalar String at the zero-based semantic-Integer index.
+- Supplementary-plane scalars therefore occupy one Core String position even
+  when represented by a UTF-16 surrogate pair; negative and out-of-range indexes
+  continue to signal `Error`.
+- Removes Unicode extended-grapheme segmentation from Core `String.size` /
+  `String.at` semantics while preserving exact scalar identity, immutability,
+  no implicit normalization, strict String-family receiver rules, `String +`,
+  `String.concat`, explicit Encoding boundaries, and `String != Bytes`.
+- Preserves the existing Unicode-17 default extended-grapheme segmentation
+  capability for separate Standard Library use; the final public grapheme
+  module/prototype/view topology and selector spelling remain deferred.
+- Normative owners changed by this revision:
+  `spec/semantics/VALUES_AND_COLLECTIONS.md` and `spec/PROTOS_GRAMMAR.md`.
+- Informative/public alignment documents reconciled by the implementation:
+  `spec/runtime/ABSTRACT_RUNTIME.md` and `README.md`.
+
+### Compatibility and implementation state
+- This is an observable Core String indexing/counting semantic change for
+  multi-scalar grapheme clusters; ASCII behavior and single-scalar supplementary
+  characters retain their prior visible results.
+- Executable implementation is delivered by I053 in the same repository change.
+- `ProtosStringValue` enforces the semantic Unicode-scalar-sequence invariant by
+  rejecting host strings with unpaired UTF-16 surrogates.
+- Maven implementation version becomes `0.3.54-SNAPSHOT`.
+
 ## [0.1.428] - 2026-09-19
 
 ### D154 / I051 — Remove public semantic identity-hash selector

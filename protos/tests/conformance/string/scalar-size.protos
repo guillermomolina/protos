@@ -17,8 +17,10 @@
 
 ok: true
 
-("e\u{301}"[0] === "e\u{301}").ifFalse(() => { ok = false })
-("😀"[0] === "😀").ifFalse(() => { ok = false })
-("abc".at(UInt8(1)) === "b").ifFalse(() => { ok = false })
+("".size() == 0).ifFalse(() => { ok = false })
+("abc".size() == 3).ifFalse(() => { ok = false })
+("e\u{301}".size() == 2).ifFalse(() => { ok = false })
+("😀".size() == 1).ifFalse(() => { ok = false })
+("👨‍👩‍👧‍👦".size() == 7).ifFalse(() => { ok = false })
 
 ok

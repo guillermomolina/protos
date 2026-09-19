@@ -17,9 +17,10 @@
 
 ok: true
 
-("".size() == 0).ifFalse(() => { ok = false })
-("abc".size() == 3).ifFalse(() => { ok = false })
-("e\u{301}".size() == 1).ifFalse(() => { ok = false })
-("👨‍👩‍👧‍👦".size() == 1).ifFalse(() => { ok = false })
+("e\u{301}"[0] === "e").ifFalse(() => { ok = false })
+("e\u{301}"[1] === "\u{301}").ifFalse(() => { ok = false })
+("😀"[0] === "😀").ifFalse(() => { ok = false })
+("👨‍👩‍👧‍👦"[1] === "\u{200D}").ifFalse(() => { ok = false })
+("abc".at(1) === "b").ifFalse(() => { ok = false })
 
 ok

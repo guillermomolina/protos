@@ -28,7 +28,28 @@ public final class ProtosStringValue implements ProtosRepresentedValue {
     private final String value;
 
     public ProtosStringValue(String value) {
-        this.value = Objects.requireNonNull(value, "value");
+        this.value = requireUnicodeScalarSequence(value);
+    }
+
+    private static String requireUnicodeScalarSequence(String value) {
+        Objects.requireNonNull(value, "value");
+
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (Character.isHighSurrogate(current)) {
+                if (index + 1 >= value.length()
+                        || !Character.isLowSurrogate(value.charAt(index + 1))) {
+                    throw new IllegalArgumentException(
+                            "String value contains an unpaired high surrogate");
+                }
+                index++;
+            } else if (Character.isLowSurrogate(current)) {
+                throw new IllegalArgumentException(
+                        "String value contains an unpaired low surrogate");
+            }
+        }
+
+        return value;
     }
 
     public String value() {

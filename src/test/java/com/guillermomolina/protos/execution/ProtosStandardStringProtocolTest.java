@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -40,6 +41,19 @@ class ProtosStandardStringProtocolTest {
         assertSame(
                 prelude.stringPrototype(),
                 prelude.bindings().readLocalSlot("String").orElseThrow());
+    }
+
+    @Test
+    void unicode17GraphemeSegmentationRemainsAvailableBehindInternalBoundary() {
+        assertEquals(1, ProtosUnicodeGraphemeSegmentation.count("e\u0301"));
+        assertEquals(
+                "e\u0301",
+                ProtosUnicodeGraphemeSegmentation.at("e\u0301", 0));
+
+        assertEquals(1, ProtosUnicodeGraphemeSegmentation.count("👨‍👩‍👧‍👦"));
+        assertEquals(
+                "👨‍👩‍👧‍👦",
+                ProtosUnicodeGraphemeSegmentation.at("👨‍👩‍👧‍👦", 0));
     }
 
     private static ProtosPrelude corePrelude() throws IOException {

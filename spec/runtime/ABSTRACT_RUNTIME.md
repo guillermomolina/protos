@@ -3459,88 +3459,81 @@ The exact meaning of String indexing and String size is defined separately from 
 
 ## Text Indexing and Mutability Runtime Semantics
 
-Observable `String.size` and `String.at` semantics are based on Unicode grapheme clusters, not on the runtime's internal byte or code-unit representation.
+Observable `String.size` and `String.at` semantics are based on Unicode scalar
+values, not on the runtime's internal byte or code-unit representation and not
+on extended-grapheme boundaries.
 
-Implementations may cache grapheme boundaries, specialize common ASCII/Latin text, or use representation-specific fast paths, provided observable indexing semantics remain unchanged.
+Implementations may cache scalar indexes, specialize common ASCII/Latin text, or
+use representation-specific fast paths, provided observable scalar indexing
+semantics remain unchanged.
 
-`String` values are immutable. Runtime optimizations such as interning, deduplication, compact encodings, ropes, slices, or structural sharing are permitted when they preserve value semantics.
+`String` values are immutable. Runtime optimizations such as interning,
+deduplication, compact encodings, ropes, slices, or structural sharing are
+permitted when they preserve value semantics.
 
 `Bytes` values are mutable raw byte sequences.
 
-Encoded text representations are ordinary objects whose mutability is protocol-defined. The runtime must not infer writability merely from the fact that an object contains bytes or represents text.
+Encoded text representations are ordinary objects whose mutability is
+protocol-defined. The runtime must not infer writability merely from the fact
+that an object contains bytes or represents text.
 
 
 ### Exact standard String indexing runtime semantics
 
-Standard String size and indexing use Unicode 17.0.0 default extended grapheme
-clusters as defined by UAX #29 revision 47.
-
 Conceptually:
 
 ```text
-function standardStringGraphemeBoundaries(receiver):
+function standardStringScalarSequence(receiver):
     text = requireSemanticFamilyReceiver(
         receiver,
         isSemanticStringValue
     )
 
-    return unicode17DefaultExtendedGraphemeBoundaries(
-        semanticUnicodeScalarSequence(text)
-    )
+    return semanticUnicodeScalarSequence(text)
 
 function standardStringSize(receiver):
-    boundaries = standardStringGraphemeBoundaries(receiver)
+    scalars = standardStringScalarSequence(receiver)
 
     return semanticIntegerFromMathematicalValue(
-        numberOfGraphemeIntervals(boundaries)
+        length(scalars)
     )
 
 function standardStringAt(receiver, index):
-    text = requireSemanticFamilyReceiver(
-        receiver,
-        isSemanticStringValue
-    )
+    scalars = standardStringScalarSequence(receiver)
 
     if not isSemanticIntegerValue(index):
         signal an Error for invalid String index
 
     i = mathematicalIntegerValue(index)
 
-    boundaries = unicode17DefaultExtendedGraphemeBoundaries(
-        semanticUnicodeScalarSequence(text)
-    )
-
-    if i < 0 or i >= numberOfGraphemeIntervals(boundaries):
+    if i < 0 or i >= length(scalars):
         signal an Error for String index out of bounds
 
-    scalars = exactScalarSubsequenceForInterval(
-        semanticUnicodeScalarSequence(text),
-        boundaries[i]
+    return semanticStringFromExactScalarSequence(
+        [scalars[i]]
     )
-
-    return semanticStringFromExactScalarSequence(scalars)
 ```
 
-The Unicode segmentation operation is semantic runtime machinery, not a user
-message. It performs no normalization, case folding, locale lookup, text
-replacement, encoding conversion, or host-dependent tailoring.
+`semanticUnicodeScalarSequence` exposes the semantic String sequence, not the
+host representation. A UTF-16 surrogate pair that represents one supplementary
+Unicode scalar therefore occupies one semantic String position, never two.
 
 `semanticStringFromExactScalarSequence` constructs the same semantic String
-value category already defined by Core. It must preserve the selected scalar
-sequence exactly. Interning, ropes, slices, shared backing storage, compact
-encodings, or other representations are permitted when they do not change that
-sequence or the value-identity result.
-
-The conceptual boundary representation is not observable and need not be
-allocated eagerly. An implementation may cache grapheme boundaries, maintain
-indexes, specialize ASCII, or compute boundaries lazily. Cached data must be
-semantically equivalent to Unicode 17.0.0 UAX #29 revision 47 and must not
-silently change when the host Unicode/ICU tables are upgraded.
+value category already defined by Core. It preserves the selected scalar
+exactly and performs no normalization, case folding, locale lookup, text
+replacement, encoding conversion, or host-dependent rewriting.
 
 String-size results are exact semantic Integers. Internal host-sized counters or
-indexes may be used only after the implementation has preserved the full
+indexes may be used only when the implementation preserves the full
 mathematical result and all observable range checks; overflow, saturation, or
 wrapping is not a conforming substitute.
+
+The separate Standard Library extended-grapheme capability may reuse dedicated
+Unicode segmentation machinery, including cached boundaries or an ICU-backed
+implementation, but Core `String.size` and `String.at` do not invoke that
+segmentation path. The grapheme capability remains distinct from Core scalar
+indexing, and its Unicode-17 behavior must not make grapheme boundaries an
+implicit Core String institution again.
 
 Standard String provides no in-place indexed mutation primitive. Generic
 indexed assignment still lowers to ordinary `atPut`; if ordinary lookup does

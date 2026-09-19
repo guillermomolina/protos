@@ -25,21 +25,14 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import com.ibm.icu.lang.UCharacter;
-import com.ibm.icu.text.BreakIterator;
-import com.ibm.icu.util.VersionInfo;
 import java.math.BigInteger;
-import java.util.Locale;
 import java.util.Objects;
 
 public final class ProtosStandardStringProtocol {
-    private static final VersionInfo REQUIRED_UNICODE = VersionInfo.getInstance(17, 0, 0, 0);
-
     private ProtosStandardStringProtocol() {}
 
     public static void install(ProtosObjectValue stringPrototype) {
         Objects.requireNonNull(stringPrototype, "stringPrototype");
-        requireUnicode17();
 
         if (stringPrototype.hasLocalSlot("recognizes")
                 || stringPrototype.hasLocalSlot("size")
@@ -69,7 +62,9 @@ public final class ProtosStandardStringProtocol {
                             ProtosStringValue receiver = requireStringReceiver(activation);
                             requireArity(activation, supplied.size(), 0);
                             return new ProtosIntegerValue(
-                                    BigInteger.valueOf(graphemeCount(receiver.value())));
+                                    BigInteger.valueOf(
+                                            receiver.value().codePointCount(
+                                                    0, receiver.value().length())));
                         }));
 
         stringPrototype.createLocalSlot(
@@ -82,11 +77,11 @@ public final class ProtosStandardStringProtocol {
                             if (index.signum() < 0 || index.bitLength() > 31) {
                                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                             }
-                            String grapheme = graphemeAt(receiver.value(), index.intValue());
-                            if (grapheme == null) {
+                            String scalar = scalarAt(receiver.value(), index.intValue());
+                            if (scalar == null) {
                                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                             }
-                            return new ProtosStringValue(grapheme);
+                            return new ProtosStringValue(scalar);
                         }));
 
         stringPrototype.createLocalSlot(
@@ -151,37 +146,18 @@ public final class ProtosStandardStringProtocol {
         throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
     }
 
-    private static long graphemeCount(String text) {
-        BreakIterator iterator = BreakIterator.getCharacterInstance(Locale.ROOT);
-        iterator.setText(text);
-        long count = 0;
-        for (int boundary = iterator.first(), next = iterator.next();
-                next != BreakIterator.DONE;
-                boundary = next, next = iterator.next()) {
-            count++;
-        }
-        return count;
-    }
-
-    private static String graphemeAt(String text, int wanted) {
-        BreakIterator iterator = BreakIterator.getCharacterInstance(Locale.ROOT);
-        iterator.setText(text);
+    private static String scalarAt(String text, int wanted) {
         int index = 0;
-        int start = iterator.first();
-        for (int end = iterator.next(); end != BreakIterator.DONE; start = end, end = iterator.next()) {
+        for (int start = 0; start < text.length(); ) {
+            int codePoint = text.codePointAt(start);
+            int end = start + Character.charCount(codePoint);
             if (index == wanted) {
                 return text.substring(start, end);
             }
             index++;
+            start = end;
         }
         return null;
     }
 
-    private static void requireUnicode17() {
-        if (UCharacter.getUnicodeVersion().compareTo(REQUIRED_UNICODE) < 0) {
-            throw new IllegalStateException(
-                    "I003 requires Unicode 17.0.0 grapheme data; ICU reports "
-                            + UCharacter.getUnicodeVersion());
-        }
-    }
 }

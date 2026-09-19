@@ -602,8 +602,9 @@ Version 0.1 remains a draft, but the major semantic decisions currently tracked 
 ## String Semantics
 
 - `String` is immutable.
-- `String.size` and `String.at` operate on Unicode grapheme clusters.
-- Lower-level code-point and byte access is explicit through separate protocols.
+- `String.size` and `String.at` operate on Unicode scalar values.
+- Extended grapheme segmentation is a separate Standard Library capability;
+  byte access remains explicit through encoding and `Bytes` protocols.
 - `StringBuilder`-style objects handle efficient mutable text construction.
 - `Bytes` is mutable.
 - Encoded text representations may be first-class objects and define their own mutability through protocol support such as `atPut`.

@@ -104,7 +104,7 @@ parse: (text) => {
             (character == "]").ifFalse(() => {
                 addressLength = addressLength + 1
                 // No valid numeric IPv6 address accepted by IpAddresses exceeds
-                // 45 grapheme positions.
+                // 45 Unicode scalar positions.
                 (addressLength > 45).ifTrue(() => {
                     fail()
                 })

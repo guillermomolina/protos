@@ -3469,7 +3469,8 @@ bytes[i]       // bytes.at(i)
 bytes[i] = v   // bytes.atPut(i, v)
 ```
 
-For `String`, `at` indexes Unicode grapheme clusters.
+For `String`, `at` indexes Unicode scalar values as defined by
+`semantics/VALUES_AND_COLLECTIONS.md`.
 
 `String` is immutable and therefore does not provide ordinary mutation through indexed assignment.
 

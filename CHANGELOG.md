@@ -1,3 +1,22 @@
+## 0.3.54-SNAPSHOT
+
+- Implement `I053 — Implement scalar Core String indexing and preserve grapheme
+  capability` (GitHub #629) under ratified D157 Candidate D and specification
+  revision `0.1.429`. Change Core `String.size` and `String.at` / bracket read
+  from Unicode-17 extended-grapheme units to exact Unicode scalar values,
+  including supplementary-plane scalars as one position and decomposed or
+  multi-scalar emoji sequences as multiple positions. Preserve zero-based
+  semantic-Integer indexing, existing Error behavior, String immutability,
+  exact-scalar identity/no-normalization, concatenation, Encoding boundaries,
+  and strict String-family receiver checks. Retain Unicode-17 default
+  extended-grapheme segmentation behind an internal reusable boundary for the
+  separately placed Standard Library capability without choosing its deferred
+  public API. Enforce the semantic String invariant by rejecting unpaired
+  UTF-16 surrogates at `ProtosStringValue` construction, migrate Core
+  conformance coverage to scalar expectations, and retain focused Java evidence
+  for preserved grapheme segmentation. Implementation version becomes
+  `0.3.54-SNAPSHOT`.
+
 ## 0.3.53-SNAPSHOT
 
 - Advance `TOOL009 — Local-first logical Case Test Tool integration` (GitHub
