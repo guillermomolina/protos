@@ -65,6 +65,9 @@ PRIORITY_REQUIRED_STATUSES = frozenset((
 ))
 MAX_PRIORITY_ANCESTRY_DEPTH = 32
 
+FULL_RECONCILIATION_ALLOW_PROJECT_PRIORITY_MIGRATION = False
+FULL_RECONCILIATION_CLEAR_UNRESOLVED_PROJECT_PRIORITY = True
+
 WORK_QUEUE_VIEW_NAME = "Work queue"
 WORK_QUEUE_FILTER = (
     'repo:guillermomolina/protos is:issue is:open '
@@ -1332,6 +1335,12 @@ def run_reconcile(
                 project,
                 item_map,
                 project_priorities,
+                allow_project_priority_migration=(
+                    FULL_RECONCILIATION_ALLOW_PROJECT_PRIORITY_MIGRATION
+                ),
+                clear_unresolved_project_priority=(
+                    FULL_RECONCILIATION_CLEAR_UNRESOLVED_PROJECT_PRIORITY
+                ),
             )
         except SyncError as exc:
             failures.append((issue.get("number"), str(exc)))
@@ -1566,6 +1575,8 @@ def self_test():
         explicit_priority_removal=False,
         allow_migration=False,
     ) is None
+    assert not FULL_RECONCILIATION_ALLOW_PROJECT_PRIORITY_MIGRATION
+    assert FULL_RECONCILIATION_CLEAR_UNRESOLVED_PROJECT_PRIORITY
 
     assert unresolved_priority_action(
         "P1",
@@ -1804,6 +1815,7 @@ def self_test():
     print("ACTIVE_PRIORITY_RESOLUTION_SELF_TEST: PASS")
     print("PARENT_PRIORITY_INHERITANCE_SELF_TEST: PASS")
     print("NONDESTRUCTIVE_PROJECT_PRIORITY_MIGRATION_SELF_TEST: PASS")
+    print("FULL_RECONCILIATION_PRIORITY_IDENTITY_SELF_TEST: PASS")
 
 
 def parse_args(argv=None):
