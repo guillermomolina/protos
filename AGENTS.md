@@ -1051,28 +1051,35 @@ artifacts such as `noop`, `test`, `NONEXISTENT`, `nonexistent`, empty files, or
 temporary commits in the repository.
 
 Normal Protos source, specification, test, documentation, and repository-policy
-changes MUST flow through the repository's Git publication path: materialize the
-bounded delta in an isolated branch/worktree, validate it according to its
-validation class, commit it there, re-check the publication base, and publish by
-a normal non-force Git fast-forward. Do not bypass that path by directly editing
-repository contents or moving Git refs through the GitHub connector/API.
+changes MUST follow the applicable repository-content workflow defined below.
+For repositories subject to maintainer-executed handoff, agents MUST NOT bypass
+that workflow by directly editing repository contents or moving Git refs through
+the GitHub connector/API. The sole agent-direct repository-content exception is
+`guillermomolina/protos-project-docs`, governed by the bounded exception below.
 
 ### Sole autonomous repository-publication exception
 <!-- GITHUB022 PROTOS-PROJECT-DOCS-PUBLICATION-EXCEPTION -->
 
 The project owner grants standing repository-publication authorization for
 exactly one repository: `guillermomolina/protos-project-docs`. This is the only
-repository an agent may autonomously publish repository-content changes to
-without obtaining another per-publication confirmation when the active task
-already requires a durable project-documentation publication.
+repository an agent may autonomously edit, commit, and push repository-content
+changes to without another per-publication confirmation when the active task
+requires a bounded durable project-documentation change.
 
-For `guillermomolina/protos-project-docs`, the normal isolated-worktree plus
-non-force Git fast-forward path remains preferred whenever network-capable Git
-transport is available. When normal Git transport is unavailable in the current
-execution environment but an authenticated GitHub connector/API has repository
-write capability, that repository alone MAY use the following bounded Git Data
-API publication fallback. This fallback is a governed publication path, not a
-general exemption from repository-write safety.
+This authorization is intentionally direct. For
+`guillermomolina/protos-project-docs`, an authorized agent SHOULD perform the
+repository-content edit and its normal non-force publication itself through the
+available repository mechanism. Do not hand the maintainer shell commands or a
+Markdown ZIP merely so the maintainer can apply, commit, or push a documentation
+change in that repository.
+
+When network-capable Git transport is available, the agent may use the normal
+non-force Git publication path from its working checkout; an isolated worktree is
+not required solely to satisfy a handoff rule. When normal Git transport is
+unavailable in the current execution environment but an authenticated GitHub
+connector/API has repository write capability, that repository alone MAY use the
+following bounded Git Data API publication fallback. This fallback is a governed
+publication path, not a general exemption from repository-write safety.
 
 The fallback MUST:
 
@@ -1108,9 +1115,10 @@ This standing authorization is repository-specific, not content-type inference.
 It applies only when the repository coordinate is exactly
 `guillermomolina/protos-project-docs`. It does **not** authorize repository
 publication to `guillermomolina/protos`, any related Protos repository, a fork,
-or any other repository. Changes to those repositories continue to require their
-ordinary authorized Git publication path or a user-executed patch/launcher when
-the agent cannot perform that path itself.
+or any other repository. Changes to those repositories require maintainer-executed repository commands
+or artifacts. The agent may inspect them through available read-only mechanisms
+and may perform separately governed live GitHub coordination, but MUST NOT
+directly edit, commit, or push their repository content.
 
 This restriction does **not** prohibit intended live GitHub coordination
 mutations governed elsewhere in this file, such as creating/updating Issues or
@@ -1543,12 +1551,12 @@ Protos GitHub Issue, the agent MUST reconcile the Issue assignee state when the
 available GitHub capability can mutate assignees:
 
 - an Issue that the agent is directly working on and keeps or moves to
-  `In progress` MUST have an active responsible assignee;
+  `In progress` or `Needs decision` MUST have an active responsible assignee;
 - when the agent is acting on behalf of the repository owner and no different
   human contributor is already responsible, assign `guillermomolina`;
-- when creating a new formal Issue and immediately starting it, set the assignee
-  in the same coordination workflow rather than leaving an `In progress` Issue
-  unassigned;
+- when creating a new formal Issue and immediately moving it to a lifecycle
+  state that requires active ownership, set the assignee in the same coordination
+  workflow rather than leaving it unassigned;
 - `Inbox` and unclaimed `Ready` work normally remain unassigned so availability
   is visible to contributors;
 - do not replace, add yourself over, or otherwise disturb an existing human
@@ -1556,15 +1564,15 @@ available GitHub capability can mutate assignees:
 - do not assign a parent/umbrella Issue solely because one of its children is
   active; assignment belongs on the directly owned active work item unless the
   parent itself is being actively driven as work;
-- `Blocked`, `Needs decision`, and `Review` may retain their existing assignee
-  when responsibility continues; do not manufacture an assignee merely from the
-  status name; and
+- `Blocked` and `Review` may retain their existing assignee when responsibility
+  continues; do not manufacture an assignee merely from either status name; and
 - closing/completing an Issue does not require clearing its assignee; historical
   responsibility may remain visible.
 
-Repository synchronization MAY enforce the `In progress` invariant by assigning
-`guillermomolina` only when the Issue has no assignee. It MUST preserve an
-existing assignee and MUST fail visibly if GitHub rejects the fallback assignment.
+Repository synchronization MAY enforce the `In progress` and `Needs decision`
+assignee invariants by assigning `guillermomolina` only when the Issue has no
+assignee. It MUST preserve an existing assignee and MUST fail visibly if GitHub
+rejects the fallback assignment.
 
 Agents MUST attempt this reconciliation when they have GitHub mutation capability.
 If the environment cannot update GitHub assignees, report that coordination
@@ -1852,12 +1860,20 @@ Lack of a local checkout, Maven, or other build tooling in the agent environment
 does not waive the repository/specification audit when repository contents are
 available through another read-capable mechanism.
 
-For maintainer-directed interactive work, the maintainer's existing repository
-checkout is the execution environment. An agent that cannot mutate that checkout
-directly SHOULD inspect repository state through available read-only mechanisms
-and hand off bounded commands or a Markdown ZIP for execution there. Do not
-replace this workflow with an isolated temporary worktree merely because the
-agent environment lacks a checkout.
+For maintainer-directed interactive work in every Protos repository except
+`guillermomolina/protos-project-docs`, the maintainer's existing repository
+checkout is the execution environment. Agents MUST inspect repository state
+through available read-only mechanisms and hand off bounded commands or a
+Markdown ZIP for execution there; repository-changing shell commands, including
+commit and push, are executed by the maintainer. Do not replace this workflow
+with an isolated temporary worktree merely because the agent environment lacks a
+checkout.
+
+`guillermomolina/protos-project-docs` is the sole repository-level exception:
+when the active task requires a bounded change there, the agent may edit, commit,
+and push that repository directly under the standing authorization below, without
+requiring maintainer-executed commands or a Markdown handoff merely for
+publication.
 
 
 ### Interactive local contribution and publication workflow
@@ -1878,8 +1894,13 @@ The current proportional model is:
   projection of Issue-owned live status.
 - **External contributions** normally use a branch/fork + Pull Request + CI/review
   before merge.
-- **Maintainer/agent interactive work** uses the maintainer's current checkout
-  with bounded command handoff and adaptive local validation.
+- **Maintainer/agent interactive work outside
+  `guillermomolina/protos-project-docs`** uses the maintainer's current checkout
+  with bounded command handoff and adaptive local validation; the maintainer
+  executes repository-changing commands, including commit and push.
+- **`guillermomolina/protos-project-docs` work** uses the standing direct
+  publication exception: the agent may edit, commit, and push that repository
+  directly when the active task requires the bounded documentation change.
 - **Maintainer Pull Requests are optional** and SHOULD be used when their review,
   integration, audit, or collaboration value justifies their operational cost.
 
@@ -1890,11 +1911,12 @@ ordinary isolated-worktree publication-launcher model for maintainer-directed
 interactive work. Those experiments remain historical evidence; they are not the
 current operator contract.
 
-For ordinary maintainer-directed work, agents MUST work from the repository state
-the maintainer is actually using and provide the required commands in small,
-coherent executable blocks. Do not create temporary branches, temporary
-worktrees, staging repositories, or out-of-checkout publication environments
-merely to apply an ordinary interactive change.
+For ordinary maintainer-directed work in repositories subject to handoff,
+agents MUST work from the repository state the maintainer is actually using and
+provide the required commands in small, coherent executable blocks. Do not create
+temporary branches, temporary worktrees, staging repositories, or out-of-checkout
+publication environments merely to apply an ordinary interactive change. This
+handoff rule does not apply to the agent-direct `protos-project-docs` exception.
 
 Before editing, inspect the current status and every patch-owned path relevant to
 the next command block. A globally clean checkout is not required. Existing
@@ -1910,16 +1932,27 @@ Agents MUST NOT manufacture a clean checkout with automatic `stash`, `reset`,
 NOT use `git add -A` or `git add .`; stage only explicit patch-owned paths. Never
 force-push.
 
-Ordinary source, test, build, configuration, and similar edits SHOULD be handed
-off directly as bounded shell-command blocks in chat. Prefer a few transparent
-commands over a large opaque generated script when the same change can be made
-safely and readably.
+Ordinary source, test, build, configuration, and similar edits in handoff
+repositories SHOULD be handed off directly as bounded shell-command blocks in
+chat. Prefer a few transparent commands over a large opaque generated script when
+the same change can be made safely and readably.
 
-Commit and push remain separate from editing/validation unless the maintainer
-explicitly requests them in the same step. Before publication, synchronize with
-current `origin/main`, inspect intervening movement relevant to the patch, and
-preserve unrelated concurrent work. A publication race is never permission to
-force-push or silently resolve a semantic conflict.
+Shell-command blocks handed to the maintainer for direct execution MUST be safe
+to paste into the maintainer's existing interactive shell. Such blocks MUST NOT
+contain `set -e`, `set -u`, `set -o pipefail`, combined forms such as
+`set -euo pipefail`, any other command that enables `pipefail`, or `exit`. Those
+constructs can persist in or terminate the maintainer's shell. Use bounded
+command-local checks, `&&`, or explicit conditionals when failure gating is
+needed. This restriction applies to command blocks handed to the maintainer;
+standalone helper scripts executed as child processes may use their own internal
+failure handling when appropriate.
+
+In handoff repositories, commit and push remain separate from editing/validation
+unless the maintainer requests the corresponding commands in the same step, and
+the maintainer executes those commit/push commands. Before publication,
+synchronize with current `origin/main`, inspect intervening movement relevant to
+the patch, and preserve unrelated concurrent work. A publication race is never
+permission to force-push or silently resolve a semantic conflict.
 
 <!-- GITHUB003 CONCURRENT-PUBLICATION-POLICY -->
 When `origin/main` moves during interactive work, re-evaluate only the
@@ -1971,6 +2004,11 @@ concurrency makes the additional coordination cost worthwhile.
 
 
 ### Local checkout safety and Markdown handoff
+
+This section governs repositories that use maintainer-executed handoff. It does
+not require command or Markdown-ZIP handoff for
+`guillermomolina/protos-project-docs` when the agent is acting under the standing
+direct-publication exception.
 
 The maintainer's current checkout may contain unrelated work from the maintainer
 or other agents. Interactive editing MUST preserve that work.
@@ -2207,11 +2245,17 @@ before treating `REQUIRED_DURABLE_PUBLICATION` as satisfied. Failure of the
 second publication does not roll back the product commit; the owning Issue
 remains open until the durable publication postcondition is satisfied.
 
-The patch launcher itself MUST NOT require GitHub API credentials and MUST NOT
-create, close, relabel, assign, or move Issues/Project items. Only after the
-applicable publication postconditions are confirmed as successful may the
-coordinating agent update the corresponding GitHub Issue live state. If the
-agent cannot perform a required Issue write, it must report the exact Issue
+Repository-content publication and live GitHub coordination are separate
+operations. Helpers handed to the maintainer for repository-content changes MUST
+NOT require GitHub API credentials and MUST NOT create, close, relabel, assign,
+or move Issues/Project items. The `protos-project-docs` direct-publication
+exception may use authenticated repository APIs only within its bounded
+repository-publication rules; live Issue/Project coordination remains a separate
+post-publication step.
+
+Only after the applicable publication postconditions are confirmed as successful
+may the coordinating agent update the corresponding GitHub Issue live state. If
+the agent cannot perform a required Issue write, it must report the exact Issue
 coordination update still required rather than pretending it happened.
 Project-field updates are not required by this rule.
 
@@ -2272,11 +2316,10 @@ Issue state, the changelog describes **what changed in the published project**;
 the Issue comment records **what was attempted/validated and how the live work
 state changed**. Do not duplicate the full execution narrative in both places.
 
-The patch launcher remains GitHub-credential-independent as required above. The
-coordinating agent performs the Issue comment only after confirmed publication.
-If GitHub mutation is unavailable, report the exact Issue update still required
-instead of omitting it silently or moving that execution history into the
-changelog.
+The coordinating agent performs the Issue comment only after confirmed
+publication. If GitHub mutation is unavailable, report the exact Issue update
+still required instead of omitting it silently or moving that execution history
+into the changelog.
 
 <!-- GITHUB020 FORMAL-WORK-CLOSURE-EVIDENCE -->
 #### Formal work closure-evidence gate
@@ -3034,15 +3077,14 @@ delta after synchronizing with the current `origin/main`:
   `src/main/**`, distributable Protos source under `protos/lib/**`, and build,
   generation, packaging, or runtime configuration whose change can alter the
   compiled or distributed program. Run the focused tests that exercise the
-  changed behavior when such tests exist. Before publication, run the complete
-  Maven test suite unless the definitive delta qualifies for the explicitly
-  bounded impact-aware tool-local exception below.
+  changed behavior when such tests exist. Before publication, run the canonical
+  integrated full suite (`make test`) unless the definitive delta qualifies for
+  the explicitly bounded impact-aware tool-local exception below.
 - **Test-impact changes** under `src/test/**`, `protos/tests/**`, or equivalent
   executable test infrastructure require the affected/focused tests. For a
-  publication change, run the complete Maven test suite unless the changed test
-  surface is intentionally outside Maven with an equivalent complete project
-  validation, or the definitive delta qualifies for the explicitly bounded
-  impact-aware tool-local exception below.
+  publication change, run the canonical integrated full suite (`make test`)
+  unless the definitive delta qualifies for the explicitly bounded impact-aware
+  tool-local exception below.
 - **Specification-only changes** under `spec/**` do not run Maven tests by
   default. Run the applicable specification governance, consistency, changelog,
   and static checks. If a specific executable guard consumes the modified
@@ -3260,10 +3302,15 @@ If a test contradicts the current specification, report the contradiction instea
 
 Operational boundaries
 
-Never commit or push changes unless the user explicitly requests it. The standing
-authorization in **Sole autonomous repository-publication exception** counts as
-explicit owner authorization only for publications to the exact repository
-`guillermomolina/protos-project-docs` within that section's bounded rules.
+Agents MUST NOT directly commit or push repository-content changes in any
+Protos repository except the exact repository
+`guillermomolina/protos-project-docs`. For every other repository, the maintainer
+executes the commit and push commands supplied through the handoff workflow.
+
+The standing authorization in **Sole autonomous repository-publication
+exception** authorizes agent-direct edit/commit/push only for
+`guillermomolina/protos-project-docs` within that section's bounded rules; no
+per-publication command or Markdown handoff is required there.
 
 Do not create releases, tags, branches, or pull requests unless explicitly requested.
 
