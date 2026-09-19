@@ -3910,23 +3910,14 @@ slot named `identityHash`.
 Its result must satisfy the existing semantic-Integer result, stability,
 collision, and `===` coherence rules.
 
-If the standard prelude provides an ordinary method:
+Core v0.1 does not install an ordinary `Object.identityHash()` method and
+does not expose a standard guest-visible numeric identity-hash accessor.
 
-```text
-Object.identityHash()
-```
+A program-defined slot named `identityHash` remains ordinary message behavior
+only. Sending such a user-defined message does not invoke, replace, shadow, or
+otherwise affect the primitive semantic identity-hash authority.
 
-its standard behavior is conceptually:
-
-```text
-return identityHashOf(this)
-```
-
-An explicit source-level send such as `x.identityHash()` uses ordinary message
-dispatch and can therefore observe a user override. That override affects only
-that explicit message behavior.
-
-Identity-keyed collection machinery must instead behave conceptually as:
+Identity-keyed collection machinery must behave conceptually as:
 
 ```text
 queryIdentityHash = identityHashOf(queryKey)

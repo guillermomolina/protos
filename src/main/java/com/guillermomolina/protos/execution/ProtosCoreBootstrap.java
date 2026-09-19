@@ -513,7 +513,6 @@ public final class ProtosCoreBootstrap {
         Set<String> expected =
                 Set.of(
                         "call",
-                        "identityHash",
                         "hasSlot",
                         "slotValue",
                         "ifTrue",

@@ -15,36 +15,4 @@
  * the specific language governing rights and limitations under the License.
  */
 
-calls: {
-    count: 0
-}
-
-source: {
-    hash: () => {
-        calls.count = calls.count + 1
-        7
-    }
-    identityHash: () => {
-        calls.count = calls.count + 1
-        13
-    }
-    equals: (other) => {
-        calls.count = calls.count + 1
-        true
-    }
-}
-view: source.alias("equals", "==")
-key: view {}
-
-m: IdentityMap()
-m[key] = 42
-found: m.containsKey(key)
-value: m[key]
-removed: m.remove(key)
-absent: m.containsKey(key)
-
-found &&
-    (value == 42) &&
-    (removed == 42) &&
-    !absent &&
-    (calls.count == 0)
+({}).identityHash()

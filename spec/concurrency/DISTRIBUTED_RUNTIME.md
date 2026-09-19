@@ -833,8 +833,9 @@ of the same semantic GroupRef identity must produce the same
 `IdentityMap` lookup made with a transferred, returned, or rematerialized form of
 the same GroupRef finds the same identity key. Distinct GroupRef identities may
 collide numerically and remain distinct because identity is never defined by hash
-comparison. An ordinary overridable `identityHash()` member, if observed, does
-not replace the primitive `identityHashOf`/`===` contract.
+comparison. A user-defined ordinary `identityHash` member, if present, has no
+semantic identity-hash authority and does not replace the primitive
+`identityHashOf`/`===` contract.
 
 Transfer of a GroupRef does not copy or expose mutable Group membership,
 controller, routing-cache, policy, or control-plane state. A receiving runtime

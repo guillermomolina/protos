@@ -612,7 +612,8 @@ Version 0.1 remains a draft, but the major semantic decisions currently tracked 
 ## Maps and Hashing
 
 - `Map` uses `==` plus `hash`.
-- `IdentityMap` uses `===` plus `identityHash`.
+- `IdentityMap` uses `===` plus non-overridable semantic identity hashing.
+- Core exposes no standard `Object.identityHash()` selector.
 - Equal keys must have equal hashes.
 - Hash/equality behavior must remain stable while a key is stored.
 - Mutable objects may be keys when the state relevant to hash/equality remains stable.

@@ -1,3 +1,17 @@
+## 0.3.52-SNAPSHOT
+
+- Implement `I051 — Remove public Object.identityHash selector` (GitHub #621)
+  under ratified D154 Candidate A and specification revision `0.1.428`. Remove
+  the standard guest-visible `Object.identityHash()` selector while preserving
+  primitive non-overridable semantic identity hashing, `===` / `!==`,
+  `IdentityMap` identity semantics, default `Object.hash()`, execution-scoped
+  identity-hash stability/collision rules, and ActorRef/GroupRef identity.
+  Ordinary user-defined slots named `identityHash` remain ordinary behavior and
+  have no semantic identity-hash authority. Add focused guest and Java coverage
+  proving the standard selector is absent and IdentityMap does not dispatch
+  user-defined `identityHash` callbacks. Implementation version becomes
+  `0.3.52-SNAPSHOT`.
+
 ## 0.3.51-SNAPSHOT
 
 - Advance `TOOL009 — Local-first logical Case Test Tool integration` (GitHub

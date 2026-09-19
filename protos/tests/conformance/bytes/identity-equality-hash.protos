@@ -30,5 +30,4 @@ b.add(255)
     (a != b) &&
     (a === a) &&
     (a !== b) &&
-    (a.identityHash() == a.identityHash()) &&
     (a.hash() == a.hash())

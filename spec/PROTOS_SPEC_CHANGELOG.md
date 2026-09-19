@@ -14,6 +14,32 @@ exact per-file history; normative documents do not carry independent
 merely to synchronize revision metadata.
 
 
+## [0.1.428] - 2026-09-19
+
+### D154 / I051 — Remove public semantic identity-hash selector
+- Removes the standard ordinary `Object.identityHash()` selector under ratified
+  D154 Candidate A.
+- Keeps primitive `identityHashOf(value)` as the non-overridable semantic
+  identity-hash authority used by identity-sensitive Core/runtime machinery.
+- Preserves primitive `===` / `!==`, `IdentityMap` identity lookup semantics,
+  default `Object.hash()` behavior, execution-scoped identity-hash stability and
+  collision rules, and ActorRef/GroupRef semantic identity.
+- A program-defined ordinary slot named `identityHash` remains ordinary message
+  behavior only and has no semantic identity-hash authority.
+- `IdentityMap` continues to use primitive `identityHashOf(key)` together with
+  primitive `===` and does not dispatch a user-defined `identityHash` message.
+- Core v0.1 exposes no replacement guest-visible numeric identity-hash accessor.
+- Normative owner changed by this revision:
+  `spec/semantics/VALUES_AND_COLLECTIONS.md`.
+- Informative/runtime-alignment documents reconciled by the implementation:
+  `spec/runtime/ABSTRACT_RUNTIME.md`,
+  `spec/concurrency/DISTRIBUTED_RUNTIME.md`, and `README.md`.
+
+### Compatibility and implementation state
+- This revision removes one previously standard guest-visible Object selector.
+- Executable implementation is delivered by I051 in the same repository change.
+- Maven implementation version becomes `0.3.52-SNAPSHOT`.
+
 ## [0.1.427] - 2026-09-18
 
 ### D144 / I048-A — Null-aware standard Object control

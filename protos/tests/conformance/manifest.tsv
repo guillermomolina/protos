@@ -686,6 +686,7 @@ core-surface/missing-boolean-binding.protos	error-parent	SlotNotFound
 core-surface/missing-p-binding.protos	error-parent	SlotNotFound
 core-surface/missing-groupref-binding.protos	error-parent	SlotNotFound
 core-surface/missing-internal-groupref-binding.protos	error-parent	SlotNotFound
+core-surface/object-identity-hash-missing-error.protos	error-parent	SlotNotFound
 core-surface/prelude-required-bindings.protos	boolean	true
 core-surface/standard-owner-recognition.protos	boolean	true
 core-surface/missing-smallinteger-binding.protos	error-parent	SlotNotFound
