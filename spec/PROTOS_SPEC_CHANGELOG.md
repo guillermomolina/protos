@@ -1,12 +1,17 @@
 # Protos Language Specification Changelog
 
-All notable changes to the Protos language specification and the concurrency design ledger will be documented in this file.
+All notable changes to the normative Protos language specification are
+documented in this file. Non-normative design notes, including
+`../docs/design/CONCURRENCY_DESIGN.md`, do not advance the specification revision
+by themselves. When a design item becomes normative, update its owning
+specification document and record that normative change here.
 
 Specification revision is global: the newest changelog entry `0.1.X` is the
-current specification revision. Each revisioned normative document carries the
-most recent global revision that changed that document; document revisions are
-not synchronized, and an otherwise-unaffected document is not edited merely to
-advance its revision.
+current specification revision. Each new entry identifies the normative
+documents or domains changed by that revision. Git history is the authoritative
+exact per-file history; normative documents do not carry independent
+`Document revision` metadata and otherwise-unaffected documents are not edited
+merely to synchronize revision metadata.
 
 
 ## [0.1.427] - 2026-09-18

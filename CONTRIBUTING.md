@@ -58,12 +58,13 @@ external-contributor path is:
    regression coverage. Use Java tests for host/JVM machinery and boundaries
    that genuinely belong on the Java side.
 
-7. **Validate according to impact.** For a simple executable contribution, run
-   focused tests for the changed behavior and use `mvn test` as the broad suite
-   unless a more specific current repository rule applies. For a
-   documentation-only contribution, inspect links and commands and run the
-   applicable static/integrity checks; unrelated Maven tests are not
-   automatically required. In either case, inspect the final diff:
+7. **Validate according to impact.** For an executable contribution, run
+   focused tests for the changed behavior and use the repository's canonical
+   integrated suite (`make test`) when broader/full validation is required by
+   the current repository policy. For a documentation-only contribution,
+   inspect links and commands and run the applicable static/integrity checks;
+   unrelated executable tests are not automatically required. In either case,
+   inspect the final diff:
 
    ```sh
    git diff --check
@@ -264,10 +265,9 @@ Contributors without direct repository publication authority should work on a
 branch/fork and open a Pull Request. Do not assume that being able to open an
 Issue grants authority to publish directly to `main`.
 
-Maintainer/project automation uses a separate governed path described in
-`AGENTS.md`: an isolated execution-time-base worktree, bounded materialization,
-adaptive local validation, and serialized non-force fast-forward publication to
-`main`. Maintainers may still choose a Pull Request whenever review,
+Maintainer/project automation follows the separate governed workflow in
+`AGENTS.md`; this contributor-facing guide does not duplicate that operational
+contract. Maintainers may still choose a Pull Request whenever review,
 collaboration, or integration visibility is worth the additional remote/CI cost.
 
 For every Pull Request that is opened, link Issues deliberately:
