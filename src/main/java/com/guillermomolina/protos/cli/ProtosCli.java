@@ -349,8 +349,15 @@ public final class ProtosCli {
                                         packageToolProjectProjectionRoot));
 
         Path packageToolRoot = distributionRoot.resolve("tools").resolve("package");
+        Path testToolRoot = distributionRoot.resolve("tools").resolve("test");
         ProtosModuleResolver standardLibraryResolver =
                 new ProtosStandardLibraryModuleResolver(core.getParent());
+        ProtosModuleResolver logicalCaseFallbackResolver =
+                new ProtosBundledToolModuleResolver(
+                        "test",
+                        testToolRoot,
+                        testToolRoot.resolveSibling("shared"),
+                        standardLibraryResolver);
         ProtosPrelude packagePrelude =
                 new ProtosCoreBootstrap()
                         .bootstrap(
@@ -433,6 +440,8 @@ public final class ProtosCli {
                                 ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities(
                                         session.activation,
                                         session.runtimeHost,
+                                        core,
+                                        logicalCaseFallbackResolver,
                                         actorPrelude,
                                         groupPrelude,
                                         packagePrelude,
@@ -673,23 +682,29 @@ public final class ProtosCli {
                     "Test tool returned an unknown outcome classification");
         }
 
-        if (!(fields.get(2) instanceof ProtosArrayValue abortPayload)) {
-            throw new IllegalStateException(
-                    "infrastructure-aborted TestRunOutcome has no abort payload");
-        }
-        List<Object> abortFields = abortPayload.indexedSnapshot();
-        if (abortFields.size() != 5
-                || !(abortFields.get(2) instanceof ProtosArrayValue attempts)
-                || !(abortFields.get(3) instanceof ProtosArrayValue cutover)
-                || !(abortFields.get(4) instanceof ProtosIntegerValue retained)) {
-            throw new IllegalStateException(
-                    "infrastructure-aborted TestRunOutcome has malformed evidence");
+        err.println("Test infrastructure aborted");
+
+        // Legacy D108 evidence remains presentation-compatible while the
+        // replacement logical-Case path is not required to manufacture that
+        // historical payload shape.
+        if (fields.get(2) instanceof ProtosArrayValue abortPayload) {
+            List<Object> abortFields = abortPayload.indexedSnapshot();
+            if (abortFields.size() == 5
+                    && abortFields.get(2) instanceof ProtosArrayValue attempts
+                    && abortFields.get(3) instanceof ProtosArrayValue cutover
+                    && abortFields.get(4) instanceof ProtosIntegerValue retained) {
+                err.println(
+                        "infrastructure attempts: "
+                                + attempts.indexedSnapshot().size());
+                err.println(
+                        "cutover not admitted: "
+                                + cutover.indexedSnapshot().size());
+                err.println(
+                        "retained unsafe reservations: "
+                                + retained.value());
+            }
         }
 
-        err.println("Test infrastructure aborted");
-        err.println("infrastructure attempts: " + attempts.indexedSnapshot().size());
-        err.println("cutover not admitted: " + cutover.indexedSnapshot().size());
-        err.println("retained unsafe reservations: " + retained.value());
         return 3;
     }
 

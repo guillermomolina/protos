@@ -1,3 +1,22 @@
+## 0.3.51-SNAPSHOT
+
+- Advance `TOOL009 — Local-first logical Case Test Tool integration` (GitHub
+  #600) under ratified D152, D153, LIB018-0 and D155. Add authority-free
+  suite-native discovery of the explicit `tests` declaration, inert ordered
+  logical Case plans, signature-checked fresh-Process Case rematerialization,
+  case-private execution observations, a global work-conserving logical Case
+  scheduler, and terminal-state Case result classification. Wire the discovery
+  and execution facilities into the Test Tool bootstrap, allow D155
+  infrastructure-aborted outcomes without manufacturing historical D108
+  evidence, and reuse D151 corpus/source authority for exact logical-source
+  resolution without exposing physical paths to guest code. Add focused Protos
+  and Java coverage for discovery, planning, scheduling, execution,
+  rematerialization, result policy, bootstrap integration, and source-authority
+  resolution. This remains an intermediate migration checkpoint: incumbent
+  production test ownership is unchanged and no repository test source has yet
+  been cut over to suite-native ownership. Implementation version becomes
+  `0.3.51-SNAPSHOT`.
+
 ## 0.3.50-SNAPSHOT
 
 - Begin `LIB018 — Expand Protos testing support beyond the initial Assertions

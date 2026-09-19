@@ -1,0 +1,132 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Arrays: import("std:collections/Array")
+
+policyError: () => {
+    Error().signal()
+}
+
+classificationForCompletion: (completion) => {
+    completion.hasSlot("phase").ifFalse(() => {
+        policyError()
+    })
+    completion.hasSlot("observation").ifFalse(() => {
+        policyError()
+    })
+
+    phase: completion.phase
+    observation: completion.observation
+
+    String.recognizes(phase).ifFalse(() => {
+        policyError()
+    })
+
+    observation.hasSlot("state").ifFalse(() => {
+        policyError()
+    })
+
+    state: observation.state
+    String.recognizes(state).ifFalse(() => {
+        policyError()
+    })
+
+    classification: null
+
+    (phase == "rematerialization-error").ifTrue(() => {
+        classification = "tool-error"
+    })
+
+    (phase == "case-execution").ifTrue(() => {
+        (state == "completed").ifTrue(() => {
+            classification = "pass"
+        })
+
+        (state == "failed").ifTrue(() => {
+            classification = "fail"
+        })
+
+        (state == "cancelled").ifTrue(() => {
+            classification = "tool-error"
+        })
+    })
+
+    (classification === null).ifTrue(() => {
+        policyError()
+    })
+
+    classification
+}
+
+project: (completion) => {
+    result: Array(
+        classificationForCompletion(completion),
+        completion
+    )
+    result.freeze()
+}
+
+classification: (result) => {
+    result[0]
+}
+
+completion: (result) => {
+    result[1]
+}
+
+projectAll: (completions) => {
+    Array.recognizes(completions).ifFalse(() => {
+        policyError()
+    })
+
+    results:
+        Arrays.map(completions, (completion) => {
+            project(completion)
+        })
+
+    results.freeze()
+}
+
+exitCode: (results) => {
+    Array.recognizes(results).ifFalse(() => {
+        policyError()
+    })
+
+    code: 0
+
+    results.each((result) => {
+        kind: classification(result)
+
+        (kind == "fail").ifTrue(() => {
+            (code == 0).ifTrue(() => {
+                code = 1
+            })
+        })
+
+        (kind == "tool-error").ifTrue(() => {
+            code = 3
+        })
+
+        (
+            (kind == "pass").not() &&
+            (kind == "fail").not() &&
+            (kind == "tool-error").not()
+        ).ifTrue(() => {
+            policyError()
+        })
+    })
+
+    code
+}

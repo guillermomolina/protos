@@ -18,7 +18,10 @@ package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.execution.ProtosAsyncExactExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosAsyncProcessSnapshotExecutionFacility;
+import com.guillermomolina.protos.execution.ProtosModuleResolver;
 import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
+import com.guillermomolina.protos.execution.ProtosTestLogicalCaseDiscoveryFacility;
+import com.guillermomolina.protos.execution.ProtosTestLogicalCaseExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosTestResourceExecutionScope;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -43,6 +46,7 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
     private final PlatformThreadPerTaskSubmission submission;
     private final List<ProtosAsyncExactExecutionFacility> facilities;
     private final ProtosTestResourceExecutionScope resourceExecutionScope;
+    private ProtosTestLogicalCaseExecutionFacility logicalCaseExecutionFacility;
     private ProtosTestCaseAuthorityExecutionScope caseAuthorityExecutionScope;
     private boolean closed;
 
@@ -161,6 +165,8 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
     static ProtosTestToolAsyncExecutionScope installWithCaseAuthorities(
             ProtosActivation activation,
             ProtosPolyglotRuntimeHost runtimeHost,
+            Path core,
+            ProtosModuleResolver logicalCaseFallbackResolver,
             ProtosPrelude actorPrelude,
             ProtosPrelude groupPrelude,
             ProtosPrelude packagePrelude,
@@ -178,6 +184,19 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                         packagePrelude);
 
         try {
+            ProtosTestLogicalCaseDiscoveryFacility.install(
+                    activation,
+                    core,
+                    logicalCaseFallbackResolver);
+
+            scope.logicalCaseExecutionFacility =
+                    ProtosTestLogicalCaseExecutionFacility.install(
+                            activation,
+                            core,
+                            logicalCaseFallbackResolver,
+                            runtimeHost,
+                            scope.submission);
+
             scope.caseAuthorityExecutionScope =
                     ProtosTestCaseAuthorityExecutionScope.install(
                             activation,
@@ -208,6 +227,9 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             return;
         }
         closed = true;
+        if (logicalCaseExecutionFacility != null) {
+            logicalCaseExecutionFacility.close();
+        }
         if (caseAuthorityExecutionScope != null) {
             caseAuthorityExecutionScope.close();
         }

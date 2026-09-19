@@ -320,6 +320,80 @@ final class ProtosTestToolFileSelectionFacilityTest {
                                                         BigInteger.ONE))));
     }
 
+    @Test
+    void resolvesAuthorizedLogicalAssociationToExactPhysicalSource()
+            throws Exception {
+        Path root =
+                Files.createDirectories(
+                        tempDir.resolve("corpus"));
+        Path nested =
+                Files.createDirectories(
+                        root.resolve("library").resolve("test"));
+        Path source =
+                Files.writeString(
+                        nested.resolve("case.protos"),
+                        "true");
+
+        Path resolved =
+                ProtosTestToolFileSelectionFacility
+                        .resolveAuthorizedSource(
+                                List.of(
+                                        sourceRoot(
+                                                "protos/corpus/example",
+                                                root)),
+                                "protos/corpus/example",
+                                "library/test/case.protos");
+
+        assertEquals(
+                source.toAbsolutePath().normalize(),
+                resolved);
+    }
+
+    @Test
+    void authorizedLogicalResolutionRejectsUnknownAndNonCanonicalSources()
+            throws Exception {
+        Path root =
+                Files.createDirectories(
+                        tempDir.resolve("corpus"));
+        Files.writeString(
+                root.resolve("case.protos"),
+                "true");
+
+        List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                roots =
+                        List.of(
+                                sourceRoot(
+                                        "protos/corpus/example",
+                                        root));
+
+        assertThrows(
+                java.io.IOException.class,
+                () ->
+                        ProtosTestToolFileSelectionFacility
+                                .resolveAuthorizedSource(
+                                        roots,
+                                        "protos/corpus/unknown",
+                                        "case.protos"));
+
+        assertThrows(
+                java.io.IOException.class,
+                () ->
+                        ProtosTestToolFileSelectionFacility
+                                .resolveAuthorizedSource(
+                                        roots,
+                                        "protos/corpus/example",
+                                        "nested/../case.protos"));
+
+        assertThrows(
+                java.io.IOException.class,
+                () ->
+                        ProtosTestToolFileSelectionFacility
+                                .resolveAuthorizedSource(
+                                        roots,
+                                        "protos/corpus/example",
+                                        "../case.protos"));
+    }
+
     private static ProtosTestToolFileSelectionFacility.CorpusSourceRoot
             sourceRoot(String corpusId, Path root) {
         return new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(

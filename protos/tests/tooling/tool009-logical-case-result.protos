@@ -1,0 +1,137 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+CaseResult: import("self:LogicalCaseResult")
+
+completion: (phase, state, value, error) => {
+    observation: {
+        state: state
+        value: value
+        error: error
+    }
+    observation.freeze()
+
+    envelope: {
+        phase: phase
+        observation: observation
+    }
+    envelope.freeze()
+}
+
+returnedError: Error {}
+
+passCompletion:
+    completion(
+        "case-execution",
+        "completed",
+        returnedError,
+        null
+    )
+
+failCompletion:
+    completion(
+        "case-execution",
+        "failed",
+        null,
+        Error {}
+    )
+
+cancelledCompletion:
+    completion(
+        "case-execution",
+        "cancelled",
+        null,
+        null
+    )
+
+rematerializationCompletion:
+    completion(
+        "rematerialization-error",
+        "failed",
+        null,
+        Error {}
+    )
+
+passResult: CaseResult.project(passCompletion)
+failResult: CaseResult.project(failCompletion)
+cancelledResult: CaseResult.project(cancelledCompletion)
+rematerializationResult:
+    CaseResult.project(rematerializationCompletion)
+
+Assertions.require(
+    CaseResult.classification(passResult) == "pass"
+)
+
+Assertions.require(
+    CaseResult.completion(passResult) === passCompletion
+)
+
+Assertions.require(
+    CaseResult.classification(failResult) == "fail"
+)
+
+Assertions.require(
+    CaseResult.classification(cancelledResult) == "tool-error"
+)
+
+Assertions.require(
+    CaseResult.classification(rematerializationResult) == "tool-error"
+)
+
+projected:
+    CaseResult.projectAll(
+        Array(
+            passCompletion,
+            failCompletion,
+            cancelledCompletion,
+            rematerializationCompletion
+        )
+    )
+
+Assertions.require(projected.size() == 4)
+
+Assertions.require(
+    CaseResult.classification(projected[0]) == "pass"
+)
+Assertions.require(
+    CaseResult.classification(projected[1]) == "fail"
+)
+Assertions.require(
+    CaseResult.classification(projected[2]) == "tool-error"
+)
+Assertions.require(
+    CaseResult.classification(projected[3]) == "tool-error"
+)
+
+Assertions.require(
+    CaseResult.exitCode(
+        Array(passResult)
+    ) == 0
+)
+
+Assertions.require(
+    CaseResult.exitCode(
+        Array(passResult, failResult)
+    ) == 1
+)
+
+Assertions.require(
+    CaseResult.exitCode(
+        Array(passResult, failResult, cancelledResult)
+    ) == 3
+)
+
+true

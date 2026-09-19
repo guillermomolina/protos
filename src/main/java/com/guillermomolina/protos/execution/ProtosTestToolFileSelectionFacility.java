@@ -156,6 +156,95 @@ public final class ProtosTestToolFileSelectionFacility {
         return prelude.newFrozenArray(associations);
     }
 
+    /**
+     * Resolves one already-authorized logical corpus/source association back to
+     * its exact physical source locator.
+     *
+     * <p>This is the inverse host-side operation of file selection. Physical
+     * paths remain inside the host boundary; callers supply only the canonical
+     * CorpusId and corpus-relative source path.
+     */
+    public static Path resolveAuthorizedSource(
+            List<CorpusSourceRoot> sourceRoots,
+            String corpusId,
+            String sourcePath)
+            throws IOException {
+        Objects.requireNonNull(sourceRoots, "sourceRoots");
+        Objects.requireNonNull(corpusId, "corpusId");
+        Objects.requireNonNull(sourcePath, "sourcePath");
+
+        if (corpusId.isEmpty() || sourcePath.isEmpty()) {
+            throw new IOException(
+                    "logical source association must not be empty");
+        }
+
+        Path resolved = null;
+
+        for (CorpusSourceRoot sourceRoot : sourceRoots) {
+            if (!sourceRoot.corpusId().equals(corpusId)) {
+                continue;
+            }
+
+            if (resolved != null) {
+                throw new IOException(
+                        "duplicate Test Tool corpus source root: "
+                                + corpusId);
+            }
+
+            final Path parsed;
+            try {
+                parsed = Path.of(sourcePath);
+            } catch (InvalidPathException failure) {
+                throw new IOException(
+                        "invalid logical source path",
+                        failure);
+            }
+
+            if (parsed.isAbsolute()) {
+                throw new IOException(
+                        "logical source path must be relative");
+            }
+
+            Path root = sourceRoot.root();
+            Path candidate =
+                    root.resolve(parsed)
+                            .toAbsolutePath()
+                            .normalize();
+
+            if (!candidate.startsWith(root)
+                    || candidate.equals(root)) {
+                throw new IOException(
+                        "logical source path escapes corpus root");
+            }
+
+            Path relative =
+                    root.relativize(candidate);
+
+            if (!logicalRelativePath(relative)
+                    .equals(sourcePath)) {
+                throw new IOException(
+                        "logical source path is not canonical");
+            }
+
+            if (!isExactRegularSource(
+                    root,
+                    relative,
+                    candidate)) {
+                throw new IOException(
+                        "logical source does not resolve to an exact regular source");
+            }
+
+            resolved = candidate;
+        }
+
+        if (resolved == null) {
+            throw new IOException(
+                    "unknown Test Tool corpus source association");
+        }
+
+        return resolved;
+    }
+
     private static boolean isExactRegularSource(
             Path root,
             Path relative,

@@ -33,6 +33,8 @@ import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
 import com.guillermomolina.protos.execution.ProtosRootTaskExecution;
 import com.guillermomolina.protos.execution.ProtosSourceCompiler;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
+import com.guillermomolina.protos.execution.ProtosTestLogicalCaseDiscoveryFacility;
+import com.guillermomolina.protos.execution.ProtosTestLogicalCaseExecutionFacility;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -124,6 +126,8 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                         ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities(
                                 activation,
                                 runtimeHost,
+                                CORE,
+                                resolver,
                                 prelude,
                                 prelude,
                                 prelude,
@@ -175,6 +179,8 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                     "packageResourceExecutionAsync",
                     "packageResourceExecutionInspectAsync",
                     ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT,
+                    ProtosTestLogicalCaseDiscoveryFacility.BOOTSTRAP_SLOT,
+                    ProtosTestLogicalCaseExecutionFacility.BOOTSTRAP_SLOT,
                     ProtosTestCaseAuthorityExecutionScope.CONTENT_IDENTITY_SLOT,
                     ProtosTestCaseAuthorityExecutionScope.RESOLUTION_INPUT_LOCK_SLOT,
                     ProtosTestCaseAuthorityExecutionScope.RESOLUTION_ROOT_SLOT,

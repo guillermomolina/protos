@@ -12,7 +12,7 @@
  *
  * Software distributed under the License is distributed on an "AS IS" basis,
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the LICENSE.
+ * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.cli;
 
@@ -168,6 +168,44 @@ prelude.newModuleActivation());
         assertTrue(report.contains("infrastructure attempts: 1"));
         assertTrue(report.contains("cutover not admitted: 2"));
         assertTrue(report.contains("retained unsafe reservations: 1"));
+    }
+
+    @Test
+    void javaAcceptsInfrastructureAbortWithoutLegacyD108Evidence()
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE);
+
+        ByteArrayOutputStream errBytes =
+                new ByteArrayOutputStream();
+        PrintStream err =
+                new PrintStream(
+                        errBytes,
+                        true,
+                        StandardCharsets.UTF_8);
+
+        ProtosArrayValue aborted =
+                array(
+                        prelude,
+                        new ProtosStringValue(
+                                "infrastructure-aborted"),
+                        ProtosNullValue.INSTANCE,
+                        ProtosNullValue.INSTANCE,
+                        new ProtosIntegerValue(
+                                BigInteger.valueOf(3)));
+
+        assertEquals(
+                3,
+                ProtosCli.testToolExitCodeForRuntime(
+                        aborted,
+                        err));
+
+        assertEquals(
+                "Test infrastructure aborted"
+                        + System.lineSeparator(),
+                errBytes.toString(
+                        StandardCharsets.UTF_8));
     }
 
     private static ProtosArrayValue array(ProtosPrelude prelude, Object... values) {

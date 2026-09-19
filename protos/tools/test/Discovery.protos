@@ -1,0 +1,143 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// D153 / LIB018-0: project one suite-native declaration into the inert ordered
+// local selector signature used by Test Tool discovery. Live Test values and
+// body Closures never leave this operation.
+Arrays: import("std:collections/Array")
+Sets: import("std:collections/Set")
+LogicalCasePlan: import("self:LogicalCasePlan")
+
+declarationSignature: (tests) => {
+    Array.recognizes(tests).ifFalse(() => {
+        fail()
+    })
+
+    seen: Sets()
+
+    selectors: Arrays.map(tests, (test) => {
+        name: test.name
+
+        String.recognizes(name).ifFalse(() => {
+            fail()
+        })
+        (name == "").ifTrue(() => {
+            fail()
+        })
+
+        Sets.contains(seen, name).ifTrue(() => {
+            fail()
+        })
+        Sets.add(seen, name)
+
+        name
+    })
+
+    selectors.freeze()
+}
+
+declarationSignatureFromModule: (module) => {
+    module.hasSlot("tests").ifFalse(() => {
+        fail()
+    })
+
+    declarationSignature(module.slotValue("tests"))
+}
+
+requireDeclarationSignature: (module, expectedSignature) => {
+    Array.recognizes(expectedSignature).ifFalse(() => {
+        fail()
+    })
+
+    actualSignature: declarationSignatureFromModule(module)
+
+    (actualSignature.size() == expectedSignature.size()).ifFalse(() => {
+        fail()
+    })
+
+    index: 0
+    actualSignature.each((selector) => {
+        expected: expectedSignature[index]
+
+        String.recognizes(expected).ifFalse(() => {
+            fail()
+        })
+
+        (selector == expected).ifFalse(() => {
+            fail()
+        })
+
+        index = index + 1
+    })
+
+    actualSignature
+}
+
+resolveSelectedTest: (module, expectedSignature, selector) => {
+    String.recognizes(selector).ifFalse(() => {
+        fail()
+    })
+    (selector == "").ifTrue(() => {
+        fail()
+    })
+
+    signature:
+        requireDeclarationSignature(
+            module,
+            expectedSignature
+        )
+
+    selectedIndex:
+        Arrays.findIndex(signature, (name) => {
+            name == selector
+        })
+
+    (selectedIndex === null).ifTrue(() => {
+        fail()
+    })
+
+    selected: module.slotValue("tests")[selectedIndex]
+
+    selected.hasSlot("call").ifFalse(() => {
+        fail()
+    })
+
+    selected
+}
+
+projectionFromModule: (sourceAssociation, module) => {
+    signature: declarationSignatureFromModule(module)
+    plan: LogicalCasePlan.build(sourceAssociation, signature)
+
+    projection: Array(signature, plan)
+    projection.freeze()
+}
+
+projectionSignature: (projection) => {
+    projection[0]
+}
+
+projectionPlan: (projection) => {
+    projection[1]
+}
+
+casePlanFromModule: (sourceAssociation, module) => {
+    projectionPlan(
+        projectionFromModule(
+            sourceAssociation,
+            module
+        )
+    )
+}
