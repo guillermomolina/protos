@@ -22,7 +22,10 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -57,11 +60,6 @@ final class ProtosTestLogicalCaseDiscoveryFacilityTest {
         var activation =
                 prelude.newModuleActivation();
 
-        ProtosTestLogicalCaseDiscoveryFacility.install(
-                activation,
-                CORE,
-                resolver);
-
         String suiteSource =
                 """
                 TestValue: import("std:test/Test")
@@ -76,18 +74,31 @@ final class ProtosTestLogicalCaseDiscoveryFacilityTest {
                 )
                 """;
 
-        activation.context()
-                .createLocalSlot(
-                        "sourceAssociation",
-                        new ProtosStringValue(
-                                "suite.protos"));
+        Path suite =
+                root.resolve("suite.protos");
+        Files.writeString(
+                suite,
+                suiteSource,
+                StandardCharsets.UTF_8);
+
+        ProtosTestLogicalCaseDiscoveryFacility.install(
+                activation,
+                CORE,
+                resolver,
+                List.of(
+                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                "test-corpus",
+                                root)));
 
         activation.context()
                 .createLocalSlot(
-                        "sourcePath",
-                        new ProtosStringValue(
-                                root.resolve("suite.protos")
-                                        .toString()));
+                        "sourceAssociation",
+                        prelude.newFrozenArray(
+                                List.of(
+                                        new ProtosStringValue(
+                                                "test-corpus"),
+                                        new ProtosStringValue(
+                                                "suite.protos"))));
 
         activation.context()
                 .createLocalSlot(
@@ -106,7 +117,6 @@ final class ProtosTestLogicalCaseDiscoveryFacilityTest {
                         projection:
                             logicalCaseDiscovery(
                                 sourceAssociation,
-                                sourcePath,
                                 suiteSource
                             )
 
@@ -127,7 +137,12 @@ final class ProtosTestLogicalCaseDiscoveryFacilityTest {
                             (
                                 CasePlan.sourceAssociation(
                                     plan[0]
-                                ) == "suite.protos"
+                                )[0] == "test-corpus"
+                            ) &&
+                            (
+                                CasePlan.sourceAssociation(
+                                    plan[0]
+                                )[1] == "suite.protos"
                             ) &&
                             (
                                 CasePlan.selector(
@@ -137,7 +152,12 @@ final class ProtosTestLogicalCaseDiscoveryFacilityTest {
                             (
                                 CasePlan.sourceAssociation(
                                     plan[1]
-                                ) == "suite.protos"
+                                )[0] == "test-corpus"
+                            ) &&
+                            (
+                                CasePlan.sourceAssociation(
+                                    plan[1]
+                                )[1] == "suite.protos"
                             ) &&
                             (
                                 CasePlan.selector(

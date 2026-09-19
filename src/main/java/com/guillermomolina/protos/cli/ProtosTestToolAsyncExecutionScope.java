@@ -23,6 +23,7 @@ import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
 import com.guillermomolina.protos.execution.ProtosTestLogicalCaseDiscoveryFacility;
 import com.guillermomolina.protos.execution.ProtosTestLogicalCaseExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosTestResourceExecutionScope;
+import com.guillermomolina.protos.execution.ProtosTestToolFileSelectionFacility;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
@@ -167,6 +168,8 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             ProtosPolyglotRuntimeHost runtimeHost,
             Path core,
             ProtosModuleResolver logicalCaseFallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    logicalCaseSourceRoots,
             ProtosPrelude actorPrelude,
             ProtosPrelude groupPrelude,
             ProtosPrelude packagePrelude,
@@ -187,13 +190,15 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             ProtosTestLogicalCaseDiscoveryFacility.install(
                     activation,
                     core,
-                    logicalCaseFallbackResolver);
+                    logicalCaseFallbackResolver,
+                    logicalCaseSourceRoots);
 
             scope.logicalCaseExecutionFacility =
                     ProtosTestLogicalCaseExecutionFacility.install(
                             activation,
                             core,
                             logicalCaseFallbackResolver,
+                            logicalCaseSourceRoots,
                             runtimeHost,
                             scope.submission);
 

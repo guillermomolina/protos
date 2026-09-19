@@ -1,0 +1,251 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Manifest: import("self:Manifest")
+Migration: import("self:LogicalCaseMigration")
+LogicalCaseResult: import("self:LogicalCaseResult")
+Runner: import("self:Runner")
+
+legacy:
+    Manifest.caseSpec(
+        Array(
+            "legacy.protos",
+            "boolean",
+            "true"
+        )
+    )
+
+native:
+    Manifest.caseSpec(
+        Array(
+            "native.protos",
+            "suite-native",
+            "-"
+        )
+    )
+
+cases:
+    Array(
+        legacy,
+        native
+    )
+cases.freeze()
+
+plan: Array(cases)
+plan.freeze()
+
+split:
+    Migration.splitPlan(
+        plan
+    )
+
+legacyPlan:
+    Migration.legacyPlan(
+        split
+    )
+
+nativeSpecs:
+    Migration.suiteNativeSpecs(
+        split
+    )
+
+Assertions.require(
+    Manifest.planCases(legacyPlan).size() == 1
+)
+Assertions.require(
+    Manifest.planCases(legacyPlan)[0] === legacy
+)
+Assertions.require(
+    nativeSpecs.size() == 1
+)
+Assertions.require(
+    nativeSpecs[0] === native
+)
+
+association:
+    Migration.sourceAssociation(
+        "corpus",
+        native
+    )
+
+Assertions.require(
+    association[0] == "corpus"
+)
+Assertions.require(
+    association[1] == "native.protos"
+)
+
+selected:
+    Migration.selectSuiteNativeSpecs(
+        "corpus",
+        nativeSpecs,
+        Array(association)
+    )
+
+Assertions.require(
+    selected.size() == 1
+)
+Assertions.require(
+    selected[0] === native
+)
+
+notSelected:
+    Migration.selectSuiteNativeSpecs(
+        "other-corpus",
+        nativeSpecs,
+        Array(association)
+    )
+
+Assertions.require(
+    notSelected.size() == 0
+)
+
+completion: (phase, state) => {
+    observation: {
+        state: state
+    }
+    observation.freeze()
+
+    value: {
+        phase: phase
+        observation: observation
+    }
+    value.freeze()
+}
+
+passResult:
+    LogicalCaseResult.project(
+        completion(
+            "case-execution",
+            "completed"
+        )
+    )
+
+failResult:
+    LogicalCaseResult.project(
+        completion(
+            "case-execution",
+            "failed"
+        )
+    )
+
+toolErrorResult:
+    LogicalCaseResult.project(
+        completion(
+            "rematerialization-error",
+            "failed"
+        )
+    )
+
+legacyPass:
+    Runner.testRunOutcomeCompletedWithExit(
+        null,
+        0
+    )
+
+legacyFail:
+    Runner.testRunOutcomeCompletedWithExit(
+        null,
+        1
+    )
+
+legacyInfrastructure:
+    Runner.testRunOutcome(
+        "infrastructure-aborted",
+        null,
+        null,
+        3
+    )
+
+allPass:
+    Migration.mergeOutcome(
+        legacyPass,
+        Array(passResult)
+    )
+
+Assertions.require(
+    Runner.testRunOutcomeStatus(allPass) ==
+        "completed"
+)
+Assertions.require(
+    Runner.testRunOutcomeExitCode(allPass) == 0
+)
+
+nativeFail:
+    Migration.mergeOutcome(
+        legacyPass,
+        Array(failResult)
+    )
+
+Assertions.require(
+    Runner.testRunOutcomeStatus(nativeFail) ==
+        "completed"
+)
+Assertions.require(
+    Runner.testRunOutcomeExitCode(nativeFail) == 1
+)
+
+retainedLegacyFail:
+    Migration.mergeOutcome(
+        legacyFail,
+        Array(passResult)
+    )
+
+Assertions.require(
+    Runner.testRunOutcomeStatus(retainedLegacyFail) ==
+        "completed"
+)
+Assertions.require(
+    Runner.testRunOutcomeExitCode(retainedLegacyFail) == 1
+)
+
+nativeToolError:
+    Migration.mergeOutcome(
+        legacyPass,
+        Array(toolErrorResult)
+    )
+
+Assertions.require(
+    Runner.testRunOutcomeStatus(nativeToolError) ==
+        "infrastructure-aborted"
+)
+Assertions.require(
+    Runner.testRunOutcomeExitCode(nativeToolError) == 3
+)
+
+retainedInfrastructure:
+    Migration.mergeOutcome(
+        legacyInfrastructure,
+        Array(passResult)
+    )
+
+Assertions.require(
+    retainedInfrastructure ===
+        legacyInfrastructure
+)
+
+neutral:
+    Migration.neutralLegacyOutcome()
+
+Assertions.require(
+    Runner.testRunOutcomeStatus(neutral) ==
+        "completed"
+)
+Assertions.require(
+    Runner.testRunOutcomeExitCode(neutral) == 0
+)
+
+true

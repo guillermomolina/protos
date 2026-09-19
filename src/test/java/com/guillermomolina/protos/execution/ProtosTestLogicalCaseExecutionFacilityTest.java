@@ -91,6 +91,10 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                                 activation,
                                 CORE,
                                 resolver,
+                                List.of(
+                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                                "test-corpus",
+                                                root)),
                                 runtimeHost,
                                 submission)) {
 
@@ -98,7 +102,6 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                     invoke(
                             prelude,
                             activation,
-                            suite,
                             source,
                             List.of("first", "second"),
                             "second");
@@ -209,6 +212,10 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                                 activation,
                                 CORE,
                                 resolver,
+                                List.of(
+                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                                "test-corpus",
+                                                root)),
                                 runtimeHost,
                                 submission)) {
 
@@ -216,7 +223,6 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                     invoke(
                             prelude,
                             activation,
-                            suite,
                             source,
                             List.of("second", "first"),
                             "second");
@@ -266,7 +272,6 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
     private static ProtosFutureValue invoke(
             ProtosPrelude prelude,
             ProtosActivation activation,
-            Path sourcePath,
             String source,
             List<String> signature,
             String selector) {
@@ -276,6 +281,14 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                         .readLocalSlot(
                                 ProtosTestLogicalCaseExecutionFacility.BOOTSTRAP_SLOT)
                         .orElseThrow();
+
+        ProtosArrayValue sourceAssociation =
+                prelude.newFrozenArray(
+                        List.of(
+                                new ProtosStringValue(
+                                        "test-corpus"),
+                                new ProtosStringValue(
+                                        "suite.protos")));
 
         ProtosArrayValue signatureValue =
                 prelude.newFrozenArray(
@@ -289,8 +302,7 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                 ProtosInvocation.invoke(
                         execution,
                         List.of(
-                                new ProtosStringValue(
-                                        sourcePath.toString()),
+                                sourceAssociation,
                                 new ProtosStringValue(source),
                                 signatureValue,
                                 new ProtosStringValue(selector)),

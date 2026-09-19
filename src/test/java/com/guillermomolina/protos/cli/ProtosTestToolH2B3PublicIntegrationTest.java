@@ -35,6 +35,7 @@ import com.guillermomolina.protos.execution.ProtosSourceCompiler;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.execution.ProtosTestLogicalCaseDiscoveryFacility;
 import com.guillermomolina.protos.execution.ProtosTestLogicalCaseExecutionFacility;
+import com.guillermomolina.protos.execution.ProtosTestToolFileSelectionFacility;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -128,6 +129,10 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                                 runtimeHost,
                                 CORE,
                                 resolver,
+                                List.of(
+                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                                "test-corpus",
+                                                Path.of("protos", "tests"))),
                                 prelude,
                                 prelude,
                                 prelude,

@@ -1,3 +1,18 @@
+## 0.3.53-SNAPSHOT
+
+- Advance `TOOL009 — Local-first logical Case Test Tool integration` (GitHub
+  #600) under ratified D151, D152, D153 and D155. Replace physical source-path
+  arguments at the suite-native discovery and logical Case execution guest
+  boundaries with canonical `[CorpusId, relativePath]` source associations,
+  resolving exact physical locators only inside the existing D151 host authority
+  boundary. Reuse the same invocation-local corpus source roots for discovery
+  and execution, preserving inert logical identity across planning and fresh
+  Process rematerialization. Add the temporary D152-M2 mixed-ownership migration
+  scaffold with explicit legacy/suite-native partitioning, D151 source
+  selection, and D155 outcome precedence (`3 > 1 > 0`) in preparation for the
+  first production Case migration. No production test source changes ownership
+  in this checkpoint. Implementation version becomes `0.3.53-SNAPSHOT`.
+
 ## 0.3.52-SNAPSHOT
 
 - Implement `I051 — Remove public Object.identityHash selector` (GitHub #621)

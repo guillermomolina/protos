@@ -25,7 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.nio.file.InvalidPathException;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -48,6 +48,8 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
     public static final String BOOTSTRAP_SLOT = "logicalCaseExecutionAsync";
 
     private final ProtosTestLogicalCaseAttemptBridge bridge;
+    private final List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+            sourceRoots;
     private final ProtosAsyncExactExecutionFacility.Submission submission;
     private final Set<Operation> outstanding = new LinkedHashSet<>();
     private boolean closed;
@@ -55,6 +57,8 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
     private ProtosTestLogicalCaseExecutionFacility(
             Path core,
             ProtosModuleResolver fallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots,
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosAsyncExactExecutionFacility.Submission submission) {
         this.bridge =
@@ -66,6 +70,11 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                         Objects.requireNonNull(
                                 runtimeHost,
                                 "runtimeHost"));
+        this.sourceRoots =
+                List.copyOf(
+                        Objects.requireNonNull(
+                                sourceRoots,
+                                "sourceRoots"));
         this.submission =
                 Objects.requireNonNull(
                         submission,
@@ -76,6 +85,8 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             ProtosActivation activation,
             Path core,
             ProtosModuleResolver fallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots,
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosAsyncExactExecutionFacility.Submission submission) {
         return install(
@@ -83,6 +94,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                 BOOTSTRAP_SLOT,
                 core,
                 fallbackResolver,
+                sourceRoots,
                 runtimeHost,
                 submission);
     }
@@ -92,6 +104,8 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             String slotName,
             Path core,
             ProtosModuleResolver fallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots,
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosAsyncExactExecutionFacility.Submission submission) {
         Objects.requireNonNull(activation, "activation");
@@ -112,6 +126,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                 new ProtosTestLogicalCaseExecutionFacility(
                         core,
                         fallbackResolver,
+                        sourceRoots,
                         runtimeHost,
                         submission);
 
@@ -133,7 +148,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             List<?> arguments) {
         if (arguments.size() != 4
                 || !(arguments.get(0)
-                        instanceof ProtosStringValue sourcePath)
+                        instanceof ProtosArrayValue sourceAssociation)
                 || !(arguments.get(1)
                         instanceof ProtosStringValue source)
                 || !(arguments.get(2)
@@ -143,14 +158,28 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
-        if (sourcePath.value().isEmpty()) {
+        List<Object> association =
+                sourceAssociation.indexedSnapshot();
+
+        if (association.size() != 2
+                || !(association.get(0)
+                        instanceof ProtosStringValue corpusId)
+                || !(association.get(1)
+                        instanceof ProtosStringValue sourcePath)
+                || corpusId.value().isEmpty()
+                || sourcePath.value().isEmpty()) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
-        Path physicalPath;
+        final Path physicalPath;
         try {
-            physicalPath = Path.of(sourcePath.value());
-        } catch (InvalidPathException failure) {
+            physicalPath =
+                    ProtosTestToolFileSelectionFacility
+                            .resolveAuthorizedSource(
+                                    sourceRoots,
+                                    corpusId.value(),
+                                    sourcePath.value());
+        } catch (IOException failure) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 

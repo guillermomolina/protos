@@ -442,6 +442,7 @@ public final class ProtosCli {
                                         session.runtimeHost,
                                         core,
                                         logicalCaseFallbackResolver,
+                                        fileSelectionSourceRoots,
                                         actorPrelude,
                                         groupPrelude,
                                         packagePrelude,

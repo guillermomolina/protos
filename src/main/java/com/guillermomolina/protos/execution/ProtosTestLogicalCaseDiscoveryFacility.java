@@ -29,7 +29,6 @@ import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -50,23 +49,34 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
     public static void install(
             ProtosActivation activation,
             Path core,
-            ProtosModuleResolver fallbackResolver) {
+            ProtosModuleResolver fallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots) {
         install(
                 activation,
                 BOOTSTRAP_SLOT,
                 core,
-                fallbackResolver);
+                fallbackResolver,
+                sourceRoots);
     }
 
     static void install(
             ProtosActivation activation,
             String slotName,
             Path core,
-            ProtosModuleResolver fallbackResolver) {
+            ProtosModuleResolver fallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(slotName, "slotName");
         Objects.requireNonNull(core, "core");
         Objects.requireNonNull(fallbackResolver, "fallbackResolver");
+        List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                immutableSourceRoots =
+                        List.copyOf(
+                                Objects.requireNonNull(
+                                        sourceRoots,
+                                        "sourceRoots"));
 
         if (slotName.isEmpty()) {
             throw new IllegalArgumentException(
@@ -88,32 +98,47 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
                                                 caller,
                                                 arguments,
                                                 core,
-                                                fallbackResolver)));
+                                                fallbackResolver,
+                                                immutableSourceRoots)));
     }
 
     private static Object execute(
             ProtosActivation caller,
             List<?> arguments,
             Path core,
-            ProtosModuleResolver fallbackResolver) {
-        if (arguments.size() != 3
+            ProtosModuleResolver fallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots) {
+        if (arguments.size() != 2
                 || !(arguments.get(0)
-                        instanceof ProtosStringValue sourceAssociation)
+                        instanceof ProtosArrayValue sourceAssociation)
                 || !(arguments.get(1)
-                        instanceof ProtosStringValue sourcePath)
-                || !(arguments.get(2)
                         instanceof ProtosStringValue source)) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
-        if (sourcePath.value().isEmpty()) {
+        List<Object> association =
+                sourceAssociation.indexedSnapshot();
+
+        if (association.size() != 2
+                || !(association.get(0)
+                        instanceof ProtosStringValue corpusId)
+                || !(association.get(1)
+                        instanceof ProtosStringValue sourcePath)
+                || corpusId.value().isEmpty()
+                || sourcePath.value().isEmpty()) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
         final Path physicalPath;
         try {
-            physicalPath = Path.of(sourcePath.value());
-        } catch (InvalidPathException failure) {
+            physicalPath =
+                    ProtosTestToolFileSelectionFacility
+                            .resolveAuthorizedSource(
+                                    sourceRoots,
+                                    corpusId.value(),
+                                    sourcePath.value());
+        } catch (IOException failure) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
@@ -155,8 +180,12 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
                     discoveryPrelude.newExecutionContext();
             context.createLocalSlot(
                     "sourceAssociation",
-                    new ProtosStringValue(
-                            sourceAssociation.value()));
+                    discoveryPrelude.newFrozenArray(
+                            List.of(
+                                    new ProtosStringValue(
+                                            corpusId.value()),
+                                    new ProtosStringValue(
+                                            sourcePath.value()))));
             context.createLocalSlot(
                     "discoverySubject",
                     module);
