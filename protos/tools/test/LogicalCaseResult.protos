@@ -120,9 +120,9 @@ exitCode: (results) => {
         })
 
         (
-            (kind == "pass").not() &&
-            (kind == "fail").not() &&
-            (kind == "tool-error").not()
+            !(kind == "pass") &&
+            !(kind == "fail") &&
+            !(kind == "tool-error")
         ).ifTrue(() => {
             policyError()
         })
