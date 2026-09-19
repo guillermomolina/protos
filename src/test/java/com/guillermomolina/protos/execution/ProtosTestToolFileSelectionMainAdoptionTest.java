@@ -28,15 +28,21 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
             Path.of("protos", "tools", "test", "Main.protos");
 
     @Test
-    void fileSelectionOccursAfterPlanMaterializationAndBeforeScheduling()
+    void selectionOccursAfterPlanMaterializationAndBeforeScheduling()
             throws Exception {
         String source =
                 Files.readString(MAIN, StandardCharsets.UTF_8);
 
         int plansFrozen = source.indexOf("plannedSuites.freeze()");
-        int resolver = source.indexOf("fileSourceResolver(filePath)");
-        int filter = source.indexOf("FileSelection.selectPlan(");
-        int zeroMatch = source.indexOf("(selectedSuites.size() == 0)");
+        int fileResolver =
+                source.indexOf("fileSourceResolver(filePath)");
+        int directoryResolver =
+                source.indexOf("directorySourceResolver(directoryPath)");
+        int filter =
+                source.indexOf(
+                        "FileSelection.selectPlanWithDirectories(");
+        int zeroMatch =
+                source.indexOf("(selectedSuites.size() == 0)");
         int ownershipSplit =
                 source.indexOf("LogicalCaseMigration.suiteNativeSpecs(");
         int logicalDiscovery =
@@ -44,18 +50,56 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
         int progressBinding = source.indexOf("suiteProgress:");
         int progress =
                 source.indexOf("startProgress(", progressBinding);
-        int scheduler = source.indexOf(
-                "Runner.runD108WithResources(");
+        int scheduler =
+                source.indexOf("Runner.runD108WithResources(");
 
         assertTrue(plansFrozen >= 0);
-        assertTrue(resolver > plansFrozen);
-        assertTrue(filter > resolver);
+        assertTrue(fileResolver > plansFrozen);
+        assertTrue(directoryResolver > fileResolver);
+        assertTrue(filter > directoryResolver);
         assertTrue(zeroMatch > filter);
         assertTrue(ownershipSplit > zeroMatch);
         assertTrue(logicalDiscovery > ownershipSplit);
         assertTrue(progressBinding > logicalDiscovery);
         assertTrue(progress > progressBinding);
         assertTrue(scheduler > progress);
+    }
+
+    @Test
+    void everyExplicitSelectorMustMatchBeforeUnionFiltering()
+            throws Exception {
+        String source =
+                Files.readString(MAIN, StandardCharsets.UTF_8);
+
+        assertTrue(
+                source.contains(
+                        "filePaths.each((filePath) => {"));
+
+        assertTrue(
+                source.contains(
+                        "directoryPaths.each((directoryPath) => {"));
+
+        assertTrue(
+                source.contains(
+                        """
+                        selectorMatchesAnyPlan(
+                                resolvedAssociations,
+                                []
+                            ).ifFalse(() => {
+                                Error().signal()
+                            })
+                        """.strip()));
+
+        assertTrue(
+                source.contains(
+                        """
+                        selectorMatchesAnyPlan(
+                                [],
+                                resolvedAssociations
+                            ).ifFalse(() => {
+                                Error().signal()
+                            })
+                        """.strip()));
     }
 
     @Test
@@ -66,11 +110,19 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
 
         assertTrue(
                 source.contains(
+                        "filePaths: Options.filePaths(arguments)"));
+
+        assertTrue(
+                source.contains(
+                        "directoryPaths: Options.directoryPaths(arguments)"));
+
+        assertTrue(
+                source.contains(
                         "executionSuites: plannedSuites"));
 
         assertTrue(
                 source.contains(
-                        "(filePath === null).ifFalse(() => {"));
+                        "selectorsActive.ifTrue(() => {"));
 
         assertTrue(
                 source.contains(

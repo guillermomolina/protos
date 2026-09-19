@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
-import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.math.BigInteger;
@@ -36,29 +35,51 @@ final class ProtosTestToolFileOptionTest {
     private static final Path SHARED_ROOT = Path.of("protos", "tools", "shared");
 
     @Test
-    void absenceSelectsNoFileLocator() throws Exception {
+    void absenceSelectsNoFileOrDirectoryLocators() throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
-                                + "Options.filePath(Array(\"test\"))\n");
+                        """
+                        Options: import("self:Options")
+                        [
+                            Options.filePaths(["test"]),
+                            Options.directoryPaths(["test"])
+                        ]
+                        """);
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertSame(ProtosNullValue.INSTANCE, outcome.value());
+
+        ProtosArrayValue observed =
+                assertInstanceOf(ProtosArrayValue.class, outcome.value());
+
+        assertStringArray(
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        observed.indexedAt(BigInteger.ZERO)));
+
+        assertStringArray(
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        observed.indexedAt(BigInteger.ONE)));
     }
 
     @Test
-    void exactSeparateTokenReturnsLiteralFileLocator() throws Exception {
+    void exactSeparateFileTokenReturnsLiteralLocator() throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
-                                + "Options.filePath("
-                                + "Array(\"test\", \"--file\", "
-                                + "\"protos/tests/library/uri/parse-components.protos\"))\n");
+                        """
+                        Options: import("self:Options")
+                        Options.filePaths([
+                            "test",
+                            "--file",
+                            "protos/tests/library/uri/parse-components.protos"
+                        ])
+                        """);
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertEquals(
-                "protos/tests/library/uri/parse-components.protos",
-                assertInstanceOf(ProtosStringValue.class, outcome.value()).value());
+
+        assertStringArray(
+                assertInstanceOf(ProtosArrayValue.class, outcome.value()),
+                "protos/tests/library/uri/parse-components.protos");
     }
 
     @Test
@@ -66,73 +87,152 @@ final class ProtosTestToolFileOptionTest {
             throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
-                                + "Options.filePath("
-                                + "Array(\"test\", \"--file\", \"--jobs\"))\n");
+                        """
+                        Options: import("self:Options")
+                        Options.filePaths([
+                            "test",
+                            "--file",
+                            "--jobs"
+                        ])
+                        """);
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-        assertEquals(
-                "--jobs",
-                assertInstanceOf(ProtosStringValue.class, outcome.value()).value());
+
+        assertStringArray(
+                assertInstanceOf(ProtosArrayValue.class, outcome.value()),
+                "--jobs");
     }
 
     @Test
-    void missingAndRepeatedOccurrencesFailClosed() throws Exception {
+    void repeatedFileOccurrencesAreRetainedInCliOrder() throws Exception {
+        ProtosExecutionOutcome outcome =
+                execute(
+                        """
+                        Options: import("self:Options")
+                        Options.filePaths([
+                            "test",
+                            "--file",
+                            "second.protos",
+                            "--file",
+                            "first.protos"
+                        ])
+                        """);
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+
+        assertStringArray(
+                assertInstanceOf(ProtosArrayValue.class, outcome.value()),
+                "second.protos",
+                "first.protos");
+    }
+
+    @Test
+    void repeatedDirectoryOccurrencesAreRetainedInCliOrder()
+            throws Exception {
+        ProtosExecutionOutcome outcome =
+                execute(
+                        """
+                        Options: import("self:Options")
+                        Options.directoryPaths([
+                            "test",
+                            "--directory",
+                            "group",
+                            "--directory",
+                            "other/nested"
+                        ])
+                        """);
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+
+        assertStringArray(
+                assertInstanceOf(ProtosArrayValue.class, outcome.value()),
+                "group",
+                "other/nested");
+    }
+
+    @Test
+    void missingSelectorValuesFailClosed() throws Exception {
         String[] expressions = {
-            "Array(\"test\", \"--file\")",
-            "Array(\"test\", \"--file\", \"a.protos\", "
-                    + "\"--file\", \"b.protos\")"
+            "[\"test\", \"--file\"]",
+            "[\"test\", \"--directory\"]"
         };
 
         for (String expression : expressions) {
             ProtosExecutionOutcome outcome =
                     execute(
                             "Options: import(\"self:Options\")\n"
-                                    + "Options.filePath("
+                                    + "Options.filePaths("
                                     + expression
                                     + ")\n");
 
             assertEquals(
                     ProtosExecutionOutcome.State.FAILED,
                     outcome.state(),
-                    () -> "expected fail-closed file option: " + expression);
+                    () -> "expected fail-closed selector: " + expression);
         }
     }
 
     @Test
     void positionalAndAttachedFormsRemainIgnored() throws Exception {
         String[] expressions = {
-            "Array(\"test\", \"case.protos\")",
-            "Array(\"test\", \"--file=case.protos\")"
+            "[\"test\", \"case.protos\"]",
+            "[\"test\", \"--file=case.protos\"]",
+            "[\"test\", \"--directory=group\"]"
         };
 
         for (String expression : expressions) {
             ProtosExecutionOutcome outcome =
                     execute(
                             "Options: import(\"self:Options\")\n"
-                                    + "Options.filePath("
+                                    + "arguments: "
                                     + expression
-                                    + ")\n");
+                                    + "\n"
+                                    + "["
+                                    + "Options.filePaths(arguments), "
+                                    + "Options.directoryPaths(arguments)"
+                                    + "]\n");
 
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
-            assertSame(ProtosNullValue.INSTANCE, outcome.value());
+
+            ProtosArrayValue observed =
+                    assertInstanceOf(ProtosArrayValue.class, outcome.value());
+
+            assertStringArray(
+                    assertInstanceOf(
+                            ProtosArrayValue.class,
+                            observed.indexedAt(BigInteger.ZERO)));
+
+            assertStringArray(
+                    assertInstanceOf(
+                            ProtosArrayValue.class,
+                            observed.indexedAt(BigInteger.ONE)));
         }
     }
 
     @Test
-    void fileJobsAndResourceCatalogRemainOrthogonal() throws Exception {
+    void selectorsJobsAndResourceCatalogRemainOrthogonal()
+            throws Exception {
         ProtosExecutionOutcome outcome =
                 execute(
-                        "Options: import(\"self:Options\")\n"
-                                + "arguments: Array("
-                                + "\"test\", "
-                                + "\"--jobs\", \"3\", "
-                                + "\"--file\", \"case.protos\", "
-                                + "\"--resource-catalog\", \"catalog.toml\")\n"
-                                + "Array("
-                                + "Options.jobs(arguments), "
-                                + "Options.resourceCatalogPath(arguments), "
-                                + "Options.filePath(arguments))\n");
+                        """
+                        Options: import("self:Options")
+
+                        arguments: [
+                            "test",
+                            "--jobs", "3",
+                            "--file", "one.protos",
+                            "--directory", "group",
+                            "--file", "two.protos",
+                            "--resource-catalog", "catalog.toml"
+                        ]
+
+                        [
+                            Options.jobs(arguments),
+                            Options.resourceCatalogPath(arguments),
+                            Options.filePaths(arguments),
+                            Options.directoryPaths(arguments)
+                        ]
+                        """);
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
 
@@ -153,12 +253,36 @@ final class ProtosTestToolFileOptionTest {
                                 observed.indexedAt(BigInteger.ONE))
                         .value());
 
-        assertEquals(
-                "case.protos",
+        assertStringArray(
                 assertInstanceOf(
-                                ProtosStringValue.class,
-                                observed.indexedAt(BigInteger.valueOf(2)))
-                        .value());
+                        ProtosArrayValue.class,
+                        observed.indexedAt(BigInteger.valueOf(2))),
+                "one.protos",
+                "two.protos");
+
+        assertStringArray(
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        observed.indexedAt(BigInteger.valueOf(3))),
+                "group");
+    }
+
+    private static void assertStringArray(
+            ProtosArrayValue values,
+            String... expected) {
+        assertEquals(
+                BigInteger.valueOf(expected.length),
+                values.indexedSize());
+
+        for (int index = 0; index < expected.length; index++) {
+            assertEquals(
+                    expected[index],
+                    assertInstanceOf(
+                                    ProtosStringValue.class,
+                                    values.indexedAt(
+                                            BigInteger.valueOf(index)))
+                            .value());
+        }
     }
 
     private static ProtosExecutionOutcome execute(String source) throws Exception {

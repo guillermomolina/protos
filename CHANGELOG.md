@@ -1,3 +1,17 @@
+## 0.3.57-SNAPSHOT
+
+- Advance `TOOL009 — Local-first logical Case Test Tool integration` (GitHub
+  #600) with composable invocation-local source selection. Make `--file FILE`
+  repeatable, add repeatable recursive `--directory DIR` selection, and project
+  both selector families over already-materialized authoritative TestPlans
+  without filesystem test discovery. Require every explicit selector to match
+  independently, union overlapping selections without duplicate Case execution,
+  preserve canonical TestPlan order, retain invocation-CWD relative and absolute
+  locator support behind host authority, and keep physical paths out of Case
+  identity. Extend the host selection capability, Test Tool option/orchestration
+  wiring, focal regressions, and end-to-end coverage accordingly.
+  Implementation version becomes `0.3.57-SNAPSHOT`.
+
 ## 0.3.56-SNAPSHOT
 
 - Implement `I052 — Remove Core fixed-width integer families and preserve

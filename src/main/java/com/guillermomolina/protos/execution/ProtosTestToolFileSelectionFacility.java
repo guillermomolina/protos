@@ -33,15 +33,16 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * D151 invocation-local host resolver for Test Tool exact file selection.
+ * Invocation-local host resolver for Test Tool source selection.
  *
- * <p>The installed bootstrap-local closure translates one user-supplied FILE
- * locator into zero or more authorized corpus/source associations. Physical
- * paths terminate at this boundary: the returned values contain only CorpusId
- * and the source path relative to that corpus authority.
+ * <p>The installed bootstrap-local closures translate user-supplied file and
+ * directory locators into authorized logical corpus/source associations.
+ * Physical paths terminate at this boundary.
  */
 public final class ProtosTestToolFileSelectionFacility {
     public static final String BOOTSTRAP_SLOT = "fileSourceResolver";
+    public static final String DIRECTORY_BOOTSTRAP_SLOT =
+            "directorySourceResolver";
 
     private ProtosTestToolFileSelectionFacility() {}
 
@@ -79,46 +80,45 @@ public final class ProtosTestToolFileSelectionFacility {
         List<CorpusSourceRoot> immutableRoots =
                 List.copyOf(capturedRoots);
 
-        if (activation.context().hasLocalSlot(BOOTSTRAP_SLOT)) {
+        if (activation.context().hasLocalSlot(BOOTSTRAP_SLOT)
+                || activation
+                        .context()
+                        .hasLocalSlot(DIRECTORY_BOOTSTRAP_SLOT)) {
             throw new IllegalStateException(
-                    "file selection bootstrap slot already exists: "
-                            + BOOTSTRAP_SLOT);
+                    "source selection bootstrap slot already exists");
         }
 
         activation.context().createLocalSlot(
                 BOOTSTRAP_SLOT,
                 ProtosClosureValue.nativeClosure(
                         (callActivation, supplied) ->
-                                resolve(
+                                resolveFile(
+                                        callActivation,
+                                        supplied,
+                                        capturedWorkingDirectory,
+                                        immutableRoots)));
+
+        activation.context().createLocalSlot(
+                DIRECTORY_BOOTSTRAP_SLOT,
+                ProtosClosureValue.nativeClosure(
+                        (callActivation, supplied) ->
+                                resolveDirectory(
                                         callActivation,
                                         supplied,
                                         capturedWorkingDirectory,
                                         immutableRoots)));
     }
 
-    private static Object resolve(
+    private static Object resolveFile(
             ProtosActivation activation,
             List<?> supplied,
             Path invocationWorkingDirectory,
             List<CorpusSourceRoot> sourceRoots) {
-        if (supplied.size() != 1
-                || !(supplied.get(0)
-                        instanceof ProtosStringValue selectedFile)) {
-            throw toolError(activation);
-        }
-
-        final Path selectedPath;
-        try {
-            Path parsed = Path.of(selectedFile.value());
-            selectedPath =
-                    (parsed.isAbsolute()
-                                    ? parsed
-                                    : invocationWorkingDirectory.resolve(parsed))
-                            .toAbsolutePath()
-                            .normalize();
-        } catch (InvalidPathException failure) {
-            throw toolError(activation);
-        }
+        Path selectedPath =
+                resolveSelectedPath(
+                        activation,
+                        supplied,
+                        invocationWorkingDirectory);
 
         ProtosPrelude prelude =
                 activation
@@ -154,6 +154,75 @@ public final class ProtosTestToolFileSelectionFacility {
         }
 
         return prelude.newFrozenArray(associations);
+    }
+
+    private static Object resolveDirectory(
+            ProtosActivation activation,
+            List<?> supplied,
+            Path invocationWorkingDirectory,
+            List<CorpusSourceRoot> sourceRoots) {
+        Path selectedPath =
+                resolveSelectedPath(
+                        activation,
+                        supplied,
+                        invocationWorkingDirectory);
+
+        ProtosPrelude prelude =
+                activation
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "directory selection requires caller Core prelude"));
+
+        ArrayList<Object> associations = new ArrayList<>();
+
+        for (CorpusSourceRoot sourceRoot : sourceRoots) {
+            Path root = sourceRoot.root();
+
+            if (!selectedPath.startsWith(root)) {
+                continue;
+            }
+
+            Path relative = root.relativize(selectedPath);
+            if (!isExactDirectory(root, relative, selectedPath)) {
+                continue;
+            }
+
+            ProtosArrayValue association =
+                    prelude.newFrozenArray(
+                            List.of(
+                                    new ProtosStringValue(
+                                            sourceRoot.corpusId()),
+                                    new ProtosStringValue(
+                                            logicalRelativeDirectoryPath(
+                                                    relative))));
+            associations.add(association);
+        }
+
+        return prelude.newFrozenArray(associations);
+    }
+
+    private static Path resolveSelectedPath(
+            ProtosActivation activation,
+            List<?> supplied,
+            Path invocationWorkingDirectory) {
+        if (supplied.size() != 1
+                || !(supplied.get(0)
+                        instanceof ProtosStringValue selectedLocator)) {
+            throw toolError(activation);
+        }
+
+        try {
+            Path parsed = Path.of(selectedLocator.value());
+            return (parsed.isAbsolute()
+                            ? parsed
+                            : invocationWorkingDirectory.resolve(parsed))
+                    .toAbsolutePath()
+                    .normalize();
+        } catch (InvalidPathException failure) {
+            throw toolError(activation);
+        }
     }
 
     /**
@@ -245,6 +314,38 @@ public final class ProtosTestToolFileSelectionFacility {
         return resolved;
     }
 
+    private static boolean isExactDirectory(
+            Path root,
+            Path relative,
+            Path selectedPath) {
+        try {
+            /*
+             * The configured corpus root itself is trusted host authority and
+             * may be reached through an aliased installation path.
+             */
+            if (selectedPath.equals(root)) {
+                return Files.isDirectory(selectedPath)
+                        && Files.isReadable(selectedPath);
+            }
+
+            if (!Files.isDirectory(
+                            selectedPath,
+                            LinkOption.NOFOLLOW_LINKS)
+                    || !Files.isReadable(selectedPath)) {
+                return false;
+            }
+
+            Path realRoot = root.toRealPath();
+            Path expectedReal =
+                    realRoot.resolve(relative).normalize();
+            Path selectedReal = selectedPath.toRealPath();
+
+            return selectedReal.equals(expectedReal);
+        } catch (IOException | SecurityException failure) {
+            return false;
+        }
+    }
+
     private static boolean isExactRegularSource(
             Path root,
             Path relative,
@@ -276,6 +377,21 @@ public final class ProtosTestToolFileSelectionFacility {
     }
 
     private static String logicalRelativePath(Path relative) {
+        String result = logicalPath(relative);
+
+        if (result.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "relative source path must not be empty");
+        }
+
+        return result;
+    }
+
+    private static String logicalRelativeDirectoryPath(Path relative) {
+        return logicalPath(relative);
+    }
+
+    private static String logicalPath(Path relative) {
         StringBuilder result = new StringBuilder();
 
         for (Path component : relative) {
@@ -283,11 +399,6 @@ public final class ProtosTestToolFileSelectionFacility {
                 result.append('/');
             }
             result.append(component);
-        }
-
-        if (result.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "relative source path must not be empty");
         }
 
         return result.toString();

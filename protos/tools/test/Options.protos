@@ -65,17 +65,34 @@ fileOption: CommandLine.option({
     minValues: 1
     maxValues: 1
     minOccurrences: 0
-    maxOccurrences: 1
+    maxOccurrences: null
     valueName: "FILE"
+    help: null
+})
+
+directoryOption: CommandLine.option({
+    key: "directory"
+    long: "directory"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: null
+    valueName: "DIR"
     help: null
 })
 
 commandSpec: CommandLine.command({
     name: "test"
     help: null
-    options: Array(jobsOption, resourceCatalogOption, fileOption)
-    positionals: Array()
-    subcommands: Array()
+    options: [
+        jobsOption,
+        resourceCatalogOption,
+        fileOption,
+        directoryOption
+    ]
+    positionals: []
+    subcommands: []
 })
 
 // LIB011-E adapter boundary.
@@ -149,7 +166,8 @@ projectArguments: (arguments) => {
             selected:
                 (argument === "--jobs") ||
                 (argument === "--resource-catalog") ||
-                (argument === "--file")
+                (argument === "--file") ||
+                (argument === "--directory")
 
             selected.ifTrue(() => {
                 appendBuilt(builder, argument)
@@ -164,8 +182,8 @@ projectArguments: (arguments) => {
 // D069/D099/D101 coordinated Test Tool option interpretation.
 //
 // LIB011 now owns structural recognition, separate-value literal consumption,
-// duplicate rejection and missing-value rejection for the projected option
-// stream. TOOL002 retains:
+// occurrence/value cardinality and missing-value rejection according to each
+// projected option specification. TOOL002 retains:
 // - unknown-argument policy through projectArguments;
 // - D069 positive-Integer conversion/default;
 // - D099/D101 resource-catalog absence and exact PATH selection.
@@ -174,7 +192,8 @@ parse: (arguments) => {
 
     jobsValue: 1
     resourceCatalogPathValue: null
-    filePathValue: null
+    filePathValues: []
+    directoryPathValues: []
 
     parsed.command.options.each((occurrence) => {
         (occurrence.key == "jobs").ifTrue(() => {
@@ -186,11 +205,29 @@ parse: (arguments) => {
         })
 
         (occurrence.key == "file").ifTrue(() => {
-            filePathValue = occurrence.value
+            filePathValues = [
+                ...filePathValues,
+                occurrence.value
+            ]
+        })
+
+        (occurrence.key == "directory").ifTrue(() => {
+            directoryPathValues = [
+                ...directoryPathValues,
+                occurrence.value
+            ]
         })
     })
 
-    Array(jobsValue, resourceCatalogPathValue, filePathValue)
+    filePathValues.freeze()
+    directoryPathValues.freeze()
+
+    [
+        jobsValue,
+        resourceCatalogPathValue,
+        filePathValues,
+        directoryPathValues
+    ]
 }
 
 // D069: one positive logical Test Tool capacity value, defaulting to one.
@@ -205,8 +242,13 @@ resourceCatalogPath: (arguments) => {
     parse(arguments)[1]
 }
 
-// D151 B': zero or one exact invocation-local --file FILE locator token.
-// Host/controller path interpretation is deliberately outside this module.
-filePath: (arguments) => {
+// TOOL009 focal selector input. Locator interpretation and source authority
+// remain outside this module.
+filePaths: (arguments) => {
     parse(arguments)[2]
 }
+
+directoryPaths: (arguments) => {
+    parse(arguments)[3]
+}
+

@@ -38,32 +38,151 @@ associationMatches: (association, corpusId, casePath) => {
         (associationPath == casePath)
 }
 
-// D151: selection never reconstructs CaseSpec. Matching CaseSpecs are retained
-// by identity and in their original TestPlan order.
-selectPlan: (corpusId, plan, associations) => {
-    selectedCases: Array()
+pathWithinDirectory: (casePath, directoryPath) => {
+    matches: directoryPath.size() == 0
+
+    matches.ifFalse(() => {
+        longEnough: casePath.size() > directoryPath.size()
+
+        longEnough.ifTrue(() => {
+            prefixMatches: true
+            index: 0
+
+            (() =>
+                prefixMatches &&
+                (index < directoryPath.size())
+            ).while() {
+                prefixMatches =
+                    casePath[index] == directoryPath[index]
+                index = index + 1
+            }
+
+            matches =
+                prefixMatches &&
+                (casePath[directoryPath.size()] == "/")
+        })
+    })
+
+    matches
+}
+
+directoryAssociationMatches: (
+    association,
+    corpusId,
+    casePath
+) => {
+    (association.size() == 2).ifFalse(() => {
+        selectionError()
+    })
+
+    associationCorpus: association[0]
+    associationDirectory: association[1]
+
+    ("" + associationCorpus === associationCorpus).ifFalse(() => {
+        selectionError()
+    })
+    ("" + associationDirectory === associationDirectory).ifFalse(() => {
+        selectionError()
+    })
+
+    (associationCorpus == corpusId) &&
+        pathWithinDirectory(
+            casePath,
+            associationDirectory
+        )
+}
+
+caseMatches: (
+    corpusId,
+    casePath,
+    fileAssociations,
+    directoryAssociations
+) => {
+    selected: false
+
+    fileAssociations.each((association) => {
+        associationMatches(
+            association,
+            corpusId,
+            casePath
+        ).ifTrue(() => {
+            selected = true
+        })
+    })
+
+    directoryAssociations.each((association) => {
+        directoryAssociationMatches(
+            association,
+            corpusId,
+            casePath
+        ).ifTrue(() => {
+            selected = true
+        })
+    })
+
+    selected
+}
+
+planHasMatch: (
+    corpusId,
+    plan,
+    fileAssociations,
+    directoryAssociations
+) => {
+    matched: false
 
     Manifest.planCases(plan).each((spec) => {
-        selected: false
-
-        associations.each((association) => {
-            associationMatches(
-                association,
-                corpusId,
-                Manifest.casePath(spec)
-            ).ifTrue(() => {
-                selected = true
-            })
+        caseMatches(
+            corpusId,
+            Manifest.casePath(spec),
+            fileAssociations,
+            directoryAssociations
+        ).ifTrue(() => {
+            matched = true
         })
+    })
 
-        selected.ifTrue(() => {
-            selectedCases = Array(...selectedCases, spec)
+    matched
+}
+
+// Selection never reconstructs CaseSpec. Every CaseSpec is visited exactly once,
+// so overlapping file/directory selectors naturally deduplicate while retaining
+// canonical TestPlan order.
+selectPlanWithDirectories: (
+    corpusId,
+    plan,
+    fileAssociations,
+    directoryAssociations
+) => {
+    selectedCases: []
+
+    Manifest.planCases(plan).each((spec) => {
+        caseMatches(
+            corpusId,
+            Manifest.casePath(spec),
+            fileAssociations,
+            directoryAssociations
+        ).ifTrue(() => {
+            selectedCases = [
+                ...selectedCases,
+                spec
+            ]
         })
     })
 
     selectedCases.freeze()
 
-    selectedPlan: Array(selectedCases)
+    selectedPlan: [selectedCases]
     selectedPlan.freeze()
     selectedPlan
+}
+
+// D151 compatibility surface for the original exact-file selector.
+selectPlan: (corpusId, plan, associations) => {
+    selectPlanWithDirectories(
+        corpusId,
+        plan,
+        associations,
+        []
+    )
 }

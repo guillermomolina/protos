@@ -32,7 +32,8 @@ LogicalCaseMigration: import("self:LogicalCaseMigration")
 arguments: process.args()
 jobs: Options.jobs(arguments)
 resourceCatalogPath: Options.resourceCatalogPath(arguments)
-filePath: Options.filePath(arguments)
+filePaths: Options.filePaths(arguments)
+directoryPaths: Options.directoryPaths(arguments)
 
 resourceCatalog: ResourceCatalog.empty()
 (resourceCatalogPath === null).ifFalse(() => {
@@ -230,20 +231,84 @@ planIndex: 0
 }
 plannedSuites.freeze()
 
-// D151: unfiltered execution retains the exact pre-selection TestPlan set.
-// Only an explicit --file selector creates a filtered execution view.
-executionSuites: plannedSuites
-
-(filePath === null).ifFalse(() => {
-    fileAssociations: fileSourceResolver(filePath)
-    selectedSuites: Array()
+// TOOL009 selection remains a projection over fully materialized authoritative
+// TestPlans. Host resolver output supplies only logical source associations;
+// neither file nor directory selection performs filesystem test discovery.
+selectorMatchesAnyPlan: (
+    selectedFileAssociations,
+    selectedDirectoryAssociations
+) => {
+    matched: false
 
     plannedSuites.each((planned) => {
-        selectedPlan: FileSelection.selectPlan(
+        FileSelection.planHasMatch(
             planned.leaf.corpus,
             planned.plan,
-            fileAssociations
-        )
+            selectedFileAssociations,
+            selectedDirectoryAssociations
+        ).ifTrue(() => {
+            matched = true
+        })
+    })
+
+    matched
+}
+
+fileAssociations: []
+filePaths.each((filePath) => {
+    resolvedAssociations: fileSourceResolver(filePath)
+
+    selectorMatchesAnyPlan(
+        resolvedAssociations,
+        []
+    ).ifFalse(() => {
+        Error().signal()
+    })
+
+    fileAssociations = [
+        ...fileAssociations,
+        ...resolvedAssociations
+    ]
+})
+fileAssociations.freeze()
+
+directoryAssociations: []
+directoryPaths.each((directoryPath) => {
+    resolvedAssociations:
+        directorySourceResolver(directoryPath)
+
+    selectorMatchesAnyPlan(
+        [],
+        resolvedAssociations
+    ).ifFalse(() => {
+        Error().signal()
+    })
+
+    directoryAssociations = [
+        ...directoryAssociations,
+        ...resolvedAssociations
+    ]
+})
+directoryAssociations.freeze()
+
+selectorsActive:
+    (filePaths.size() > 0) ||
+    (directoryPaths.size() > 0)
+
+// Unfiltered execution retains the exact pre-selection TestPlan set.
+executionSuites: plannedSuites
+
+selectorsActive.ifTrue(() => {
+    selectedSuites: []
+
+    plannedSuites.each((planned) => {
+        selectedPlan:
+            FileSelection.selectPlanWithDirectories(
+                planned.leaf.corpus,
+                planned.plan,
+                fileAssociations,
+                directoryAssociations
+            )
 
         (Manifest.planCases(selectedPlan).size() > 0).ifTrue(() => {
             selected: {
@@ -254,12 +319,16 @@ executionSuites: plannedSuites
                 plan: selectedPlan
             }
             selected.freeze()
-            selectedSuites = Array(...selectedSuites, selected)
+            selectedSuites = [
+                ...selectedSuites,
+                selected
+            ]
         })
     })
 
-    // D151 zero-match is a selection/configuration error and therefore occurs
-    // before progress state exists or any case reaches the scheduler.
+    // Every explicit selector was already required to match independently.
+    // Retain this as a fail-closed aggregate invariant before progress or
+    // scheduling begins.
     (selectedSuites.size() == 0).ifTrue(() => {
         Error().signal()
     })

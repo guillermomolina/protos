@@ -182,6 +182,128 @@ final class ProtosTestToolFileSelectionPlanTest {
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
 
+    @Test
+    void directoryAssociationSelectsRecursivelyWithoutSiblingPrefix()
+            throws Exception {
+        ProtosExecutionOutcome outcome =
+                execute(
+                        """
+                        Manifest: import("self:Manifest")
+                        FileSelection: import("self:FileSelection")
+
+                        first:
+                            Manifest.projectTreeCaseSpec(
+                                ["project-a", "group/first.protos", "true"],
+                                "protos/example"
+                            )
+                        second:
+                            Manifest.projectTreeCaseSpec(
+                                [
+                                    "project-b",
+                                    "group/nested/second.protos",
+                                    "true"
+                                ],
+                                "protos/example"
+                            )
+                        sibling:
+                            Manifest.projectTreeCaseSpec(
+                                ["project-c", "grouped/third.protos", "true"],
+                                "protos/example"
+                            )
+
+                        cases: [first, second, sibling]
+                        cases.freeze()
+                        plan: [cases]
+                        plan.freeze()
+
+                        selected:
+                            FileSelection.selectPlanWithDirectories(
+                                "protos/corpus/example",
+                                plan,
+                                [],
+                                [
+                                    [
+                                        "protos/corpus/example",
+                                        "fixtures/group"
+                                    ]
+                                ]
+                            )
+
+                        selectedCases: Manifest.planCases(selected)
+
+                        (selectedCases.size() == 2) &&
+                            (selectedCases[0] === first) &&
+                            (selectedCases[1] === second)
+                        """);
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+    }
+
+    @Test
+    void overlappingSelectorsDeduplicateAndKeepCanonicalPlanOrder()
+            throws Exception {
+        ProtosExecutionOutcome outcome =
+                execute(
+                        """
+                        Manifest: import("self:Manifest")
+                        FileSelection: import("self:FileSelection")
+
+                        first:
+                            Manifest.projectTreeCaseSpec(
+                                ["project-a", "group/first.protos", "true"],
+                                "protos/example"
+                            )
+                        second:
+                            Manifest.projectTreeCaseSpec(
+                                ["project-b", "other.protos", "true"],
+                                "protos/example"
+                            )
+                        third:
+                            Manifest.projectTreeCaseSpec(
+                                ["project-c", "group/third.protos", "error"],
+                                "protos/example"
+                            )
+
+                        cases: [first, second, third]
+                        cases.freeze()
+                        plan: [cases]
+                        plan.freeze()
+
+                        selected:
+                            FileSelection.selectPlanWithDirectories(
+                                "protos/corpus/example",
+                                plan,
+                                [
+                                    [
+                                        "protos/corpus/example",
+                                        "fixtures/group/third.protos"
+                                    ],
+                                    [
+                                        "protos/corpus/example",
+                                        "fixtures/other.protos"
+                                    ]
+                                ],
+                                [
+                                    [
+                                        "protos/corpus/example",
+                                        "fixtures/group"
+                                    ]
+                                ]
+                            )
+
+                        selectedCases: Manifest.planCases(selected)
+
+                        (selectedCases.size() == 3) &&
+                            (selectedCases[0] === first) &&
+                            (selectedCases[1] === second) &&
+                            (selectedCases[2] === third)
+                        """);
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+    }
+
     private static ProtosExecutionOutcome execute(String source) throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(

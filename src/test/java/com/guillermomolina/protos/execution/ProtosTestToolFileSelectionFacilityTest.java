@@ -195,6 +195,100 @@ final class ProtosTestToolFileSelectionFacilityTest {
     }
 
     @Test
+    void relativeDirectoryResolvesToLogicalCorpusDirectory()
+            throws Exception {
+        Path root =
+                Files.createDirectories(tempDir.resolve("corpus"));
+        Path selected =
+                Files.createDirectories(
+                        root.resolve("group").resolve("nested"));
+
+        Fixture fixture =
+                fixture(
+                        tempDir,
+                        List.of(
+                                sourceRoot(
+                                        "protos/corpus/example",
+                                        root)));
+
+        ProtosArrayValue associations =
+                resolveDirectory(fixture, selected.toString());
+
+        assertEquals(
+                BigInteger.ONE,
+                associations.indexedSize());
+        assertAssociation(
+                associations,
+                0,
+                "protos/corpus/example",
+                "group/nested");
+    }
+
+    @Test
+    void corpusRootDirectoryUsesEmptyLogicalDirectory()
+            throws Exception {
+        Path root =
+                Files.createDirectories(tempDir.resolve("corpus"));
+
+        Fixture fixture =
+                fixture(
+                        tempDir,
+                        List.of(
+                                sourceRoot(
+                                        "protos/corpus/example",
+                                        root)));
+
+        ProtosArrayValue associations =
+                resolveDirectory(fixture, root.toString());
+
+        assertEquals(
+                BigInteger.ONE,
+                associations.indexedSize());
+        assertAssociation(
+                associations,
+                0,
+                "protos/corpus/example",
+                "");
+    }
+
+    @Test
+    void directoryResolverRejectsFileMissingAndOutsideLocators()
+            throws Exception {
+        Path root =
+                Files.createDirectories(tempDir.resolve("corpus"));
+        Path file =
+                Files.writeString(
+                        root.resolve("case.protos"),
+                        "true");
+
+        Fixture fixture =
+                fixture(
+                        tempDir,
+                        List.of(
+                                sourceRoot(
+                                        "protos/corpus/example",
+                                        root)));
+
+        assertEquals(
+                BigInteger.ZERO,
+                resolveDirectory(fixture, file.toString()).indexedSize());
+
+        assertEquals(
+                BigInteger.ZERO,
+                resolveDirectory(
+                                fixture,
+                                root.resolve("missing").toString())
+                        .indexedSize());
+
+        assertEquals(
+                BigInteger.ZERO,
+                resolveDirectory(
+                                fixture,
+                                tempDir.resolve("outside").toString())
+                        .indexedSize());
+    }
+
+    @Test
     void symbolicLinkAliasIsNotSelected() throws Exception {
         Path root =
                 Files.createDirectories(tempDir.resolve("corpus"));
@@ -278,6 +372,12 @@ final class ProtosTestToolFileSelectionFacilityTest {
                         .hasLocalSlot(
                                 ProtosTestToolFileSelectionFacility
                                         .BOOTSTRAP_SLOT));
+        assertTrue(
+                activation
+                        .context()
+                        .hasLocalSlot(
+                                ProtosTestToolFileSelectionFacility
+                                        .DIRECTORY_BOOTSTRAP_SLOT));
 
         ProtosActivation independent =
                 prelude.newModuleActivation();
@@ -288,6 +388,12 @@ final class ProtosTestToolFileSelectionFacilityTest {
                         .hasLocalSlot(
                                 ProtosTestToolFileSelectionFacility
                                         .BOOTSTRAP_SLOT));
+        assertFalse(
+                independent
+                        .context()
+                        .hasLocalSlot(
+                                ProtosTestToolFileSelectionFacility
+                                        .DIRECTORY_BOOTSTRAP_SLOT));
     }
 
     @Test
@@ -450,6 +556,32 @@ final class ProtosTestToolFileSelectionFacilityTest {
                                 List.of(
                                         new ProtosStringValue(
                                                 selectedFile))));
+    }
+
+    private static ProtosArrayValue resolveDirectory(
+            Fixture fixture,
+            String selectedDirectory) {
+        ProtosClosureValue closure =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        fixture
+                                .activation()
+                                .context()
+                                .readLocalSlot(
+                                        ProtosTestToolFileSelectionFacility
+                                                .DIRECTORY_BOOTSTRAP_SLOT)
+                                .orElseThrow());
+
+        return assertInstanceOf(
+                ProtosArrayValue.class,
+                closure
+                        .nativeBody()
+                        .orElseThrow()
+                        .execute(
+                                fixture.activation(),
+                                List.of(
+                                        new ProtosStringValue(
+                                                selectedDirectory))));
     }
 
     private static void assertAssociation(
