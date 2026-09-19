@@ -53,9 +53,6 @@ class ProtosRepresentedValueLookupTest {
         ProtosPrelude prelude = corePrelude();
         Object integerCall = prelude.integerPrototype().readLocalSlot("call").orElseThrow();
         Object floatCall = prelude.floatPrototype().readLocalSlot("call").orElseThrow();
-        ProtosObjectValue fixedPrototype =
-                prelude.fixedIntegerPrototype(ProtosFixedIntegerValue.Family.UINT8);
-        Object fixedCall = fixedPrototype.readLocalSlot("call").orElseThrow();
 
         ProtosSlotLookupResult integerSelected =
                 ProtosValueLookup.lookup(
@@ -75,16 +72,6 @@ class ProtosRepresentedValueLookupTest {
         assertSame(floatCall, floatSelected.value());
         assertSame(prelude.floatPrototype(), floatSelected.home());
 
-        ProtosSlotLookupResult fixedSelected =
-                ProtosValueLookup.lookup(
-                                new ProtosFixedIntegerValue(
-                                        ProtosFixedIntegerValue.Family.UINT8,
-                                        BigInteger.valueOf(7)),
-                                "call",
-                                prelude)
-                        .orElseThrow();
-        assertSame(fixedCall, fixedSelected.value());
-        assertSame(fixedPrototype, fixedSelected.home());
     }
 
     // Deliberately Java-side: this fixes exact root lookup-home identity and the

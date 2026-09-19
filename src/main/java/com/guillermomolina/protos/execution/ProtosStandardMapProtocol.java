@@ -439,9 +439,6 @@ public final class ProtosStandardMapProtocol {
   if (h instanceof ProtosIntegerValue i) {
    return i.value();
   }
-  if (h instanceof ProtosFixedIntegerValue i) {
-   return i.value();
-  }
   throw err(a);
  }
  static boolean requireEqualityResultForStructured(Object q, ProtosActivation a) {

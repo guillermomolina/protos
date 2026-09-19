@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
@@ -79,7 +78,6 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardErrorProtocol.java", 2),
                     Map.entry("execution/ProtosStandardImportProtocol.java", 1),
                     Map.entry("execution/ProtosStandardIntegerProtocol.java", 4),
-                    Map.entry("execution/ProtosStandardFixedIntegerProtocol.java", 1),
                     Map.entry("execution/ProtosStandardFutureProtocol.java", 2),
                     Map.entry("execution/ProtosStandardFloatProtocol.java", 2),
                     Map.entry("execution/ProtosStandardBooleanProtocol.java", 1),
@@ -125,8 +123,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(36, actualCore.size());
-        assertEquals(147, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(35, actualCore.size());
+        assertEquals(146, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -195,14 +193,19 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 Set.of("call", "+", "-", "*", "/", "recognizes"));
         assertSourceBacked(prelude.floatPrototype(), "negated");
 
-        for (ProtosFixedIntegerValue.Family family : ProtosFixedIntegerValue.Family.values()) {
-            ProtosObjectValue prototype = prelude.fixedIntegerPrototype(family);
-            assertNativeSelectors(
-                    family.prototypeName(),
-                    prototype,
-                    Set.of("call", "+", "-", "*", "/", "div", "mod"));
-            assertSourceBacked(prototype, "negated");
-            assertSourceBacked(prototype, "%");
+        for (String removed :
+                Set.of(
+                        "UInt8",
+                        "Int8",
+                        "UInt16",
+                        "Int16",
+                        "UInt32",
+                        "Int32",
+                        "UInt64",
+                        "Int64")) {
+            assertTrue(
+                    prelude.bindings().readLocalSlot(removed).isEmpty(),
+                    () -> removed + " must not remain a Core-prelude binding");
         }
 
         assertNativeSelectors("Context", prelude.contextPrototype(), Set.of());

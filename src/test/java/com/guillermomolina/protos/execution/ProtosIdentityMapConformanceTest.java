@@ -7,13 +7,11 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -32,24 +30,10 @@ class ProtosIdentityMapConformanceTest {
     }
 
     // Deliberately Java-side: ProtosIdentity is the primitive representation
-    // helper consumed by IdentityMap; testing its raw family/NaN/signed-zero
+    // helper consumed by IdentityMap; testing its raw NaN/signed-zero
     // behavior is an implementation contract rather than a message-level test.
     @Test
     void identityHashesAreCoherent() {
-        var a =
-                new ProtosFixedIntegerValue(
-                        ProtosFixedIntegerValue.Family.INT32, BigInteger.ONE);
-        var b =
-                new ProtosFixedIntegerValue(
-                        ProtosFixedIntegerValue.Family.INT32, BigInteger.ONE);
-        var c =
-                new ProtosFixedIntegerValue(
-                        ProtosFixedIntegerValue.Family.UINT32, BigInteger.ONE);
-
-        assertTrue(ProtosIdentity.identical(a, b));
-        assertEquals(ProtosIdentity.identityHash(a), ProtosIdentity.identityHash(b));
-        assertFalse(ProtosIdentity.identical(a, c));
-
         var nan1 = new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000001L));
         var nan2 = new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000002L));
         assertTrue(ProtosIdentity.identical(nan1, nan2));

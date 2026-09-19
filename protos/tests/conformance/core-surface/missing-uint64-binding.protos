@@ -13,28 +13,4 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-
-ok: true
-
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => { true }
-    )
-}
-
-reject(() => { IpAddress(5, 0) }).ifFalse(() => { ok = false })
-reject(() => { IpAddress(4.0, 0) }).ifFalse(() => { ok = false })
-reject(() => { IpAddress(4, -1) }).ifFalse(() => { ok = false })
-reject(() => { IpAddress(4, 4294967296) }).ifFalse(() => { ok = false })
-reject(() => { IpAddress(6, 340282366920938463463374607431768211456) }).ifFalse(() => { ok = false })
-reject(() => { IpAddress(4) }).ifFalse(() => { ok = false })
-reject(() => { IpAddress(4, 1, 2) }).ifFalse(() => { ok = false })
-
-derived: IpAddress {}
-reject(() => { derived(4, 1) }).ifFalse(() => { ok = false })
-
-ok
+UInt64

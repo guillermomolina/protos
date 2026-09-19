@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -212,9 +211,6 @@ public final class ProtosStandardBytesProtocol {
 
     private static BigInteger exactIntegerValue(Object candidate) {
         if (candidate instanceof ProtosIntegerValue integer) {
-            return integer.value();
-        }
-        if (candidate instanceof ProtosFixedIntegerValue integer) {
             return integer.value();
         }
         return null;

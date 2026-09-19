@@ -113,7 +113,6 @@ execution observation. Common retained forms include:
 | `boolean` | `true` or `false` |
 | `null` | no payload (`-` is retained convention) |
 | `integer` | decimal ordinary Integer text |
-| `fixed-integer` | fixed-width family and value, for example `UInt8:255` |
 | `float-bits` | exact 16-hex-digit binary64 bit pattern |
 | `float-nan` | NaN result; payload/sign are not made portable semantics |
 | `error` | execution must fail with an ordinary guest Error |

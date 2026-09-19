@@ -35,21 +35,14 @@ reject: (body) => {
 
 delegatedIntegerLookalike: (1) {}
 
-require(reject(() => { IntegerMath.gcd(UInt8(6), 9) }))
-require(reject(() => { IntegerMath.gcd(Int16(6), 9) }))
 require(reject(() => { IntegerMath.gcd(6.0, 9) }))
 require(reject(() => { IntegerMath.gcd("6", 9) }))
 require(reject(() => { IntegerMath.gcd(delegatedIntegerLookalike, 9) }))
-require(reject(() => { IntegerMath.gcd(9, UInt64(6)) }))
 
-require(reject(() => { IntegerMath.lcm(UInt8(6), 9) }))
-require(reject(() => { IntegerMath.lcm(6, Int32(9)) }))
 require(reject(() => { IntegerMath.lcm(6.0, 9) }))
 require(reject(() => { IntegerMath.lcm(6, null) }))
 require(reject(() => { IntegerMath.lcm(delegatedIntegerLookalike, 9) }))
 
 // Both arguments remain part of the domain even when one mathematical value is zero.
-require(reject(() => { IntegerMath.lcm(0, UInt8(0)) }))
-require(reject(() => { IntegerMath.lcm(UInt8(0), 0) }))
 
 true

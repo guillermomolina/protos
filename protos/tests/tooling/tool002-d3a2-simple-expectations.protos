@@ -39,11 +39,6 @@ errorResult: Runner.evaluateSimple(errorCase, "1.definitelyMissing()", execution
 booleanMismatch: Runner.evaluateSimple(booleanTrue, "false", execution)
 nullMismatch: Runner.evaluateSimple(nullCase, "0", execution)
 integerMismatch: Runner.evaluateSimple(negativeIntegerCase, "-122", execution)
-integerFamilyMismatch: Runner.evaluateSimple(
-    Manifest.parseLine("synthetic/fixed.protos\tinteger\t42"),
-    "UInt8(42)",
-    execution
-)
 errorMismatch: Runner.evaluateSimple(errorCase, "42", execution)
 
 Runner.resultPassed(trueResult) &&
@@ -55,7 +50,6 @@ Runner.resultPassed(errorResult) &&
 (Runner.resultPassed(booleanMismatch) === false) &&
 (Runner.resultPassed(nullMismatch) === false) &&
 (Runner.resultPassed(integerMismatch) === false) &&
-(Runner.resultPassed(integerFamilyMismatch) === false) &&
 (Runner.resultPassed(errorMismatch) === false) &&
 (Runner.resultObservation(trueResult).state === "completed") &&
 (Runner.resultObservation(errorResult).state === "failed") &&

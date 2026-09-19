@@ -18,8 +18,6 @@
 ok: true
 (1 < 1.5).ifFalse(() => { ok = false })
 (1.5 > 1).ifFalse(() => { ok = false })
-(UInt8(1) <= Int16(1)).ifFalse(() => { ok = false })
-(Int16(-1) < UInt8(1)).ifFalse(() => { ok = false })
 (9007199254740993 > 9007199254740992.0).ifFalse(() => { ok = false })
 (9007199254740992.0 < 9007199254740993).ifFalse(() => { ok = false })
 ok

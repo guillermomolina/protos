@@ -18,7 +18,7 @@
 bytes: Encoding.UTF8.encode("")
 low: 0
 mid: 127
-high: UInt8(255)
+high: 255
 
 addedLow: bytes.add(low)
 addedMid: bytes.add(mid)

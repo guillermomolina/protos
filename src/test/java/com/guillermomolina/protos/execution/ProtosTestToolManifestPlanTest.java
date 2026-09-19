@@ -318,7 +318,6 @@ invalidFixture.activation());
             "\"gpu\", \"shared\", -1",
             "\"gpu\", \"shared\", null",
             "\"gpu\", \"shared\", 1.0",
-            "\"gpu\", \"shared\", Int64(1)",
             "\"gpu\", \"shared\", Integer {}",
             "\"gpu\", \"shared\", \"1\"",
             "\"gpu\", \"exclusive\", 1",

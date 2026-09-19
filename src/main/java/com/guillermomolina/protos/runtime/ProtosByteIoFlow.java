@@ -473,7 +473,6 @@ public final class ProtosByteIoFlow {
     }
     private static BigInteger integer(Object v){
         if(v instanceof ProtosIntegerValue i)return i.value();
-        if(v instanceof ProtosFixedIntegerValue i)return i.value();
         return null;
     }
     private static byte[] snapshot(ProtosBytesValue b){

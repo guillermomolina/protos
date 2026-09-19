@@ -24,37 +24,34 @@ because a future Standard Library module operates in the same subject area.
 
 ## Existing Core numeric boundary
 
-Core v0.1 already owns the semantic numeric model:
+The current Core v0.1 numeric semantic model is:
 
 ```text
 Number
 ├── Integer
-│   ├── UInt8
-│   ├── Int8
-│   ├── UInt16
-│   ├── Int16
-│   ├── UInt32
-│   ├── Int32
-│   ├── UInt64
-│   └── Int64
 └── Float
 ```
 
-The following therefore remain Core responsibilities:
+`Integer` is the single unbounded exact-integer family; `Float` is IEEE binary64.
+D156 removed the former width-specific integer families from Core while
+explicitly preserving width/range conversion machinery as an
+implementation/interop capability for a future separately designed FFI or
+binary boundary.
 
-- numeric semantic-family membership;
-- standard `Number`, `Integer`, `Float`, and fixed-width prototype identities;
-- exact fixed-width ranges;
-- unbounded ordinary `Integer` semantics;
+The following remain Core responsibilities:
+
+- numeric semantic-family membership for `Integer` and `Float`;
+- standard `Number`, `Integer`, and `Float` prototype identities;
+- unbounded `Integer` semantics;
 - IEEE binary64 `Float` semantics;
 - numeric `==`, `===`, ordering, and hash coherence;
 - standard arithmetic already owned by Core;
-- exact standard numeric conversion factories;
-- Actor/P transfer semantics for Core numeric values;
+- exact standard `Integer`/`Float` conversion factories;
+- Actor/P transfer semantics for Core numeric values; and
 - the distinction between semantic value and host/internal representation.
 
-`Int64` is therefore simultaneously a numeric concept and a Core concept, just
-as `Map` is simultaneously a collection concept and a Core concept.
+Width-specific numeric descriptors or carriers are not Core numeric families
+merely because Standard Library or future FFI code may need them.
 
 ### No Standard Library `BigInteger` value family
 
@@ -82,9 +79,9 @@ Rejected for the initial Standard Library shape.
 
 The name suggests ownership of numeric types or a general numeric hierarchy,
 while Protos already has a closed normative Core numeric model. A second numeric
-namespace would create a recurring ambiguity about whether `Integer`, `Int64`,
-`Float`, future number-like objects, conversions, or algorithms belong to Core,
-`std:numbers`, or `std:math`.
+namespace would create a recurring ambiguity about whether `Integer`, `Float`,
+future width-specific or number-like objects, conversions, or algorithms belong
+to Core, `std:numbers`, or `std:math`.
 
 Some languages have a useful `numbers` layer because they need an abstract type
 hierarchy or extensible numeric tower. That motivation does not transfer to
@@ -281,7 +278,7 @@ they operate on integers.
 A future focused `std:math/Bits` audit can define questions such as:
 
 - unbounded Integer bit semantics;
-- fixed-width bit semantics;
+- explicit width/range semantics at binary or interop boundaries;
 - signed right shift versus logical right shift;
 - explicit wrapping arithmetic;
 - width selection and masks;
@@ -402,11 +399,11 @@ KEEP IN CORE
     Number
     Integer
     Float
-    UInt8 / Int8
-    UInt16 / Int16
-    UInt32 / Int32
-    UInt64 / Int64
     fundamental arithmetic/equality/order/hash/conversion semantics
+
+KEEP OUTSIDE CORE PENDING SEPARATE DESIGN
+    width/range-specific numeric descriptors or carriers
+    binary/interop/FFI width semantics
 
 DO NOT ADD
     BigInteger as a visible numeric family

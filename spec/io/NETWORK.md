@@ -68,8 +68,8 @@ canonical standard `IpAddress` factory/prototype and requires exactly two suppli
 arguments. `version` must belong to the ordinary unbounded `Integer` family and
 be exactly 4 or 6. `bits` must belong to that same ordinary unbounded `Integer`
 family and must be in `0 .. 2^32-1` for version 4 or `0 .. 2^128-1` for version
-6. A fixed-width numeric value is not accepted merely because its mathematical
-value is in range. Invalid construction signals a fresh ordinary `Error`
+6. A Float is not accepted even when finite, integral, and in range. Invalid
+construction signals a fresh ordinary `Error`
 synchronously and performs no DNS, routing, Network or host I/O.
 
 Every successful invocation returns one fresh ordinary frozen object whose
@@ -136,8 +136,8 @@ The standard factory behavior requires the invocation receiver to be exactly the
 canonical `IpEndpoint` factory/prototype and exactly two supplied arguments.
 `address` must be a recognized standard `IpAddress` under section 2. `port` must
 belong to the ordinary unbounded `Integer` family and be in `1 .. 65535`; a
-fixed-width numeric value is not accepted merely because its mathematical value
-is in range. Invalid construction signals a fresh ordinary `Error` synchronously
+Float is not accepted even when finite, integral, and in range. Invalid
+construction signals a fresh ordinary `Error` synchronously
 and performs no network/DNS/host effect.
 
 Each success returns one fresh ordinary frozen object whose immediate delegation

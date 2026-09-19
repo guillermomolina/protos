@@ -21,7 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
-import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -179,9 +178,6 @@ public final class ProtosStandardTextReaderProtocol {
 
     private static BigInteger integer(Object value) {
         if (value instanceof ProtosIntegerValue integer) {
-            return integer.value();
-        }
-        if (value instanceof ProtosFixedIntegerValue integer) {
             return integer.value();
         }
         return null;

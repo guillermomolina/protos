@@ -20,7 +20,6 @@ ordinary: {}
 ok: true
 (1 == ordinary).ifTrue(() => { ok = false })
 (1.0 == ordinary).ifTrue(() => { ok = false })
-(UInt8(1) == ordinary).ifTrue(() => { ok = false })
 (1 == null).ifTrue(() => { ok = false })
 (1 == true).ifTrue(() => { ok = false })
 ok

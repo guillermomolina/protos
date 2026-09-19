@@ -1,3 +1,21 @@
+## 0.3.56-SNAPSHOT
+
+- Implement `I052 — Remove Core fixed-width integer families and preserve
+  interop capability` (GitHub #628) under ratified D156 Candidate D′ and
+  specification revision `0.1.430`. Remove the eight former Core
+  `UInt8`/`Int8` through `UInt64`/`Int64` source prototypes, prelude bindings,
+  conversion/arithmetic/equality/order/hash participation, runtime transfer and
+  indexed/I/O widening paths, and the obsolete Test Tool `fixed-integer`
+  expectation policy. Core numeric semantics now expose only `Number`,
+  unbounded exact `Integer`, and binary64 `Float`. Preserve reusable
+  width/range-aware host numeric projection behind the internal
+  `ProtosFixedIntegerInteropValue` carrier without granting it guest Core
+  prototype, identity, equality, arithmetic, hashing, transfer, or public FFI
+  semantics. Reconcile Standard Library domain tests, Core architecture guards,
+  current public documentation, and exploratory numeric-boundary notes with the
+  ratified model while retaining the historical TOOL002-D3B1 record as retired.
+  Implementation version becomes `0.3.56-SNAPSHOT`.
+
 ## 0.3.55-SNAPSHOT
 
 - Advance `TOOL009 — Local-first logical Case Test Tool integration` (GitHub

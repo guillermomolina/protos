@@ -21,14 +21,6 @@ _corePreludeBindings: Context {
     Number: Number
     Integer: Integer
     Float: Float
-    UInt8: UInt8
-    Int8: Int8
-    UInt16: UInt16
-    Int16: Int16
-    UInt32: UInt32
-    Int32: Int32
-    UInt64: UInt64
-    Int64: Int64
     Error: Error
     fail: () => {
         Error().signal()

@@ -1089,7 +1089,6 @@ public final class ProtosTextReader {
             BigInteger value;
             Object element = values.get(index);
             if (element instanceof ProtosIntegerValue integer) value = integer.value();
-            else if (element instanceof ProtosFixedIntegerValue integer) value = integer.value();
             else return null;
             if (value.signum() < 0 || value.compareTo(BigInteger.valueOf(255)) > 0) return null;
             result[index] = (byte) value.intValue();

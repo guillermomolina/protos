@@ -35,17 +35,12 @@ reject: (body) => {
 
 delegatedIntegerLookalike: (2) {}
 
-require(reject(() => { IntegerMath.pow(UInt8(2), 3) }))
-require(reject(() => { IntegerMath.pow(2, UInt8(3)) }))
 require(reject(() => { IntegerMath.pow(2.0, 3) }))
 require(reject(() => { IntegerMath.pow(2, 3.0) }))
 require(reject(() => { IntegerMath.pow(delegatedIntegerLookalike, 3) }))
 require(reject(() => { IntegerMath.pow(2, delegatedIntegerLookalike) }))
 require(reject(() => { IntegerMath.pow(2, -1) }))
 
-require(reject(() => { IntegerMath.powMod(UInt8(2), 3, 5) }))
-require(reject(() => { IntegerMath.powMod(2, UInt8(3), 5) }))
-require(reject(() => { IntegerMath.powMod(2, 3, UInt8(5)) }))
 require(reject(() => { IntegerMath.powMod(2.0, 3, 5) }))
 require(reject(() => { IntegerMath.powMod(2, 3.0, 5) }))
 require(reject(() => { IntegerMath.powMod(2, 3, 5.0) }))

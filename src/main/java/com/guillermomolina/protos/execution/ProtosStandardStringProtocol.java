@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -138,9 +137,6 @@ public final class ProtosStandardStringProtocol {
             com.guillermomolina.protos.runtime.ProtosActivation activation,
             Object value) {
         if (value instanceof ProtosIntegerValue integer) {
-            return integer.value();
-        }
-        if (value instanceof ProtosFixedIntegerValue integer) {
             return integer.value();
         }
         throw new ProtosSignalException(ProtosCoreErrors.newError(activation));

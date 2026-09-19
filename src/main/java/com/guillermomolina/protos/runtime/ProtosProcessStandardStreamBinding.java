@@ -447,9 +447,6 @@ public final class ProtosProcessStandardStreamBinding {
         if (value instanceof ProtosIntegerValue integer) {
             return integer.value();
         }
-        if (value instanceof ProtosFixedIntegerValue integer) {
-            return integer.value();
-        }
         return null;
     }
 

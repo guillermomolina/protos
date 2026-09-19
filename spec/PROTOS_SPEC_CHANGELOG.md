@@ -14,6 +14,43 @@ exact per-file history; normative documents do not carry independent
 merely to synchronize revision metadata.
 
 
+## [0.1.430] - 2026-09-19
+
+### D156 / I052 — Remove Core fixed-width integer families
+- Removes `UInt8`, `Int8`, `UInt16`, `Int16`, `UInt32`, `Int32`, `UInt64`, and
+  `Int64` as Core numeric semantic families, prototype objects, and prelude
+  bindings.
+- Defines the Core numeric hierarchy as exactly the common `Number` prototype,
+  the single unbounded exact mathematical `Integer` family, and the IEEE
+  binary64 `Float` family.
+- Removes the former fixed-width conversion factories, checked same-family
+  arithmetic/division/quotient/remainder rules, cross-family identity examples,
+  and width/signedness participation in standard numeric equality, ordering, and
+  hashing.
+- Keeps width/range-specific host or binary representations outside Core
+  semantics. Implementations may preserve such machinery internally or at an
+  interop/FFI boundary, but this revision selects no guest-visible fixed-width
+  value model or public FFI surface.
+- Requires standard Integer-domain APIs, indexed access, Bytes, Map hashes, and
+  IP-address/endpoint validation to consume the single semantic `Integer`
+  family rather than a wider family set.
+- Normative owners changed by this revision:
+  `spec/semantics/VALUES_AND_COLLECTIONS.md`, `spec/io/BYTE_IO.md`, and
+  `spec/io/NETWORK.md`.
+- Informative/runtime alignment is reconciled in
+  `spec/runtime/ABSTRACT_RUNTIME.md`.
+
+### Compatibility and implementation state
+- Programs that reference the removed fixed-width Core names now encounter the
+  ordinary missing-binding behavior unless a program or library defines those
+  names itself.
+- The former Test Tool `fixed-integer` expectation kind is retired because its
+  value family no longer exists in Core.
+- Executable implementation is delivered by I052 in the same repository change.
+- Reusable exact host-width projection remains internal implementation machinery
+  and does not constitute a public FFI contract.
+- Maven implementation version becomes `0.3.56-SNAPSHOT`.
+
 ## [0.1.429] - 2026-09-19
 
 ### D157 / I053 — Scalar Core String indexing with preserved grapheme capability

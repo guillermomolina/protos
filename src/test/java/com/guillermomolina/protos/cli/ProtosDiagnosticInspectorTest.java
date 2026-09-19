@@ -27,7 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosFileValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
-import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
@@ -104,10 +104,10 @@ final class ProtosDiagnosticInspectorTest {
     @Test
     void byteSequencesExposeOnlyBoundedSemanticContent() {
         ProtosBytesValue bytes = new ProtosBytesValue(ProtosObjectValue.rootObject());
-        bytes.indexedAdd(uint8(65));
-        bytes.indexedAdd(uint8(255));
+        bytes.indexedAdd(octet(65));
+        bytes.indexedAdd(octet(255));
         ProtosByteRegionValue region =
-                new ProtosByteRegionValue(List.of(uint8(1), uint8(2)));
+                new ProtosByteRegionValue(List.of(octet(1), octet(2)));
 
         assertEquals("Bytes[65, 255]", inspector.render(bytes));
         assertEquals("ByteRegion[1, 2]", inspector.render(region));
@@ -186,9 +186,8 @@ final class ProtosDiagnosticInspectorTest {
         assertFalse(rendered.contains("\n"), rendered);
     }
 
-    private static ProtosFixedIntegerValue uint8(int value) {
-        return new ProtosFixedIntegerValue(
-                ProtosFixedIntegerValue.Family.UINT8, BigInteger.valueOf(value));
+    private static ProtosIntegerValue octet(int value) {
+        return new ProtosIntegerValue(BigInteger.valueOf(value));
     }
 
 }

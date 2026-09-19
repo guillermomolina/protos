@@ -34,18 +34,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 final class ProtosAdditionalIndexedInteropTest {
     private final InteropLibrary interop = InteropLibrary.getUncached();
 
-    private static ProtosFixedIntegerValue octet(int value) {
-        return new ProtosFixedIntegerValue(
-                ProtosFixedIntegerValue.Family.UINT8,
-                BigInteger.valueOf(value));
+    private static ProtosIntegerValue octet(int value) {
+        return new ProtosIntegerValue(BigInteger.valueOf(value));
     }
 
     @Test
     void bytesProjectsCurrentSynchronizedIndexedStateReadOnly() throws Exception {
         ProtosBytesValue bytes =
                 new ProtosBytesValue(ProtosObjectValue.rootObject());
-        ProtosFixedIntegerValue first = octet(1);
-        ProtosFixedIntegerValue replacement = octet(2);
+        ProtosIntegerValue first = octet(1);
+        ProtosIntegerValue replacement = octet(2);
         bytes.indexedAdd(first);
 
         assertTrue(interop.hasArrayElements(bytes));
@@ -87,8 +85,8 @@ final class ProtosAdditionalIndexedInteropTest {
     @Test
     void byteRegionProjectsExactLiveIndexedReferencesWithoutMutationInterop()
             throws Exception {
-        ProtosFixedIntegerValue first = octet(10);
-        ProtosFixedIntegerValue replacement = octet(11);
+        ProtosIntegerValue first = octet(10);
+        ProtosIntegerValue replacement = octet(11);
         ProtosByteRegionValue region =
                 new ProtosByteRegionValue(List.of(first));
 

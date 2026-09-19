@@ -38,7 +38,6 @@ reject(() => { IpEndpoint(address, 0) }).ifFalse(() => { ok = false })
 reject(() => { IpEndpoint(address, -1) }).ifFalse(() => { ok = false })
 reject(() => { IpEndpoint(address, 65536) }).ifFalse(() => { ok = false })
 reject(() => { IpEndpoint(address, 80.0) }).ifFalse(() => { ok = false })
-reject(() => { IpEndpoint(address, UInt16(80)) }).ifFalse(() => { ok = false })
 reject(() => { IpEndpoint(address) }).ifFalse(() => { ok = false })
 reject(() => { IpEndpoint(address, 80, 81) }).ifFalse(() => { ok = false })
 

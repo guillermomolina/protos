@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -252,9 +251,6 @@ public final class ProtosStandardArrayProtocol {
             ProtosActivation activation,
             Object value) {
         if (value instanceof ProtosIntegerValue integer) {
-            return integer.value();
-        }
-        if (value instanceof ProtosFixedIntegerValue integer) {
             return integer.value();
         }
         throw invalid(activation);

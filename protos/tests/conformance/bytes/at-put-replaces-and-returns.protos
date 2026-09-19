@@ -19,7 +19,7 @@ bytes: Encoding.UTF8.encode("")
 bytes.add(1)
 bytes.add(2)
 
-replacement: UInt16(255)
+replacement: 255
 result: bytes.atPut(0, replacement)
 
 (result === replacement) &&

@@ -114,11 +114,6 @@ public final class ProtosDetachedExecutionValue {
             if (value instanceof ProtosIntegerValue integer) {
                 return remember(value, new ProtosIntegerValue(integer.value()));
             }
-            if (value instanceof ProtosFixedIntegerValue integer) {
-                return remember(
-                        value,
-                        new ProtosFixedIntegerValue(integer.family(), integer.value()));
-            }
             if (value instanceof ProtosFloatValue floating) {
                 return remember(value, new ProtosFloatValue(floating.value()));
             }

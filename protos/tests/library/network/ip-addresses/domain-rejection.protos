@@ -36,8 +36,6 @@ require(reject(() => { IpAddresses.v4(-1, 0, 0, 0) }))
 require(reject(() => { IpAddresses.v4(0, 256, 0, 0) }))
 require(reject(() => { IpAddresses.v4(0, 0, -1, 0) }))
 require(reject(() => { IpAddresses.v4(0, 0, 0, 256) }))
-require(reject(() => { IpAddresses.v4(UInt8(1), 0, 0, 0) }))
-require(reject(() => { IpAddresses.v4(Int16(1), 0, 0, 0) }))
 require(reject(() => { IpAddresses.v4(1.0, 0, 0, 0) }))
 
 // This is a known-valid delegated numeric lookalike shape in Core conformance:
@@ -54,9 +52,6 @@ require(reject(() => {
 }))
 require(reject(() => {
     IpAddresses.v6(0, 65536, 0, 0, 0, 0, 0, 0)
-}))
-require(reject(() => {
-    IpAddresses.v6(UInt16(1), 0, 0, 0, 0, 0, 0, 0)
 }))
 require(reject(() => {
     IpAddresses.v6(1.0, 0, 0, 0, 0, 0, 0, 0)

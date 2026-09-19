@@ -28,14 +28,6 @@ Assertions.require(
     Integer.recognizes(1234567890123456789012345678901234567890) === true
 )
 
-Assertions.require(Integer.recognizes(UInt8(1)) === false)
-Assertions.require(Integer.recognizes(Int8(1)) === false)
-Assertions.require(Integer.recognizes(UInt16(1)) === false)
-Assertions.require(Integer.recognizes(Int16(1)) === false)
-Assertions.require(Integer.recognizes(UInt32(1)) === false)
-Assertions.require(Integer.recognizes(Int32(1)) === false)
-Assertions.require(Integer.recognizes(UInt64(1)) === false)
-Assertions.require(Integer.recognizes(Int64(1)) === false)
 Assertions.require(Integer.recognizes(Integer) === false)
 
 // Float: exact semantic Float, with no numeric promotion.
@@ -133,17 +125,6 @@ Assertions.require(calls.hash == 0)
 Assertions.require(calls.recognizes == 0)
 
 // No additional standard owner acquires an approved recognizer.
-//
-// Fixed-width Integer owners may find Integer.recognizes through ordinary
-// delegation, but exact-owner validation must reject them.
-Assertions.signals(Error, () => { UInt8.recognizes(UInt8(1)) })
-Assertions.signals(Error, () => { Int8.recognizes(Int8(1)) })
-Assertions.signals(Error, () => { UInt16.recognizes(UInt16(1)) })
-Assertions.signals(Error, () => { Int16.recognizes(Int16(1)) })
-Assertions.signals(Error, () => { UInt32.recognizes(UInt32(1)) })
-Assertions.signals(Error, () => { Int32.recognizes(Int32(1)) })
-Assertions.signals(Error, () => { UInt64.recognizes(UInt64(1)) })
-Assertions.signals(Error, () => { Int64.recognizes(Int64(1)) })
 
 Assertions.signals(Error, () => { Number.recognizes(1) })
 Assertions.signals(Error, () => { Map.recognizes(null) })

@@ -581,10 +581,10 @@ Version 0.1 remains a draft, but the major semantic decisions currently tracked 
 ## Numeric Model
 
 - `Number` is the common numeric prototype.
-- `Integer` values are exact and semantically arbitrary precision.
-- `Float` is a separate numeric specialization.
-- Fixed-width integers such as `UInt8` and `Int32` are explicit and range-checked.
-- Ordinary fixed-width arithmetic does not silently wrap.
+- `Integer` is the single Core exact-integer family and is semantically arbitrary precision.
+- `Float` is a separate IEEE binary64 numeric specialization.
+- Core has no width-specific integer families or prelude bindings.
+- Width/range-specific representations belong to explicit binary, interop, or future FFI boundaries rather than ordinary Core arithmetic.
 - Bit operations belong naturally to integer protocols.
 - Endianness belongs to binary encoding/decoding, not to the numeric value itself.
 - Float literals require digits after the decimal point; `2.` is not a valid float literal.
@@ -636,11 +636,10 @@ This also means `Map` can rely directly on `==` without introducing a separate k
 
 ## Numeric Equality and Identity
 
-Numeric `==` compares mathematical numeric value across numeric families without requiring coercion:
+Numeric `==` compares mathematical numeric value across `Integer` and `Float` without requiring coercion:
 
 ```js
 1 == 1.0               // true
-UInt8(1) == 1          // true
 ```
 
 The comparison must not create false equality through lossy conversion.
@@ -649,8 +648,6 @@ Numeric `===` is stricter and includes the semantic numeric family:
 
 ```js
 1 === 1.0               // false
-UInt8(1) === 1          // false
-Int32(1) === UInt32(1)  // false
 ```
 
 Float NaN and signed-zero equality/identity behavior is defined explicitly

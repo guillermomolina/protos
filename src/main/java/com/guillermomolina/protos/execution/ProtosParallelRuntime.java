@@ -356,7 +356,6 @@ public final class ProtosParallelRuntime {
         static Object copy(Object v,ProtosActivation a,IdentityHashMap<Object,Object> memo){
             if(v==ProtosNullValue.INSTANCE||v==ProtosBooleanValue.TRUE||v==ProtosBooleanValue.FALSE)return v;
             if(v instanceof ProtosIntegerValue x)return new ProtosIntegerValue(x.value());
-            if(v instanceof ProtosFixedIntegerValue x)return new ProtosFixedIntegerValue(x.family(),x.value());
             if(v instanceof ProtosFloatValue x)return new ProtosFloatValue(x.value());
             if(v instanceof ProtosStringValue x)return new ProtosStringValue(x.value());
             if(v instanceof ProtosPathValue x)return new ProtosPathValue(a.prelude().orElseThrow().pathPrototype(),x.rooted(),x.components());
@@ -456,7 +455,7 @@ public final class ProtosParallelRuntime {
     }
     private static ProtosArrayValue requireArray(ProtosActivation a){if(!(a.receiver() instanceof ProtosArrayValue x))throw error(a);return x;}
     private static BigInteger integer(Object v,ProtosActivation a){
-        if(v instanceof ProtosIntegerValue x)return x.value();if(v instanceof ProtosFixedIntegerValue x)return x.value();throw error(a);}
+        if(v instanceof ProtosIntegerValue x)return x.value();throw error(a);}
     private static void octet(Object v,ProtosActivation a){BigInteger x=integer(v,a);if(x.signum()<0||x.compareTo(BigInteger.valueOf(255))>0)throw error(a);}
     private static ProtosObjectValue occ(ProtosActivation a,ProtosCoreErrors.StandardError e){return ProtosCoreErrors.newOccurrence(a,e);}
     private static ProtosObjectValue nonParallel(ProtosActivation a){return occ(a,ProtosCoreErrors.StandardError.NON_PARALLEL_VALUE);}

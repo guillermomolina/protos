@@ -12,7 +12,7 @@ The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.m
 
 `Bytes` is a standardized byte-sequence object but is not a required Core-prelude binding.
 
-A `Bytes` element is an ordinary semantic `Integer` in the inclusive range 0 through 255. A byte value is not a distinct `Byte` or `UInt8` object merely because it is stored in `Bytes`.
+A `Bytes` element is a semantic `Integer` in the inclusive range 0 through 255. Byte storage does not introduce a distinct Core numeric value family.
 
 The minimum standardized `Bytes` behavior required by this model is conceptually:
 

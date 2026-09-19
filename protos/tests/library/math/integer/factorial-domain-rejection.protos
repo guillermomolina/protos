@@ -36,8 +36,6 @@ reject: (body) => {
 delegatedIntegerLookalike: (5) {}
 
 require(reject(() => { IntegerMath.factorial(-1) }))
-require(reject(() => { IntegerMath.factorial(UInt8(5)) }))
-require(reject(() => { IntegerMath.factorial(Int16(5)) }))
 require(reject(() => { IntegerMath.factorial(5.0) }))
 require(reject(() => { IntegerMath.factorial("5") }))
 require(reject(() => { IntegerMath.factorial(null) }))

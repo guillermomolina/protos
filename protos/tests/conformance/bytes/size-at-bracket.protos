@@ -17,7 +17,7 @@
 
 bytes: Encoding.UTF8.encode("")
 zero: 0
-high: UInt8(255)
+high: 255
 
 bytes.add(zero)
 bytes.add(high)
@@ -25,6 +25,6 @@ bytes.add(high)
 ok: true
 (bytes.size() == 2).ifFalse(() => { ok = false })
 (bytes.at(0) === zero).ifFalse(() => { ok = false })
-(bytes.at(UInt8(1)) === high).ifFalse(() => { ok = false })
+(bytes.at(1) === high).ifFalse(() => { ok = false })
 (bytes[1] === high).ifFalse(() => { ok = false })
 ok

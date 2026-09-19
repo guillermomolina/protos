@@ -143,11 +143,6 @@ public final class ProtosPrelude {
         return requiredOrdinaryBinding("Float");
     }
 
-    public ProtosObjectValue fixedIntegerPrototype(
-            ProtosFixedIntegerValue.Family family) {
-        Objects.requireNonNull(family, "family");
-        return requiredOrdinaryBinding(family.prototypeName());
-    }
 
     public ProtosObjectValue errorPrototype() {
         return (ProtosObjectValue)

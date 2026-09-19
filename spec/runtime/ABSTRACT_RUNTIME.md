@@ -3290,8 +3290,6 @@ Therefore:
 
 ```text
 1 === 1.0               -> false
-UInt8(1) === 1          -> false
-Int32(1) === UInt32(1)  -> false
 ```
 
 The implementation may use optimized paths, but it must preserve this distinction between exact numeric equality and numeric-family-sensitive identity.
@@ -3319,8 +3317,8 @@ numericEquals(a, b) == true
 for every pair of Core Number values.
 
 For finite values, the key represents the exact mathematical numeric value. It
-must not contain the semantic numeric family, fixed-width Integer prototype,
-signedness, boxing identity, source spelling, or host storage representation.
+must not contain the semantic numeric family, boxing identity, source spelling,
+or host storage representation.
 
 Consequently exact cross-family equalities share one key, including Integer
 values and exactly equal binary64 Float values. Positive and negative Float zero
@@ -3435,7 +3433,11 @@ Integer arithmetic is semantically exact and must not expose host-machine overfl
 
 Such specialization is not observable through identity, equality, message lookup, or arithmetic results.
 
-Fixed-width integer objects have explicit range and width semantics. Ordinary operations that exceed the representable range signal an error rather than silently wrapping. Separate explicitly wrapping protocols may be provided.
+Core has no width-specific Integer semantic objects. A runtime may still use
+machine-width specializations or width-bearing interop carriers internally, but
+such representations do not acquire Core prototypes, numeric identity,
+arithmetic, equality, or hashing semantics merely by existing at a host
+boundary.
 
 Numeric protocol dispatch remains ordinary receiver-based message lookup. Integer-only messages such as bit operations are found through the receiver's delegation chain; there is no static overload resolution.
 

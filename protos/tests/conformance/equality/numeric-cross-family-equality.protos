@@ -17,8 +17,4 @@
 
 ok: true
 (1 == 1.0).ifFalse(() => { ok = false })
-(UInt8(1) == 1).ifFalse(() => { ok = false })
-(Int32(1) == UInt32(1)).ifFalse(() => { ok = false })
-(Int8(-1) == -1).ifFalse(() => { ok = false })
-(UInt64(18446744073709551615) == 18446744073709551615).ifFalse(() => { ok = false })
 ok

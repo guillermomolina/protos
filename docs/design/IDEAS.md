@@ -87,11 +87,12 @@ A focused exploratory audit of future Standard Library domains, including the
 Core-versus-library numeric boundary, is recorded in
 [`STANDARD_LIBRARY_IDEAS.md`](STANDARD_LIBRARY_IDEAS.md).
 
-Current numeric direction: keep all existing Core numeric families including
-`Integer`, fixed-width integers such as `Int64`, and `Float` in Core; do not add
-a visible `BigInteger` family; explore one `std:math/...` library domain rather
-than a parallel `std:numbers/...` hierarchy. The detailed record also lists
-candidate future library areas and which ones are likely to require a separate
-runtime/capability prerequisite.
+Current numeric direction after D156: keep `Number`, unbounded `Integer`, and
+binary64 `Float` in Core; do not add a visible `BigInteger` family; keep
+width/range-specific numeric capability outside Core pending a separately
+designed binary/interop/FFI boundary; and explore one `std:math/...` library
+domain rather than a parallel `std:numbers/...` hierarchy. The detailed record
+also lists candidate future library areas and which ones are likely to require a
+separate runtime/capability prerequisite.
 
 No `LIBxxx` identifier or implementation commitment is created by this idea.

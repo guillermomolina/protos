@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -134,13 +133,11 @@ public final class ProtosStandardNumberOrderingProtocol {
 
     private static BigInteger exactInteger(Object value) {
         if (value instanceof ProtosIntegerValue integer) return integer.value();
-        if (value instanceof ProtosFixedIntegerValue fixed) return fixed.value();
         throw new IllegalArgumentException("value is not an exact-integer family");
     }
 
     private static boolean isSemanticNumber(Object value) {
         return value instanceof ProtosIntegerValue
-                || value instanceof ProtosFixedIntegerValue
                 || value instanceof ProtosFloatValue;
     }
 

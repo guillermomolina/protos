@@ -421,6 +421,12 @@ still owns bounded outer parallel execution and deterministic reporting.
 
 ### TOOL002-D3B1 fixed-integer expectation boundary
 
+> **Historical / retired by D156 and I052.** This subsection records the former
+> Test Tool policy when Core still exposed width-specific integer families.
+> `fixed-integer` is no longer a retained expectation kind, and the runner no
+> longer constructs or matches those former Core values.
+
+
 D3B is subdivided because fixed-width family/value matching and Error-parent
 taxonomy matching are independent policy surfaces. D3B1 owns only
 `fixed-integer`; D3B2 remains responsible for `error-parent`.
