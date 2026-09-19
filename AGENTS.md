@@ -2349,6 +2349,13 @@ GitHub Issue numbers, and never fabricate historical dates/evidence. Family
 semantics remain those documented by their owning policies.
 
 Parent Issues remain open until their repository-defined outcome is complete.
+A parent MAY close while independently meaningful descendants remain open when
+the parent's own repository-defined outcome is complete. Do not keep a completed
+AUDxxx, Dxxx, PLATxxx, or other parent artificially open merely to preserve
+descendant visibility in Project scheduling; native hierarchy preserves
+provenance while each descendant's own Status governs its lifecycle and
+actionability.
+
 Sub-issues require independently meaningful work; temporary patch versions,
 diagnostics, launcher attempts, and cost-driven micro-slices do not become
 project work merely because they helped execution.

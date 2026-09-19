@@ -602,18 +602,9 @@ def _single_select_field(project, name):
     raise SyncError("Project does not contain a single-select %s field" % name)
 
 
-def _named_project_view(project, name):
-    matches = [
-        node
-        for node in ((project.get("views") or {}).get("nodes") or [])
-        if node and node.get("name") == name
-    ]
-    if len(matches) != 1:
-        raise SyncError(
-            "Project must contain exactly one %r view; found %d"
-            % (name, len(matches))
-        )
-    node = matches[0]
+def _normalized_project_view(node, name):
+    if not node or node.get("name") != name:
+        return None
     if not node.get("id"):
         raise SyncError("Project view %r has no node id" % name)
     return {
@@ -621,6 +612,72 @@ def _named_project_view(project, name):
         "name": node.get("name"),
         "filter": node.get("filter") or "",
     }
+
+
+def _named_project_view(project, name):
+    matches = [
+        _normalized_project_view(node, name)
+        for node in ((project.get("views") or {}).get("nodes") or [])
+        if node and node.get("name") == name
+    ]
+    matches = [node for node in matches if node is not None]
+    if len(matches) > 1:
+        raise SyncError(
+            "Project contains duplicate %r views; found %d"
+            % (name, len(matches))
+        )
+    return matches[0] if matches else None
+
+
+def _project_view_probe_query(max_view_number):
+    fields = []
+    for number in range(1, int(max_view_number) + 1):
+        fields.append(
+            "      v%d: view(number: %d) { id name filter }"
+            % (number, number)
+        )
+    return (
+        "query($login: String!, $number: Int!) {\n"
+        "  user(login: $login) {\n"
+        "    projectV2(number: $number) {\n"
+        + "\n".join(fields)
+        + "\n    }\n  }\n}\n"
+    )
+
+
+def discover_project_view_by_number(
+    project_token,
+    owner,
+    project_number,
+    name,
+    max_view_number=64,
+    graphql_runner=None,
+):
+    if graphql_runner is None:
+        graphql_runner = _graphql
+    data = graphql_runner(
+        project_token,
+        _project_view_probe_query(max_view_number),
+        {"login": owner, "number": int(project_number)},
+    )
+    project = (data.get("user") or {}).get("projectV2")
+    if not project:
+        raise SyncError("Cannot resolve Project while probing saved views")
+
+    matches = []
+    for key, node in project.items():
+        if not key.startswith("v"):
+            continue
+        normalized = _normalized_project_view(node, name)
+        if normalized is not None:
+            matches.append(normalized)
+
+    if len(matches) > 1:
+        raise SyncError(
+            "Project contains duplicate %r views during numbered probe"
+            % name
+        )
+    return matches[0] if matches else None
 
 
 def work_queue_filter_action(current_filter):
@@ -631,6 +688,13 @@ def work_queue_filter_action(current_filter):
 
 def reconcile_work_queue_view(project_token, project):
     view = project["work_queue"]
+    if view is None:
+        print(
+            "PROJECT_VIEW_CONVERGENCE=EXPLICITLY_UNAVAILABLE "
+            "Work queue not exposed by current Project token"
+        )
+        return None
+
     action = work_queue_filter_action(view.get("filter") or "")
     if action == "unchanged":
         print("PROJECT_VIEW_FILTER: Work queue -> canonical")
@@ -689,6 +753,13 @@ def load_project(project_token, owner, number):
         )
 
     work_queue = _named_project_view(project, WORK_QUEUE_VIEW_NAME)
+    if work_queue is None:
+        work_queue = discover_project_view_by_number(
+            project_token,
+            owner,
+            number,
+            WORK_QUEUE_VIEW_NAME,
+        )
 
     return {
         "id": project["id"],
@@ -1592,22 +1663,78 @@ def self_test():
         "name": WORK_QUEUE_VIEW_NAME,
         "filter": WORK_QUEUE_FILTER,
     }
+    assert _named_project_view(
+        {"views": {"nodes": []}},
+        WORK_QUEUE_VIEW_NAME,
+    ) is None
 
-    for bad_views in ([], [
-        {"id": "a", "name": WORK_QUEUE_VIEW_NAME, "filter": ""},
-        {"id": "b", "name": WORK_QUEUE_VIEW_NAME, "filter": ""},
-    ]):
-        try:
-            _named_project_view(
-                {"views": {"nodes": bad_views}},
-                WORK_QUEUE_VIEW_NAME,
-            )
-        except SyncError:
-            pass
-        else:
-            raise AssertionError(
-                "Work queue view lookup must fail closed on missing/duplicate view"
-            )
+    try:
+        _named_project_view(
+            {
+                "views": {
+                    "nodes": [
+                        {"id": "a", "name": WORK_QUEUE_VIEW_NAME, "filter": ""},
+                        {"id": "b", "name": WORK_QUEUE_VIEW_NAME, "filter": ""},
+                    ]
+                }
+            },
+            WORK_QUEUE_VIEW_NAME,
+        )
+    except SyncError:
+        pass
+    else:
+        raise AssertionError(
+            "duplicate Work queue views must fail closed"
+        )
+
+    probe_query = _project_view_probe_query(3)
+    assert "v1: view(number: 1)" in probe_query
+    assert "v3: view(number: 3)" in probe_query
+
+    def fake_view_probe(_token, _query, variables):
+        assert variables == {"login": "owner", "number": 7}
+        return {
+            "user": {
+                "projectV2": {
+                    "v1": {
+                        "id": "other",
+                        "name": "Decisions",
+                        "filter": "x",
+                    },
+                    "v2": {
+                        "id": "work",
+                        "name": WORK_QUEUE_VIEW_NAME,
+                        "filter": WORK_QUEUE_FILTER,
+                    },
+                    "v3": None,
+                }
+            }
+        }
+
+    assert discover_project_view_by_number(
+        "token",
+        "owner",
+        7,
+        WORK_QUEUE_VIEW_NAME,
+        max_view_number=3,
+        graphql_runner=fake_view_probe,
+    ) == {
+        "id": "work",
+        "name": WORK_QUEUE_VIEW_NAME,
+        "filter": WORK_QUEUE_FILTER,
+    }
+
+    def fake_no_view(_token, _query, _variables):
+        return {"user": {"projectV2": {"v1": None, "v2": None}}}
+
+    assert discover_project_view_by_number(
+        "token",
+        "owner",
+        7,
+        WORK_QUEUE_VIEW_NAME,
+        max_view_number=2,
+        graphql_runner=fake_no_view,
+    ) is None
 
     print("BOUNDED_DESCENDANT_TRAVERSAL_SELF_TEST: PASS")
     print("BOUNDED_PROJECT_ITEM_LOOKUP_SELF_TEST: PASS")
