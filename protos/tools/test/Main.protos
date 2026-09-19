@@ -467,6 +467,16 @@ executionSuites = migrationExecutionSuites
 logicalResults: Array()
 logicalResults.freeze()
 
+// D174: lifecycle observation exists before suite-native Case execution.
+// Presentation policy is deliberately separate and remains unchanged here.
+invocationLifecycle:
+    Progress.beginLifecycle()
+
+invocationLifecycleObserver:
+    Progress.lifecycleObserver(
+        invocationLifecycle
+    )
+
 (logicalProjections.size() > 0).ifTrue(() => {
     logicalCompletions:
         LogicalCaseRunner.run(
@@ -520,13 +530,18 @@ logicalResults.freeze()
                 )
             },
             logicalCaseExecutionAsync,
-            jobs
+            jobs,
+            invocationLifecycleObserver
         ).value()
 
     logicalResults =
         LogicalCaseResult.projectAll(
             logicalCompletions
         )
+})
+
+(Progress.inFlightCount(invocationLifecycle) == 0).ifFalse(() => {
+    Error().signal()
 })
 
 (logicalResults.size() == logicalCaseMetadata.size()).ifFalse(() => {
@@ -627,7 +642,8 @@ suiteIndex: 0
                 resourceExecutionInspectAsync,
                 jobs,
                 Progress.observer(suiteProgress),
-                caseAuthorityExecutorAsync
+                caseAuthorityExecutorAsync,
+                invocationLifecycleObserver
             )
 
         infrastructureFailed =
@@ -730,6 +746,10 @@ suiteIndex: 0
 
     suiteIndex = suiteIndex + 1
 }
+
+(Progress.inFlightCount(invocationLifecycle) == 0).ifFalse(() => {
+    Error().signal()
+})
 
 (!invocationAborted).ifTrue(() => {
     (completedRuns.size() > 0).ifTrue(() => {

@@ -58,7 +58,11 @@ prelude.newModuleActivation());
 
         String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
         assertTrue(runner.contains("terminalObserver = null"));
+        assertTrue(runner.contains("lifecycleObserver = null"));
         assertTrue(runner.contains("terminalObserver("));
+        assertTrue(runner.contains("lifecycleObserver("));
+        assertTrue(runner.contains("\"started\""));
+        assertTrue(runner.contains("\"terminal\""));
         assertTrue(runner.contains("infrastructureFailed"));
 
         // TOOL004-B owns only the optional Runner seam. TOOL004-C may wire a

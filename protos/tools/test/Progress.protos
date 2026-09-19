@@ -61,7 +61,7 @@ selectedCount: (plan) => {
     count
 }
 
-// State layout is private to this module:
+// Phase-state layout is private to this module:
 // [phaseName, total, completed, failed, step, nextMilestone, emitLine]
 begin: (phaseName, total, emitLine) => {
     Integer.recognizes(total).ifFalse(() => {
@@ -102,6 +102,82 @@ beginPlan: (phaseName, plan, emitLine) => {
         selectedCount(plan),
         emitLine
     )
+}
+
+// D174 invocation-wide lifecycle tracker.
+// State layout: [inFlight]
+beginLifecycle: () => {
+    Array(Array())
+}
+
+inFlightCount: (state) => {
+    state[0].size()
+}
+
+inFlightSnapshot: (state) => {
+    snapshot: Array(...state[0])
+    snapshot.freeze()
+}
+
+lifecycleObserver: (state) => {
+    (kind, caseRef, result) => {
+        (kind === "started").ifTrue(() => {
+            duplicate: false
+
+            state[0].each((running) => {
+                (running === caseRef).ifTrue(() => {
+                    duplicate = true
+                })
+            })
+
+            duplicate.ifTrue(() => {
+                policyError()
+            })
+
+            state[0] =
+                Array(
+                    ...state[0],
+                    caseRef
+                )
+        })
+
+        (kind === "terminal").ifTrue(() => {
+            retained: Array()
+            found: false
+
+            state[0].each((running) => {
+                (running === caseRef).ifTrue(() => {
+                    found.ifTrue(() => {
+                        policyError()
+                    })
+                    found = true
+                })
+
+                (running === caseRef).ifFalse(() => {
+                    retained =
+                        Array(
+                            ...retained,
+                            running
+                        )
+                })
+            })
+
+            found.ifFalse(() => {
+                policyError()
+            })
+
+            state[0] = retained
+        })
+
+        (
+            (kind === "started").not() &&
+            (kind === "terminal").not()
+        ).ifTrue(() => {
+            policyError()
+        })
+
+        null
+    }
 }
 
 observer: (state) => {

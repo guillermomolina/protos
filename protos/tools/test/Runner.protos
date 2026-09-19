@@ -1918,7 +1918,8 @@ runD108WithResourcesWithLoader: (
     resourceInspectorExecutorAsync,
     maxInFlight,
     terminalObserver = null,
-    caseAuthorityExecutorAsync = null
+    caseAuthorityExecutorAsync = null,
+    lifecycleObserver = null
 ) => {
     Integer.recognizes(maxInFlight).ifFalse(() => {
         policyError()
@@ -2030,6 +2031,15 @@ runD108WithResourcesWithLoader: (
                     (reservation === null).ifFalse(() => {
                         spec: windowSpecs[windowIndex]
                         source: windowSources[windowIndex]
+
+                        (lifecycleObserver === null).ifFalse(() => {
+                            lifecycleObserver(
+                                "started",
+                                spec,
+                                null
+                            )
+                        })
+
                         scheduled:
                             scheduleD108CaseAsync(
                                 spec,
@@ -2165,10 +2175,19 @@ runD108WithResourcesWithLoader: (
                     policyError()
                 })
 
+                // D174: lifecycle terminality is observable only after the
+                // existing D108 terminal/reconciliation boundary.
+                (lifecycleObserver === null).ifFalse(() => {
+                    lifecycleObserver(
+                        "terminal",
+                        spec,
+                        evaluation
+                    )
+                })
+
                 // TOOL004-B / D120: this observer sees only attempts that have
                 // crossed D108's terminal barrier and had capacity/result state
-                // reconciled. It is presentation-neutral and optional; Main does
-                // not supply it until TOOL004-C.
+                // reconciled. It remains presentation-neutral and optional.
                 (terminalObserver === null).ifFalse(() => {
                     terminalObserver(
                         spec,
@@ -2280,7 +2299,8 @@ runD108WithResources: (
     resourceInspectorExecutorAsync,
     maxInFlight,
     terminalObserver = null,
-    caseAuthorityExecutorAsync = null
+    caseAuthorityExecutorAsync = null,
+    lifecycleObserver = null
 ) => {
     runD108WithResourcesWithLoader(
         plan,
@@ -2292,7 +2312,8 @@ runD108WithResources: (
         resourceInspectorExecutorAsync,
         maxInFlight,
         terminalObserver,
-        caseAuthorityExecutorAsync
+        caseAuthorityExecutorAsync,
+        lifecycleObserver
     )
 }
 

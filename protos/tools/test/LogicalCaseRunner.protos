@@ -21,7 +21,8 @@ run: (
     projections,
     sourceLoader,
     executorAsync,
-    maxInFlight
+    maxInFlight,
+    lifecycleObserver = null
 ) => {
     Integer.recognizes(maxInFlight).ifFalse(() => {
         fail()
@@ -75,6 +76,14 @@ run: (
             entry: item[1]
             source: sourceLoader(entry)
 
+            (lifecycleObserver === null).ifFalse(() => {
+                lifecycleObserver(
+                    "started",
+                    entry,
+                    null
+                )
+            })
+
             completion:
                 executorAsync(
                     CasePlan.sourceAssociation(entry),
@@ -82,6 +91,14 @@ run: (
                     signature,
                     CasePlan.selector(entry)
                 ).value()
+
+            (lifecycleObserver === null).ifFalse(() => {
+                lifecycleObserver(
+                    "terminal",
+                    entry,
+                    completion
+                )
+            })
 
             results[index] = completion
         })

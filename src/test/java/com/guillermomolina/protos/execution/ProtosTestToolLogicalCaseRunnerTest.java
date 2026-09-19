@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.math.BigInteger;
@@ -241,6 +242,195 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                 stringAt(results, 3));
 
         assertTrue(results.isFrozen());
+    }
+
+    @Test
+    void lifecycleObserverKeepsPendingCaseIdentifiableUntilTerminal()
+            throws Exception {
+        ProtosBundledToolModuleResolver resolver =
+                new ProtosBundledToolModuleResolver(
+                        "test",
+                        TOOL_ROOT,
+                        SHARED_ROOT,
+                        new ProtosStandardLibraryModuleResolver(
+                                STANDARD_LIBRARY));
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                resolver);
+
+        ProtosActivation activation =
+                prelude.newModuleActivation();
+
+        Map<String, ProtosFutureValue> pending =
+                new LinkedHashMap<>();
+
+        ArrayList<String> lifecycleKinds =
+                new ArrayList<>();
+        ArrayList<Object> lifecycleRefs =
+                new ArrayList<>();
+        ArrayList<Object> lifecycleResults =
+                new ArrayList<>();
+
+        ProtosClosureValue sourceLoader =
+                ProtosClosureValue.nativeClosure(
+                        (caller, arguments) -> {
+                            assertEquals(1, arguments.size());
+                            return new ProtosStringValue(
+                                    "unused-source");
+                        });
+
+        ProtosClosureValue executorAsync =
+                ProtosClosureValue.nativeClosure(
+                        (caller, arguments) -> {
+                            assertEquals(4, arguments.size());
+
+                            ProtosStringValue selector =
+                                    assertInstanceOf(
+                                            ProtosStringValue.class,
+                                            arguments.get(3));
+
+                            ProtosFutureValue future =
+                                    new ProtosFutureValue(
+                                            prelude.futurePrototype(),
+                                            caller.executionDomain());
+
+                            pending.put(
+                                    selector.value(),
+                                    future);
+
+                            caller.executionDomain()
+                                    .registerActorNonTaskFutureForRuntime(
+                                            future);
+
+                            return future;
+                        });
+
+        ProtosClosureValue lifecycleObserver =
+                ProtosClosureValue.nativeClosure(
+                        (caller, arguments) -> {
+                            assertEquals(3, arguments.size());
+
+                            ProtosStringValue kind =
+                                    assertInstanceOf(
+                                            ProtosStringValue.class,
+                                            arguments.get(0));
+
+                            lifecycleKinds.add(
+                                    kind.value());
+                            lifecycleRefs.add(
+                                    arguments.get(1));
+                            lifecycleResults.add(
+                                    arguments.get(2));
+
+                            return ProtosNullValue.INSTANCE;
+                        });
+
+        activation
+                .context()
+                .createLocalSlot(
+                        "sourceLoader",
+                        sourceLoader);
+
+        activation
+                .context()
+                .createLocalSlot(
+                        "executorAsync",
+                        executorAsync);
+
+        activation
+                .context()
+                .createLocalSlot(
+                        "lifecycleObserver",
+                        lifecycleObserver);
+
+        String source =
+                """
+                Discovery: import("self:Discovery")
+                Runner: import("self:LogicalCaseRunner")
+                TestValue: import("std:test/Test")
+
+                suite: {
+                    tests: Array(
+                        TestValue("only", () => null)
+                    )
+                }
+
+                projection:
+                    Discovery.projectionFromModule(
+                        "suite.protos",
+                        suite
+                    )
+
+                Runner.run(
+                    Array(projection),
+                    sourceLoader,
+                    executorAsync,
+                    1,
+                    lifecycleObserver
+                )
+                """;
+
+        Object runnerValue =
+                ProtosTestExecutionSupport.evaluate(
+                        source,
+                        activation);
+
+        ProtosFutureValue run =
+                assertInstanceOf(
+                        ProtosFutureValue.class,
+                        runnerValue);
+
+        ProtosTestExecutionSupport.dispatchUntilIdle(
+                activation.executionDomain());
+
+        assertEquals(
+                List.of("started"),
+                lifecycleKinds);
+
+        assertEquals(
+                ProtosFutureValue.State.PENDING,
+                run.state());
+
+        assertEquals(
+                1,
+                lifecycleRefs.size());
+
+        assertSame(
+                ProtosNullValue.INSTANCE,
+                lifecycleResults.get(0));
+
+        pending.get("only")
+                .resolve(
+                        new ProtosStringValue("done-only"),
+                        activation);
+
+        dispatchUntilTerminal(
+                run,
+                activation);
+
+        assertEquals(
+                List.of(
+                        "started",
+                        "terminal"),
+                lifecycleKinds);
+
+        assertEquals(
+                2,
+                lifecycleRefs.size());
+
+        assertSame(
+                lifecycleRefs.get(0),
+                lifecycleRefs.get(1));
+
+        assertEquals(
+                "done-only",
+                assertInstanceOf(
+                                ProtosStringValue.class,
+                                lifecycleResults.get(1))
+                        .value());
     }
 
     @Test

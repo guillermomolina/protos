@@ -89,6 +89,20 @@ ordinaryExecutorAsync: (source) => {
 }
 
 terminalEvents: Array()
+lifecycleEvents: Array()
+
+lifecycleObserver: (kind, spec, result) => {
+    lifecycleEvents =
+        Array(
+            ...lifecycleEvents,
+            Array(
+                kind,
+                spec,
+                result
+            )
+        )
+    null
+}
 
 terminalObserver: (spec, evaluation, infrastructureFailed) => {
     terminalEvents = Array(
@@ -111,7 +125,9 @@ plainEnvelope: Runner.runD108WithResourcesWithLoader(
     null,
     null,
     2,
-    terminalObserver
+    terminalObserver,
+    null,
+    lifecycleObserver
 )
 
 plainPassed: Runner.d108RunInfrastructureFailed(plainEnvelope).not()
@@ -123,6 +139,46 @@ plainPassed.ifTrue(() => {
 })
 
 plainPassed = plainPassed && (terminalEvents.size() == 2)
+plainPassed = plainPassed && (lifecycleEvents.size() == 4)
+
+plainPassed.ifTrue(() => {
+    firstStarted: lifecycleEvents[0]
+    secondStarted: lifecycleEvents[1]
+    firstTerminal: lifecycleEvents[2]
+    secondTerminal: lifecycleEvents[3]
+
+    plainPassed =
+        firstStarted[0] === "started"
+    plainPassed =
+        plainPassed &&
+        (secondStarted[0] === "started")
+    plainPassed =
+        plainPassed &&
+        (firstTerminal[0] === "terminal")
+    plainPassed =
+        plainPassed &&
+        (secondTerminal[0] === "terminal")
+
+    plainPassed =
+        plainPassed &&
+        (firstStarted[1] === plainPass)
+    plainPassed =
+        plainPassed &&
+        (secondStarted[1] === plainFail)
+    plainPassed =
+        plainPassed &&
+        (firstTerminal[1] === plainPass)
+    plainPassed =
+        plainPassed &&
+        (secondTerminal[1] === plainFail)
+
+    plainPassed =
+        plainPassed &&
+        (firstStarted[2] === null)
+    plainPassed =
+        plainPassed &&
+        (secondStarted[2] === null)
+})
 
 plainPassed.ifTrue(() => {
     first: terminalEvents[0]
@@ -200,6 +256,7 @@ resourceExecutorAsync: (source, bindings) => {
 }
 
 terminalEvents = Array()
+lifecycleEvents = Array()
 
 infrastructureEnvelope: Runner.runD108WithResourcesWithLoader(
     infrastructurePlan,
@@ -210,7 +267,9 @@ infrastructureEnvelope: Runner.runD108WithResourcesWithLoader(
     resourceExecutorAsync,
     null,
     1,
-    terminalObserver
+    terminalObserver,
+    null,
+    lifecycleObserver
 )
 
 infrastructurePassed:
@@ -227,6 +286,30 @@ infrastructurePassed =
 infrastructurePassed =
     infrastructurePassed &&
     (terminalEvents.size() == 1)
+
+infrastructurePassed =
+    infrastructurePassed &&
+    (lifecycleEvents.size() == 2)
+
+infrastructurePassed.ifTrue(() => {
+    started: lifecycleEvents[0]
+    terminal: lifecycleEvents[1]
+
+    infrastructurePassed =
+        started[0] === "started"
+    infrastructurePassed =
+        infrastructurePassed &&
+        (terminal[0] === "terminal")
+    infrastructurePassed =
+        infrastructurePassed &&
+        (started[1] === infrastructureSpec)
+    infrastructurePassed =
+        infrastructurePassed &&
+        (terminal[1] === infrastructureSpec)
+    infrastructurePassed =
+        infrastructurePassed &&
+        (started[2] === null)
+})
 
 infrastructurePassed.ifTrue(() => {
     event: terminalEvents[0]

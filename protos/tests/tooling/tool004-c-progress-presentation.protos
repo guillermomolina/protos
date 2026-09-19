@@ -32,6 +32,87 @@ failSpec:
 passEvaluation: Array(true, null)
 failEvaluation: Array(false, null)
 
+lifecycleState:
+    Progress.beginLifecycle()
+
+lifecycle:
+    Progress.lifecycleObserver(
+        lifecycleState
+    )
+
+firstRef: Array("first")
+firstRef.freeze()
+
+secondRef: Array("second")
+secondRef.freeze()
+
+lifecycle(
+    "started",
+    firstRef,
+    null
+)
+
+lifecycle(
+    "started",
+    secondRef,
+    null
+)
+
+lifecyclePassed:
+    Progress.inFlightCount(
+        lifecycleState
+    ) == 2
+
+lifecycleSnapshot:
+    Progress.inFlightSnapshot(
+        lifecycleState
+    )
+
+lifecyclePassed =
+    lifecyclePassed &&
+    (lifecycleSnapshot[0] === firstRef)
+
+lifecyclePassed =
+    lifecyclePassed &&
+    (lifecycleSnapshot[1] === secondRef)
+
+lifecycle(
+    "terminal",
+    firstRef,
+    1
+)
+
+lifecyclePassed =
+    lifecyclePassed &&
+    (
+        Progress.inFlightCount(
+            lifecycleState
+        ) == 1
+    )
+
+lifecycleSnapshot =
+    Progress.inFlightSnapshot(
+        lifecycleState
+    )
+
+lifecyclePassed =
+    lifecyclePassed &&
+    (lifecycleSnapshot[0] === secondRef)
+
+lifecycle(
+    "terminal",
+    secondRef,
+    2
+)
+
+lifecyclePassed =
+    lifecyclePassed &&
+    (
+        Progress.inFlightCount(
+            lifecycleState
+        ) == 0
+    )
+
 state: Progress.begin("main", 23, emitLine)
 terminal: Progress.observer(state)
 
@@ -130,4 +211,4 @@ infraIndex: 0
     infraIndex = infraIndex + 1
 })
 
-passed && infraPassed
+passed && infraPassed && lifecyclePassed
