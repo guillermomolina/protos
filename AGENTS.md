@@ -3165,7 +3165,59 @@ those tests must be handled as separately tracked work.
 
 Legacy Java/JUnit tests that predate this rule are not required to migrate
 opportunistically during unrelated work. Their bounded repository-wide
-reconciliation is owned separately by TEST002.\n\n## Guest execution backend and Java execution tests
+reconciliation is owned separately by TEST002.\n\n### TOOL009 M2 test ownership for newly added Protos tests
+<!-- TOOL009 M2 NEW-TEST-OWNERSHIP -->
+
+During D152 M2, production-test ownership migration is an explicit domain
+allowlist. Agents MUST NOT infer suite-native ownership merely because a test
+uses `std:test/Test`, `std:test/Assertions`, lives near already migrated tests,
+or could technically execute through the logical Case runner.
+
+The current M2 domain states are:
+
+- `protos/tests/conformance/library/test/` — **SUITE_NATIVE_ADMITTED**. New
+  production tests in this domain MUST use the suite-native authoring model:
+  import `std:test/Test`, expose a finite frozen `tests` Array of named Tests,
+  keep test behavior inside Test bodies rather than executing it during module
+  discovery, and use the temporary `suite-native` manifest marker while the M2
+  bridge exists.
+- `protos/tests/conformance/library/text/` — **MIGRATION_IN_PROGRESS**. Do not
+  add a new production test in this domain or choose its ownership independently
+  until the active TOOL009 migration batch is green and this state is updated.
+- Core and central language-semantics conformance domains — including
+  `core-surface/` and other tests whose primary subject is Core/runtime language
+  semantics — are **NOT_ADMITTED_DURING_ACTIVE_AUD009_REFACTORING**. Preserve
+  their current owner and manifest/TestPlan form. Do not opportunistically move
+  them to suite-native ownership. TOOL009 migration of those domains requires
+  explicit coordination with the project owner before the first ownership
+  change.
+- Every other production-test domain remains **CURRENT_OWNER** until explicitly
+  admitted by a bounded TOOL009 M2 migration. New tests there MUST follow the
+  domain's current authoritative owner rather than creating a mixed ownership
+  transition implicitly.
+
+When a domain is admitted to suite-native ownership, the same bounded migration
+work MUST update this allowlist. Do not use a broad repository-wide rule such as
+"all new Protos tests are suite-native" while M2 is incomplete.
+
+JUnit-owned component fixtures under `protos/tests/tooling/` are not production
+TestPlan ownership merely because they contain Protos source. A fixture that is
+executed externally to prove discovery, scheduling, rematerialization, result
+classification, bootstrap, host/runtime, or another independent component
+invariant SHOULD remain externally owned unless separate work deliberately
+changes that evidence boundary.
+
+For a suite-native source, D153 discovery must remain observational with respect
+to test execution: constructing/importing declarations is allowed, but test
+behavior, mutable test state, expected failures, and other case effects belong
+inside the selected Test body. The physical source file is not the logical Case
+identity.
+
+This section is temporary migration policy. M3/M4 must remove or replace it when
+the incumbent production-test ownership path and `suite-native` migration marker
+no longer exist.
+
+## Guest execution backend and Java execution tests
 <!-- AUD012 PLAT035 BYTECODE-ONLY-EXECUTION -->
 
 PLAT035 establishes Truffle Bytecode DSL as the only executable Protos backend.
