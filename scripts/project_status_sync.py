@@ -653,13 +653,35 @@ def discover_project_view_by_number(
     max_view_number=64,
     graphql_runner=None,
 ):
+    variables = {"login": owner, "number": int(project_number)}
+    query = _project_view_probe_query(max_view_number)
+
     if graphql_runner is None:
-        graphql_runner = _graphql
-    data = graphql_runner(
-        project_token,
-        _project_view_probe_query(max_view_number),
-        {"login": owner, "number": int(project_number)},
-    )
+        response, _headers = _json_request(
+            "https://api.github.com/graphql",
+            project_token,
+            method="POST",
+            payload={"query": query, "variables": variables},
+        )
+        errors = (response or {}).get("errors") or []
+        unexpected = [
+            entry
+            for entry in errors
+            if entry.get("type") != "NOT_FOUND"
+        ]
+        if unexpected:
+            raise SyncError(
+                "GraphQL saved-view probe failed: "
+                + json.dumps(unexpected, sort_keys=True)
+            )
+        data = (response or {}).get("data")
+        if data is None:
+            raise SyncError(
+                "GraphQL saved-view probe response did not contain data"
+            )
+    else:
+        data = graphql_runner(project_token, query, variables)
+
     project = (data.get("user") or {}).get("projectV2")
     if not project:
         raise SyncError("Cannot resolve Project while probing saved views")
@@ -1735,6 +1757,38 @@ def self_test():
         max_view_number=2,
         graphql_runner=fake_no_view,
     ) is None
+
+    partial_payload = {
+        "data": {
+            "user": {
+                "projectV2": {
+                    "v1": {
+                        "id": "work",
+                        "name": WORK_QUEUE_VIEW_NAME,
+                        "filter": WORK_QUEUE_FILTER,
+                    },
+                    "v2": None,
+                }
+            }
+        },
+        "errors": [
+            {
+                "type": "NOT_FOUND",
+                "message": "missing view 2",
+                "path": ["user", "projectV2", "v2"],
+            }
+        ],
+    }
+    partial_unexpected = [
+        entry
+        for entry in partial_payload["errors"]
+        if entry.get("type") != "NOT_FOUND"
+    ]
+    assert partial_unexpected == []
+    assert (
+        partial_payload["data"]["user"]["projectV2"]["v1"]["name"]
+        == WORK_QUEUE_VIEW_NAME
+    )
 
     print("BOUNDED_DESCENDANT_TRAVERSAL_SELF_TEST: PASS")
     print("BOUNDED_PROJECT_ITEM_LOOKUP_SELF_TEST: PASS")
