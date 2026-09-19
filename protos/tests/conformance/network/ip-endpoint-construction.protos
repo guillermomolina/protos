@@ -13,28 +13,38 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-address: IpAddress(4, 2130706433)
-endpoint: IpEndpoint(address, 1)
-maxPort: IpEndpoint(IpAddress(6, 1), 65535)
-fresh: IpEndpoint(address, 1)
-ok: true
+tests: Array(
+    Test("ip endpoint construction", () => {
+        tool009LegacyCase: () => {
+            address: IpAddress(4, 2130706433)
+            endpoint: IpEndpoint(address, 1)
+            maxPort: IpEndpoint(IpAddress(6, 1), 65535)
+            fresh: IpEndpoint(address, 1)
+            ok: true
 
-(endpoint.parent() === IpEndpoint).ifFalse(() => { ok = false })
-(endpoint.address === address).ifFalse(() => { ok = false })
-(endpoint.port == 1).ifFalse(() => { ok = false })
-(maxPort.port == 65535).ifFalse(() => { ok = false })
-(endpoint === fresh).ifTrue(() => { ok = false })
-IpEndpoint.recognizes(endpoint).ifFalse(() => { ok = false })
-IpEndpoint.recognizes(maxPort).ifFalse(() => { ok = false })
+            (endpoint.parent() === IpEndpoint).ifFalse(() => { ok = false })
+            (endpoint.address === address).ifFalse(() => { ok = false })
+            (endpoint.port == 1).ifFalse(() => { ok = false })
+            (maxPort.port == 65535).ifFalse(() => { ok = false })
+            (endpoint === fresh).ifTrue(() => { ok = false })
+            IpEndpoint.recognizes(endpoint).ifFalse(() => { ok = false })
+            IpEndpoint.recognizes(maxPort).ifFalse(() => { ok = false })
 
-mutationRejected: Error.handle(
-    () => {
-        endpoint.port = 2
-        false
-    },
-    (error) => { true }
+            mutationRejected: Error.handle(
+                () => {
+                    endpoint.port = 2
+                    false
+                },
+                (error) => { true }
+            )
+            mutationRejected.ifFalse(() => { ok = false })
+
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-mutationRejected.ifFalse(() => { ok = false })
-
-ok
+tests.freeze()

@@ -13,35 +13,45 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ok: true
-address: IpAddress(4, 1)
-openAddress: IpAddress {
-    version: 4
-    bits: 1
-}
+tests: Array(
+    Test("ip endpoint validation", () => {
+        tool009LegacyCase: () => {
+            ok: true
+            address: IpAddress(4, 1)
+            openAddress: IpAddress {
+                version: 4
+                bits: 1
+            }
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => { true }
-    )
-}
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => { true }
+                )
+            }
 
-reject(() => { IpEndpoint({}, 80) }).ifFalse(() => { ok = false })
-reject(() => { IpEndpoint(IpAddress, 80) }).ifFalse(() => { ok = false })
-reject(() => { IpEndpoint(openAddress, 80) }).ifFalse(() => { ok = false })
-reject(() => { IpEndpoint(address, 0) }).ifFalse(() => { ok = false })
-reject(() => { IpEndpoint(address, -1) }).ifFalse(() => { ok = false })
-reject(() => { IpEndpoint(address, 65536) }).ifFalse(() => { ok = false })
-reject(() => { IpEndpoint(address, 80.0) }).ifFalse(() => { ok = false })
-reject(() => { IpEndpoint(address) }).ifFalse(() => { ok = false })
-reject(() => { IpEndpoint(address, 80, 81) }).ifFalse(() => { ok = false })
+            reject(() => { IpEndpoint({}, 80) }).ifFalse(() => { ok = false })
+            reject(() => { IpEndpoint(IpAddress, 80) }).ifFalse(() => { ok = false })
+            reject(() => { IpEndpoint(openAddress, 80) }).ifFalse(() => { ok = false })
+            reject(() => { IpEndpoint(address, 0) }).ifFalse(() => { ok = false })
+            reject(() => { IpEndpoint(address, -1) }).ifFalse(() => { ok = false })
+            reject(() => { IpEndpoint(address, 65536) }).ifFalse(() => { ok = false })
+            reject(() => { IpEndpoint(address, 80.0) }).ifFalse(() => { ok = false })
+            reject(() => { IpEndpoint(address) }).ifFalse(() => { ok = false })
+            reject(() => { IpEndpoint(address, 80, 81) }).ifFalse(() => { ok = false })
 
-derived: IpEndpoint {}
-reject(() => { derived(address, 80) }).ifFalse(() => { ok = false })
+            derived: IpEndpoint {}
+            reject(() => { derived(address, 80) }).ifFalse(() => { ok = false })
 
-ok
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

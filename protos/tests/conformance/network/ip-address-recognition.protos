@@ -13,41 +13,51 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-canonical: IpAddress(4, 1)
-openExactShape: IpAddress {
-    version: 4
-    bits: 1
-}
-wrongParent: {
-    version: 4
-    bits: 1
-}
-derived: IpAddress {}
-ok: true
+tests: Array(
+    Test("ip address recognition", () => {
+        tool009LegacyCase: () => {
+            canonical: IpAddress(4, 1)
+            openExactShape: IpAddress {
+                version: 4
+                bits: 1
+            }
+            wrongParent: {
+                version: 4
+                bits: 1
+            }
+            derived: IpAddress {}
+            ok: true
 
-IpAddress.recognizes(canonical).ifFalse(() => { ok = false })
-IpAddress.recognizes(openExactShape).ifTrue(() => { ok = false })
-IpAddress.recognizes(wrongParent).ifTrue(() => { ok = false })
-IpAddress.recognizes(derived).ifTrue(() => { ok = false })
-IpAddress.recognizes(4).ifTrue(() => { ok = false })
+            IpAddress.recognizes(canonical).ifFalse(() => { ok = false })
+            IpAddress.recognizes(openExactShape).ifTrue(() => { ok = false })
+            IpAddress.recognizes(wrongParent).ifTrue(() => { ok = false })
+            IpAddress.recognizes(derived).ifTrue(() => { ok = false })
+            IpAddress.recognizes(4).ifTrue(() => { ok = false })
 
-wrongReceiverRejected: Error.handle(
-    () => {
-        derived.recognizes(canonical)
-        false
-    },
-    (error) => { true }
+            wrongReceiverRejected: Error.handle(
+                () => {
+                    derived.recognizes(canonical)
+                    false
+                },
+                (error) => { true }
+            )
+            wrongReceiverRejected.ifFalse(() => { ok = false })
+
+            wrongArityRejected: Error.handle(
+                () => {
+                    IpAddress.recognizes()
+                    false
+                },
+                (error) => { true }
+            )
+            wrongArityRejected.ifFalse(() => { ok = false })
+
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-wrongReceiverRejected.ifFalse(() => { ok = false })
-
-wrongArityRejected: Error.handle(
-    () => {
-        IpAddress.recognizes()
-        false
-    },
-    (error) => { true }
-)
-wrongArityRejected.ifFalse(() => { ok = false })
-
-ok
+tests.freeze()

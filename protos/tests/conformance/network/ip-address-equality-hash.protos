@@ -13,22 +13,32 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-left: IpAddress(4, 3232235777)
-same: IpAddress(4, 3232235777)
-differentBits: IpAddress(4, 3232235778)
-differentVersion: IpAddress(6, 3232235777)
-addresses: Map()
-ok: true
+tests: Array(
+    Test("ip address equality hash", () => {
+        tool009LegacyCase: () => {
+            left: IpAddress(4, 3232235777)
+            same: IpAddress(4, 3232235777)
+            differentBits: IpAddress(4, 3232235778)
+            differentVersion: IpAddress(6, 3232235777)
+            addresses: Map()
+            ok: true
 
-(left == same).ifFalse(() => { ok = false })
-(left === same).ifTrue(() => { ok = false })
-(left == differentBits).ifTrue(() => { ok = false })
-(left == differentVersion).ifTrue(() => { ok = false })
-(left == {}).ifTrue(() => { ok = false })
-(left.hash() == same.hash()).ifFalse(() => { ok = false })
+            (left == same).ifFalse(() => { ok = false })
+            (left === same).ifTrue(() => { ok = false })
+            (left == differentBits).ifTrue(() => { ok = false })
+            (left == differentVersion).ifTrue(() => { ok = false })
+            (left == {}).ifTrue(() => { ok = false })
+            (left.hash() == same.hash()).ifFalse(() => { ok = false })
 
-addresses[left] = 77
-(addresses[same] == 77).ifFalse(() => { ok = false })
+            addresses[left] = 77
+            (addresses[same] == 77).ifFalse(() => { ok = false })
 
-ok
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

@@ -13,26 +13,36 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-leftAddress: IpAddress(4, 3232235777)
-sameAddress: IpAddress(4, 3232235777)
-differentAddress: IpAddress(4, 3232235778)
-left: IpEndpoint(leftAddress, 443)
-same: IpEndpoint(sameAddress, 443)
-differentPort: IpEndpoint(leftAddress, 444)
-differentIp: IpEndpoint(differentAddress, 443)
-endpoints: Map()
-ok: true
+tests: Array(
+    Test("ip endpoint equality hash", () => {
+        tool009LegacyCase: () => {
+            leftAddress: IpAddress(4, 3232235777)
+            sameAddress: IpAddress(4, 3232235777)
+            differentAddress: IpAddress(4, 3232235778)
+            left: IpEndpoint(leftAddress, 443)
+            same: IpEndpoint(sameAddress, 443)
+            differentPort: IpEndpoint(leftAddress, 444)
+            differentIp: IpEndpoint(differentAddress, 443)
+            endpoints: Map()
+            ok: true
 
-(left == same).ifFalse(() => { ok = false })
-(left === same).ifTrue(() => { ok = false })
-(left.address === same.address).ifTrue(() => { ok = false })
-(left == differentPort).ifTrue(() => { ok = false })
-(left == differentIp).ifTrue(() => { ok = false })
-(left == {}).ifTrue(() => { ok = false })
-(left.hash() == same.hash()).ifFalse(() => { ok = false })
+            (left == same).ifFalse(() => { ok = false })
+            (left === same).ifTrue(() => { ok = false })
+            (left.address === same.address).ifTrue(() => { ok = false })
+            (left == differentPort).ifTrue(() => { ok = false })
+            (left == differentIp).ifTrue(() => { ok = false })
+            (left == {}).ifTrue(() => { ok = false })
+            (left.hash() == same.hash()).ifFalse(() => { ok = false })
 
-endpoints[left] = 91
-(endpoints[same] == 91).ifFalse(() => { ok = false })
+            endpoints[left] = 91
+            (endpoints[same] == 91).ifFalse(() => { ok = false })
 
-ok
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

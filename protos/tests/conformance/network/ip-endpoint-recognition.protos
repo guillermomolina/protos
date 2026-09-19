@@ -13,43 +13,53 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-address: IpAddress(4, 1)
-canonical: IpEndpoint(address, 80)
-openExactShape: IpEndpoint {
-    address: address
-    port: 80
-}
-wrongParent: {
-    address: address
-    port: 80
-}
-derived: IpEndpoint {}
-ok: true
+tests: Array(
+    Test("ip endpoint recognition", () => {
+        tool009LegacyCase: () => {
+            address: IpAddress(4, 1)
+            canonical: IpEndpoint(address, 80)
+            openExactShape: IpEndpoint {
+                address: address
+                port: 80
+            }
+            wrongParent: {
+                address: address
+                port: 80
+            }
+            derived: IpEndpoint {}
+            ok: true
 
-IpEndpoint.recognizes(canonical).ifFalse(() => { ok = false })
-IpEndpoint.recognizes(openExactShape).ifTrue(() => { ok = false })
-IpEndpoint.recognizes(wrongParent).ifTrue(() => { ok = false })
-IpEndpoint.recognizes(derived).ifTrue(() => { ok = false })
-IpEndpoint.recognizes(address).ifTrue(() => { ok = false })
-IpEndpoint.recognizes(80).ifTrue(() => { ok = false })
+            IpEndpoint.recognizes(canonical).ifFalse(() => { ok = false })
+            IpEndpoint.recognizes(openExactShape).ifTrue(() => { ok = false })
+            IpEndpoint.recognizes(wrongParent).ifTrue(() => { ok = false })
+            IpEndpoint.recognizes(derived).ifTrue(() => { ok = false })
+            IpEndpoint.recognizes(address).ifTrue(() => { ok = false })
+            IpEndpoint.recognizes(80).ifTrue(() => { ok = false })
 
-wrongReceiverRejected: Error.handle(
-    () => {
-        derived.recognizes(canonical)
-        false
-    },
-    (error) => { true }
+            wrongReceiverRejected: Error.handle(
+                () => {
+                    derived.recognizes(canonical)
+                    false
+                },
+                (error) => { true }
+            )
+            wrongReceiverRejected.ifFalse(() => { ok = false })
+
+            wrongArityRejected: Error.handle(
+                () => {
+                    IpEndpoint.recognizes()
+                    false
+                },
+                (error) => { true }
+            )
+            wrongArityRejected.ifFalse(() => { ok = false })
+
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-wrongReceiverRejected.ifFalse(() => { ok = false })
-
-wrongArityRejected: Error.handle(
-    () => {
-        IpEndpoint.recognizes()
-        false
-    },
-    (error) => { true }
-)
-wrongArityRejected.ifFalse(() => { ok = false })
-
-ok
+tests.freeze()

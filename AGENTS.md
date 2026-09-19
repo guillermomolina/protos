@@ -3168,54 +3168,26 @@ opportunistically during unrelated work. Their bounded repository-wide
 reconciliation is owned separately by TEST002.\n\n### TOOL009 M2 test ownership for newly added Protos tests
 <!-- TOOL009 M2 NEW-TEST-OWNERSHIP -->
 
-During D152 M2, production-test ownership migration is an explicit domain
-allowlist. Agents MUST NOT infer suite-native ownership merely because a test
-uses `std:test/Test`, `std:test/Assertions`, lives near already migrated tests,
-or could technically execute through the logical Case runner.
+During D152 M2, production-test ownership is explicit per source rather than by
+a manually maintained domain allowlist.
 
-The current M2 domain states are:
-
-- `protos/tests/conformance/library/test/` — **SUITE_NATIVE_ADMITTED**. New
-  production tests in this domain MUST use the suite-native authoring model:
-  import `std:test/Test`, expose a finite frozen `tests` Array of named Tests,
-  keep test behavior inside Test bodies rather than executing it during module
-  discovery, and use the temporary `suite-native` manifest marker while the M2
-  bridge exists.
-- `protos/tests/conformance/library/text/` — **SUITE_NATIVE_ADMITTED**. New
-  production tests in this domain MUST use the suite-native authoring model:
-  import `std:test/Test`, expose a finite frozen `tests` Array of named Tests,
-  keep test behavior inside Test bodies rather than executing it during module
-  discovery, and use the temporary `suite-native` manifest marker while the M2
-  bridge exists.
-- `protos/tests/conformance/library/collections/` — **SUITE_NATIVE_ADMITTED**.
-  New production tests in this domain MUST use the suite-native authoring model:
-  import `std:test/Test`, expose a finite frozen `tests` Array of named Tests,
-  keep test behavior inside Test bodies rather than executing it during module
-  discovery, and use the temporary `suite-native` manifest marker while the M2
-  bridge exists.
-- `protos/tests/conformance/library/json/` — **SUITE_NATIVE_ADMITTED**. New
-  production tests in this domain MUST use the suite-native authoring model:
-  import `std:test/Test`, expose a finite frozen `tests` Array of named Tests,
-  keep test behavior inside Test bodies rather than executing it during module
-  discovery, and use the temporary `suite-native` manifest marker while the M2
-  bridge exists. Tests whose behavior completes through a Future MUST observe
-  that Future explicitly inside the Test body rather than returning it for the
-  Test Tool to interpret.
-- Core and central language-semantics conformance domains — including
-  `core-surface/` and other tests whose primary subject is Core/runtime language
-  semantics — are **NOT_ADMITTED_DURING_ACTIVE_AUD009_REFACTORING**. Preserve
-  their current owner and manifest/TestPlan form. Do not opportunistically move
-  them to suite-native ownership. TOOL009 migration of those domains requires
-  explicit coordination with the project owner before the first ownership
-  change.
-- Every other production-test domain remains **CURRENT_OWNER** until explicitly
-  admitted by a bounded TOOL009 M2 migration. New tests there MUST follow the
-  domain's current authoritative owner rather than creating a mixed ownership
-  transition implicitly.
-
-When a domain is admitted to suite-native ownership, the same bounded migration
-work MUST update this allowlist. Do not use a broad repository-wide rule such as
-"all new Protos tests are suite-native" while M2 is incomplete.
+- A manifest source marked `suite-native` is owned by the suite-native D153/D152
+  path. The same bounded migration change MUST introduce or preserve its
+  `std:test/Test` declaration surface and MUST remove that source from incumbent
+  execution ownership so it cannot run twice.
+- A production source that is not marked `suite-native` retains its incumbent
+  owner until a bounded TOOL009 M2 migration changes that source.
+- New production conformance sources added while M2 is active MUST use the
+  suite-native authoring model: import `std:test/Test`, expose a finite frozen
+  `tests` Array of named Tests, keep test behavior inside Test bodies rather
+  than executing it during module discovery, and use the temporary
+  `suite-native` manifest marker.
+- A domain may therefore be partially migrated during one bounded slice without
+  requiring an `AGENTS.md` edit for each family or directory. The manifest is
+  the authoritative source-level ownership boundary during M2.
+- Tests whose behavior completes through a Future MUST observe that Future
+  explicitly inside the Test body rather than returning it for the Test Tool to
+  interpret.
 
 JUnit-owned component fixtures under `protos/tests/tooling/` are not production
 TestPlan ownership merely because they contain Protos source. A fixture that is

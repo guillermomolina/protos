@@ -13,29 +13,39 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ipv4: IpAddress(4, 4294967295)
-ipv6: IpAddress(6, 340282366920938463463374607431768211455)
-fresh: IpAddress(4, 4294967295)
-ok: true
+tests: Array(
+    Test("ip address construction", () => {
+        tool009LegacyCase: () => {
+            ipv4: IpAddress(4, 4294967295)
+            ipv6: IpAddress(6, 340282366920938463463374607431768211455)
+            fresh: IpAddress(4, 4294967295)
+            ok: true
 
-(ipv4.parent() === IpAddress).ifFalse(() => { ok = false })
-(ipv6.parent() === IpAddress).ifFalse(() => { ok = false })
-(ipv4.version == 4).ifFalse(() => { ok = false })
-(ipv4.bits == 4294967295).ifFalse(() => { ok = false })
-(ipv6.version == 6).ifFalse(() => { ok = false })
-(ipv6.bits == 340282366920938463463374607431768211455).ifFalse(() => { ok = false })
-(ipv4 === fresh).ifTrue(() => { ok = false })
-IpAddress.recognizes(ipv4).ifFalse(() => { ok = false })
-IpAddress.recognizes(ipv6).ifFalse(() => { ok = false })
+            (ipv4.parent() === IpAddress).ifFalse(() => { ok = false })
+            (ipv6.parent() === IpAddress).ifFalse(() => { ok = false })
+            (ipv4.version == 4).ifFalse(() => { ok = false })
+            (ipv4.bits == 4294967295).ifFalse(() => { ok = false })
+            (ipv6.version == 6).ifFalse(() => { ok = false })
+            (ipv6.bits == 340282366920938463463374607431768211455).ifFalse(() => { ok = false })
+            (ipv4 === fresh).ifTrue(() => { ok = false })
+            IpAddress.recognizes(ipv4).ifFalse(() => { ok = false })
+            IpAddress.recognizes(ipv6).ifFalse(() => { ok = false })
 
-mutationRejected: Error.handle(
-    () => {
-        ipv4.bits = 0
-        false
-    },
-    (error) => { true }
+            mutationRejected: Error.handle(
+                () => {
+                    ipv4.bits = 0
+                    false
+                },
+                (error) => { true }
+            )
+            mutationRejected.ifFalse(() => { ok = false })
+
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-mutationRejected.ifFalse(() => { ok = false })
-
-ok
+tests.freeze()
