@@ -210,9 +210,9 @@ def invoke_selector(repo, base, head, top_level_closure):
     return parse_selector_result(completed.stdout)
 
 
-def maven_command(selection):
+def validation_command(selection):
     if selection["validation_impact"] == "FULL":
-        return ["mvn", "test"]
+        return ["make", "test"]
     return ["mvn", "-Dtest=" + selection["affected_test_set"], "test"]
 
 
@@ -258,7 +258,7 @@ def run(repo, base, head, top_level_closure=False):
     else:
         print("TOP_LEVEL_RECONCILIATION: NOT_REQUIRED_FOR_THIS_CHILD_SLICE")
 
-    completed = subprocess.run(maven_command(selection), cwd=str(repo))
+    completed = subprocess.run(validation_command(selection), cwd=str(repo))
 
     if completed.returncode != 0:
         if impact == "FULL":

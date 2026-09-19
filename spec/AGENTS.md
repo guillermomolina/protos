@@ -357,6 +357,21 @@ Individual specification documents do not carry independent revision numbers.
 Each changelog entry must identify the documents or domains actually changed by
 that revision.
 
+For concurrent interactive work, author and review the substantive normative
+delta before assigning its next global specification revision. Do not reserve a
+future `0.1.N` value early merely to begin specification editing.
+
+Immediately before finalizing a normative specification commit, re-read the
+current newest `spec/PROTOS_SPEC_CHANGELOG.md` entry and current relevant
+`origin/main` state, derive the next global revision from that state, and add the
+changelog entry for the stable normative delta. If another agent publishes a
+specification revision first, recompute this moving revision metadata rather than
+discarding otherwise valid normative edits, unless the intervening publication
+changes semantics or another precondition relevant to the pending delta.
+
+The final normative commit MUST still contain the required global changelog entry;
+late revision assignment changes timing only, not atomicity or authority.
+
 Git history is the authoritative exact history of an individual specification
 file. Use `git log -- <path>` (and the corresponding commit diffs) when exact
 per-file history is required.

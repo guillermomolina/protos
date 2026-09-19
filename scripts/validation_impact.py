@@ -155,7 +155,7 @@ def classify_paths(paths, top_level_closure=False, kind_overrides=None):
     if top_level_closure:
         return Selection(
             "FULL", "ALL",
-            "top-level executable closure requires complete Maven validation",
+            "top-level executable closure requires complete integrated validation",
             False,
         )
 

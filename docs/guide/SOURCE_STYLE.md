@@ -90,9 +90,11 @@ specification has not defined.
 ## Repository prevention gate
 
 Repository publication validation runs `scripts/source_style_guard.py` before
-the selected executable test set. GitHub CI already routes its base/head pair
-through the same `scripts/publication_validation.py` entry point, so the same
-guard applies to publication launchers, pushes and pull requests.
+the selected executable test set when that guard applies. Interactive
+maintainer/agent work may run the guard directly as part of its bounded
+validation, and repository automation may invoke the same guard for pushes or
+pull requests. The guard contract does not require an isolated publication
+worktree.
 
 The guard is deliberately differential, not a repository-wide ban. It examines
 changed hand-written Protos source under `protos/`, plus Protos/JS fenced source

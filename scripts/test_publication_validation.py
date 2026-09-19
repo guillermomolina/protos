@@ -48,6 +48,7 @@ class PublicationValidationTest(unittest.TestCase):
         self.repo = self.temp / "repo"
         self.bin = self.temp / "bin"
         self.log = self.temp / "mvn.log"
+        self.make_log = self.temp / "make.log"
         self.bin.mkdir()
 
         subprocess.run(
@@ -102,6 +103,15 @@ class PublicationValidationTest(unittest.TestCase):
         )
         mvn.chmod(0o755)
 
+        make = self.bin / "make"
+        make.write_text(
+            "#!/usr/bin/env bash\n"
+            "printf '%s\\n' \"$*\" >> \"$MAKE_LOG\"\n"
+            "exit \"${MAKE_EXIT_CODE:-0}\"\n",
+            encoding="utf-8",
+        )
+        make.chmod(0o755)
+
     def tearDown(self):
         shutil.rmtree(self.temp)
 
@@ -131,11 +141,19 @@ class PublicationValidationTest(unittest.TestCase):
         )
         return self.rev("HEAD")
 
-    def run_helper(self, candidate, top_level=False, exit_code="0"):
+    def run_helper(
+        self,
+        candidate,
+        top_level=False,
+        exit_code="0",
+        make_exit_code="0",
+    ):
         env = os.environ.copy()
         env["PATH"] = str(self.bin) + os.pathsep + env.get("PATH", "")
         env["MVN_LOG"] = str(self.log)
         env["MVN_EXIT_CODE"] = exit_code
+        env["MAKE_LOG"] = str(self.make_log)
+        env["MAKE_EXIT_CODE"] = make_exit_code
         with mock.patch.dict(os.environ, env, clear=True):
             return HELPER.run(
                 self.repo,
@@ -150,6 +168,15 @@ class PublicationValidationTest(unittest.TestCase):
         return [
             line.strip()
             for line in self.log.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+
+    def make_calls(self):
+        if not self.make_log.exists():
+            return []
+        return [
+            line.strip()
+            for line in self.make_log.read_text(encoding="utf-8").splitlines()
             if line.strip()
         ]
 
@@ -178,14 +205,16 @@ class PublicationValidationTest(unittest.TestCase):
             "src/main/java/com/guillermomolina/protos/Probe.java": "final class Probe {}\n",
         })
         self.assertEqual(0, self.run_helper(candidate))
-        self.assertEqual(["test"], self.maven_calls())
+        self.assertEqual([], self.maven_calls())
+        self.assertEqual(["test"], self.make_calls())
 
     def test_unknown_path_runs_full(self):
         candidate = self.commit_files({
             "future/executable/Probe.protos": "self\n",
         })
         self.assertEqual(0, self.run_helper(candidate))
-        self.assertEqual(["test"], self.maven_calls())
+        self.assertEqual([], self.maven_calls())
+        self.assertEqual(["test"], self.make_calls())
 
     def test_cross_tool_delta_runs_full(self):
         candidate = self.commit_files({
@@ -193,21 +222,24 @@ class PublicationValidationTest(unittest.TestCase):
             "protos/tools/test/Probe.protos": "self\n",
         })
         self.assertEqual(0, self.run_helper(candidate))
-        self.assertEqual(["test"], self.maven_calls())
+        self.assertEqual([], self.maven_calls())
+        self.assertEqual(["test"], self.make_calls())
 
     def test_top_level_closure_with_tool_change_forces_full(self):
         candidate = self.commit_files({
             "protos/tools/package/Probe.protos": "self\n",
         })
         self.assertEqual(0, self.run_helper(candidate, top_level=True))
-        self.assertEqual(["test"], self.maven_calls())
+        self.assertEqual([], self.maven_calls())
+        self.assertEqual(["test"], self.make_calls())
 
     def test_top_level_closure_without_tool_change_runs_full(self):
         candidate = self.commit_files({
             "src/main/java/com/guillermomolina/protos/Probe.java": "final class Probe {}\n",
         })
         self.assertEqual(0, self.run_helper(candidate, top_level=True))
-        self.assertEqual(["test"], self.maven_calls())
+        self.assertEqual([], self.maven_calls())
+        self.assertEqual(["test"], self.make_calls())
 
     def test_shared_plus_package_tool_change_runs_complete_suite(self):
         candidate = self.commit_files({
@@ -215,7 +247,8 @@ class PublicationValidationTest(unittest.TestCase):
             "protos/tools/package/Probe.protos": "self\n",
         })
         self.assertEqual(0, self.run_helper(candidate))
-        self.assertEqual(["test"], self.maven_calls())
+        self.assertEqual([], self.maven_calls())
+        self.assertEqual(["test"], self.make_calls())
 
     def test_source_style_regression_fails_before_maven(self):
         candidate = self.commit_files({
@@ -265,6 +298,18 @@ require(true)
             "protos/tools/package/Probe.protos": "self\n",
         })
         self.assertEqual(7, self.run_helper(candidate, exit_code="7"))
+
+    def test_full_make_failure_prevents_success(self):
+        candidate = self.commit_files({
+            "src/main/java/com/guillermomolina/protos/Probe.java":
+                "final class Probe {}\n",
+        })
+        self.assertEqual(
+            9,
+            self.run_helper(candidate, make_exit_code="9"),
+        )
+        self.assertEqual([], self.maven_calls())
+        self.assertEqual(["test"], self.make_calls())
 
     def test_dirty_tracked_state_fails_before_maven(self):
         candidate = self.commit_files({

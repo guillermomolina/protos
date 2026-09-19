@@ -1775,8 +1775,8 @@ validation, publication conflict, or user-requested stopping point prevents
 further progress. Do not ask the user to choose among obvious implementation
 slices when the dependency order can be derived from the audited repository.
 
-When the workflow requires the user to execute publication launchers manually,
-provide one safe publishable slice at a time. After the user reports successful
+When the workflow requires the maintainer to execute commands manually, provide
+one safe bounded slice at a time. After the maintainer reports successful
 publication, continue from the new `origin/main` with the next required slice
 without reopening design decisions that were already closed, unless current
 repository evidence invalidates them.
@@ -1849,19 +1849,24 @@ normative/documentation audit from a source-code-only implementation.
 ### Patch-authoring environments
 
 Lack of a local checkout, Maven, or other build tooling in the agent environment
-does not waive this audit when repository contents are available through another
-read-capable mechanism.
+does not waive the repository/specification audit when repository contents are
+available through another read-capable mechanism.
 
-Such an environment limitation also does not by itself prevent patch authoring
-when the required repository contents can be inspected and the generated patch
-is intended to be executed and validated later in the user's real checkout.
+For maintainer-directed interactive work, the maintainer's existing repository
+checkout is the execution environment. An agent that cannot mutate that checkout
+directly SHOULD inspect repository state through available read-only mechanisms
+and hand off bounded commands or a Markdown ZIP for execution there. Do not
+replace this workflow with an isolated temporary worktree merely because the
+agent environment lacks a checkout.
 
-### Proportional hybrid contribution and publication workflow
+
+### Interactive local contribution and publication workflow
 <!-- GITHUB002-C HYBRID-CONTRIBUTION-PUBLICATION-CONTRACT -->
+<!-- GITHUB024 INTERACTIVE-LOCAL-PATCH-HANDOFF -->
 
 Protos uses GitHub Discussions, Issues, the `Protos Development` Project, and
 Pull Requests where each mechanism adds value, but it does **not** require every
-maintainer/agent-generated patch to pay the cost of a remote PR + CI lifecycle.
+maintainer/agent-generated change to pay the cost of a remote PR + CI lifecycle.
 
 The current proportional model is:
 
@@ -1870,96 +1875,72 @@ The current proportional model is:
 - **Issues** own required actionable live coordination, assignment, lifecycle
   history, and work logs.
 - The **`Protos Development` Project** is the derived scheduling/dashboard
-  projection of Issue-owned live status. Agents maintain Issue state and
-  `status:*` labels; repository automation projects that state into the
-  Project.
+  projection of Issue-owned live status.
 - **External contributions** normally use a branch/fork + Pull Request + CI/review
   before merge.
-- **Maintainer/agent-generated patches** may use the governed isolated
-  direct-to-`main` launcher workflow below after the required adaptive local
-  validation passes.
+- **Maintainer/agent interactive work** uses the maintainer's current checkout
+  with bounded command handoff and adaptive local validation.
 - **Maintainer Pull Requests are optional** and SHOULD be used when their review,
   integration, audit, or collaboration value justifies their operational cost.
 
-This is an intentional scaling rule: collaboration infrastructure should become
-stricter as real contributor/concurrency needs appear. Do not impose future-scale
-coordination cost on routine current-scale work merely because that machinery may
-be useful later.
-
 `GITHUB002-B` temporarily made PR-first mandatory for newly generated internal
-launchers. `GITHUB002-D`/PR #153 demonstrated that mechanism successfully, but the
-project owner explicitly rejected its routine operational cost at the current
-stage. `GITHUB002-C` supersedes that mandatory-PR rule. The experiment remains
-historical evidence; it is not the current publication contract.
+launchers. `GITHUB002-D`/PR #153 demonstrated that mechanism successfully, and
+`GITHUB002-C` later removed that mandatory PR cost. GITHUB024 further retires the
+ordinary isolated-worktree publication-launcher model for maintainer-directed
+interactive work. Those experiments remain historical evidence; they are not the
+current operator contract.
 
-For the ordinary maintainer/agent direct-to-`main` publication workflow, a
-generated launcher MUST:
+For ordinary maintainer-directed work, agents MUST work from the repository state
+the maintainer is actually using and provide the required commands in small,
+coherent executable blocks. Do not create temporary branches, temporary
+worktrees, staging repositories, or out-of-checkout publication environments
+merely to apply an ordinary interactive change.
 
-1. verify that the supplied path belongs to the intended repository and validate
-   the configured `origin` coordinate;
-2. fetch `origin/main` without changing the caller checkout and record that exact
-   execution-time commit as `PUBLICATION_BASE`;
-3. create a uniquely named **local-only temporary branch** from exactly
-   `PUBLICATION_BASE` and check it out in a temporary `git worktree` outside the
-   caller checkout;
-4. inspect the files that actually exist in that worktree and evaluate semantic
-   preconditions there;
-5. materialize only the requested bounded/state-aware delta against those
-   execution-time files;
-6. derive moving repository metadata from `PUBLICATION_BASE`, preserving unrelated
-   execution-time content in shared files;
-7. treat unrelated movement since `AUTHORING_BASE` as compatible unless it
-   violates a real semantic precondition;
-8. abort before publication when a relevant semantic precondition no longer
-   holds or the requested transformation overlaps incompatibly with already
-   published work;
-9. stage only explicit patch-owned paths and run the adaptive local validation
-   required by the definitive delta;
-10. create the candidate commit entirely inside the isolated worktree;
+Before editing, inspect the current status and every patch-owned path relevant to
+the next command block. A globally clean checkout is not required. Existing
+tracked or untracked work outside the patch-owned paths MUST remain untouched.
+
+When a patch-owned path already has unrelated or concurrent edits, inspect its
+current content and proceed only when the requested transformation can preserve
+those edits without silently absorbing or overwriting them. Otherwise stop and
+report the overlap.
+
+Agents MUST NOT manufacture a clean checkout with automatic `stash`, `reset`,
+`restore`, `checkout`, `clean`, or equivalent destructive operations. They MUST
+NOT use `git add -A` or `git add .`; stage only explicit patch-owned paths. Never
+force-push.
+
+Ordinary source, test, build, configuration, and similar edits SHOULD be handed
+off directly as bounded shell-command blocks in chat. Prefer a few transparent
+commands over a large opaque generated script when the same change can be made
+safely and readably.
+
+Commit and push remain separate from editing/validation unless the maintainer
+explicitly requests them in the same step. Before publication, synchronize with
+current `origin/main`, inspect intervening movement relevant to the patch, and
+preserve unrelated concurrent work. A publication race is never permission to
+force-push or silently resolve a semantic conflict.
+
 <!-- GITHUB003 CONCURRENT-PUBLICATION-POLICY -->
-11. fetch `origin/main` again immediately before publication;
-12. when it still equals the candidate's `PUBLICATION_BASE`, publish only by a
-    non-force fast-forward push of the exact validated candidate commit to
-    `refs/heads/main`;
-13. when `origin/main` moved, abort unless the launcher declared in advance a
-    bounded validation-reuse proof appropriate to that slice;
-14. a validation-reuse proof MUST declare both the patch-owned paths and the
-    complete conservative dependency closure whose movement could invalidate the
-    expensive validation result; checking only for direct path overlap is not
-    sufficient;
-15. reuse is permitted only when every intervening changed path is outside both
-    sets and the relevant semantic/governance preconditions still hold;
-16. for eligible unrelated movement, rematerialize the same bounded delta from
-    the newer `origin/main` in launcher-owned local state without rebasing or
-    merging the old candidate, and require the resulting patch-owned final bytes
-    to match the already validated result exactly unless the approved proof
-    defines a stronger equivalent invariant;
-17. after rematerialization, rerun cheap source/style/static/postcondition gates
-    against the new base and rerun any expensive validation whose declared
-    dependency closure changed; an expensive result may be reused only while its
-    complete declared closure is unchanged; and
-18. any automatic rematerialization/retry MUST be finitely bounded. Exhausting
-    that bound, encountering relevant movement, losing byte/invariant
-    equivalence, or observing another unsafe publication race is a hard abort;
-    never force-push, auto-resolve a semantic conflict, or modify the caller
-    checkout.
+When `origin/main` moves during interactive work, re-evaluate only the
+preconditions and dependency surfaces that movement can affect. Benign unrelated
+movement does not invalidate already-correct substantive work. If the movement
+overlaps the patch, changes an applicable semantic/governance precondition, or
+changes moving metadata required by the final commit, reconcile that specific
+surface before publication.
 
-The direct-to-`main` path is not permission to bypass validation. Local adaptive
-validation is the merge gate for this governed maintainer path. Documentation or
-governance-only changes should not start unrelated heavyweight runtime/test
-containers merely to imitate an external PR pipeline.
 
 ### Focal validation for mechanical reconciliation children
 
 Already-ratified, semantics-preserving mechanical reconciliation work SHOULD pay
 only for the validation needed to prove the bounded child delta. In particular,
 AUD003 source-style reconciliation children may use a declared focal validation
-profile instead of a broad Tool-family or repository-wide Maven suite when all of
-the following are true:
+profile instead of a broad Tool-family or repository-wide integrated suite when
+all of the following are true:
 
 - the child changes only already-classified source spellings whose semantic
   equivalence is already authoritative;
-- the launcher proves the complete scoped inventory before modification and the
+- the change proves the complete scoped inventory before modification and the
   required clean/postcondition inventory afterwards;
 - `scripts/source_style_guard.py` passes for the candidate;
 - any executable corpus directly affected by the changed source is exercised by
@@ -1980,7 +1961,7 @@ rules still apply:
   completed by merge;
 - use `Refs #N` for parents/related work that must remain open;
 - report the local validation performed;
-- let the repository's PR CI run;
+- let the repository's PR CI run; and
 - do not call an open PR `PUBLISHED`; publication occurs when the accepted change
   reaches `main`.
 
@@ -1988,196 +1969,75 @@ rules still apply:
 PRs/checks/reviews when sustained external contribution volume or maintainer
 concurrency makes the additional coordination cost worthwhile.
 
-### Caller-checkout isolation is operational, not a frozen-state assertion
 
-Caller-checkout protection is established by **where the launcher performs
-mutating operations**, not by requiring the caller checkout to remain byte-for-byte
-unchanged for the whole duration of a potentially long validation run.
+### Local checkout safety and Markdown handoff
 
-A publication launcher MUST scope patch materialization, file writes, staging,
-commits, builds, tests, resets/restores (when permitted on launcher-owned state),
-and other worktree mutations to its isolated temporary worktree. Against the
-caller repository/worktree it may perform only operations needed to inspect Git
-metadata, fetch remote refs, create/remove the launcher-owned temporary worktree,
-and create/delete the launcher-owned temporary local branch.
+The maintainer's current checkout may contain unrelated work from the maintainer
+or other agents. Interactive editing MUST preserve that work.
 
-A launcher MUST NOT use equality of the caller's `HEAD`, current branch, index,
-tracked-file status, or untracked-file status between launcher start and launcher
-exit as a publication precondition or postcondition. The caller checkout may be
-edited independently while validation runs; observing such a change cannot prove
-that the launcher caused it and MUST NOT invalidate an otherwise valid isolated
-publication.
+Before each bounded edit, inspect the current changed-path set and the current
+content of the paths the edit owns. Do not reject unrelated dirty paths merely
+because they exist. Do not overwrite, stage, revert, clean, or otherwise
+incorporate unrelated changes.
 
-Reports SHOULD therefore describe the operational guarantee, for example:
+Markdown creation and editing use a ZIP artifact rather than long inline heredocs
+or pasted whole-document replacements. Assume the maintainer downloads the ZIP
+into the repository's `tmp/` directory.
 
-```text
-CALLER_WORKTREE_TOUCHED_BY_LAUNCHER: NO
-```
+For a **new Markdown file**, the ZIP MUST contain the complete intended Markdown
+file and an `apply.sh` that installs it at the intended path. The helper MUST fail
+rather than unexpectedly overwrite an existing file unless replacement is the
+explicit task.
 
-rather than claiming that the caller checkout itself stayed globally unchanged
-while unrelated tools or the user may have modified it.
+For an **existing Markdown file**, the ZIP SHOULD contain a bounded
+state-aware transformation helper, normally Python when that is the clearest
+reliable mechanism, plus `apply.sh`. Another helper mechanism is acceptable when
+it is simpler and at least as safe. The helper MUST verify the current expected
+state/anchors, perform only the intended edit, preserve unrelated content and
+formatting, and fail without modification when the required state is missing or
+ambiguous.
 
-For a governed direct-to-`main` launcher, `PUBLISHED` may be printed only after the
-non-force fast-forward push of the exact validated candidate to `main` succeeds.
-Once that push succeeds, later failure to remove launcher-owned local temporary
-state MUST be reported as `CLEANUP_WARNING` and MUST NOT rewrite the already true
-publication result into a generic failure.
+The standard Markdown bundle handoff is:
 
-Before publication, failed validation, relevant semantic-precondition failure,
-unexpected launcher-owned state, publication-window movement of `origin/main`, or
-failed fast-forward push remains a hard failure. For an optional Pull Request
-workflow, opening the PR is not publication and MUST be reported separately.
+    unzip -d /tmp tmp/<bundle>.zip
+    /tmp/<bundle>/apply.sh .
 
-A launcher may manage only the temporary branch/worktree and patch-owned state it
-created itself. An unexpected launcher-owned worktree change, failed validation,
-relevant semantic-precondition failure, execution-window movement of
-`origin/main`, or failed fast-forward publication is a reason to abort. It is
-never permission to repair or rewrite the caller checkout, force-push `main`, or
-discard another agent's work.
+The agent MUST provide those commands explicitly with the artifact. Do not add
+instructions requiring the maintainer to manually copy generated files from an
+agent/container path.
 
-Temporary publication branches used by the ordinary maintainer direct-to-`main`
-launcher are implementation machinery, not project work items. They MUST remain
-local, MUST NOT be pushed to `origin`, and MUST be deleted when the launcher
-terminates. An optional Pull Request deliberately uses its own remote head branch
-under the PR workflow instead; do not conflate that contributor/review branch
-with the launcher's local publication machinery.
+Generated Markdown helpers are executable project work. Before delivering a ZIP,
+the agent MUST validate the helper syntax when the authoring environment permits,
+verify the expected archive layout and integrity, and test the transformation
+against the audited current target content. If a required authoring-time check is
+not available, report that limitation instead of inventing a PASS result.
 
-This isolation changes only patch-publication mechanics. It does not weaken
-scope, audit, validation, specification, versioning, license, or explicit user
-approval requirements, and it does not authorize a patch to incorporate or
-publish changes from the caller checkout.
+Generated helpers MUST use repository-declared or baseline-compatible tools.
+When a helper runtime is required, use syntax/APIs compatible with the
+repository's declared development environment. Do not install, upgrade, relink,
+or reconfigure the maintainer's toolchain merely to execute a patch helper.
 
-### Generated patch artifact acceptance gate
+### Interactive validation handoff
 
-A generated patch ZIP and its launcher are executable project work, not merely a
-transport wrapper around an intended diff. An agent MUST validate the artifact
-itself before presenting it to the user as ready to execute.
+Validation proceeds from cheapest/highest-signal evidence to the most expensive
+required gate:
 
-Before delivering a generated publication ZIP, the authoring agent MUST, to the
-extent the required repository content is available:
+1. inspect the changed-path set;
+2. run `git diff --check`;
+3. inspect the exact diff;
+4. run applicable static/style/compile checks;
+5. run the complete focal/affected regression set; and
+6. run the integrated full suite only when the adaptive policy requires it.
 
-1. establish and record the exact `AUTHORING_BASE` used for repository audit and
-   artifact acceptance. Do **not** treat that value as the future
-   `PUBLICATION_BASE`;
-2. run syntax/parse checks for every generated executable helper, including
-   `bash -n` for shell launchers and the applicable compile/parse check for any
-   Python, Java, Node, Ruby, Perl, or other generated helper;
-3. execute every generated **content transformation** against the exact
-   `AUTHORING_BASE` contents of each patch-owned file it will modify. A
-   hand-written or synthetic fixture may add edge-case coverage, but MUST NOT
-   substitute for this exact-current-file transformation test;
-4. for every patch-owned file explicitly classified as moving/shared, also test
-   **forward compatibility** by applying representative unrelated preceding
-   changes before running the transformation. At minimum, when applicable,
-   exercise a changed Maven patch version, additional unrelated changelog
-   entries, and unrelated status/blocker/ledger edits, and verify that the
-   artifact derives from and preserves that newer state rather than requiring
-   the authoring snapshot;
-5. verify that transformations produce exactly the intended changed-file set and
-   satisfy semantic/static postconditions. For shared moving files, verify
-   preservation of unrelated content as well as the intended edit;
-6. verify the final ZIP/archive structure and integrity, including the expected
-   single package root, required files, executable permission bits where
-   relevant, and successful archive integrity/CRC inspection;
-7. inspect the generated launcher as one whole workflow for its Git-state
-   preconditions, isolated-worktree lifecycle, execution-time
-   `PUBLICATION_BASE`, dynamic shared-file materialization, explicit staging
-   scope, adaptive-validation commands, publication-base stability check,
-   publication command, cleanup path, and final report;
-8. verify explicitly that the launcher does **not** require
-   `PUBLICATION_BASE == AUTHORING_BASE` and does not reject benign main movement
-   merely because an old whole-file hash, line number, version, changelog header,
-   or unrelated ledger text changed;
-9. when the authoring environment provides a disposable Git checkout or can
-   construct a faithful local Git harness without changing project semantics,
-   execute an end-to-end launcher dry run with a remote whose `main` has advanced
-   benignly beyond `AUTHORING_BASE`; require the artifact to materialize and
-   reach the publication gate successfully from that newer
-   `PUBLICATION_BASE`. Keep the actual push disabled or redirect it to the
-   disposable local remote; and
-10. never report an artifact-level check as `PASS` unless that exact check was
-    actually executed successfully.
+Agents MUST NOT repeatedly request the integrated full suite after every small
+intermediate edit. A failed earlier gate stops progression to a more expensive
+gate. Intermediate focal evidence accumulates, but it does not discharge a final
+full-suite obligation when the owning top-level closure requires one.
 
-Generated-launcher acceptance MUST also exercise caller isolation as an
-operational property. When an end-to-end disposable Git harness is available,
-the harness SHOULD make an unrelated caller-worktree change while the launcher is
-operating and verify that the isolated patch still reaches its publication gate,
-that the unrelated caller change is preserved, and that the launcher performs no
-file/index/commit mutation in the caller checkout.
+The agent SHOULD provide the next validation commands directly in chat and
+interpret the maintainer's returned output before advancing to the next
+publication-sensitive step.
 
-Acceptance MUST verify that a successful disposable push cannot subsequently be
-reported as a failed publication merely because caller state differs from the
-launcher's initial observation. Post-push cleanup failure may be simulated to
-verify warning/reporting behavior, but it must not turn an already successful
-push into a generic `ERROR: caller checkout state changed`.
-
-A generated artifact that fails any authoring-time acceptance check MUST be fixed
-and re-tested before it is shown to the user. Do not intentionally use the
-user's real checkout as the first test of a generated parser, patch hunk,
-replacement anchor, helper script, ZIP layout, Git worktree flow, or similar
-deterministic launcher machinery.
-
-If `origin/main` advances while an agent is still authoring a patch, that fact
-alone does not reset the work. The agent may continue preparing the
-forward-compatible artifact from its audited `AUTHORING_BASE`; before delivery,
-it should use the newest repository content available to test compatibility of
-the semantic transformation where practical. Re-audit/regeneration is required
-only when new evidence changes the slice's relevant semantics/preconditions or
-the artifact cannot forward-materialize safely.
-
-If the authoring environment cannot execute a required acceptance check, report
-that specific limitation accurately. Lack of one unavailable check does not
-justify inventing `PASS`, but agents should still perform every exact-content,
-forward-compatibility, syntax, archive and static workflow check that their
-available tools permit.
-
-This acceptance gate is distinct from project behavioral validation. Maven focal
-or full-suite tests are still selected from the definitive execution-time
-repository delta by the adaptive validation matrix. Artifact acceptance exists
-to establish that the generated launcher can correctly materialize and
-orchestrate that delta across normal intervening publications before the user's
-checkout becomes its first real execution environment.
-
-### Environment and toolchain discipline for generated patches
-
-Generated patches and their launchers MUST run against the repository's declared
-development environment rather than assuming newer host tools happen to exist.
-Inspect the applicable environment and build declarations such as
-`.devcontainer/`, `pom.xml`, `Makefile`, and repository scripts before choosing
-helper-tool requirements.
-
-Patch materialization SHOULD minimize incidental tool dependencies, but
-**reliability against `PUBLICATION_BASE` is more important than forcing every
-change through `git apply`**. Use the simplest repository-declared or
-baseline-compatible mechanism that can express the requested transformation
-safely. For stable files an ordinary unified diff is often ideal. For moving
-shared files such as `pom.xml`, `CHANGELOG.md`, and canonical ledgers, a bounded
-state-aware edit that reads and validates the current worktree content is
-preferred when that avoids stale-context failures. Any helper runtime must still
-satisfy the version/toolchain checks below; do not add incidental dependencies
-merely for convenience.
-
-Never assume an unversioned command name implies a modern runtime. In particular,
-`python3` may denote an older system Python. If a helper language is genuinely
-required, the launcher MUST, before modifying repository state:
-
-1. locate the intended executable explicitly;
-2. inspect its actual version;
-3. verify that version satisfies the helper's declared minimum; and
-4. use only syntax and APIs compatible with that verified version.
-
-Apply the same principle to Java, Maven, Node, compilers, formatters, and other
-tools: use the repository-declared toolchain and validate required capabilities
-before relying on them. Do not install, upgrade, replace, relink, or reconfigure
-system tools, packages, `PATH`, shell profiles, the devcontainer, or the project
-toolchain merely to make a generated patch helper run unless changing that
-toolchain is itself the explicit task.
-
-If a genuinely required tool or compatible version is unavailable, abort before
-repository modification and report `ENVIRONMENT_LIMITATION` with the required
-and observed tool/version information. Prefer rewriting the patch launcher to
-use already-declared compatible tools when that can be done without changing the
-requested repository behavior.
 
 ### Truncated repository reads
 
@@ -2231,16 +2091,17 @@ environment lacks a local checkout or build toolchain.
 
 Agents MUST NOT create or push temporary, staging, validation, audit, or
 agent-specific remote branches unless the task explicitly requires a remote
-branch or pull request.
+branch or Pull Request.
 
-Temporary branches used for patch construction, rebasing, or validation SHOULD
-remain local.
+Ordinary maintainer-directed interactive work does not require a temporary local
+branch or worktree solely for patch construction. Work in the maintainer's
+current checkout, preserving unrelated work as required above.
 
-For the standard patch-publication workflow, publish the validated commit
-directly to `main` only after synchronizing with the current `origin/main` and
-rerunning the validation required by the adaptive test/validation rules below.
+For direct publication to `main`, synchronize with current `origin/main`, resolve
+only genuine overlaps/precondition changes, run the validation required by the
+final candidate, and publish only by a normal non-force update. Never leave
+temporary remote branches behind.
 
-Do not leave temporary remote branches behind after successful publication.
 
 ## Unresolved language-design questions
 
@@ -3195,216 +3056,87 @@ delta after synchronizing with the current `origin/main`:
   executable impact.
 
 <!-- PERF005-B2 IMPACT-AWARE-TOOL-VALIDATION -->
-### Impact-aware tool-local publication validation
+### Impact-aware validation and integrated full-suite discipline
 
-#### Required publication-launcher integration
+Impact-aware validation exists to avoid repeatedly paying for unrelated
+repository-wide tests while preserving a mandatory integrated closure gate.
 
-For an intermediate **executable-impact** or **test-impact** publication, use the
-repository-maintained validation runner rather than reproducing impact parsing in
-the generated launcher.
+Derive test impact from the actual definitive delta plus a conservative dependency
+closure. A work-item identifier such as `I031`, `TOOL001`, `TOOL002`, `PERF006`,
+or `LIB001` is coordination metadata and MUST NOT by itself select test scope.
 
-The launcher MUST first materialize the complete intended delta in its isolated
-publication worktree, stage only the bounded slice, and create one local
-candidate commit. That immutable commit is `CANDIDATE_SHA`; the caller worktree
-remains untouched. Then run:
+A reduced validation path is permitted only when the affected behavior can be
+bounded confidently. "Focused" means the complete demonstrated affected set, not
+one convenient regression while known affected consumers are omitted.
 
-    python3 scripts/publication_validation.py \
-      --repo . \
-      --base "$PUBLICATION_BASE" \
-      --head "$CANDIDATE_SHA"
+Shared production surfaces such as `src/main/**`, distributable shared
+library/Core surfaces under `protos/lib/**`, and shared
+runtime/compiler/parser/filesystem/module machinery default to integrated full
+validation. An intermediate already-approved implementation slice MAY use a
+bounded focal profile when:
 
-If this publication closes or reconciles an owning top-level executable work
-item, append `--top-level-closure`. That flag is closure metadata only; it does
-not make a formal Issue identifier authoritative for ordinary impact routing.
+- the owning top-level executable work item remains open;
+- the slice does not claim top-level closure/reconciliation;
+- semantics/architecture are already approved;
+- patch-owned paths and the conservative validation dependency closure are
+  understood;
+- applicable static/style/compile gates pass; and
+- every test in the complete affected set passes.
 
-The validation runner MUST inspect exactly
-`PUBLICATION_BASE..CANDIDATE_SHA`. It verifies that the isolated worktree `HEAD`
-is that candidate and has no later tracked changes, invokes
-`scripts/validation_impact.py`, and executes either the selector's complete
-tool-local Maven test set for the bounded Tool-local intermediate-publication
-exception or the complete Maven suite for shared, unknown, unmapped, empty,
-cross-tool, and top-level closure candidates. Missing/malformed selector state,
-unsupported output, candidate mismatch, dirty tracked state, or failed selected
-tests is a fail-closed publication error.
+Cross-tool deltas, unknown/unmapped executable paths, build/generation changes,
+shared executable test infrastructure, or dependency ambiguity fail closed to
+integrated full validation.
 
-After validation, the launcher MUST verify that no tracked file changed during
-tests. It MUST NOT amend, repair, or otherwise mutate `CANDIDATE_SHA`. If any
-material change is required, abort that invocation and create a fresh candidate
-under the normal execution-time publication-base rules. Before push, fetch
-`origin/main` again and abort without push if it no longer equals
-`PUBLICATION_BASE`.
+Reduced validation applies to **intermediate work**. Closing or reconciling an
+owning top-level executable work item such as an `Ixxx`, `TOOLxxx`, `LIBxxx`,
+`PERFxxx`, `CLIxxx`, or comparable parent requires one integrated full-suite run
+over the final closure candidate after cheaper gates pass.
 
-The launcher report MUST preserve the runner's `VALIDATION_IMPACT`,
-`AFFECTED_TEST_SET`, `VALIDATION_REASON`, `FULL_TEST_SUITE`, and
-`TOP_LEVEL_RECONCILIATION` evidence. Documentation/governance-only publications
-continue to use the existing adaptive validation rules and do not invoke this
-runner merely to obtain a no-test classification.
+The repository's official integrated full-suite entry point is:
+
+    make test
+
+`make test` runs the ordinary Java/JUnit suite and the native Protos test suite.
+Use the narrower official `make test-java` or `make test-protos` lanes when the
+required validation is exactly one whole lane. Direct Maven invocation remains
+appropriate for intentionally focal Java/JUnit test sets and other bounded
+Maven-specific checks; unrestricted `mvn test` is not the repository's canonical
+integrated full-suite command.
+
+Agents MUST NOT run or request `make test` repeatedly merely to discover whether
+an intermediate edit materializes, compiles, or passes focal regressions. Pay for
+the integrated full suite at the point required by impact/closure policy, normally
+after the substantive delta and all moving finalization metadata are stable.
+
+Expensive validation belongs to the **exact candidate bytes and relevant
+dependency state**, not to an invocation attempt. If the required full suite has
+already passed and publication then fails solely because of credentials,
+network/transport, or another push-layer failure while the candidate and relevant
+validation dependencies remain unchanged, do not rerun the suite merely to retry
+the push. If candidate bytes or a relevant dependency changes, reassess and rerun
+the validation that change invalidates.
+
+`scripts/validation_impact.py` and `scripts/publication_validation.py` remain
+repository helpers for deterministic commit-range classification/validation when
+that evidence is useful. They are not a requirement to manufacture an isolated
+publication worktree for interactive editing. For `FULL`,
+`scripts/publication_validation.py` MUST use the repository's `make test` entry
+point; bounded tool-local Java/JUnit profiles may continue to invoke Maven
+directly for their exact affected test set.
+
+Reports SHOULD state the selected impact/profile, the complete affected test set,
+why broader suites were skipped for intermediate work, whether integrated
+full-suite validation is deferred, and which top-level work item owns that final
+obligation.
 
 <!-- PERF005-C RETIREMENT-CONDITION -->
-#### Retirement of the temporary host-side execution bridge
+The impact selector/routing policy is independent from the host-side execution
+bridge. A future official Test Tool path may replace host-side execution only when
+it demonstrably preserves deterministic affected-set selection, failure
+propagation, required isolation, complete integrated validation, fail-closed
+unknown-state handling, and auditable evidence. Do not delete the routing policy
+merely because its execution mechanism changes.
 
-The impact-aware publication-validation **policy and classification contract are
-not temporary merely because PERF005 introduced them**. They may remain useful
-after TOOL002 matures. The temporary component is the host-side Maven execution
-bridge currently implemented by `scripts/publication_validation.py`.
-
-Retire or replace that host-side execution bridge only when the official
-`protos test` / TOOL002 execution path demonstrably owns the publication
-validation execution contract while preserving all of these properties:
-
-1. it receives the deterministic affected test set selected from the definitive
-   `PUBLICATION_BASE..CANDIDATE_SHA` delta, or provides an equivalent first-class
-   Test Tool selection model with the same coverage;
-2. it preserves the selected corpus and failure propagation rather than silently
-   narrowing, skipping, or reinterpreting the routed test set;
-3. it preserves the fresh semantic Process / RootActor isolation required by the
-   ratified Test Tool contract;
-4. it can execute complete validation for shared, unknown, cross-tool, and
-   top-level closure/reconciliation candidates;
-5. unknown, malformed, or unsupported selection state still fails closed rather
-   than silently omitting validation;
-6. it reports auditable selected, passed, failed, and skipped evidence suitable
-   for the owning GitHub Issue publication log; and
-7. the transition does not introduce a competing host scheduler, silently select
-   worker-count/timeout/resource semantics, resume suspended TOOL002-H work, or
-   change observable Protos behavior.
-
-Nominal existence of TOOL002, completion of unrelated Test Tool slices, or the
-availability of a `protos test` command is not sufficient to retire the bridge.
-Retirement occurs only after the official path has demonstrated ownership of the
-required publication-validation execution contract.
-
-When that condition is met, prefer replacing only the host-side execution bridge
-first. Keep or evolve the impact selector/routing policy independently if it
-still provides useful deterministic dependency classification. Do not couple
-retirement of execution machinery to deletion of the routing policy without
-separate evidence that the policy itself is obsolete.
-
-
-Impact-aware publication validation is a bounded exception for intermediate
-executable/test-impact slices whose definitive publication delta can be
-**deterministically bounded to an explicit affected-test dependency closure**.
-Tool-local routing is one established instance of that rule; it is not the only
-possible bounded profile. The purpose is to avoid repeatedly paying for unrelated
-repository-wide validation while preserving a mandatory integrated closure gate.
-
-The exception is governed by these rules:
-
-1. Derive impact from the complete definitive delta against the execution-time
-   `PUBLICATION_BASE` plus an explicit dependency closure. A work-item identifier
-   such as `I031`, `TOOL001`, `TOOL002`, `PERF006`, or `LIB001` is coordination
-   metadata and MUST NOT by itself select test scope.
-
-2. A reduced publication path MAY be selected in either of two ways:
-
-   - a deterministic repository selector classifies the complete delta into an
-     already-maintained impact profile such as `TOOL_LOCAL:*`; or
-   - for an intermediate slice that the generic selector cannot yet express, the
-     launcher declares a bounded `FOCAL_BOUNDED` profile containing the exact
-     patch-owned paths, the conservative validation-dependency closure, the exact
-     retained focal/regression test set, and the owning top-level work item that
-     retains the final full-suite obligation.
-
-   A launcher MUST NOT call a profile `FOCAL_BOUNDED` merely because the diff is
-   small or the focal tests are convenient.
-
-3. Any reduced profile MUST run its **complete declared affected set**, including
-   every shared smoke, conformance, adapter, integration, regression, or corpus
-   test that the maintained map or slice-specific dependency proof says can
-   observe the changed behavior. "Focused" means bounded by demonstrated impact;
-   it never means one convenient test while a known affected test is omitted.
-
-4. Shared production surfaces such as `src/main/**`, distributable shared
-   library/Core surfaces under `protos/lib/**`, and shared
-   runtime/compiler/parser/filesystem/module machinery **default to `FULL`**.
-   An intermediate already-approved implementation slice MAY instead use
-   `FOCAL_BOUNDED` only when all of the following are true:
-
-   - the owning top-level executable work item remains open after this
-     publication and this slice does not claim top-level closure/reconciliation;
-   - the slice implements already-approved semantics/architecture and does not
-     resolve a new `Dxxx`/`PLATxxx` choice inside the reduced-validation path;
-   - the launcher explicitly declares the patch-owned paths and a conservative
-     dependency closure broad enough to include every known consumer that could
-     invalidate the slice;
-   - source/style/static and compile/generation gates applicable to the changed
-     surface pass before behavioral tests;
-   - every test in the declared affected set passes; and
-   - the publication report records the deferred integrated obligation as
-     `FULL_VALIDATION_DEBT: <owning-work-item>`.
-
-   Changes to build/generation configuration, dependency/toolchain coordinates,
-   shared executable test infrastructure, or another surface whose effects
-   cannot be conservatively bounded remain `FULL`.
-
-5. Cross-tool deltas, unknown paths, newly introduced executable/test-impact
-   paths without a demonstrated mapping/closure, and any dependency ambiguity
-   fail closed to the complete Maven test suite. Never guess that an unclassified
-   or poorly understood path is local.
-
-6. Reduced validation applies only to **intermediate publications**. Closing or
-   reconciling an owning top-level executable work item such as an `Ixxx`,
-   `TOOLxxx`, `LIBxxx`, `PERFxxx`, `CLIxxx`, or comparable parent requires a
-   complete unrestricted Maven test suite over the exact closure candidate.
-   Passing intermediate focal profiles accumulates evidence; it does not discharge
-   this final integrated obligation.
-
-7. Validation MUST be ordered from cheapest/highest-signal gate to most expensive:
-   materialization/preconditions, changed-path/static/style checks, compilation,
-   focal/declared affected tests, and only then any required full suite. Agents and
-   launchers MUST NOT run unrestricted `mvn test` merely to discover whether a
-   patch materializes, compiles, or passes its focal regressions. A failed earlier
-   gate stops the candidate before the expensive suite.
-
-8. Expensive validation belongs to the **exact candidate**, not to an invocation
-   attempt. If the complete suite already passed for an exact candidate commit and
-   publication then fails solely because of credentials, network/transport, or
-   another push-layer failure, the suite MUST NOT be rerun merely to retry the
-   same bytes. Re-fetch `origin/main` and rerun the publication race gate:
-
-   - if `origin/main` is still the candidate's validated `PUBLICATION_BASE`, retry
-     only the non-force fast-forward push of that exact candidate;
-   - if `origin/main` moved, reuse is governed by the existing concurrent-
-     publication validation-reuse proof rules above; without such a proof, abort
-     rather than treating the old full-suite result as portable to a new base.
-
-   Any change to candidate bytes, candidate commit, or relevant validation
-   dependency closure invalidates this exact-candidate reuse.
-
-9. The launcher/report MUST state the selected impact/profile class, the complete
-   affected test set, why broader suites were skipped, whether integrated
-   full-suite validation is deferred, and which top-level work item owns that
-   debt. This evidence belongs in the owning Issue work log after successful
-   publication.
-
-10. This validation optimization is repository tooling policy only. It MUST NOT
-    resume, duplicate, or emulate a suspended Test Tool scheduler, alter Protos
-    execution semantics, or convert host-level validation routing into language
-    behavior.
-
-Representative reporting for an intermediate recognized tool-local publication:
-
-    VALIDATION_CLASS: EXECUTABLE_IMPACT
-    VALIDATION_IMPACT: TOOL_LOCAL:PACKAGE
-    AFFECTED_TEST_SET: <deterministic selector output>
-    FULL_TEST_SUITE: SKIPPED (impact-aware tool-local intermediate publication)
-    TOP_LEVEL_RECONCILIATION: NOT_REQUIRED_FOR_THIS_CHILD_SLICE
-
-Representative reporting for an intermediate bounded shared-production slice:
-
-    VALIDATION_CLASS: EXECUTABLE_IMPACT
-    VALIDATION_IMPACT: FOCAL_BOUNDED
-    AFFECTED_TEST_SET: <declared complete bounded regression set>
-    FULL_TEST_SUITE: DEFERRED_TO_TOP_LEVEL_CLOSURE
-    FULL_VALIDATION_DEBT: <owning-work-item>
-    TOP_LEVEL_RECONCILIATION: NOT_REQUIRED_FOR_THIS_CHILD_SLICE
-
-For ambiguous, unknown, unbounded, build/generation-impact, or top-level closure
-candidates:
-
-    VALIDATION_CLASS: EXECUTABLE_IMPACT
-    VALIDATION_IMPACT: FULL
-    FULL_TEST_SUITE: PASS
 
 ### Prefer Protos-level tests for observable language behavior
 
@@ -3443,8 +3175,8 @@ packaging scripts, or runtime configuration may have executable impact even
 though they are not Java or Protos source. Conversely, a Markdown-only design
 clarification does not gain executable impact merely because it describes code.
 
-Patch launchers SHOULD derive and print their validation class from the actual
-post-apply delta, for example:
+Interactive workflows SHOULD derive and report their validation class from the
+actual current delta, for example:
 
     VALIDATION_CLASS: EXECUTABLE_IMPACT
     FOCAL_TESTS: PASS
@@ -3456,12 +3188,10 @@ or:
     FOCAL_TESTS: SKIPPED (not applicable)
     FULL_TEST_SUITE: SKIPPED (documentation-only change)
 
-A user request for a publication-capable automated patch/launcher authorizes that
-launcher, when the user executes it, to run the tests required by this matrix and
-to publish only after those required validations pass. Do not ask for a second
-test confirmation solely because the matrix requires focal or full-suite tests.
-Outside such an authorized publication workflow, do not start expensive test
-runs automatically; follow the user's requested validation scope.
+When validation is required, provide the maintainer with the bounded commands
+needed for that validation. Do not request the integrated full suite repeatedly
+during intermediate editing; follow the adaptive impact rules and reserve the
+full suite for the exact point where those rules require it.
 
 Do not repeatedly rerun failing tests without first understanding and changing
 the likely cause.
@@ -3639,11 +3369,29 @@ Every committed change that modifies executable implementation source under
   major/minor transition;
 - add a corresponding section to the root `CHANGELOG.md` for that exact
   implementation version, describing the notable implementation changes in
-  English;
+  English; and
 - keep specification revisions separate: specification-only or
   documentation-only commits do not increment the implementation version merely
   because `spec/` or `docs/` changed, and normative specification changes remain
   recorded in `spec/PROTOS_SPEC_CHANGELOG.md`.
+
+For concurrent interactive work, **derive and materialize moving implementation
+metadata at finalization, not at patch start**. Implement and focal-validate the
+substantive source/test delta first. Do not reserve the next Maven version or add
+its root changelog section early merely to begin work.
+
+Immediately before the final candidate is prepared, re-read the current
+`pom.xml`, root `CHANGELOG.md`, and relevant `origin/main` state, derive the
+then-current next implementation version, and add the matching version/changelog
+metadata. If another agent consumed an earlier expected next version, recompute
+the metadata from current state; do not discard or restart otherwise valid
+substantive work unless the concurrent publication actually overlaps or changes
+one of its semantic/implementation preconditions.
+
+Late metadata materialization does not weaken atomicity. The required version
+bump and matching changelog entry MUST still be present in the same final commit
+as the implementation change, and the required final validation applies after
+that metadata has been materialized.
 
 A commit that changes both implementation and documentation follows the
 implementation rule above. A version bump must not be omitted merely because the
