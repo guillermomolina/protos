@@ -1502,8 +1502,45 @@ remains unset unless explicitly prioritized; Status never manufactures priority.
 
 After an explicit priority change, repository automation MUST reconcile the
 changed Issue and affected native descendants while preserving explicit-vs-
-inherited identity. Repository-wide reconciliation is an explicit audit/repair
-operation, not the routine propagation path.
+inherited identity. Closing or reopening a formal Issue MUST likewise reconcile
+its open native descendants so a Project Priority inherited only from a now-closed
+ancestor is cleared instead of becoming stale or being materialized as an
+explicit child priority. Repository-wide reconciliation is an explicit
+audit/repair operation, not the routine propagation path.
+
+## Hierarchy-independent actionable Work queue
+<!-- GITHUB025 HIERARCHY-INDEPENDENT-WORK-QUEUE -->
+
+Native hierarchy records provenance and coordination structure; it does not decide
+whether an open Issue is actionable.
+
+The main Protos Development **Work queue** MUST include open Issues whose Project
+Status is `In progress`, `Review`, or `Ready` regardless of whether they are
+top-level or native sub-issues and regardless of whether their ancestors are open
+or closed. Closing a decision/audit parent therefore does not hide a still-open
+implementation child.
+
+The canonical base saved-filter intent is:
+
+```text
+repo:guillermomolina/protos is:issue is:open status:"In progress",Review,Ready
+```
+
+`no:parent-issue` MUST NOT be part of the Work queue filter.
+
+Status remains the actionability authority. Native Parent/Sub-issue remains the
+hierarchy authority. Priority remains an independent scheduling dimension under
+GITHUB005; an actionable `Ready` child may remain visible with Priority unset
+after its last priority-bearing open ancestor closes.
+
+Repository Project synchronization MUST verify the saved **Work queue** filter
+against this contract and converge it when the available Project token permits
+view mutation. Drift is a visible synchronization failure, not permission to
+detach children, reopen completed ancestors, copy ancestor priorities onto
+children, or invent lifecycle transitions.
+
+Independently ratified routing exclusions remain applicable. In particular,
+Community placement below is not replaced by this hierarchy rule.
 
 ## Community contribution placement
 <!-- GITHUB012 COMMUNITY-WORK-QUEUE-PLACEMENT -->

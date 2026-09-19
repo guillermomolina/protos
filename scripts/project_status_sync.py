@@ -65,6 +65,12 @@ PRIORITY_REQUIRED_STATUSES = frozenset((
 ))
 MAX_PRIORITY_ANCESTRY_DEPTH = 32
 
+WORK_QUEUE_VIEW_NAME = "Work queue"
+WORK_QUEUE_FILTER = (
+    'repo:guillermomolina/protos is:issue is:open '
+    'status:"In progress",Review,Ready'
+)
+
 
 class SyncError(Exception):
     pass
@@ -454,6 +460,13 @@ query($login: String!, $number: Int!) {
           }
         }
       }
+      views(first: 100) {
+        nodes {
+          id
+          name
+          filter
+        }
+      }
     }
   }
 }
@@ -563,6 +576,19 @@ mutation($project: ID!, $item: ID!, $field: ID!) {
 }
 """
 
+UPDATE_PROJECT_VIEW_MUTATION = r"""
+mutation($view: ID!, $filter: String!) {
+  updateProjectV2View(input: {viewId: $view, filter: $filter}) {
+    projectV2View {
+      id
+      name
+      filter
+    }
+  }
+}
+"""
+
+
 
 def _single_select_field(project, name):
     for node in (project.get("fields") or {}).get("nodes") or []:
@@ -574,6 +600,62 @@ def _single_select_field(project, name):
             }
             return {"id": node["id"], "options": options}
     raise SyncError("Project does not contain a single-select %s field" % name)
+
+
+def _named_project_view(project, name):
+    matches = [
+        node
+        for node in ((project.get("views") or {}).get("nodes") or [])
+        if node and node.get("name") == name
+    ]
+    if len(matches) != 1:
+        raise SyncError(
+            "Project must contain exactly one %r view; found %d"
+            % (name, len(matches))
+        )
+    node = matches[0]
+    if not node.get("id"):
+        raise SyncError("Project view %r has no node id" % name)
+    return {
+        "id": node["id"],
+        "name": node.get("name"),
+        "filter": node.get("filter") or "",
+    }
+
+
+def work_queue_filter_action(current_filter):
+    if current_filter == WORK_QUEUE_FILTER:
+        return "unchanged"
+    return "update"
+
+
+def reconcile_work_queue_view(project_token, project):
+    view = project["work_queue"]
+    action = work_queue_filter_action(view.get("filter") or "")
+    if action == "unchanged":
+        print("PROJECT_VIEW_FILTER: Work queue -> canonical")
+        return False
+
+    data = _graphql(
+        project_token,
+        UPDATE_PROJECT_VIEW_MUTATION,
+        {"view": view["id"], "filter": WORK_QUEUE_FILTER},
+    )
+    updated = (data.get("updateProjectV2View") or {}).get("projectV2View")
+    if not updated or updated.get("id") != view["id"]:
+        raise SyncError("Work queue view update returned no matching view")
+    if (updated.get("filter") or "") != WORK_QUEUE_FILTER:
+        raise SyncError(
+            "Work queue view update did not converge to canonical filter"
+        )
+
+    project["work_queue"] = {
+        "id": updated["id"],
+        "name": updated.get("name") or WORK_QUEUE_VIEW_NAME,
+        "filter": updated.get("filter") or "",
+    }
+    print("PROJECT_VIEW_FILTER: Work queue -> reconciled")
+    return True
 
 
 def load_project(project_token, owner, number):
@@ -606,11 +688,14 @@ def load_project(project_token, owner, number):
             "Project Priority options missing: " + ", ".join(missing_priority)
         )
 
+    work_queue = _named_project_view(project, WORK_QUEUE_VIEW_NAME)
+
     return {
         "id": project["id"],
         "title": project.get("title"),
         "status": status_field,
         "priority": priority_field,
+        "work_queue": work_queue,
     }
 
 
@@ -1481,9 +1566,54 @@ def self_test():
     else:
         raise AssertionError("native descendant cycle must fail closed")
 
+    assert "no:parent-issue" not in WORK_QUEUE_FILTER
+    assert 'status:"In progress",Review,Ready' in WORK_QUEUE_FILTER
+    assert work_queue_filter_action(WORK_QUEUE_FILTER) == "unchanged"
+    assert work_queue_filter_action(
+        WORK_QUEUE_FILTER + " no:parent-issue"
+    ) == "update"
+
+    project_with_views = {
+        "views": {
+            "nodes": [
+                {"id": "PVTV_other", "name": "Decisions", "filter": "x"},
+                {
+                    "id": "PVTV_work",
+                    "name": WORK_QUEUE_VIEW_NAME,
+                    "filter": WORK_QUEUE_FILTER,
+                },
+            ]
+        }
+    }
+    assert _named_project_view(
+        project_with_views, WORK_QUEUE_VIEW_NAME
+    ) == {
+        "id": "PVTV_work",
+        "name": WORK_QUEUE_VIEW_NAME,
+        "filter": WORK_QUEUE_FILTER,
+    }
+
+    for bad_views in ([], [
+        {"id": "a", "name": WORK_QUEUE_VIEW_NAME, "filter": ""},
+        {"id": "b", "name": WORK_QUEUE_VIEW_NAME, "filter": ""},
+    ]):
+        try:
+            _named_project_view(
+                {"views": {"nodes": bad_views}},
+                WORK_QUEUE_VIEW_NAME,
+            )
+        except SyncError:
+            pass
+        else:
+            raise AssertionError(
+                "Work queue view lookup must fail closed on missing/duplicate view"
+            )
+
     print("BOUNDED_DESCENDANT_TRAVERSAL_SELF_TEST: PASS")
     print("BOUNDED_PROJECT_ITEM_LOOKUP_SELF_TEST: PASS")
     print("STALE_INHERITED_PRIORITY_CLEAR_SELF_TEST: PASS")
+    print("WORK_QUEUE_HIERARCHY_FILTER_SELF_TEST: PASS")
+    print("WORK_QUEUE_VIEW_DRIFT_SELF_TEST: PASS")
 
     print("PROJECT_STATUS_PRIORITY_SYNC_SELF_TEST: PASS")
     print("UNKNOWN_STATUS_LABEL_FAIL_CLOSED: PASS")
@@ -1551,6 +1681,7 @@ def main(argv=None):
             project.get("title") or "<untitled>",
         )
     )
+    reconcile_work_queue_view(project_token, project)
 
     if args.reconcile_all:
         item_map, project_issues, project_priorities = load_project_issue_items(

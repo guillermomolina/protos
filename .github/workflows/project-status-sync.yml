@@ -70,8 +70,8 @@ jobs:
           fi
           python3 scripts/project_status_sync.py "${args[@]}"
 
-      - name: Reconcile inherited priorities after priority changes
-        if: ${{ github.event_name == 'issues' && (github.event.action == 'labeled' || github.event.action == 'unlabeled') && startsWith(github.event.label.name, 'priority:') }}
+      - name: Reconcile descendants after ancestry or priority changes
+        if: ${{ github.event_name == 'issues' && (github.event.action == 'closed' || github.event.action == 'reopened' || ((github.event.action == 'labeled' || github.event.action == 'unlabeled') && startsWith(github.event.label.name, 'priority:'))) }}
         env:
           ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
