@@ -1050,11 +1050,9 @@ whether a write would succeed. In particular, NEVER create sentinel/probe
 artifacts such as `noop`, `test`, `NONEXISTENT`, `nonexistent`, empty files, or
 temporary commits in the repository.
 
-Normal Protos source, specification, test, documentation, and repository-policy
-changes MUST follow the applicable repository-content workflow defined below.
-For repositories subject to maintainer-executed handoff, agents MUST NOT bypass
-that workflow by directly editing repository contents or moving Git refs through
-the GitHub connector/API. The sole agent-direct repository-content exception is
+Repository-content changes follow **Interactive local contribution and
+publication workflow** below. Connector/API repository-content writes MUST NOT
+bypass that workflow. The sole agent-direct exception is
 `guillermomolina/protos-project-docs`, governed by the bounded exception below.
 
 ### Sole autonomous repository-publication exception
@@ -1111,21 +1109,11 @@ already-authorized publication transaction after all required read-only checks
 and pre-publication validation have succeeded. It MUST NOT create a temporary
 remote branch.
 
-This standing authorization is repository-specific, not content-type inference.
-It applies only when the repository coordinate is exactly
-`guillermomolina/protos-project-docs`. It does **not** authorize repository
-publication to `guillermomolina/protos`, any related Protos repository, a fork,
-or any other repository. Changes to those repositories require maintainer-executed repository commands
-or artifacts. The agent may inspect them through available read-only mechanisms
-and may perform separately governed live GitHub coordination, but MUST NOT
-directly edit, commit, or push their repository content.
-
-This restriction does **not** prohibit intended live GitHub coordination
-mutations governed elsewhere in this file, such as creating/updating Issues or
-Pull Requests, labels, assignees, native hierarchy/dependency relations, release
-coordination, or other non-repository-content metadata. Those operations may be
-performed when the task actually requires that exact coordination mutation; they
-MUST NOT be used as generic write-capability probes.
+This standing authorization applies only to the exact repository
+`guillermomolina/protos-project-docs`. All other Protos repository-content
+changes use maintainer-executed handoff. Separately governed live GitHub
+coordination mutations may be performed when the task requires them, but MUST
+NOT be used as generic write-capability probes.
 
 Read-only GitHub operations may inspect repository metadata, files, commits,
 refs, checks, workflow results, Issues, Pull Requests, and other state whenever
@@ -1406,209 +1394,116 @@ explicit project-owner scheduling/release decision.
 ## GitHub Issue vs implementation-slice boundary
 <!-- ISSUE-SLICE-BOUNDARY -->
 
-GitHub Issues and implementation slices serve different purposes and MUST NOT be
-treated as interchangeable bookkeeping levels.
+A **GitHub Issue/Sub-issue** is an independently meaningful live coordination
+unit. A **slice** is a bounded implementation/publication unit inside one Issue.
+New decomposition remains a slice unless at least one promotion trigger applies:
 
-- A **GitHub Issue/Sub-issue** is a unit of coordination: it has an independently
-  meaningful lifecycle, dependency or scheduling boundary that belongs in the
-  live GitHub work graph.
-- A **slice** is a bounded implementation/publication unit inside one Issue. A
-  slice exists to keep a change reviewable, testable and safely publishable; it
-  does not become an Issue merely because it has a name, commit, patch, retry or
-  validation checkpoint.
+1. **Independent closure** — it can satisfy/close its own acceptance criteria
+   while the parent remains open.
+2. **Independent blockage** — it can be blocked while a sibling can continue.
+3. **Independent scheduling** — it can be owned/progress independently in
+   parallel with a sibling.
+4. **Issue dependency** — it must participate directly in a native
+   `blocked by` / `blocking` relation.
+5. **Decision checkpoint** — it owns an independently tracked project-owner
+   approval or dedicated `Dxxx` / `PLATxxx` dependency.
+6. **Multi-publication scope** — before implementation, it is expected to need
+   at least three distinct publication slices; retries, reruns, launcher
+   revisions, and repairs of the same slice do not count.
 
-### Mechanical promotion rule
+If any trigger applies, the work MUST have its own Issue and, when it belongs to
+larger tracked work, a native Parent/Sub-issue relation. If none applies, it MUST
+remain a slice. A bounded patch, retry, launcher revision, same-slice regression
+repair, validation checkpoint, commit-only step, or purely mechanical
+subdivision is therefore not an Issue unless it independently crosses a trigger.
 
-Newly decomposed work starts as a slice unless one or more of the following
-objective promotion triggers is true. If **any** trigger is true, the work MUST
-have its own GitHub Issue and, when it is part of a larger tracked item, MUST be
-attached through GitHub's native Parent/Sub-issue relationship:
+If an existing slice later crosses a trigger, promote it then, preserve prior
+slice evidence as history, and continue under the new Issue; do not rewrite
+historical commits. Textual parent prose never substitutes for the native
+relation. `Sub-issue progress` measures coordination milestones, not patch count.
 
-1. **Independent closure** — the work has acceptance/closure criteria that can
-   be satisfied and closed while its parent remains open.
-2. **Independent blockage** — the work can become `BLOCKED` on a dependency
-   while a sibling under the same parent can validly continue.
-3. **Independent scheduling** — the work can be assigned to a separate
-   agent/worktree and progress in parallel with a sibling without requiring the
-   same ordered publication sequence.
-4. **Issue-to-Issue dependency** — the work must participate directly in a
-   native GitHub `blocked by` / `blocking` relationship with another Issue.
-5. **Decision checkpoint** — the work owns a substantive project-owner approval
-   checkpoint or a dedicated `Dxxx` / `PLATxxx` decision dependency whose
-   resolution is independently tracked.
-6. **Multi-publication scope** — before implementation begins, the work is
-   expected to require **three or more distinct publication slices**. Retry
-   launchers, `v2`/`v3` attempts, CI reruns and repairs of the same bounded slice
-   do not count toward this threshold.
-
-If none of triggers 1-6 is true, the work MUST remain a slice of its existing
-Issue rather than creating another Issue merely to mirror implementation
-decomposition.
-
-If a slice later crosses one of the triggers, promote it at that point: create
-the Issue, attach the native parent, record the already-completed slice evidence
-as history, and continue under the Issue. Do not rewrite historical commits just
-to make the hierarchy look as though it had existed earlier.
-
-### Things that are not Issues by themselves
-
-The following MUST stay inside their owning Issue unless they independently
-cross one of the promotion triggers above:
-
-- one bounded patch or publication slice;
-- a failed publication attempt or environmental retry;
-- `v2`, `v3`, or equivalent launcher revisions;
-- a regression repair whose only purpose is to restore the acceptance criteria
-  of the same slice;
-- focal/full validation checkpoints;
-- commit-only bookkeeping; and
-- purely mechanical subdivision used to limit changed files or test scope.
-
-### Native hierarchy and progress
-
-A textual `Parent: #NNN`, a comment, a work-record heading or a slice name does
-not create GitHub hierarchy. Whenever the promotion rule requires a child Issue,
-agents MUST use GitHub's native Parent/Sub-issue relationship. This keeps
-`Sub-issue progress` and the Project hierarchy meaningful.
-
-`Sub-issue progress` is intentionally **milestone progress, not patch progress**.
-Do not create microscopic child Issues merely to increase the denominator.
-
-### Historical reconciliation
-
-Do not retrospectively create one Issue for every historical slice.
-
-When an existing large Issue predates this rule, backfill only coordination-level
-milestones that satisfy at least one promotion trigger and are useful for making
-the current/future hierarchy truthful. Historical micro-slices remain durable
-repository/comment evidence. Closed milestones MAY be backfilled when they are
-needed to make a parent's native progress representative, but the migration MUST
-not manufacture fake work or alter historical closure evidence.
-
-This rule governs work-item granularity only. Native Issue dependencies remain
-governed by the dependency policy below, and substantive semantic/platform
-choices remain governed by the explicit approval gate.
+Historical backfill is selective: create only useful coordination-level
+milestones that satisfy a promotion trigger. Do not recreate every historical
+micro-slice, manufacture fake work, or alter historical closure evidence.
+Dependencies remain governed by the dependency policy below; semantic/platform
+decisions remain governed by the explicit approval gate.
 
 ## Native GitHub Issue dependencies
 <!-- GITHUB009 NATIVE-ISSUE-DEPENDENCY-AUTHORITY -->
 
-GitHub's native Issue `blocked by` / `blocking` relationships are the canonical
-**live dependency graph** for specific Issue-to-Issue blocking relationships.
-They are deliberately orthogonal to native Parent/Sub-issue hierarchy,
-Issue-owned `status:*`, explicit `priority:*`, and durable repository evidence.
+Native GitHub `blocked by` / `blocking` relationships are the canonical live
+graph for exact Issue-to-Issue blockers. They are orthogonal to hierarchy,
+`status:*`, `priority:*`, and durable repository evidence.
 
-When a formal Protos Issue is genuinely prevented from progressing by another
-specific Issue:
+When an exact current blocker is known, establish the native edge when supported.
+Textual `Blocked by`/`Prerequisite` prose, checklists, titles, family, Project
+grouping, hierarchy, roadmap position, identifier ordering, `Triggered by`, or
+`status:blocked` do not substitute for or imply that edge. Do not propagate edges
+through hierarchy or copy transitive prerequisites; retain one native edge for
+each independent direct blocker.
 
-- establish the native `blocked by` / `blocking` relationship in the same
-  coordination step when the exact current blocker is already known and the
-  available interface supports dependency mutation;
-- explanatory or historical `Blocked by`, `Prerequisite`, `State at creation`,
-  checklist, title, family, Project, or repository prose is not a substitute for
-  the native relationship once the exact live dependency is known;
-- do not infer a dependency merely from `status:blocked`, Parent/Sub-issue
-  hierarchy, sibling order, `family:*`, `Triggered by`, roadmap position,
-  identifier numbering, or a prerequisite that has already been satisfied;
-- do not propagate dependency edges mechanically through Parent/Sub-issue
-  hierarchy in either direction;
-- prefer direct real blockers rather than copying every transitive upstream
-  prerequisite onto each downstream Issue;
-- when several exact Issues independently block one Issue, retain one native
-  relationship for each real blocker;
-- if native dependency state conflicts with current explicit coordination or
-  durable evidence, stop and reconcile the conflict rather than silently
-  trusting stale prose or rewriting the graph heuristically; and
-- if the current environment cannot mutate native dependencies, report the exact
-  pending coordination step instead of claiming that text alone reconciled it.
+If native dependency state conflicts with current explicit coordination or
+durable evidence, reconcile the conflict explicitly. If dependency mutation is
+unavailable, report the exact pending edge instead of treating prose as
+reconciled.
 
-`status:blocked` answers whether an open Issue is currently blocked as lifecycle
-state; a native dependency answers which specific Issue participates in the
-blocking graph. An Issue may therefore be `status:blocked` without a native edge
-when the blocker is external or not represented by one exact Issue.
+`status:blocked` says that lifecycle progress is blocked; a native edge identifies
+a specific Issue blocker. External/non-Issue blockers therefore need no invented
+edge. Closing a blocker neither chooses the dependent Issue's next status nor
+requires deleting the historical edge; transition lifecycle state only from
+current coordination evidence.
 
-Closing a blocker does not mechanically select the dependent Issue's next
-`status:*` value and does not require deleting the dependency relationship.
-Closed blocker edges may remain as useful history while GitHub distinguishes
-active unresolved blockers from the complete historical dependency set. Change
-the dependent Issue to `Ready`, `In progress`, `Needs decision`, `Paused`,
-`Review`, or another valid state only from current coordination evidence.
-
-Dependency automation may verify explicit/native state and report drift, but it
-MUST NOT infer blocker identity from arbitrary prose, family, hierarchy, title
-similarity, Status, Project grouping, or implementation numbering. It also MUST
-NOT close dependent Issues or choose lifecycle transitions merely because a
-blocker closes.
+Dependency automation may verify explicit/native state and report drift, but MUST
+NOT infer blocker identity, close dependents, or choose lifecycle transitions.
 
 ## Live GitHub assignee discipline
 <!-- LIVE-GITHUB-ASSIGNEE-DISCIPLINE -->
 
-GitHub `Assignees` represent **active responsibility**, not repository ownership.
-They are live coordination state and MUST NOT be mirrored into historical
-repository ledgers.
+GitHub assignees represent active responsibility, not repository ownership, and
+MUST NOT be mirrored into historical repository ledgers.
 
-When an agent starts or resumes work that is directly represented by a formal
-Protos GitHub Issue, the agent MUST reconcile the Issue assignee state when the
-available GitHub capability can mutate assignees:
+For directly owned formal work:
 
-- an Issue that the agent is directly working on and keeps or moves to
-  `In progress` or `Needs decision` MUST have an active responsible assignee;
-- when the agent is acting on behalf of the repository owner and no different
-  human contributor is already responsible, assign `guillermomolina`;
-- when creating a new formal Issue and immediately moving it to a lifecycle
-  state that requires active ownership, set the assignee in the same coordination
-  workflow rather than leaving it unassigned;
-- `Inbox` and unclaimed `Ready` work normally remain unassigned so availability
-  is visible to contributors;
-- do not replace, add yourself over, or otherwise disturb an existing human
-  assignee merely because an agent is assisting that person's work;
-- do not assign a parent/umbrella Issue solely because one of its children is
-  active; assignment belongs on the directly owned active work item unless the
-  parent itself is being actively driven as work;
-- `Blocked` and `Review` may retain their existing assignee when responsibility
-  continues; do not manufacture an assignee merely from either status name; and
-- closing/completing an Issue does not require clearing its assignee; historical
-  responsibility may remain visible.
+- `In progress` and `Needs decision` MUST have an active responsible assignee.
+- When acting for the repository owner and no different human is already
+  responsible, use `guillermomolina` as the fallback.
+- A newly created Issue moved immediately into an ownership-requiring state MUST
+  receive its assignee in the same coordination workflow.
+- `Inbox` and unclaimed `Ready` normally remain unassigned.
+- Preserve an existing responsible human; assistance alone is not grounds to
+  replace or add another assignee.
+- Child activity does not assign its parent unless the parent itself is actively
+  owned.
+- `Blocked` and `Review` may retain an assignee but MUST NOT manufacture one from
+  status alone.
+- Closing an Issue does not require clearing historical assignment.
 
-Repository synchronization MAY enforce the `In progress` and `Needs decision`
-assignee invariants by assigning `guillermomolina` only when the Issue has no
-assignee. It MUST preserve an existing assignee and MUST fail visibly if GitHub
-rejects the fallback assignment.
+Repository synchronization MAY add the owner fallback only when an
+`In progress`/`Needs decision` Issue has no assignee; it MUST preserve an
+existing assignee and fail visibly if fallback assignment is rejected.
 
-Agents MUST attempt this reconciliation when they have GitHub mutation capability.
-If the environment cannot update GitHub assignees, report that coordination
-limitation explicitly instead of claiming the Issue was assigned. Lack of
-assignee-mutation capability is not by itself an implementation blocker when the
-work is otherwise authorized and correctly coordinated.
-
-Direct GitHub Project-field mutation remains outside routine agent
-coordination. Agents maintain Issue-owned `status:*` and, when explicitly
-prioritized, `priority:*` labels; repository automation projects those values into
-the Project. Agents MUST NOT probe for or mutate Project fields merely to mirror
-Issue coordination. See **Optional GitHub Project metadata** below.
+Agents with assignee-mutation capability MUST perform required reconciliation.
+Without that capability, report the pending coordination step; that limitation
+alone is not an implementation blocker.
 
 ## Native parent priority inheritance
 <!-- GITHUB005 NATIVE-PARENT-PRIORITY-INHERITANCE -->
 
-A `priority:*` label on an Issue is an **explicit override**, not a mechanically
-duplicated copy of its parent's label. Effective Project priority is resolved as:
+Effective priority resolves in this order:
 
-1. the Issue's own explicit `priority:*`, when present; otherwise
-2. the nearest **open** native ancestor with an explicit `priority:*`; otherwise
-3. unset.
+1. the Issue's own explicit `priority:*`;
+2. otherwise the nearest **open** native ancestor with an explicit `priority:*`;
+3. otherwise unset.
 
-Therefore agents MUST NOT copy a parent priority label onto every child merely to
-make Project ordering work. Leave an ordinary child unlabeled when it should
-follow its workstream; add a child `priority:*` only to intentionally override
-inheritance. A closed ancestor's retained historical priority is not live
-inheritance. Parentless work remains unprioritized unless explicitly prioritized.
-Status never manufactures priority: `Ready` is not automatically P2 and `In
-progress` is not automatically P1.
+An Issue label is therefore an explicit override, not a copied parent value.
+Agents MUST NOT duplicate parent priority onto children merely for Project
+ordering. Closed ancestors do not provide live inheritance; parentless work
+remains unset unless explicitly prioritized; Status never manufactures priority.
 
-Repository automation owns effective-priority projection. After an explicit
-priority change it MUST reconcile only the changed Issue plus the affected native
-descendant subtree so inheritance converges without losing the distinction
-between inherited and explicit priority. Repository-wide reconciliation is an
-explicit audit/repair operation, not the routine propagation path.
+After an explicit priority change, repository automation MUST reconcile the
+changed Issue and affected native descendants while preserving explicit-vs-
+inherited identity. Repository-wide reconciliation is an explicit audit/repair
+operation, not the routine propagation path.
 
 ## Community contribution placement
 <!-- GITHUB012 COMMUNITY-WORK-QUEUE-PLACEMENT -->
@@ -1860,38 +1755,20 @@ Lack of a local checkout, Maven, or other build tooling in the agent environment
 does not waive the repository/specification audit when repository contents are
 available through another read-capable mechanism.
 
-For maintainer-directed interactive work in every Protos repository except
-`guillermomolina/protos-project-docs`, the maintainer's existing repository
-checkout is the execution environment. Agents MUST inspect repository state
-through available read-only mechanisms and hand off bounded commands or a
-Markdown ZIP for execution there; repository-changing shell commands, including
-commit and push, are executed by the maintainer. Do not replace this workflow
-with an isolated temporary worktree merely because the agent environment lacks a
-checkout.
-
-`guillermomolina/protos-project-docs` is the sole repository-level exception:
-when the active task requires a bounded change there, the agent may edit, commit,
-and push that repository directly under the standing authorization below, without
-requiring maintainer-executed commands or a Markdown handoff merely for
-publication.
+Repository-content execution follows **Interactive local contribution and
+publication workflow** below. Lack of local tooling MUST NOT be used to invent a
+different publication path.
 
 
 ### Interactive local contribution and publication workflow
 <!-- GITHUB002-C HYBRID-CONTRIBUTION-PUBLICATION-CONTRACT -->
 <!-- GITHUB024 INTERACTIVE-LOCAL-PATCH-HANDOFF -->
 
-Protos uses GitHub Discussions, Issues, the `Protos Development` Project, and
-Pull Requests where each mechanism adds value, but it does **not** require every
-maintainer/agent-generated change to pay the cost of a remote PR + CI lifecycle.
+Live GitHub coordination is governed by the dedicated GitHub sections below;
+this section owns repository-content execution and publication.
 
-The current proportional model is:
+The current publication model is:
 
-- **Discussions** own exploration, questions, early ideas, and pre-decision
-  conversation.
-- **Issues** own required actionable live coordination, assignment, lifecycle
-  history, and work logs.
-- The **`Protos Development` Project** is the derived scheduling/dashboard
-  projection of Issue-owned live status.
 - **External contributions** normally use a branch/fork + Pull Request + CI/review
   before merge.
 - **Maintainer/agent interactive work outside
@@ -1899,17 +1776,9 @@ The current proportional model is:
   with bounded command handoff and adaptive local validation; the maintainer
   executes repository-changing commands, including commit and push.
 - **`guillermomolina/protos-project-docs` work** uses the standing direct
-  publication exception: the agent may edit, commit, and push that repository
-  directly when the active task requires the bounded documentation change.
+  publication exception above.
 - **Maintainer Pull Requests are optional** and SHOULD be used when their review,
   integration, audit, or collaboration value justifies their operational cost.
-
-`GITHUB002-B` temporarily made PR-first mandatory for newly generated internal
-launchers. `GITHUB002-D`/PR #153 demonstrated that mechanism successfully, and
-`GITHUB002-C` later removed that mandatory PR cost. GITHUB024 further retires the
-ordinary isolated-worktree publication-launcher model for maintainer-directed
-interactive work. Those experiments remain historical evidence; they are not the
-current operator contract.
 
 For ordinary maintainer-directed work in repositories subject to handoff,
 agents MUST work from the repository state the maintainer is actually using and
@@ -2004,11 +1873,6 @@ concurrency makes the additional coordination cost worthwhile.
 
 
 ### Local checkout safety and Markdown handoff
-
-This section governs repositories that use maintainer-executed handoff. It does
-not require command or Markdown-ZIP handoff for
-`guillermomolina/protos-project-docs` when the agent is acting under the standing
-direct-publication exception.
 
 The maintainer's current checkout may contain unrelated work from the maintainer
 or other agents. Interactive editing MUST preserve that work.
@@ -2157,78 +2021,34 @@ Do not bypass this process merely because the original request was phrased as
 
 ### GitHub-native project coordination
 
-GitHub is the live coordination layer for actionable Protos project work. This
-coordination role is deliberately separate from language/design authority and
-from durable repository evidence.
+GitHub owns live project coordination, not language/design authority or durable
+repository evidence. The dedicated hierarchy, dependency, assignee, family,
+status, priority, work-log, and closure sections own their respective mechanics.
 
-The authority split is:
-
-- normative Protos semantics remain owned by the applicable files under `spec/`;
-- ratified `Dxxx` and `PLATxxx` decisions remain durable repository records and
-  are not redefined by an Issue, Discussion, reaction, vote, or Project field;
-- `guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_BLOCKERS.md`
-  remains the durable project-record ledger for `Bxxx` normative unblock conditions;
-- GitHub Discussions is the preferred public surface for questions, ideas,
-  investigation, and pre-decision design discussion;
-- GitHub Issues is the canonical visible coordination/history representation for
-  every formal Protos identifier. For actionable work families, the owning Issue
-  is also the canonical live coordination surface. For `Dxxx`, `PLATxxx`, and
-  `Bxxx`, Issue state represents coordination/history only and does not replace
-  the durable repository authority described above;
-- the `Protos Development` GitHub Project is the derived scheduling/dashboard
-  projection for live Issues tracked there: Issue-owned status and explicit
-  scheduling priority are projected automatically while other planning-only
-  Project metadata remains advisory; and
-- merged/published repository state, owning project records, tests, changelog
-  entries, and Git history retain durable implementation/closure evidence.
-
-No GitHub surface has design-approval authority. A Discussion reaching consensus,
-an Issue being closed, a Project item moving to `Done`, a reaction count, or a PR
-being merged does not satisfy the explicit project-owner approval gate for a
-substantive design decision. Apply the design-authority rules above exactly as
-before.
+Normative semantics remain under `spec/`; ratified `Dxxx`/`PLATxxx` decisions and
+`Bxxx` blocker conditions retain their durable repository authority. GitHub
+Issues represent formal work and live coordination, while `Protos Development`
+is a derived scheduling/dashboard projection. No Discussion, Issue, Project
+field, reaction, vote, PR, or merge satisfies the explicit project-owner design
+approval gate by itself.
 
 <!-- GITHUB001-F LEGACY-LIVE-LEDGER-RETIREMENT -->
 `guillermomolina/protos-project-docs:docs/project/history/OPEN_TASKS.md` is a
-retired historical backlog snapshot.
+retired historical backlog snapshot; do not add actionable work to it, mirror
+GitHub into it, or use it to choose current work.
+
 `guillermomolina/protos-project-docs:docs/project/registries/IMPLEMENTATION_STATUS.md`
-is a durable implementation registry and closure-evidence ledger. Neither file
-is a live scheduling/status source.
+is durable implementation/closure evidence only. It MUST NOT mirror live status,
+assignee, priority, or roadmap state, and it never overrides the owning Issue.
+Preserve both legacy files as historical evidence; do not bulk-delete them.
 
-Agents MUST NOT add new actionable work to `OPEN_TASKS.md`, update it to mirror
-GitHub, or use it to decide what should run next. Agents MUST NOT update
-`IMPLEMENTATION_STATUS.md` merely to mirror `OPEN`, `READY`, `IN_PROGRESS`,
-`BLOCKED`, assignee, priority, or roadmap changes. New actionable work and required agent-facing live coordination belong to
-GitHub Issues. Open Issue state is machine-readable through the GITHUB004
-`status:*` vocabulary; explicit scheduling priority is machine-readable through
-the GITHUB005 `priority:*` vocabulary. Both are automatically projected into
-`Protos Development`; routine agents do not need direct Project mutation
-capability.
-
-`IMPLEMENTATION_STATUS.md` may still preserve or add durable historical/closure
-evidence when a repository publication genuinely needs that registry function,
-but a row there never reserves work, releases work, blocks work operationally,
-or overrides the owning Issue's live coordination state. Optional Project
-metadata does not change that authority. Preserve both
-legacy files as historical evidence; do not bulk-delete their retained content.
-
-Before starting actionable implementation/project work, agents MUST:
-
-1. inspect the current GitHub Issue for the work item when one exists;
-2. inspect current `origin/main`, the owning durable project/design records, and
-   every applicable blocker/specification source;
-3. reconcile stale Issue claims against repository fact before relying on them;
-   and
-4. preserve the authority split above when updating either side.
-
-GitHub Issue state is coordination data, not proof that code exists. If an Issue
-conflicts with current published repository state, use the
-repository/specification to establish what actually exists and then reconcile
-the Issue; do not rewrite durable semantics or implementation evidence merely to
-match stale coordination metadata. Reconcile the Issue's `status:*` label when
-its live state changes; Project Status follows automatically. When scheduling
-priority is explicitly established or changed, reconcile the Issue's
-`priority:*` label; Project Priority follows automatically.
+Before actionable implementation/project work, apply **Mandatory
+pre-implementation audit** above: inspect the current Issue when one exists,
+current `origin/main`, owning durable records, blockers, and applicable
+specification sources. Issue state is coordination data, not proof of repository
+fact or semantics. Reconcile stale Issue claims to published authority, and use
+the dedicated status/priority policies for live transitions; Project projection
+follows automatically.
 
 When a bounded implementation slice is successfully published, its Protos
 publication commit MUST still record every durable artifact owned by
@@ -2262,74 +2082,41 @@ Project-field updates are not required by this rule.
 <!-- GITHUB001 ISSUE-WORK-LOG-CHANGELOG-DISCIPLINE -->
 #### Issue work log and changelog discipline
 
-For actionable work with an owning GitHub Issue, that Issue thread is the live
-execution diary. After an outcome is known, agents with GitHub mutation
-capability MUST record materially significant execution outcomes on the directly
-owning Issue. This includes:
+For actionable work, the most specific owning GitHub Issue is the live execution
+diary. Agents with Issue-write capability MUST record materially significant
+outcomes after they are known, including successful publications, meaningful
+failed/unpublished attempts, validation/diagnostic results that affect work
+state, approved design decisions with links to their durable authority, and
+dependency/child outcomes that change what is actionable next.
 
-- confirmed publications, with the exact published commit and the validation
-  evidence relevant to that bounded change;
-- failed or unpublished attempts when they expose a real blocker, invalidate a
-  working assumption, reveal a relevant repository/precondition conflict, or
-  otherwise change the next action; trivial authoring mistakes before meaningful
-  execution need not be logged;
-- validation or diagnostic results that materially affect closure, readiness, or
-  the interpretation of the work;
-- explicit project-owner-approved design decisions encountered by the work,
-  linking to the durable repository authority rather than treating the Issue
-  comment itself as design authority; and
-- dependency/blocker transitions or child outcomes when they materially change
-  what work is actionable next.
+Update a parent only when the outcome materially changes that parent's live state
+or summary. Mechanical slices without their own Issue remain logged on their
+owning Issue when significant.
 
-Record the outcome on the most specific durable Issue that owns the work. Update
-an umbrella/parent Issue as well only when the outcome materially changes that
-parent's live state or summary. Mechanical micro-slices that do not have their
-own durable Issue remain logged on their owning durable parent when the outcome
-is significant.
+Issue comments MUST summarize scope, stable publication/evidence identities,
+relevant PASS/FAIL results, resulting state, and next action where useful; do not
+paste raw terminal/build logs. Suggested headings such as `WORK UPDATE`,
+`BLOCKER`, `PUBLICATION`, and `DECISION` are presentation only, not lifecycle
+states.
 
-Issue comments MUST summarize evidence and outcomes rather than paste raw build
-or terminal transcripts. Prefer a compact entry that states the scope, exact
-publication/evidence identity when applicable, relevant PASS/FAIL results, the
-finding or resulting state, and the next released/blocked step. `WORK UPDATE`,
-`BLOCKER`, `PUBLICATION`, and `DECISION` are recommended comment headings when
-one of those labels makes the history easier to scan; the headings are not new
-formal work-item states.
+`CHANGELOG.md` records published durable changes to Protos and maintained
+artifacts; it is not an execution diary. Failed/unpublished attempts,
+validation-only activity, diagnostics without publication, live
+status/assignee/priority/roadmap changes, and dependency/blocker transitions
+without a durable artifact do not require changelog entries merely because they
+occurred. Conversely, a materially published implementation, specification,
+documentation, tooling, governance, or other maintained-artifact change may
+require one even while parent work remains open.
 
-`CHANGELOG.md` records **published durable changes to Protos and its maintained
-artifacts**. It MUST NOT be used as the work-item execution diary. In particular:
-
-- failed/unpublished attempts, validation-only runs, diagnostics with no durable
-  publication, and live assignee/priority/roadmap/status changes do not receive a
-  changelog entry merely because they happened;
-- dependency or blocker coordination changes that publish no durable artifact do
-  not by themselves require a changelog entry;
-- closing, reopening, blocking, or unblocking a GitHub Issue does not by itself
-  require a changelog entry;
-- conversely, a materially published implementation, specification,
-  documentation, tooling, governance, or other maintained-artifact change may
-  require a changelog entry even while its owning parent Issue remains open; and
-- a status-only reconciliation SHOULD NOT create a repository commit merely to
-  manufacture a changelog entry.
-
-When one publication both changes durable repository artifacts and changes live
-Issue state, the changelog describes **what changed in the published project**;
-the Issue comment records **what was attempted/validated and how the live work
-state changed**. Do not duplicate the full execution narrative in both places.
-
-The coordinating agent performs the Issue comment only after confirmed
-publication. If GitHub mutation is unavailable, report the exact Issue update
-still required instead of omitting it silently or moving that execution history
-into the changelog.
+When one publication changes both repository artifacts and live Issue state, the
+changelog records what changed in the published project; the Issue records the
+execution/coordination outcome. Post the Issue outcome only after publication is
+confirmed. If Issue mutation is unavailable, report the exact pending update.
 
 <!-- GITHUB020 FORMAL-WORK-CLOSURE-EVIDENCE -->
 #### Formal work closure-evidence gate
 
-Closing a formal Protos Issue is a coordination transaction with an explicit
-evidence decision. A closed Issue, Project `Done` state, successful commit, or
-passing validation is not by itself proof that every required closure artifact
-has been published.
-
-Before closing any formal work item, the coordinating agent MUST establish:
+Before closing formal work, the coordinating agent MUST establish:
 
 ```text
 ISSUE_CLOSURE_COMMENT=PASS
@@ -2339,89 +2126,51 @@ PROJECT_RECORD_REVISION=<exact SHA>|NOT_APPLICABLE
 REQUIRED_DURABLE_PUBLICATION=PASS|NOT_APPLICABLE
 ```
 
-The final Issue closure comment is mandatory for every formal work item. It MUST
-summarize the completed outcome and identify the exact publication, validation,
-decision, external evidence, or other stable identities needed to understand why
-the closure criteria are satisfied. It SHOULD remain compact and MUST NOT merely
-paste raw terminal or CI logs.
+Every formal closure requires a compact final Issue comment identifying the
+stable publication, validation, decision, external evidence, or other identities
+that justify closure. A successful commit, passing test, Project `Done` state, or
+closed Issue is not by itself complete closure evidence.
 
-A separate durable project record is conditional, not automatic.
+A separate durable project record is conditional:
 
-Set `DURABLE_RECORD_DECISION=REQUIRED` when closure creates, changes, selects, or
-depends on project knowledge that would not remain adequately recoverable from
-the owning product repository state, exact Git history, and the Issue execution
-history alone. A durable record is also required whenever the owning work-item
-contract explicitly requires one.
+- use `DURABLE_RECORD_DECISION=REQUIRED` when the work-item contract requires
+  one or when closure depends on project knowledge not adequately recoverable
+  from published product artifacts, maintained documentation, exact Git history,
+  tests, and the Issue history;
+- otherwise use `DURABLE_RECORD_DECISION=NOT_REQUIRED` only as an evidence-backed
+  conclusion, not as a bypass;
+- do not create one Markdown record per Issue merely for symmetry.
 
-Routine work whose complete durable result is already represented by published
-product artifacts, tests, Git history, maintained documentation where applicable,
-and a precise Issue closure comment MAY use:
+When required, maintained work-item records belong under
+`guillermomolina/protos-project-docs:docs/project/work/<formal-work-item>/`;
+snapshot-like evidence belongs under
+`guillermomolina/protos-project-docs:docs/project/evidence/<formal-work-item>/`
+only when retaining it is useful. Prefer stable run/artifact/commit/release
+identities over copied raw logs.
 
-```text
-DURABLE_RECORD_DECISION=NOT_REQUIRED
-PROJECT_RECORD_REVISION=NOT_APPLICABLE
-REQUIRED_DURABLE_PUBLICATION=NOT_APPLICABLE
-```
+Revision-coupled records MUST name exact revisions, never a moving `main`. After
+publication, record the exact `PROJECT_RECORD_REVISION` and every other revision
+required by the closure claim, re-read the published record, and keep the owning
+Issue open until `REQUIRED_DURABLE_PUBLICATION=PASS`. A prepared file, failed
+helper, unpushed commit, Issue comment, or Project field does not satisfy that
+postcondition.
 
-Do not create one Markdown file per formal Issue merely for symmetry.
+Project metadata is not closure-evidence authority and MUST NOT substitute for
+the final Issue summary or a required durable publication. Do not create a
+Project `Evidence` field merely to mirror repository/Issue evidence.
 
-When a durable record is required:
-
-- a maintained record primarily owned by the formal work item belongs under
-  `guillermomolina/protos-project-docs:docs/project/work/<formal-work-item>/`;
-- immutable or snapshot-like supporting evidence belongs under
-  `guillermomolina/protos-project-docs:docs/project/evidence/<formal-work-item>/`
-  only when retaining that evidence is itself useful;
-- raw logs MUST NOT be copied merely to manufacture evidence when stable run,
-  artifact, commit, release, or external identities are sufficient;
-- the durable record MUST identify exact revisions whenever its claims are
-  revision-coupled; a moving `main` reference is insufficient;
-- after publication, the coordinating agent MUST record the exact
-  `PROJECT_RECORD_REVISION` and any other repository revision required by the
-  closure claim; and
-- the owning Issue MUST remain open until the required durable publication has
-  succeeded and has been re-read.
-
-A prepared file, failed launcher, unpushed commit, Issue comment, or Project
-field does not satisfy `REQUIRED_DURABLE_PUBLICATION=PASS`.
-
-`DURABLE_RECORD_DECISION=NOT_REQUIRED` is itself an evidence-backed closure
-conclusion, not a way to skip the closure-evidence gate. The coordinating agent
-MUST be able to identify the repository and Issue evidence that makes an
-additional durable project record unnecessary.
-
-The `Protos Development` Project remains a derived scheduling/dashboard surface.
-It is not closure-evidence authority. Agents MUST NOT create or populate a
-Project `Evidence` field merely to mirror Issue or repository evidence, and a
-Project field MUST NOT substitute for the Issue closure summary or a required
-durable project publication.
-
-Existing stronger closure contracts remain stronger. In particular, Dxxx/PLATxxx
-approval and ratification publication requirements, explicit work-item closure
-contracts, release evidence requirements, and cross-repository publication
-contracts are not weakened by this general rule.
+Stronger closure contracts remain stronger, including Dxxx/PLATxxx approval and
+ratification, explicit work-item closure contracts, release evidence, and
+cross-repository publication requirements.
 
 This rule is prospective. Do not bulk-create durable records for historical
-closed Issues merely to make old closures visually uniform. Reconcile an older
-closure only when current bounded work identifies durable project knowledge that
-is still useful to preserve.
+closed Issues merely for symmetry; reconcile an older closure only when current
+bounded work identifies durable project knowledge still worth preserving.
 
-
-
-The standard isolated direct-to-`main` publication workflow remains valid. Moving
-project coordination to GitHub does not by itself require every agent-generated
-change to use a pull request. Use a PR when the contribution workflow, review
-policy, or explicit user request requires one; otherwise follow the publication
-rules in this file.
-
-Live Issue coordination state such as assignee, active work, blocking, or
-priority is advisory coordination, not a repository lock. The Issue's `status:*`
-label is required live-state metadata for tracked open work; `priority:*` is
-optional explicit scheduling metadata. Derived Project Status/Priority and other
-planning-only Project fields remain advisory and are not repository locks.
-Multiple agents must
-still re-fetch `origin/main`, inspect overlapping work, and avoid assuming that a
-GitHub assignment grants exclusive ownership of mutable files or semantics.
+Repository publication follows **Interactive local contribution and publication
+workflow** above. Live GitHub coordination does not reserve mutable repository
+files or semantics; agents MUST still synchronize with current `origin/main`,
+inspect overlaps, and preserve concurrent work.
 
 #### Discussions and actionable work
 
@@ -2439,69 +2188,41 @@ repository authority back from the Issue as useful coordination metadata.
 
 #### Tracked work-item families
 
-Formal project identifiers retain their existing family meanings. Identifier
-syntax alone does not establish authority: discover existing identifiers and
-family semantics from current repository records and migrated GitHub history,
-not from chat memory or a token that merely looks like `I123`.
+Formal identifiers use the family meanings already established by current
+repository records and GitHub history; identifier-shaped text or chat memory does
+not establish authority.
 
-Every newly allocated formal Protos identifier MUST have a GitHub Issue
-representation as part of allocation, including `Dxxx`, `PLATxxx`, and `Bxxx`.
-For actionable work, that Issue owns live coordination; for decisions/blockers,
-the Issue provides visible coordination/history while durable authority remains
-in the repository. A formal identifier MUST NOT exist only in a prompt/chat.
-When the identifier also has an owning durable repository record, persist it
-there no later than the first repository publication that materially establishes
-the work.
+Every newly allocated formal Protos identifier, including `Dxxx`, `PLATxxx`, and
+`Bxxx`, MUST have a GitHub Issue as part of allocation. The Issue owns live
+coordination; durable decision/blocker authority remains in its repository
+record. A formal identifier MUST NOT exist only in chat. When it also owns a
+durable repository record, persist that record no later than the first
+publication that materially establishes the work.
 
 <!-- GITHUB001-A2 FAMILY-IDENTIFIER-POLICY -->
+<!-- GITHUB001-A2 FAMILY-CLASSIFICATION-SINGLE-SOURCE -->
 ##### Family labels
 
-Every GitHub Issue that represents a formal Protos identifier MUST carry exactly
-one stable family-classification label named `family:<FAMILY>`, where `<FAMILY>`
-is the identifier prefix. Examples include `family:I`, `family:LIB`,
-`family:TOOL`, `family:TEST`, `family:CLI`, `family:PERF`, `family:DOC`, `family:DIST`,
-`family:AUD`, `family:LM`, `family:GITHUB`, `family:UPSTREAM`, `family:D`,
-`family:PLAT`, `family:B`, and `family:BUG`.
+Every Issue representing a formal identifier MUST carry exactly one
+`family:<FAMILY>` label matching the identifier prefix. That label is the single
+source of truth for formal family classification; do not create or maintain a
+duplicate Project `Family` field.
 
-A formal sub-issue keeps the same family label as its formal identifier. The
-family label classifies durable project ownership only.
+Family labels classify formal work only. They MUST NOT encode status, priority,
+roadmap position, assignee, blocking, or hierarchy. Ordinary community Issues
+without a formal identifier need no family label.
 
-<!-- GITHUB001-A2 FAMILY-CLASSIFICATION-SINGLE-SOURCE -->
-The owning Issue's `family:<FAMILY>` label is the **single source of truth** for
-formal Protos family classification. Agents MUST NOT create, populate, reconcile,
-or require a custom GitHub Project `Family` field that duplicates that label. If
-a Project view wants family visibility, it SHOULD display GitHub's standard Issue
-`Labels` field instead of maintaining a second family value.
-
-Do not encode live status, priority, roadmap position, assignee, blocking state,
-or parent/child structure in family labels; those belong to the Issue/native
-hierarchy. Optional Project scheduling metadata may mirror scheduling information,
-but it MUST NOT become a second family-classification authority.
-Ordinary community Issues that do not have a formal Protos work identifier do not
-need a family label.
-
-`Dxxx`, `PLATxxx`, and `Bxxx` keep their repository-owned decision/blocker
-authority while also having first-class GitHub Issue representations. Their
-Issues MUST carry `family:D`, `family:PLAT`, or `family:B` respectively. An
-Issue state, Project field, reaction, or comment cannot ratify, redefine, or
-clear the underlying durable decision/blocker by itself. When another actionable
-Issue consumes or is blocked by one of these records, link the formal
-decision/blocker Issue and its durable repository authority rather than
-duplicating semantic authority in the consuming Issue.
-
-GitHub's numeric Issue identifier and a Protos formal identifier are independent
-namespaces. For example, GitHub Issue `#73` may own `I031`; agents MUST NOT try to
-make those numbers coincide.
+`Dxxx`, `PLATxxx`, and `Bxxx` retain their repository-owned authority despite
+their Issue representation; Issue/Project state, reactions, comments, or labels
+cannot ratify, redefine, or clear that authority. GitHub Issue numbers and
+Protos formal identifiers are independent namespaces.
 
 <!-- GITHUB004 ISSUE-OWNED-PROJECT-STATUS -->
 ##### Issue-owned status and derived GitHub Project projection
 
-The owning GitHub Issue is the canonical live work-state source. The
-`Protos Development` Project is a derived dashboard/scheduling projection, not a
-second status authority.
-
-Every open Issue tracked as actionable work MUST carry exactly one current
-machine-readable status label:
+The owning Issue is the canonical live-state source; `Protos Development` is a
+derived dashboard. Every open actionable Issue MUST carry exactly one canonical
+status label:
 
 - `status:inbox`
 - `status:ready`
@@ -2511,153 +2232,89 @@ machine-readable status label:
 - `status:paused`
 - `status:review`
 
-`status:paused` means work is intentionally suspended/paused and MUST NOT be
-collapsed into `status:blocked`. A closed Issue projects to Project `Done`
-regardless of its retained last open-state label.
+`status:paused` is distinct from `status:blocked`; a closed Issue projects to
+Project `Done` regardless of its retained open-state label. When live state
+changes, replace the `status:*` label coherently. New Issues default to
+`status:inbox` only when no more specific state is known. Unknown `status:*`
+labels are invalid drift and MUST fail closed rather than being ignored or
+normalized silently.
 
-When an agent with Issue-write capability materially changes an open Issue's live
-state, it MUST replace the Issue's `status:*` label coherently. When a new Issue
-has no more specific state yet, `status:inbox` is the default. Agents MUST NOT
-encode this state in the `family:*` label or rely on stale prose in the Issue body
-as the machine-readable status source.
-
-A label whose name begins with `status:` but is not in the canonical status set
-above is invalid lifecycle drift. Repository status automation MUST fail closed
-on such a label; it MUST NOT ignore it and synthesize `status:inbox`, and agents
-MUST remove/replace the invalid label with the one current canonical state.
-
-Repository automation owns Project membership and Project `Status` projection.
-Agents do not need Project API capability and SHOULD NOT directly mutate the
-Project Status field merely to mirror an Issue transition. Project-sync failure
-is a visible coordination failure but never changes repository/design authority
-and does not invalidate an otherwise valid publication.
-
-Project Status uses Inbox / Ready / In progress / Needs decision / Blocked /
-Paused / Review / Done. `Family` is intentionally not duplicated into Project
-metadata: the owning Issue's `family:<FAMILY>` label remains the single family
-classifier.
-
-Project `Priority` is governed separately by GITHUB005: zero or one
-Issue-owned `priority:*` label is projected automatically to P0 / P1 / P2 / P3,
-and absence means Priority is unset for an open Issue. `Area`, `Roadmap`, `Owner`,
-and similar planning fields remain advisory Project-only metadata unless a later
-explicit policy owns their mapping. Neither GITHUB004 nor GITHUB005 makes Project
-metadata publication, semantic, blocker, or design authority.
-
-The absence of direct Project mutation capability is not a repository-work
-blocker. If Issue mutation itself is unavailable when a required live-state
-transition occurs, report the exact Issue update still required rather than
-fabricating Project state.
+Repository automation owns Project membership and Status projection. Agents
+SHOULD NOT mutate Project Status merely to mirror Issue state. Project-sync
+failure is a visible coordination failure, not repository/design authority; if
+Issue mutation itself is unavailable when a transition is required, report the
+pending Issue update.
 
 <!-- GITHUB005 ISSUE-OWNED-PROJECT-PRIORITY -->
 ##### Issue-owned priority and derived GitHub Project projection
 
-Scheduling priority is explicit, optional Issue-owned live coordination metadata.
-An Issue may carry at most one current priority label:
+Priority is optional explicit Issue-owned scheduling metadata. An Issue may carry
+at most one of:
 
-- `priority:p0` — immediate/critical attention; exceptional;
-- `priority:p1` — next/high-priority work;
-- `priority:p2` — normal planned work; or
-- `priority:p3` — opportunistic/later work.
+- `priority:p0` — immediate/critical; exceptional;
+- `priority:p1` — next/high priority;
+- `priority:p2` — normal planned work;
+- `priority:p3` — opportunistic/later.
 
-No `priority:*` label is valid and means Project Priority is unset for an open
-Issue. Do not silently default unprioritized work to P2.
+No explicit/inherited priority means Project Priority is unset. Priority is
+orthogonal to Status: never infer P0/P1/P2 merely from `Needs decision`,
+`In progress`, or `Ready`. Preserve existing priority unless current coordination
+evidence or an owner instruction justifies changing it.
 
-Priority is orthogonal to Status. Do not infer P0 merely from `Needs decision`,
-P1 merely from `In progress`, or P2 merely from `Ready`. A project-owner priority
-instruction overrides agent heuristics. If current coordination evidence does not
-justify changing priority, preserve the existing priority rather than churn it.
+An explicit priority change replaces the Issue's prior `priority:*` label.
+Removing the only explicit label clears Project Priority only when no inherited
+priority applies. During migration, if an open Issue has no explicit/inherited
+label but still has a valid historical Project P0-P3 value, automation MUST
+preserve that value and materialize the matching label; do not guess a priority
+that is already lost.
 
-When an agent with Issue-write capability deliberately changes priority, it MUST
-replace the Issue's `priority:*` label coherently. A newly-added priority label
-wins over an older one; repository automation removes the stale label and projects
-the canonical priority into `Protos Development`. Removing the only priority label
-is an explicit priority-removal transition: Project Priority is cleared only when
-no inherited priority replaces it.
-
-Absence of a `priority:*` label MUST NOT by itself erase an existing Project
-Priority. During migration from historical/manual Project-only scheduling data,
-if an open Issue has no explicit/inherited Issue priority but the Project item
-still carries P0/P1/P2/P3, automation MUST preserve that value and materialize the
-matching `priority:p*` label. Agents MUST NOT guess or reconstruct a Project
-priority that has already been lost.
-
-Closed Issues may retain their last `priority:*` label as historical scheduling
-context while Project Status becomes `Done`. Reopening reuses a retained priority.
-Priority never approves design, clears a blocker, reserves files, or acts as a
-publication lock.
-
-Repository automation owns Project `Priority` projection. Agents do not need
-Project API capability and SHOULD NOT directly mutate Project Priority merely to
-mirror an Issue transition.
+Closed Issues may retain their last explicit priority and reuse it on reopen.
+Priority never approves design, clears blockers, reserves files, or authorizes
+publication. Repository automation owns Project Priority projection; agents
+SHOULD NOT mutate Project Priority merely to mirror Issue coordination.
 
 ##### Collision-safe formal identifier allocation
 
-Top-level formal family numbers are monotonic allocation identifiers, not a
-reusable pool. Closed, cancelled, superseded, retrospectively imported, or
-otherwise previously allocated identifiers remain consumed. Do not fill an old
-gap merely because its number appears unused in the current active-work view.
-Slice suffixes such as `I031-A` or `TOOL003-B2` do not allocate another top-level
-family number.
+Top-level family numbers are monotonic and never reused; historical, closed,
+cancelled, superseded, or retrospectively imported allocations remain consumed.
+Slice suffixes do not allocate another top-level number.
 
-Before allocating a new top-level identifier, the coordinating agent MUST:
+Before allocating a top-level identifier, the coordinating agent MUST:
 
-1. verify that the work genuinely belongs to that formal family and deserves a
-   new durable work identity rather than a Discussion, ordinary Issue, existing
-   parent, or mechanical slice;
-2. search current durable repository records plus all relevant GitHub Issues,
-   including closed/historical Issues, for allocated identifiers in that family;
-3. choose the next number after the greatest already allocated top-level number;
-4. create the GitHub Issue immediately with a title beginning
-   `<IDENTIFIER> — ...` and apply the matching `family:<FAMILY>` label; and
-5. re-search the candidate identifier after creation before treating the
-   allocation as confirmed.
+1. confirm the work belongs to that family and merits new durable identity rather
+   than a Discussion, ordinary Issue, existing parent, or slice;
+2. search current durable repository records and relevant open/closed GitHub
+   Issues for allocations in that family;
+3. choose the next number after the greatest allocated top-level number;
+4. create the Issue immediately as `<IDENTIFIER> — ...` with its matching
+   `family:<FAMILY>` label; and
+5. re-search the identifier after creation before treating allocation as
+   confirmed.
 
-The post-create re-search is the concurrency gate. If two agents race and create
-the same previously-free identifier, the Issue with the lower GitHub Issue number
-keeps that Protos identifier. Every later colliding Issue MUST re-scan repository
-and GitHub state, choose the then-next family number, rename itself, and repeat
-the uniqueness check until it owns a unique identifier. If the candidate already
-belongs to a durable repository record, that repository allocation wins and the
-new Issue must be renumbered regardless of GitHub Issue ordering.
+The post-create search is the concurrency gate. If two Issues race for the same
+previously-free identifier, the lower GitHub Issue number keeps it and later
+collisions MUST re-scan, take the then-next number, rename, and re-check until
+unique. A pre-existing durable repository allocation always wins over a new
+GitHub collision.
 
-`scripts/issue_intake.py` mechanically enforces the GitHub half of this
-concurrency gate by scanning authorized formal Issue titles across **open and
-closed** Issues before reconciliation. An exact duplicate identifier fails
-closed; child identifiers such as `TEST001-A` remain distinct from `TEST001`.
-This GitHub scan does not supersede the durable-repository search above: a
-repository allocation still wins when GitHub alone cannot see it.
+`scripts/issue_intake.py` enforces the GitHub half by scanning authorized formal
+Issue titles across open and closed Issues and failing closed on exact duplicate
+identifiers. It does not replace the durable-repository search.
 
-Do not publish a new durable repository record, changelog entry, source reference,
-or implementation under a newly allocated identifier until that identifier has
-passed the post-create uniqueness check. If GitHub Issue creation or verification
-is unavailable, report the coordination limitation rather than reserving a new
-formal identifier only in chat or a local patch.
+Do not publish a durable record, changelog/source reference, or implementation
+under a newly allocated identifier until the uniqueness check passes. If Issue
+creation/verification is unavailable, report the limitation rather than reserve
+the identifier only in chat or a local patch.
 
-Historical migration is different from new allocation: an already-established
-repository identifier keeps its historical number. Backfill creates the
-retrospective Issue with that same identifier and never renumbers historical
-project work merely to obtain a contiguous sequence or to match GitHub Issue
-numbers.
+Historical backfill preserves the established identifier and identifies itself
+as retrospective; never renumber historical work for contiguity or to match
+GitHub Issue numbers, and never fabricate historical dates/evidence. Family
+semantics remain those documented by their owning policies.
 
-Standard Library work uses `LIBxxx`; documentation initiatives use `DOCxxx`;
-official bundled tools use `TOOLxxx`; performance work uses `PERFxxx`; Language
-Maturity uses `LMxxx`; defect/regression work uses `BUGxxx`; and the other
-existing families retain their documented boundaries. Moving lifecycle
-coordination to GitHub does not change those family semantics and MUST NOT be
-used to smuggle language-design authority into an implementation/project
-family.
-
-Parent Issues remain open until the repository-defined parent outcome is
-actually complete. Use a sub-issue only for a durable independently meaningful
-unit. Temporary patch versions, diagnostics, launcher attempts, and cost-driven
-micro-slices are not separate project work items merely because they were useful
-to an agent while executing the work.
-
-Retrospective GitHub backfill MUST identify itself as retrospective. GitHub
-creation/closure timestamps are not historical project dates. Preserve original
-closure commits, versions, durable records, and Git history where available; do
-not fabricate unavailable evidence merely to make an old Issue look complete.
+Parent Issues remain open until their repository-defined outcome is complete.
+Sub-issues require independently meaningful work; temporary patch versions,
+diagnostics, launcher attempts, and cost-driven micro-slices do not become
+project work merely because they helped execution.
 
 <!-- BUG-FAMILY-POLICY -->
 ### Defect and regression work
@@ -3066,251 +2723,135 @@ Clearly report compatibility consequences when changing already implemented beha
 
 Test execution
 
-Select test scope from the actual changed-file delta and the behavioral impact of
-that delta. Tests are evidence for executable behavior; they are not a mandatory
-ritual for every repository edit.
+Validation scope comes from the definitive changed-file delta plus a conservative
+dependency closure, not from a work-item identifier. Tests are evidence for
+executable behavior, not a ritual for every repository edit.
 
-For a publication-capable patch or implementation change, classify the definitive
-delta after synchronizing with the current `origin/main`:
+Classify the final candidate by impact:
 
-- **Executable-impact changes** include production implementation under
-  `src/main/**`, distributable Protos source under `protos/lib/**`, and build,
-  generation, packaging, or runtime configuration whose change can alter the
-  compiled or distributed program. Run the focused tests that exercise the
-  changed behavior when such tests exist. Before publication, run the canonical
-  integrated full suite (`make test`) unless the definitive delta qualifies for
-  the explicitly bounded impact-aware tool-local exception below.
-- **Test-impact changes** under `src/test/**`, `protos/tests/**`, or equivalent
-  executable test infrastructure require the affected/focused tests. For a
-  publication change, run the canonical integrated full suite (`make test`)
-  unless the definitive delta qualifies for the explicitly bounded impact-aware
-  tool-local exception below.
-- **Specification-only changes** under `spec/**` do not run Maven tests by
-  default. Run the applicable specification governance, consistency, changelog,
-  and static checks. If a specific executable guard consumes the modified
-  specification artifact, run that focused guard; a full suite is not required
-  merely because normative text changed.
-- **Documentation/governance-only changes** such as `docs/**`, `AGENTS.md`,
-  `CHANGELOG.md`, and project ledgers do not run Maven tests by default. Run the
-  applicable documentation, status, governance, formatting, link/integrity, or
-  other static checks. If an executable guard specifically consumes a modified
-  document or ledger, run that focused guard only unless the delta also has
-  executable impact.
+- **Executable/test impact** — production/distributable source, executable test
+  infrastructure, build/generation/packaging/runtime configuration, or another
+  change capable of altering executable behavior. Run the complete affected test
+  set and the broader gate selected by the policy below.
+- **Specification-only** — run applicable specification governance,
+  consistency/changelog/static checks and any focused executable guard that
+  consumes the changed artifact. Normative text alone does not require the full
+  executable suite.
+- **Documentation/governance-only** — run applicable formatting, integrity,
+  link, governance, or other static checks plus any focused guard that directly
+  consumes the changed artifact. Unrelated executable suites are not required.
+- **Mixed** — use the strongest applicable class; adding documentation or
+  changelog changes never weakens executable-impact requirements.
+
+Do not classify by extension alone: build files, generators, packaging scripts,
+or runtime configuration may have executable impact.
 
 <!-- PERF005-B2 IMPACT-AWARE-TOOL-VALIDATION -->
 ### Impact-aware validation and integrated full-suite discipline
 
-Impact-aware validation exists to avoid repeatedly paying for unrelated
-repository-wide tests while preserving a mandatory integrated closure gate.
+`scripts/validation_impact.py` is the deterministic fail-closed selector for
+publication deltas, and `scripts/publication_validation.py` validates an
+immutable candidate using that selection. Use their result when deterministic
+commit-range evidence is useful; do not duplicate or second-guess their path
+mapping in ad-hoc prose.
 
-Derive test impact from the actual definitive delta plus a conservative dependency
-closure. A work-item identifier such as `I031`, `TOOL001`, `TOOL002`, `PERF006`,
-or `LIB001` is coordination metadata and MUST NOT by itself select test scope.
+The governing invariants are:
 
-A reduced validation path is permitted only when the affected behavior can be
-bounded confidently. "Focused" means the complete demonstrated affected set, not
-one convenient regression while known affected consumers are omitted.
+- focused validation means the complete demonstrated affected set, not one
+  convenient regression;
+- shared production/library/runtime/compiler/parser/filesystem/module surfaces,
+  cross-tool deltas, unknown/unmapped executable paths, build/generation changes,
+  shared executable test infrastructure, or ambiguous dependency closure require
+  `FULL`;
+- only explicitly mapped bounded Tool-local deltas may use a reduced profile;
+- reduced profiles are for intermediate work whose top-level executable owner
+  remains open and whose semantics/architecture are already settled;
+- closing/reconciling a top-level executable item requires one `FULL` validation
+  over the final closure candidate after cheaper gates pass.
 
-Shared production surfaces such as `src/main/**`, distributable shared
-library/Core surfaces under `protos/lib/**`, and shared
-runtime/compiler/parser/filesystem/module machinery default to integrated full
-validation. An intermediate already-approved implementation slice MAY use a
-bounded focal profile when:
-
-- the owning top-level executable work item remains open;
-- the slice does not claim top-level closure/reconciliation;
-- semantics/architecture are already approved;
-- patch-owned paths and the conservative validation dependency closure are
-  understood;
-- applicable static/style/compile gates pass; and
-- every test in the complete affected set passes.
-
-Cross-tool deltas, unknown/unmapped executable paths, build/generation changes,
-shared executable test infrastructure, or dependency ambiguity fail closed to
-integrated full validation.
-
-Reduced validation applies to **intermediate work**. Closing or reconciling an
-owning top-level executable work item such as an `Ixxx`, `TOOLxxx`, `LIBxxx`,
-`PERFxxx`, `CLIxxx`, or comparable parent requires one integrated full-suite run
-over the final closure candidate after cheaper gates pass.
-
-The repository's official integrated full-suite entry point is:
+The canonical integrated full-suite command is:
 
     make test
 
-`make test` runs the ordinary Java/JUnit suite and the native Protos test suite.
-Use the narrower official `make test-java` or `make test-protos` lanes when the
-required validation is exactly one whole lane. Direct Maven invocation remains
-appropriate for intentionally focal Java/JUnit test sets and other bounded
-Maven-specific checks; unrestricted `mvn test` is not the repository's canonical
-integrated full-suite command.
+`make test` covers both ordinary Java/JUnit and native Protos tests. Use
+`make test-java` or `make test-protos` only when exactly one whole lane is the
+required validation. Direct Maven invocation is appropriate for intentional
+focal Java/JUnit sets and other bounded Maven-specific checks; unrestricted
+`mvn test` is not the canonical integrated full-suite command.
 
-Agents MUST NOT run or request `make test` repeatedly merely to discover whether
-an intermediate edit materializes, compiles, or passes focal regressions. Pay for
-the integrated full suite at the point required by impact/closure policy, normally
-after the substantive delta and all moving finalization metadata are stable.
+Do not repeatedly run/request `make test` for intermediate edits. Follow
+**Interactive validation handoff**: cheapest/highest-signal gates first, then pay
+for the integrated suite only when impact/closure policy requires it and the
+candidate plus moving finalization metadata are stable.
 
-Expensive validation belongs to the **exact candidate bytes and relevant
-dependency state**, not to an invocation attempt. If the required full suite has
-already passed and publication then fails solely because of credentials,
-network/transport, or another push-layer failure while the candidate and relevant
-validation dependencies remain unchanged, do not rerun the suite merely to retry
-the push. If candidate bytes or a relevant dependency changes, reassess and rerun
-the validation that change invalidates.
+Expensive validation belongs to exact candidate bytes and relevant dependency
+state. A pure credential/network/push retry does not invalidate already-passing
+validation; changed candidate bytes or relevant dependencies require
+reassessment.
 
-`scripts/validation_impact.py` and `scripts/publication_validation.py` remain
-repository helpers for deterministic commit-range classification/validation when
-that evidence is useful. They are not a requirement to manufacture an isolated
-publication worktree for interactive editing. For `FULL`,
-`scripts/publication_validation.py` MUST use the repository's `make test` entry
-point; bounded tool-local Java/JUnit profiles may continue to invoke Maven
-directly for their exact affected test set.
-
-Reports SHOULD state the selected impact/profile, the complete affected test set,
-why broader suites were skipped for intermediate work, whether integrated
-full-suite validation is deferred, and which top-level work item owns that final
-obligation.
+Validation reporting SHOULD identify the selected impact/profile, affected test
+set, applicable PASS/FAIL evidence, skipped/deferred broader validation, and the
+top-level item that owns any deferred full-suite obligation.
 
 <!-- PERF005-C RETIREMENT-CONDITION -->
-The impact selector/routing policy is independent from the host-side execution
-bridge. A future official Test Tool path may replace host-side execution only when
-it demonstrably preserves deterministic affected-set selection, failure
-propagation, required isolation, complete integrated validation, fail-closed
-unknown-state handling, and auditable evidence. Do not delete the routing policy
-merely because its execution mechanism changes.
+The impact-routing policy is independent of its execution mechanism. A future
+official Test Tool path may replace current host-side execution only if it
+preserves deterministic affected-set selection, failure propagation, required
+isolation, complete integrated validation, fail-closed unknown-state handling,
+and auditable evidence.
 
+### Test placement
 
-### Prefer Protos-level tests for observable language behavior
+Prefer Protos-level tests for observable Protos language semantics, conformance,
+regressions, and user-visible standard-library behavior. A Java test alone SHOULD
+NOT replace reasonably expressible Protos-level coverage merely because the
+implementation is Java or JUnit is easier.
 
-When behavior can be expressed and observed by executing Protos source, prefer a
-Protos-language test over a Java test.
+Use Java tests for Java-side contracts that are not meaningfully observable from
+Protos: internal APIs/representations/invariants, parser/lowering machinery,
+Truffle/JVM integration, host interop, bootstrap code, and harness
+infrastructure. Do not contort a Protos test to reach a purely internal Java
+contract. Keeping an additional focused Java regression is fine when it adds
+implementation-level diagnostic value.
 
-Tests whose primary purpose is to validate observable Protos language semantics,
-regressions, conformance, or user-visible standard-library behavior SHOULD
-normally be written as executable Protos source under `protos/tests/**` or the
-applicable Protos-level test harness. Do not default to JUnit merely because the
-implementation under test is written in Java or because a Java test is easier to
-write.
+### Static verification
 
-A Java test alone SHOULD NOT be treated as sufficient coverage for observable
-Protos behavior when the same behavior can reasonably be exercised through
-Protos source. In that case, add or update the Protos-level test; a focused Java
-test may additionally be kept when it provides useful implementation-level
-coverage or diagnostics.
+For source changes, run the narrowest applicable formatter/linter/compiler/static
+check for the modified scope unless unavailable or disproportionately expensive.
+Prefer check modes that do not rewrite files or trigger unrelated build phases.
 
-Java tests under `src/test/**` are preferred when the subject being tested is
-specifically Java-side implementation behavior rather than Protos language
-behavior, including internal Java APIs, representations, invariants, parser or
-lowering machinery, Truffle/JVM integration, host interop, bootstrap code, and
-test-harness infrastructure that is not meaningfully testable from Protos.
+Static verification MUST NOT implicitly run tests when tests are not part of the
+selected gate. Formatting/check tooling MUST NOT introduce unrelated changes.
+Report unavailable or skipped applicable checks rather than claiming a clean
+result.
 
-Do not contort a Protos test to reach a purely internal Java contract. The
-distinction is semantic: test the language as Protos when the contract is visible
-to Protos programs, and test Java as Java when the contract belongs to the
-implementation itself.
-- **Mixed changes** use the strongest applicable validation class. Adding docs,
-  specification text, changelog entries, or status updates to an executable
-  change never weakens the executable-change test requirements.
-
-Do not classify only by file extension. For example, `pom.xml`, code generators,
-packaging scripts, or runtime configuration may have executable impact even
-though they are not Java or Protos source. Conversely, a Markdown-only design
-clarification does not gain executable impact merely because it describes code.
-
-Interactive workflows SHOULD derive and report their validation class from the
-actual current delta, for example:
-
-    VALIDATION_CLASS: EXECUTABLE_IMPACT
-    FOCAL_TESTS: PASS
-    FULL_TEST_SUITE: PASS
-
-or:
-
-    VALIDATION_CLASS: DOCUMENTATION_ONLY
-    FOCAL_TESTS: SKIPPED (not applicable)
-    FULL_TEST_SUITE: SKIPPED (documentation-only change)
-
-When validation is required, provide the maintainer with the bounded commands
-needed for that validation. Do not request the integrated full suite repeatedly
-during intermediate editing; follow the adaptive impact rules and reserve the
-full suite for the exact point where those rules require it.
-
-Do not repeatedly rerun failing tests without first understanding and changing
-the likely cause.
-
-Static verification
-
-For source-code changes, run the narrowest applicable formatter check, linter,
-compiler check, or static-analysis command needed to verify the modified scope,
-unless the check is unavailable, would be expensive, or would require starting
-a long-running process.
-
-Prefer dedicated validation/check modes over commands that rewrite files or
-perform broader build phases. Static verification MUST NOT implicitly run tests
-when tests were not explicitly requested. Formatting tools must not introduce
-unrelated formatting changes.
-
-If an applicable verification command would also execute tests, use a non-test
-alternative or report that the check was not run.
-
-New or modified code must not introduce compiler, static-analysis, lint, or
-formatting diagnostics that indicate correctness, type-safety, maintainability,
-or project-style problems in the affected scope.
-
-Do not claim a source change is clean if the applicable static checks were not
-run. Report which checks were run, which were not run, and why.
-
-A clean build achieved only by suppressing applicable warnings is not the same
-as clean code. Do not add suppressions merely to make tooling pass; use narrowly
-scoped suppressions only when the warning is genuinely inapplicable and the
+Do not add warning suppressions merely to make tooling pass. Use a narrowly
+scoped suppression only when the warning is genuinely inapplicable and the
 reason is defensible.
 
-Testing philosophy
+### Testing philosophy
 
-Tests should validate Protos semantics rather than implementation accidents.
+Tests validate current Protos semantics, not implementation accidents. Prefer
+small semantic regressions and workloads proportional to the correctness
+property being proved.
 
-Prefer small semantic tests that demonstrate observable language behavior.
+Do not keep benchmark/stress/profiling/diagnostic-scale workloads in ordinary
+tests when a smaller evidence-backed workload proves the same property; route
+larger workloads to their purpose-specific surfaces.
 
-Routine developer and CI checks must use workloads proportional to the
-correctness property they prove.
+Do not weaken semantic coverage, replace required integration evidence with
+mocks, skip failures, or add production fast paths merely to reduce test cost.
+Aggregate validation may legitimately be expensive because it composes many
+checks; optimize/reclassify unnecessarily expensive constituents instead of
+weakening the aggregate contract.
 
-Do not retain benchmark-, stress-, profiling-, or diagnostic-scale workloads in
-ordinary tests merely because those workloads were useful when discovering a
-defect. When correctness depends on scale, retain the smallest evidence-backed
-workload that still distinguishes the prohibited implementation shape, and route
-larger diagnostic workloads to an explicit benchmark, stress, profiling, or
-other purpose-specific validation surface.
-
-Do not reduce semantic coverage, replace required integration evidence with
-mocks, skip failures, or introduce production fast paths solely to reduce test
-cost.
-
-Aggregate validation commands may legitimately be expensive because they compose
-many checks; optimize or reclassify unnecessarily expensive constituent checks
-rather than weakening the aggregate validation contract.
-
-Work items may establish stricter quantitative budgets for particular validation
-classes.
-
-When fixing a semantic bug, add or update a focused regression test when tests are part of the requested work.
-
-Where useful, test the same semantic rule through multiple execution paths, especially when Truffle specialization or optimized nodes could diverge from generic behavior.
-
-Do not weaken a test merely to make an incorrect implementation pass.
-
-If a test contradicts the current specification, report the contradiction instead of treating the test as authoritative.
+When fixing a semantic bug, add/update a focused regression when tests are part
+of the work. Where useful, exercise the same semantic rule through multiple
+execution paths that could diverge. Never weaken a test to make incorrect
+implementation pass; if a test contradicts the current specification, report
+that contradiction instead of treating the test as authoritative.
 
 Operational boundaries
-
-Agents MUST NOT directly commit or push repository-content changes in any
-Protos repository except the exact repository
-`guillermomolina/protos-project-docs`. For every other repository, the maintainer
-executes the commit and push commands supplied through the handoff workflow.
-
-The standing authorization in **Sole autonomous repository-publication
-exception** authorizes agent-direct edit/commit/push only for
-`guillermomolina/protos-project-docs` within that section's bounded rules; no
-per-publication command or Markdown handoff is required there.
 
 Do not create releases, tags, branches, or pull requests unless explicitly requested.
 
