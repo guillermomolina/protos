@@ -1,27 +1,47 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE: https://github.com/guillermomolina/protos
- *
- * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-trace: Array(null, null, null, null)
-step: 0
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-record: (marker, result) => {
-    trace[step] = marker
-    step = step + 1
-    result
-}
+tests: [
+    Test("map construction syntax order", () => {
+        tool009LegacyCase: () => {
+            trace: Array(null, null, null, null)
+            step: 0
 
-mapping: %{
-    record(1, "first"): record(2, 10)
-    record(3, "second"): record(4, 20)
-}
+            record: (marker, result) => {
+                trace[step] = marker
+                step = step + 1
+                result
+            }
 
-(step == 4) &&
-    (trace[0] == 1) &&
-    (trace[1] == 2) &&
-    (trace[2] == 3) &&
-    (trace[3] == 4) &&
-    (mapping["first"] == 10) &&
-    (mapping["second"] == 20)
+            mapping: %{
+                record(1, "first"): record(2, 10)
+                record(3, "second"): record(4, 20)
+            }
+
+            (step == 4) &&
+                (trace[0] == 1) &&
+                (trace[1] == 2) &&
+                (trace[2] == 3) &&
+                (trace[3] == 4) &&
+                (mapping["first"] == 10) &&
+                (mapping["second"] == 20)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()
