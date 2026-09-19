@@ -15,26 +15,48 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-textWriter: null
-textWriter = {
-    writeText: (text) => {
-        (() => { textWriter }).future()
-    }
-}
+tests: Array(
+    Test("text adapter writer reuse after finish error", () => {
+        tool009LegacyFutureCase: () => {
+            JSON: import("std:json/JSON")
 
-stream: JSON.writeEvents(textWriter)
-valueWrite: stream.feed({
-    kind: "null"
-    value: null
-})
-finished: valueWrite.then((ignored) => {
-    stream.finish()
-})
-finished.then((ignored) => {
-    stream.feed({
-        kind: "boolean"
-        value: true
+            textWriter: null
+            textWriter = {
+                writeText: (text) => {
+                    (() => { textWriter }).future()
+                }
+            }
+
+            stream: JSON.writeEvents(textWriter)
+            valueWrite: stream.feed({
+                kind: "null"
+                value: null
+            })
+            finished: valueWrite.then((ignored) => {
+                stream.finish()
+            })
+            finished.then((ignored) => {
+                stream.feed({
+                    kind: "boolean"
+                    value: true
+                })
+            })
+        }
+
+        candidate: tool009LegacyFutureCase()
+        Assertions.require(candidate.parent() === Future)
+
+        first: Assertions.signals(Error, () => {
+            candidate.value()
+        })
+        second: Assertions.signals(Error, () => {
+            candidate.value()
+        })
+
+        Assertions.require(first === second)
     })
-})
+)
+tests.freeze()

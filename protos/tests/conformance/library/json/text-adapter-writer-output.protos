@@ -15,61 +15,75 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-sink: ""
-writes: 0
-textWriter: null
-textWriter = {
-    writeText: (text) => {
-        (() => {
-            sink = sink + text
-            writes = writes + 1
-            textWriter
-        }).future()
-    }
-}
+tests: Array(
+    Test("text adapter writer output", () => {
+        tool009LegacyFutureCase: () => {
+            JSON: import("std:json/JSON")
 
-event: (kind, value) => {
-    {
-        kind: kind
-        value: value
-    }
-}
+            sink: ""
+            writes: 0
+            textWriter: null
+            textWriter = {
+                writeText: (text) => {
+                    (() => {
+                        sink = sink + text
+                        writes = writes + 1
+                        textWriter
+                    }).future()
+                }
+            }
 
-stream: JSON.writeEvents(textWriter)
-step1: stream.feed(event("objectStart", null))
-step2: step1.then((ignored) => {
-    stream.feed(event("name", "a"))
-})
-step3: step2.then((ignored) => {
-    stream.feed(event("arrayStart", null))
-})
-step4: step3.then((ignored) => {
-    stream.feed(event("number", {
-        coefficient: 12
-        exponent: -1
-    }))
-})
-step5: step4.then((ignored) => {
-    stream.feed(event("boolean", false))
-})
-step6: step5.then((ignored) => {
-    stream.feed(event("arrayEnd", null))
-})
-step7: step6.then((ignored) => {
-    stream.feed(event("objectEnd", null))
-})
-finished: step7.then((ignored) => {
-    stream.finish()
-})
+            event: (kind, value) => {
+                {
+                    kind: kind
+                    value: value
+                }
+            }
 
-finished.then((ignored) => {
-    (sink == "{\"a\":[12e-1,false]}").ifFalse(() => {
-        Error().signal()
+            stream: JSON.writeEvents(textWriter)
+            step1: stream.feed(event("objectStart", null))
+            step2: step1.then((ignored) => {
+                stream.feed(event("name", "a"))
+            })
+            step3: step2.then((ignored) => {
+                stream.feed(event("arrayStart", null))
+            })
+            step4: step3.then((ignored) => {
+                stream.feed(event("number", {
+                    coefficient: 12
+                    exponent: -1
+                }))
+            })
+            step5: step4.then((ignored) => {
+                stream.feed(event("boolean", false))
+            })
+            step6: step5.then((ignored) => {
+                stream.feed(event("arrayEnd", null))
+            })
+            step7: step6.then((ignored) => {
+                stream.feed(event("objectEnd", null))
+            })
+            finished: step7.then((ignored) => {
+                stream.finish()
+            })
+
+            finished.then((ignored) => {
+                (sink == "{\"a\":[12e-1,false]}").ifFalse(() => {
+                    Error().signal()
+                })
+                (writes == 8).ifFalse(() => {
+                    Error().signal()
+                })
+                true
+            })
+        }
+
+        candidate: tool009LegacyFutureCase()
+        Assertions.require(candidate.parent() === Future)
+        Assertions.require(candidate.value() === true)
     })
-    (writes == 8).ifFalse(() => {
-        Error().signal()
-    })
-    true
-})
+)
+tests.freeze()

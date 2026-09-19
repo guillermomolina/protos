@@ -15,43 +15,57 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-chunks: Array("{\"a\":", "[1,true]}", null)
-index: 0
-reader: {
-    readText: () => {
-        chunk: chunks[index]
-        index = index + 1
-        (() => { chunk }).future()
-    }
-}
+tests: Array(
+    Test("text adapter reader chunks", () => {
+        tool009LegacyFutureCase: () => {
+            JSON: import("std:json/JSON")
 
-seen: ""
-stream: JSON.readEvents(reader, (event) => {
-    seen = seen + event.kind + ","
-})
+            chunks: Array("{\"a\":", "[1,true]}", null)
+            index: 0
+            reader: {
+                readText: () => {
+                    chunk: chunks[index]
+                    index = index + 1
+                    (() => { chunk }).future()
+                }
+            }
 
-first: stream.read()
-second: first.then((more) => {
-    (more === true).ifFalse(() => {
-        Error().signal()
-    })
-    stream.read()
-})
-eof: second.then((more) => {
-    (more === true).ifFalse(() => {
-        Error().signal()
-    })
-    stream.read()
-})
+            seen: ""
+            stream: JSON.readEvents(reader, (event) => {
+                seen = seen + event.kind + ","
+            })
 
-eof.then((more) => {
-    (more === false).ifFalse(() => {
-        Error().signal()
+            first: stream.read()
+            second: first.then((more) => {
+                (more === true).ifFalse(() => {
+                    Error().signal()
+                })
+                stream.read()
+            })
+            eof: second.then((more) => {
+                (more === true).ifFalse(() => {
+                    Error().signal()
+                })
+                stream.read()
+            })
+
+            eof.then((more) => {
+                (more === false).ifFalse(() => {
+                    Error().signal()
+                })
+                (seen == "objectStart,name,arrayStart,number,boolean,arrayEnd,objectEnd,").ifFalse(() => {
+                    Error().signal()
+                })
+                true
+            })
+        }
+
+        candidate: tool009LegacyFutureCase()
+        Assertions.require(candidate.parent() === Future)
+        Assertions.require(candidate.value() === true)
     })
-    (seen == "objectStart,name,arrayStart,number,boolean,arrayEnd,objectEnd,").ifFalse(() => {
-        Error().signal()
-    })
-    true
-})
+)
+tests.freeze()

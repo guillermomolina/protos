@@ -15,29 +15,51 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-chunks: Array("null", null)
-index: 0
-reader: {
-    readText: () => {
-        chunk: chunks[index]
-        index = index + 1
-        (() => { chunk }).future()
-    }
-}
+tests: Array(
+    Test("text adapter reader reuse after eof error", () => {
+        tool009LegacyFutureCase: () => {
+            JSON: import("std:json/JSON")
 
-stream: JSON.readEvents(reader, (event) => { null })
-valueRead: stream.read()
-eof: valueRead.then((more) => {
-    (more === true).ifFalse(() => {
-        Error().signal()
+            chunks: Array("null", null)
+            index: 0
+            reader: {
+                readText: () => {
+                    chunk: chunks[index]
+                    index = index + 1
+                    (() => { chunk }).future()
+                }
+            }
+
+            stream: JSON.readEvents(reader, (event) => { null })
+            valueRead: stream.read()
+            eof: valueRead.then((more) => {
+                (more === true).ifFalse(() => {
+                    Error().signal()
+                })
+                stream.read()
+            })
+            eof.then((more) => {
+                (more === false).ifFalse(() => {
+                    Error().signal()
+                })
+                stream.read()
+            })
+        }
+
+        candidate: tool009LegacyFutureCase()
+        Assertions.require(candidate.parent() === Future)
+
+        first: Assertions.signals(Error, () => {
+            candidate.value()
+        })
+        second: Assertions.signals(Error, () => {
+            candidate.value()
+        })
+
+        Assertions.require(first === second)
     })
-    stream.read()
-})
-eof.then((more) => {
-    (more === false).ifFalse(() => {
-        Error().signal()
-    })
-    stream.read()
-})
+)
+tests.freeze()

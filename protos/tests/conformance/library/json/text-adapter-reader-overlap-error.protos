@@ -15,14 +15,26 @@
  * the specific language governing rights and limitations under the License.
  */
 
-JSON: import("std:json/JSON")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-reader: {
-    readText: () => {
-        (() => { "null" }).future()
-    }
-}
+tests: Array(
+    Test("text adapter reader overlap error", () => {
+        JSON: import("std:json/JSON")
 
-stream: JSON.readEvents(reader, (event) => { null })
-first: stream.read()
-stream.read()
+        reader: {
+            readText: () => {
+                (() => { "null" }).future()
+            }
+        }
+
+        stream: JSON.readEvents(reader, (event) => { null })
+
+        first: stream.read()
+
+        Assertions.signals(Error, () => {
+            stream.read()
+        })
+    })
+)
+tests.freeze()
