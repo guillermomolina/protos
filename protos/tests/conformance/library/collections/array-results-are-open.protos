@@ -15,21 +15,32 @@
  * the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-mapped: Arrays.map(Array(1), (element) => {
-    element
-})
-filtered: Arrays.filter(Array(1), (element) => {
-    true
-})
-sorted: Arrays.sort(Array(2, 1), (left, right) => {
-    left < right
-})
+tests: Array(
+    Test("array results are open", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
 
-mapped.lib001Probe: 1
-filtered.lib001Probe: 2
-sorted.lib001Probe: 3
+            mapped: Arrays.map(Array(1), (element) => {
+                element
+            })
+            filtered: Arrays.filter(Array(1), (element) => {
+                true
+            })
+            sorted: Arrays.sort(Array(2, 1), (left, right) => {
+                left < right
+            })
 
-((mapped.lib001Probe == 1) && (filtered.lib001Probe == 2)) &&
-    (sorted.lib001Probe == 3)
+            mapped.lib001Probe: 1
+            filtered.lib001Probe: 2
+            sorted.lib001Probe: 3
+
+            ((mapped.lib001Probe == 1) && (filtered.lib001Probe == 2)) &&
+                (sorted.lib001Probe == 3)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

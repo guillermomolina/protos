@@ -13,20 +13,31 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Ranges: import("std:collections/Range")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-observed: 0
+tests: Array(
+    Test("range polymorphic callable", () => {
+        tool009LegacyCase: () => {
+            Ranges: import("std:collections/Range")
 
-callback: {
-    call: (value) => {
-        observed = observed * 10 + value
-        999
-    }
-}
+            observed: 0
 
-forwardResult: Ranges.each(1, 4, callback)
-reverseResult: Ranges.reverseEach(1, 4, callback)
+            callback: {
+                call: (value) => {
+                    observed = observed * 10 + value
+                    999
+                }
+            }
 
-(forwardResult === null) &&
-    (reverseResult === null) &&
-    (observed == 123321)
+            forwardResult: Ranges.each(1, 4, callback)
+            reverseResult: Ranges.reverseEach(1, 4, callback)
+
+            (forwardResult === null) &&
+                (reverseResult === null) &&
+                (observed == 123321)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

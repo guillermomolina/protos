@@ -4,31 +4,42 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
-Set: import("std:collections/Set")
-IdentitySet: import("std:collections/IdentitySet")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-mixed: Array(3, 1, 2, 2.0)
-sorted: Arrays.sort(mixed, (left, right) => {
-    left < right
-})
-normalSet: Set(...sorted)
-identitySet: IdentitySet(...sorted)
+tests: Array(
+    Test("lib001 surfaces compose", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            Set: import("std:collections/Set")
+            IdentitySet: import("std:collections/IdentitySet")
 
-integers: Array(3, 1, 2, 2)
-total: Arrays.reduce(
-    integers,
-    (accumulator, element) => {
-        accumulator + element
-    },
-    0
+            mixed: Array(3, 1, 2, 2.0)
+            sorted: Arrays.sort(mixed, (left, right) => {
+                left < right
+            })
+            normalSet: Set(...sorted)
+            identitySet: IdentitySet(...sorted)
+
+            integers: Array(3, 1, 2, 2)
+            total: Arrays.reduce(
+                integers,
+                (accumulator, element) => {
+                    accumulator + element
+                },
+                0
+            )
+
+            ok: true
+            (Set.size(normalSet) == 3).ifFalse(() => { ok = false })
+            (IdentitySet.size(identitySet) == 4).ifFalse(() => { ok = false })
+            (total == 8).ifFalse(() => { ok = false })
+            Set.contains(normalSet, 2.0).ifFalse(() => { ok = false })
+            IdentitySet.contains(identitySet, 2).ifFalse(() => { ok = false })
+            IdentitySet.contains(identitySet, 2.0).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-
-ok: true
-(Set.size(normalSet) == 3).ifFalse(() => { ok = false })
-(IdentitySet.size(identitySet) == 4).ifFalse(() => { ok = false })
-(total == 8).ifFalse(() => { ok = false })
-Set.contains(normalSet, 2.0).ifFalse(() => { ok = false })
-IdentitySet.contains(identitySet, 2).ifFalse(() => { ok = false })
-IdentitySet.contains(identitySet, 2.0).ifFalse(() => { ok = false })
-ok
+tests.freeze()

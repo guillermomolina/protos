@@ -13,25 +13,36 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Ranges: import("std:collections/Range")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-forwardProbe: () => {
-    Ranges.each(1, 6, (value) => {
-        (value == 3).ifTrue(() => {
-            ^value
-        })
+tests: Array(
+    Test("range nonlocal return propagation", () => {
+        tool009LegacyCase: () => {
+            Ranges: import("std:collections/Range")
+
+            forwardProbe: () => {
+                Ranges.each(1, 6, (value) => {
+                    (value == 3).ifTrue(() => {
+                        ^value
+                    })
+                })
+                99
+            }
+
+            reverseProbe: () => {
+                Ranges.reverseEach(1, 6, (value) => {
+                    (value == 3).ifTrue(() => {
+                        ^value
+                    })
+                })
+                99
+            }
+
+            (forwardProbe() == 3) &&
+                (reverseProbe() == 3)
+        }
+        Assertions.require(tool009LegacyCase())
     })
-    99
-}
-
-reverseProbe: () => {
-    Ranges.reverseEach(1, 6, (value) => {
-        (value == 3).ifTrue(() => {
-            ^value
-        })
-    })
-    99
-}
-
-(forwardProbe() == 3) &&
-    (reverseProbe() == 3)
+)
+tests.freeze()

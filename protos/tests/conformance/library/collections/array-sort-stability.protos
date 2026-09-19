@@ -4,17 +4,28 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
-first: Array(1, 10)
-second: Array(1, 20)
-zero: Array(0, 30)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-sorted: Arrays.sort(
-    Array(first, second, zero),
-    (left, right) => {
-        left[0] < right[0]
-    }
+tests: Array(
+    Test("array sort stability", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            first: Array(1, 10)
+            second: Array(1, 20)
+            zero: Array(0, 30)
+
+            sorted: Arrays.sort(
+                Array(first, second, zero),
+                (left, right) => {
+                    left[0] < right[0]
+                }
+            )
+
+            ((sorted[0] === zero) && (sorted[1] === first)) &&
+                (sorted[2] === second)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-
-((sorted[0] === zero) && (sorted[1] === first)) &&
-    (sorted[2] === second)
+tests.freeze()

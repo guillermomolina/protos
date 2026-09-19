@@ -4,57 +4,68 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Set: import("std:collections/Set")
-left: Set(1, 2, 3)
-right: Set(2.0, 4, 1.0)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-union: Set.union(left, right)
-intersection: Set.intersection(left, right)
-difference: Set.difference(left, right)
+tests: Array(
+    Test("set algebra order and freshness", () => {
+        tool009LegacyCase: () => {
+            Set: import("std:collections/Set")
+            left: Set(1, 2, 3)
+            right: Set(2.0, 4, 1.0)
 
-unionOrder: Map()
-unionIndex: 0
-Set.each(union, (element) => {
-    unionOrder[unionIndex] = element
-    unionIndex = unionIndex + 1
-})
+            union: Set.union(left, right)
+            intersection: Set.intersection(left, right)
+            difference: Set.difference(left, right)
 
-intersectionOrder: Map()
-intersectionIndex: 0
-Set.each(intersection, (element) => {
-    intersectionOrder[intersectionIndex] = element
-    intersectionIndex = intersectionIndex + 1
-})
+            unionOrder: Map()
+            unionIndex: 0
+            Set.each(union, (element) => {
+                unionOrder[unionIndex] = element
+                unionIndex = unionIndex + 1
+            })
 
-differenceOrder: Map()
-differenceIndex: 0
-Set.each(difference, (element) => {
-    differenceOrder[differenceIndex] = element
-    differenceIndex = differenceIndex + 1
-})
+            intersectionOrder: Map()
+            intersectionIndex: 0
+            Set.each(intersection, (element) => {
+                intersectionOrder[intersectionIndex] = element
+                intersectionIndex = intersectionIndex + 1
+            })
 
-added: Set.add(union, 5)
+            differenceOrder: Map()
+            differenceIndex: 0
+            Set.each(difference, (element) => {
+                differenceOrder[differenceIndex] = element
+                differenceIndex = differenceIndex + 1
+            })
 
-ok: true
-(union !== left).ifFalse(() => { ok = false })
-(union !== right).ifFalse(() => { ok = false })
-(intersection !== left).ifFalse(() => { ok = false })
-(difference !== left).ifFalse(() => { ok = false })
-(Set.size(left) == 3).ifFalse(() => { ok = false })
-(Set.size(right) == 3).ifFalse(() => { ok = false })
-(unionIndex == 4).ifFalse(() => { ok = false })
-(unionOrder[0] === 1).ifFalse(() => { ok = false })
-(unionOrder[1] === 2).ifFalse(() => { ok = false })
-(unionOrder[2] === 3).ifFalse(() => { ok = false })
-(unionOrder[3] === 4).ifFalse(() => { ok = false })
-(intersectionIndex == 2).ifFalse(() => { ok = false })
-(intersectionOrder[0] === 1).ifFalse(() => { ok = false })
-(intersectionOrder[1] === 2).ifFalse(() => { ok = false })
-(differenceIndex == 1).ifFalse(() => { ok = false })
-(differenceOrder[0] === 3).ifFalse(() => { ok = false })
-(added === union).ifFalse(() => { ok = false })
-Set.contains(union, 5).ifFalse(() => { ok = false })
-(union.at(1) === true).ifFalse(() => { ok = false })
-(intersection.at(1) === true).ifFalse(() => { ok = false })
-(difference.at(3) === true).ifFalse(() => { ok = false })
-ok
+            added: Set.add(union, 5)
+
+            ok: true
+            (union !== left).ifFalse(() => { ok = false })
+            (union !== right).ifFalse(() => { ok = false })
+            (intersection !== left).ifFalse(() => { ok = false })
+            (difference !== left).ifFalse(() => { ok = false })
+            (Set.size(left) == 3).ifFalse(() => { ok = false })
+            (Set.size(right) == 3).ifFalse(() => { ok = false })
+            (unionIndex == 4).ifFalse(() => { ok = false })
+            (unionOrder[0] === 1).ifFalse(() => { ok = false })
+            (unionOrder[1] === 2).ifFalse(() => { ok = false })
+            (unionOrder[2] === 3).ifFalse(() => { ok = false })
+            (unionOrder[3] === 4).ifFalse(() => { ok = false })
+            (intersectionIndex == 2).ifFalse(() => { ok = false })
+            (intersectionOrder[0] === 1).ifFalse(() => { ok = false })
+            (intersectionOrder[1] === 2).ifFalse(() => { ok = false })
+            (differenceIndex == 1).ifFalse(() => { ok = false })
+            (differenceOrder[0] === 3).ifFalse(() => { ok = false })
+            (added === union).ifFalse(() => { ok = false })
+            Set.contains(union, 5).ifFalse(() => { ok = false })
+            (union.at(1) === true).ifFalse(() => { ok = false })
+            (intersection.at(1) === true).ifFalse(() => { ok = false })
+            (difference.at(3) === true).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

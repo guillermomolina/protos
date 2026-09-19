@@ -4,5 +4,15 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
-Arrays.filter(Array(1), (element) => { 123 })
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("array filter invalid predicate result error", () => {
+        Assertions.signals(InvalidPredicateResult, () => {
+            Arrays: import("std:collections/Array")
+            Arrays.filter(Array(1), (element) => { 123 })
+        })
+    })
+)
+tests.freeze()

@@ -4,32 +4,43 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
-source: Array(8, 7, 6, 5, 4, 3, 2, 1)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-reduceCalls: 0
-sum: Arrays.reduce(source, (accumulator, element) => {
-    reduceCalls = reduceCalls + 1
-    accumulator + element
-}, 0)
+tests: Array(
+    Test("array reduce sort balanced traversal", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            source: Array(8, 7, 6, 5, 4, 3, 2, 1)
 
-sortCalls: 0
-sorted: Arrays.sort(source, (left, right) => {
-    sortCalls = sortCalls + 1
-    left < right
-})
+            reduceCalls: 0
+            sum: Arrays.reduce(source, (accumulator, element) => {
+                reduceCalls = reduceCalls + 1
+                accumulator + element
+            }, 0)
 
-ok: true
-(sum == 36).ifFalse(() => { ok = false })
-(reduceCalls == 8).ifFalse(() => { ok = false })
-(sorted[0] == 1).ifFalse(() => { ok = false })
-(sorted[1] == 2).ifFalse(() => { ok = false })
-(sorted[2] == 3).ifFalse(() => { ok = false })
-(sorted[3] == 4).ifFalse(() => { ok = false })
-(sorted[4] == 5).ifFalse(() => { ok = false })
-(sorted[5] == 6).ifFalse(() => { ok = false })
-(sorted[6] == 7).ifFalse(() => { ok = false })
-(sorted[7] == 8).ifFalse(() => { ok = false })
-(sortCalls > 0).ifFalse(() => { ok = false })
-(source[0] == 8).ifFalse(() => { ok = false })
-ok
+            sortCalls: 0
+            sorted: Arrays.sort(source, (left, right) => {
+                sortCalls = sortCalls + 1
+                left < right
+            })
+
+            ok: true
+            (sum == 36).ifFalse(() => { ok = false })
+            (reduceCalls == 8).ifFalse(() => { ok = false })
+            (sorted[0] == 1).ifFalse(() => { ok = false })
+            (sorted[1] == 2).ifFalse(() => { ok = false })
+            (sorted[2] == 3).ifFalse(() => { ok = false })
+            (sorted[3] == 4).ifFalse(() => { ok = false })
+            (sorted[4] == 5).ifFalse(() => { ok = false })
+            (sorted[5] == 6).ifFalse(() => { ok = false })
+            (sorted[6] == 7).ifFalse(() => { ok = false })
+            (sorted[7] == 8).ifFalse(() => { ok = false })
+            (sortCalls > 0).ifFalse(() => { ok = false })
+            (source[0] == 8).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

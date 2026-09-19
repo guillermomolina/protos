@@ -4,47 +4,58 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Set: import("std:collections/Set")
-IdentitySet: import("std:collections/IdentitySet")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-values: Set(1, 2)
-visited: Map()
-index: 0
-same: Set.each(values, (element) => {
-    visited[index] = element
-    (index == 0).ifTrue(() => {
-        Set.add(values, 3)
-        Set.remove(values, 2)
+tests: Array(
+    Test("set each snapshot order", () => {
+        tool009LegacyCase: () => {
+            Set: import("std:collections/Set")
+            IdentitySet: import("std:collections/IdentitySet")
+
+            values: Set(1, 2)
+            visited: Map()
+            index: 0
+            same: Set.each(values, (element) => {
+                visited[index] = element
+                (index == 0).ifTrue(() => {
+                    Set.add(values, 3)
+                    Set.remove(values, 2)
+                })
+                index = index + 1
+            })
+
+            identities: IdentitySet(1, 2)
+            identityVisited: Map()
+            identityIndex: 0
+            sameIdentity: IdentitySet.each(identities, (element) => {
+                identityVisited[identityIndex] = element
+                (identityIndex == 0).ifTrue(() => {
+                    IdentitySet.add(identities, 3)
+                    IdentitySet.remove(identities, 2)
+                })
+                identityIndex = identityIndex + 1
+            })
+
+            ok: true
+            (same === values).ifFalse(() => { ok = false })
+            (index == 2).ifFalse(() => { ok = false })
+            (visited[0] === 1).ifFalse(() => { ok = false })
+            (visited[1] === 2).ifFalse(() => { ok = false })
+            (Set.size(values) == 2).ifFalse(() => { ok = false })
+            Set.contains(values, 2).ifTrue(() => { ok = false })
+            Set.contains(values, 3).ifFalse(() => { ok = false })
+
+            (sameIdentity === identities).ifFalse(() => { ok = false })
+            (identityIndex == 2).ifFalse(() => { ok = false })
+            (identityVisited[0] === 1).ifFalse(() => { ok = false })
+            (identityVisited[1] === 2).ifFalse(() => { ok = false })
+            (IdentitySet.size(identities) == 2).ifFalse(() => { ok = false })
+            IdentitySet.contains(identities, 2).ifTrue(() => { ok = false })
+            IdentitySet.contains(identities, 3).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
     })
-    index = index + 1
-})
-
-identities: IdentitySet(1, 2)
-identityVisited: Map()
-identityIndex: 0
-sameIdentity: IdentitySet.each(identities, (element) => {
-    identityVisited[identityIndex] = element
-    (identityIndex == 0).ifTrue(() => {
-        IdentitySet.add(identities, 3)
-        IdentitySet.remove(identities, 2)
-    })
-    identityIndex = identityIndex + 1
-})
-
-ok: true
-(same === values).ifFalse(() => { ok = false })
-(index == 2).ifFalse(() => { ok = false })
-(visited[0] === 1).ifFalse(() => { ok = false })
-(visited[1] === 2).ifFalse(() => { ok = false })
-(Set.size(values) == 2).ifFalse(() => { ok = false })
-Set.contains(values, 2).ifTrue(() => { ok = false })
-Set.contains(values, 3).ifFalse(() => { ok = false })
-
-(sameIdentity === identities).ifFalse(() => { ok = false })
-(identityIndex == 2).ifFalse(() => { ok = false })
-(identityVisited[0] === 1).ifFalse(() => { ok = false })
-(identityVisited[1] === 2).ifFalse(() => { ok = false })
-(IdentitySet.size(identities) == 2).ifFalse(() => { ok = false })
-IdentitySet.contains(identities, 2).ifTrue(() => { ok = false })
-IdentitySet.contains(identities, 3).ifFalse(() => { ok = false })
-ok
+)
+tests.freeze()

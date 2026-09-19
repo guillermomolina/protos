@@ -4,31 +4,42 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
-source: Array(10, 3, 2, 1)
-calls: 0
-reduced: Arrays.reduce(source, (accumulator, element) => {
-    (calls == 0).ifTrue(() => {
-        source[2] = 99
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("array reduce left fold snapshot", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            source: Array(10, 3, 2, 1)
+            calls: 0
+            reduced: Arrays.reduce(source, (accumulator, element) => {
+                (calls == 0).ifTrue(() => {
+                    source[2] = 99
+                })
+                calls = calls + 1
+                accumulator - element
+            })
+
+            withInitialCalls: 0
+            withInitial: Arrays.reduce(
+                Array(10, 3, 2, 1),
+                (accumulator, element) => {
+                    withInitialCalls = withInitialCalls + 1
+                    accumulator - element
+                },
+                20
+            )
+
+            ok: true
+            (reduced == 4).ifFalse(() => { ok = false })
+            (calls == 3).ifFalse(() => { ok = false })
+            (source[2] == 99).ifFalse(() => { ok = false })
+            (withInitial == 4).ifFalse(() => { ok = false })
+            (withInitialCalls == 4).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
     })
-    calls = calls + 1
-    accumulator - element
-})
-
-withInitialCalls: 0
-withInitial: Arrays.reduce(
-    Array(10, 3, 2, 1),
-    (accumulator, element) => {
-        withInitialCalls = withInitialCalls + 1
-        accumulator - element
-    },
-    20
 )
-
-ok: true
-(reduced == 4).ifFalse(() => { ok = false })
-(calls == 3).ifFalse(() => { ok = false })
-(source[2] == 99).ifFalse(() => { ok = false })
-(withInitial == 4).ifFalse(() => { ok = false })
-(withInitialCalls == 4).ifFalse(() => { ok = false })
-ok
+tests.freeze()

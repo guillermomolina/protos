@@ -4,22 +4,33 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
-source: Array(1, 2, 2, 3)
-calls: 0
-found: Arrays.findIndex(source, (element) => {
-    (calls == 0).ifTrue(() => {
-        source[1] = 99
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("array find index short circuit", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            source: Array(1, 2, 2, 3)
+            calls: 0
+            found: Arrays.findIndex(source, (element) => {
+                (calls == 0).ifTrue(() => {
+                    source[1] = 99
+                })
+                calls = calls + 1
+                element == 2
+            })
+            missing: Arrays.findIndex(source, (element) => {
+                element == 777
+            })
+            ok: true
+            (found == 1).ifFalse(() => { ok = false })
+            (calls == 2).ifFalse(() => { ok = false })
+            (source[1] == 99).ifFalse(() => { ok = false })
+            (missing === null).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
     })
-    calls = calls + 1
-    element == 2
-})
-missing: Arrays.findIndex(source, (element) => {
-    element == 777
-})
-ok: true
-(found == 1).ifFalse(() => { ok = false })
-(calls == 2).ifFalse(() => { ok = false })
-(source[1] == 99).ifFalse(() => { ok = false })
-(missing === null).ifFalse(() => { ok = false })
-ok
+)
+tests.freeze()

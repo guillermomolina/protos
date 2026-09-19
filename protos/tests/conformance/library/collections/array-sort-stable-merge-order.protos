@@ -4,32 +4,43 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
-source: Array(3, 1, 2)
-trace: Map()
-calls: 0
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-sorted: Arrays.sort(source, (left, right) => {
-    (calls == 0).ifTrue(() => {
-        source[0] = 99
+tests: Array(
+    Test("array sort stable merge order", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            source: Array(3, 1, 2)
+            trace: Map()
+            calls: 0
+
+            sorted: Arrays.sort(source, (left, right) => {
+                (calls == 0).ifTrue(() => {
+                    source[0] = 99
+                })
+                trace[calls] = left * 10 + right
+                calls = calls + 1
+                left < right
+            })
+            sorted[0] = sorted[0]
+
+            ok: true
+            (sorted !== source).ifFalse(() => { ok = false })
+            (sorted[0] == 1).ifFalse(() => { ok = false })
+            (sorted[1] == 2).ifFalse(() => { ok = false })
+            (sorted[2] == 3).ifFalse(() => { ok = false })
+            (source[0] == 99).ifFalse(() => { ok = false })
+            (calls == 6).ifFalse(() => { ok = false })
+            (trace[0] == 12).ifFalse(() => { ok = false })
+            (trace[1] == 21).ifFalse(() => { ok = false })
+            (trace[2] == 31).ifFalse(() => { ok = false })
+            (trace[3] == 13).ifFalse(() => { ok = false })
+            (trace[4] == 32).ifFalse(() => { ok = false })
+            (trace[5] == 23).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
     })
-    trace[calls] = left * 10 + right
-    calls = calls + 1
-    left < right
-})
-sorted[0] = sorted[0]
-
-ok: true
-(sorted !== source).ifFalse(() => { ok = false })
-(sorted[0] == 1).ifFalse(() => { ok = false })
-(sorted[1] == 2).ifFalse(() => { ok = false })
-(sorted[2] == 3).ifFalse(() => { ok = false })
-(source[0] == 99).ifFalse(() => { ok = false })
-(calls == 6).ifFalse(() => { ok = false })
-(trace[0] == 12).ifFalse(() => { ok = false })
-(trace[1] == 21).ifFalse(() => { ok = false })
-(trace[2] == 31).ifFalse(() => { ok = false })
-(trace[3] == 13).ifFalse(() => { ok = false })
-(trace[4] == 32).ifFalse(() => { ok = false })
-(trace[5] == 23).ifFalse(() => { ok = false })
-ok
+)
+tests.freeze()

@@ -13,39 +13,50 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Ranges: import("std:collections/Range")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-forwardError: Error()
-reverseError: Error()
+tests: Array(
+    Test("range callback error propagation", () => {
+        tool009LegacyCase: () => {
+            Ranges: import("std:collections/Range")
 
-forwardExact: Error.handle(
-    () => {
-        Ranges.each(1, 4, (value) => {
-            (value == 2).ifTrue(() => {
-                forwardError.signal()
-            })
-            null
-        })
-        false
-    },
-    (caught) => {
-        caught === forwardError
-    }
+            forwardError: Error()
+            reverseError: Error()
+
+            forwardExact: Error.handle(
+                () => {
+                    Ranges.each(1, 4, (value) => {
+                        (value == 2).ifTrue(() => {
+                            forwardError.signal()
+                        })
+                        null
+                    })
+                    false
+                },
+                (caught) => {
+                    caught === forwardError
+                }
+            )
+
+            reverseExact: Error.handle(
+                () => {
+                    Ranges.reverseEach(1, 4, (value) => {
+                        (value == 2).ifTrue(() => {
+                            reverseError.signal()
+                        })
+                        null
+                    })
+                    false
+                },
+                (caught) => {
+                    caught === reverseError
+                }
+            )
+
+            forwardExact && reverseExact
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-
-reverseExact: Error.handle(
-    () => {
-        Ranges.reverseEach(1, 4, (value) => {
-            (value == 2).ifTrue(() => {
-                reverseError.signal()
-            })
-            null
-        })
-        false
-    },
-    (caught) => {
-        caught === reverseError
-    }
-)
-
-forwardExact && reverseExact
+tests.freeze()

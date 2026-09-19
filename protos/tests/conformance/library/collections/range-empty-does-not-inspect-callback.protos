@@ -13,9 +13,20 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Ranges: import("std:collections/Range")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-(Ranges.each(4, 4, 42) === null) &&
-    (Ranges.reverseEach(4, 4, 42) === null) &&
-    (Ranges.each(5, 2, 42) === null) &&
-    (Ranges.reverseEach(5, 2, 42) === null)
+tests: Array(
+    Test("range empty does not inspect callback", () => {
+        tool009LegacyCase: () => {
+            Ranges: import("std:collections/Range")
+
+            (Ranges.each(4, 4, 42) === null) &&
+                (Ranges.reverseEach(4, 4, 42) === null) &&
+                (Ranges.each(5, 2, 42) === null) &&
+                (Ranges.reverseEach(5, 2, 42) === null)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

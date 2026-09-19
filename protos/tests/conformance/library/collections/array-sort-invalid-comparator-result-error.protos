@@ -4,5 +4,15 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
-Arrays.sort(Array(2, 1), (left, right) => { 123 })
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("array sort invalid comparator result error", () => {
+        Assertions.signals(InvalidComparatorResult, () => {
+            Arrays: import("std:collections/Array")
+            Arrays.sort(Array(2, 1), (left, right) => { 123 })
+        })
+    })
+)
+tests.freeze()

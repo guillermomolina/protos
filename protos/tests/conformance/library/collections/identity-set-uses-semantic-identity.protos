@@ -4,12 +4,23 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-IdentitySet: import("std:collections/IdentitySet")
-values: IdentitySet(1, 1.0, 1)
-ok: true
-(IdentitySet.size(values) == 2).ifFalse(() => { ok = false })
-IdentitySet.contains(values, 1).ifFalse(() => { ok = false })
-IdentitySet.contains(values, 1.0).ifFalse(() => { ok = false })
-(values.at(1) === true).ifFalse(() => { ok = false })
-(values.at(1.0) === true).ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("identity set uses semantic identity", () => {
+        tool009LegacyCase: () => {
+            IdentitySet: import("std:collections/IdentitySet")
+            values: IdentitySet(1, 1.0, 1)
+            ok: true
+            (IdentitySet.size(values) == 2).ifFalse(() => { ok = false })
+            IdentitySet.contains(values, 1).ifFalse(() => { ok = false })
+            IdentitySet.contains(values, 1.0).ifFalse(() => { ok = false })
+            (values.at(1) === true).ifFalse(() => { ok = false })
+            (values.at(1.0) === true).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

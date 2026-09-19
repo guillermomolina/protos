@@ -13,32 +13,43 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Ranges: import("std:collections/Range")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-startCalls: 0
-stopCalls: 0
+tests: Array(
+    Test("range bounds evaluated once", () => {
+        tool009LegacyCase: () => {
+            Ranges: import("std:collections/Range")
 
-start: () => {
-    startCalls = startCalls + 1
-    2
-}
+            startCalls: 0
+            stopCalls: 0
 
-stop: () => {
-    stopCalls = stopCalls + 1
-    5
-}
+            start: () => {
+                startCalls = startCalls + 1
+                2
+            }
 
-forward: 0
-Ranges.each(start(), stop(), (value) => {
-    forward = forward * 10 + value
-})
+            stop: () => {
+                stopCalls = stopCalls + 1
+                5
+            }
 
-reverse: 0
-Ranges.reverseEach(start(), stop(), (value) => {
-    reverse = reverse * 10 + value
-})
+            forward: 0
+            Ranges.each(start(), stop(), (value) => {
+                forward = forward * 10 + value
+            })
 
-(startCalls == 2) &&
-    (stopCalls == 2) &&
-    (forward == 234) &&
-    (reverse == 432)
+            reverse: 0
+            Ranges.reverseEach(start(), stop(), (value) => {
+                reverse = reverse * 10 + value
+            })
+
+            (startCalls == 2) &&
+                (stopCalls == 2) &&
+                (forward == 234) &&
+                (reverse == 432)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

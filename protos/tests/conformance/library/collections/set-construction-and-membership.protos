@@ -4,15 +4,26 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Set: import("std:collections/Set")
-emptyA: Set()
-emptyB: Set()
-values: Set("Ada", "Grace")
-ok: true
-(Set.size(emptyA) == 0).ifFalse(() => { ok = false })
-(emptyA !== emptyB).ifFalse(() => { ok = false })
-(Set.size(values) == 2).ifFalse(() => { ok = false })
-Set.contains(values, "Ada").ifFalse(() => { ok = false })
-Set.contains(values, "Linus").ifTrue(() => { ok = false })
-(values.at("Ada") === true).ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("set construction and membership", () => {
+        tool009LegacyCase: () => {
+            Set: import("std:collections/Set")
+            emptyA: Set()
+            emptyB: Set()
+            values: Set("Ada", "Grace")
+            ok: true
+            (Set.size(emptyA) == 0).ifFalse(() => { ok = false })
+            (emptyA !== emptyB).ifFalse(() => { ok = false })
+            (Set.size(values) == 2).ifFalse(() => { ok = false })
+            Set.contains(values, "Ada").ifFalse(() => { ok = false })
+            Set.contains(values, "Linus").ifTrue(() => { ok = false })
+            (values.at("Ada") === true).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

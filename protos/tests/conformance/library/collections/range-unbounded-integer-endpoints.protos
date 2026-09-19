@@ -13,37 +13,48 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Ranges: import("std:collections/Range")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-base: 10000000000000000000000000000000000000000
+tests: Array(
+    Test("range unbounded integer endpoints", () => {
+        tool009LegacyCase: () => {
+            Ranges: import("std:collections/Range")
 
-forwardCount: 0
-forwardFirst: null
-forwardLast: null
+            base: 10000000000000000000000000000000000000000
 
-Ranges.each(base, base + 3, (value) => {
-    (forwardCount == 0).ifTrue(() => {
-        forwardFirst = value
+            forwardCount: 0
+            forwardFirst: null
+            forwardLast: null
+
+            Ranges.each(base, base + 3, (value) => {
+                (forwardCount == 0).ifTrue(() => {
+                    forwardFirst = value
+                })
+                forwardLast = value
+                forwardCount = forwardCount + 1
+            })
+
+            reverseCount: 0
+            reverseFirst: null
+            reverseLast: null
+
+            Ranges.reverseEach(base, base + 3, (value) => {
+                (reverseCount == 0).ifTrue(() => {
+                    reverseFirst = value
+                })
+                reverseLast = value
+                reverseCount = reverseCount + 1
+            })
+
+            (forwardCount == 3) &&
+                (forwardFirst == base) &&
+                (forwardLast == base + 2) &&
+                (reverseCount == 3) &&
+                (reverseFirst == base + 2) &&
+                (reverseLast == base)
+        }
+        Assertions.require(tool009LegacyCase())
     })
-    forwardLast = value
-    forwardCount = forwardCount + 1
-})
-
-reverseCount: 0
-reverseFirst: null
-reverseLast: null
-
-Ranges.reverseEach(base, base + 3, (value) => {
-    (reverseCount == 0).ifTrue(() => {
-        reverseFirst = value
-    })
-    reverseLast = value
-    reverseCount = reverseCount + 1
-})
-
-(forwardCount == 3) &&
-    (forwardFirst == base) &&
-    (forwardLast == base + 2) &&
-    (reverseCount == 3) &&
-    (reverseFirst == base + 2) &&
-    (reverseLast == base)
+)
+tests.freeze()

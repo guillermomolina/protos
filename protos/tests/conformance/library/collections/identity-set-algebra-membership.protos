@@ -4,32 +4,43 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-IdentitySet: import("std:collections/IdentitySet")
-left: IdentitySet(1, 2)
-right: IdentitySet(1.0, 2, 3)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-union: IdentitySet.union(left, right)
-intersection: IdentitySet.intersection(left, right)
-difference: IdentitySet.difference(left, right)
+tests: Array(
+    Test("identity set algebra membership", () => {
+        tool009LegacyCase: () => {
+            IdentitySet: import("std:collections/IdentitySet")
+            left: IdentitySet(1, 2)
+            right: IdentitySet(1.0, 2, 3)
 
-order: Map()
-index: 0
-IdentitySet.each(union, (element) => {
-    order[index] = element
-    index = index + 1
-})
+            union: IdentitySet.union(left, right)
+            intersection: IdentitySet.intersection(left, right)
+            difference: IdentitySet.difference(left, right)
 
-ok: true
-(IdentitySet.size(union) == 4).ifFalse(() => { ok = false })
-(order[0] === 1).ifFalse(() => { ok = false })
-(order[1] === 2).ifFalse(() => { ok = false })
-(order[2] === 1.0).ifFalse(() => { ok = false })
-(order[3] === 3).ifFalse(() => { ok = false })
-(IdentitySet.size(intersection) == 1).ifFalse(() => { ok = false })
-IdentitySet.contains(intersection, 2).ifFalse(() => { ok = false })
-IdentitySet.contains(intersection, 1).ifTrue(() => { ok = false })
-(IdentitySet.size(difference) == 1).ifFalse(() => { ok = false })
-IdentitySet.contains(difference, 1).ifFalse(() => { ok = false })
-IdentitySet.sameMembers(IdentitySet(1), IdentitySet(1.0)).ifTrue(() => { ok = false })
-IdentitySet.isDisjoint(IdentitySet(1), IdentitySet(1.0)).ifFalse(() => { ok = false })
-ok
+            order: Map()
+            index: 0
+            IdentitySet.each(union, (element) => {
+                order[index] = element
+                index = index + 1
+            })
+
+            ok: true
+            (IdentitySet.size(union) == 4).ifFalse(() => { ok = false })
+            (order[0] === 1).ifFalse(() => { ok = false })
+            (order[1] === 2).ifFalse(() => { ok = false })
+            (order[2] === 1.0).ifFalse(() => { ok = false })
+            (order[3] === 3).ifFalse(() => { ok = false })
+            (IdentitySet.size(intersection) == 1).ifFalse(() => { ok = false })
+            IdentitySet.contains(intersection, 2).ifFalse(() => { ok = false })
+            IdentitySet.contains(intersection, 1).ifTrue(() => { ok = false })
+            (IdentitySet.size(difference) == 1).ifFalse(() => { ok = false })
+            IdentitySet.contains(difference, 1).ifFalse(() => { ok = false })
+            IdentitySet.sameMembers(IdentitySet(1), IdentitySet(1.0)).ifTrue(() => { ok = false })
+            IdentitySet.isDisjoint(IdentitySet(1), IdentitySet(1.0)).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

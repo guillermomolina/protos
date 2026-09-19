@@ -4,38 +4,49 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-unseededCalls: 0
-unseeded: Arrays.reduce(Array(10, 3), (accumulator, element) => {
-    unseededCalls = unseededCalls + 1
-    accumulator - element
-})
+tests: Array(
+    Test("array reduce fold start boundaries", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
 
-seededCalls: 0
-seeded: Arrays.reduce(Array(3), (accumulator, element) => {
-    seededCalls = seededCalls + 1
-    accumulator - element
-}, 20)
+            unseededCalls: 0
+            unseeded: Arrays.reduce(Array(10, 3), (accumulator, element) => {
+                unseededCalls = unseededCalls + 1
+                accumulator - element
+            })
 
-singletonCalls: 0
-marker: Array(7)
-singleton: Arrays.reduce(Array(marker), (accumulator, element) => {
-    singletonCalls = singletonCalls + 1
-    null
-})
+            seededCalls: 0
+            seeded: Arrays.reduce(Array(3), (accumulator, element) => {
+                seededCalls = seededCalls + 1
+                accumulator - element
+            }, 20)
 
-seededEmptyCalls: 0
-seededEmpty: Arrays.reduce(Array(), (accumulator, element) => {
-    seededEmptyCalls = seededEmptyCalls + 1
-    null
-}, marker)
+            singletonCalls: 0
+            marker: Array(7)
+            singleton: Arrays.reduce(Array(marker), (accumulator, element) => {
+                singletonCalls = singletonCalls + 1
+                null
+            })
 
-(unseeded == 7) &&
-(unseededCalls == 1) &&
-(seeded == 17) &&
-(seededCalls == 1) &&
-(singleton === marker) &&
-(singletonCalls == 0) &&
-(seededEmpty === marker) &&
-(seededEmptyCalls == 0)
+            seededEmptyCalls: 0
+            seededEmpty: Arrays.reduce(Array(), (accumulator, element) => {
+                seededEmptyCalls = seededEmptyCalls + 1
+                null
+            }, marker)
+
+            (unseeded == 7) &&
+            (unseededCalls == 1) &&
+            (seeded == 17) &&
+            (seededCalls == 1) &&
+            (singleton === marker) &&
+            (singletonCalls == 0) &&
+            (seededEmpty === marker) &&
+            (seededEmptyCalls == 0)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

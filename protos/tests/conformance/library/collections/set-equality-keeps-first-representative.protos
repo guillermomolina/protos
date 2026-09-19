@@ -4,18 +4,29 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Set: import("std:collections/Set")
-values: Set(1, 1.0)
-representative: null
-marker: null
-values.each((key, value) => {
-    representative = key
-    marker = value
-})
-ok: true
-(Set.size(values) == 1).ifFalse(() => { ok = false })
-Set.contains(values, 1.0).ifFalse(() => { ok = false })
-(representative === 1).ifFalse(() => { ok = false })
-(representative === 1.0).ifTrue(() => { ok = false })
-(marker === true).ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("set equality keeps first representative", () => {
+        tool009LegacyCase: () => {
+            Set: import("std:collections/Set")
+            values: Set(1, 1.0)
+            representative: null
+            marker: null
+            values.each((key, value) => {
+                representative = key
+                marker = value
+            })
+            ok: true
+            (Set.size(values) == 1).ifFalse(() => { ok = false })
+            Set.contains(values, 1.0).ifFalse(() => { ok = false })
+            (representative === 1).ifFalse(() => { ok = false })
+            (representative === 1.0).ifTrue(() => { ok = false })
+            (marker === true).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

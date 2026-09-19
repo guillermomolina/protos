@@ -4,21 +4,32 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Arrays: import("std:collections/Array")
-source: Array(
-    1, 2, 3, 4, 5, 6, 7, 8,
-    9, 10, 11, 12, 13, 14, 15, 16,
-    17, 18, 19, 20, 21, 22, 23, 24,
-    25, 26, 27, 28, 29, 30, 31, 32
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("array reduce repeated large left fold", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            source: Array(
+                1, 2, 3, 4, 5, 6, 7, 8,
+                9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 24,
+                25, 26, 27, 28, 29, 30, 31, 32
+            )
+
+            calls: 0
+            reducer: (accumulator, element) => {
+                calls = calls + 1
+                accumulator + element
+            }
+
+            first: Arrays.reduce(source, reducer, 0)
+            second: Arrays.reduce(source, reducer, 10)
+
+            (first == 528) && (second == 538) && (calls == 64)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
 )
-
-calls: 0
-reducer: (accumulator, element) => {
-    calls = calls + 1
-    accumulator + element
-}
-
-first: Arrays.reduce(source, reducer, 0)
-second: Arrays.reduce(source, reducer, 10)
-
-(first == 528) && (second == 538) && (calls == 64)
+tests.freeze()

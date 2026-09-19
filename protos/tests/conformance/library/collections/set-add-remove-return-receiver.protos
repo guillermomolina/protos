@@ -4,31 +4,42 @@
  * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
  */
 
-Set: import("std:collections/Set")
-IdentitySet: import("std:collections/IdentitySet")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-values: Set(1, 2)
-added: Set.add(values, 3)
-removed: Set.remove(values, 2)
+tests: Array(
+    Test("set add remove return receiver", () => {
+        tool009LegacyCase: () => {
+            Set: import("std:collections/Set")
+            IdentitySet: import("std:collections/IdentitySet")
 
-identities: IdentitySet(1, 2)
-identityAdded: IdentitySet.add(identities, 3)
-identityRemoved: IdentitySet.remove(identities, 2)
+            values: Set(1, 2)
+            added: Set.add(values, 3)
+            removed: Set.remove(values, 2)
 
-ok: true
-(added === values).ifFalse(() => { ok = false })
-(removed === values).ifFalse(() => { ok = false })
-(Set.size(values) == 2).ifFalse(() => { ok = false })
-Set.contains(values, 1).ifFalse(() => { ok = false })
-Set.contains(values, 2).ifTrue(() => { ok = false })
-Set.contains(values, 3).ifFalse(() => { ok = false })
-(values.at(1) === true).ifFalse(() => { ok = false })
-(values.at(3) === true).ifFalse(() => { ok = false })
+            identities: IdentitySet(1, 2)
+            identityAdded: IdentitySet.add(identities, 3)
+            identityRemoved: IdentitySet.remove(identities, 2)
 
-(identityAdded === identities).ifFalse(() => { ok = false })
-(identityRemoved === identities).ifFalse(() => { ok = false })
-(IdentitySet.size(identities) == 2).ifFalse(() => { ok = false })
-IdentitySet.contains(identities, 1).ifFalse(() => { ok = false })
-IdentitySet.contains(identities, 2).ifTrue(() => { ok = false })
-IdentitySet.contains(identities, 3).ifFalse(() => { ok = false })
-ok
+            ok: true
+            (added === values).ifFalse(() => { ok = false })
+            (removed === values).ifFalse(() => { ok = false })
+            (Set.size(values) == 2).ifFalse(() => { ok = false })
+            Set.contains(values, 1).ifFalse(() => { ok = false })
+            Set.contains(values, 2).ifTrue(() => { ok = false })
+            Set.contains(values, 3).ifFalse(() => { ok = false })
+            (values.at(1) === true).ifFalse(() => { ok = false })
+            (values.at(3) === true).ifFalse(() => { ok = false })
+
+            (identityAdded === identities).ifFalse(() => { ok = false })
+            (identityRemoved === identities).ifFalse(() => { ok = false })
+            (IdentitySet.size(identities) == 2).ifFalse(() => { ok = false })
+            IdentitySet.contains(identities, 1).ifFalse(() => { ok = false })
+            IdentitySet.contains(identities, 2).ifTrue(() => { ok = false })
+            IdentitySet.contains(identities, 3).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

@@ -13,21 +13,32 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Ranges: import("std:collections/Range")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-forward: 0
-forwardResult: Ranges.each(2, 5, (value) => {
-    forward = forward * 10 + value
-    999
-})
+tests: Array(
+    Test("range order and return", () => {
+        tool009LegacyCase: () => {
+            Ranges: import("std:collections/Range")
 
-reverse: 0
-reverseResult: Ranges.reverseEach(2, 5, (value) => {
-    reverse = reverse * 10 + value
-    999
-})
+            forward: 0
+            forwardResult: Ranges.each(2, 5, (value) => {
+                forward = forward * 10 + value
+                999
+            })
 
-(forwardResult === null) &&
-    (reverseResult === null) &&
-    (forward == 234) &&
-    (reverse == 432)
+            reverse: 0
+            reverseResult: Ranges.reverseEach(2, 5, (value) => {
+                reverse = reverse * 10 + value
+                999
+            })
+
+            (forwardResult === null) &&
+                (reverseResult === null) &&
+                (forward == 234) &&
+                (reverse == 432)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()
