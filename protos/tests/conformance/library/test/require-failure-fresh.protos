@@ -15,23 +15,31 @@
 
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-first: Assertions.AssertionFailure.handle(
-    () => {
-        Assertions.require(false)
-        null
-    },
-    (caught) => caught
+tests: Array(
+    Test("require failures are fresh", () => {
+        first: Assertions.AssertionFailure.handle(
+            () => {
+                Assertions.require(false)
+                null
+            },
+            (caught) => caught
+        )
+
+        second: Assertions.AssertionFailure.handle(
+            () => {
+                Assertions.require(false)
+                null
+            },
+            (caught) => caught
+        )
+
+        Assertions.require(
+            (first.parent() === Assertions.AssertionFailure) &&
+            (second.parent() === Assertions.AssertionFailure) &&
+            (first !== second)
+        )
+    })
 )
-
-second: Assertions.AssertionFailure.handle(
-    () => {
-        Assertions.require(false)
-        null
-    },
-    (caught) => caught
-)
-
-(first.parent() === Assertions.AssertionFailure) &&
-(second.parent() === Assertions.AssertionFailure) &&
-(first !== second)
+tests.freeze()

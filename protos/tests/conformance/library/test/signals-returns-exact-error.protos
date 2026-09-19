@@ -15,12 +15,18 @@
 
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Expected: Error {}
-expected: Expected {}
+tests: Array(
+    Test("signals returns exact error", () => {
+        Expected: Error {}
+        expected: Expected {}
 
-caught: Assertions.signals(Expected, () => {
-    expected.signal()
-})
+        caught: Assertions.signals(Expected, () => {
+            expected.signal()
+        })
 
-caught === expected
+        Assertions.require(caught === expected)
+    })
+)
+tests.freeze()

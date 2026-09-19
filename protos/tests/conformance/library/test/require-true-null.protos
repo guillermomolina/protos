@@ -15,4 +15,13 @@
 
 
 Assertions: import("std:test/Assertions")
-Assertions.require(true) === null
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("require true returns null", () => {
+        Assertions.require(
+            Assertions.require(true) === null
+        )
+    })
+)
+tests.freeze()

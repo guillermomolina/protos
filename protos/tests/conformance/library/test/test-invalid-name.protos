@@ -13,30 +13,39 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
-emptyFailed: false
-Error.handle(
-    () => {
-        Test("", () => null)
-        null
-    },
-    (error) => {
-        emptyFailed = true
-        null
-    }
-)
+tests: Array(
+    Test("Test rejects invalid names", () => {
+        emptyFailed: false
+        Error.handle(
+            () => {
+                Test("", () => null)
+                null
+            },
+            (error) => {
+                emptyFailed = true
+                null
+            }
+        )
 
-nonStringFailed: false
-Error.handle(
-    () => {
-        Test(42, () => null)
-        null
-    },
-    (error) => {
-        nonStringFailed = true
-        null
-    }
-)
+        nonStringFailed: false
+        Error.handle(
+            () => {
+                Test(42, () => null)
+                null
+            },
+            (error) => {
+                nonStringFailed = true
+                null
+            }
+        )
 
-emptyFailed && nonStringFailed
+        Assertions.require(
+            emptyFailed &&
+            nonStringFailed
+        )
+    })
+)
+tests.freeze()

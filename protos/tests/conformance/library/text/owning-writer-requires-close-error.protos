@@ -15,8 +15,19 @@
  * the specific language governing rights and limitations under the License.
  */
 
-UTF8: import("std:text/UTF8")
-target: {
-    write: (bytes) => null
-}
-UTF8.owningWriter(target)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("owning writer requires close", () => {
+        UTF8: import("std:text/UTF8")
+        target: {
+            write: (bytes) => null
+        }
+
+        Assertions.signals(Error, () => {
+            UTF8.owningWriter(target)
+        })
+    })
+)
+tests.freeze()

@@ -15,8 +15,19 @@
  * the specific language governing rights and limitations under the License.
  */
 
-UTF8: import("std:text/UTF8")
-source: {
-    read: (maxBytes) => null
-}
-TextReader(source, UTF8)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("helper module is not Encoding", () => {
+        UTF8: import("std:text/UTF8")
+        source: {
+            read: (maxBytes) => null
+        }
+
+        Assertions.signals(Error, () => {
+            TextReader(source, UTF8)
+        })
+    })
+)
+tests.freeze()

@@ -13,20 +13,29 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
-value: Test("deferred", 42)
+tests: Array(
+    Test("Test body validation is deferred", () => {
+        value: Test("deferred", 42)
 
-failedOnInvocation: false
-Error.handle(
-    () => {
-        value()
-        null
-    },
-    (error) => {
-        failedOnInvocation = true
-        null
-    }
+        failedOnInvocation: false
+        Error.handle(
+            () => {
+                value()
+                null
+            },
+            (error) => {
+                failedOnInvocation = true
+                null
+            }
+        )
+
+        Assertions.require(
+            (value.name == "deferred") &&
+            failedOnInvocation
+        )
+    })
 )
-
-(value.name == "deferred") && failedOnInvocation
+tests.freeze()

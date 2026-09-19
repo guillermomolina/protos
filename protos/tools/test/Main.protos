@@ -23,6 +23,11 @@ ResourceRequirements: import("self:ResourceRequirements")
 SuiteGraph: import("self:SuiteGraph")
 RepositorySuite: import("self:RepositorySuite")
 RepositoryCorpusPlans: import("self:RepositoryCorpusPlans")
+Discovery: import("self:Discovery")
+CasePlan: import("self:LogicalCasePlan")
+LogicalCaseRunner: import("self:LogicalCaseRunner")
+LogicalCaseResult: import("self:LogicalCaseResult")
+LogicalCaseMigration: import("self:LogicalCaseMigration")
 
 arguments: process.args()
 jobs: Options.jobs(arguments)
@@ -46,10 +51,15 @@ emitProgress: (line) => {
 
 progressPhases: Array()
 
-startProgress: (phaseName, phasePlan) => {
-    state: Progress.beginPlan(
+startProgress: (
+    phaseName,
+    phasePlan,
+    additionalLogicalCases
+) => {
+    state: Progress.begin(
         phaseName,
-        phasePlan,
+        Progress.selectedCount(phasePlan) +
+            additionalLogicalCases,
         emitProgress
     )
     progressPhases = Array(...progressPhases, state)
@@ -258,6 +268,239 @@ executionSuites: plannedSuites
     executionSuites = selectedSuites
 })
 
+// D152 M2 temporary mixed-ownership bridge.
+//
+// Every suite-native source is removed from incumbent ownership before either
+// runner is scheduled. D153 discovery for the complete selected suite-native
+// set is completed first. The resulting logical Cases are then scheduled as
+// one flat global plan, independent of the historical corpus/phase topology.
+migrationExecutionSuites: Array()
+logicalProjections: Array()
+logicalCaseMetadata: Array()
+logicalSourceSpecs: Map()
+
+migrationSuiteIndex: 0
+executionSuites.each((planned) => {
+    split:
+        LogicalCaseMigration.splitPlan(
+            planned.plan
+        )
+
+    nativeSpecs:
+        LogicalCaseMigration.suiteNativeSpecs(
+            split
+        )
+
+    logicalCaseCount: 0
+
+    nativeSpecs.each((spec) => {
+        corpusId: planned.leaf.corpus
+        sourcePath: Manifest.casePath(spec)
+
+        corpusSpecs: null
+
+        logicalSourceSpecs.containsKey(corpusId).ifTrue(() => {
+            corpusSpecs = logicalSourceSpecs[corpusId]
+        })
+
+        logicalSourceSpecs.containsKey(corpusId).ifFalse(() => {
+            corpusSpecs = Map()
+            logicalSourceSpecs[corpusId] = corpusSpecs
+        })
+
+        corpusSpecs.containsKey(sourcePath).ifTrue(() => {
+            Error().signal()
+        })
+        corpusSpecs[sourcePath] = spec
+
+        sourceAssociation:
+            LogicalCaseMigration.sourceAssociation(
+                corpusId,
+                spec
+            )
+
+        discoverySource:
+            Runner.readSource(
+                spec,
+                planned.corpusBinding.filesystem
+            )
+
+        projection:
+            logicalCaseDiscovery(
+                sourceAssociation,
+                discoverySource
+            )
+
+        projectionCases:
+            Discovery.projectionPlan(
+                projection
+            )
+
+        // A migration marker must transfer at least one logical Case. Otherwise
+        // the bounded M2 change would silently leave the source with no owner.
+        (projectionCases.size() == 0).ifTrue(() => {
+            Error().signal()
+        })
+
+        logicalProjections =
+            Array(
+                ...logicalProjections,
+                projection
+            )
+
+        projectionCases.each((ignored) => {
+            metadata:
+                Array(
+                    migrationSuiteIndex,
+                    spec
+                )
+            metadata.freeze()
+
+            logicalCaseMetadata =
+                Array(
+                    ...logicalCaseMetadata,
+                    metadata
+                )
+
+            logicalCaseCount =
+                logicalCaseCount + 1
+        })
+    })
+
+    migrated: {
+        leaf: planned.leaf
+        phaseName: planned.phaseName
+        corpusBinding: planned.corpusBinding
+        binding: planned.binding
+        plan:
+            LogicalCaseMigration.legacyPlan(
+                split
+            )
+        logicalCaseCount: logicalCaseCount
+    }
+    migrated.freeze()
+
+    migrationExecutionSuites =
+        Array(
+            ...migrationExecutionSuites,
+            migrated
+        )
+
+    migrationSuiteIndex =
+        migrationSuiteIndex + 1
+})
+
+migrationExecutionSuites.freeze()
+logicalProjections.freeze()
+logicalCaseMetadata.freeze()
+executionSuites = migrationExecutionSuites
+
+logicalResults: Array()
+logicalResults.freeze()
+
+(logicalProjections.size() > 0).ifTrue(() => {
+    logicalCompletions:
+        LogicalCaseRunner.run(
+            logicalProjections,
+            (entry) => {
+                association:
+                    CasePlan.sourceAssociation(
+                        entry
+                    )
+
+                (association.size() == 2).ifFalse(() => {
+                    Error().signal()
+                })
+
+                corpusId: association[0]
+                sourcePath: association[1]
+
+                String.recognizes(corpusId).ifFalse(() => {
+                    Error().signal()
+                })
+                String.recognizes(sourcePath).ifFalse(() => {
+                    Error().signal()
+                })
+
+                logicalSourceSpecs.containsKey(corpusId).ifFalse(() => {
+                    Error().signal()
+                })
+
+                corpusSpecs:
+                    logicalSourceSpecs[corpusId]
+
+                corpusSpecs.containsKey(sourcePath).ifFalse(() => {
+                    Error().signal()
+                })
+
+                testCorpusBindings.hasSlot(corpusId).ifFalse(() => {
+                    Error().signal()
+                })
+
+                sourceBinding:
+                    testCorpusBindings.slotValue(
+                        corpusId
+                    )
+
+                // Re-read immediately before each fresh Process execution.
+                // Discovery source text is deliberately not cached across the
+                // D153 rematerialization boundary.
+                Runner.readSource(
+                    corpusSpecs[sourcePath],
+                    sourceBinding.filesystem
+                )
+            },
+            logicalCaseExecutionAsync,
+            jobs
+        ).value()
+
+    logicalResults =
+        LogicalCaseResult.projectAll(
+            logicalCompletions
+        )
+})
+
+(logicalResults.size() == logicalCaseMetadata.size()).ifFalse(() => {
+    Error().signal()
+})
+
+logicalResultsBySuite: Array()
+executionSuites.each((ignored) => {
+    logicalResultsBySuite =
+        Array(
+            ...logicalResultsBySuite,
+            Array()
+        )
+})
+
+logicalResultIndex: 0
+logicalResults.each((result) => {
+    metadata:
+        logicalCaseMetadata[
+            logicalResultIndex
+        ]
+
+    targetSuiteIndex: metadata[0]
+    spec: metadata[1]
+
+    pair: Array(spec, result)
+    pair.freeze()
+
+    logicalResultsBySuite[targetSuiteIndex] =
+        Array(
+            ...logicalResultsBySuite[targetSuiteIndex],
+            pair
+        )
+
+    logicalResultIndex =
+        logicalResultIndex + 1
+})
+
+logicalResultsBySuite.each((group) => {
+    group.freeze()
+})
+logicalResultsBySuite.freeze()
+
 completedRuns: Array()
 primaryRun: null
 finalOutcome: null
@@ -271,7 +514,12 @@ suiteIndex: 0
     planned: executionSuites[suiteIndex]
     corpusBinding: planned.corpusBinding
     binding: planned.binding
-    suiteProgress: startProgress(planned.phaseName, planned.plan)
+    suiteProgress:
+        startProgress(
+            planned.phaseName,
+            planned.plan,
+            planned.logicalCaseCount
+        )
 
     caseAuthorityExecutorAsync: null
     corpusBinding.hasSlot("caseAuthorityExecutionAsync").ifTrue(() => {
@@ -295,25 +543,80 @@ suiteIndex: 0
             binding.resourceExecutionInspectAsync
     })
 
-    suiteD108: Runner.runD108WithResources(
-        planned.plan,
-        resourceCatalog,
-        corpusBinding.filesystem,
-        binding.executionAsync,
-        executionInspectAsync,
-        resourceExecutionAsync,
-        resourceExecutionInspectAsync,
-        jobs,
-        Progress.observer(suiteProgress),
-        caseAuthorityExecutorAsync
-    )
+    suiteD108: null
+    infrastructureFailed: false
 
-    infrastructureFailed:
-        Runner.d108RunInfrastructureFailed(suiteD108)
+    (Manifest.planCases(planned.plan).size() > 0).ifTrue(() => {
+        suiteD108 =
+            Runner.runD108WithResources(
+                planned.plan,
+                resourceCatalog,
+                corpusBinding.filesystem,
+                binding.executionAsync,
+                executionInspectAsync,
+                resourceExecutionAsync,
+                resourceExecutionInspectAsync,
+                jobs,
+                Progress.observer(suiteProgress),
+                caseAuthorityExecutorAsync
+            )
+
+        infrastructureFailed =
+            Runner.d108RunInfrastructureFailed(
+                suiteD108
+            )
+    })
+
+    logicalInfrastructureFailed: false
+    logicalObserver:
+        Progress.observer(
+            suiteProgress
+        )
+
+    logicalResultsBySuite[suiteIndex].each((pair) => {
+        spec: pair[0]
+        logicalResult: pair[1]
+
+        classification:
+            LogicalCaseResult.classification(
+                logicalResult
+            )
+
+        evaluation: null
+        resultInfrastructureFailed: false
+
+        (classification == "pass").ifTrue(() => {
+            evaluation =
+                Runner.resultTuple(
+                    true,
+                    null
+                )
+        })
+
+        (classification == "fail").ifTrue(() => {
+            evaluation =
+                Runner.resultTuple(
+                    false,
+                    null
+                )
+        })
+
+        (classification == "tool-error").ifTrue(() => {
+            resultInfrastructureFailed = true
+            logicalInfrastructureFailed = true
+        })
+
+        logicalObserver(
+            spec,
+            evaluation,
+            resultInfrastructureFailed
+        )
+    })
 
     Progress.finishPhase(
         suiteProgress,
-        infrastructureFailed
+        infrastructureFailed ||
+            logicalInfrastructureFailed
     )
 
     infrastructureFailed.ifTrue(() => {
@@ -336,9 +639,21 @@ suiteIndex: 0
         invocationAborted = true
     })
 
-    infrastructureFailed.ifFalse(() => {
-        healthyRun: Runner.d108RunHealthyRun(suiteD108)
-        completedRuns = Array(...completedRuns, healthyRun)
+    (
+        !infrastructureFailed &&
+        (suiteD108 !== null)
+    ).ifTrue(() => {
+        healthyRun:
+            Runner.d108RunHealthyRun(
+                suiteD108
+            )
+
+        completedRuns =
+            Array(
+                ...completedRuns,
+                healthyRun
+            )
+
         (primaryRun === null).ifTrue(() => {
             primaryRun = healthyRun
         })
@@ -347,13 +662,26 @@ suiteIndex: 0
     suiteIndex = suiteIndex + 1
 }
 
-invocationAborted.not().ifTrue(() => {
-    finalOutcome =
-        Runner.testRunOutcomeCompletedAcrossRuns(
-            primaryRun,
-            completedRuns
-        )
+(!invocationAborted).ifTrue(() => {
+    (completedRuns.size() > 0).ifTrue(() => {
+        finalOutcome =
+            Runner.testRunOutcomeCompletedAcrossRuns(
+                primaryRun,
+                completedRuns
+            )
+    })
+
+    (completedRuns.size() == 0).ifTrue(() => {
+        finalOutcome =
+            LogicalCaseMigration.neutralLegacyOutcome()
+    })
 })
+
+finalOutcome =
+    LogicalCaseMigration.mergeOutcome(
+        finalOutcome,
+        logicalResults
+    )
 
 Progress.finishInvocation(
     progressPhases,

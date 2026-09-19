@@ -15,16 +15,26 @@
  * the specific language governing rights and limitations under the License.
  */
 
-utf8First: import("std:text/UTF8")
-utf8Second: import("std:text/UTF8")
-utf16leFirst: import("std:text/UTF16LE")
-utf16leSecond: import("std:text/UTF16LE")
-utf16beFirst: import("std:text/UTF16BE")
-utf16beSecond: import("std:text/UTF16BE")
-latin1First: import("std:text/Latin1")
-latin1Second: import("std:text/Latin1")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-(utf8First === utf8Second) &&
-    (utf16leFirst === utf16leSecond) &&
-    (utf16beFirst === utf16beSecond) &&
-    (latin1First === latin1Second)
+tests: Array(
+    Test("text modules use import cache", () => {
+        utf8First: import("std:text/UTF8")
+        utf8Second: import("std:text/UTF8")
+        utf16leFirst: import("std:text/UTF16LE")
+        utf16leSecond: import("std:text/UTF16LE")
+        utf16beFirst: import("std:text/UTF16BE")
+        utf16beSecond: import("std:text/UTF16BE")
+        latin1First: import("std:text/Latin1")
+        latin1Second: import("std:text/Latin1")
+
+        Assertions.require(
+            (utf8First === utf8Second) &&
+            (utf16leFirst === utf16leSecond) &&
+            (utf16beFirst === utf16beSecond) &&
+            (latin1First === latin1Second)
+        )
+    })
+)
+tests.freeze()

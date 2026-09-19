@@ -15,13 +15,21 @@
 
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-failure: Assertions.AssertionFailure.handle(
-    () => {
-        Assertions.signals(Error, () => 42)
-        null
-    },
-    (caught) => caught
+tests: Array(
+    Test("signals missing error fails assertion", () => {
+        failure: Assertions.AssertionFailure.handle(
+            () => {
+                Assertions.signals(Error, () => 42)
+                null
+            },
+            (caught) => caught
+        )
+
+        Assertions.require(
+            failure.parent() === Assertions.AssertionFailure
+        )
+    })
 )
-
-failure.parent() === Assertions.AssertionFailure
+tests.freeze()

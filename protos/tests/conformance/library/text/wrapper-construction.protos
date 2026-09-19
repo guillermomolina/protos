@@ -15,52 +15,61 @@
  * the specific language governing rights and limitations under the License.
  */
 
-UTF8: import("std:text/UTF8")
-UTF16LE: import("std:text/UTF16LE")
-UTF16BE: import("std:text/UTF16BE")
-Latin1: import("std:text/Latin1")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-source: {
-    read: (maxBytes) => null
-    close: () => null
-}
+tests: Array(
+    Test("text wrapper construction", () => {
+        UTF8: import("std:text/UTF8")
+        UTF16LE: import("std:text/UTF16LE")
+        UTF16BE: import("std:text/UTF16BE")
+        Latin1: import("std:text/Latin1")
 
-target: {
-    write: (bytes) => null
-    close: () => null
-}
+        source: {
+            read: (maxBytes) => null
+            close: () => null
+        }
 
-r8: UTF8.reader(source)
-r16le: UTF16LE.reader(source)
-r16be: UTF16BE.reader(source)
-r1: Latin1.reader(source)
-or8: UTF8.owningReader(source)
-or16le: UTF16LE.owningReader(source)
-or16be: UTF16BE.owningReader(source)
-or1: Latin1.owningReader(source)
+        target: {
+            write: (bytes) => null
+            close: () => null
+        }
 
-w8: UTF8.writer(target)
-w16le: UTF16LE.writer(target)
-w16be: UTF16BE.writer(target)
-w1: Latin1.writer(target)
-ow8: UTF8.owningWriter(target)
-ow16le: UTF16LE.owningWriter(target)
-ow16be: UTF16BE.owningWriter(target)
-ow1: Latin1.owningWriter(target)
+        r8: UTF8.reader(source)
+        r16le: UTF16LE.reader(source)
+        r16be: UTF16BE.reader(source)
+        r1: Latin1.reader(source)
+        or8: UTF8.owningReader(source)
+        or16le: UTF16LE.owningReader(source)
+        or16be: UTF16BE.owningReader(source)
+        or1: Latin1.owningReader(source)
 
-ok: true
-(r8 === r16le).ifTrue(() => { ok = false })
-(r16le === r16be).ifTrue(() => { ok = false })
-(r16be === r1).ifTrue(() => { ok = false })
-(or8 === r8).ifTrue(() => { ok = false })
-(or16le === r16le).ifTrue(() => { ok = false })
-(or16be === r16be).ifTrue(() => { ok = false })
-(or1 === r1).ifTrue(() => { ok = false })
-(w8 === w16le).ifTrue(() => { ok = false })
-(w16le === w16be).ifTrue(() => { ok = false })
-(w16be === w1).ifTrue(() => { ok = false })
-(ow8 === w8).ifTrue(() => { ok = false })
-(ow16le === w16le).ifTrue(() => { ok = false })
-(ow16be === w16be).ifTrue(() => { ok = false })
-(ow1 === w1).ifTrue(() => { ok = false })
-ok
+        w8: UTF8.writer(target)
+        w16le: UTF16LE.writer(target)
+        w16be: UTF16BE.writer(target)
+        w1: Latin1.writer(target)
+        ow8: UTF8.owningWriter(target)
+        ow16le: UTF16LE.owningWriter(target)
+        ow16be: UTF16BE.owningWriter(target)
+        ow1: Latin1.owningWriter(target)
+
+        ok: true
+        (r8 === r16le).ifTrue(() => { ok = false })
+        (r16le === r16be).ifTrue(() => { ok = false })
+        (r16be === r1).ifTrue(() => { ok = false })
+        (or8 === r8).ifTrue(() => { ok = false })
+        (or16le === r16le).ifTrue(() => { ok = false })
+        (or16be === r16be).ifTrue(() => { ok = false })
+        (or1 === r1).ifTrue(() => { ok = false })
+        (w8 === w16le).ifTrue(() => { ok = false })
+        (w16le === w16be).ifTrue(() => { ok = false })
+        (w16be === w1).ifTrue(() => { ok = false })
+        (ow8 === w8).ifTrue(() => { ok = false })
+        (ow16le === w16le).ifTrue(() => { ok = false })
+        (ow16be === w16be).ifTrue(() => { ok = false })
+        (ow1 === w1).ifTrue(() => { ok = false })
+
+        Assertions.require(ok)
+    })
+)
+tests.freeze()

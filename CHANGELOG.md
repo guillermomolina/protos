@@ -1,3 +1,26 @@
+## 0.3.55-SNAPSHOT
+
+- Advance `TOOL009 — Local-first logical Case Test Tool integration` (GitHub
+  #600) through the first production D152-M2 ownership cutovers under ratified
+  D151, D152, D153, D155 and the LIB018 suite-native authoring model. Wire the
+  temporary mixed-ownership Test Tool orchestrator so selected `suite-native`
+  manifest entries are discovered before scheduling, projected into one flat
+  logical Case plan, executed through fresh semantic Processes with the global
+  `--jobs` capacity, and removed from incumbent TOOL002 ownership to prevent
+  double execution while unmigrated entries continue through the legacy path.
+  Migrate all 13 `library/test/` production sources and all 12 `library/text/`
+  production sources to finite frozen `tests` Arrays of named `std:test/Test`
+  values, preserving D151 exact `--file` selection and D155 terminal outcome
+  precedence across mixed ownership. Correct the migrated malformed-UTF8
+  conformance case to construct Bytes through the public UTF8 Encoding surface
+  and assert the intended `EncodingError`, eliminating a historical generic
+  `error` false positive that could succeed because direct `Bytes()` is no
+  longer a public Core binding. Admit both migrated library domains as
+  suite-native during the temporary M2 bridge. TOOL009 remains open: additional
+  production domains, legacy-owner exhaustion, M3 cleanup and the M4
+  migration-scar audit remain pending. Implementation version becomes
+  `0.3.55-SNAPSHOT`.
+
 ## 0.3.54-SNAPSHOT
 
 - Implement `I053 — Implement scalar Core String indexing and preserve grapheme

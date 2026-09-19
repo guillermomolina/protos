@@ -15,23 +15,32 @@
 
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-caughtByAssertionFailure: false
+tests: Array(
+    Test("require nonboolean is not AssertionFailure", () => {
+        caughtByAssertionFailure: false
 
-caught: Error.handle(
-    () => {
-        Assertions.AssertionFailure.handle(
+        caught: Error.handle(
             () => {
-                Assertions.require(42)
-                null
+                Assertions.AssertionFailure.handle(
+                    () => {
+                        Assertions.require(42)
+                        null
+                    },
+                    (error) => {
+                        caughtByAssertionFailure = true
+                        error
+                    }
+                )
             },
-            (error) => {
-                caughtByAssertionFailure = true
-                error
-            }
+            (error) => error
         )
-    },
-    (error) => error
-)
 
-(caught !== null) && !caughtByAssertionFailure
+        Assertions.require(
+            (caught !== null) &&
+            !caughtByAssertionFailure
+        )
+    })
+)
+tests.freeze()

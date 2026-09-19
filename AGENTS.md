@@ -3181,9 +3181,12 @@ The current M2 domain states are:
   keep test behavior inside Test bodies rather than executing it during module
   discovery, and use the temporary `suite-native` manifest marker while the M2
   bridge exists.
-- `protos/tests/conformance/library/text/` — **MIGRATION_IN_PROGRESS**. Do not
-  add a new production test in this domain or choose its ownership independently
-  until the active TOOL009 migration batch is green and this state is updated.
+- `protos/tests/conformance/library/text/` — **SUITE_NATIVE_ADMITTED**. New
+  production tests in this domain MUST use the suite-native authoring model:
+  import `std:test/Test`, expose a finite frozen `tests` Array of named Tests,
+  keep test behavior inside Test bodies rather than executing it during module
+  discovery, and use the temporary `suite-native` manifest marker while the M2
+  bridge exists.
 - Core and central language-semantics conformance domains — including
   `core-surface/` and other tests whose primary subject is Core/runtime language
   semantics — are **NOT_ADMITTED_DURING_ACTIVE_AUD009_REFACTORING**. Preserve

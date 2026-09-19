@@ -15,7 +15,18 @@
  * the specific language governing rights and limitations under the License.
  */
 
-UTF8: import("std:text/UTF8")
-bytes: Bytes()
-bytes.add(195)
-UTF8.decode(bytes)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("UTF8 rejects malformed input", () => {
+        UTF8: import("std:text/UTF8")
+        bytes: UTF8.encode("")
+        bytes.add(195)
+
+        Assertions.signals(EncodingError, () => {
+            UTF8.decode(bytes)
+        })
+    })
+)
+tests.freeze()

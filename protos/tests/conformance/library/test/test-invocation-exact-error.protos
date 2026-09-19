@@ -13,21 +13,27 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
-Expected: Error {}
-expected: Expected {}
+tests: Array(
+    Test("Test invocation propagates exact error", () => {
+        Expected: Error {}
+        expected: Expected {}
 
-value: Test("error", () => {
-    expected.signal()
-})
+        value: Test("error", () => {
+            expected.signal()
+        })
 
-caught: Error.handle(
-    () => {
-        value()
-        null
-    },
-    (error) => error
+        caught: Error.handle(
+            () => {
+                value()
+                null
+            },
+            (error) => error
+        )
+
+        Assertions.require(caught === expected)
+    })
 )
-
-caught === expected
+tests.freeze()

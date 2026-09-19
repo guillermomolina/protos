@@ -13,13 +13,21 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
-value: Test("surface", () => 42)
-names: value.slotNames()
+tests: Array(
+    Test("Test value surface", () => {
+        value: Test("surface", () => 42)
+        names: value.slotNames()
 
-(names.size() == 2) &&
-value.hasSlot("name") &&
-value.hasSlot("call") &&
-(value.name == "surface") &&
-(value() == 42)
+        Assertions.require(
+            (names.size() == 2) &&
+            value.hasSlot("name") &&
+            value.hasSlot("call") &&
+            (value.name == "surface") &&
+            (value() == 42)
+        )
+    })
+)
+tests.freeze()

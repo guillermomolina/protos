@@ -15,10 +15,19 @@
 
 
 Assertions: import("std:test/Assertions")
-names: Assertions.slotNames()
+Test: import("std:test/Test")
 
-(names.size() == 3) &&
-Assertions.hasSlot("AssertionFailure") &&
-Assertions.hasSlot("require") &&
-Assertions.hasSlot("signals") &&
-(Assertions.AssertionFailure.parent() === Error)
+tests: Array(
+    Test("Assertions public surface", () => {
+        names: Assertions.slotNames()
+
+        Assertions.require(
+            (names.size() == 3) &&
+            Assertions.hasSlot("AssertionFailure") &&
+            Assertions.hasSlot("require") &&
+            Assertions.hasSlot("signals") &&
+            (Assertions.AssertionFailure.parent() === Error)
+        )
+    })
+)
+tests.freeze()

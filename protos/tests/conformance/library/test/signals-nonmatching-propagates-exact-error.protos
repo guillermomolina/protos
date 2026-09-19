@@ -15,18 +15,24 @@
 
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Expected: Error {}
-Other: Error {}
-other: Other {}
+tests: Array(
+    Test("signals propagates nonmatching exact error", () => {
+        Expected: Error {}
+        Other: Error {}
+        other: Other {}
 
-caught: Error.handle(
-    () => {
-        Assertions.signals(Expected, () => {
-            other.signal()
-        })
-    },
-    (error) => error
+        caught: Error.handle(
+            () => {
+                Assertions.signals(Expected, () => {
+                    other.signal()
+                })
+            },
+            (error) => error
+        )
+
+        Assertions.require(caught === other)
+    })
 )
-
-caught === other
+tests.freeze()

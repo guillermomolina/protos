@@ -37,8 +37,13 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
         int resolver = source.indexOf("fileSourceResolver(filePath)");
         int filter = source.indexOf("FileSelection.selectPlan(");
         int zeroMatch = source.indexOf("(selectedSuites.size() == 0)");
-        int progress = source.indexOf(
-                "suiteProgress: startProgress(");
+        int ownershipSplit =
+                source.indexOf("LogicalCaseMigration.suiteNativeSpecs(");
+        int logicalDiscovery =
+                source.indexOf("logicalCaseDiscovery(");
+        int progressBinding = source.indexOf("suiteProgress:");
+        int progress =
+                source.indexOf("startProgress(", progressBinding);
         int scheduler = source.indexOf(
                 "Runner.runD108WithResources(");
 
@@ -46,7 +51,10 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
         assertTrue(resolver > plansFrozen);
         assertTrue(filter > resolver);
         assertTrue(zeroMatch > filter);
-        assertTrue(progress > zeroMatch);
+        assertTrue(ownershipSplit > zeroMatch);
+        assertTrue(logicalDiscovery > ownershipSplit);
+        assertTrue(progressBinding > logicalDiscovery);
+        assertTrue(progress > progressBinding);
         assertTrue(scheduler > progress);
     }
 
