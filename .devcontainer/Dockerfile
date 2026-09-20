@@ -38,3 +38,5 @@ RUN useradd --create-home --shell /bin/bash vscode \
 USER vscode
 
 RUN curl -fsSL https://claude.ai/install.sh | bash
+
+WORKDIR /workspace/protos
