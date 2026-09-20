@@ -1,147 +1,156 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
- * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
- * https://github.com/guillermomolina/protos
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the License.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-// Success returns the exact original RHS, extracts shallow references in
-// ascending prefix order and ignores extra Array elements.
-firstObject: {
-    value: 11
-}
-secondObject: {
-    value: 22
-}
-extraObject: {
-    value: 33
-}
+tests: [
+    Test("multiple slot creation", () => {
+        tool009LegacyCase: () => {
+            Assertions: import("std:test/Assertions")
 
-source: Array(firstObject, secondObject, extraObject)
-result: (first, second): source
+            // Success returns the exact original RHS, extracts shallow references in
+            // ascending prefix order and ignores extra Array elements.
+            firstObject: {
+                value: 11
+            }
+            secondObject: {
+                value: 22
+            }
+            extraObject: {
+                value: 33
+            }
 
-Assertions.require(result === source)
-Assertions.require(first === firstObject)
-Assertions.require(second === secondObject)
+            source: Array(firstObject, secondObject, extraObject)
+            result: (first, second): source
 
-// The RHS is evaluated exactly once and extraction does not dispatch the
-// user-visible Array 'at' protocol.
-calls: {
-    source: 0
-    at: 0
-}
+            Assertions.require(result === source)
+            Assertions.require(first === firstObject)
+            Assertions.require(second === secondObject)
 
-makeSource: () => {
-    calls.source = calls.source + 1
+            // The RHS is evaluated exactly once and extraction does not dispatch the
+            // user-visible Array 'at' protocol.
+            calls: {
+                source: 0
+                at: 0
+            }
 
-    value: Array(4, 5, 6)
-    value.at: (index) => {
-        calls.at = calls.at + 1
-        Error().signal()
-    }
+            makeSource: () => {
+                calls.source = calls.source + 1
 
-    value
-}
+                value: Array(4, 5, 6)
+                value.at: (index) => {
+                    calls.at = calls.at + 1
+                    Error().signal()
+                }
 
-madeResult: (madeFirst, madeSecond): makeSource()
+                value
+            }
 
-Assertions.require(calls.source == 1)
-Assertions.require(calls.at == 0)
-Assertions.require(madeFirst == 4)
-Assertions.require(madeSecond == 5)
+            madeResult: (madeFirst, madeSecond): makeSource()
 
-// Bare targets use the ordinary current slot-creation context. There is no
-// hidden Closure activation around the multiple creation itself.
-closureResult: (() => {
-    (closureFirst, closureSecond): Array(7, 8)
-    (closureFirst == 7) && (closureSecond == 8)
-})()
+            Assertions.require(calls.source == 1)
+            Assertions.require(calls.at == 0)
+            Assertions.require(madeFirst == 4)
+            Assertions.require(madeSecond == 5)
 
-Assertions.require(closureResult)
+            // Bare targets use the ordinary current slot-creation context. There is no
+            // hidden Closure activation around the multiple creation itself.
+            closureResult: (() => {
+                (closureFirst, closureSecond): Array(7, 8)
+                (closureFirst == 7) && (closureSecond == 8)
+            })()
 
-// Object bodies likewise create the slots on that object's construction context.
-objectResult: {
-    (objectFirst, objectSecond): Array(9, 10)
-}
+            Assertions.require(closureResult)
 
-Assertions.require(objectResult.objectFirst == 9)
-Assertions.require(objectResult.objectSecond == 10)
+            // Object bodies likewise create the slots on that object's construction context.
+            objectResult: {
+                (objectFirst, objectSecond): Array(9, 10)
+            }
 
-// Open, closed and frozen Array sources are equivalent for this read-only
-// fixed-prefix extraction.
-openArray: Array(11, 12)
-(openFirst, openSecond): openArray
+            Assertions.require(objectResult.objectFirst == 9)
+            Assertions.require(objectResult.objectSecond == 10)
 
-closedArray: Array(13, 14)
-closedArray.close()
-(closedFirst, closedSecond): closedArray
+            // Open, closed and frozen Array sources are equivalent for this read-only
+            // fixed-prefix extraction.
+            openArray: Array(11, 12)
+            (openFirst, openSecond): openArray
 
-frozenArray: Array(15, 16)
-frozenArray.freeze()
-(frozenFirst, frozenSecond): frozenArray
+            closedArray: Array(13, 14)
+            closedArray.close()
+            (closedFirst, closedSecond): closedArray
 
-Assertions.require(openFirst == 11)
-Assertions.require(openSecond == 12)
-Assertions.require(closedFirst == 13)
-Assertions.require(closedSecond == 14)
-Assertions.require(frozenFirst == 15)
-Assertions.require(frozenSecond == 16)
+            frozenArray: Array(15, 16)
+            frozenArray.freeze()
+            (frozenFirst, frozenSecond): frozenArray
 
-// A descendant constructed through an Array prototype owns standard indexed
-// state and therefore qualifies.
-MyArray: Array {
-    marker: true
-}
-descendantArray: MyArray(31, 32, 33)
-(descendantFirst, descendantSecond): descendantArray
+            Assertions.require(openFirst == 11)
+            Assertions.require(openSecond == 12)
+            Assertions.require(closedFirst == 13)
+            Assertions.require(closedSecond == 14)
+            Assertions.require(frozenFirst == 15)
+            Assertions.require(frozenSecond == 16)
 
-Assertions.require(descendantFirst == 31)
-Assertions.require(descendantSecond == 32)
+            // A descendant constructed through an Array prototype owns standard indexed
+            // state and therefore qualifies.
+            MyArray: Array {
+                marker: true
+            }
+            descendantArray: MyArray(31, 32, 33)
+            (descendantFirst, descendantSecond): descendantArray
 
-// An object that merely inherits Array behavior but owns no indexed Array state
-// is not an eligible source.
-ArrayLookalike: Array {}
+            Assertions.require(descendantFirst == 31)
+            Assertions.require(descendantSecond == 32)
 
-Assertions.signals(Error, () => {
-    (lookalikeFirst, lookalikeSecond): ArrayLookalike
-})
+            // An object that merely inherits Array behavior but owns no indexed Array state
+            // is not an eligible source.
+            ArrayLookalike: Array {}
 
-// Ordinary non-Array sources fail.
-Assertions.signals(Error, () => {
-    (objectSourceFirst, objectSourceSecond): {}
-})
+            Assertions.signals(Error, () => {
+                (lookalikeFirst, lookalikeSecond): ArrayLookalike
+            })
 
-// A short Array fails rather than partially binding a prefix.
-Assertions.signals(Error, () => {
-    (shortFirst, shortSecond, shortThird): Array(1, 2)
-})
+            // Ordinary non-Array sources fail.
+            Assertions.signals(Error, () => {
+                (objectSourceFirst, objectSourceSecond): {}
+            })
 
-// Multiple creation names participate in object-body composition reservation
-// exactly like ordinary bare ':' creations.
-compositionSource: {
-    reservedFirst: 99
-    contributed: 77
-}
+            // A short Array fails rather than partially binding a prefix.
+            Assertions.signals(Error, () => {
+                (shortFirst, shortSecond, shortThird): Array(1, 2)
+            })
 
-composed: {
-    ...compositionSource
-    (reservedFirst, reservedSecond): Array(41, 42)
-}
+            // Multiple creation names participate in object-body composition reservation
+            // exactly like ordinary bare ':' creations.
+            compositionSource: {
+                reservedFirst: 99
+                contributed: 77
+            }
 
-Assertions.require(composed.reservedFirst == 41)
-Assertions.require(composed.reservedSecond == 42)
-Assertions.require(composed.contributed == 77)
+            composed: {
+                ...compositionSource
+                (reservedFirst, reservedSecond): Array(41, 42)
+            }
 
-true
+            Assertions.require(composed.reservedFirst == 41)
+            Assertions.require(composed.reservedSecond == 42)
+            Assertions.require(composed.contributed == 77)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

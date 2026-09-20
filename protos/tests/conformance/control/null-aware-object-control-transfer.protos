@@ -14,86 +14,97 @@
 // the specific language governing rights and limitations under the License.
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-receiver: {}
+tests: [
+    Test("null aware object control transfer", () => {
+        tool009LegacyCase: () => {
+            Assertions: import("std:test/Assertions")
 
-// Normal callback results are returned unchanged.
-Assertions.require(null.ifNull(() => null) === null)
-Assertions.require(null.ifNull(() => true) === true)
-Assertions.require(receiver.ifNotNull((value) => false) === false)
+            receiver: {}
 
-marker: {}
-Assertions.require(null.ifNull(() => marker) === marker)
-Assertions.require(receiver.ifNotNull((value) => marker) === marker)
+            // Normal callback results are returned unchanged.
+            Assertions.require(null.ifNull(() => null) === null)
+            Assertions.require(null.ifNull(() => true) === true)
+            Assertions.require(receiver.ifNotNull((value) => false) === false)
 
-// A Future result is returned as the exact same Future. There is no implicit
-// await, adoption, wrapping, or replacement.
-firstFuture: (() => 41).future()
-secondFuture: (() => 42).future()
+            marker: {}
+            Assertions.require(null.ifNull(() => marker) === marker)
+            Assertions.require(receiver.ifNotNull((value) => marker) === marker)
 
-Assertions.require(
-    null.ifNull(() => firstFuture) === firstFuture
-)
+            // A Future result is returned as the exact same Future. There is no implicit
+            // await, adoption, wrapping, or replacement.
+            firstFuture: (() => 41).future()
+            secondFuture: (() => 42).future()
 
-Assertions.require(
-    receiver.ifNotNull((value) => secondFuture) === secondFuture
-)
+            Assertions.require(
+                null.ifNull(() => firstFuture) === firstFuture
+            )
 
-// Error identity and propagation remain ordinary on reached branches.
-ifNullFailure: Error()
-observedIfNullFailure: Assertions.signals(
-    Error,
-    () => {
-        null.ifNull(() => {
-            ifNullFailure.signal()
-        })
-    }
-)
-Assertions.require(observedIfNullFailure === ifNullFailure)
+            Assertions.require(
+                receiver.ifNotNull((value) => secondFuture) === secondFuture
+            )
 
-ifNotNullFailure: Error()
-observedIfNotNullFailure: Assertions.signals(
-    Error,
-    () => {
-        receiver.ifNotNull((value) => {
-            Assertions.require(value === receiver)
-            ifNotNullFailure.signal()
-        })
-    }
-)
-Assertions.require(observedIfNotNullFailure === ifNotNullFailure)
+            // Error identity and propagation remain ordinary on reached branches.
+            ifNullFailure: Error()
+            observedIfNullFailure: Assertions.signals(
+                Error,
+                () => {
+                    null.ifNull(() => {
+                        ifNullFailure.signal()
+                    })
+                }
+            )
+            Assertions.require(observedIfNullFailure === ifNullFailure)
 
-// Non-local return propagates unchanged through a reached ifNull callback.
-ifNullReturnMarker: {}
-ifNullAfter: 0
+            ifNotNullFailure: Error()
+            observedIfNotNullFailure: Assertions.signals(
+                Error,
+                () => {
+                    receiver.ifNotNull((value) => {
+                        Assertions.require(value === receiver)
+                        ifNotNullFailure.signal()
+                    })
+                }
+            )
+            Assertions.require(observedIfNotNullFailure === ifNotNullFailure)
 
-ifNullOuter: () => {
-    null.ifNull(() => {
-        ^ifNullReturnMarker
+            // Non-local return propagates unchanged through a reached ifNull callback.
+            ifNullReturnMarker: {}
+            ifNullAfter: 0
+
+            ifNullOuter: () => {
+                null.ifNull(() => {
+                    ^ifNullReturnMarker
+                })
+
+                ifNullAfter = ifNullAfter + 1
+                null
+            }
+
+            Assertions.require(ifNullOuter() === ifNullReturnMarker)
+            Assertions.require(ifNullAfter == 0)
+
+            // Non-local return propagates unchanged through a reached ifNotNull callback.
+            ifNotNullReturnMarker: {}
+            ifNotNullAfter: 0
+
+            ifNotNullOuter: () => {
+                receiver.ifNotNull((value) => {
+                    Assertions.require(value === receiver)
+                    ^ifNotNullReturnMarker
+                })
+
+                ifNotNullAfter = ifNotNullAfter + 1
+                null
+            }
+
+            Assertions.require(ifNotNullOuter() === ifNotNullReturnMarker)
+            Assertions.require(ifNotNullAfter == 0)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase() === true)
     })
-
-    ifNullAfter = ifNullAfter + 1
-    null
-}
-
-Assertions.require(ifNullOuter() === ifNullReturnMarker)
-Assertions.require(ifNullAfter == 0)
-
-// Non-local return propagates unchanged through a reached ifNotNull callback.
-ifNotNullReturnMarker: {}
-ifNotNullAfter: 0
-
-ifNotNullOuter: () => {
-    receiver.ifNotNull((value) => {
-        Assertions.require(value === receiver)
-        ^ifNotNullReturnMarker
-    })
-
-    ifNotNullAfter = ifNotNullAfter + 1
-    null
-}
-
-Assertions.require(ifNotNullOuter() === ifNotNullReturnMarker)
-Assertions.require(ifNotNullAfter == 0)
-
-true
+]
+tests.freeze()

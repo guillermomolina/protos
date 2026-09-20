@@ -14,118 +14,129 @@
 // the specific language governing rights and limitations under the License.
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-// Canonical null selects ifNull and invokes its callback exactly once with
-// zero supplied arguments.
-ifNullCalls: 0
-ifNullMarker: {}
-ifNullResult: null.ifNull(() => {
-    ifNullCalls = ifNullCalls + 1
-    ifNullMarker
-})
-Assertions.require(ifNullCalls == 1)
-Assertions.require(ifNullResult === ifNullMarker)
+tests: [
+    Test("null aware object protocol", () => {
+        tool009LegacyCase: () => {
+            Assertions: import("std:test/Assertions")
 
-// Non-null ifNull neither validates nor invokes an unreachable callback.
-receiver: {}
-Assertions.require(receiver.ifNull(42) === receiver)
+            // Canonical null selects ifNull and invokes its callback exactly once with
+            // zero supplied arguments.
+            ifNullCalls: 0
+            ifNullMarker: {}
+            ifNullResult: null.ifNull(() => {
+                ifNullCalls = ifNullCalls + 1
+                ifNullMarker
+            })
+            Assertions.require(ifNullCalls == 1)
+            Assertions.require(ifNullResult === ifNullMarker)
 
-// Canonical null ifNotNull neither validates nor invokes an unreachable callback.
-Assertions.require(null.ifNotNull(42) === null)
+            // Non-null ifNull neither validates nor invokes an unreachable callback.
+            receiver: {}
+            Assertions.require(receiver.ifNull(42) === receiver)
 
-// Non-null ifNotNull invokes through the ordinary polymorphic call protocol,
-// exactly once, with the exact original receiver.
-ifNotNullCalls: 0
-received: null
+            // Canonical null ifNotNull neither validates nor invokes an unreachable callback.
+            Assertions.require(null.ifNotNull(42) === null)
 
-callable: {
-    call: (value) => {
-        ifNotNullCalls = ifNotNullCalls + 1
-        received = value
-        ifNullMarker
-    }
-}
+            // Non-null ifNotNull invokes through the ordinary polymorphic call protocol,
+            // exactly once, with the exact original receiver.
+            ifNotNullCalls: 0
+            received: null
 
-Assertions.require(receiver.ifNotNull(callable) === ifNullMarker)
-Assertions.require(ifNotNullCalls == 1)
-Assertions.require(received === receiver)
+            callable: {
+                call: (value) => {
+                    ifNotNullCalls = ifNotNullCalls + 1
+                    received = value
+                    ifNullMarker
+                }
+            }
 
-// Callback-producing argument expressions remain eager even when the callback
-// body is unreachable.
-argumentEvaluations: 0
+            Assertions.require(receiver.ifNotNull(callable) === ifNullMarker)
+            Assertions.require(ifNotNullCalls == 1)
+            Assertions.require(received === receiver)
 
-makeNonInvokable: () => {
-    argumentEvaluations = argumentEvaluations + 1
-    42
-}
+            // Callback-producing argument expressions remain eager even when the callback
+            // body is unreachable.
+            argumentEvaluations: 0
 
-Assertions.require(receiver.ifNull(makeNonInvokable()) === receiver)
-Assertions.require(argumentEvaluations == 1)
+            makeNonInvokable: () => {
+                argumentEvaluations = argumentEvaluations + 1
+                42
+            }
 
-Assertions.require(null.ifNotNull(makeNonInvokable()) === null)
-Assertions.require(argumentEvaluations == 2)
+            Assertions.require(receiver.ifNull(makeNonInvokable()) === receiver)
+            Assertions.require(argumentEvaluations == 1)
 
-// A non-invokable callback signals only when its branch is actually reached.
-Assertions.signals(Error, () => {
-    null.ifNull(42)
-})
+            Assertions.require(null.ifNotNull(makeNonInvokable()) === null)
+            Assertions.require(argumentEvaluations == 2)
 
-Assertions.signals(Error, () => {
-    receiver.ifNotNull(42)
-})
+            // A non-invokable callback signals only when its branch is actually reached.
+            Assertions.signals(Error, () => {
+                null.ifNull(42)
+            })
 
-// Exact canonical null identity only. Delegating to null does not confer null
-// identity and therefore follows the non-null branch.
-NullDelegate: (null) {}
+            Assertions.signals(Error, () => {
+                receiver.ifNotNull(42)
+            })
 
-nullDelegateCalls: 0
-nullDelegateResult: NullDelegate.ifNotNull((value) => {
-    nullDelegateCalls = nullDelegateCalls + 1
-    Assertions.require(value === NullDelegate)
-    value
-})
+            // Exact canonical null identity only. Delegating to null does not confer null
+            // identity and therefore follows the non-null branch.
+            NullDelegate: (null) {}
 
-Assertions.require(nullDelegateCalls == 1)
-Assertions.require(nullDelegateResult === NullDelegate)
-Assertions.require(NullDelegate.ifNull(42) === NullDelegate)
+            nullDelegateCalls: 0
+            nullDelegateResult: NullDelegate.ifNotNull((value) => {
+                nullDelegateCalls = nullDelegateCalls + 1
+                Assertions.require(value === NullDelegate)
+                value
+            })
 
-// No truthiness: ordinary false-y-looking values are all non-null.
-Assertions.require(false.ifNull(42) === false)
-Assertions.require(0.ifNull(42) === 0)
-Assertions.require("".ifNull(42) == "")
-emptyArray: Array()
-Assertions.require(emptyArray.ifNull(42) === emptyArray)
+            Assertions.require(nullDelegateCalls == 1)
+            Assertions.require(nullDelegateResult === NullDelegate)
+            Assertions.require(NullDelegate.ifNull(42) === NullDelegate)
 
-// Exact public arity remains one supplied argument.
-Assertions.signals(Error, () => { null.ifNull() })
-Assertions.signals(Error, () => { null.ifNull(1, 2) })
-Assertions.signals(Error, () => { null.ifNotNull() })
-Assertions.signals(Error, () => { null.ifNotNull(1, 2) })
+            // No truthiness: ordinary false-y-looking values are all non-null.
+            Assertions.require(false.ifNull(42) === false)
+            Assertions.require(0.ifNull(42) === 0)
+            Assertions.require("".ifNull(42) == "")
+            emptyArray: Array()
+            Assertions.require(emptyArray.ifNull(42) === emptyArray)
 
-// The protocol is ordinary Object behavior and remains reflectively visible.
-Assertions.require(Object.hasSlot("ifNull") === true)
-Assertions.require(Object.hasSlot("ifNotNull") === true)
+            // Exact public arity remains one supplied argument.
+            Assertions.signals(Error, () => { null.ifNull() })
+            Assertions.signals(Error, () => { null.ifNull(1, 2) })
+            Assertions.signals(Error, () => { null.ifNotNull() })
+            Assertions.signals(Error, () => { null.ifNotNull(1, 2) })
 
-// Failed lookup remains an ordinary Error; D144 does not convert it to null.
-Assertions.signals(Error, () => {
-    receiver.thisMemberDoesNotExist
-})
+            // The protocol is ordinary Object behavior and remains reflectively visible.
+            Assertions.require(Object.hasSlot("ifNull") === true)
+            Assertions.require(Object.hasSlot("ifNotNull") === true)
 
-// Custom overrides remain ordinary message behavior.
-customIfNullMarker: {}
-customIfNotNullMarker: {}
+            // Failed lookup remains an ordinary Error; D144 does not convert it to null.
+            Assertions.signals(Error, () => {
+                receiver.thisMemberDoesNotExist
+            })
 
-Custom: {
-    ifNull: (block) => {
-        customIfNullMarker
-    }
+            // Custom overrides remain ordinary message behavior.
+            customIfNullMarker: {}
+            customIfNotNullMarker: {}
 
-    ifNotNull: (block) => {
-        customIfNotNullMarker
-    }
-}
+            Custom: {
+                ifNull: (block) => {
+                    customIfNullMarker
+                }
 
-Assertions.require(Custom.ifNull(42) === customIfNullMarker)
-Assertions.require(Custom.ifNotNull(42) === customIfNotNullMarker)
+                ifNotNull: (block) => {
+                    customIfNotNullMarker
+                }
+            }
 
-true
+            Assertions.require(Custom.ifNull(42) === customIfNullMarker)
+            Assertions.require(Custom.ifNotNull(42) === customIfNotNullMarker)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()
