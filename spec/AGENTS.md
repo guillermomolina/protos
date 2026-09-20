@@ -13,6 +13,13 @@ implementation and realistic pressure.
 When a language-design question is not already resolved normatively, do not jump
 directly to syntax or implementation.
 
+Substantive semantic/architectural questions are governed by the canonical
+decision process in `AGENTS.work/DESIGN.md` (GITHUB010), including its
+research-breadth, scoring, and approval-gate requirements. The research
+guidance below applies to already-tracked, non-substantive specification
+refinements; for substantive questions it supplements, and must not replace,
+the GITHUB010 process.
+
 Research how comparable languages, runtimes, and language designs solve the same
 or closely related problem. Prefer primary and authoritative material:
 language specifications, design documents, reference implementations, runtime
@@ -47,20 +54,9 @@ Do not answer only with the first technically workable solution.
 
 ## User design-closure authority
 
-Research and recommendation are not design approval. The user/project owner
-decides when the evidence is sufficient to close a substantive language-design
-question and which recommended semantics, if any, become normative Protos.
-
-An agent MUST NOT convert its own research conclusion into a normative decision
-merely because it believes the investigation is complete, one alternative now
-dominates, or no unresolved ambiguity remains in the agent's analysis. Even a
-recommendation of "only one coherent option survived" remains a recommendation
-until the user explicitly approves it or has explicitly delegated that bounded
-decision.
-
-Before a new or reopened design question may cause any of the following, present
-the researched alternatives, trade-offs, recommendation, consequences, and
-remaining deferred choices to the user and obtain explicit approval:
+The canonical design approval gate and decision process are in
+`AGENTS.work/DESIGN.md`. Within this tree the gate applies before any of the
+following:
 
 - new or changed normative semantics;
 - a `Dxxx` or equivalent design resolution becoming selected/closed;
@@ -69,15 +65,11 @@ remaining deferred choices to the user and obtain explicit approval:
 - downstream implementation proceeding on a substantive semantic/architectural
   choice that was not previously approved.
 
-A broad implementation request does not waive this checkpoint. `Implement Ixxx`,
-`continue`, permission to subdivide work, or permission to publish validated
-implementation slices authorizes work under already-approved semantics; it does
-not authorize the agent to settle newly discovered language design on the user's
-behalf.
-
-Existing normative rules that are not being reopened remain authoritative and do
-not require ceremonial re-approval. The gate applies to genuinely new,
-unresolved, or explicitly reopened design choices.
+A broad implementation request does not waive this checkpoint. Research and
+recommendation are not design approval. Existing normative rules that are not
+being reopened remain authoritative and do not require ceremonial re-approval;
+the gate applies to genuinely new, unresolved, or explicitly reopened design
+choices.
 
 ## Design by attempted falsification
 
@@ -382,6 +374,7 @@ specification documents merely to synchronize metadata.
 
 ## Editing discipline
 
-Follow the root rules for document revision, changelog updates, minimal edits,
-format preservation, and cross-document consistency. A semantic change must be
-reflected in every normative document whose responsibility it affects.
+Follow the documentation editing rules in `AGENTS.work/DOCUMENTATION.md`
+(minimal edits, format preservation) and the revision discipline above for
+changelog updates. A semantic change must be reflected in every normative
+document whose responsibility it affects.
