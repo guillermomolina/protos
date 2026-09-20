@@ -355,6 +355,8 @@ f()
 The closure returned by `make` still refers to the completed invocation of `make`. Therefore executing `^42` later signals `InvalidReturn`.
 
 The runtime must not reinterpret that operation as a local return from `f`.
+
+A captured return-home activation is reachable only from the Task (see `../concurrency/FUTURES_AND_TASKS.md`) that owns it. A `^` whose captured return home belongs to a different Task than the one currently executing the `^` — for example, a closure lexically captured inside one invocation but later invoked from within a `.future()`/`.parallel()`-spawned Task's own closure — is unreachable from that executing Task exactly as an already-completed home is, regardless of whether the owning Task itself has completed. Executing `^` in that situation signals `InvalidReturn`; the runtime must not attempt to deliver the value across the Task boundary or otherwise resume the owning Task's suspended control flow.
 ## 18. Trailing Closures
 
 Trailing-closure syntax, same-line attachment, newline/comment behavior, and its

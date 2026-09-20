@@ -18,12 +18,13 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
-import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.Objects;
 
 /**
@@ -53,6 +54,7 @@ final class ProtosBytecodeTaskExecution {
         activation.attachTask(task);
         runSegment(
                 task,
+                activation,
                 () -> target.call(activation));
     }
 
@@ -87,6 +89,7 @@ final class ProtosBytecodeTaskExecution {
 
         runSegment(
                 task,
+                prepared.activation(),
                 () -> target.call(
                         prepared.activation(),
                         prepared));
@@ -134,9 +137,16 @@ final class ProtosBytecodeTaskExecution {
             } catch (ProtosTaskCancellationException cancelled) {
                 prepared.complete();
                 finishCancellationUnwind(task);
-            } catch (ControlFlowException escaping) {
+            } catch (ProtosNonLocalReturnException escaped) {
+                /*
+                 * D177: the captured return home is not reachable from this Task's own
+                 * activation chain (it belongs to a different, currently-suspended Task).
+                 * Treat it exactly like a completed home per CALLABLES.md §14: signal
+                 * InvalidReturn as an ordinary Task failure instead of letting the raw
+                 * escape propagate uncaught.
+                 */
                 prepared.complete();
-                throw escaping;
+                task.fail(ProtosCoreErrors.newInvalidReturn(prepared.activation()));
             }
         } catch (ProtosTaskCancellationException cancelled) {
             prepared.complete();
@@ -201,10 +211,12 @@ final class ProtosBytecodeTaskExecution {
 
     private static void resumePublished(
             ProtosTask task,
+            ProtosActivation activation,
             ContinuationResult continuation,
             ProtosTask.WaitDependency dependency) {
         runSegment(
                 task,
+                activation,
                 () -> {
                     if (task.cancellationRequested()) {
                         return continuation.continueWith(
@@ -223,21 +235,34 @@ final class ProtosBytecodeTaskExecution {
 
     private static void runSegment(
             ProtosTask task,
+            ProtosActivation activation,
             java.util.function.Supplier<Object> segment) {
         try {
             Object outcome =
                     Objects.requireNonNull(
                             segment.get(),
                             "Bytecode C-prime segment returned null");
-            driveOutcome(task, outcome);
+            driveOutcome(task, activation, outcome);
         } catch (ProtosBytecodeControlTransferException bridged) {
             if (bridged.transfer() instanceof ProtosTaskCancellationException) {
                 finishCancellationUnwind(task);
                 return;
             }
+            if (bridged.transfer() instanceof ProtosNonLocalReturnException) {
+                /*
+                 * D177: the captured return home is not reachable from this Task's own
+                 * activation chain. Treat it exactly like a completed home per
+                 * CALLABLES.md §14: signal InvalidReturn as an ordinary Task failure
+                 * instead of letting the raw escape propagate uncaught.
+                 */
+                task.fail(ProtosCoreErrors.newInvalidReturn(activation));
+                return;
+            }
             throw bridged;
         } catch (ProtosTaskCancellationException cancelled) {
             finishCancellationUnwind(task);
+        } catch (ProtosNonLocalReturnException escaped) {
+            task.fail(ProtosCoreErrors.newInvalidReturn(activation));
         } catch (ProtosSignalException signalled) {
             task.fail(signalled.error());
         }
@@ -245,6 +270,7 @@ final class ProtosBytecodeTaskExecution {
 
     private static void driveOutcome(
             ProtosTask task,
+            ProtosActivation activation,
             Object initialOutcome) {
         Object outcome = initialOutcome;
         while (true) {
@@ -288,6 +314,7 @@ final class ProtosBytecodeTaskExecution {
                     resumedTask ->
                             resumePublished(
                                     resumedTask,
+                                    activation,
                                     continuation,
                                     dependency));
             return;

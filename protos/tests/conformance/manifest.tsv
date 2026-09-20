@@ -473,6 +473,7 @@ call/object-init-wrong-arity-error.protos	suite-native	-
 call/plain-closure-call.protos	suite-native	-
 regression/non-local-return-from-default.protos	integer	42
 regression/escaped-closure-fresh-invalid-return.protos	closure-error-parent-fresh	InvalidReturn
+regression/escaped-closure-cross-task-invalid-return.protos	suite-native	-
 call/message-send-spread-left-to-right.protos	suite-native	-
 call/closure-local-call-override.protos	suite-native	-
 call/extracted-method-freshness-and-state.protos	suite-native	-
@@ -642,12 +643,12 @@ control/ensure-cleanup-suspension-exact-once.protos	suite-native	-
 control/ensure-cleanup-suspension-exact-result-identity.protos	suite-native	-
 control/ensure-error-cleanup-suspension-exact-error-identity.protos	suite-native	-
 control/ensure-nested-cleanup-suspension-lifo.protos	suite-native	-
-control/ensure-return-cleanup-suspension-preserves-return.protos	future-integer	1142
+control/ensure-return-cleanup-suspension-preserves-return.protos	suite-native	-
 control/ensure-selected-handler-inactive-across-cleanup-suspension.protos	suite-native	-
 future/root-activation-preserves-local-binding-across-suspension.protos	future-integer	42
 future/root-activation-preserves-return-home-across-suspension.protos	future-integer	42
 control/ensure-cancellation-cleanup-error-supersedes.protos	suite-native	-
-control/ensure-cancellation-cleanup-return-supersedes.protos	future-integer	42
+control/ensure-cancellation-cleanup-return-supersedes.protos	suite-native	-
 control/ensure-cancellation-nested-lifo.protos	suite-native	-
 control/ensure-cancellation-sync-cleanup-runs.protos	suite-native	-
 control/ensure-cancellation-cleanup-created-child-awaited.protos	suite-native	-
@@ -657,7 +658,7 @@ control/ensure-cancellation-suspended-cleanup-error-supersedes.protos	suite-nati
 control/ensure-cancellation-suspended-cleanup-shields-request.protos	suite-native	-
 control/ensure-cancellation-cleanup-error-child-structured-completion.protos	suite-native	-
 control/ensure-cancellation-cleanup-error-handler-recovers.protos	suite-native	-
-control/ensure-cancellation-cleanup-return-child-structured-completion.protos	future-integer	142
+control/ensure-cancellation-cleanup-return-child-structured-completion.protos	suite-native	-
 control/ensure-selected-error-cleanup-cancellation-supersedes-handler.protos	suite-native	-
 error/handle-parent-task-does-not-flow-into-child-future.protos	future-integer	1
 reflection/parent-ordinary.protos	boolean	true

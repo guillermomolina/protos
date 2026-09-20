@@ -14,6 +14,21 @@ exact per-file history; normative documents do not carry independent
 merely to synchronize revision metadata.
 
 
+## [0.1.431] - 2026-09-20
+
+### D177 — Non-local return target reachability across a Task/Future boundary
+- Generalizes `spec/semantics/CALLABLES.md` §14 ("Return from Escaped
+  Closures"): a captured return-home activation is reachable only from the
+  Task that owns it. A `^` whose captured return home belongs to a different
+  Task than the one currently executing the `^` is unreachable exactly as an
+  already-completed home is, regardless of whether the owning Task itself has
+  completed, and signals `InvalidReturn`.
+- Does not reopen the already-ratified D162 fixed fatal-failure authority
+  (non-root fatal failure terminates that Actor incarnation; RootActor fatal
+  failure terminates the Process); this revision only settles what an
+  escaping `^` itself signals before that already-fixed consequence applies.
+- Normative owner changed by this revision: `spec/semantics/CALLABLES.md`.
+
 ## [0.1.430] - 2026-09-19
 
 ### D156 / I052 — Remove Core fixed-width integer families

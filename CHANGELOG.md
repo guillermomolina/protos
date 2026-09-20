@@ -1,3 +1,22 @@
+## 0.3.58-SNAPSHOT
+
+- Fix `BUG009` — a self-cancelled Task's suspended `.ensure()` cleanup that
+  superseded the cancellation via a non-local return (`^`) whose captured
+  return home belonged to a different, currently-suspended Task escaped
+  uncaught instead of being recognized, permanently stalling that Task and
+  deadlocking anything awaiting its Future. Under ratified `D177`,
+  `ProtosBytecodeTaskExecution`'s Task drivers (`runSegment`,
+  `runPreparedSegment`) now recognize a non-local return whose captured home
+  is unreachable from the executing Task and fail that Task with
+  `InvalidReturn`, matching the already-specified completed-home case in
+  `spec/semantics/CALLABLES.md` §14. Adds a dedicated regression
+  (`regression/escaped-closure-cross-task-invalid-return.protos`) and
+  corrects the TOOL009 suite-native migration of the three previously-blocked
+  `control/` conformance tests so their `.ensure()`-cleanup closures keep
+  their original same-Task return home instead of unintentionally capturing
+  the enclosing Test body's.
+  Implementation version becomes `0.3.58-SNAPSHOT`.
+
 ## 0.3.57-SNAPSHOT
 
 - Advance `TOOL009 — Local-first logical Case Test Tool integration` (GitHub

@@ -16,43 +16,28 @@
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
-outer: (targetFuture, bodyDependency, setChildRan) => {
-    (() => {
-        targetFuture.cancel()
-        bodyDependency.value()
-        41
-    }).ensure(() => {
-        child: (() => {
-            setChildRan(1)
-            9
-        }).future()
-        ^42
-    })
-
-    0
-}
-
 tests: [
-    Test("ensure cancellation cleanup return child structured completion", () => {
-        childRan: 0
+    Test("non-local return escaping to a different Task signals InvalidReturn", () => {
+        Assertions.signals(InvalidReturn, () => {
+            outer: (targetFuture, dependency) => {
+                (() => {
+                    targetFuture.cancel()
+                    dependency.value()
+                    41
+                }).ensure(() => {
+                    ^42
+                })
 
-        setChildRan: (value) => {
-            childRan = value
-            null
-        }
+                0
+            }
 
-        producer: (() => {
-            bodyDependency: Future.all().then((values) => 7).detach()
-            outer(producer, bodyDependency, setChildRan)
-        }).future()
+            future: (() => {
+                dependency: Future.all().then((values) => 7).detach()
+                outer(future, dependency)
+            }).future()
 
-        observer: (() => {
-            value: producer.value()
-            childRan * 100 + value
-        }).future()
-
-        futureValue: observer.value()
-        Assertions.require(futureValue === 142)
+            future.value()
+        })
     })
 ]
 tests.freeze()
