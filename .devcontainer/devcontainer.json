@@ -19,6 +19,7 @@
   "runArgs": [
     "--userns=host"
   ],
+  "initializeCommand": "mkdir -p \"${localEnv:HOME}/.claude\"",
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
   ]
