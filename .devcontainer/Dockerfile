@@ -13,6 +13,8 @@ RUN microdnf install -y \
         xz \
         maven \
         procps \
+        time \
+        sudo \
     && microdnf clean all
 
 ARG GH_VERSION=2.100.0
@@ -29,6 +31,10 @@ RUN curl --fail --location --silent --show-error \
     && gh --version \
     && rm /tmp/gh.tar.gz
 
-RUN useradd --create-home --shell /bin/bash vscode
+RUN useradd --create-home --shell /bin/bash vscode \
+    && echo "vscode ALL=(root) NOPASSWD:ALL" > /etc/sudoers.d/vscode \
+    && chmod 0440 /etc/sudoers.d/vscode
 
 USER vscode
+
+RUN curl -fsSL https://claude.ai/install.sh | bash

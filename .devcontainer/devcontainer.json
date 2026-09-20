@@ -11,14 +11,15 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "vscjava.vscode-java-pack"
-      ],
-      "settings": {
-        // "java.jdt.ls.java.home": "/opt/graalvm-community-java25"
-      }
+        "vscjava.vscode-java-pack",
+        "anthropic.claude-code"
+      ]
     }
   },
   "runArgs": [
     "--userns=host"
+  ],
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/home/vscode/.claude,type=bind,consistency=cached"
   ]
 }
