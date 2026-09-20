@@ -14,6 +14,15 @@ drivers intentionally retain their recursive repetition structure. A benchmark
 runtime may provision a larger call stack when required, but that runtime option
 must be fixed and recorded as part of the retained run identity.
 
+`bin/protos` (BUG008) satisfies this requirement by always dispatching guest
+execution on a dedicated carrier thread with a fixed 64 MiB call stack,
+regardless of the ambient stack size of whichever thread called into the CLI.
+This keeps the corpus's checked-in recursive repetition counts, including the
+10,000-deep micro/runtime drivers, executable on the reference runtime without
+depending on host JVM/OS stack defaults. A companion or alternative runtime that
+reports comparable measurements must record its own equivalent fixed call-stack
+provisioning as part of its retained run identity.
+
 The first corpus intentionally uses only mechanisms already defined clearly enough by the current normative specifications. Algorithm variants that require a standardized growable sequence or additional iteration protocols should be added only after those contracts are defined; benchmark code must not invent missing library semantics.
 
 Initial families:

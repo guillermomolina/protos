@@ -46,12 +46,50 @@ public final class ProtosCli {
     private final ProtosValueRenderer renderer = new ProtosValueRenderer();
     private final ProtosDiagnosticInspector diagnosticInspector = new ProtosDiagnosticInspector();
 
+    /**
+     * BUG008: a Protos-level Closure call composes through two nested Bytecode
+     * CallTargets (the PLAT026 truthful semantic-root shell wrapping the untagged
+     * execution helper), so host stack consumption per guest recursion level is
+     * higher than a single-CallTarget interpreter would need. Whatever stack size
+     * happens to be available on whichever thread calls {@link #run} (the JVM
+     * main thread's platform-dependent default, a test runner's worker thread,
+     * an embedder's calling thread, ...) is host configuration, not a Protos
+     * language guarantee, so guest command dispatch always runs on a dedicated
+     * carrier thread with an explicit, generous stack budget instead of depending
+     * on that ambient default. The exact value is fixed rather than tunable so it
+     * remains a stable, recorded part of this reference runtime's execution
+     * identity; see {@code protos/benchmarks/README.md}. Every other host thread
+     * that can independently drive guest Protos execution, such as this package's
+     * {@link ProtosTestToolAsyncExecutionScope} per-Case carriers, reuses this
+     * same budget rather than depending on an unpatched default.
+     */
+    static final long GUEST_CALL_STACK_SIZE_BYTES = 64L * 1024 * 1024;
+
     public static void main(String[] args) {
         int code = new ProtosCli().run(args, System.in, System.out, System.err);
         if (code != 0) System.exit(code);
     }
 
     public int run(String[] args, InputStream in, PrintStream out, PrintStream err) {
+        int[] exitCode = {70};
+        Thread carrier =
+                new Thread(
+                        null,
+                        () -> exitCode[0] = dispatchCommand(args, in, out, err),
+                        "protos-cli-guest",
+                        GUEST_CALL_STACK_SIZE_BYTES);
+        carrier.start();
+        try {
+            carrier.join();
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(
+                    "protos CLI execution was interrupted", interrupted);
+        }
+        return exitCode[0];
+    }
+
+    private int dispatchCommand(String[] args, InputStream in, PrintStream out, PrintStream err) {
         try {
             if (args.length == 0) return repl(in, out, err);
             if (args.length == 1 && (args[0].equals("--help") || args[0].equals("-h"))) {

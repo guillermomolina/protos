@@ -262,6 +262,10 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             Thread carrier =
                     Thread.ofPlatform()
                             .name("protos-test-exact-" + nextCarrierId.incrementAndGet())
+                            // BUG008: this carrier can independently drive guest Protos
+                            // execution (a Case's isolated Process), so it needs the same
+                            // stack budget as ProtosCli's own guest dispatch carrier.
+                            .stackSize(ProtosCli.GUEST_CALL_STACK_SIZE_BYTES)
                             .unstarted(
                                     () -> {
                                         try {

@@ -474,6 +474,7 @@ call/plain-closure-call.protos	suite-native	-
 regression/non-local-return-from-default.protos	integer	42
 regression/escaped-closure-fresh-invalid-return.protos	closure-error-parent-fresh	InvalidReturn
 regression/escaped-closure-cross-task-invalid-return.protos	suite-native	-
+regression/deep-recursive-closure-call-stack-capacity.protos	suite-native	-
 call/message-send-spread-left-to-right.protos	suite-native	-
 call/closure-local-call-override.protos	suite-native	-
 call/extracted-method-freshness-and-state.protos	suite-native	-

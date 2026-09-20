@@ -1,3 +1,47 @@
+## 0.3.59-SNAPSHOT
+
+- Fix `BUG008` — the canonical recursive benchmark corpus (for example
+  `protos/benchmarks/micro/closure-call.protos` at its checked-in 10,000-deep
+  `repeat` recursion) overflowed the host call stack with
+  `java.lang.StackOverflowError` well short of its documented iteration count.
+  Root cause: a Protos-level Closure call composes through two nested Bytecode
+  `CallTarget` invocations (the ratified `PLAT026` truthful semantic-root shell
+  wrapping the untagged execution helper), so host stack consumption per guest
+  recursion level is higher than a single-`CallTarget` interpreter would need,
+  and no part of the implementation provisioned a call stack sized for that
+  cost. This is a host-resource-budget gap, not a `PLAT026` semantic regression:
+  the existing two-root architecture and its RootTag truthfulness rationale are
+  unchanged. `ProtosCli.run` now dispatches every CLI command (file/REPL/`-e`
+  evaluation, `run`, `debug`, `package`, `test`) on a dedicated carrier thread
+  with a fixed 64 MiB stack instead of depending on whatever stack size the
+  calling thread happened to have, matching `protos/benchmarks/README.md`'s
+  existing allowance for a benchmark runtime to "provision a larger call stack
+  when required" as long as that runtime option is fixed and recorded; the
+  README now records the exact provisioned value. All seven `micro/` workloads,
+  both `runtime/` dispatch workloads and the affected `collections/` workloads
+  execute successfully at their checked-in iteration counts with unchanged
+  documented results. Adds a dedicated regression
+  (`regression/deep-recursive-closure-call-stack-capacity.protos`) exercising
+  the same 10,000-deep recursive self-call shape as the benchmark corpus;
+  writing that regression as ordinary suite-native Test Tool corpus content
+  exposed a second, independently reachable instance of the identical gap:
+  `ProtosTestToolAsyncExecutionScope$PlatformThreadPerTaskSubmission` gives
+  each Test Tool Case its own isolated Process on a fresh
+  `protos-test-exact-N` platform Thread that can likewise drive arbitrarily
+  deep guest recursion, and that carrier previously kept the JVM's unpatched
+  default stack size. Left unfixed, the same 10,000-deep recursion running
+  inside that isolated per-Case Process did not merely crash — the resulting
+  `StackOverflowError` during Actor/Task unwinding left the Process's
+  lifecycle unable to reach `TERMINATED`, so `bin/protos test` hung
+  indefinitely instead of failing the Case. `PlatformThreadPerTaskSubmission`
+  now provisions the same fixed 64 MiB budget for its carriers. Diagnosing
+  and hardening that unwind-time hang-on-`StackOverflowError` path itself
+  (independent of stack provisioning) is not in scope here and is not
+  addressed by this fix.
+  No Protos specification, observable language semantics, or `PLAT026`
+  architecture change.
+  Implementation version becomes `0.3.59-SNAPSHOT`.
+
 ## 0.3.58-SNAPSHOT
 
 - Fix `BUG009` — a self-cancelled Task's suspended `.ensure()` cleanup that
