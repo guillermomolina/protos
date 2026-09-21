@@ -232,7 +232,7 @@ admissible only when its invocation belongs to the exact dynamic execution exten
 already authorized as Actor termination cleanup. Actor state `TERMINATING` alone
 does not authorize it. The authority follows nested calls and suspension/resume
 of that same cleanup flow, but does not transfer merely by creating another
-Task, Future producer, mailbox turn, detached job or unrelated callback.
+Task, Future producer, mailbox turn, or unrelated callback.
 
 Once admitted, the close is an ordinary lifecycle close with the existing
 commitment, follower and failure rules. If required release needs guest

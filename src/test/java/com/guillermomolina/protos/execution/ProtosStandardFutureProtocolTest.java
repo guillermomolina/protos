@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -39,6 +40,8 @@ import java.nio.file.Path;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 class ProtosStandardFutureProtocolTest {
     private static ProtosPrelude core() throws Exception {
@@ -77,7 +80,7 @@ class ProtosStandardFutureProtocolTest {
                                 prelude,
                                 activation,
                                 "future: (() => {\n"
-                                        + "    bodyDependency: Future.all().then((values) => 7).detach()\n"
+                                        + "    bodyDependency: Future.all().then((values) => 7)\n"
                                         + "    (() => {\n"
                                         + "        future.cancel()\n"
                                         + "        bodyDependency.value()\n"
@@ -221,6 +224,194 @@ class ProtosStandardFutureProtocolTest {
 
         assertEquals(ProtosFutureValue.State.FAILED, aggregate.state());
         assertSame(laterError, aggregate.failedError().orElseThrow());
+    }
+
+    // Deliberately Java-side: the pending child and the exact parent-release boundary
+    // are runtime state, unavailable to ordinary Protos assertions.
+    @Test
+    void escapedChildKeepsItsOwnerUntilTerminalization() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActorExecutionDomain domain = activation.executionDomain();
+        ProtosFutureValue gate = new ProtosFutureValue(prelude.futurePrototype(), domain);
+        activation.context().createLocalSlot("gate", gate);
+
+        ProtosFutureValue ownerResult = assertInstanceOf(
+                ProtosFutureValue.class,
+                eval(prelude, activation, """
+                        holder: { stored: null; returned: null; wrapped: null; passed: null }
+                        ownerResult: (() => {
+                            create: () => {
+                                child: (() => gate.value()).future()
+                                holder.stored = child
+                                child
+                            }
+                            returned: create()
+                            holder.returned = returned
+                            holder.wrapped = { future: returned }
+                            pass: (value) => { holder.passed = value; null }
+                            pass(holder.wrapped.future)
+                            42
+                        }).future()
+                        ownerResult
+                        """));
+        ProtosTask owner = ownerResult.producerTask().orElseThrow();
+
+        assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
+        ProtosObjectValue holder = assertInstanceOf(
+                ProtosObjectValue.class,
+                activation.context().readLocalSlot("holder").orElseThrow());
+        ProtosFutureValue childResult = assertInstanceOf(
+                ProtosFutureValue.class, holder.readLocalSlot("stored").orElseThrow());
+        ProtosTask child = childResult.producerTask().orElseThrow();
+        assertSame(childResult, holder.readLocalSlot("returned").orElseThrow());
+        assertSame(childResult, holder.readLocalSlot("passed").orElseThrow());
+        ProtosObjectValue wrapper = assertInstanceOf(
+                ProtosObjectValue.class, holder.readLocalSlot("wrapped").orElseThrow());
+        assertSame(childResult, wrapper.readLocalSlot("future").orElseThrow());
+        assertSame(owner, child.parent().orElseThrow());
+        assertEquals(1, owner.children().size());
+        assertTrue(owner.children().contains(child));
+        assertEquals(ProtosTask.State.SUSPENDED, owner.state());
+        assertEquals(ProtosFutureValue.State.PENDING, ownerResult.state());
+
+        assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(ProtosTask.State.SUSPENDED, child.state());
+        assertFalse(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(ProtosFutureValue.State.PENDING, ownerResult.state());
+        assertTrue(owner.children().contains(child));
+
+        gate.resolve(ProtosNullValue.INSTANCE, activation);
+        assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(ProtosFutureValue.State.RESOLVED, childResult.state());
+        assertTrue(owner.children().isEmpty(), "true child completion releases the owner");
+        assertEquals(ProtosTask.State.RUNNABLE, owner.state());
+        assertEquals(ProtosFutureValue.State.PENDING, ownerResult.state());
+
+        assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(ProtosFutureValue.State.RESOLVED, ownerResult.state());
+        assertEquals(
+                BigInteger.valueOf(42),
+                ((ProtosIntegerValue) ownerResult.resolvedValue().orElseThrow()).value());
+        assertEquals(0, domain.liveTaskCount());
+    }
+
+    // Deliberately Java-side: keep the source pending while the continuation cancels,
+    // then complete it to detect a retained observer or a late transform invocation.
+    @Test
+    void cancellingThenDoesNotWaitForOrCancelItsPendingSource() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActorExecutionDomain domain = activation.executionDomain();
+        ProtosFutureValue source = new ProtosFutureValue(prelude.futurePrototype(), domain);
+        activation.context().createLocalSlot("source", source);
+        ProtosFutureValue destination = assertInstanceOf(
+                ProtosFutureValue.class,
+                eval(prelude, activation, """
+                        transforms: 0
+                        source.then((value) => {
+                            transforms = transforms + 1
+                            value
+                        })
+                        """));
+
+        ProtosTask continuation = destination.producerTask().orElseThrow();
+        assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(ProtosTask.State.SUSPENDED, continuation.state());
+        destination.cancelRequest();
+        assertEquals(ProtosTask.State.RUNNABLE, continuation.state());
+        // One resume must honor cancellation. Draining until idle would hang if the
+        // pending source wait merely requeues itself with cancellation still pending.
+        assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(
+                ProtosFutureValue.State.CANCELLED,
+                destination.state(),
+                "source-wait resume must honor cancellation before waiting again");
+        assertEquals(ProtosTask.State.CANCELLED, continuation.state());
+        assertEquals(ProtosFutureValue.State.PENDING, source.state());
+        assertFalse(ProtosTestExecutionSupport.dispatchOne(domain));
+
+        source.resolve(ProtosNullValue.INSTANCE, activation);
+        assertFalse(
+                ProtosTestExecutionSupport.dispatchOne(domain),
+                "source completion must not requeue the cancelled continuation");
+        assertEquals(ProtosFutureValue.State.RESOLVED, source.state());
+        assertEquals(ProtosFutureValue.State.CANCELLED, destination.state());
+        Object transforms = activation.context().readLocalSlot("transforms").orElseThrow();
+        assertEquals(BigInteger.ZERO, ((ProtosIntegerValue) transforms).value());
+        assertEquals(0, domain.liveTaskCount());
+    }
+
+    // Deliberately Java-side: separate source readiness from continuation dispatch
+    // so cancellation is recorded at the exact resume boundary.
+    @ParameterizedTest
+    @EnumSource(value = ProtosFutureValue.State.class, names = {"RESOLVED", "FAILED", "CANCELLED"})
+    void cancellationWinsBeforeThenSourceWaitResume(ProtosFutureValue.State sourceState)
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActorExecutionDomain domain = activation.executionDomain();
+        ProtosFutureValue source = new ProtosFutureValue(prelude.futurePrototype(), domain);
+        activation.context().createLocalSlot("source", source);
+        ProtosFutureValue destination = assertInstanceOf(
+                ProtosFutureValue.class,
+                eval(prelude, activation, """
+                        transforms: 0
+                        source.then((value) => {
+                            transforms = transforms + 1
+                            value
+                        })
+                        """));
+        ProtosTask continuation = destination.producerTask().orElseThrow();
+        assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(ProtosTask.State.SUSPENDED, continuation.state());
+
+        ProtosObjectValue sourceError = ProtosCoreErrors.newError(activation);
+        switch (sourceState) {
+            case RESOLVED -> source.resolve(ProtosNullValue.INSTANCE, activation);
+            case FAILED -> source.fail(sourceError);
+            case CANCELLED -> source.cancelTerminal();
+            default -> throw new AssertionError("expected a terminal source state");
+        }
+        assertEquals(ProtosTask.State.RUNNABLE, continuation.state());
+        destination.cancelRequest();
+
+        assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(ProtosFutureValue.State.CANCELLED, destination.state());
+        assertEquals(ProtosTask.State.CANCELLED, continuation.state());
+        assertEquals(sourceState, source.state());
+        if (sourceState == ProtosFutureValue.State.FAILED) {
+            assertSame(sourceError, source.failedError().orElseThrow());
+        } else if (sourceState == ProtosFutureValue.State.RESOLVED) {
+            assertSame(ProtosNullValue.INSTANCE, source.resolvedValue().orElseThrow());
+        }
+        Object transforms = activation.context().readLocalSlot("transforms").orElseThrow();
+        assertEquals(BigInteger.ZERO, ((ProtosIntegerValue) transforms).value());
+        assertFalse(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(0, domain.liveTaskCount());
+    }
+
+    @Test
+    void runningThenTransformCanCompleteWithoutObservingCancellation() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosActorExecutionDomain domain = activation.executionDomain();
+        ProtosFutureValue destination = assertInstanceOf(
+                ProtosFutureValue.class,
+                eval(prelude, activation, """
+                        destination: Future.all().then((values) => {
+                            destination.cancel()
+                            42
+                        })
+                        destination
+                        """));
+
+        assertTrue(ProtosTestExecutionSupport.dispatchOne(domain));
+        assertEquals(ProtosFutureValue.State.RESOLVED, destination.state());
+        assertEquals(
+                BigInteger.valueOf(42),
+                ((ProtosIntegerValue) destination.resolvedValue().orElseThrow()).value());
+        assertEquals(0, domain.liveTaskCount());
     }
 
     // Deliberately Java-side: real host-thread contention validates the internal

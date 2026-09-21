@@ -22,7 +22,7 @@ tests: [
             order: 0
 
             future: (() => {
-                dependency: Future.all().then((values) => 7).detach()
+                dependency: Future.all().then((values) => 7)
 
                 (() => {
                     (() => {

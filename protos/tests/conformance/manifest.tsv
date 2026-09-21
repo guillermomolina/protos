@@ -661,6 +661,7 @@ control/ensure-cancellation-cleanup-error-child-structured-completion.protos	sui
 control/ensure-cancellation-cleanup-error-handler-recovers.protos	suite-native	-
 control/ensure-cancellation-cleanup-return-child-structured-completion.protos	suite-native	-
 control/ensure-selected-error-cleanup-cancellation-supersedes-handler.protos	suite-native	-
+control/future-detach-removed-semantics.protos	suite-native	-
 error/handle-parent-task-does-not-flow-into-child-future.protos	future-integer	1
 reflection/parent-ordinary.protos	boolean	true
 reflection/parent-error-taxonomy.protos	boolean	true

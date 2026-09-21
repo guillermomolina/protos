@@ -43,7 +43,6 @@ public final class ProtosFutureValue extends ProtosObjectValue {
     private ProtosTask producerTask;
     private ProtosActivation producerActivation;
     private CancellationProducer cancellationProducer;
-    private boolean detached;
     private ProtosFutureValue adoptedSource;
     private Observer adoptedObserver;
     private final List<Waiter> waiters = new ArrayList<>();
@@ -60,7 +59,6 @@ public final class ProtosFutureValue extends ProtosObjectValue {
     public synchronized Optional<Object> resolvedValue() { return state == State.RESOLVED ? Optional.of(value) : Optional.empty(); }
     public synchronized Optional<ProtosObjectValue> failedError() { return state == State.FAILED ? Optional.of(error) : Optional.empty(); }
     public synchronized Optional<ProtosTask> producerTask() { return Optional.ofNullable(producerTask); }
-    public synchronized boolean detached() { return detached; }
 
     public synchronized void attachProducerTask(ProtosTask task, ProtosActivation activation) {
         Objects.requireNonNull(task, "task");
@@ -131,17 +129,6 @@ public final class ProtosFutureValue extends ProtosObjectValue {
     }
 
     public boolean cancelTerminal() { return transition(State.CANCELLED, null, null); }
-
-    public ProtosFutureValue detach() {
-        ProtosTask producer;
-        synchronized (this) {
-            if (detached || state != State.PENDING) return this;
-            detached = true;
-            producer = producerTask;
-        }
-        if (producer != null) producer.detachFromParent();
-        return this;
-    }
 
     public Object observeValue(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");

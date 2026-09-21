@@ -272,8 +272,7 @@ The Future returned by isolated parallel execution participates in the standard
 Future/task ownership model.
 
 If task-backed parallel work is created while an asynchronous task scope is
-current, it is owned by that structured scope unless explicitly detached under
-the ordinary Future rules.
+current, it is owned by that structured scope under the ordinary Future rules.
 
 This means P isolation does **not** create an unrelated lifetime universe.
 
@@ -667,7 +666,7 @@ For exact behavior, consult:
   operations, deterministic failure/result rules, byte-region partitioning,
   cancellation, and scheduling independence;
 - [`../../spec/concurrency/FUTURES_AND_TASKS.md`](../../spec/concurrency/FUTURES_AND_TASKS.md)
-  for the Future result, observation, cancellation, detachment, and structured
+  for the Future result, observation, cancellation, and structured
   ownership model reused by P-produced Futures;
 - [`../../spec/concurrency/ACTORS.md`](../../spec/concurrency/ACTORS.md) for the
   contrasting Actor mutable execution domain, identity, and lifecycle;

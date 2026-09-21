@@ -14,6 +14,32 @@ exact per-file history; normative documents do not carry independent
 merely to synchronize revision metadata.
 
 
+## [0.1.432] - 2026-09-21
+
+### D159 — Remove `Future.detach()`; strict structured child lifetime
+- Implements ratified D159 Candidate B. Core exposes no public
+  `Future.detach()` operation, and no Core operation removes, transfers, or
+  re-parents the structured-ownership edge of a task-backed child Future after
+  creation. Task-backed child work remains owned by the creating asynchronous
+  task scope for the child's complete lifetime.
+- `spec/concurrency/FUTURES_AND_TASKS.md` §24, §24E, §24G, §26, §28, §30, §31
+  and the `Future then() continuations` contract are reconciled: detachment
+  clauses are removed and the complete-lifetime ownership invariant is stated
+  directly, including the Actor-termination and non-task-backed consequences.
+- `spec/semantics/EXECUTION_AND_CONTROL.md`: the `ensure` structured-scope rule
+  no longer contrasts detached work, and the D121 termination-cleanup authority
+  rule no longer names a detached-computation category.
+- `spec/concurrency/ACTORS.md`: Actor graceful-stop cancellation no longer
+  names detached tasks, and the D121 cleanup-authorization rule drops the
+  detached-job category.
+- `spec/concurrency/PARALLEL_EXECUTION.md`: P-local cooperative tasks lose the
+  detachment escape clause; the ownership edge cannot be removed.
+- `spec/io/IO_CORE.md`: the D121 authority-transfer rule drops the detached-job
+  category; adapter lifecycle rules are unchanged.
+- `spec/runtime/ABSTRACT_RUNTIME.md` (informative): the Task model drops the
+  `detached` participation flag and remaining detachment cross-references are
+  removed.
+
 ## [0.1.431] - 2026-09-20
 
 ### D177 — Non-local return target reachability across a Task/Future boundary

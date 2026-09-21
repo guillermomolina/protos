@@ -119,7 +119,7 @@ cleanup precedence, and deterministic explicit resource release.
 `DOC001-I` is CLOSED with
 [chapter 08](08-futures-and-structured-concurrency.md), which explains Future
 identity/state and observation, adoption, `then`, deterministic `Future.all`,
-cooperative cancellation, task-scoped structured ownership, and `detach()`.
+cooperative cancellation, and task-scoped structured ownership.
 
 `DOC001-J` is CLOSED with
 [chapter 09](09-isolated-parallel-execution.md), which explains explicit P

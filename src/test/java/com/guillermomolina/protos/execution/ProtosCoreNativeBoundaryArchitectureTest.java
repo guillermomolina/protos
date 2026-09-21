@@ -275,7 +275,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Future",
                 prelude.futurePrototype(),
-                Set.of("value", "cancel", "detach", "then", "all"));
+                Set.of("value", "cancel", "then", "all"));
         assertNativeSelectors(
                 "Actor",
                 ordinaryBinding(prelude, "Actor"),
@@ -433,15 +433,15 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         future,
                         "suspensionSlot(\n                futurePrototype,");
         assertEquals(
-                4,
+                3,
                 ordinaryFutureNativeSlots,
-                "Future keeps four ordinary native helper-backed surfaces");
+                "Future keeps three ordinary native helper-backed surfaces");
         assertEquals(
                 1,
                 suspensionCapableFutureNativeSlots,
                 "Future.value is the single PLAT019 suspension-capable native surface");
         assertEquals(
-                5,
+                4,
                 ordinaryFutureNativeSlots + suspensionCapableFutureNativeSlots,
                 "Future native/helper-backed standard surface count must not expand silently");
 

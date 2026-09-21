@@ -22,7 +22,7 @@ tests: [
             cleanupError: Error()
 
             producer: (() => {
-                bodyDependency: Future.all().then((values) => 7).detach()
+                bodyDependency: Future.all().then((values) => 7)
 
                 Error.handle(
                     () => {

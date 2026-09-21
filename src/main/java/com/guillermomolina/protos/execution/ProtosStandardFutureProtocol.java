@@ -50,7 +50,6 @@ public final class ProtosStandardFutureProtocol {
                                             resumer));
                 });
         slot(futurePrototype, "cancel", (a,x)->{ arity(a,x,0); ProtosFutureValue f=future(a); f.cancelRequest(); return f; });
-        slot(futurePrototype, "detach", (a,x)->{ arity(a,x,0); return future(a).detach(); });
         slot(futurePrototype, "then", (a,x)->then(a,x,futurePrototype));
         slot(futurePrototype, "all", (a,x)->all(a,x,futurePrototype));
     }
@@ -115,6 +114,12 @@ public final class ProtosStandardFutureProtocol {
         ProtosTask parent=activation.task().orElse(null);
         final ProtosFutureValue.Observer[] observation=new ProtosFutureValue.Observer[1];
         ProtosTask task=activation.executionDomain().createTask(parent,destination,current->{
+            /*
+             * The source prerequisite wait resumes here, outside the guest continuation's
+             * cancellation bridge. Honor that resume boundary before registering another wait
+             * or propagating the source outcome. The transform has not started on this path.
+             */
+            if(current.observeCancellation()) return;
             if(source.isPending()) {
                 SourceDependency dep=new SourceDependency(source,current);
                 observation[0]=dep;

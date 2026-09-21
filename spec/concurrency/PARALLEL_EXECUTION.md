@@ -129,7 +129,7 @@ semantics using different internal execution objects without creating a
 Protos-visible difference.
 
 Structured concurrency does not require a public Task object. Ownership,
-detachment, cancellation, waiting, failure propagation, and Actor/P lifetime
+cancellation, waiting, failure propagation, and Actor/P lifetime
 rules are defined semantically through task-scoped structured execution,
 Futures, and execution domains. An implementation may track richer internal parent/child task state as
 needed to realize those rules.
@@ -1536,8 +1536,8 @@ A nested `closure.parallel(...)` creates another isolated P domain and may run
 simultaneously.
 
 P-local cooperative tasks and nested P children remain bounded by the P domain's
-lifetime. Detachment removes an applicable structured activation ownership edge
-but does not create persistent identity, mailbox semantics, Actor identity, or a
+lifetime under the structured-ownership rules in `FUTURES_AND_TASKS.md` §24.
+Such work has no persistent identity, mailbox semantics, Actor identity, or
 right to survive termination of the enclosing P domain.
 
 ### 71.17 Physical sharing is not a public capability

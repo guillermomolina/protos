@@ -22,7 +22,7 @@ tests: [
             cleaned: 0
 
             future: (() => {
-                bodyDependency: Future.all().then((values) => 7).detach()
+                bodyDependency: Future.all().then((values) => 7)
 
                 (() => {
                     future.cancel()
@@ -30,7 +30,7 @@ tests: [
                     41
                 }).ensure(() => {
                     future.cancel()
-                    cleanupDependency: Future.all().then((values) => 9).detach()
+                    cleanupDependency: Future.all().then((values) => 9)
                     cleaned = cleaned + 1
                     cleanupDependency.value()
                     cleaned = cleaned + 10

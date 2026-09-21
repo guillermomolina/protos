@@ -28,3 +28,6 @@ Thumbs.db
 **/*.zip
 
 tmp/
+
+# IA
+.claude/

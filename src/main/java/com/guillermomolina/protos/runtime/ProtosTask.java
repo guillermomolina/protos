@@ -332,12 +332,6 @@ public final class ProtosTask {
         }
     }
 
-    public void detachFromParent() {
-        ProtosTask previous;
-        synchronized (this) { previous = parent; parent = null; }
-        if (previous != null) previous.removeChild(this);
-    }
-
     /**
      * Begins the private PLAT019 capture-pending phase after a wait relationship has been
      * registered.

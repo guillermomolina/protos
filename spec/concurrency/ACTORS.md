@@ -794,7 +794,7 @@ Actor-termination cancellation and `ensure`-cleanup rules apply and no further
 ordinary code from that turn executes.
 
 Establishing graceful stop requests cancellation of all remaining Actor-local tasks,
-including detached tasks, and of all still-pending non-task-backed asynchronous
+and of all still-pending non-task-backed asynchronous
 operations initiated by that Actor, exactly as defined by Structured Concurrency.
 Producer-specific commitment and acceptance boundaries remain authoritative:
 graceful stop does not undo committed I/O, unsend accepted communication, close
@@ -824,7 +824,7 @@ Examples include Actor-local cancellation/unwind `ensure` cleanup and a PLAT030
 lifecycle-release C′ segment already running as termination cleanup. The
 authorization follows nested synchronous calls and suspension/resumption of that
 same cleanup continuation; it is not granted merely by Actor state and is not
-inherited by a newly created Task, Future producer, mailbox turn, detached job or
+inherited by a newly created Task, Future producer, mailbox turn, or
 unrelated callback.
 
 A close admitted by that rule is an ordinary lifecycle close. If its remaining

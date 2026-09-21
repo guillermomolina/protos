@@ -61,8 +61,8 @@ SlotReference
     name
 
 Task
-    owner                  // structured-concurrency owner, or none when detached
-    detached               // structured-lifetime participation
+    owner                  // structured-concurrency owner, or none when created
+                           // outside a current structured execution scope
     future                 // Future representing this task's eventual outcome
 
 Future
@@ -2057,15 +2057,15 @@ A runtime may represent continuation eligibility, dependency observation,
 runnable queues, task records, callbacks, or equivalent machinery in any way
 that preserves the owning contract. This runtime-semantics document does not
 define a second conceptual `futureThen` algorithm or an additional observable
-ownership, scheduling, propagation, flattening, cancellation, detachment, or
+ownership, scheduling, propagation, flattening, cancellation, or
 ordering rule.
 
 ---
 
 # 35. Concurrency and Actor Runtime Integration
 
-The normative semantics of structured Future/task ownership, cancellation unwind,
-and `Future.detach()` are owned by `../concurrency/FUTURES_AND_TASKS.md` §24.
+The normative semantics of structured Future/task ownership and cancellation
+unwind are owned by `../concurrency/FUTURES_AND_TASKS.md` §24.
 Actor-local cooperative non-preemption is owned there by the corresponding
 Actor-local execution contract.
 
@@ -5339,7 +5339,7 @@ A nested `closure.parallel(...)` creates a distinct isolated P domain and may
 execute simultaneously.
 
 Remaining P-local children are subject to structured cancellation/cleanup when
-the P domain finishes. Detachment does not re-parent them to the caller Actor,
+the P domain finishes. They are never re-parented to the caller Actor,
 Process, RootActor, or another execution domain.
 
 Implementations may map these guarantees to the host VM memory model, scheduler barriers, or equivalent mechanisms as long as language-level visibility is preserved.

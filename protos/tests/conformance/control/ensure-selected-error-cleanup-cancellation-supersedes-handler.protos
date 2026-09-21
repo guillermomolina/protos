@@ -23,7 +23,7 @@ tests: [
             handlerRan: 0
 
             producer: (() => {
-                cleanupDependency: Future.all().then((values) => 9).detach()
+                cleanupDependency: Future.all().then((values) => 9)
 
                 Error.handle(
                     () => {

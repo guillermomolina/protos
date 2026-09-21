@@ -1,0 +1,104 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("detach selector is absent from a task-backed Future", () => {
+        Assertions.signals(SlotNotFound, () => {
+            work: () => { 1 }
+            work.future().detach()
+        })
+    }),
+
+    Test("detach selector is absent from a non-task-backed Future", () => {
+        Assertions.signals(SlotNotFound, () => {
+            Future.all().detach()
+        })
+    }),
+
+    Test("detach selector remains absent from a terminal Future", () => {
+        future: (() => { 1 }).future()
+        future.value()
+        Assertions.signals(SlotNotFound, () => {
+            future.detach()
+        })
+    }),
+
+    Test("pending aggregate has no detach selector and preserves its sources", () => {
+        source: (() => 7).future()
+        aggregate: Future.all(source)
+        Assertions.signals(SlotNotFound, () => aggregate.detach())
+        Assertions.require(aggregate.value()[0] === 7)
+        Assertions.require(source.value() === 7)
+    }),
+
+    Test("normal owner completion waits for owned task-backed child", () => {
+        childRan: false
+        stored: { future: null }
+
+        ownerResult: (() => {
+            create: () => {
+                child: (() => {
+                    childRan = true
+                    7
+                }).future()
+                stored.future = child
+                child
+            }
+            returned: create()
+            wrapper: { future: returned }
+            pass: (value) => value.future
+            Assertions.require(pass(wrapper) === stored.future)
+            // Synchronous escape does not drain the child at the helper's return.
+            Assertions.require(childRan === false)
+            42
+        }).future()
+
+        observed: ownerResult.value()
+        Assertions.require(observed === 42)
+        Assertions.require(childRan === true)
+        Assertions.require(stored.future.value() === 7)
+    }),
+
+    Test("normal owner does not adopt an unobserved child failure", () => {
+        child: null
+        failure: Error()
+        owner: (() => {
+            child = (() => failure.signal()).future()
+            42
+        }).future()
+
+        Assertions.require(owner.value() === 42)
+        caught: Assertions.signals(Error, () => child.value())
+        Assertions.require(caught === failure)
+    }),
+
+    Test("then cancellation remains downstream only", () => {
+        transformed: false
+        source: (() => 7).future()
+        destination: source.then((value) => {
+            transformed = true
+            value
+        })
+        destination.cancel()
+
+        Assertions.signals(Cancelled, () => destination.value())
+        Assertions.require(source.value() === 7)
+        Assertions.require(transformed === false)
+    })
+]
+tests.freeze()

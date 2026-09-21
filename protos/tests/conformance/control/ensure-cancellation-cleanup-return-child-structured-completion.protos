@@ -42,7 +42,7 @@ tests: [
         }
 
         producer: (() => {
-            bodyDependency: Future.all().then((values) => 7).detach()
+            bodyDependency: Future.all().then((values) => 7)
             outer(producer, bodyDependency, setChildRan)
         }).future()
 

@@ -31,7 +31,7 @@ outer: (targetFuture, dependency) => {
 tests: [
     Test("ensure cancellation cleanup return supersedes", () => {
         future: (() => {
-            dependency: Future.all().then((values) => 7).detach()
+            dependency: Future.all().then((values) => 7)
             outer(future, dependency)
         }).future()
 

@@ -22,14 +22,14 @@ tests: [
             cleanupError: Error()
 
             future: (() => {
-                bodyDependency: Future.all().then((values) => 7).detach()
+                bodyDependency: Future.all().then((values) => 7)
 
                 (() => {
                     future.cancel()
                     bodyDependency.value()
                     41
                 }).ensure(() => {
-                    cleanupDependency: Future.all().then((values) => 9).detach()
+                    cleanupDependency: Future.all().then((values) => 9)
                     cleanupDependency.value()
                     cleanupError.signal()
                 })

@@ -27,13 +27,13 @@ There are no `async` functions and no `await` keyword.
 An ordinary function may simply return a Future.
 
 Returning a Future from an ordinary synchronous invocation does not itself create,
-close, transfer, detach, re-parent, or wait a structured-concurrency ownership
+close, transfer, re-parent, or wait a structured-concurrency ownership
 scope. Structured ownership is task-scoped as defined in §24: synchronous Closure
 and method activations executing within one asynchronous computation remain in
 that computation's current structured execution scope. A pending Future can
 therefore cross an ordinary synchronous return immediately while its task-backed
 producer, when any, remains owned by the same surrounding structured execution
-scope unless explicitly detached.
+scope.
 
 ### Future result identity
 
@@ -205,11 +205,9 @@ invoke ordinary Protos transformation or handler code merely to perform that
 propagation.
 
 Adoption transfers only eventual outcome. It does not transfer Future identity,
-task identity, structured ownership, or detachment. It creates no upstream
+task identity, or structured ownership. It creates no upstream
 cancellation: cancelling an adopting destination never requests cancellation of
-the adopted source and never changes that source's ownership or detachment.
-Detaching a task-backed destination likewise does not detach or re-parent the
-adopted source.
+the adopted source and never changes that source's ownership.
 
 Adoption is a cancellation-aware pending operation under the cancellation rules
 owned by `FUTURES_AND_TASKS.md` §23. If destination cancellation and
@@ -351,13 +349,13 @@ future.then(transform)
 
 `then` is an ordinary message on a Future value and introduces no new syntax or
 executable value kind. Its normative continuation-task ownership, execution
-domain, scheduling, source-outcome propagation, flattening, cancellation,
-detachment, and ordering semantics are owned by
+domain, scheduling, source-outcome propagation, flattening, cancellation, and
+ordering semantics are owned by
 `FUTURES_AND_TASKS.md` under `Future then() continuations`.
 
 Automatic flattening uses the Future resolution/adoption semantics owned by
 this specification in §28. The concurrency model owns the continuation task's
-execution, ownership, cancellation, detachment, and scheduling consequences.
+execution, ownership, cancellation, and scheduling consequences.
 The `transform` value is not Closure-only. It must be ordinarily invokable under
 the callability-inspection protocol owned by `../semantics/CALLABLES.md`; no
 hidden callback protocol or Closure-identity shortcut is introduced.
@@ -413,13 +411,11 @@ incarnation.
 
 Structured ownership of Future-producing child work is a concurrency-domain
 facility. Its normative ownership, normal-exit waiting, error/cancellation
-unwind, cleanup, detachment, Actor-local lifetime, and non-task-backed Future
+unwind, cleanup, Actor-local lifetime, and non-task-backed Future
 semantics are owned by `FUTURES_AND_TASKS.md` §24.
 
 The cooperative non-preemption rule for ordinary Actor-local
 `closure.future()` work is owned by `ACTORS.md` §24D.
-`Future.detach()` remains an ordinary Future message and introduces no syntax or
-new execution kind.
 
 The exact scheduler representation remains implementation machinery.
 
@@ -448,8 +444,8 @@ resolved, failed, or cancelled source does not defer, suppress, or replace it.
 Only after successful validation does the call create a distinct continuation
 task and a destination Future. The continuation is asynchronous child work
 created in the current task-scoped structured execution scope, and therefore
-belongs to that scope under the ordinary structured-concurrency rule unless the
-destination Future is detached. An ordinary synchronous activation that merely
+belongs to that scope under the ordinary structured-concurrency rule. An
+ordinary synchronous activation that merely
 calls `then()` does not become a new structured owner solely because that call
 occurred inside it.
 
@@ -475,11 +471,10 @@ That generic adoption contract owns outcome mirroring, cycle failure,
 destination/source identity separation, first-terminal-transition stability, and
 the absence of upstream cancellation or ownership transfer during adoption.
 
-Cancellation and detachment are downstream-only for this continuation edge:
+Cancellation is downstream-only for this continuation edge:
 cancelling the destination requests cancellation of the continuation but does not
-cancel the source Future, and detaching the destination detaches only the
-continuation task. Neither operation changes ownership or lifetime of the source
-Future.
+cancel the source Future. It does not change the ownership or lifetime of the
+source Future.
 
 The first execution of every newly created asynchronous task is a portable
 cancellation-observation boundary before any ordinary Protos code in that task
@@ -609,8 +604,7 @@ Principle:
 
 This section is the primary normative owner of Core v0.1 structured ownership
 semantics for Future-producing child work, including structured lifetime,
-cancellation unwind, cleanup, task-backed versus non-task-backed detachment, and
-`Future.detach()`.
+cancellation unwind, and cleanup.
 
 The existing structured-concurrency semantics for Futures remain.
 
@@ -624,7 +618,7 @@ asynchronous computation. Core exposes no public Task or scope object merely to
 represent this relationship.
 
 Task-backed asynchronous child work created while a structured execution scope is
-current is owned by that scope by default unless explicitly detached. Starting a
+current is owned by that scope. Starting a
 distinct child task creates a new structured execution scope for work that child
 itself later creates, so the ownership relation remains recursively structured
 without making synchronous call-stack depth part of the concurrency tree.
@@ -632,14 +626,14 @@ without making synchronous call-stack depth part of the concurrency tree.
 An ordinary synchronous invocation can therefore return while task-backed work it
 created remains pending. Returning the Future itself, storing it, wrapping it in
 another ordinary value, or otherwise letting it escape that invocation does not
-transfer, re-parent, detach, duplicate, or remove its ownership edge. No escape
+transfer, re-parent, duplicate, or remove its ownership edge. No escape
 analysis or result-shape inspection participates in ownership. The edge remains
 attached to the same surrounding structured execution scope until the child is
-terminal or explicitly detached.
+terminal.
 
 Structured ownership bounds child lifetime but does not implicitly observe child
 results. When the owning asynchronous computation itself reaches otherwise normal
-terminal completion, its structured execution scope waits for every non-detached
+terminal completion, its structured execution scope waits for every
 child to become terminal. A child's failed or cancelled terminal state does not by
 itself fail or cancel that normally completing owner. Failure or cancellation
 becomes observable to owner code only through the ordinary Future observation
@@ -661,30 +655,21 @@ completes, cancellation continues and the Future becomes cancelled only after
 cleanup is complete. This rule does not create a general user-visible
 cancellation-mask facility.
 
-Detachment removes a task from the structured lifetime of its current owning
-structured execution scope only. `Future.detach()` always returns the same Future
-object and is idempotent. On a still-pending task-backed Future that is not already
-detached, it removes that task's structured-ownership edge. Repeated detachment is
-a state-preserving no-op. Detachment is not implied by returning or otherwise
-exposing the Future from an ordinary synchronous invocation.
+Core exposes no `Future.detach()` operation. No Core operation removes,
+transfers, or re-parents a task-backed child's structured-ownership edge while
+the child remains nonterminal.
 
 A non-task-backed Future, including one produced directly by an I/O facility,
-has no structured task ownership edge to remove; `detach()` on such a Future is
-therefore a state-preserving no-op. Calling `detach()` on an already terminal
-Future is also a no-op. These cases do not signal merely because no detachable
-ownership edge remains.
+has no structured task ownership edge; its lifetime and cancellation follow its
+producer's own contract.
 
-Detachment never changes Future terminal outcome, requests cancellation, alters
-an I/O producer's lifecycle, or manufactures a new owner. It does not move
-Actor-local work out of the Actor execution domain, promote it to Process-global
-work, or give it an independent Actor-like lifecycle. A detached Actor-local task
-may outlive the activation that created it, but it cannot outlive the Actor
+An Actor-local task may outlive the synchronous activation that created it,
+but it cannot outlive the Actor
 incarnation whose mutable state and serial execution domain it uses.
 
 When termination of an Actor incarnation begins while its hosting runtime remains
 able to execute Protos cleanup, every pending Actor-local task belonging to that
-incarnation receives a cooperative cancellation request, including detached
-tasks.
+incarnation receives a cooperative cancellation request.
 
 Termination also records a cancellation request on every still-pending
 non-task-backed Future representing an asynchronous operation initiated by that
@@ -706,7 +691,7 @@ execution that occurs thereafter is limited to reaching the existing portable
 cancellation boundaries and performing the cancellation unwind and applicable
 `ensure` cleanup required to terminate those tasks.
 
-A detached task is never silently re-parented to the RootActor, Process, a
+A task is never silently re-parented to the RootActor, Process, a
 replacement Actor, or another runtime scope merely so it can continue running
 after its Actor terminates. Its Future follows the ordinary cancellation-unwind
 rule: successful cleanup permits the Future to become `cancelled`; a cleanup
@@ -767,7 +752,7 @@ ascending argument-index order. The first non-Future argument signals an `Error`
 and no aggregate Future is created.
 
 The returned aggregate is a fresh non-task-backed Future representing only this
-multi-Future observation. It does not own, re-parent, detach, cancel, or otherwise
+multi-Future observation. It does not own, re-parent, cancel, or otherwise
 change any source Future or its producer.
 
 For zero arguments:
@@ -832,8 +817,7 @@ observation slot. If the same Future appears more than once and resolves, its sa
 resolved value occupies each corresponding result position; no source is
 duplicated or re-executed.
 
-The aggregate itself has no structured task-ownership edge. `detach()` therefore
-has the existing non-task-backed Future no-op behavior.
+The aggregate itself has no structured task-ownership edge.
 
 A pending aggregate must not retain arbitrary completed-source implementation
 state beyond what is necessary to produce the specified result or deterministic
@@ -919,12 +903,6 @@ Actor-local task-backed Future
     -> Actor waits for required task cancellation unwind/ensure cleanup
     -> task cannot continue as ordinary Protos work after Actor termination
 
-detached Actor-local task-backed Future
-    -> activation ownership edge is removed
-    -> Actor-domain ownership is not removed
-    -> Actor termination still requests cooperative cancellation
-    -> task is not re-parented to Process, RootActor, replacement Actor, or runtime
-
 Actor-originated non-task-backed Future
     -> no structured task ownership edge exists
     -> Actor termination records a cancellation request on the pending operation
@@ -941,7 +919,6 @@ P-result Future created from Actor-local code
 
 pure observation Future with no Actor-originated producer ownership
     -> follows the explicit contract of that observation facility
-    -> `detach()` remains a no-op when no task ownership edge exists
     -> merely holding the Future does not extend Actor lifetime
 ```
 

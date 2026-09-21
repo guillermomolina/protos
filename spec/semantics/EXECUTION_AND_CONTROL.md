@@ -565,9 +565,9 @@ child's dynamic control state. Existing structured-ownership rules in
 structured execution boundary. The protected body's ordinary synchronous
 activation does not become a separate structured scope merely because `ensure`
 invoked it: a task-backed Future created there may remain pending after the body
-invocation returns. Non-detached child work can still delay terminal completion of
-the enclosing owning asynchronous computation, while detached work does not extend
-that structured lifetime.
+invocation returns. That child work can still delay terminal completion of
+the enclosing owning asynchronous computation, because the child's ownership
+edge remains attached to that computation's structured scope.
 
 The live `ensure` installation is task-local dynamic control state. It is not
 copied or transferred merely because protected code creates or returns a
@@ -707,7 +707,7 @@ authorized termination cleanup for that Actor, an explicit resource lifecycle
 even though the Actor termination cutover has already occurred. The authorization
 follows ordinary nested calls and suspension/resumption of the same cleanup
 continuation. It does **not** transfer merely because the cleanup creates a new
-Task, Future producer, mailbox turn or detached computation. The admitted close
+Task, Future producer, or mailbox turn. The admitted close
 then follows the ordinary lifecycle contract; any guest-requiring release is
 termination cleanup under D112/D121 and PLAT030.
 

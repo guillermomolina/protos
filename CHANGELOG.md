@@ -1,3 +1,28 @@
+## 0.3.60-SNAPSHOT
+
+- Implement ratified `D159` as `I055` (GitHub #656): remove the public
+  `Future.detach()` operation and enforce the strict complete-lifetime
+  structured-ownership invariant. The standard Future protocol no longer
+  installs a `detach` selector, `ProtosFutureValue` loses its detached state
+  and `detach()` operation, and `ProtosTask.detachFromParent()` is removed
+  without touching the retained parent/child terminalization, child-drain,
+  cancellation-unwind, or Actor-termination machinery. Cancellation, cleanup,
+  loop, and cross-Task return fixtures retain their task-local pending
+  dependencies without detachment. Add regressions for ordinary missing-selector
+  behavior and complete-lifetime child ownership. Normative reconciliation
+  updates `FUTURES_AND_TASKS.md`, `EXECUTION_AND_CONTROL.md`, `ACTORS.md`,
+  `PARALLEL_EXECUTION.md`, `IO_CORE.md`, `ABSTRACT_RUNTIME.md`, and the guide
+  chapters, advancing the specification to `0.1.432`. No public replacement
+  background-work API, native-boundary expansion, or license-term change is
+  introduced.
+- Fix a source-wait cancellation defect exposed by I055 validation:
+  `Future.then()` now honors cancellation when its private source wait resumes,
+  before waiting again or propagating the source outcome. This prevents an
+  endlessly runnable continuation while the source is pending and preserves
+  cancellation precedence when the source becomes terminal before resumption.
+  The source remains unchanged, and a running non-suspending transform retains
+  the ordinary cooperative-cancellation behavior.
+
 ## 0.3.59-SNAPSHOT
 
 - Fix `BUG008` — the canonical recursive benchmark corpus (for example

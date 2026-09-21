@@ -15,11 +15,11 @@ The central model is:
 
 > A Future is an ordinary eventual-result object. A task-backed Future may also
 > represent asynchronous child work whose lifetime is owned by the current
-> asynchronous task scope unless explicitly detached.
+> asynchronous task scope.
 
 There is no `async` function category and no `await` keyword. Ordinary Closures
 can execute synchronously or asynchronously, and ordinary Future messages provide
-observation, composition, cancellation, and detachment.
+observation, composition, and cancellation.
 
 ## A Closure chooses synchronous or asynchronous execution at the call site
 
@@ -175,14 +175,11 @@ It also does not transfer:
 ```text
 task identity
 structured ownership
-detachment state
 upstream cancellation authority
 ```
 
 Cancelling an adopting destination does not automatically cancel the adopted
 source.
-
-Detaching the destination does not detach the adopted source.
 
 Adoption is an outcome relationship, not ownership re-parenting.
 
@@ -382,9 +379,6 @@ Cancelling the destination Future requests cancellation of the continuation task
 
 It does **not** cancel the source Future.
 
-Likewise, detaching the destination detaches only the continuation task represented
-by that destination.
-
 This is a useful general rule:
 
 > Dependency does not imply upstream cancellation ownership.
@@ -423,7 +417,6 @@ It does not:
 
 ```text
 re-parent sources
-detach sources
 cancel sources
 take ownership of their tasks
 ```
@@ -593,9 +586,9 @@ The synchronous body of `parent` can reach its normal result while `child` is
 still pending.
 
 But the **parent asynchronous computation cannot terminalize normally** until its
-non-detached owned child becomes terminal.
+owned child becomes terminal.
 
-## Returning a Future from a synchronous call does not detach it
+## Returning a Future from a synchronous call does not change ownership
 
 This is a subtle but essential rule.
 
@@ -618,7 +611,6 @@ The helper's synchronous return does not create or close a structured scope.
 It does not:
 
 ```text
-detach child
 transfer child ownership
 re-parent child
 remove the ownership edge
@@ -631,8 +623,8 @@ No escape analysis or "returned value" rule changes that.
 
 ## Structured ownership limits lifetime, not result propagation
 
-If an owner reaches otherwise-normal completion, it waits for every non-detached
-owned child to become terminal.
+If an owner reaches otherwise-normal completion, it waits for every owned
+child to become terminal.
 
 However, a child's terminal:
 
@@ -668,48 +660,29 @@ wrap Future in another object
 pass Future to synchronous helper
 ```
 
-None of them automatically changes structured ownership.
+None of them changes structured ownership.
 
-Ownership changes only through a semantic rule that explicitly changes it, such
-as `detach()` for task-backed Futures.
+## Task-backed ownership cannot be escaped
 
-## `detach()` removes one structured ownership edge
+After a task-backed child Future is created, its ownership edge stays attached
+to the surrounding asynchronous task scope until the child is terminal.
 
-For a still-pending task-backed Future:
+Core exposes no `Future.detach()` operation. While the child remains pending,
+there is no public operation that:
 
-```protos
-child.detach()
+```text
+removes the ownership edge
+transfers the edge to another scope
+re-parents the child task
 ```
 
-removes the child task from its current parent's structured lifetime.
+Not every Future has a task ownership edge. For example, some I/O operations
+return non-task-backed Futures representing backend work. Their lifetime and
+cancellation follow the producer's own contract.
 
-`detach()`:
+## Ownership does not escape the Actor domain
 
-- returns the same Future;
-- is idempotent;
-- does not cancel the Future;
-- does not change its eventual outcome;
-- does not manufacture a new owner.
-
-Detachment is therefore a lifetime operation, not result transformation.
-
-## `detach()` is a no-op for non-task-backed or terminal Futures
-
-Not every Future has a task ownership edge.
-
-For example, some I/O operations return non-task-backed Futures representing
-backend work.
-
-Calling `detach()` when there is no task ownership edge is a state-preserving
-no-op.
-
-Calling `detach()` on a terminal Future is likewise a no-op.
-
-The absence of a detachable edge is not itself an Error.
-
-## Detachment does not escape the Actor domain
-
-A detached Actor-local child task may outlive the activation that created it.
+An Actor-local child task may outlive the synchronous activation that created it.
 
 It does **not** thereby become:
 
@@ -722,11 +695,11 @@ runtime-global work
 
 It still belongs to the same Actor execution domain.
 
-If that Actor incarnation terminates, detached Actor-local tasks are still
-subject to Actor-lifecycle cancellation.
+If that Actor incarnation terminates, Actor-local tasks are still subject to
+Actor-lifecycle cancellation.
 
-Detachment removes a structured parent edge; it does not grant an independent
-Actor-like lifetime.
+Structured ownership therefore limits child lifetime; it does not grant an
+independent Actor-like lifetime.
 
 ## Cancellation unwind composes with `ensure`
 
@@ -869,10 +842,10 @@ specification remains authoritative.
    restore producer control state.
 7. Future resolution automatically adopts/ flattens a Future result.
 8. Adoption transfers eventual outcome, not Future identity, ownership,
-   detachment, or upstream cancellation.
+   or upstream cancellation.
 9. `then()` creates asynchronous continuation work; source failure/cancellation
    bypasses the transform.
-10. `then` cancellation and detachment are downstream-only.
+10. `then` cancellation is downstream-only.
 11. `Future.all(...)` preserves argument order and uses deterministic
     argument-index failure/cancellation selection.
 12. Core intentionally has no generic scheduler-timing-based Future race/select.
@@ -880,13 +853,13 @@ specification remains authoritative.
 14. Cancelling a waiter does not cancel the Future it is observing.
 15. Structured ownership belongs to asynchronous task scopes, not synchronous
     call frames.
-16. Returning, storing, or wrapping a task-backed Future does not detach or
-    transfer its ownership edge.
-17. Normal owner completion waits for non-detached children to become terminal,
+16. Returning, storing, or wrapping a task-backed Future does not transfer its
+    ownership edge.
+17. Normal owner completion waits for owned children to become terminal,
     but child failure/cancellation is not implicitly adopted as the owner's
     result.
-18. `detach()` removes only the current structured task ownership edge and never
-    grants an Actor-independent lifetime.
+18. A child keeps its structured ownership edge until terminal completion;
+    Core exposes no `Future.detach()` operation.
 19. Cancellation unwind runs applicable `ensure` cleanup before terminal
     cancellation.
 20. Treat ownership/lifetime and result/error observation as separate concerns.
@@ -897,7 +870,7 @@ For exact behavior, consult:
 
 - [`../../spec/concurrency/FUTURES_AND_TASKS.md`](../../spec/concurrency/FUTURES_AND_TASKS.md)
   for Future identity/state, `future`, `value`, adoption, `then`, `all`,
-  cancellation, structured ownership, detachment, and Actor-lifecycle
+  cancellation, structured ownership, and Actor-lifecycle
   integration;
 - [`../../spec/semantics/CALLABLES.md`](../../spec/semantics/CALLABLES.md) for
   ordinary `Object.future` placement and invocation/callability rules;
