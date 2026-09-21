@@ -1,3 +1,34 @@
+## 0.3.63-SNAPSHOT
+
+- TOOL009-C (#686, Slice 1): migrate the seven library-conformance
+  `RepositoryCorpusPlans` corpora (`uri`, `csv`, `cli`, `math/integer`,
+  `crypto/sha256`, `network/ip-addresses`, `network/ip-endpoints`; 78 case
+  sources) from legacy Test Tool interpretation (`boolean`, `error`,
+  `future-boolean` expectations) to the suite-native authoring model: each
+  source now imports `std:test/Test` and `std:test/Assertions`, exposes a
+  finite frozen `tests` Array of named `Test` declarations, and keeps prior
+  legacy case logic intact inside the Test body. `error`-expectation cases use
+  `Assertions.signals(Error, body)`; `future-boolean`-expectation cases
+  observe their `Future` explicitly with `value()` inside the Test body
+  before asserting, rather than returning the `Future` for runner
+  interpretation.
+  - `protos/tools/test/RepositoryCorpusPlans.protos` keeps the exact same
+    explicit corpus membership, path spelling, and case order for all seven
+    corpora; every entry's expectation column now reads `suite-native`. The
+    manifest itself is preserved as the explicit membership authority, not
+    removed.
+  - `ProtosTestToolRepositoryCorpusPlansTest.java` remains the golden
+    membership/order JUnit test: `ordinaryLibraryPlansHaveExactExplicitMembership`
+    is unchanged, and the renamed
+    `csvFutureAndShaCasesRemainOrderedAndAreSuiteNative` now asserts both case
+    path identity and the `suite-native` expectation at the previously
+    special csv future-boolean and sha256 error indices.
+  - Process, Actor, and Group corpora are out of scope for this slice and are
+    unchanged; TOOL009-C tracks their migration as separate remaining slices
+    under #686, which stays open.
+  - `make test-java` and the integrated `make test` (Java + native Protos)
+    both pass.
+
 ## 0.3.62-SNAPSHOT
 
 - TOOL009: reconcile the JUnit/harness surface with the now-complete

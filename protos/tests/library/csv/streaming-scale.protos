@@ -13,47 +13,58 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("streaming scale", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            rowsSeen: 0
+            parser: CSV.rowParser((row) => {
+                require(row.size() == 3)
+                require(row[0] == "alpha")
+                require(row[1] == "beta,beta")
+                require(row[2] == "gamma")
+                rowsSeen = rowsSeen + 1
+            })
+
+            iteration: 0
+            (() => { iteration < 4096 }).while() {
+                parser.feed("alpha,\"beta,beta\",gamma\r\n")
+                iteration = iteration + 1
+            }
+            parser.finish()
+            require(rowsSeen == 4096)
+
+            largeFieldSeen: false
+            large: CSV.rowParser((row) => {
+                require(row.size() == 2)
+                require(row[0].size() == 8192)
+                require(row[1] == "tail")
+                largeFieldSeen = true
+            })
+
+            large.feed("\"")
+            chunks: 0
+            (() => { chunks < 2048 }).while() {
+                large.feed("abcd")
+                chunks = chunks + 1
+            }
+            large.feed("\",tail")
+            large.finish()
+
+            require(largeFieldSeen)
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-rowsSeen: 0
-parser: CSV.rowParser((row) => {
-    require(row.size() == 3)
-    require(row[0] == "alpha")
-    require(row[1] == "beta,beta")
-    require(row[2] == "gamma")
-    rowsSeen = rowsSeen + 1
-})
-
-iteration: 0
-(() => { iteration < 4096 }).while() {
-    parser.feed("alpha,\"beta,beta\",gamma\r\n")
-    iteration = iteration + 1
-}
-parser.finish()
-require(rowsSeen == 4096)
-
-largeFieldSeen: false
-large: CSV.rowParser((row) => {
-    require(row.size() == 2)
-    require(row[0].size() == 8192)
-    require(row[1] == "tail")
-    largeFieldSeen = true
-})
-
-large.feed("\"")
-chunks: 0
-(() => { chunks < 2048 }).while() {
-    large.feed("abcd")
-    chunks = chunks + 1
-}
-large.feed("\",tail")
-large.finish()
-
-require(largeFieldSeen)
-true
+]
+tests.freeze()

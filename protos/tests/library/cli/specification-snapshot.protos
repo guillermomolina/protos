@@ -13,152 +13,163 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CommandLine: import("std:cli/CommandLine")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("specification snapshot", () => {
+        tool009LegacyCase: () => {
+            CommandLine: import("std:cli/CommandLine")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            rootOption: {
+                key: "jobs"
+                long: "jobs"
+                short: "j"
+                minValues: 1
+                maxValues: 1
+                minOccurrences: 0
+                maxOccurrences: 1
+                valueName: "COUNT"
+                help: "Workers"
+            }
+
+            rootPositional: {
+                key: "target"
+                minOccurrences: 0
+                maxOccurrences: 1
+                valueName: "TARGET"
+                help: null
+            }
+
+            childOption: {
+                key: "force"
+                long: "force"
+                short: "f"
+                minValues: 0
+                maxValues: 0
+                minOccurrences: 0
+                maxOccurrences: 1
+                valueName: null
+                help: null
+            }
+
+            childOptions: Array(childOption)
+            child: {
+                name: "run"
+                help: "Run"
+                options: childOptions
+                positionals: Array()
+                subcommands: Array()
+            }
+
+            rootOptions: Array(rootOption)
+            rootPositionals: Array(rootPositional)
+            children: Array(child)
+            descriptor: {
+                name: "tool"
+                help: "Tool"
+                options: rootOptions
+                positionals: rootPositionals
+                subcommands: children
+            }
+
+            spec: CommandLine.command(descriptor)
+
+            rootOption.key = "changed-root-key"
+            rootOption.long = "changed-root-long"
+            rootPositional.key = "changed-positional"
+            childOption.key = "changed-child-key"
+            child.name = "changed-child-name"
+            descriptor.name = "changed-root-name"
+
+            rootOptions[0] = {
+                key: "replacement"
+                long: "replacement"
+                short: "r"
+                minValues: 0
+                maxValues: 0
+                minOccurrences: 0
+                maxOccurrences: 1
+                valueName: null
+                help: null
+            }
+
+            rootPositionals[0] = {
+                key: "replacement-positional"
+                minOccurrences: 0
+                maxOccurrences: 1
+                valueName: null
+                help: null
+            }
+
+            childOptions[0] = {
+                key: "replacement-child"
+                long: "replacement-child"
+                short: null
+                minValues: 0
+                maxValues: 0
+                minOccurrences: 0
+                maxOccurrences: 1
+                valueName: null
+                help: null
+            }
+
+            children[0] = {
+                name: "replacement-child"
+                help: null
+                options: Array()
+                positionals: Array()
+                subcommands: Array()
+            }
+
+            require(spec.name == "tool")
+            require(spec.options.size() == 1)
+            require(spec.options[0].key == "jobs")
+            require(spec.options[0].long == "jobs")
+            require(spec.positionals.size() == 1)
+            require(spec.positionals[0].key == "target")
+            require(spec.subcommands.size() == 1)
+            require(spec.subcommands[0].name == "run")
+            require(spec.subcommands[0].options.size() == 1)
+            require(spec.subcommands[0].options[0].key == "force")
+
+            require(reject(() => {
+                spec.name = "changed"
+            }))
+
+            require(reject(() => {
+                spec.options[0] = spec.options[0]
+            }))
+
+            require(reject(() => {
+                spec.options[0].key = "changed"
+            }))
+
+            require(reject(() => {
+                spec.subcommands[0].name = "changed"
+            }))
+
             true
         }
-    )
-}
-
-rootOption: {
-    key: "jobs"
-    long: "jobs"
-    short: "j"
-    minValues: 1
-    maxValues: 1
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: "COUNT"
-    help: "Workers"
-}
-
-rootPositional: {
-    key: "target"
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: "TARGET"
-    help: null
-}
-
-childOption: {
-    key: "force"
-    long: "force"
-    short: "f"
-    minValues: 0
-    maxValues: 0
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: null
-    help: null
-}
-
-childOptions: Array(childOption)
-child: {
-    name: "run"
-    help: "Run"
-    options: childOptions
-    positionals: Array()
-    subcommands: Array()
-}
-
-rootOptions: Array(rootOption)
-rootPositionals: Array(rootPositional)
-children: Array(child)
-descriptor: {
-    name: "tool"
-    help: "Tool"
-    options: rootOptions
-    positionals: rootPositionals
-    subcommands: children
-}
-
-spec: CommandLine.command(descriptor)
-
-rootOption.key = "changed-root-key"
-rootOption.long = "changed-root-long"
-rootPositional.key = "changed-positional"
-childOption.key = "changed-child-key"
-child.name = "changed-child-name"
-descriptor.name = "changed-root-name"
-
-rootOptions[0] = {
-    key: "replacement"
-    long: "replacement"
-    short: "r"
-    minValues: 0
-    maxValues: 0
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: null
-    help: null
-}
-
-rootPositionals[0] = {
-    key: "replacement-positional"
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: null
-    help: null
-}
-
-childOptions[0] = {
-    key: "replacement-child"
-    long: "replacement-child"
-    short: null
-    minValues: 0
-    maxValues: 0
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: null
-    help: null
-}
-
-children[0] = {
-    name: "replacement-child"
-    help: null
-    options: Array()
-    positionals: Array()
-    subcommands: Array()
-}
-
-require(spec.name == "tool")
-require(spec.options.size() == 1)
-require(spec.options[0].key == "jobs")
-require(spec.options[0].long == "jobs")
-require(spec.positionals.size() == 1)
-require(spec.positionals[0].key == "target")
-require(spec.subcommands.size() == 1)
-require(spec.subcommands[0].name == "run")
-require(spec.subcommands[0].options.size() == 1)
-require(spec.subcommands[0].options[0].key == "force")
-
-require(reject(() => {
-    spec.name = "changed"
-}))
-
-require(reject(() => {
-    spec.options[0] = spec.options[0]
-}))
-
-require(reject(() => {
-    spec.options[0].key = "changed"
-}))
-
-require(reject(() => {
-    spec.subcommands[0].name = "changed"
-}))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

@@ -13,68 +13,79 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Uri: import("std:uri")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("format constructed", () => {
+        tool009LegacyCase: () => {
+            Uri: import("std:uri")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            relative: {
+                scheme: null
+                userInfo: null
+                host: null
+                port: null
+                path: "a/b"
+                query: null
+                fragment: null
+            }
+            require(Uri.format(relative) == "a/b")
+
+            authority: {
+                scheme: "HTTP"
+                userInfo: ""
+                host: "Example.COM"
+                port: ""
+                path: "/%7e"
+                query: ""
+                fragment: "Frag"
+            }
+            require(Uri.format(authority) == "HTTP://@Example.COM:/%7e?#Frag")
+
+            allEmptyPresent: {
+                scheme: "x"
+                userInfo: ""
+                host: ""
+                port: ""
+                path: ""
+                query: ""
+                fragment: ""
+            }
+            require(Uri.format(allEmptyPresent) == "x://@:?#")
+
+            literal: {
+                scheme: null
+                userInfo: null
+                host: "[v1.fe80::a]"
+                port: "00080"
+                path: "/p"
+                query: "q=%2f"
+                fragment: null
+            }
+            require(Uri.format(literal) == "//[v1.fe80::a]:00080/p?q=%2f")
+
+            // format validates structural compatibility, not provenance from parse().
+            mutableCallerData: {
+                scheme: "custom"
+                userInfo: null
+                host: null
+                port: null
+                path: "payload"
+                query: null
+                fragment: null
+            }
+            require(Uri.format(mutableCallerData) == "custom:payload")
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-relative: {
-    scheme: null
-    userInfo: null
-    host: null
-    port: null
-    path: "a/b"
-    query: null
-    fragment: null
-}
-require(Uri.format(relative) == "a/b")
-
-authority: {
-    scheme: "HTTP"
-    userInfo: ""
-    host: "Example.COM"
-    port: ""
-    path: "/%7e"
-    query: ""
-    fragment: "Frag"
-}
-require(Uri.format(authority) == "HTTP://@Example.COM:/%7e?#Frag")
-
-allEmptyPresent: {
-    scheme: "x"
-    userInfo: ""
-    host: ""
-    port: ""
-    path: ""
-    query: ""
-    fragment: ""
-}
-require(Uri.format(allEmptyPresent) == "x://@:?#")
-
-literal: {
-    scheme: null
-    userInfo: null
-    host: "[v1.fe80::a]"
-    port: "00080"
-    path: "/p"
-    query: "q=%2f"
-    fragment: null
-}
-require(Uri.format(literal) == "//[v1.fe80::a]:00080/p?q=%2f")
-
-// format validates structural compatibility, not provenance from parse().
-mutableCallerData: {
-    scheme: "custom"
-    userInfo: null
-    host: null
-    port: null
-    path: "payload"
-    query: null
-    fragment: null
-}
-require(Uri.format(mutableCallerData) == "custom:payload")
-
-true
+]
+tests.freeze()

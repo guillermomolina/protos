@@ -12,49 +12,61 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
-IpAddresses: import("std:network/IpAddresses")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+tests: [
+    Test("ipv6 invalid", () => {
+        tool009LegacyCase: () => {
+            IpAddresses: import("std:network/IpAddresses")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            require(reject(() => { IpAddresses.parse(":::") }))
+            require(reject(() => { IpAddresses.parse("1::2::3") }))
+            require(reject(() => { IpAddresses.parse("1:2:3:4:5:6:7:8:9") }))
+            require(reject(() => { IpAddresses.parse("1:2:3:4:5:6:7") }))
+            require(reject(() => { IpAddresses.parse("1:2:3:4:5:6:7:8::") }))
+            require(reject(() => { IpAddresses.parse("12345::") }))
+            require(reject(() => { IpAddresses.parse("gggg::1") }))
+            require(reject(() => { IpAddresses.parse(":1:2:3:4:5:6:7") }))
+            require(reject(() => { IpAddresses.parse("1:2:3:4:5:6:7:") }))
+
+            // Embedded dotted-decimal tail must itself be strict IPv4 and final.
+            require(reject(() => { IpAddresses.parse("::ffff:192.0.2.256") }))
+            require(reject(() => { IpAddresses.parse("::ffff:192.168.001.1") }))
+            require(reject(() => { IpAddresses.parse("1.2.3.4::") }))
+            require(reject(() => { IpAddresses.parse("::ffff:192.0.2.1:5") }))
+
+            // Scope, brackets, whitespace and non-ASCII hexadecimal substitutes are not
+            // numeric IpAddress syntax in LIB005.
+            require(reject(() => { IpAddresses.parse("fe80::1%3") }))
+            require(reject(() => { IpAddresses.parse("fe80::1%eth0") }))
+            require(reject(() => { IpAddresses.parse("[::1]") }))
+            require(reject(() => { IpAddresses.parse(" ::1") }))
+            require(reject(() => { IpAddresses.parse("::1 ") }))
+            require(reject(() => { IpAddresses.parse("２００１:db8::1") }))
+
             true
         }
-    )
-}
-
-require(reject(() => { IpAddresses.parse(":::") }))
-require(reject(() => { IpAddresses.parse("1::2::3") }))
-require(reject(() => { IpAddresses.parse("1:2:3:4:5:6:7:8:9") }))
-require(reject(() => { IpAddresses.parse("1:2:3:4:5:6:7") }))
-require(reject(() => { IpAddresses.parse("1:2:3:4:5:6:7:8::") }))
-require(reject(() => { IpAddresses.parse("12345::") }))
-require(reject(() => { IpAddresses.parse("gggg::1") }))
-require(reject(() => { IpAddresses.parse(":1:2:3:4:5:6:7") }))
-require(reject(() => { IpAddresses.parse("1:2:3:4:5:6:7:") }))
-
-// Embedded dotted-decimal tail must itself be strict IPv4 and final.
-require(reject(() => { IpAddresses.parse("::ffff:192.0.2.256") }))
-require(reject(() => { IpAddresses.parse("::ffff:192.168.001.1") }))
-require(reject(() => { IpAddresses.parse("1.2.3.4::") }))
-require(reject(() => { IpAddresses.parse("::ffff:192.0.2.1:5") }))
-
-// Scope, brackets, whitespace and non-ASCII hexadecimal substitutes are not
-// numeric IpAddress syntax in LIB005.
-require(reject(() => { IpAddresses.parse("fe80::1%3") }))
-require(reject(() => { IpAddresses.parse("fe80::1%eth0") }))
-require(reject(() => { IpAddresses.parse("[::1]") }))
-require(reject(() => { IpAddresses.parse(" ::1") }))
-require(reject(() => { IpAddresses.parse("::1 ") }))
-require(reject(() => { IpAddresses.parse("２００１:db8::1") }))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

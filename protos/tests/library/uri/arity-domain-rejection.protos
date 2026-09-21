@@ -13,34 +13,45 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Uri: import("std:uri")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("arity domain rejection", () => {
+        tool009LegacyCase: () => {
+            Uri: import("std:uri")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            delegatedStringLookalike: String {}
+
+            require(reject(() => { Uri.parse() }))
+            require(reject(() => { Uri.parse("a", "b") }))
+            require(reject(() => { Uri.parse(123) }))
+            require(reject(() => { Uri.parse(null) }))
+            require(reject(() => { Uri.parse({}) }))
+            require(reject(() => { Uri.parse(Array()) }))
+            require(reject(() => { Uri.parse(delegatedStringLookalike) }))
+
             true
         }
-    )
-}
-
-delegatedStringLookalike: String {}
-
-require(reject(() => { Uri.parse() }))
-require(reject(() => { Uri.parse("a", "b") }))
-require(reject(() => { Uri.parse(123) }))
-require(reject(() => { Uri.parse(null) }))
-require(reject(() => { Uri.parse({}) }))
-require(reject(() => { Uri.parse(Array()) }))
-require(reject(() => { Uri.parse(delegatedStringLookalike) }))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

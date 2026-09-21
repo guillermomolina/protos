@@ -12,34 +12,46 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
-IpAddresses: import("std:network/IpAddresses")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("surface ipv4", () => {
+        tool009LegacyCase: () => {
+            IpAddresses: import("std:network/IpAddresses")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            // Exact module exports are checked by the Java harness because the current
+            // guest Object protocol does not yet expose slot-name enumeration.
+            zero: IpAddresses.v4(0, 0, 0, 0)
+            require(IpAddress.recognizes(zero))
+            require(zero.parent() === IpAddress)
+            require(zero.version == 4)
+            require(zero.bits == 0)
+
+            loopback: IpAddresses.v4(127, 0, 0, 1)
+            require(loopback.version == 4)
+            require(loopback.bits == 2130706433)
+
+            documentation: IpAddresses.v4(192, 0, 2, 1)
+            require(documentation.bits == 3221225985)
+
+            maximum: IpAddresses.v4(255, 255, 255, 255)
+            require(maximum.bits == 4294967295)
+
+            fresh: IpAddresses.v4(192, 0, 2, 1)
+            require(fresh == documentation)
+            require(fresh !== documentation)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-// Exact module exports are checked by the Java harness because the current
-// guest Object protocol does not yet expose slot-name enumeration.
-zero: IpAddresses.v4(0, 0, 0, 0)
-require(IpAddress.recognizes(zero))
-require(zero.parent() === IpAddress)
-require(zero.version == 4)
-require(zero.bits == 0)
-
-loopback: IpAddresses.v4(127, 0, 0, 1)
-require(loopback.version == 4)
-require(loopback.bits == 2130706433)
-
-documentation: IpAddresses.v4(192, 0, 2, 1)
-require(documentation.bits == 3221225985)
-
-maximum: IpAddresses.v4(255, 255, 255, 255)
-require(maximum.bits == 4294967295)
-
-fresh: IpAddresses.v4(192, 0, 2, 1)
-require(fresh == documentation)
-require(fresh !== documentation)
-
-true
+]
+tests.freeze()

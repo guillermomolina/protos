@@ -12,70 +12,82 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
-IpEndpoints: import("std:network/IpEndpoints")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("parse format", () => {
+        tool009LegacyCase: () => {
+            IpEndpoints: import("std:network/IpEndpoints")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            assertRoundTrip: (source, canonical, version, port) => {
+                endpoint: IpEndpoints.parse(source)
+
+                require(IpEndpoint.recognizes(endpoint))
+                require(endpoint.address.version == version)
+                require(endpoint.port == port)
+                require(IpEndpoints.format(endpoint) == canonical)
+
+                reparsed: IpEndpoints.parse(canonical)
+                require(reparsed == endpoint)
+                require(reparsed !== endpoint)
+            }
+
+            assertRoundTrip("0.0.0.0:1", "0.0.0.0:1", 4, 1)
+            assertRoundTrip("192.0.2.1:443", "192.0.2.1:443", 4, 443)
+            assertRoundTrip(
+                "255.255.255.255:65535",
+                "255.255.255.255:65535",
+                4,
+                65535
+            )
+
+            assertRoundTrip(
+                "192.0.2.1:00443",
+                "192.0.2.1:443",
+                4,
+                443
+            )
+
+            // The approved grammar permits decimal leading zeros without a separate
+            // character-count restriction; parser state remains bounded.
+            assertRoundTrip(
+                "192.0.2.1:00000000000000000443",
+                "192.0.2.1:443",
+                4,
+                443
+            )
+
+            assertRoundTrip("[::1]:443", "[::1]:443", 6, 443)
+            assertRoundTrip(
+                "[2001:0DB8::1]:00443",
+                "[2001:db8::1]:443",
+                6,
+                443
+            )
+            assertRoundTrip(
+                "[::ffff:192.0.2.1]:65535",
+                "[::ffff:192.0.2.1]:65535",
+                6,
+                65535
+            )
+
+            constructedV4: IpEndpoint(IpAddress(4, 3221225985), 80)
+            require(IpEndpoints.format(constructedV4) == "192.0.2.1:80")
+
+            constructedV6: IpEndpoint(IpAddress(6, 1), 1)
+            require(IpEndpoints.format(constructedV6) == "[::1]:1")
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-assertRoundTrip: (source, canonical, version, port) => {
-    endpoint: IpEndpoints.parse(source)
-
-    require(IpEndpoint.recognizes(endpoint))
-    require(endpoint.address.version == version)
-    require(endpoint.port == port)
-    require(IpEndpoints.format(endpoint) == canonical)
-
-    reparsed: IpEndpoints.parse(canonical)
-    require(reparsed == endpoint)
-    require(reparsed !== endpoint)
-}
-
-assertRoundTrip("0.0.0.0:1", "0.0.0.0:1", 4, 1)
-assertRoundTrip("192.0.2.1:443", "192.0.2.1:443", 4, 443)
-assertRoundTrip(
-    "255.255.255.255:65535",
-    "255.255.255.255:65535",
-    4,
-    65535
-)
-
-assertRoundTrip(
-    "192.0.2.1:00443",
-    "192.0.2.1:443",
-    4,
-    443
-)
-
-// The approved grammar permits decimal leading zeros without a separate
-// character-count restriction; parser state remains bounded.
-assertRoundTrip(
-    "192.0.2.1:00000000000000000443",
-    "192.0.2.1:443",
-    4,
-    443
-)
-
-assertRoundTrip("[::1]:443", "[::1]:443", 6, 443)
-assertRoundTrip(
-    "[2001:0DB8::1]:00443",
-    "[2001:db8::1]:443",
-    6,
-    443
-)
-assertRoundTrip(
-    "[::ffff:192.0.2.1]:65535",
-    "[::ffff:192.0.2.1]:65535",
-    6,
-    65535
-)
-
-constructedV4: IpEndpoint(IpAddress(4, 3221225985), 80)
-require(IpEndpoints.format(constructedV4) == "192.0.2.1:80")
-
-constructedV6: IpEndpoint(IpAddress(6, 1), 1)
-require(IpEndpoints.format(constructedV6) == "[::1]:1")
-
-true
+]
+tests.freeze()

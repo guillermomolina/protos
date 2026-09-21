@@ -13,108 +13,119 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Uri: import("std:uri")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("format invalid", () => {
+        tool009LegacyCase: () => {
+            Uri: import("std:uri")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            validBase: () => {
+                {
+                    scheme: null
+                    userInfo: null
+                    host: null
+                    port: null
+                    path: "a/b"
+                    query: null
+                    fragment: null
+                }
+            }
+
+            require(reject(() => { Uri.format() }))
+            require(reject(() => { Uri.format(validBase(), validBase()) }))
+            require(reject(() => { Uri.format("a/b") }))
+            require(reject(() => { Uri.format(null) }))
+
+            missingFragment: {
+                scheme: null
+                userInfo: null
+                host: null
+                port: null
+                path: "a/b"
+                query: null
+            }
+            require(reject(() => { Uri.format(missingFragment) }))
+
+            badSchemeFamily: validBase()
+            badSchemeFamily.scheme = 1
+            require(reject(() => { Uri.format(badSchemeFamily) }))
+
+            badPathFamily: validBase()
+            badPathFamily.path = 1
+            require(reject(() => { Uri.format(badPathFamily) }))
+
+            orphanUserInfo: validBase()
+            orphanUserInfo.userInfo = ""
+            require(reject(() => { Uri.format(orphanUserInfo) }))
+
+            orphanPort: validBase()
+            orphanPort.port = ""
+            require(reject(() => { Uri.format(orphanPort) }))
+
+            badScheme: validBase()
+            badScheme.scheme = "1bad"
+            require(reject(() => { Uri.format(badScheme) }))
+
+            relativeColon: validBase()
+            relativeColon.path = "a:b"
+            require(reject(() => { Uri.format(relativeColon) }))
+
+            badHost: validBase()
+            badHost.host = "exa mple"
+            require(reject(() => { Uri.format(badHost) }))
+
+            badLiteral: validBase()
+            badLiteral.host = "[v1.]"
+            require(reject(() => { Uri.format(badLiteral) }))
+
+            badPort: validBase()
+            badPort.host = "host"
+            badPort.port = "80x"
+            require(reject(() => { Uri.format(badPort) }))
+
+            badPercent: validBase()
+            badPercent.path = "/a%GG"
+            require(reject(() => { Uri.format(badPercent) }))
+
+            rawUnicode: validBase()
+            rawUnicode.path = "/café"
+            require(reject(() => { Uri.format(rawUnicode) }))
+
+            rawBackslash: validBase()
+            rawBackslash.path = "/a\\b"
+            require(reject(() => { Uri.format(rawBackslash) }))
+
+            queryDelimiter: validBase()
+            queryDelimiter.query = "a#b"
+            require(reject(() => { Uri.format(queryDelimiter) }))
+
+            pathDelimiter: validBase()
+            pathDelimiter.path = "/a?b"
+            require(reject(() => { Uri.format(pathDelimiter) }))
+
             true
         }
-    )
-}
-
-validBase: () => {
-    {
-        scheme: null
-        userInfo: null
-        host: null
-        port: null
-        path: "a/b"
-        query: null
-        fragment: null
-    }
-}
-
-require(reject(() => { Uri.format() }))
-require(reject(() => { Uri.format(validBase(), validBase()) }))
-require(reject(() => { Uri.format("a/b") }))
-require(reject(() => { Uri.format(null) }))
-
-missingFragment: {
-    scheme: null
-    userInfo: null
-    host: null
-    port: null
-    path: "a/b"
-    query: null
-}
-require(reject(() => { Uri.format(missingFragment) }))
-
-badSchemeFamily: validBase()
-badSchemeFamily.scheme = 1
-require(reject(() => { Uri.format(badSchemeFamily) }))
-
-badPathFamily: validBase()
-badPathFamily.path = 1
-require(reject(() => { Uri.format(badPathFamily) }))
-
-orphanUserInfo: validBase()
-orphanUserInfo.userInfo = ""
-require(reject(() => { Uri.format(orphanUserInfo) }))
-
-orphanPort: validBase()
-orphanPort.port = ""
-require(reject(() => { Uri.format(orphanPort) }))
-
-badScheme: validBase()
-badScheme.scheme = "1bad"
-require(reject(() => { Uri.format(badScheme) }))
-
-relativeColon: validBase()
-relativeColon.path = "a:b"
-require(reject(() => { Uri.format(relativeColon) }))
-
-badHost: validBase()
-badHost.host = "exa mple"
-require(reject(() => { Uri.format(badHost) }))
-
-badLiteral: validBase()
-badLiteral.host = "[v1.]"
-require(reject(() => { Uri.format(badLiteral) }))
-
-badPort: validBase()
-badPort.host = "host"
-badPort.port = "80x"
-require(reject(() => { Uri.format(badPort) }))
-
-badPercent: validBase()
-badPercent.path = "/a%GG"
-require(reject(() => { Uri.format(badPercent) }))
-
-rawUnicode: validBase()
-rawUnicode.path = "/café"
-require(reject(() => { Uri.format(rawUnicode) }))
-
-rawBackslash: validBase()
-rawBackslash.path = "/a\\b"
-require(reject(() => { Uri.format(rawBackslash) }))
-
-queryDelimiter: validBase()
-queryDelimiter.query = "a#b"
-require(reject(() => { Uri.format(queryDelimiter) }))
-
-pathDelimiter: validBase()
-pathDelimiter.path = "/a?b"
-require(reject(() => { Uri.format(pathDelimiter) }))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

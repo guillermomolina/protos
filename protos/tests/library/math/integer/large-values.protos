@@ -13,24 +13,35 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-IntegerMath: import("std:math/Integer")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("large values", () => {
+        tool009LegacyCase: () => {
+            IntegerMath: import("std:math/Integer")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            // 2^80, well beyond every signed/unsigned 64-bit range.
+            unit: 1208925819614629174706176
+            fifteenUnits: 18133887294219437620592640
+            twentyOneUnits: 25387442211907212668829696
+            threeUnits: 3626777458843887524118528
+            oneHundredFiveUnits: 126937211059536063344148480
+
+            require(IntegerMath.gcd(fifteenUnits, twentyOneUnits) == threeUnits)
+            require(IntegerMath.gcd(0 - fifteenUnits, twentyOneUnits) == threeUnits)
+            require(IntegerMath.lcm(fifteenUnits, twentyOneUnits) == oneHundredFiveUnits)
+            require(IntegerMath.lcm(0 - fifteenUnits, twentyOneUnits) == oneHundredFiveUnits)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-// 2^80, well beyond every signed/unsigned 64-bit range.
-unit: 1208925819614629174706176
-fifteenUnits: 18133887294219437620592640
-twentyOneUnits: 25387442211907212668829696
-threeUnits: 3626777458843887524118528
-oneHundredFiveUnits: 126937211059536063344148480
-
-require(IntegerMath.gcd(fifteenUnits, twentyOneUnits) == threeUnits)
-require(IntegerMath.gcd(0 - fifteenUnits, twentyOneUnits) == threeUnits)
-require(IntegerMath.lcm(fifteenUnits, twentyOneUnits) == oneHundredFiveUnits)
-require(IntegerMath.lcm(0 - fifteenUnits, twentyOneUnits) == oneHundredFiveUnits)
-
-true
+]
+tests.freeze()

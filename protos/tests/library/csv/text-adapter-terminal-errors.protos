@@ -13,65 +13,76 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("text adapter terminal errors", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            badReader: {
+                readText: () => {
+                    Error().signal()
+                }
+            }
+            input: CSV.readRows(badReader, (row) => { null })
+            require(reject(() => { input.read() }))
+            require(reject(() => { input.read() }))
+
+            writerCalls: 0
+            badWriter: {
+                writeText: (text) => {
+                    writerCalls = writerCalls + 1
+                    Error().signal()
+                }
+            }
+            output: CSV.writeRows(badWriter)
+            require(reject(() => { output.feed(Array("a")) }))
+            require(writerCalls == 1)
+            require(reject(() => { output.feed(Array("b")) }))
+            require(reject(() => { output.finish() }))
+            require(writerCalls == 1)
+
+            invalidWriterCalls: 0
+            unusedWriter: {
+                writeText: (text) => {
+                    invalidWriterCalls = invalidWriterCalls + 1
+                    (() => { unusedWriter }).future()
+                }
+            }
+            invalidOutput: CSV.writeRows(unusedWriter)
+            require(reject(() => { invalidOutput.feed(Array()) }))
+            require(invalidWriterCalls == 0)
+            require(reject(() => { invalidOutput.feed(Array("later")) }))
+            require(invalidWriterCalls == 0)
+
+            require(reject(() => { CSV.readRows() }))
+            require(reject(() => { CSV.readRows({}, (row) => { null }, 1) }))
+            require(reject(() => { CSV.writeRows() }))
+            require(reject(() => { CSV.writeRows({}, {}) }))
+
             true
         }
-    )
-}
-
-badReader: {
-    readText: () => {
-        Error().signal()
-    }
-}
-input: CSV.readRows(badReader, (row) => { null })
-require(reject(() => { input.read() }))
-require(reject(() => { input.read() }))
-
-writerCalls: 0
-badWriter: {
-    writeText: (text) => {
-        writerCalls = writerCalls + 1
-        Error().signal()
-    }
-}
-output: CSV.writeRows(badWriter)
-require(reject(() => { output.feed(Array("a")) }))
-require(writerCalls == 1)
-require(reject(() => { output.feed(Array("b")) }))
-require(reject(() => { output.finish() }))
-require(writerCalls == 1)
-
-invalidWriterCalls: 0
-unusedWriter: {
-    writeText: (text) => {
-        invalidWriterCalls = invalidWriterCalls + 1
-        (() => { unusedWriter }).future()
-    }
-}
-invalidOutput: CSV.writeRows(unusedWriter)
-require(reject(() => { invalidOutput.feed(Array()) }))
-require(invalidWriterCalls == 0)
-require(reject(() => { invalidOutput.feed(Array("later")) }))
-require(invalidWriterCalls == 0)
-
-require(reject(() => { CSV.readRows() }))
-require(reject(() => { CSV.readRows({}, (row) => { null }, 1) }))
-require(reject(() => { CSV.writeRows() }))
-require(reject(() => { CSV.writeRows({}, {}) }))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

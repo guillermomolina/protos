@@ -13,58 +13,69 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("text adapter overlap", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
-            true
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            readerCalls: 0
+            reader: {
+                readText: () => {
+                    readerCalls = readerCalls + 1
+                    (() => { "a\n" }).future()
+                }
+            }
+            input: CSV.readRows(reader, (row) => { null })
+            firstRead: input.read()
+            require(reject(() => { input.read() }))
+            require(readerCalls == 1)
+
+            sink: ""
+            writer: null
+            writer = {
+                writeText: (text) => {
+                    (() => {
+                        sink = sink + text
+                        writer
+                    }).future()
+                }
+            }
+            output: CSV.writeRows(writer)
+            firstWrite: output.feed(Array("a"))
+            require(reject(() => { output.feed(Array("b")) }))
+            require(reject(() => { output.finish() }))
+
+            firstRead.then((more) => {
+                require(more === true)
+                firstWrite.then((resolvedOutput) => {
+                    require(resolvedOutput === output)
+                    require(sink == "a\r\n")
+                    true
+                })
+            })
         }
-    )
-}
-
-readerCalls: 0
-reader: {
-    readText: () => {
-        readerCalls = readerCalls + 1
-        (() => { "a\n" }).future()
-    }
-}
-input: CSV.readRows(reader, (row) => { null })
-firstRead: input.read()
-require(reject(() => { input.read() }))
-require(readerCalls == 1)
-
-sink: ""
-writer: null
-writer = {
-    writeText: (text) => {
-        (() => {
-            sink = sink + text
-            writer
-        }).future()
-    }
-}
-output: CSV.writeRows(writer)
-firstWrite: output.feed(Array("a"))
-require(reject(() => { output.feed(Array("b")) }))
-require(reject(() => { output.finish() }))
-
-firstRead.then((more) => {
-    require(more === true)
-    firstWrite.then((resolvedOutput) => {
-        require(resolvedOutput === output)
-        require(sink == "a\r\n")
-        true
+        Assertions.require(tool009LegacyCase().value() === true)
     })
-})
+]
+tests.freeze()

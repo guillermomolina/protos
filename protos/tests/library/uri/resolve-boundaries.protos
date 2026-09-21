@@ -13,64 +13,75 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Uri: import("std:uri")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("resolve boundaries", () => {
+        tool009LegacyCase: () => {
+            Uri: import("std:uri")
 
-preservedBase: Uri.parse("HTTP://User@Example.COM:080/a/b/c?q=%2f")
-preserved: Uri.resolve(preservedBase, Uri.parse("../%2E/x?y=%2f#Frag"))
-require(Uri.format(preserved) == "HTTP://User@Example.COM:080/a/%2E/x?y=%2f#Frag")
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
 
-// Authority + empty base path uses the RFC merge special case.
-require(Uri.format(Uri.resolve(Uri.parse("http://a"), Uri.parse("g"))) == "http://a/g")
+            preservedBase: Uri.parse("HTTP://User@Example.COM:080/a/b/c?q=%2f")
+            preserved: Uri.resolve(preservedBase, Uri.parse("../%2E/x?y=%2f#Frag"))
+            require(Uri.format(preserved) == "HTTP://User@Example.COM:080/a/%2E/x?y=%2f#Frag")
 
-// Rootless absolute-URI bases remain valid bases.
-require(Uri.format(Uri.resolve(Uri.parse("urn:a/b/c"), Uri.parse("../d"))) == "urn:a/d")
+            // Authority + empty base path uses the RFC merge special case.
+            require(Uri.format(Uri.resolve(Uri.parse("http://a"), Uri.parse("g"))) == "http://a/g")
 
-// A network-path reference replaces authority while inheriting the base scheme.
-require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c"), Uri.parse("//B/x"))) == "http://B/x")
+            // Rootless absolute-URI bases remain valid bases.
+            require(Uri.format(Uri.resolve(Uri.parse("urn:a/b/c"), Uri.parse("../d"))) == "urn:a/d")
 
-// Empty query presence replaces an inherited query; a fragment-only reference
-// keeps the base query.
-require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c?old"), Uri.parse("?"))) == "http://a/b/c?")
-require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c?old"), Uri.parse("#f"))) == "http://a/b/c?old#f")
+            // A network-path reference replaces authority while inheriting the base scheme.
+            require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c"), Uri.parse("//B/x"))) == "http://B/x")
 
-// Resolution publishes fresh frozen ordinary data.
-base: Uri.parse("http://a/b/c/d;p?q")
-reference: Uri.parse("../g#f")
-first: Uri.resolve(base, reference)
-second: Uri.resolve(base, reference)
-require(first !== second)
-require(first.parent() === Object)
-require(first.freeze() === first)
+            // Empty query presence replaces an inherited query; a fragment-only reference
+            // keeps the base query.
+            require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c?old"), Uri.parse("?"))) == "http://a/b/c?")
+            require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c?old"), Uri.parse("#f"))) == "http://a/b/c?old#f")
 
-names: first.slotNames()
-require(names.size() == 7)
-require(names[0] == "fragment")
-require(names[1] == "host")
-require(names[2] == "path")
-require(names[3] == "port")
-require(names[4] == "query")
-require(names[5] == "scheme")
-require(names[6] == "userInfo")
+            // Resolution publishes fresh frozen ordinary data.
+            base: Uri.parse("http://a/b/c/d;p?q")
+            reference: Uri.parse("../g#f")
+            first: Uri.resolve(base, reference)
+            second: Uri.resolve(base, reference)
+            require(first !== second)
+            require(first.parent() === Object)
+            require(first.freeze() === first)
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            names: first.slotNames()
+            require(names.size() == 7)
+            require(names[0] == "fragment")
+            require(names[1] == "host")
+            require(names[2] == "path")
+            require(names[3] == "port")
+            require(names[4] == "query")
+            require(names[5] == "scheme")
+            require(names[6] == "userInfo")
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+            require(reject(() => { first.path = "/changed" }))
+            require(reject(() => { first.extra: "value" }))
+            require(Uri.format(first) == "http://a/b/g#f")
+
             true
         }
-    )
-}
-require(reject(() => { first.path = "/changed" }))
-require(reject(() => { first.extra: "value" }))
-require(Uri.format(first) == "http://a/b/g#f")
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

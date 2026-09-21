@@ -13,31 +13,42 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("encode canonical", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            require(CSV.encode(Array()) == "")
+            require(CSV.encode(Array(Array("a", "b"))) == "a,b\r\n")
+            require(CSV.encode(Array(Array(""))) == "\r\n")
+            require(CSV.encode(Array(Array("a,b", "x"))) == "\"a,b\",x\r\n")
+            require(CSV.encode(Array(Array("a\"b"))) == "\"a\"\"b\"\r\n")
+            require(CSV.encode(Array(Array(" a "))) == " a \r\n")
+            require(CSV.encode(Array(Array("a\nb"))) == "\"a\nb\"\r\n")
+            require(CSV.encode(Array(Array("a\rb"))) == "\"a\rb\"\r\n")
+            require(CSV.encode(Array(Array("a\r\nb"))) == "\"a\r\nb\"\r\n")
+            require(CSV.encode(Array(Array("=1+1", "+x", "-x", "@x"))) == "=1+1,+x,-x,@x\r\n")
+            require(CSV.encode(Array(Array("\\."))) == "\\.\r\n")
+
+            many: CSV.encode(Array(
+                Array("alpha", "beta"),
+                Array("x,y", "\"q\"", ""),
+                Array("snow 雪", "emoji 🙂")
+            ))
+            require(many == "alpha,beta\r\n\"x,y\",\"\"\"q\"\"\",\r\nsnow 雪,emoji 🙂\r\n")
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-require(CSV.encode(Array()) == "")
-require(CSV.encode(Array(Array("a", "b"))) == "a,b\r\n")
-require(CSV.encode(Array(Array(""))) == "\r\n")
-require(CSV.encode(Array(Array("a,b", "x"))) == "\"a,b\",x\r\n")
-require(CSV.encode(Array(Array("a\"b"))) == "\"a\"\"b\"\r\n")
-require(CSV.encode(Array(Array(" a "))) == " a \r\n")
-require(CSV.encode(Array(Array("a\nb"))) == "\"a\nb\"\r\n")
-require(CSV.encode(Array(Array("a\rb"))) == "\"a\rb\"\r\n")
-require(CSV.encode(Array(Array("a\r\nb"))) == "\"a\r\nb\"\r\n")
-require(CSV.encode(Array(Array("=1+1", "+x", "-x", "@x"))) == "=1+1,+x,-x,@x\r\n")
-require(CSV.encode(Array(Array("\\."))) == "\\.\r\n")
-
-many: CSV.encode(Array(
-    Array("alpha", "beta"),
-    Array("x,y", "\"q\"", ""),
-    Array("snow 雪", "emoji 🙂")
-))
-require(many == "alpha,beta\r\n\"x,y\",\"\"\"q\"\"\",\r\nsnow 雪,emoji 🙂\r\n")
-
-true
+]
+tests.freeze()

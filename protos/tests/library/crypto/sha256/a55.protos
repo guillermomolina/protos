@@ -13,17 +13,28 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-SHA256: import("std:crypto/SHA256")
-input: Encoding.UTF8.encode("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-digest: SHA256.digest(input)
-expected: Array(159, 67, 144, 248, 211, 12, 45, 217, 46, 201, 240, 149, 182, 94, 43, 154, 233, 176, 169, 37, 165, 37, 142, 36, 28, 159, 30, 145, 15, 115, 67, 24)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ok: digest.size() == 32
-index: 0
-expected.each((octet) => {
-    (digest[index] == octet).ifFalse(() => {
-        ok = false
+tests: [
+    Test("a55", () => {
+        tool009LegacyCase: () => {
+            SHA256: import("std:crypto/SHA256")
+            input: Encoding.UTF8.encode("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+            digest: SHA256.digest(input)
+            expected: Array(159, 67, 144, 248, 211, 12, 45, 217, 46, 201, 240, 149, 182, 94, 43, 154, 233, 176, 169, 37, 165, 37, 142, 36, 28, 159, 30, 145, 15, 115, 67, 24)
+
+            ok: digest.size() == 32
+            index: 0
+            expected.each((octet) => {
+                (digest[index] == octet).ifFalse(() => {
+                    ok = false
+                })
+                index = index + 1
+            })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
     })
-    index = index + 1
-})
-ok
+]
+tests.freeze()

@@ -13,72 +13,83 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("row parser boundaries", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            checkSplit: (left, right) => {
+                rows: Map()
+                count: 0
+
+                parser: CSV.rowParser((row) => {
+                    rows[count] = row
+                    count = count + 1
+                })
+
+                parser.feed(left)
+                parser.feed("")
+                parser.feed(right)
+                parser.finish()
+
+                require(count == 3)
+
+                require(rows[0].size() == 3)
+                require(rows[0][0] == "a")
+                require(rows[0][1] == "b,b")
+                require(rows[0][2] == "c\"d")
+
+                require(rows[1].size() == 2)
+                require(rows[1][0] == "x\r\ny")
+                require(rows[1][1] == "z")
+
+                require(rows[2].size() == 2)
+                require(rows[2][0] == "q")
+                require(rows[2][1] == "")
+
+            }
+
+            checkSplit("", "a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a", ",\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,", "\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"", "b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b", ",b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,", "b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b", "\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\"", ",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",", "\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"", "c\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c", "\"\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"", "\"d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"", "d\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d", "\"\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"", "\r\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r", "\n\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n", "\"x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"", "x\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x", "\r\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r", "\ny\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\n", "y\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny", "\",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\"", ",z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",", "z\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z", "\rq,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\r", "q,")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq", ",")
+            checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,", "")
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-checkSplit: (left, right) => {
-    rows: Map()
-    count: 0
-
-    parser: CSV.rowParser((row) => {
-        rows[count] = row
-        count = count + 1
-    })
-
-    parser.feed(left)
-    parser.feed("")
-    parser.feed(right)
-    parser.finish()
-
-    require(count == 3)
-
-    require(rows[0].size() == 3)
-    require(rows[0][0] == "a")
-    require(rows[0][1] == "b,b")
-    require(rows[0][2] == "c\"d")
-
-    require(rows[1].size() == 2)
-    require(rows[1][0] == "x\r\ny")
-    require(rows[1][1] == "z")
-
-    require(rows[2].size() == 2)
-    require(rows[2][0] == "q")
-    require(rows[2][1] == "")
-
-}
-
-checkSplit("", "a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a", ",\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,", "\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"", "b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b", ",b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,", "b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b", "\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\"", ",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",", "\"c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"", "c\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c", "\"\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"", "\"d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"", "d\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d", "\"\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"", "\r\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r", "\n\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n", "\"x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"", "x\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x", "\r\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r", "\ny\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\n", "y\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny", "\",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\"", ",z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",", "z\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z", "\rq,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\r", "q,")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq", ",")
-checkSplit("a,\"b,b\",\"c\"\"d\"\r\n\"x\r\ny\",z\rq,", "")
-
-true
+]
+tests.freeze()

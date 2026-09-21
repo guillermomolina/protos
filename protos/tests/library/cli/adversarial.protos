@@ -13,198 +13,209 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CommandLine: import("std:cli/CommandLine")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("adversarial", () => {
+        tool009LegacyCase: () => {
+            CommandLine: import("std:cli/CommandLine")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            require(reject(() => {
+                CommandLine.command({
+                    name: "tool"
+                    help: null
+                    options: Array(
+                        {
+                            key: "first"
+                            long: "first"
+                            short: "x"
+                            minValues: 0
+                            maxValues: 0
+                            minOccurrences: 0
+                            maxOccurrences: 1
+                            valueName: null
+                            help: null
+                        },
+                        {
+                            key: "second"
+                            long: "second"
+                            short: "x"
+                            minValues: 0
+                            maxValues: 0
+                            minOccurrences: 0
+                            maxOccurrences: 1
+                            valueName: null
+                            help: null
+                        }
+                    )
+                    positionals: Array()
+                    subcommands: Array()
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.command({
+                    name: "tool"
+                    help: null
+                    options: Array()
+                    positionals: Array(
+                        {
+                            key: "same"
+                            minOccurrences: 0
+                            maxOccurrences: 1
+                            valueName: "ARG"
+                            help: null
+                        },
+                        {
+                            key: "same"
+                            minOccurrences: 0
+                            maxOccurrences: 1
+                            valueName: "ARG"
+                            help: null
+                        }
+                    )
+                    subcommands: Array()
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.option({
+                    key: 7
+                    long: "jobs"
+                    short: "j"
+                    minValues: 1
+                    maxValues: 1
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: "VALUE"
+                    help: null
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.option({
+                    key: "jobs"
+                    long: "mañana"
+                    short: "j"
+                    minValues: 1
+                    maxValues: 1
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: "VALUE"
+                    help: null
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.option({
+                    key: "jobs"
+                    long: "jobs"
+                    short: "-"
+                    minValues: 1
+                    maxValues: 1
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: "VALUE"
+                    help: null
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.command({
+                    name: "tool_name"
+                    help: null
+                    options: Array()
+                    positionals: Array()
+                    subcommands: Array()
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.command({
+                    name: "tool"
+                    help: null
+                    options: {}
+                    positionals: Array()
+                    subcommands: Array()
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.option({
+                    key: "jobs"
+                    long: "jobs"
+                    short: "j"
+                    minValues: 1.0
+                    maxValues: 1
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: "VALUE"
+                    help: null
+                })
+            }))
+
+            require(reject(() => {
+                child: {
+                    name: "run"
+                    help: null
+                    options: Array({
+                        key: "broken"
+                        long: "broken"
+                        short: null
+                        minValues: 0
+                        maxValues: 0
+                        minOccurrences: 0
+                        valueName: null
+                        help: null
+                    })
+                    positionals: Array()
+                    subcommands: Array()
+                }
+
+                CommandLine.command({
+                    name: "tool"
+                    help: null
+                    options: Array()
+                    positionals: Array()
+                    subcommands: Array(child)
+                })
+            }))
+
+            require(reject(() => {
+                children: Array(null)
+                root: {
+                    name: "tool"
+                    help: null
+                    options: Array()
+                    positionals: Array()
+                    subcommands: children
+                }
+                children[0] = root
+                CommandLine.command(root)
+            }))
+
             true
         }
-    )
-}
-
-require(reject(() => {
-    CommandLine.command({
-        name: "tool"
-        help: null
-        options: Array(
-            {
-                key: "first"
-                long: "first"
-                short: "x"
-                minValues: 0
-                maxValues: 0
-                minOccurrences: 0
-                maxOccurrences: 1
-                valueName: null
-                help: null
-            },
-            {
-                key: "second"
-                long: "second"
-                short: "x"
-                minValues: 0
-                maxValues: 0
-                minOccurrences: 0
-                maxOccurrences: 1
-                valueName: null
-                help: null
-            }
-        )
-        positionals: Array()
-        subcommands: Array()
+        Assertions.require(tool009LegacyCase())
     })
-}))
-
-require(reject(() => {
-    CommandLine.command({
-        name: "tool"
-        help: null
-        options: Array()
-        positionals: Array(
-            {
-                key: "same"
-                minOccurrences: 0
-                maxOccurrences: 1
-                valueName: "ARG"
-                help: null
-            },
-            {
-                key: "same"
-                minOccurrences: 0
-                maxOccurrences: 1
-                valueName: "ARG"
-                help: null
-            }
-        )
-        subcommands: Array()
-    })
-}))
-
-require(reject(() => {
-    CommandLine.option({
-        key: 7
-        long: "jobs"
-        short: "j"
-        minValues: 1
-        maxValues: 1
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: "VALUE"
-        help: null
-    })
-}))
-
-require(reject(() => {
-    CommandLine.option({
-        key: "jobs"
-        long: "mañana"
-        short: "j"
-        minValues: 1
-        maxValues: 1
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: "VALUE"
-        help: null
-    })
-}))
-
-require(reject(() => {
-    CommandLine.option({
-        key: "jobs"
-        long: "jobs"
-        short: "-"
-        minValues: 1
-        maxValues: 1
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: "VALUE"
-        help: null
-    })
-}))
-
-require(reject(() => {
-    CommandLine.command({
-        name: "tool_name"
-        help: null
-        options: Array()
-        positionals: Array()
-        subcommands: Array()
-    })
-}))
-
-require(reject(() => {
-    CommandLine.command({
-        name: "tool"
-        help: null
-        options: {}
-        positionals: Array()
-        subcommands: Array()
-    })
-}))
-
-require(reject(() => {
-    CommandLine.option({
-        key: "jobs"
-        long: "jobs"
-        short: "j"
-        minValues: 1.0
-        maxValues: 1
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: "VALUE"
-        help: null
-    })
-}))
-
-require(reject(() => {
-    child: {
-        name: "run"
-        help: null
-        options: Array({
-            key: "broken"
-            long: "broken"
-            short: null
-            minValues: 0
-            maxValues: 0
-            minOccurrences: 0
-            valueName: null
-            help: null
-        })
-        positionals: Array()
-        subcommands: Array()
-    }
-
-    CommandLine.command({
-        name: "tool"
-        help: null
-        options: Array()
-        positionals: Array()
-        subcommands: Array(child)
-    })
-}))
-
-require(reject(() => {
-    children: Array(null)
-    root: {
-        name: "tool"
-        help: null
-        options: Array()
-        positionals: Array()
-        subcommands: children
-    }
-    children[0] = root
-    CommandLine.command(root)
-}))
-
-true
+]
+tests.freeze()

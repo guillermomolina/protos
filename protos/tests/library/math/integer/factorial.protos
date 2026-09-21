@@ -13,20 +13,31 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-IntegerMath: import("std:math/Integer")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("factorial", () => {
+        tool009LegacyCase: () => {
+            IntegerMath: import("std:math/Integer")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            require(IntegerMath.factorial(0) == 1)
+            require(IntegerMath.factorial(1) == 1)
+            require(IntegerMath.factorial(2) == 2)
+            require(IntegerMath.factorial(5) == 120)
+            require(IntegerMath.factorial(10) == 3628800)
+            require(IntegerMath.factorial(21) == 51090942171709440000)
+            require(IntegerMath.factorial(100) == 93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-require(IntegerMath.factorial(0) == 1)
-require(IntegerMath.factorial(1) == 1)
-require(IntegerMath.factorial(2) == 2)
-require(IntegerMath.factorial(5) == 120)
-require(IntegerMath.factorial(10) == 3628800)
-require(IntegerMath.factorial(21) == 51090942171709440000)
-require(IntegerMath.factorial(100) == 93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000)
-
-true
+]
+tests.freeze()

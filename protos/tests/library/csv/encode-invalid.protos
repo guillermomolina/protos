@@ -13,35 +13,46 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("encode invalid", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            require(reject(() => { CSV.encode() }))
+            require(reject(() => { CSV.encode(Array(), Array()) }))
+            require(reject(() => { CSV.encode("a") }))
+            require(reject(() => { CSV.encode(Map()) }))
+            require(reject(() => { CSV.encode(Array("a")) }))
+            require(reject(() => { CSV.encode(Array(Map())) }))
+            require(reject(() => { CSV.encode(Array(Array())) }))
+            require(reject(() => { CSV.encode(Array(Array(42))) }))
+            require(reject(() => { CSV.encode(Array(Array(null))) }))
+            require(reject(() => { CSV.encode(Array(Array(Array("a")))) }))
+
             true
         }
-    )
-}
-
-require(reject(() => { CSV.encode() }))
-require(reject(() => { CSV.encode(Array(), Array()) }))
-require(reject(() => { CSV.encode("a") }))
-require(reject(() => { CSV.encode(Map()) }))
-require(reject(() => { CSV.encode(Array("a")) }))
-require(reject(() => { CSV.encode(Array(Map())) }))
-require(reject(() => { CSV.encode(Array(Array())) }))
-require(reject(() => { CSV.encode(Array(Array(42))) }))
-require(reject(() => { CSV.encode(Array(Array(null))) }))
-require(reject(() => { CSV.encode(Array(Array(Array("a")))) }))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

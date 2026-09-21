@@ -13,98 +13,109 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Uri: import("std:uri")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("parse components", () => {
+        tool009LegacyCase: () => {
+            Uri: import("std:uri")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            reference: Uri.parse("HTTP://user@example.com:080/a/b?x=%2f#Frag")
+
+            require(reference.scheme == "HTTP")
+            require(reference.userInfo == "user")
+            require(reference.host == "example.com")
+            require(reference.port == "080")
+            require(reference.path == "/a/b")
+            require(reference.query == "x=%2f")
+            require(reference.fragment == "Frag")
+
+            names: reference.slotNames()
+            require(names.size() == 7)
+            require(names[0] == "fragment")
+            require(names[1] == "host")
+            require(names[2] == "path")
+            require(names[3] == "port")
+            require(names[4] == "query")
+            require(names[5] == "scheme")
+            require(names[6] == "userInfo")
+
+            require(reference.parent() === Object)
+            require(reference.freeze() === reference)
+            require(reject(() => { reference.path = "/changed" }))
+            require(reject(() => { reference.extra: "value" }))
+            require(reference.path == "/a/b")
+
+            sameText: Uri.parse("HTTP://user@example.com:080/a/b?x=%2f#Frag")
+            require(reference !== sameText)
+
+            empty: Uri.parse("")
+            require(empty.scheme === null)
+            require(empty.userInfo === null)
+            require(empty.host === null)
+            require(empty.port === null)
+            require(empty.path == "")
+            require(empty.query === null)
+            require(empty.fragment === null)
+
+            emptyQuery: Uri.parse("scheme:path?")
+            require(emptyQuery.scheme == "scheme")
+            require(emptyQuery.host === null)
+            require(emptyQuery.userInfo === null)
+            require(emptyQuery.port === null)
+            require(emptyQuery.path == "path")
+            require(emptyQuery.query == "")
+            require(emptyQuery.fragment === null)
+
+            emptyFragment: Uri.parse("scheme:path#")
+            require(emptyFragment.query === null)
+            require(emptyFragment.fragment == "")
+
+            emptyAuthority: Uri.parse("scheme:///path")
+            require(emptyAuthority.scheme == "scheme")
+            require(emptyAuthority.userInfo === null)
+            require(emptyAuthority.host == "")
+            require(emptyAuthority.port === null)
+            require(emptyAuthority.path == "/path")
+
+            networkEmpty: Uri.parse("//?")
+            require(networkEmpty.scheme === null)
+            require(networkEmpty.userInfo === null)
+            require(networkEmpty.host == "")
+            require(networkEmpty.port === null)
+            require(networkEmpty.path == "")
+            require(networkEmpty.query == "")
+
+            emptyUserInfo: Uri.parse("//@host/")
+            require(emptyUserInfo.userInfo == "")
+            require(emptyUserInfo.host == "host")
+
+            emptyPort: Uri.parse("//host:/")
+            require(emptyPort.host == "host")
+            require(emptyPort.port == "")
+
             true
         }
-    )
-}
-
-reference: Uri.parse("HTTP://user@example.com:080/a/b?x=%2f#Frag")
-
-require(reference.scheme == "HTTP")
-require(reference.userInfo == "user")
-require(reference.host == "example.com")
-require(reference.port == "080")
-require(reference.path == "/a/b")
-require(reference.query == "x=%2f")
-require(reference.fragment == "Frag")
-
-names: reference.slotNames()
-require(names.size() == 7)
-require(names[0] == "fragment")
-require(names[1] == "host")
-require(names[2] == "path")
-require(names[3] == "port")
-require(names[4] == "query")
-require(names[5] == "scheme")
-require(names[6] == "userInfo")
-
-require(reference.parent() === Object)
-require(reference.freeze() === reference)
-require(reject(() => { reference.path = "/changed" }))
-require(reject(() => { reference.extra: "value" }))
-require(reference.path == "/a/b")
-
-sameText: Uri.parse("HTTP://user@example.com:080/a/b?x=%2f#Frag")
-require(reference !== sameText)
-
-empty: Uri.parse("")
-require(empty.scheme === null)
-require(empty.userInfo === null)
-require(empty.host === null)
-require(empty.port === null)
-require(empty.path == "")
-require(empty.query === null)
-require(empty.fragment === null)
-
-emptyQuery: Uri.parse("scheme:path?")
-require(emptyQuery.scheme == "scheme")
-require(emptyQuery.host === null)
-require(emptyQuery.userInfo === null)
-require(emptyQuery.port === null)
-require(emptyQuery.path == "path")
-require(emptyQuery.query == "")
-require(emptyQuery.fragment === null)
-
-emptyFragment: Uri.parse("scheme:path#")
-require(emptyFragment.query === null)
-require(emptyFragment.fragment == "")
-
-emptyAuthority: Uri.parse("scheme:///path")
-require(emptyAuthority.scheme == "scheme")
-require(emptyAuthority.userInfo === null)
-require(emptyAuthority.host == "")
-require(emptyAuthority.port === null)
-require(emptyAuthority.path == "/path")
-
-networkEmpty: Uri.parse("//?")
-require(networkEmpty.scheme === null)
-require(networkEmpty.userInfo === null)
-require(networkEmpty.host == "")
-require(networkEmpty.port === null)
-require(networkEmpty.path == "")
-require(networkEmpty.query == "")
-
-emptyUserInfo: Uri.parse("//@host/")
-require(emptyUserInfo.userInfo == "")
-require(emptyUserInfo.host == "host")
-
-emptyPort: Uri.parse("//host:/")
-require(emptyPort.host == "host")
-require(emptyPort.port == "")
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

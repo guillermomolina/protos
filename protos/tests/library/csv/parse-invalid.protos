@@ -13,32 +13,43 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("parse invalid", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            require(reject(() => { CSV.parse("a\"b") }))
+            require(reject(() => { CSV.parse("\"a\"b") }))
+            require(reject(() => { CSV.parse("\"a") }))
+            require(reject(() => { CSV.parse("\"a\"\"") }))
+            require(reject(() => { CSV.parse("a,\"b\"c") }))
+            require(reject(() => { CSV.parse("\"a\" ,b") }))
+            require(reject(() => { CSV.parse(" ,\"x\"\"y\"z") }))
+
             true
         }
-    )
-}
-
-require(reject(() => { CSV.parse("a\"b") }))
-require(reject(() => { CSV.parse("\"a\"b") }))
-require(reject(() => { CSV.parse("\"a") }))
-require(reject(() => { CSV.parse("\"a\"\"") }))
-require(reject(() => { CSV.parse("a,\"b\"c") }))
-require(reject(() => { CSV.parse("\"a\" ,b") }))
-require(reject(() => { CSV.parse(" ,\"x\"\"y\"z") }))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

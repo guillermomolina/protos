@@ -13,59 +13,70 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("encode roundtrip", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
 
-sameTable: (left, right) => {
-    same: left.size() == right.size()
-
-    same.ifTrue(() => {
-        rowIndex: 0
-        left.each((leftRow) => {
-            rightRow: right[rowIndex]
-
-            (leftRow.size() == rightRow.size()).ifFalse(() => {
-                same = false
-            })
-
-            same.ifTrue(() => {
-                fieldIndex: 0
-                leftRow.each((leftField) => {
-                    (leftField == rightRow[fieldIndex]).ifFalse(() => {
-                        same = false
-                    })
-                    fieldIndex = fieldIndex + 1
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
                 })
+            }
+
+            sameTable: (left, right) => {
+                same: left.size() == right.size()
+
+                same.ifTrue(() => {
+                    rowIndex: 0
+                    left.each((leftRow) => {
+                        rightRow: right[rowIndex]
+
+                        (leftRow.size() == rightRow.size()).ifFalse(() => {
+                            same = false
+                        })
+
+                        same.ifTrue(() => {
+                            fieldIndex: 0
+                            leftRow.each((leftField) => {
+                                (leftField == rightRow[fieldIndex]).ifFalse(() => {
+                                    same = false
+                                })
+                                fieldIndex = fieldIndex + 1
+                            })
+                        })
+
+                        rowIndex = rowIndex + 1
+                    })
+                })
+
+                same
+            }
+
+            tables: Array(
+                Array(),
+                Array(Array("")),
+                Array(Array("a")),
+                Array(Array("", "", "")),
+                Array(Array("a", "b"), Array("c")),
+                Array(Array("a,b", "x"), Array("a\"b", "c")),
+                Array(Array(" a ", "\t", "00123", "true")),
+                Array(Array("a\nb", "a\rb", "a\r\nb")),
+                Array(Array("é", "雪", "🙂"))
+            )
+
+            tables.each((table) => {
+                encoded: CSV.encode(table)
+                decoded: CSV.parse(encoded)
+                require(sameTable(table, decoded))
             })
 
-            rowIndex = rowIndex + 1
-        })
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-
-    same
-}
-
-tables: Array(
-    Array(),
-    Array(Array("")),
-    Array(Array("a")),
-    Array(Array("", "", "")),
-    Array(Array("a", "b"), Array("c")),
-    Array(Array("a,b", "x"), Array("a\"b", "c")),
-    Array(Array(" a ", "\t", "00123", "true")),
-    Array(Array("a\nb", "a\rb", "a\r\nb")),
-    Array(Array("é", "雪", "🙂"))
-)
-
-tables.each((table) => {
-    encoded: CSV.encode(table)
-    decoded: CSV.parse(encoded)
-    require(sameTable(table, decoded))
-})
-
-true
+]
+tests.freeze()

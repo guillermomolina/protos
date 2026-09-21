@@ -4,6 +4,11 @@
 
 //! TOOL005-B2 explicit Test Tool membership for existing Standard Library corpora.
 //! No filesystem discovery is used.
+//!
+//! TOOL009-C: every case in these seven corpora is now `suite-native`; the
+//! authoritative test behavior lives in each source's own `std:test/Test`
+//! declaration (D152/D153/LIB018/D155), not in this manifest's expectation
+//! column.
 
 Manifest: import("self:Manifest")
 
@@ -35,17 +40,17 @@ load: (corpusId) => {
         selected = planFromEntries(
             "uri/",
             Array(
-            Array("parse-components.protos", "boolean", "true"),
-            Array("parse-valid.protos", "boolean", "true"),
-            Array("parse-invalid.protos", "boolean", "true"),
-            Array("arity-domain-rejection.protos", "boolean", "true"),
-            Array("format-roundtrip.protos", "boolean", "true"),
-            Array("format-constructed.protos", "boolean", "true"),
-            Array("format-invalid.protos", "boolean", "true"),
-            Array("resolve-rfc3986-normal.protos", "boolean", "true"),
-            Array("resolve-rfc3986-abnormal.protos", "boolean", "true"),
-            Array("resolve-boundaries.protos", "boolean", "true"),
-            Array("resolve-invalid.protos", "boolean", "true")
+            Array("parse-components.protos", "suite-native", "-"),
+            Array("parse-valid.protos", "suite-native", "-"),
+            Array("parse-invalid.protos", "suite-native", "-"),
+            Array("arity-domain-rejection.protos", "suite-native", "-"),
+            Array("format-roundtrip.protos", "suite-native", "-"),
+            Array("format-constructed.protos", "suite-native", "-"),
+            Array("format-invalid.protos", "suite-native", "-"),
+            Array("resolve-rfc3986-normal.protos", "suite-native", "-"),
+            Array("resolve-rfc3986-abnormal.protos", "suite-native", "-"),
+            Array("resolve-boundaries.protos", "suite-native", "-"),
+            Array("resolve-invalid.protos", "suite-native", "-")
             )
         )
         matched = true
@@ -55,23 +60,23 @@ load: (corpusId) => {
         selected = planFromEntries(
             "csv/",
             Array(
-            Array("parse-basic.protos", "boolean", "true"),
-            Array("parse-record-boundaries.protos", "boolean", "true"),
-            Array("parse-invalid.protos", "boolean", "true"),
-            Array("arity-domain-rejection.protos", "boolean", "true"),
-            Array("encode-canonical.protos", "boolean", "true"),
-            Array("encode-roundtrip.protos", "boolean", "true"),
-            Array("encode-invalid.protos", "boolean", "true"),
-            Array("row-parser-basic.protos", "boolean", "true"),
-            Array("row-parser-boundaries.protos", "boolean", "true"),
-            Array("row-parser-lifecycle.protos", "boolean", "true"),
-            Array("row-parser-independence.protos", "boolean", "true"),
-            Array("text-adapter-reader.protos", "future-boolean", "true"),
-            Array("text-adapter-writer.protos", "future-boolean", "true"),
-            Array("text-adapter-overlap.protos", "future-boolean", "true"),
-            Array("text-adapter-terminal-errors.protos", "boolean", "true"),
-            Array("integrated-closure.protos", "future-boolean", "true"),
-            Array("streaming-scale.protos", "boolean", "true")
+            Array("parse-basic.protos", "suite-native", "-"),
+            Array("parse-record-boundaries.protos", "suite-native", "-"),
+            Array("parse-invalid.protos", "suite-native", "-"),
+            Array("arity-domain-rejection.protos", "suite-native", "-"),
+            Array("encode-canonical.protos", "suite-native", "-"),
+            Array("encode-roundtrip.protos", "suite-native", "-"),
+            Array("encode-invalid.protos", "suite-native", "-"),
+            Array("row-parser-basic.protos", "suite-native", "-"),
+            Array("row-parser-boundaries.protos", "suite-native", "-"),
+            Array("row-parser-lifecycle.protos", "suite-native", "-"),
+            Array("row-parser-independence.protos", "suite-native", "-"),
+            Array("text-adapter-reader.protos", "suite-native", "-"),
+            Array("text-adapter-writer.protos", "suite-native", "-"),
+            Array("text-adapter-overlap.protos", "suite-native", "-"),
+            Array("text-adapter-terminal-errors.protos", "suite-native", "-"),
+            Array("integrated-closure.protos", "suite-native", "-"),
+            Array("streaming-scale.protos", "suite-native", "-")
             )
         )
         matched = true
@@ -81,25 +86,25 @@ load: (corpusId) => {
         selected = planFromEntries(
             "cli/",
             Array(
-            Array("specification-valid.protos", "boolean", "true"),
-            Array("specification-invalid.protos", "boolean", "true"),
-            Array("specification-snapshot.protos", "boolean", "true"),
-            Array("result-model.protos", "boolean", "true"),
-            Array("result-provenance.protos", "boolean", "true"),
-            Array("adversarial.protos", "boolean", "true"),
-            Array("parse-options.protos", "boolean", "true"),
-            Array("parse-positionals-d111.protos", "boolean", "true"),
-            Array("parse-delimiter.protos", "boolean", "true"),
-            Array("parse-failures.protos", "boolean", "true"),
-            Array("parse-subcommands-d115.protos", "boolean", "true"),
-            Array("parse-subcommand-delimiter.protos", "boolean", "true"),
-            Array("parse-subcommand-options.protos", "boolean", "true"),
-            Array("parse-subcommand-deep.protos", "boolean", "true"),
-            Array("valuename-d119.protos", "boolean", "true"),
-            Array("help-rendering-d118.protos", "boolean", "true"),
-            Array("help-rendering-path-d118.protos", "boolean", "true"),
-            Array("closure-large-spec.protos", "boolean", "true"),
-            Array("closure-isolation-concurrency.protos", "boolean", "true")
+            Array("specification-valid.protos", "suite-native", "-"),
+            Array("specification-invalid.protos", "suite-native", "-"),
+            Array("specification-snapshot.protos", "suite-native", "-"),
+            Array("result-model.protos", "suite-native", "-"),
+            Array("result-provenance.protos", "suite-native", "-"),
+            Array("adversarial.protos", "suite-native", "-"),
+            Array("parse-options.protos", "suite-native", "-"),
+            Array("parse-positionals-d111.protos", "suite-native", "-"),
+            Array("parse-delimiter.protos", "suite-native", "-"),
+            Array("parse-failures.protos", "suite-native", "-"),
+            Array("parse-subcommands-d115.protos", "suite-native", "-"),
+            Array("parse-subcommand-delimiter.protos", "suite-native", "-"),
+            Array("parse-subcommand-options.protos", "suite-native", "-"),
+            Array("parse-subcommand-deep.protos", "suite-native", "-"),
+            Array("valuename-d119.protos", "suite-native", "-"),
+            Array("help-rendering-d118.protos", "suite-native", "-"),
+            Array("help-rendering-path-d118.protos", "suite-native", "-"),
+            Array("closure-large-spec.protos", "suite-native", "-"),
+            Array("closure-isolation-concurrency.protos", "suite-native", "-")
             )
         )
         matched = true
@@ -109,17 +114,17 @@ load: (corpusId) => {
         selected = planFromEntries(
             "math/integer/",
             Array(
-            Array("gcd-lcm.protos", "boolean", "true"),
-            Array("large-values.protos", "boolean", "true"),
-            Array("domain-rejection.protos", "boolean", "true"),
-            Array("arity-rejection.protos", "boolean", "true"),
-            Array("factorial.protos", "boolean", "true"),
-            Array("factorial-domain-rejection.protos", "boolean", "true"),
-            Array("factorial-arity-rejection.protos", "boolean", "true"),
-            Array("power.protos", "boolean", "true"),
-            Array("power-domain-rejection.protos", "boolean", "true"),
-            Array("power-arity-rejection.protos", "boolean", "true"),
-            Array("integrated-closure.protos", "boolean", "true")
+            Array("gcd-lcm.protos", "suite-native", "-"),
+            Array("large-values.protos", "suite-native", "-"),
+            Array("domain-rejection.protos", "suite-native", "-"),
+            Array("arity-rejection.protos", "suite-native", "-"),
+            Array("factorial.protos", "suite-native", "-"),
+            Array("factorial-domain-rejection.protos", "suite-native", "-"),
+            Array("factorial-arity-rejection.protos", "suite-native", "-"),
+            Array("power.protos", "suite-native", "-"),
+            Array("power-domain-rejection.protos", "suite-native", "-"),
+            Array("power-arity-rejection.protos", "suite-native", "-"),
+            Array("integrated-closure.protos", "suite-native", "-")
             )
         )
         matched = true
@@ -129,16 +134,16 @@ load: (corpusId) => {
         selected = planFromEntries(
             "crypto/sha256/",
             Array(
-            Array("empty.protos", "boolean", "true"),
-            Array("abc.protos", "boolean", "true"),
-            Array("multi.protos", "boolean", "true"),
-            Array("binary.protos", "boolean", "true"),
-            Array("a55.protos", "boolean", "true"),
-            Array("a56.protos", "boolean", "true"),
-            Array("a64.protos", "boolean", "true"),
-            Array("fresh-result.protos", "boolean", "true"),
-            Array("input-unchanged.protos", "boolean", "true"),
-            Array("invalid-non-bytes.protos", "error", "-")
+            Array("empty.protos", "suite-native", "-"),
+            Array("abc.protos", "suite-native", "-"),
+            Array("multi.protos", "suite-native", "-"),
+            Array("binary.protos", "suite-native", "-"),
+            Array("a55.protos", "suite-native", "-"),
+            Array("a56.protos", "suite-native", "-"),
+            Array("a64.protos", "suite-native", "-"),
+            Array("fresh-result.protos", "suite-native", "-"),
+            Array("input-unchanged.protos", "suite-native", "-"),
+            Array("invalid-non-bytes.protos", "suite-native", "-")
             )
         )
         matched = true
@@ -148,14 +153,14 @@ load: (corpusId) => {
         selected = planFromEntries(
             "network/ip-addresses/",
             Array(
-            Array("surface-ipv4.protos", "boolean", "true"),
-            Array("ipv6.protos", "boolean", "true"),
-            Array("domain-rejection.protos", "boolean", "true"),
-            Array("arity-rejection.protos", "boolean", "true"),
-            Array("ipv4-parse-format.protos", "boolean", "true"),
-            Array("ipv4-invalid.protos", "boolean", "true"),
-            Array("ipv6-parse-format.protos", "boolean", "true"),
-            Array("ipv6-invalid.protos", "boolean", "true")
+            Array("surface-ipv4.protos", "suite-native", "-"),
+            Array("ipv6.protos", "suite-native", "-"),
+            Array("domain-rejection.protos", "suite-native", "-"),
+            Array("arity-rejection.protos", "suite-native", "-"),
+            Array("ipv4-parse-format.protos", "suite-native", "-"),
+            Array("ipv4-invalid.protos", "suite-native", "-"),
+            Array("ipv6-parse-format.protos", "suite-native", "-"),
+            Array("ipv6-invalid.protos", "suite-native", "-")
             )
         )
         matched = true
@@ -165,8 +170,8 @@ load: (corpusId) => {
         selected = planFromEntries(
             "network/ip-endpoints/",
             Array(
-            Array("parse-format.protos", "boolean", "true"),
-            Array("invalid.protos", "boolean", "true")
+            Array("parse-format.protos", "suite-native", "-"),
+            Array("invalid.protos", "suite-native", "-")
             )
         )
         matched = true

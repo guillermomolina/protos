@@ -13,49 +13,60 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("parse basic", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            simple: CSV.parse("alpha,beta,gamma")
+            require(simple.size() == 1)
+            require(simple[0].size() == 3)
+            require(simple[0][0] == "alpha")
+            require(simple[0][1] == "beta")
+            require(simple[0][2] == "gamma")
+
+            quoted: CSV.parse("\"a,b\",\"a\"\"b\",plain")
+            require(quoted.size() == 1)
+            require(quoted[0].size() == 3)
+            require(quoted[0][0] == "a,b")
+            require(quoted[0][1] == "a\"b")
+            require(quoted[0][2] == "plain")
+
+            empties: CSV.parse(",x,")
+            require(empties.size() == 1)
+            require(empties[0].size() == 3)
+            require(empties[0][0] == "")
+            require(empties[0][1] == "x")
+            require(empties[0][2] == "")
+
+            variable: CSV.parse("a\nb,c\nd,e,f")
+            require(variable.size() == 3)
+            require(variable[0].size() == 1)
+            require(variable[1].size() == 2)
+            require(variable[2].size() == 3)
+
+            whitespace: CSV.parse("  a , b\t,\" c \"")
+            require(whitespace[0][0] == "  a ")
+            require(whitespace[0][1] == " b\t")
+            require(whitespace[0][2] == " c ")
+
+            unicode: CSV.parse("é,雪,\"🙂,ñ\"")
+            require(unicode[0][0] == "é")
+            require(unicode[0][1] == "雪")
+            require(unicode[0][2] == "🙂,ñ")
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-simple: CSV.parse("alpha,beta,gamma")
-require(simple.size() == 1)
-require(simple[0].size() == 3)
-require(simple[0][0] == "alpha")
-require(simple[0][1] == "beta")
-require(simple[0][2] == "gamma")
-
-quoted: CSV.parse("\"a,b\",\"a\"\"b\",plain")
-require(quoted.size() == 1)
-require(quoted[0].size() == 3)
-require(quoted[0][0] == "a,b")
-require(quoted[0][1] == "a\"b")
-require(quoted[0][2] == "plain")
-
-empties: CSV.parse(",x,")
-require(empties.size() == 1)
-require(empties[0].size() == 3)
-require(empties[0][0] == "")
-require(empties[0][1] == "x")
-require(empties[0][2] == "")
-
-variable: CSV.parse("a\nb,c\nd,e,f")
-require(variable.size() == 3)
-require(variable[0].size() == 1)
-require(variable[1].size() == 2)
-require(variable[2].size() == 3)
-
-whitespace: CSV.parse("  a , b\t,\" c \"")
-require(whitespace[0][0] == "  a ")
-require(whitespace[0][1] == " b\t")
-require(whitespace[0][2] == " c ")
-
-unicode: CSV.parse("é,雪,\"🙂,ñ\"")
-require(unicode[0][0] == "é")
-require(unicode[0][1] == "雪")
-require(unicode[0][2] == "🙂,ñ")
-
-true
+]
+tests.freeze()

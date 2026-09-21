@@ -13,84 +13,95 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CommandLine: import("std:cli/CommandLine")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("parse positionals d111", () => {
+        tool009LegacyCase: () => {
+            CommandLine: import("std:cli/CommandLine")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            positional: (key, minimum, maximum) => {
+                CommandLine.positional({
+                    key: key
+                    minOccurrences: minimum
+                    maxOccurrences: maximum
+                    valueName: key
+                    help: null
+                })
+            }
+
+            specFor: (leftMinimum, leftMaximum, rightMinimum, rightMaximum) => {
+                CommandLine.command({
+                    name: "tool"
+                    help: null
+                    options: Array()
+                    positionals: Array(
+                        positional("A", leftMinimum, leftMaximum),
+                        positional("B", rightMinimum, rightMaximum)
+                    )
+                    subcommands: Array()
+                })
+            }
+
+            requiredTail: specFor(0, 1, 1, 1)
+
+            one: CommandLine.parse(requiredTail, Array("x"))
+            require(one.command.positionals.size() == 1)
+            require(one.command.positionals[0].key == "B")
+            require(one.command.positionals[0].value == "x")
+            require(one.command.positionals[0].tokenIndex == 0)
+
+            two: CommandLine.parse(requiredTail, Array("x", "y"))
+            require(two.command.positionals.size() == 2)
+            require(two.command.positionals[0].key == "A")
+            require(two.command.positionals[0].value == "x")
+            require(two.command.positionals[0].tokenIndex == 0)
+            require(two.command.positionals[1].key == "B")
+            require(two.command.positionals[1].value == "y")
+            require(two.command.positionals[1].tokenIndex == 1)
+
+            optionalTail: specFor(0, 1, 0, 1)
+            optionalOne: CommandLine.parse(optionalTail, Array("x"))
+            require(optionalOne.command.positionals.size() == 1)
+            require(optionalOne.command.positionals[0].key == "A")
+            require(optionalOne.command.positionals[0].value == "x")
+
+            requiredRest: specFor(0, 1, 1, null)
+            requiredRestOne: CommandLine.parse(requiredRest, Array("x"))
+            require(requiredRestOne.command.positionals.size() == 1)
+            require(requiredRestOne.command.positionals[0].key == "B")
+            require(requiredRestOne.command.positionals[0].value == "x")
+
+            requiredRestTwo: CommandLine.parse(requiredRest, Array("x", "y"))
+            require(requiredRestTwo.command.positionals.size() == 2)
+            require(requiredRestTwo.command.positionals[0].key == "A")
+            require(requiredRestTwo.command.positionals[0].value == "x")
+            require(requiredRestTwo.command.positionals[1].key == "B")
+            require(requiredRestTwo.command.positionals[1].value == "y")
+
+            optionalRest: specFor(0, 1, 0, null)
+            optionalRestOne: CommandLine.parse(optionalRest, Array("x"))
+            require(optionalRestOne.command.positionals.size() == 1)
+            require(optionalRestOne.command.positionals[0].key == "A")
+            require(optionalRestOne.command.positionals[0].value == "x")
+
+            optionalRestTwo: CommandLine.parse(optionalRest, Array("x", "y"))
+            require(optionalRestTwo.command.positionals.size() == 2)
+            require(optionalRestTwo.command.positionals[0].key == "A")
+            require(optionalRestTwo.command.positionals[0].value == "x")
+            require(optionalRestTwo.command.positionals[1].key == "B")
+            require(optionalRestTwo.command.positionals[1].value == "y")
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-positional: (key, minimum, maximum) => {
-    CommandLine.positional({
-        key: key
-        minOccurrences: minimum
-        maxOccurrences: maximum
-        valueName: key
-        help: null
-    })
-}
-
-specFor: (leftMinimum, leftMaximum, rightMinimum, rightMaximum) => {
-    CommandLine.command({
-        name: "tool"
-        help: null
-        options: Array()
-        positionals: Array(
-            positional("A", leftMinimum, leftMaximum),
-            positional("B", rightMinimum, rightMaximum)
-        )
-        subcommands: Array()
-    })
-}
-
-requiredTail: specFor(0, 1, 1, 1)
-
-one: CommandLine.parse(requiredTail, Array("x"))
-require(one.command.positionals.size() == 1)
-require(one.command.positionals[0].key == "B")
-require(one.command.positionals[0].value == "x")
-require(one.command.positionals[0].tokenIndex == 0)
-
-two: CommandLine.parse(requiredTail, Array("x", "y"))
-require(two.command.positionals.size() == 2)
-require(two.command.positionals[0].key == "A")
-require(two.command.positionals[0].value == "x")
-require(two.command.positionals[0].tokenIndex == 0)
-require(two.command.positionals[1].key == "B")
-require(two.command.positionals[1].value == "y")
-require(two.command.positionals[1].tokenIndex == 1)
-
-optionalTail: specFor(0, 1, 0, 1)
-optionalOne: CommandLine.parse(optionalTail, Array("x"))
-require(optionalOne.command.positionals.size() == 1)
-require(optionalOne.command.positionals[0].key == "A")
-require(optionalOne.command.positionals[0].value == "x")
-
-requiredRest: specFor(0, 1, 1, null)
-requiredRestOne: CommandLine.parse(requiredRest, Array("x"))
-require(requiredRestOne.command.positionals.size() == 1)
-require(requiredRestOne.command.positionals[0].key == "B")
-require(requiredRestOne.command.positionals[0].value == "x")
-
-requiredRestTwo: CommandLine.parse(requiredRest, Array("x", "y"))
-require(requiredRestTwo.command.positionals.size() == 2)
-require(requiredRestTwo.command.positionals[0].key == "A")
-require(requiredRestTwo.command.positionals[0].value == "x")
-require(requiredRestTwo.command.positionals[1].key == "B")
-require(requiredRestTwo.command.positionals[1].value == "y")
-
-optionalRest: specFor(0, 1, 0, null)
-optionalRestOne: CommandLine.parse(optionalRest, Array("x"))
-require(optionalRestOne.command.positionals.size() == 1)
-require(optionalRestOne.command.positionals[0].key == "A")
-require(optionalRestOne.command.positionals[0].value == "x")
-
-optionalRestTwo: CommandLine.parse(optionalRest, Array("x", "y"))
-require(optionalRestTwo.command.positionals.size() == 2)
-require(optionalRestTwo.command.positionals[0].key == "A")
-require(optionalRestTwo.command.positionals[0].value == "x")
-require(optionalRestTwo.command.positionals[1].key == "B")
-require(optionalRestTwo.command.positionals[1].value == "y")
-
-true
+]
+tests.freeze()

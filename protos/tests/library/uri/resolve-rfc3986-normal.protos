@@ -13,43 +13,54 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Uri: import("std:uri")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("resolve rfc3986 normal", () => {
+        tool009LegacyCase: () => {
+            Uri: import("std:uri")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            base: Uri.parse("http://a/b/c/d;p?q")
+
+            check: (reference, expected) => {
+                actual: Uri.resolve(base, Uri.parse(reference))
+                require(Uri.format(actual) == expected)
+            }
+
+            check("g:h", "g:h")
+            check("g", "http://a/b/c/g")
+            check("./g", "http://a/b/c/g")
+            check("g/", "http://a/b/c/g/")
+            check("/g", "http://a/g")
+            check("//g", "http://g")
+            check("?y", "http://a/b/c/d;p?y")
+            check("g?y", "http://a/b/c/g?y")
+            check("#s", "http://a/b/c/d;p?q#s")
+            check("g#s", "http://a/b/c/g#s")
+            check("g?y#s", "http://a/b/c/g?y#s")
+            check(";x", "http://a/b/c/;x")
+            check("g;x", "http://a/b/c/g;x")
+            check("g;x?y#s", "http://a/b/c/g;x?y#s")
+            check("", "http://a/b/c/d;p?q")
+            check(".", "http://a/b/c/")
+            check("./", "http://a/b/c/")
+            check("..", "http://a/b/")
+            check("../", "http://a/b/")
+            check("../g", "http://a/b/g")
+            check("../..", "http://a/")
+            check("../../", "http://a/")
+            check("../../g", "http://a/g")
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-base: Uri.parse("http://a/b/c/d;p?q")
-
-check: (reference, expected) => {
-    actual: Uri.resolve(base, Uri.parse(reference))
-    require(Uri.format(actual) == expected)
-}
-
-check("g:h", "g:h")
-check("g", "http://a/b/c/g")
-check("./g", "http://a/b/c/g")
-check("g/", "http://a/b/c/g/")
-check("/g", "http://a/g")
-check("//g", "http://g")
-check("?y", "http://a/b/c/d;p?y")
-check("g?y", "http://a/b/c/g?y")
-check("#s", "http://a/b/c/d;p?q#s")
-check("g#s", "http://a/b/c/g#s")
-check("g?y#s", "http://a/b/c/g?y#s")
-check(";x", "http://a/b/c/;x")
-check("g;x", "http://a/b/c/g;x")
-check("g;x?y#s", "http://a/b/c/g;x?y#s")
-check("", "http://a/b/c/d;p?q")
-check(".", "http://a/b/c/")
-check("./", "http://a/b/c/")
-check("..", "http://a/b/")
-check("../", "http://a/b/")
-check("../g", "http://a/b/g")
-check("../..", "http://a/")
-check("../../", "http://a/")
-check("../../g", "http://a/g")
-
-true
+]
+tests.freeze()

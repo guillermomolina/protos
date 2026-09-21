@@ -13,39 +13,50 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("row parser basic", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            rows: Map()
+            count: 0
+            parser: CSV.rowParser((row) => {
+                rows[count] = row
+                count = count + 1
+            })
+
+            require(parser.feed("") === parser)
+            require(count == 0)
+            require(parser.feed("a,b\r") === parser)
+            require(count == 1)
+            require(rows[0].size() == 2)
+            require(rows[0][0] == "a")
+            require(rows[0][1] == "b")
+
+            require(parser.feed("") === parser)
+            require(parser.feed("\n\"c") === parser)
+            require(count == 1)
+            require(parser.feed(",d\",\"e\"\"f\"") === parser)
+            require(count == 1)
+            require(parser.finish() === parser)
+
+            require(count == 2)
+            require(rows[1].size() == 2)
+            require(rows[1][0] == "c,d")
+            require(rows[1][1] == "e\"f")
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-rows: Map()
-count: 0
-parser: CSV.rowParser((row) => {
-    rows[count] = row
-    count = count + 1
-})
-
-require(parser.feed("") === parser)
-require(count == 0)
-require(parser.feed("a,b\r") === parser)
-require(count == 1)
-require(rows[0].size() == 2)
-require(rows[0][0] == "a")
-require(rows[0][1] == "b")
-
-require(parser.feed("") === parser)
-require(parser.feed("\n\"c") === parser)
-require(count == 1)
-require(parser.feed(",d\",\"e\"\"f\"") === parser)
-require(count == 1)
-require(parser.finish() === parser)
-
-require(count == 2)
-require(rows[1].size() == 2)
-require(rows[1][0] == "c,d")
-require(rows[1][1] == "e\"f")
-
-true
+]
+tests.freeze()

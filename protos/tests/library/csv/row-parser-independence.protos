@@ -13,47 +13,58 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("row parser independence", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            rowsA: Map()
+            rowsB: Map()
+            countA: 0
+            countB: 0
+
+            a: CSV.rowParser((row) => {
+                rowsA[countA] = row
+                countA = countA + 1
+            })
+
+            b: CSV.rowParser((row) => {
+                rowsB[countB] = row
+                countB = countB + 1
+            })
+
+            a.feed("\"left")
+            b.feed("right,one\nright,two")
+            require(countA == 0)
+            require(countB == 1)
+
+            a.feed(",continued\",x\n")
+            require(countA == 1)
+            require(rowsA[0][0] == "left,continued")
+            require(rowsA[0][1] == "x")
+
+            b.finish()
+            require(countB == 2)
+            require(rowsB[0][0] == "right")
+            require(rowsB[0][1] == "one")
+            require(rowsB[1][0] == "right")
+            require(rowsB[1][1] == "two")
+
+            a.finish()
+            require(countA == 1)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-rowsA: Map()
-rowsB: Map()
-countA: 0
-countB: 0
-
-a: CSV.rowParser((row) => {
-    rowsA[countA] = row
-    countA = countA + 1
-})
-
-b: CSV.rowParser((row) => {
-    rowsB[countB] = row
-    countB = countB + 1
-})
-
-a.feed("\"left")
-b.feed("right,one\nright,two")
-require(countA == 0)
-require(countB == 1)
-
-a.feed(",continued\",x\n")
-require(countA == 1)
-require(rowsA[0][0] == "left,continued")
-require(rowsA[0][1] == "x")
-
-b.finish()
-require(countB == 2)
-require(rowsB[0][0] == "right")
-require(rowsB[0][1] == "one")
-require(rowsB[1][0] == "right")
-require(rowsB[1][1] == "two")
-
-a.finish()
-require(countA == 1)
-
-true
+]
+tests.freeze()

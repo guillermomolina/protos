@@ -13,106 +13,117 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CommandLine: import("std:cli/CommandLine")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+tests: [
+    Test("help rendering d118", () => {
+        tool009LegacyCase: () => {
+            CommandLine: import("std:cli/CommandLine")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            option: (
+                key,
+                longName,
+                shortName,
+                minValues,
+                minOccurrences,
+                maxOccurrences,
+                valueName,
+                help
+            ) => {
+                CommandLine.option({
+                    key: key
+                    long: longName
+                    short: shortName
+                    minValues: minValues
+                    maxValues: minValues
+                    minOccurrences: minOccurrences
+                    maxOccurrences: maxOccurrences
+                    valueName: valueName
+                    help: help
+                })
+            }
+
+            positional: (key, minimum, maximum, valueName, help) => {
+                CommandLine.positional({
+                    key: key
+                    minOccurrences: minimum
+                    maxOccurrences: maximum
+                    valueName: valueName
+                    help: help
+                })
+            }
+
+            build: CommandLine.command({
+                name: "build"
+                help: "Build a package"
+                options: Array()
+                positionals: Array()
+                subcommands: Array()
+            })
+
+            test: CommandLine.command({
+                name: "test"
+                help: null
+                options: Array()
+                positionals: Array()
+                subcommands: Array()
+            })
+
+            root: CommandLine.command({
+                name: "tool"
+                help: "Tool root"
+                options: Array(
+                    option("verbose", "verbose", "v", 0, 0, 1, null, "Verbose output"),
+                    option("output", "output", "o", 1, 1, 1, "FILE", "Output file"),
+                    option("define", "define", null, 1, 1, null, "NAME", null),
+                    option("quiet", null, "q", 0, 0, 1, null, "Quiet mode")
+                )
+                positionals: Array(
+                    positional("input", 1, 1, "INPUT", "Input file"),
+                    positional("mode", 0, 1, "MODE", null),
+                    positional("extra", 0, null, "EXTRA", "Additional inputs")
+                )
+                subcommands: Array(build, test)
+            })
+
+            expected:
+                "Usage: tool --output FILE --define NAME [--define NAME]... [OPTIONS] INPUT [MODE] [EXTRA]... [COMMAND]\n\n" +
+                "Tool root\n\n" +
+                "Arguments:\n" +
+                "  INPUT\n" +
+                "    Input file\n" +
+                "  [MODE]\n" +
+                "  [EXTRA]...\n" +
+                "    Additional inputs\n\n" +
+                "Options:\n" +
+                "  -v, --verbose\n" +
+                "    Verbose output\n" +
+                "  -o, --output FILE (required)\n" +
+                "    Output file\n" +
+                "  --define NAME (required, repeatable)\n" +
+                "  -q\n" +
+                "    Quiet mode\n\n" +
+                "Commands:\n" +
+                "  build\n" +
+                "    Build a package\n" +
+                "  test"
+
+            rendered: CommandLine.renderHelp(root, Array())
+
+            require(rendered == expected)
+            require(rendered == CommandLine.renderHelp(root, Array()))
+            require(rendered.size() == expected.size())
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-option: (
-    key,
-    longName,
-    shortName,
-    minValues,
-    minOccurrences,
-    maxOccurrences,
-    valueName,
-    help
-) => {
-    CommandLine.option({
-        key: key
-        long: longName
-        short: shortName
-        minValues: minValues
-        maxValues: minValues
-        minOccurrences: minOccurrences
-        maxOccurrences: maxOccurrences
-        valueName: valueName
-        help: help
-    })
-}
-
-positional: (key, minimum, maximum, valueName, help) => {
-    CommandLine.positional({
-        key: key
-        minOccurrences: minimum
-        maxOccurrences: maximum
-        valueName: valueName
-        help: help
-    })
-}
-
-build: CommandLine.command({
-    name: "build"
-    help: "Build a package"
-    options: Array()
-    positionals: Array()
-    subcommands: Array()
-})
-
-test: CommandLine.command({
-    name: "test"
-    help: null
-    options: Array()
-    positionals: Array()
-    subcommands: Array()
-})
-
-root: CommandLine.command({
-    name: "tool"
-    help: "Tool root"
-    options: Array(
-        option("verbose", "verbose", "v", 0, 0, 1, null, "Verbose output"),
-        option("output", "output", "o", 1, 1, 1, "FILE", "Output file"),
-        option("define", "define", null, 1, 1, null, "NAME", null),
-        option("quiet", null, "q", 0, 0, 1, null, "Quiet mode")
-    )
-    positionals: Array(
-        positional("input", 1, 1, "INPUT", "Input file"),
-        positional("mode", 0, 1, "MODE", null),
-        positional("extra", 0, null, "EXTRA", "Additional inputs")
-    )
-    subcommands: Array(build, test)
-})
-
-expected:
-    "Usage: tool --output FILE --define NAME [--define NAME]... [OPTIONS] INPUT [MODE] [EXTRA]... [COMMAND]\n\n" +
-    "Tool root\n\n" +
-    "Arguments:\n" +
-    "  INPUT\n" +
-    "    Input file\n" +
-    "  [MODE]\n" +
-    "  [EXTRA]...\n" +
-    "    Additional inputs\n\n" +
-    "Options:\n" +
-    "  -v, --verbose\n" +
-    "    Verbose output\n" +
-    "  -o, --output FILE (required)\n" +
-    "    Output file\n" +
-    "  --define NAME (required, repeatable)\n" +
-    "  -q\n" +
-    "    Quiet mode\n\n" +
-    "Commands:\n" +
-    "  build\n" +
-    "    Build a package\n" +
-    "  test"
-
-rendered: CommandLine.renderHelp(root, Array())
-
-require(rendered == expected)
-require(rendered == CommandLine.renderHelp(root, Array()))
-require(rendered.size() == expected.size())
-
-true
+]
+tests.freeze()

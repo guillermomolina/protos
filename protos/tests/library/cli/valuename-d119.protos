@@ -13,122 +13,133 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CommandLine: import("std:cli/CommandLine")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("valuename d119", () => {
+        tool009LegacyCase: () => {
+            CommandLine: import("std:cli/CommandLine")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            flag: CommandLine.option({
+                key: "verbose"
+                long: "verbose"
+                short: "v"
+                minValues: 0
+                maxValues: 0
+                minOccurrences: 0
+                maxOccurrences: 1
+                valueName: null
+                help: null
+            })
+
+            valued: CommandLine.option({
+                key: "output"
+                long: "output"
+                short: "o"
+                minValues: 1
+                maxValues: 1
+                minOccurrences: 0
+                maxOccurrences: 1
+                valueName: "file-path"
+                help: null
+            })
+
+            positional: CommandLine.positional({
+                key: "target"
+                minOccurrences: 1
+                maxOccurrences: 1
+                valueName: "target-name"
+                help: null
+            })
+
+            require(flag.valueName === null)
+            require(valued.valueName == "file-path")
+            require(positional.valueName == "target-name")
+
+            require(reject(() => {
+                CommandLine.option({
+                    key: "broken"
+                    long: "broken"
+                    short: null
+                    minValues: 0
+                    maxValues: 0
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: "VALUE"
+                    help: null
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.option({
+                    key: "broken"
+                    long: "broken"
+                    short: null
+                    minValues: 1
+                    maxValues: 1
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: null
+                    help: null
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.option({
+                    key: "broken"
+                    long: "broken"
+                    short: null
+                    minValues: 1
+                    maxValues: 1
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: ""
+                    help: null
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.positional({
+                    key: "broken"
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: null
+                    help: null
+                })
+            }))
+
+            require(reject(() => {
+                CommandLine.positional({
+                    key: "broken"
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: ""
+                    help: null
+                })
+            }))
+
             true
         }
-    )
-}
-
-flag: CommandLine.option({
-    key: "verbose"
-    long: "verbose"
-    short: "v"
-    minValues: 0
-    maxValues: 0
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: null
-    help: null
-})
-
-valued: CommandLine.option({
-    key: "output"
-    long: "output"
-    short: "o"
-    minValues: 1
-    maxValues: 1
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: "file-path"
-    help: null
-})
-
-positional: CommandLine.positional({
-    key: "target"
-    minOccurrences: 1
-    maxOccurrences: 1
-    valueName: "target-name"
-    help: null
-})
-
-require(flag.valueName === null)
-require(valued.valueName == "file-path")
-require(positional.valueName == "target-name")
-
-require(reject(() => {
-    CommandLine.option({
-        key: "broken"
-        long: "broken"
-        short: null
-        minValues: 0
-        maxValues: 0
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: "VALUE"
-        help: null
+        Assertions.require(tool009LegacyCase())
     })
-}))
-
-require(reject(() => {
-    CommandLine.option({
-        key: "broken"
-        long: "broken"
-        short: null
-        minValues: 1
-        maxValues: 1
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: null
-        help: null
-    })
-}))
-
-require(reject(() => {
-    CommandLine.option({
-        key: "broken"
-        long: "broken"
-        short: null
-        minValues: 1
-        maxValues: 1
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: ""
-        help: null
-    })
-}))
-
-require(reject(() => {
-    CommandLine.positional({
-        key: "broken"
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: null
-        help: null
-    })
-}))
-
-require(reject(() => {
-    CommandLine.positional({
-        key: "broken"
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: ""
-        help: null
-    })
-}))
-
-true
+]
+tests.freeze()

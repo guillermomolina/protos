@@ -13,70 +13,81 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("text adapter reader", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
-            true
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            chunks: Array("a,\"b", ",b\"\r", "\n", "c,d", null)
+            index: 0
+            reader: {
+                readText: () => {
+                    chunk: chunks[index]
+                    index = index + 1
+                    (() => { chunk }).future()
+                }
+            }
+
+            rows: Map()
+            count: 0
+            stream: CSV.readRows(reader, (row) => {
+                rows[count] = row
+                count = count + 1
+            })
+
+            step1: stream.read()
+            step2: step1.then((more) => {
+                require(more === true)
+                stream.read()
+            })
+            step3: step2.then((more) => {
+                require(more === true)
+                stream.read()
+            })
+            step4: step3.then((more) => {
+                require(more === true)
+                stream.read()
+            })
+            step5: step4.then((more) => {
+                require(more === true)
+                stream.read()
+            })
+
+            step5.then((more) => {
+                require(more === false)
+                require(count == 2)
+                require(rows[0].size() == 2)
+                require(rows[0][0] == "a")
+                require(rows[0][1] == "b,b")
+                require(rows[1].size() == 2)
+                require(rows[1][0] == "c")
+                require(rows[1][1] == "d")
+                require(reject(() => { stream.read() }))
+                true
+            })
         }
-    )
-}
-
-chunks: Array("a,\"b", ",b\"\r", "\n", "c,d", null)
-index: 0
-reader: {
-    readText: () => {
-        chunk: chunks[index]
-        index = index + 1
-        (() => { chunk }).future()
-    }
-}
-
-rows: Map()
-count: 0
-stream: CSV.readRows(reader, (row) => {
-    rows[count] = row
-    count = count + 1
-})
-
-step1: stream.read()
-step2: step1.then((more) => {
-    require(more === true)
-    stream.read()
-})
-step3: step2.then((more) => {
-    require(more === true)
-    stream.read()
-})
-step4: step3.then((more) => {
-    require(more === true)
-    stream.read()
-})
-step5: step4.then((more) => {
-    require(more === true)
-    stream.read()
-})
-
-step5.then((more) => {
-    require(more === false)
-    require(count == 2)
-    require(rows[0].size() == 2)
-    require(rows[0][0] == "a")
-    require(rows[0][1] == "b,b")
-    require(rows[1].size() == 2)
-    require(rows[1][0] == "c")
-    require(rows[1][1] == "d")
-    require(reject(() => { stream.read() }))
-    true
-})
+        Assertions.require(tool009LegacyCase().value() === true)
+    })
+]
+tests.freeze()

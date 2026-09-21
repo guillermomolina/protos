@@ -13,157 +13,168 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CommandLine: import("std:cli/CommandLine")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("parse failures", () => {
+        tool009LegacyCase: () => {
+            CommandLine: import("std:cli/CommandLine")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            flag: CommandLine.option({
+                key: "verbose"
+                long: "verbose"
+                short: "v"
+                minValues: 0
+                maxValues: 0
+                minOccurrences: 0
+                maxOccurrences: 1
+                valueName: null
+                help: null
+            })
+
+            value: CommandLine.option({
+                key: "output"
+                long: "output"
+                short: "o"
+                minValues: 1
+                maxValues: 1
+                minOccurrences: 1
+                maxOccurrences: 1
+                valueName: "VALUE"
+                help: null
+            })
+
+            target: CommandLine.positional({
+                key: "target"
+                minOccurrences: 1
+                maxOccurrences: 1
+                valueName: "TARGET"
+                help: null
+            })
+
+            spec: CommandLine.command({
+                name: "tool"
+                help: null
+                options: Array(flag, value)
+                positionals: Array(target)
+                subcommands: Array()
+            })
+
+            require(reject(() => {
+                CommandLine.parse(spec, Array("--unknown", "--output", "x", "target"))
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(spec, Array("-x", "--output", "x", "target"))
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(spec, Array("-vo", "x", "target"))
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(spec, Array("--output"))
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(spec, Array("target"))
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(spec, Array("--output", "a", "--output", "b", "target"))
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(spec, Array("--verbose=value", "--output", "x", "target"))
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(
+                    CommandLine.command({
+                        name: "tool"
+                        help: null
+                        options: Array()
+                        positionals: Array(target)
+                        subcommands: Array()
+                    }),
+                    Array()
+                )
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(
+                    CommandLine.command({
+                        name: "tool"
+                        help: null
+                        options: Array()
+                        positionals: Array()
+                        subcommands: Array()
+                    }),
+                    Array("unexpected")
+                )
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(
+                    CommandLine.command({
+                        name: "tool"
+                        help: null
+                        options: Array()
+                        positionals: Array()
+                        subcommands: Array()
+                    }),
+                    Array("-")
+                )
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(
+                    CommandLine.command({
+                        name: "tool"
+                        help: null
+                        options: Array()
+                        positionals: Array()
+                        subcommands: Array()
+                    }),
+                    {}
+                )
+            }))
+
+            require(reject(() => {
+                CommandLine.parse(
+                    CommandLine.command({
+                        name: "tool"
+                        help: null
+                        options: Array()
+                        positionals: Array()
+                        subcommands: Array()
+                    }),
+                    Array(1)
+                )
+            }))
+
             true
         }
-    )
-}
-
-flag: CommandLine.option({
-    key: "verbose"
-    long: "verbose"
-    short: "v"
-    minValues: 0
-    maxValues: 0
-    minOccurrences: 0
-    maxOccurrences: 1
-    valueName: null
-    help: null
-})
-
-value: CommandLine.option({
-    key: "output"
-    long: "output"
-    short: "o"
-    minValues: 1
-    maxValues: 1
-    minOccurrences: 1
-    maxOccurrences: 1
-    valueName: "VALUE"
-    help: null
-})
-
-target: CommandLine.positional({
-    key: "target"
-    minOccurrences: 1
-    maxOccurrences: 1
-    valueName: "TARGET"
-    help: null
-})
-
-spec: CommandLine.command({
-    name: "tool"
-    help: null
-    options: Array(flag, value)
-    positionals: Array(target)
-    subcommands: Array()
-})
-
-require(reject(() => {
-    CommandLine.parse(spec, Array("--unknown", "--output", "x", "target"))
-}))
-
-require(reject(() => {
-    CommandLine.parse(spec, Array("-x", "--output", "x", "target"))
-}))
-
-require(reject(() => {
-    CommandLine.parse(spec, Array("-vo", "x", "target"))
-}))
-
-require(reject(() => {
-    CommandLine.parse(spec, Array("--output"))
-}))
-
-require(reject(() => {
-    CommandLine.parse(spec, Array("target"))
-}))
-
-require(reject(() => {
-    CommandLine.parse(spec, Array("--output", "a", "--output", "b", "target"))
-}))
-
-require(reject(() => {
-    CommandLine.parse(spec, Array("--verbose=value", "--output", "x", "target"))
-}))
-
-require(reject(() => {
-    CommandLine.parse(
-        CommandLine.command({
-            name: "tool"
-            help: null
-            options: Array()
-            positionals: Array(target)
-            subcommands: Array()
-        }),
-        Array()
-    )
-}))
-
-require(reject(() => {
-    CommandLine.parse(
-        CommandLine.command({
-            name: "tool"
-            help: null
-            options: Array()
-            positionals: Array()
-            subcommands: Array()
-        }),
-        Array("unexpected")
-    )
-}))
-
-require(reject(() => {
-    CommandLine.parse(
-        CommandLine.command({
-            name: "tool"
-            help: null
-            options: Array()
-            positionals: Array()
-            subcommands: Array()
-        }),
-        Array("-")
-    )
-}))
-
-require(reject(() => {
-    CommandLine.parse(
-        CommandLine.command({
-            name: "tool"
-            help: null
-            options: Array()
-            positionals: Array()
-            subcommands: Array()
-        }),
-        {}
-    )
-}))
-
-require(reject(() => {
-    CommandLine.parse(
-        CommandLine.command({
-            name: "tool"
-            help: null
-            options: Array()
-            positionals: Array()
-            subcommands: Array()
-        }),
-        Array(1)
-    )
-}))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

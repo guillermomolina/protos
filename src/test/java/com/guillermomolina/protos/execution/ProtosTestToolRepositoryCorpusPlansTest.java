@@ -31,12 +31,20 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
     }
 
     @Test
-    void csvFutureAndShaErrorExpectationsAreExplicit() throws Exception {
-        assertEquals("future-boolean", expectation("protos/corpus/library/csv", 11));
-        assertEquals("future-boolean", expectation("protos/corpus/library/csv", 12));
-        assertEquals("future-boolean", expectation("protos/corpus/library/csv", 13));
-        assertEquals("future-boolean", expectation("protos/corpus/library/csv", 15));
-        assertEquals("error", expectation("protos/corpus/library/crypto/sha256", 9));
+    void csvFutureAndShaCasesRemainOrderedAndAreSuiteNative() throws Exception {
+        assertEquals("csv/text-adapter-reader.protos", path("protos/corpus/library/csv", 11));
+        assertEquals("csv/text-adapter-writer.protos", path("protos/corpus/library/csv", 12));
+        assertEquals("csv/text-adapter-overlap.protos", path("protos/corpus/library/csv", 13));
+        assertEquals("csv/integrated-closure.protos", path("protos/corpus/library/csv", 15));
+        assertEquals(
+                "crypto/sha256/invalid-non-bytes.protos",
+                path("protos/corpus/library/crypto/sha256", 9));
+
+        assertEquals("suite-native", expectation("protos/corpus/library/csv", 11));
+        assertEquals("suite-native", expectation("protos/corpus/library/csv", 12));
+        assertEquals("suite-native", expectation("protos/corpus/library/csv", 13));
+        assertEquals("suite-native", expectation("protos/corpus/library/csv", 15));
+        assertEquals("suite-native", expectation("protos/corpus/library/crypto/sha256", 9));
     }
 
     @Test
@@ -72,6 +80,18 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
                         + corpusId
                         + "\"))\n"
                         + "Manifest.caseExpectation(cases["
+                        + index
+                        + "])");
+    }
+
+    private static String path(String corpusId, int index) throws Exception {
+        return completedString(
+                "Manifest: import(\"self:Manifest\")\n"
+                        + "Plans: import(\"self:RepositoryCorpusPlans\")\n"
+                        + "cases: Manifest.planCases(Plans.load(\""
+                        + corpusId
+                        + "\"))\n"
+                        + "Manifest.casePath(cases["
                         + index
                         + "])");
     }

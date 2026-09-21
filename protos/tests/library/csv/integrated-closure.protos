@@ -13,104 +13,115 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CSV: import("std:csv/CSV")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("integrated closure", () => {
+        tool009LegacyCase: () => {
+            CSV: import("std:csv/CSV")
 
-sameTable: (left, right) => {
-    same: left.size() == right.size()
-
-    same.ifTrue(() => {
-        rowIndex: 0
-        left.each((leftRow) => {
-            rightRow: right[rowIndex]
-            (leftRow.size() == rightRow.size()).ifFalse(() => {
-                same = false
-            })
-
-            same.ifTrue(() => {
-                fieldIndex: 0
-                leftRow.each((leftField) => {
-                    (leftField == rightRow[fieldIndex]).ifFalse(() => {
-                        same = false
-                    })
-                    fieldIndex = fieldIndex + 1
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
                 })
+            }
+
+            sameTable: (left, right) => {
+                same: left.size() == right.size()
+
+                same.ifTrue(() => {
+                    rowIndex: 0
+                    left.each((leftRow) => {
+                        rightRow: right[rowIndex]
+                        (leftRow.size() == rightRow.size()).ifFalse(() => {
+                            same = false
+                        })
+
+                        same.ifTrue(() => {
+                            fieldIndex: 0
+                            leftRow.each((leftField) => {
+                                (leftField == rightRow[fieldIndex]).ifFalse(() => {
+                                    same = false
+                                })
+                                fieldIndex = fieldIndex + 1
+                            })
+                        })
+
+                        rowIndex = rowIndex + 1
+                    })
+                })
+
+                same
+            }
+
+            expectedRows: Array(
+                Array("a", "b"),
+                Array("x,y", "q\"z"),
+                Array("line\r\nbreak", ""),
+                Array("snow 雪", "emoji 🙂")
+            )
+
+            encoded: CSV.encode(expectedRows)
+            expectedText: "a,b\r\n\"x,y\",\"q\"\"z\"\r\n\"line\r\nbreak\",\r\nsnow 雪,emoji 🙂\r\n"
+            require(encoded == expectedText)
+
+            eager: CSV.parse(encoded)
+            require(sameTable(expectedRows, eager))
+
+            streamed: Map()
+            streamedCount: 0
+            parser: CSV.rowParser((row) => {
+                streamed[streamedCount] = row
+                streamedCount = streamedCount + 1
             })
 
-            rowIndex = rowIndex + 1
-        })
+            parser.feed("a,b\r")
+            parser.feed("\n\"x")
+            parser.feed(",y\",\"q\"")
+            parser.feed("\"z\"\r\n\"line\r")
+            parser.feed("\nbreak\",\r")
+            parser.feed("\nsnow 雪,emoji ")
+            parser.feed("🙂\r\n")
+            parser.finish()
+
+            streamedRows: Array(
+                streamed[0],
+                streamed[1],
+                streamed[2],
+                streamed[3]
+            )
+            require(streamedCount == 4)
+            require(sameTable(expectedRows, streamedRows))
+
+            sink: ""
+            writes: 0
+            writer: null
+            writer = {
+                writeText: (text) => {
+                    (() => {
+                        sink = sink + text
+                        writes = writes + 1
+                        writer
+                    }).future()
+                }
+            }
+
+            output: CSV.writeRows(writer)
+            step1: output.feed(expectedRows[0])
+            step2: step1.then((ignored) => { output.feed(expectedRows[1]) })
+            step3: step2.then((ignored) => { output.feed(expectedRows[2]) })
+            step4: step3.then((ignored) => { output.feed(expectedRows[3]) })
+            done: step4.then((ignored) => { output.finish() })
+
+            done.then((resolvedOutput) => {
+                require(resolvedOutput === output)
+                require(sink == encoded)
+                require(writes == 5)
+                true
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
     })
-
-    same
-}
-
-expectedRows: Array(
-    Array("a", "b"),
-    Array("x,y", "q\"z"),
-    Array("line\r\nbreak", ""),
-    Array("snow 雪", "emoji 🙂")
-)
-
-encoded: CSV.encode(expectedRows)
-expectedText: "a,b\r\n\"x,y\",\"q\"\"z\"\r\n\"line\r\nbreak\",\r\nsnow 雪,emoji 🙂\r\n"
-require(encoded == expectedText)
-
-eager: CSV.parse(encoded)
-require(sameTable(expectedRows, eager))
-
-streamed: Map()
-streamedCount: 0
-parser: CSV.rowParser((row) => {
-    streamed[streamedCount] = row
-    streamedCount = streamedCount + 1
-})
-
-parser.feed("a,b\r")
-parser.feed("\n\"x")
-parser.feed(",y\",\"q\"")
-parser.feed("\"z\"\r\n\"line\r")
-parser.feed("\nbreak\",\r")
-parser.feed("\nsnow 雪,emoji ")
-parser.feed("🙂\r\n")
-parser.finish()
-
-streamedRows: Array(
-    streamed[0],
-    streamed[1],
-    streamed[2],
-    streamed[3]
-)
-require(streamedCount == 4)
-require(sameTable(expectedRows, streamedRows))
-
-sink: ""
-writes: 0
-writer: null
-writer = {
-    writeText: (text) => {
-        (() => {
-            sink = sink + text
-            writes = writes + 1
-            writer
-        }).future()
-    }
-}
-
-output: CSV.writeRows(writer)
-step1: output.feed(expectedRows[0])
-step2: step1.then((ignored) => { output.feed(expectedRows[1]) })
-step3: step2.then((ignored) => { output.feed(expectedRows[2]) })
-step4: step3.then((ignored) => { output.feed(expectedRows[3]) })
-done: step4.then((ignored) => { output.finish() })
-
-done.then((resolvedOutput) => {
-    require(resolvedOutput === output)
-    require(sink == encoded)
-    require(writes == 5)
-    true
-})
+]
+tests.freeze()

@@ -12,49 +12,61 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
-IpAddresses: import("std:network/IpAddresses")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+tests: [
+    Test("domain rejection", () => {
+        tool009LegacyCase: () => {
+            IpAddresses: import("std:network/IpAddresses")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            require(reject(() => { IpAddresses.v4(-1, 0, 0, 0) }))
+            require(reject(() => { IpAddresses.v4(0, 256, 0, 0) }))
+            require(reject(() => { IpAddresses.v4(0, 0, -1, 0) }))
+            require(reject(() => { IpAddresses.v4(0, 0, 0, 256) }))
+            require(reject(() => { IpAddresses.v4(1.0, 0, 0, 0) }))
+
+            // This is a known-valid delegated numeric lookalike shape in Core conformance:
+            // the object delegates to the ordinary Integer value 1, whose parent is Integer.
+            // Lookup can therefore find Integer protocol, but strict receiver validation
+            // must reject the object itself as not being an actual Integer value.
+            delegatedIntegerLookalike: (1) {}
+            require(reject(() => {
+                IpAddresses.v4(delegatedIntegerLookalike, 0, 0, 0)
+            }))
+
+            require(reject(() => {
+                IpAddresses.v6(-1, 0, 0, 0, 0, 0, 0, 0)
+            }))
+            require(reject(() => {
+                IpAddresses.v6(0, 65536, 0, 0, 0, 0, 0, 0)
+            }))
+            require(reject(() => {
+                IpAddresses.v6(1.0, 0, 0, 0, 0, 0, 0, 0)
+            }))
+
             true
         }
-    )
-}
-
-require(reject(() => { IpAddresses.v4(-1, 0, 0, 0) }))
-require(reject(() => { IpAddresses.v4(0, 256, 0, 0) }))
-require(reject(() => { IpAddresses.v4(0, 0, -1, 0) }))
-require(reject(() => { IpAddresses.v4(0, 0, 0, 256) }))
-require(reject(() => { IpAddresses.v4(1.0, 0, 0, 0) }))
-
-// This is a known-valid delegated numeric lookalike shape in Core conformance:
-// the object delegates to the ordinary Integer value 1, whose parent is Integer.
-// Lookup can therefore find Integer protocol, but strict receiver validation
-// must reject the object itself as not being an actual Integer value.
-delegatedIntegerLookalike: (1) {}
-require(reject(() => {
-    IpAddresses.v4(delegatedIntegerLookalike, 0, 0, 0)
-}))
-
-require(reject(() => {
-    IpAddresses.v6(-1, 0, 0, 0, 0, 0, 0, 0)
-}))
-require(reject(() => {
-    IpAddresses.v6(0, 65536, 0, 0, 0, 0, 0, 0)
-}))
-require(reject(() => {
-    IpAddresses.v6(1.0, 0, 0, 0, 0, 0, 0, 0)
-}))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

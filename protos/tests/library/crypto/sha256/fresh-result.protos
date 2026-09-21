@@ -13,21 +13,32 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-SHA256: import("std:crypto/SHA256")
-input: Encoding.UTF8.encode("abc")
-first: SHA256.digest(input)
-second: SHA256.digest(input)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ok: first !== second
-(first.size() == second.size()).ifFalse(() => {
-    ok = false
-})
+tests: [
+    Test("fresh result", () => {
+        tool009LegacyCase: () => {
+            SHA256: import("std:crypto/SHA256")
+            input: Encoding.UTF8.encode("abc")
+            first: SHA256.digest(input)
+            second: SHA256.digest(input)
 
-index: 0
-first.each((octet) => {
-    (second[index] == octet).ifFalse(() => {
-        ok = false
+            ok: first !== second
+            (first.size() == second.size()).ifFalse(() => {
+                ok = false
+            })
+
+            index: 0
+            first.each((octet) => {
+                (second[index] == octet).ifFalse(() => {
+                    ok = false
+                })
+                index = index + 1
+            })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
     })
-    index = index + 1
-})
-ok
+]
+tests.freeze()

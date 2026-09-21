@@ -13,68 +13,79 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Uri: import("std:uri")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("parse invalid", () => {
+        tool009LegacyCase: () => {
+            Uri: import("std:uri")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            // A colon before '/', '?', or '#' commits to scheme syntax.
+            require(reject(() => { Uri.parse(":x") }))
+            require(reject(() => { Uri.parse("1a:x") }))
+            require(reject(() => { Uri.parse("+a:x") }))
+            require(reject(() => { Uri.parse(".a:x") }))
+
+            // Raw characters outside the RFC 3986 ASCII grammar.
+            require(reject(() => { Uri.parse("/a b") }))
+            require(reject(() => { Uri.parse("/a\\b") }))
+            require(reject(() => { Uri.parse("/a<b") }))
+            require(reject(() => { Uri.parse("/é") }))
+            require(reject(() => { Uri.parse("/a\nb") }))
+
+            // Percent escapes are syntax, not a permissive decoding hint.
+            require(reject(() => { Uri.parse("/%") }))
+            require(reject(() => { Uri.parse("/%0") }))
+            require(reject(() => { Uri.parse("/%GG") }))
+            require(reject(() => { Uri.parse("?%") }))
+            require(reject(() => { Uri.parse("#%") }))
+
+            // Authority syntax.
+            require(reject(() => { Uri.parse("//user@@host/") }))
+            require(reject(() => { Uri.parse("//host:80:90/") }))
+            require(reject(() => { Uri.parse("//ho st/") }))
+            require(reject(() => { Uri.parse("//[2001:db8::1") }))
+            require(reject(() => { Uri.parse("//[2001:db8::1]x/") }))
+            require(reject(() => { Uri.parse("//[2001:db8::1]:abc/") }))
+
+            // IPv6 and IPvFuture syntax inside IP-literal brackets.
+            require(reject(() => { Uri.parse("//[gggg::1]/") }))
+            require(reject(() => { Uri.parse("//[1:2:3:4:5:6:7]/") }))
+            require(reject(() => { Uri.parse("//[1:2:3:4:5:6:7:8:9]/") }))
+            require(reject(() => { Uri.parse("//[1::2::3]/") }))
+            require(reject(() => { Uri.parse("//[1:2:3:4:5:6::192.0.2.1]/") }))
+            require(reject(() => { Uri.parse("//[::ffff:999.1.1.1]/") }))
+            require(reject(() => { Uri.parse("//[v.z]/") }))
+            require(reject(() => { Uri.parse("//[v1.]/") }))
+            require(reject(() => { Uri.parse("//[v1.a@b]/") }))
+
+            // '[' and ']' are not generic path/query/fragment characters.
+            require(reject(() => { Uri.parse("/[x]") }))
+            require(reject(() => { Uri.parse("?x=[y]") }))
+            require(reject(() => { Uri.parse("#[z]") }))
+
             true
         }
-    )
-}
-
-// A colon before '/', '?', or '#' commits to scheme syntax.
-require(reject(() => { Uri.parse(":x") }))
-require(reject(() => { Uri.parse("1a:x") }))
-require(reject(() => { Uri.parse("+a:x") }))
-require(reject(() => { Uri.parse(".a:x") }))
-
-// Raw characters outside the RFC 3986 ASCII grammar.
-require(reject(() => { Uri.parse("/a b") }))
-require(reject(() => { Uri.parse("/a\\b") }))
-require(reject(() => { Uri.parse("/a<b") }))
-require(reject(() => { Uri.parse("/é") }))
-require(reject(() => { Uri.parse("/a\nb") }))
-
-// Percent escapes are syntax, not a permissive decoding hint.
-require(reject(() => { Uri.parse("/%") }))
-require(reject(() => { Uri.parse("/%0") }))
-require(reject(() => { Uri.parse("/%GG") }))
-require(reject(() => { Uri.parse("?%") }))
-require(reject(() => { Uri.parse("#%") }))
-
-// Authority syntax.
-require(reject(() => { Uri.parse("//user@@host/") }))
-require(reject(() => { Uri.parse("//host:80:90/") }))
-require(reject(() => { Uri.parse("//ho st/") }))
-require(reject(() => { Uri.parse("//[2001:db8::1") }))
-require(reject(() => { Uri.parse("//[2001:db8::1]x/") }))
-require(reject(() => { Uri.parse("//[2001:db8::1]:abc/") }))
-
-// IPv6 and IPvFuture syntax inside IP-literal brackets.
-require(reject(() => { Uri.parse("//[gggg::1]/") }))
-require(reject(() => { Uri.parse("//[1:2:3:4:5:6:7]/") }))
-require(reject(() => { Uri.parse("//[1:2:3:4:5:6:7:8:9]/") }))
-require(reject(() => { Uri.parse("//[1::2::3]/") }))
-require(reject(() => { Uri.parse("//[1:2:3:4:5:6::192.0.2.1]/") }))
-require(reject(() => { Uri.parse("//[::ffff:999.1.1.1]/") }))
-require(reject(() => { Uri.parse("//[v.z]/") }))
-require(reject(() => { Uri.parse("//[v1.]/") }))
-require(reject(() => { Uri.parse("//[v1.a@b]/") }))
-
-// '[' and ']' are not generic path/query/fragment characters.
-require(reject(() => { Uri.parse("/[x]") }))
-require(reject(() => { Uri.parse("?x=[y]") }))
-require(reject(() => { Uri.parse("#[z]") }))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

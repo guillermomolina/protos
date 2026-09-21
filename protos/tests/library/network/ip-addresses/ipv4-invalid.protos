@@ -12,58 +12,70 @@
 // Software distributed under the License is distributed on an "AS IS" basis,
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
-IpAddresses: import("std:network/IpAddresses")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+tests: [
+    Test("ipv4 invalid", () => {
+        tool009LegacyCase: () => {
+            IpAddresses: import("std:network/IpAddresses")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            // Shape/cardinality.
+            require(reject(() => { IpAddresses.parse("") }))
+            require(reject(() => { IpAddresses.parse("1.2.3") }))
+            require(reject(() => { IpAddresses.parse("127.1") }))
+            require(reject(() => { IpAddresses.parse("1.2.3.4.5") }))
+            require(reject(() => { IpAddresses.parse(".1.2.3") }))
+            require(reject(() => { IpAddresses.parse("1..2.3") }))
+            require(reject(() => { IpAddresses.parse("1.2.3.") }))
+
+            // Strict decimal spelling and range.
+            require(reject(() => { IpAddresses.parse("01.2.3.4") }))
+            require(reject(() => { IpAddresses.parse("1.02.3.4") }))
+            require(reject(() => { IpAddresses.parse("1.2.003.4") }))
+            require(reject(() => { IpAddresses.parse("256.0.0.1") }))
+            require(reject(() => { IpAddresses.parse("1.2.3.999") }))
+            require(reject(() => { IpAddresses.parse("-1.2.3.4") }))
+            require(reject(() => { IpAddresses.parse("+1.2.3.4") }))
+            require(reject(() => { IpAddresses.parse("0x7f.0.0.1") }))
+            require(reject(() => { IpAddresses.parse("0300.0.0.1") }))
+
+            // No whitespace, Unicode-digit substitution, or hostname interpretation.
+            require(reject(() => { IpAddresses.parse(" 1.2.3.4") }))
+            require(reject(() => { IpAddresses.parse("1.2.3.4 ") }))
+            require(reject(() => { IpAddresses.parse("١.2.3.4") }))
+            require(reject(() => { IpAddresses.parse("example.com") }))
+
+            // Exact String receiver domain.
+            require(reject(() => { IpAddresses.parse(1234) }))
+            require(reject(() => { IpAddresses.parse({}) }))
+            require(reject(() => { IpAddresses.parse(null) }))
+
+            require(reject(() => { IpAddresses.format({}) }))
+            require(reject(() => { IpAddresses.format(1234) }))
+
             true
         }
-    )
-}
-
-// Shape/cardinality.
-require(reject(() => { IpAddresses.parse("") }))
-require(reject(() => { IpAddresses.parse("1.2.3") }))
-require(reject(() => { IpAddresses.parse("127.1") }))
-require(reject(() => { IpAddresses.parse("1.2.3.4.5") }))
-require(reject(() => { IpAddresses.parse(".1.2.3") }))
-require(reject(() => { IpAddresses.parse("1..2.3") }))
-require(reject(() => { IpAddresses.parse("1.2.3.") }))
-
-// Strict decimal spelling and range.
-require(reject(() => { IpAddresses.parse("01.2.3.4") }))
-require(reject(() => { IpAddresses.parse("1.02.3.4") }))
-require(reject(() => { IpAddresses.parse("1.2.003.4") }))
-require(reject(() => { IpAddresses.parse("256.0.0.1") }))
-require(reject(() => { IpAddresses.parse("1.2.3.999") }))
-require(reject(() => { IpAddresses.parse("-1.2.3.4") }))
-require(reject(() => { IpAddresses.parse("+1.2.3.4") }))
-require(reject(() => { IpAddresses.parse("0x7f.0.0.1") }))
-require(reject(() => { IpAddresses.parse("0300.0.0.1") }))
-
-// No whitespace, Unicode-digit substitution, or hostname interpretation.
-require(reject(() => { IpAddresses.parse(" 1.2.3.4") }))
-require(reject(() => { IpAddresses.parse("1.2.3.4 ") }))
-require(reject(() => { IpAddresses.parse("١.2.3.4") }))
-require(reject(() => { IpAddresses.parse("example.com") }))
-
-// Exact String receiver domain.
-require(reject(() => { IpAddresses.parse(1234) }))
-require(reject(() => { IpAddresses.parse({}) }))
-require(reject(() => { IpAddresses.parse(null) }))
-
-require(reject(() => { IpAddresses.format({}) }))
-require(reject(() => { IpAddresses.format(1234) }))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

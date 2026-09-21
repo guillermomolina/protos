@@ -13,27 +13,38 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-IntegerMath: import("std:math/Integer")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("factorial arity rejection", () => {
+        tool009LegacyCase: () => {
+            IntegerMath: import("std:math/Integer")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            require(reject(() => { IntegerMath.factorial() }))
+            require(reject(() => { IntegerMath.factorial(1, 2) }))
+
             true
         }
-    )
-}
-
-require(reject(() => { IntegerMath.factorial() }))
-require(reject(() => { IntegerMath.factorial(1, 2) }))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

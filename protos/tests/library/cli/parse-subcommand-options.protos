@@ -13,104 +13,115 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CommandLine: import("std:cli/CommandLine")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("parse subcommand options", () => {
+        tool009LegacyCase: () => {
+            CommandLine: import("std:cli/CommandLine")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            flag: (key, longName) => {
+                CommandLine.option({
+                    key: key
+                    long: longName
+                    short: null
+                    minValues: 0
+                    maxValues: 0
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: null
+                    help: null
+                })
+            }
+
+            valued: (key, longName) => {
+                CommandLine.option({
+                    key: key
+                    long: longName
+                    short: null
+                    minValues: 1
+                    maxValues: 1
+                    minOccurrences: 0
+                    maxOccurrences: 1
+                    valueName: "VALUE"
+                    help: null
+                })
+            }
+
+            rootOnly: flag("root", "root")
+            childOnly: flag("child", "child")
+            shared: flag("verbose", "verbose")
+            output: valued("output", "output")
+
+            run: CommandLine.command({
+                name: "run"
+                help: null
+                options: Array(childOnly, shared)
+                positionals: Array()
+                subcommands: Array()
+            })
+
+            root: CommandLine.command({
+                name: "tool"
+                help: null
+                options: Array(rootOnly, shared, output)
+                positionals: Array()
+                subcommands: Array(run)
+            })
+
+            scoped: CommandLine.parse(
+                root,
+                Array("--root", "--verbose", "run", "--child", "--verbose")
+            )
+
+            require(scoped.command.options.size() == 2)
+            require(scoped.command.options[0].key == "root")
+            require(scoped.command.options[0].tokenIndex == 0)
+            require(scoped.command.options[1].key == "verbose")
+            require(scoped.command.options[1].tokenIndex == 1)
+
+            require(scoped.command.subcommand.name == "run")
+            require(scoped.command.subcommand.tokenIndex == 2)
+            require(scoped.command.subcommand.options.size() == 2)
+            require(scoped.command.subcommand.options[0].key == "child")
+            require(scoped.command.subcommand.options[0].tokenIndex == 3)
+            require(scoped.command.subcommand.options[1].key == "verbose")
+            require(scoped.command.subcommand.options[1].tokenIndex == 4)
+
+            require(reject(() => {
+                CommandLine.parse(root, Array("run", "--root"))
+            }))
+
+            valueWins: CommandLine.parse(root, Array("--output", "run"))
+            require(valueWins.command.subcommand === null)
+            require(valueWins.command.options.size() == 1)
+            require(valueWins.command.options[0].key == "output")
+            require(valueWins.command.options[0].value == "run")
+            require(valueWins.command.options[0].tokenIndex == 0)
+            require(valueWins.command.options[0].valueTokenIndex == 1)
+
             true
         }
-    )
-}
-
-flag: (key, longName) => {
-    CommandLine.option({
-        key: key
-        long: longName
-        short: null
-        minValues: 0
-        maxValues: 0
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: null
-        help: null
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-valued: (key, longName) => {
-    CommandLine.option({
-        key: key
-        long: longName
-        short: null
-        minValues: 1
-        maxValues: 1
-        minOccurrences: 0
-        maxOccurrences: 1
-        valueName: "VALUE"
-        help: null
-    })
-}
-
-rootOnly: flag("root", "root")
-childOnly: flag("child", "child")
-shared: flag("verbose", "verbose")
-output: valued("output", "output")
-
-run: CommandLine.command({
-    name: "run"
-    help: null
-    options: Array(childOnly, shared)
-    positionals: Array()
-    subcommands: Array()
-})
-
-root: CommandLine.command({
-    name: "tool"
-    help: null
-    options: Array(rootOnly, shared, output)
-    positionals: Array()
-    subcommands: Array(run)
-})
-
-scoped: CommandLine.parse(
-    root,
-    Array("--root", "--verbose", "run", "--child", "--verbose")
-)
-
-require(scoped.command.options.size() == 2)
-require(scoped.command.options[0].key == "root")
-require(scoped.command.options[0].tokenIndex == 0)
-require(scoped.command.options[1].key == "verbose")
-require(scoped.command.options[1].tokenIndex == 1)
-
-require(scoped.command.subcommand.name == "run")
-require(scoped.command.subcommand.tokenIndex == 2)
-require(scoped.command.subcommand.options.size() == 2)
-require(scoped.command.subcommand.options[0].key == "child")
-require(scoped.command.subcommand.options[0].tokenIndex == 3)
-require(scoped.command.subcommand.options[1].key == "verbose")
-require(scoped.command.subcommand.options[1].tokenIndex == 4)
-
-require(reject(() => {
-    CommandLine.parse(root, Array("run", "--root"))
-}))
-
-valueWins: CommandLine.parse(root, Array("--output", "run"))
-require(valueWins.command.subcommand === null)
-require(valueWins.command.options.size() == 1)
-require(valueWins.command.options[0].key == "output")
-require(valueWins.command.options[0].value == "run")
-require(valueWins.command.options[0].tokenIndex == 0)
-require(valueWins.command.options[0].valueTokenIndex == 1)
-
-true
+]
+tests.freeze()

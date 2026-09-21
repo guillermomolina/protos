@@ -13,146 +13,157 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CommandLine: import("std:cli/CommandLine")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("result model", () => {
+        tool009LegacyCase: () => {
+            CommandLine: import("std:cli/CommandLine")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            require(CommandLine.hasSlot("parseResult") === false)
+            require(CommandLine.hasSlot("commandResult") === false)
+            require(CommandLine.hasSlot("optionOccurrence") === false)
+            require(CommandLine.hasSlot("positionalOccurrence") === false)
+
+            argumentsInput: Array(
+                "--verbose",
+                "package",
+                "install",
+                "--",
+                "-literal"
+            )
+
+            arguments: Array(...argumentsInput)
+            arguments.freeze()
+
+            verbose: {
+                kind: "optionOccurrence"
+                key: "verbose"
+                spelling: "--verbose"
+                tokenIndex: 0
+                value: null
+                valueTokenIndex: null
+            }
+            verbose.freeze()
+
+            rootOptions: Array(verbose)
+            rootOptions.freeze()
+            rootPositionals: Array()
+            rootPositionals.freeze()
+
+            leafPositional: {
+                kind: "positionalOccurrence"
+                key: "files"
+                value: "-literal"
+                tokenIndex: 4
+            }
+            leafPositional.freeze()
+
+            leafOptions: Array()
+            leafOptions.freeze()
+            leafPositionals: Array(leafPositional)
+            leafPositionals.freeze()
+
+            leaf: {
+                kind: "commandResult"
+                name: "install"
+                tokenIndex: 2
+                endOfOptionsIndex: 3
+                options: leafOptions
+                positionals: leafPositionals
+                subcommand: null
+            }
+            leaf.freeze()
+
+            packageOptions: Array()
+            packageOptions.freeze()
+            packagePositionals: Array()
+            packagePositionals.freeze()
+
+            packageResult: {
+                kind: "commandResult"
+                name: "package"
+                tokenIndex: 1
+                endOfOptionsIndex: null
+                options: packageOptions
+                positionals: packagePositionals
+                subcommand: leaf
+            }
+            packageResult.freeze()
+
+            root: {
+                kind: "commandResult"
+                name: "tool"
+                tokenIndex: null
+                endOfOptionsIndex: null
+                options: rootOptions
+                positionals: rootPositionals
+                subcommand: packageResult
+            }
+            root.freeze()
+
+            parsed: {
+                kind: "parseResult"
+                arguments: arguments
+                command: root
+            }
+            parsed.freeze()
+
+            argumentsInput[0] = "changed-after-snapshot"
+
+            require(parsed.kind == "parseResult")
+            require(parsed.arguments[0] == "--verbose")
+            require(parsed.arguments[1] == "package")
+            require(parsed.arguments[2] == "install")
+            require(parsed.arguments[3] == "--")
+            require(parsed.arguments[4] == "-literal")
+
+            require(parsed.command.kind == "commandResult")
+            require(parsed.command.name == "tool")
+            require(parsed.command.tokenIndex === null)
+            require(parsed.command.subcommand.name == "package")
+            require(parsed.command.subcommand.tokenIndex == 1)
+            require(parsed.command.subcommand.subcommand.name == "install")
+            require(parsed.command.subcommand.subcommand.tokenIndex == 2)
+            require(parsed.command.subcommand.subcommand.endOfOptionsIndex == 3)
+            require(parsed.command.subcommand.subcommand.positionals[0].key == "files")
+            require(parsed.command.subcommand.subcommand.positionals[0].value == "-literal")
+            require(parsed.command.subcommand.subcommand.positionals[0].tokenIndex == 4)
+
+            require(reject(() => {
+                parsed.arguments[0] = "changed"
+            }))
+
+            require(reject(() => {
+                parsed.command.name = "changed"
+            }))
+
+            require(reject(() => {
+                parsed.command.options[0].key = "changed"
+            }))
+
             true
         }
-    )
-}
-
-require(CommandLine.hasSlot("parseResult") === false)
-require(CommandLine.hasSlot("commandResult") === false)
-require(CommandLine.hasSlot("optionOccurrence") === false)
-require(CommandLine.hasSlot("positionalOccurrence") === false)
-
-argumentsInput: Array(
-    "--verbose",
-    "package",
-    "install",
-    "--",
-    "-literal"
-)
-
-arguments: Array(...argumentsInput)
-arguments.freeze()
-
-verbose: {
-    kind: "optionOccurrence"
-    key: "verbose"
-    spelling: "--verbose"
-    tokenIndex: 0
-    value: null
-    valueTokenIndex: null
-}
-verbose.freeze()
-
-rootOptions: Array(verbose)
-rootOptions.freeze()
-rootPositionals: Array()
-rootPositionals.freeze()
-
-leafPositional: {
-    kind: "positionalOccurrence"
-    key: "files"
-    value: "-literal"
-    tokenIndex: 4
-}
-leafPositional.freeze()
-
-leafOptions: Array()
-leafOptions.freeze()
-leafPositionals: Array(leafPositional)
-leafPositionals.freeze()
-
-leaf: {
-    kind: "commandResult"
-    name: "install"
-    tokenIndex: 2
-    endOfOptionsIndex: 3
-    options: leafOptions
-    positionals: leafPositionals
-    subcommand: null
-}
-leaf.freeze()
-
-packageOptions: Array()
-packageOptions.freeze()
-packagePositionals: Array()
-packagePositionals.freeze()
-
-packageResult: {
-    kind: "commandResult"
-    name: "package"
-    tokenIndex: 1
-    endOfOptionsIndex: null
-    options: packageOptions
-    positionals: packagePositionals
-    subcommand: leaf
-}
-packageResult.freeze()
-
-root: {
-    kind: "commandResult"
-    name: "tool"
-    tokenIndex: null
-    endOfOptionsIndex: null
-    options: rootOptions
-    positionals: rootPositionals
-    subcommand: packageResult
-}
-root.freeze()
-
-parsed: {
-    kind: "parseResult"
-    arguments: arguments
-    command: root
-}
-parsed.freeze()
-
-argumentsInput[0] = "changed-after-snapshot"
-
-require(parsed.kind == "parseResult")
-require(parsed.arguments[0] == "--verbose")
-require(parsed.arguments[1] == "package")
-require(parsed.arguments[2] == "install")
-require(parsed.arguments[3] == "--")
-require(parsed.arguments[4] == "-literal")
-
-require(parsed.command.kind == "commandResult")
-require(parsed.command.name == "tool")
-require(parsed.command.tokenIndex === null)
-require(parsed.command.subcommand.name == "package")
-require(parsed.command.subcommand.tokenIndex == 1)
-require(parsed.command.subcommand.subcommand.name == "install")
-require(parsed.command.subcommand.subcommand.tokenIndex == 2)
-require(parsed.command.subcommand.subcommand.endOfOptionsIndex == 3)
-require(parsed.command.subcommand.subcommand.positionals[0].key == "files")
-require(parsed.command.subcommand.subcommand.positionals[0].value == "-literal")
-require(parsed.command.subcommand.subcommand.positionals[0].tokenIndex == 4)
-
-require(reject(() => {
-    parsed.arguments[0] = "changed"
-}))
-
-require(reject(() => {
-    parsed.command.name = "changed"
-}))
-
-require(reject(() => {
-    parsed.command.options[0].key = "changed"
-}))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

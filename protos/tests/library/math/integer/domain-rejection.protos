@@ -13,36 +13,47 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-IntegerMath: import("std:math/Integer")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("domain rejection", () => {
+        tool009LegacyCase: () => {
+            IntegerMath: import("std:math/Integer")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            delegatedIntegerLookalike: (1) {}
+
+            require(reject(() => { IntegerMath.gcd(6.0, 9) }))
+            require(reject(() => { IntegerMath.gcd("6", 9) }))
+            require(reject(() => { IntegerMath.gcd(delegatedIntegerLookalike, 9) }))
+
+            require(reject(() => { IntegerMath.lcm(6.0, 9) }))
+            require(reject(() => { IntegerMath.lcm(6, null) }))
+            require(reject(() => { IntegerMath.lcm(delegatedIntegerLookalike, 9) }))
+
+            // Both arguments remain part of the domain even when one mathematical value is zero.
+
             true
         }
-    )
-}
-
-delegatedIntegerLookalike: (1) {}
-
-require(reject(() => { IntegerMath.gcd(6.0, 9) }))
-require(reject(() => { IntegerMath.gcd("6", 9) }))
-require(reject(() => { IntegerMath.gcd(delegatedIntegerLookalike, 9) }))
-
-require(reject(() => { IntegerMath.lcm(6.0, 9) }))
-require(reject(() => { IntegerMath.lcm(6, null) }))
-require(reject(() => { IntegerMath.lcm(delegatedIntegerLookalike, 9) }))
-
-// Both arguments remain part of the domain even when one mathematical value is zero.
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()

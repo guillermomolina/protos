@@ -13,127 +13,138 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("result provenance", () => {
+        tool009LegacyCase: () => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            arguments: Array(
+                "--output=value",
+                "-abc",
+                "--output",
+                "--",
+                "--",
+                "tail"
+            )
+            arguments.freeze()
+
+            attached: {
+                kind: "optionOccurrence"
+                key: "output"
+                spelling: "--output"
+                tokenIndex: 0
+                value: "value"
+                valueTokenIndex: 0
+            }
+            attached.freeze()
+
+            clusterA: {
+                kind: "optionOccurrence"
+                key: "all"
+                spelling: "-a"
+                tokenIndex: 1
+                value: null
+                valueTokenIndex: null
+            }
+            clusterA.freeze()
+
+            clusterB: {
+                kind: "optionOccurrence"
+                key: "brief"
+                spelling: "-b"
+                tokenIndex: 1
+                value: null
+                valueTokenIndex: null
+            }
+            clusterB.freeze()
+
+            clusterC: {
+                kind: "optionOccurrence"
+                key: "check"
+                spelling: "-c"
+                tokenIndex: 1
+                value: null
+                valueTokenIndex: null
+            }
+            clusterC.freeze()
+
+            literalDoubleDash: {
+                kind: "optionOccurrence"
+                key: "output"
+                spelling: "--output"
+                tokenIndex: 2
+                value: "--"
+                valueTokenIndex: 3
+            }
+            literalDoubleDash.freeze()
+
+            tail: {
+                kind: "positionalOccurrence"
+                key: "tail"
+                value: "tail"
+                tokenIndex: 5
+            }
+            tail.freeze()
+
+            options: Array(
+                attached,
+                clusterA,
+                clusterB,
+                clusterC,
+                literalDoubleDash
+            )
+            options.freeze()
+
+            positionals: Array(tail)
+            positionals.freeze()
+
+            command: {
+                kind: "commandResult"
+                name: "tool"
+                tokenIndex: null
+                endOfOptionsIndex: 4
+                options: options
+                positionals: positionals
+                subcommand: null
+            }
+            command.freeze()
+
+            parsed: {
+                kind: "parseResult"
+                arguments: arguments
+                command: command
+            }
+            parsed.freeze()
+
+            require(parsed.command.options[0].spelling == "--output")
+            require(parsed.command.options[0].tokenIndex == 0)
+            require(parsed.command.options[0].value == "value")
+            require(parsed.command.options[0].valueTokenIndex == 0)
+
+            require(parsed.command.options[1].spelling == "-a")
+            require(parsed.command.options[1].tokenIndex == 1)
+            require(parsed.command.options[2].spelling == "-b")
+            require(parsed.command.options[2].tokenIndex == 1)
+            require(parsed.command.options[3].spelling == "-c")
+            require(parsed.command.options[3].tokenIndex == 1)
+
+            require(parsed.arguments[3] == "--")
+            require(parsed.arguments[4] == "--")
+            require(parsed.command.options[4].value == "--")
+            require(parsed.command.options[4].valueTokenIndex == 3)
+            require(parsed.command.endOfOptionsIndex == 4)
+            require(parsed.command.positionals[0].tokenIndex == 5)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
-}
-
-arguments: Array(
-    "--output=value",
-    "-abc",
-    "--output",
-    "--",
-    "--",
-    "tail"
-)
-arguments.freeze()
-
-attached: {
-    kind: "optionOccurrence"
-    key: "output"
-    spelling: "--output"
-    tokenIndex: 0
-    value: "value"
-    valueTokenIndex: 0
-}
-attached.freeze()
-
-clusterA: {
-    kind: "optionOccurrence"
-    key: "all"
-    spelling: "-a"
-    tokenIndex: 1
-    value: null
-    valueTokenIndex: null
-}
-clusterA.freeze()
-
-clusterB: {
-    kind: "optionOccurrence"
-    key: "brief"
-    spelling: "-b"
-    tokenIndex: 1
-    value: null
-    valueTokenIndex: null
-}
-clusterB.freeze()
-
-clusterC: {
-    kind: "optionOccurrence"
-    key: "check"
-    spelling: "-c"
-    tokenIndex: 1
-    value: null
-    valueTokenIndex: null
-}
-clusterC.freeze()
-
-literalDoubleDash: {
-    kind: "optionOccurrence"
-    key: "output"
-    spelling: "--output"
-    tokenIndex: 2
-    value: "--"
-    valueTokenIndex: 3
-}
-literalDoubleDash.freeze()
-
-tail: {
-    kind: "positionalOccurrence"
-    key: "tail"
-    value: "tail"
-    tokenIndex: 5
-}
-tail.freeze()
-
-options: Array(
-    attached,
-    clusterA,
-    clusterB,
-    clusterC,
-    literalDoubleDash
-)
-options.freeze()
-
-positionals: Array(tail)
-positionals.freeze()
-
-command: {
-    kind: "commandResult"
-    name: "tool"
-    tokenIndex: null
-    endOfOptionsIndex: 4
-    options: options
-    positionals: positionals
-    subcommand: null
-}
-command.freeze()
-
-parsed: {
-    kind: "parseResult"
-    arguments: arguments
-    command: command
-}
-parsed.freeze()
-
-require(parsed.command.options[0].spelling == "--output")
-require(parsed.command.options[0].tokenIndex == 0)
-require(parsed.command.options[0].value == "value")
-require(parsed.command.options[0].valueTokenIndex == 0)
-
-require(parsed.command.options[1].spelling == "-a")
-require(parsed.command.options[1].tokenIndex == 1)
-require(parsed.command.options[2].spelling == "-b")
-require(parsed.command.options[2].tokenIndex == 1)
-require(parsed.command.options[3].spelling == "-c")
-require(parsed.command.options[3].tokenIndex == 1)
-
-require(parsed.arguments[3] == "--")
-require(parsed.arguments[4] == "--")
-require(parsed.command.options[4].value == "--")
-require(parsed.command.options[4].valueTokenIndex == 3)
-require(parsed.command.endOfOptionsIndex == 4)
-require(parsed.command.positionals[0].tokenIndex == 5)
-
-true
+]
+tests.freeze()

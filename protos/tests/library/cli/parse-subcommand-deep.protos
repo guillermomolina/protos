@@ -13,88 +13,99 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-CommandLine: import("std:cli/CommandLine")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-require: (condition) => {
-    condition.ifFalse(() => {
-        Error().signal()
-    })
-}
+tests: [
+    Test("parse subcommand deep", () => {
+        tool009LegacyCase: () => {
+            CommandLine: import("std:cli/CommandLine")
 
-reject: (body) => {
-    Error.handle(
-        () => {
-            body()
-            false
-        },
-        (error) => {
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            target: CommandLine.positional({
+                key: "target"
+                minOccurrences: 1
+                maxOccurrences: 1
+                valueName: "TARGET"
+                help: null
+            })
+
+            install: CommandLine.command({
+                name: "install"
+                help: null
+                options: Array()
+                positionals: Array(target)
+                subcommands: Array()
+            })
+
+            package: CommandLine.command({
+                name: "package"
+                help: null
+                options: Array()
+                positionals: Array()
+                subcommands: Array(install)
+            })
+
+            root: CommandLine.command({
+                name: "tool"
+                help: null
+                options: Array()
+                positionals: Array()
+                subcommands: Array(package)
+            })
+
+            parsed: CommandLine.parse(
+                root,
+                Array("package", "install", "artifact")
+            )
+
+            require(parsed.arguments.size() == 3)
+            require(parsed.command.name == "tool")
+            require(parsed.command.tokenIndex === null)
+            require(parsed.command.positionals.size() == 0)
+
+            packageResult: parsed.command.subcommand
+            require(packageResult.name == "package")
+            require(packageResult.tokenIndex == 0)
+            require(packageResult.positionals.size() == 0)
+
+            installResult: packageResult.subcommand
+            require(installResult.name == "install")
+            require(installResult.tokenIndex == 1)
+            require(installResult.positionals.size() == 1)
+            require(installResult.positionals[0].key == "target")
+            require(installResult.positionals[0].value == "artifact")
+            require(installResult.positionals[0].tokenIndex == 2)
+            require(installResult.subcommand === null)
+
+            require(reject(() => {
+                packageResult.name = "changed"
+            }))
+
+            require(reject(() => {
+                installResult.positionals[0].value = "changed"
+            }))
+
             true
         }
-    )
-}
-
-target: CommandLine.positional({
-    key: "target"
-    minOccurrences: 1
-    maxOccurrences: 1
-    valueName: "TARGET"
-    help: null
-})
-
-install: CommandLine.command({
-    name: "install"
-    help: null
-    options: Array()
-    positionals: Array(target)
-    subcommands: Array()
-})
-
-package: CommandLine.command({
-    name: "package"
-    help: null
-    options: Array()
-    positionals: Array()
-    subcommands: Array(install)
-})
-
-root: CommandLine.command({
-    name: "tool"
-    help: null
-    options: Array()
-    positionals: Array()
-    subcommands: Array(package)
-})
-
-parsed: CommandLine.parse(
-    root,
-    Array("package", "install", "artifact")
-)
-
-require(parsed.arguments.size() == 3)
-require(parsed.command.name == "tool")
-require(parsed.command.tokenIndex === null)
-require(parsed.command.positionals.size() == 0)
-
-packageResult: parsed.command.subcommand
-require(packageResult.name == "package")
-require(packageResult.tokenIndex == 0)
-require(packageResult.positionals.size() == 0)
-
-installResult: packageResult.subcommand
-require(installResult.name == "install")
-require(installResult.tokenIndex == 1)
-require(installResult.positionals.size() == 1)
-require(installResult.positionals[0].key == "target")
-require(installResult.positionals[0].value == "artifact")
-require(installResult.positionals[0].tokenIndex == 2)
-require(installResult.subcommand === null)
-
-require(reject(() => {
-    packageResult.name = "changed"
-}))
-
-require(reject(() => {
-    installResult.positionals[0].value = "changed"
-}))
-
-true
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()
