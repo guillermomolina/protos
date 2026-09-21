@@ -5,40 +5,55 @@
 // OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
 // THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
 // OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
-// THE CONTENTS OF THIS FILE.
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-calls: {
-    left: 0
-    right: 0
-    equality: 0
-}
+tests: [
+    Test("derived inequality evaluates once", () => {
+        tool009LegacyCase: () => {
+            calls: {
+                left: 0
+                right: 0
+                equality: 0
+            }
 
-source: {
-    equals: (other) => {
-        calls.equality = calls.equality + 1
-        false
-    }
-}
+            source: {
+                equals: (other) => {
+                    calls.equality = calls.equality + 1
+                    false
+                }
+            }
 
-view: source.alias("equals", "==")
+            view: source.alias("equals", "==")
 
-leftFactory: () => {
-    calls.left = calls.left + 1
-    view {}
-}
+            leftFactory: () => {
+                calls.left = calls.left + 1
+                view {}
+            }
 
-rightFactory: () => {
-    calls.right = calls.right + 1
-    view {}
-}
+            rightFactory: () => {
+                calls.right = calls.right + 1
+                view {}
+            }
 
-result: leftFactory() != rightFactory()
+            result: leftFactory() != rightFactory()
 
-Assertions.require(result)
-Assertions.require(calls.left == 1)
-Assertions.require(calls.right == 1)
-Assertions.require(calls.equality == 1)
+            Assertions.require(result)
+            Assertions.require(calls.left == 1)
+            Assertions.require(calls.right == 1)
+            Assertions.require(calls.equality == 1)
 
-true
+            true
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()
