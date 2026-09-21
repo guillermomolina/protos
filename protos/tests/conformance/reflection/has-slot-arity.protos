@@ -13,8 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-object: {
-    present: 1
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-object.hasSlot()
+tests: [
+    Test("has slot arity", () => {
+        Assertions.signals(Error, () => {
+            object: {
+                present: 1
+            }
+
+            object.hasSlot()
+        })
+    })
+]
+tests.freeze()

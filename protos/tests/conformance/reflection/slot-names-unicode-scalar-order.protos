@@ -13,14 +13,25 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-value: {
-    z: 1
-    Ａ: 2
-    𐐀: 3
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-names: value.slotNames()
-(names.size() == 3) &&
-(names[0] == "z") &&
-(names[1] == "Ａ") &&
-(names[2] == "𐐀")
+tests: [
+    Test("slot names unicode scalar order", () => {
+        tool009LegacyCase: () => {
+            value: {
+                z: 1
+                Ａ: 2
+                𐐀: 3
+            }
+
+            names: value.slotNames()
+            (names.size() == 3) &&
+                (names[0] == "z") &&
+                (names[1] == "Ａ") &&
+                (names[2] == "𐐀")
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

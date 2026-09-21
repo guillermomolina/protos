@@ -13,12 +13,23 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-inner: {
-    existing: 1
-}
-outer: {
-    child: inner
-}
-outer.close()
-inner.added: 2
-(outer.child === inner) && (inner.existing == 1) && (inner.added == 2)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("close is shallow", () => {
+        tool009LegacyCase: () => {
+            inner: {
+                existing: 1
+            }
+            outer: {
+                child: inner
+            }
+            outer.close()
+            inner.added: 2
+            (outer.child === inner) && (inner.existing == 1) && (inner.added == 2)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

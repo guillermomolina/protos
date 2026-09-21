@@ -13,19 +13,30 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-payload: {
-    marker: 7
-}
-base: {
-    value: 41
-}
-child: base {
-    value: payload
-    untouched: 9
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-removed: child.removeSlot("value")
-(removed === payload) &&
-(child.hasSlot("value") === false) &&
-(child.value == 41) &&
-(child.untouched == 9)
+tests: [
+    Test("remove slot exact local result", () => {
+        tool009LegacyCase: () => {
+            payload: {
+                marker: 7
+            }
+            base: {
+                value: 41
+            }
+            child: base {
+                value: payload
+                untouched: 9
+            }
+
+            removed: child.removeSlot("value")
+            (removed === payload) &&
+                (child.hasSlot("value") === false) &&
+                (child.value == 41) &&
+                (child.untouched == 9)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

@@ -13,20 +13,31 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-value: {
-    alpha: 1
-    beta: 2
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-first: value.slotNames()
-second: value.slotNames()
-first[0] = "mutated"
-third: value.slotNames()
+tests: [
+    Test("slot names fresh independent snapshot", () => {
+        tool009LegacyCase: () => {
+            value: {
+                alpha: 1
+                beta: 2
+            }
 
-(first !== second) &&
-(second !== third) &&
-(first[0] == "mutated") &&
-(second[0] == "alpha") &&
-(second[1] == "beta") &&
-(third[0] == "alpha") &&
-(third[1] == "beta")
+            first: value.slotNames()
+            second: value.slotNames()
+            first[0] = "mutated"
+            third: value.slotNames()
+
+            (first !== second) &&
+                (second !== third) &&
+                (first[0] == "mutated") &&
+                (second[0] == "alpha") &&
+                (second[1] == "beta") &&
+                (third[0] == "alpha") &&
+                (third[1] == "beta")
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

@@ -13,15 +13,26 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-failed: false
-before: Object.hasSlot("slotNames")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Error.handle(() => {
-    Object.removeSlot("slotNames")
-    null
-}, (error) => {
-    failed = true
-    null
-})
+tests: [
+    Test("remove slot frozen root preserves local", () => {
+        tool009LegacyCase: () => {
+            failed: false
+            before: Object.hasSlot("slotNames")
 
-before && failed && Object.hasSlot("slotNames")
+            Error.handle(() => {
+                Object.removeSlot("slotNames")
+                null
+            }, (error) => {
+                failed = true
+                null
+            })
+
+            before && failed && Object.hasSlot("slotNames")
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

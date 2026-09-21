@@ -13,13 +13,24 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-inner: {
-    existing: 1
-}
-outer: {
-    child: inner
-}
-same: outer.freeze() === outer
-inner.existing = 2
-inner.added: 3
-same && (outer.child === inner) && (inner.existing == 2) && (inner.added == 3)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("freeze is shallow", () => {
+        tool009LegacyCase: () => {
+            inner: {
+                existing: 1
+            }
+            outer: {
+                child: inner
+            }
+            same: outer.freeze() === outer
+            inner.existing = 2
+            inner.added: 3
+            same && (outer.child === inner) && (inner.existing == 2) && (inner.added == 3)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

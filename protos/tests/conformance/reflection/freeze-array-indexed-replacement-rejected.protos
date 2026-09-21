@@ -13,14 +13,25 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-value: Array(1)
-same: value.freeze() === value
-failed: false
-Error.handle(() => {
-    value[0] = 2
-    null
-}, (error) => {
-    failed = true
-    null
-})
-same && failed && (value[0] == 1)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("freeze array indexed replacement rejected", () => {
+        tool009LegacyCase: () => {
+            value: Array(1)
+            same: value.freeze() === value
+            failed: false
+            Error.handle(() => {
+                value[0] = 2
+                null
+            }, (error) => {
+                failed = true
+                null
+            })
+            same && failed && (value[0] == 1)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

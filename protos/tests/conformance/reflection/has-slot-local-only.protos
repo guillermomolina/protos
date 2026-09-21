@@ -13,14 +13,25 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-base: {
-    inherited: 1
-}
-child: base {
-    local: 2
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-child.hasSlot("local") &&
-(child.hasSlot("inherited") === false) &&
-(child.hasSlot("missing") === false) &&
-base.hasSlot("inherited")
+tests: [
+    Test("has slot local only", () => {
+        tool009LegacyCase: () => {
+            base: {
+                inherited: 1
+            }
+            child: base {
+                local: 2
+            }
+
+            child.hasSlot("local") &&
+                (child.hasSlot("inherited") === false) &&
+                (child.hasSlot("missing") === false) &&
+                base.hasSlot("inherited")
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

@@ -13,12 +13,23 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-value: {}
-first: value.slotNames()
-second: value.slotNames()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-(first.size() == 0) &&
-(second.size() == 0) &&
-(first !== second) &&
-(first.parent() === Array) &&
-(second.parent() === Array)
+tests: [
+    Test("slot names empty fresh standard array", () => {
+        tool009LegacyCase: () => {
+            value: {}
+            first: value.slotNames()
+            second: value.slotNames()
+
+            (first.size() == 0) &&
+                (second.size() == 0) &&
+                (first !== second) &&
+                (first.parent() === Array) &&
+                (second.parent() === Array)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

@@ -13,17 +13,28 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-value: {
-    kept: 7
-}
-failed: false
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Error.handle(() => {
-    value.removeSlot(1)
-    null
-}, (error) => {
-    failed = true
-    null
-})
+tests: [
+    Test("remove slot invalid name preserves local", () => {
+        tool009LegacyCase: () => {
+            value: {
+                kept: 7
+            }
+            failed: false
 
-failed && value.hasSlot("kept") && (value.kept == 7)
+            Error.handle(() => {
+                value.removeSlot(1)
+                null
+            }, (error) => {
+                failed = true
+                null
+            })
+
+            failed && value.hasSlot("kept") && (value.kept == 7)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

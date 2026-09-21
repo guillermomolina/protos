@@ -13,9 +13,20 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-value: {
-    existing: 1
-}
-value.close()
-value.existing = 2
-value.existing == 2
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("close allows existing assignment", () => {
+        tool009LegacyCase: () => {
+            value: {
+                existing: 1
+            }
+            value.close()
+            value.existing = 2
+            value.existing == 2
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

@@ -13,5 +13,16 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-("hello".hasSlot("anything") === false) &&
-((true).hasSlot("anything") === false)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("has slot represented values", () => {
+        tool009LegacyCase: () => {
+            ("hello".hasSlot("anything") === false) &&
+                ((true).hasSlot("anything") === false)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

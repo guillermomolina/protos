@@ -13,4 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-({}).parent(1)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("parent arity", () => {
+        Assertions.signals(Error, () => {
+            ({}).parent(1)
+        })
+    })
+]
+tests.freeze()

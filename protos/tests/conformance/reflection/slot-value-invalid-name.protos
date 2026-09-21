@@ -13,8 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-holder: {
-    value: 42
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-holder.slotValue(1)
+tests: [
+    Test("slot value invalid name", () => {
+        Assertions.signals(Error, () => {
+            holder: {
+                value: 42
+            }
+
+            holder.slotValue(1)
+        })
+    })
+]
+tests.freeze()

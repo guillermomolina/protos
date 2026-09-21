@@ -13,4 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-(42).removeSlot("missing")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("remove slot represented receiver error", () => {
+        Assertions.signals(Error, () => {
+            (42).removeSlot("missing")
+        })
+    })
+]
+tests.freeze()
