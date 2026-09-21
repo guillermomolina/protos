@@ -1,3 +1,55 @@
+## 0.3.64-SNAPSHOT
+
+- TOOL009-D (#687): transport the D125 `ExecutionRequirementId` selected by a
+  logical Case's corpus into suite-native `LogicalCaseRunner` execution,
+  without weakening the D152/D153 inert-`CasePlan` invariant. Process, Actor,
+  and Group corpus migration remain out of scope (TOOL009-C/#686 Slices 2-4).
+  - `protos/tools/test/LogicalCaseMigration.protos` adds
+    `logicalCaseExecutorAsync(corpusExecutionRequirements,
+    testExecutionRequirementBindings)`, which returns the
+    `LogicalCaseRunner.run` `executorAsync` callback. At each Case's
+    execution boundary, the callback resolves the corpus's authoritative
+    `ExecutionRequirementId` (never carried on the guest-visible
+    `LogicalCasePlan`/`CasePlan` entry) against the existing D125
+    `testExecutionRequirementBindings` registry and dispatches to that
+    requirement's `logicalCaseExecutionAsync` binding, failing closed for a
+    requirement or corpus with no suite-native execution route.
+  - `protos/tools/test/Main.protos` records each selected suite's
+    `ExecutionRequirementId` by corpus id while building the flat
+    suite-native Case plan, and passes
+    `LogicalCaseMigration.logicalCaseExecutorAsync(...)` to
+    `LogicalCaseRunner.run` in place of the single generic
+    `logicalCaseExecutionAsync` executor.
+  - `ProtosTestExecutionRequirementRegistry` (Java) exposes the
+    already-installed `ProtosTestLogicalCaseExecutionFacility` bootstrap slot
+    as an additional optional `logicalCaseExecutionAsync` member of the
+    `protos/test/ordinary` binding, reusing that existing facility rather
+    than installing a parallel one; the binding is otherwise unchanged and
+    the other requirement bindings (`actor`, `group`, `package`,
+    `process-snapshot`) are untouched.
+  - Extends `protos/tests/tooling/tool009-logical-case-migration.protos`
+    (run by the existing `ProtosTestToolLogicalCaseMigrationTest`) with
+    direct coverage of the new dispatcher: correct per-corpus requirement
+    routing, and fail-closed behavior for a requirement binding with no
+    suite-native execution route and for an unrecorded corpus. Adds
+    `ProtosTestToolExecutionRequirementRegistryTest
+    .ordinaryBindingCarriesSuiteNativeLogicalCaseExecutionRouteWhenInstalled`
+    verifying the `protos/test/ordinary` binding carries the exact installed
+    facility object and that no other requirement binding gains the route.
+  - Updates the literal `Main.protos`-content assertions in
+    `ProtosTestToolI8D5CPublicCutoverTest` and
+    `ProtosTestToolTool004CProgressPresentationTest` to check for
+    `LogicalCaseMigration.logicalCaseExecutorAsync(` in place of the removed
+    bare `logicalCaseExecutionAsync` reference.
+  - Process, Actor, and Group corpora remain on the incumbent legacy
+    execution path; TOOL009-C/#686 Slices 2-4 still own migrating them to
+    suite-native, and TOOL009-B/#685 still owns retiring legacy execution
+    infrastructure once that migration makes it unnecessary. No
+    `CaseAuthority` concept was introduced for Process/Actor/Group and no new
+    `ExecutionRequirementId` was added.
+  - `make test-java` and the integrated `make test` (Java + native Protos,
+    after `make clean`) both pass.
+
 ## 0.3.63-SNAPSHOT
 
 - TOOL009-C (#686, Slice 1): migrate the seven library-conformance

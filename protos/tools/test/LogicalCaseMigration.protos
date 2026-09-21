@@ -140,6 +140,58 @@ selectSuiteNativeSpecs: (
     selected.freeze()
 }
 
+// TOOL009-D transport boundary.
+//
+// LogicalCasePlan/CasePlan entries stay inert and test-neutral (D152/D153):
+// they carry a source association and a selector only, never a host
+// execution requirement. The authoritative D125 ExecutionRequirementId for a
+// logical Case instead lives on the SuiteGraph leaf that owns its corpus. This
+// dispatcher resolves that requirement to its already-installed D125
+// testExecutionRequirementBindings entry only at the LogicalCaseRunner
+// executorAsync boundary, so no guest Case ever observes host execution
+// infrastructure and no parallel requirement registry is introduced.
+//
+// corpusExecutionRequirements maps corpusId -> ExecutionRequirementId, built
+// once by the caller from the resolved SuiteGraph leaves. A requirement whose
+// binding has no suite-native logical Case execution route yet (every
+// requirement other than "protos/test/ordinary" as of TOOL009-D) fails closed
+// rather than silently falling back to a different requirement's mechanics.
+logicalCaseExecutorAsync: (
+    corpusExecutionRequirements,
+    testExecutionRequirementBindings
+) => {
+    (sourceAssociation, source, signature, selector) => {
+        (sourceAssociation.size() == 2).ifFalse(() => {
+            migrationError()
+        })
+
+        corpusId: sourceAssociation[0]
+
+        corpusExecutionRequirements.containsKey(corpusId).ifFalse(() => {
+            migrationError()
+        })
+
+        requirementId: corpusExecutionRequirements[corpusId]
+
+        testExecutionRequirementBindings.hasSlot(requirementId).ifFalse(() => {
+            migrationError()
+        })
+
+        binding: testExecutionRequirementBindings.slotValue(requirementId)
+
+        binding.hasSlot("logicalCaseExecutionAsync").ifFalse(() => {
+            migrationError()
+        })
+
+        binding.logicalCaseExecutionAsync(
+            sourceAssociation,
+            source,
+            signature,
+            selector
+        )
+    }
+}
+
 // Neutral incumbent side used when --file selects only suite-native Cases.
 neutralLegacyOutcome: () => {
     Runner.testRunOutcomeCompletedWithExit(

@@ -108,7 +108,7 @@ prelude.newModuleActivation());
         assertTrue(d108 > progressStart);
 
         assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
-        assertTrue(main.contains("logicalCaseExecutionAsync"));
+        assertTrue(main.contains("LogicalCaseMigration.logicalCaseExecutorAsync("));
         assertEquals(0, occurrences(main, "Runner.runBounded("));
         assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
         assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));

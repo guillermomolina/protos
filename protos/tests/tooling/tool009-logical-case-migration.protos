@@ -248,4 +248,113 @@ Assertions.require(
     Runner.testRunOutcomeExitCode(neutral) == 0
 )
 
+// TOOL009-D transport boundary: logicalCaseExecutorAsync resolves the
+// requirement recorded for a logical Case's corpus and dispatches only to
+// that requirement's own suite-native execution binding. The inert
+// CasePlan/LogicalCasePlan shape never carries this host information; the
+// dispatcher receives it only through the corpusExecutionRequirements map a
+// caller builds from the authoritative SuiteGraph leaves.
+recordedOrdinaryCalls: Array()
+
+fakeOrdinaryLogicalCaseExecutionAsync:
+    (sourceAssociation, source, signature, selector) => {
+        recordedOrdinaryCalls =
+            Array(
+                ...recordedOrdinaryCalls,
+                Array(
+                    sourceAssociation,
+                    source,
+                    signature,
+                    selector
+                )
+            )
+        "ordinary-result"
+    }
+
+ordinaryBinding: {
+    logicalCaseExecutionAsync: fakeOrdinaryLogicalCaseExecutionAsync
+}
+
+// Legacy-shaped requirement bindings (D125) that have not been extended with
+// a suite-native logical Case execution route must not be silently reused.
+actorBindingWithoutLogicalCaseRoute: {
+    executionAsync: (source) => { source }
+}
+
+testExecutionRequirementBindings: {
+    ordinary: ordinaryBinding
+    actor: actorBindingWithoutLogicalCaseRoute
+}
+
+corpusExecutionRequirements: Map()
+corpusExecutionRequirements["corpus-a"] = "ordinary"
+corpusExecutionRequirements["corpus-b"] = "actor"
+
+dispatcher:
+    Migration.logicalCaseExecutorAsync(
+        corpusExecutionRequirements,
+        testExecutionRequirementBindings
+    )
+
+associationA: Array("corpus-a", "case-a.protos")
+associationA.freeze()
+
+dispatchResult:
+    dispatcher(
+        associationA,
+        "source-a",
+        Array("selector-a"),
+        "selector-a"
+    )
+
+Assertions.require(
+    dispatchResult == "ordinary-result"
+)
+Assertions.require(
+    recordedOrdinaryCalls.size() == 1
+)
+Assertions.require(
+    recordedOrdinaryCalls[0][0] === associationA
+)
+Assertions.require(
+    recordedOrdinaryCalls[0][1] == "source-a"
+)
+Assertions.require(
+    recordedOrdinaryCalls[0][3] == "selector-a"
+)
+
+// A corpus bound to a requirement whose binding has no suite-native
+// execution route yet fails closed rather than falling back to a different
+// requirement's mechanics.
+associationB: Array("corpus-b", "case-b.protos")
+associationB.freeze()
+
+Assertions.signals(
+    Error,
+    () => {
+        dispatcher(
+            associationB,
+            "source-b",
+            Array(),
+            "case-b"
+        )
+    }
+)
+
+// A corpus with no recorded execution requirement also fails closed.
+associationUnknown: Array("corpus-unknown", "case-c.protos")
+associationUnknown.freeze()
+
+Assertions.signals(
+    Error,
+    () => {
+        dispatcher(
+            associationUnknown,
+            "source-c",
+            Array(),
+            "case-c"
+        )
+    }
+)
+
 true

@@ -16,10 +16,13 @@ import com.guillermomolina.protos.execution.ProtosBundledToolModuleResolver;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
+import com.guillermomolina.protos.execution.ProtosTestLogicalCaseExecutionFacility;
+import com.guillermomolina.protos.execution.ProtosTestToolFileSelectionFacility;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class ProtosTestToolExecutionRequirementRegistryTest {
@@ -73,6 +76,96 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
             assertThrows(
                     IllegalStateException.class,
                     () -> ProtosTestExecutionRequirementRegistry.install(fixture.activation()));
+        }
+    }
+
+    @Test
+    void ordinaryBindingCarriesSuiteNativeLogicalCaseExecutionRouteWhenInstalled()
+            throws Exception {
+        Fixture fixture = fixture();
+        ProtosBundledToolModuleResolver resolver =
+                new ProtosBundledToolModuleResolver(
+                        "test",
+                        TOOL_ROOT,
+                        TOOL_ROOT.resolveSibling("shared"),
+                        new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+                ProtosTestToolAsyncExecutionScope scope =
+                        ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities(
+                                fixture.activation(),
+                                runtimeHost,
+                                CORE,
+                                resolver,
+                                List.of(
+                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                                "test-corpus",
+                                                Path.of("protos", "tests"))),
+                                fixture.prelude(),
+                                fixture.prelude(),
+                                fixture.prelude(),
+                                Path.of(
+                                        "protos", "tests", "package-tool",
+                                        "content-identity", "cases"),
+                                Path.of(
+                                        "protos", "tests", "package-tool",
+                                        "resolution-input-lock", "cases"),
+                                Path.of(
+                                        "protos", "tests", "package-tool",
+                                        "resolution-root", "cases"),
+                                Path.of(
+                                        "protos", "tests", "package-tool",
+                                        "execution-plan", "cases"),
+                                Path.of(
+                                        "protos", "tests", "package-tool",
+                                        "project-projection", "cases"))) {
+            ProtosTestExecutionRequirementRegistry.install(fixture.activation());
+
+            ProtosObjectValue registry =
+                    assertInstanceOf(
+                            ProtosObjectValue.class,
+                            fixture.activation()
+                                    .context()
+                                    .readLocalSlot(
+                                            ProtosTestExecutionRequirementRegistry.REGISTRY_SLOT)
+                                    .orElseThrow());
+
+            ProtosObjectValue ordinaryBinding =
+                    assertInstanceOf(
+                            ProtosObjectValue.class,
+                            registry.readLocalSlot("protos/test/ordinary").orElseThrow());
+
+            // TOOL009-D: the transport boundary reuses whichever host facility already
+            // installed logicalCaseExecutionAsync (D152/D153) rather than provisioning a
+            // parallel one, so the bound value must be the exact same object.
+            assertTrue(ordinaryBinding.isFrozen());
+            assertEquals(5, ordinaryBinding.localSlotsSnapshot().size());
+            assertSame(
+                    fixture.activation()
+                            .context()
+                            .readLocalSlot(ProtosTestLogicalCaseExecutionFacility.BOOTSTRAP_SLOT)
+                            .orElseThrow(),
+                    ordinaryBinding.readLocalSlot("logicalCaseExecutionAsync").orElseThrow());
+
+            // TOOL009-C/#686 has not migrated Process/Actor/Group corpora yet, so their
+            // legacy-shaped D125 bindings must not silently gain a suite-native route.
+            for (String requirementId :
+                    List.of("protos/test/actor", "protos/test/group", "protos/test/package")) {
+                ProtosObjectValue binding =
+                        assertInstanceOf(
+                                ProtosObjectValue.class,
+                                registry.readLocalSlot(requirementId).orElseThrow());
+                assertFalse(binding.hasLocalSlot("logicalCaseExecutionAsync"), requirementId);
+            }
+
+            ProtosObjectValue processSnapshotBinding =
+                    assertInstanceOf(
+                            ProtosObjectValue.class,
+                            registry.readLocalSlot("protos/test/process-snapshot")
+                                    .orElseThrow());
+            assertFalse(
+                    processSnapshotBinding.hasLocalSlot("logicalCaseExecutionAsync"),
+                    "protos/test/process-snapshot");
         }
     }
 

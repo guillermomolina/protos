@@ -348,8 +348,18 @@ logicalProjections: Array()
 logicalCaseMetadata: Array()
 logicalSourceSpecs: Map()
 
+// TOOL009-D: the D125 ExecutionRequirementId a logical Case must execute
+// under is authoritative on its SuiteGraph leaf, not on the inert CasePlan
+// entry produced by discovery. Recording it here by corpusId lets the single
+// flat LogicalCaseRunner.run() call below still dispatch each Case to its
+// own corpus's execution requirement.
+corpusExecutionRequirements: Map()
+
 migrationSuiteIndex: 0
 executionSuites.each((planned) => {
+    corpusExecutionRequirements[planned.leaf.corpus] =
+        planned.leaf.executionRequirement
+
     split:
         LogicalCaseMigration.splitPlan(
             planned.plan
@@ -560,7 +570,10 @@ logicalLifecycleObserver:
                     sourceBinding.filesystem
                 )
             },
-            logicalCaseExecutionAsync,
+            LogicalCaseMigration.logicalCaseExecutorAsync(
+                corpusExecutionRequirements,
+                testExecutionRequirementBindings
+            ),
             jobs,
             logicalLifecycleObserver
         ).value()

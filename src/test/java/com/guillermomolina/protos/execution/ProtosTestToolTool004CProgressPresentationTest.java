@@ -91,7 +91,7 @@ prelude.newModuleActivation());
         assertEquals(1, occurrences(main, "Progress.finishPhase("));
         assertTrue(main.contains("Progress.finishInvocation("));
         assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
-        assertTrue(main.contains("logicalCaseExecutionAsync"));
+        assertTrue(main.contains("LogicalCaseMigration.logicalCaseExecutorAsync("));
         // The D176 watchdog wiring is guarded by the TOOL009-A presentation test; D120 only
         // requires that the invocation-wide tracker exists before any Case is scheduled.
         assertTrue(main.contains("Progress.beginLifecycle("));
