@@ -1,26 +1,52 @@
-state: {
-    matcherCalls: 0
-    subjectCalls: 0
-}
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-MatcherBase: {
-    equalTo: (other) => {
-        state.matcherCalls = state.matcherCalls + 1
-        true
-    }
-}
-Matcher: MatcherBase.alias("equalTo", "==")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-SubjectBase: {
-    equalTo: (other) => {
-        state.subjectCalls = state.subjectCalls + 1
-        false
-    }
-}
-Subject: SubjectBase.alias("equalTo", "==")
+tests: [
+    Test("object match receiver equality", () => {
+        tool009LegacyCase: () => {
+            state: {
+                matcherCalls: 0
+                subjectCalls: 0
+            }
 
-matched: Matcher.match(Subject)
+            MatcherBase: {
+                equalTo: (other) => {
+                    state.matcherCalls = state.matcherCalls + 1
+                    true
+                }
+            }
+            Matcher: MatcherBase.alias("equalTo", "==")
 
-matched &&
-    state.matcherCalls == 1 &&
-    state.subjectCalls == 0
+            SubjectBase: {
+                equalTo: (other) => {
+                    state.subjectCalls = state.subjectCalls + 1
+                    false
+                }
+            }
+            Subject: SubjectBase.alias("equalTo", "==")
+
+            matched: Matcher.match(Subject)
+
+            matched &&
+                state.matcherCalls == 1 &&
+                state.subjectCalls == 0
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

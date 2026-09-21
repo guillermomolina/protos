@@ -1,29 +1,44 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-source: {
-    equals: (other) => { id == other.id }
-    hash: () => { id }
-}
-view: source.alias("equals", "==")
-left: view { id: 7 }
-peer: view { id: 7 }
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-flags: 0
-view.hasSlot("equals").ifTrue(() => { flags = flags + 1 })
-view.hasSlot("==").ifTrue(() => { flags = flags + 1 })
-(source.hasSlot("==")).ifFalse(() => { flags = flags + 1 })
-(view.slotValue("equals") === view.slotValue("==")).ifTrue(() => { flags = flags + 1 })
-(view.parent() === Object).ifTrue(() => { flags = flags + 1 })
-(left == peer).ifTrue(() => { flags = flags + 1 })
-(left === peer).ifFalse(() => { flags = flags + 1 })
-result: flags
-result
+tests: [
+    Test("alias publishes symbolic selector", () => {
+        tool009LegacyCase: () => {
+            source: {
+                equals: (other) => { id == other.id }
+                hash: () => { id }
+            }
+            view: source.alias("equals", "==")
+            left: view { id: 7 }
+            peer: view { id: 7 }
+
+            flags: 0
+            view.hasSlot("equals").ifTrue(() => { flags = flags + 1 })
+            view.hasSlot("==").ifTrue(() => { flags = flags + 1 })
+            (source.hasSlot("==")).ifFalse(() => { flags = flags + 1 })
+            (view.slotValue("equals") === view.slotValue("==")).ifTrue(() => { flags = flags + 1 })
+            (view.parent() === Object).ifTrue(() => { flags = flags + 1 })
+            (left == peer).ifTrue(() => { flags = flags + 1 })
+            (left === peer).ifFalse(() => { flags = flags + 1 })
+            result: flags
+            result
+        }
+        Assertions.require(tool009LegacyCase() == 7)
+    })
+]
+tests.freeze()
