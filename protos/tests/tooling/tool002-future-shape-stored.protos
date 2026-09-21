@@ -13,42 +13,22 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Manifest: import("self:Manifest")
-Runner: import("self:Runner")
+// TOOL002-owned retained/stored Future shape: a frozen local object exposing
+// `future`, `error`, and `observe`, where `observe` resignals the same
+// recorded `error` identity on every call. Shared by the F3C1B/F3C2/F3E
+// live-inspection fixtures, which probe this exact slot shape through
+// `executionInspect`. This source is intentionally independent from the
+// `protos/tests/conformance` corpus: those fixtures are owned by the
+// suite-native Test Tool corpus and no longer expose this bare shape.
+error: Error()
+future: (() => {
+    error.signal()
+}).future()
 
-spec: Manifest.parseLine(
-    "tool002-future-shape-stored.protos\tfuture-observation-error-identity\tstored:Error"
-)
-
-source:
-    "storedError: Cancelled()\n" +
-    "future: (() => {\n" +
-    "    storedError.signal()\n" +
-    "}).future()\n" +
-    "{\n" +
-    "    future: future\n" +
-    "    error: storedError\n" +
-    "    observe: () => {\n" +
-    "        future.value()\n" +
-    "    }\n" +
-    "}"
-
-evaluation: Runner.evaluateFutureStoredObservation(
-    spec,
-    source,
-    executionInspect
-)
-observation: Runner.resultObservation(evaluation)
-
-passed: Runner.resultPassed(evaluation) === false
-passed.ifTrue(() => {
-    passed = observation.state === "completed"
-})
-passed.ifTrue(() => {
-    passed = observation.error === null
-})
-passed.ifTrue(() => {
-    passed = observation.value === false
-})
-
-passed
+{
+    future: future
+    error: error
+    observe: () => {
+        future.value()
+    }
+}

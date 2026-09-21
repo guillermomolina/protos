@@ -43,19 +43,9 @@ final class ProtosTestToolFutureObservationPolicyFixtureSuiteTest {
     private static final Path MANIFEST =
             TOOLING_ROOT.resolve("tool002-f3e-integration-fixtures.tsv");
     private static final Path RETAINED_STORED_SOURCE =
-            Path.of(
-                    "protos",
-                    "tests",
-                    "conformance",
-                    "future",
-                    "failed-value-resignals-recorded-error.protos");
+            TOOLING_ROOT.resolve("tool002-future-shape-stored.protos");
     private static final Path RETAINED_FRESH_SOURCE =
-            Path.of(
-                    "protos",
-                    "tests",
-                    "conformance",
-                    "future",
-                    "cancelled-value-fresh-error.protos");
+            TOOLING_ROOT.resolve("tool002-future-shape-fresh.protos");
 
     @TestFactory
     Stream<DynamicTest> futureObservationPolicyFixtures() throws IOException {

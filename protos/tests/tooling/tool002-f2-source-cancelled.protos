@@ -13,42 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Manifest: import("self:Manifest")
-Runner: import("self:Runner")
-
-spec: Manifest.parseLine(
-    "tool002-future-shape-stored.protos\tfuture-observation-error-identity\tstored:Error"
-)
-
-source:
-    "storedError: Cancelled()\n" +
-    "future: (() => {\n" +
-    "    storedError.signal()\n" +
-    "}).future()\n" +
-    "{\n" +
-    "    future: future\n" +
-    "    error: storedError\n" +
-    "    observe: () => {\n" +
-    "        future.value()\n" +
-    "    }\n" +
-    "}"
-
-evaluation: Runner.evaluateFutureStoredObservation(
-    spec,
-    source,
-    executionInspect
-)
-observation: Runner.resultObservation(evaluation)
-
-passed: Runner.resultPassed(evaluation) === false
-passed.ifTrue(() => {
-    passed = observation.state === "completed"
-})
-passed.ifTrue(() => {
-    passed = observation.error === null
-})
-passed.ifTrue(() => {
-    passed = observation.value === false
-})
-
-passed
+// TOOL002-owned F2 sample: evaluates directly to a Future cancelled before
+// its closure ever runs, read through a real filesystem capability by the
+// F2 terminal-mechanism fixture.
+future: (() => { 42 }).future()
+future.cancel()
+future

@@ -32,12 +32,12 @@ evaluate: (line, source, expectedPassed) => {
 }
 
 integerSpec: Manifest.parseLine(
-    "future/then-transforms.protos\tfuture-integer\t42"
+    "tool002-f1-source-resolved-integer.protos\tfuture-integer\t42"
 )
 integerSource: Runner.readSource(integerSpec, filesystem)
 
 nullSpec: Manifest.parseLine(
-    "future/closure-future-null.protos\tfuture-null\t-"
+    "tool002-f1-source-resolved-null.protos\tfuture-null\t-"
 )
 nullSource: Runner.readSource(nullSpec, filesystem)
 
@@ -47,7 +47,7 @@ passed:
 
 passed.ifTrue(() => {
     passed = evaluate(
-        "future/then-transforms.protos\tfuture-integer\t42",
+        "tool002-f1-source-resolved-integer.protos\tfuture-integer\t42",
         integerSource,
         true
     )
@@ -55,7 +55,7 @@ passed.ifTrue(() => {
 
 passed.ifTrue(() => {
     passed = evaluate(
-        "future/closure-future-null.protos\tfuture-null\t-",
+        "tool002-f1-source-resolved-null.protos\tfuture-null\t-",
         nullSource,
         true
     )

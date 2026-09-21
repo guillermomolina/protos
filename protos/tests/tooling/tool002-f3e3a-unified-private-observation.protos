@@ -17,10 +17,10 @@ Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
 storedSpec: Manifest.parseLine(
-    "future/failed-value-resignals-recorded-error.protos\tfuture-observation-error-identity\tstored:Error"
+    "tool002-future-shape-stored.protos\tfuture-observation-error-identity\tstored:Error"
 )
 freshSpec: Manifest.parseLine(
-    "future/cancelled-value-fresh-error.protos\tfuture-observation-error-identity\tfresh:Cancelled"
+    "tool002-future-shape-fresh.protos\tfuture-observation-error-identity\tfresh:Cancelled"
 )
 
 storedEvaluation: Runner.evaluateFutureObservation(

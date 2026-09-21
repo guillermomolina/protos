@@ -17,7 +17,7 @@ Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
 spec: Manifest.parseLine(
-    "future/cancelled-value-fresh-error.protos\tfuture-observation-error-identity\tfresh:Cancelled"
+    "tool002-future-shape-fresh.protos\tfuture-observation-error-identity\tfresh:Cancelled"
 )
 
 evaluation: Runner.evaluateFutureFreshObservation(

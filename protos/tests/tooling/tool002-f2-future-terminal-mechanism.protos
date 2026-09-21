@@ -32,17 +32,17 @@ evaluate: (line, source, expectedPassed) => {
 }
 
 failedSpec: Manifest.parseLine(
-    "text-reader/closed-reader-read-error.protos\tfuture-error\t-"
+    "tool002-f2-source-failed-plain.protos\tfuture-error\t-"
 )
 failedSource: Runner.readSource(failedSpec, filesystem)
 
 parentSpec: Manifest.parseLine(
-    "text-reader/readline-bound-zero-error.protos\tfuture-error-parent\tInvalidIOArgument"
+    "tool002-f2-source-failed-invalid-io-argument.protos\tfuture-error-parent\tInvalidIOArgument"
 )
 parentSource: Runner.readSource(parentSpec, filesystem)
 
 cancelledSpec: Manifest.parseLine(
-    "future/cancel-before-start.protos\tfuture-cancelled\t-"
+    "tool002-f2-source-cancelled.protos\tfuture-cancelled\t-"
 )
 cancelledSource: Runner.readSource(cancelledSpec, filesystem)
 
@@ -56,7 +56,7 @@ passed:
 
 passed.ifTrue(() => {
     passed = evaluate(
-        "text-reader/closed-reader-read-error.protos\tfuture-error\t-",
+        "tool002-f2-source-failed-plain.protos\tfuture-error\t-",
         failedSource,
         true
     )
@@ -64,7 +64,7 @@ passed.ifTrue(() => {
 
 passed.ifTrue(() => {
     passed = evaluate(
-        "text-reader/readline-bound-zero-error.protos\tfuture-error-parent\tInvalidIOArgument",
+        "tool002-f2-source-failed-invalid-io-argument.protos\tfuture-error-parent\tInvalidIOArgument",
         parentSource,
         true
     )
@@ -72,7 +72,7 @@ passed.ifTrue(() => {
 
 passed.ifTrue(() => {
     passed = evaluate(
-        "future/cancel-before-start.protos\tfuture-cancelled\t-",
+        "tool002-f2-source-cancelled.protos\tfuture-cancelled\t-",
         cancelledSource,
         true
     )
@@ -81,7 +81,7 @@ passed.ifTrue(() => {
 // FAILED and CANCELLED are not collapsed merely because both value() calls signal.
 passed.ifTrue(() => {
     passed = evaluate(
-        "future/cancel-before-start.protos\tfuture-error\t-",
+        "tool002-f2-source-cancelled.protos\tfuture-error\t-",
         cancelledSource,
         false
     )
@@ -89,7 +89,7 @@ passed.ifTrue(() => {
 
 passed.ifTrue(() => {
     passed = evaluate(
-        "text-reader/closed-reader-read-error.protos\tfuture-cancelled\t-",
+        "tool002-f2-source-failed-plain.protos\tfuture-cancelled\t-",
         failedSource,
         false
     )
@@ -98,7 +98,7 @@ passed.ifTrue(() => {
 // Immediate parent matching remains exact, not ancestry-based.
 passed.ifTrue(() => {
     passed = evaluate(
-        "text-reader/readline-bound-zero-error.protos\tfuture-error-parent\tIOError",
+        "tool002-f2-source-failed-invalid-io-argument.protos\tfuture-error-parent\tIOError",
         parentSource,
         false
     )

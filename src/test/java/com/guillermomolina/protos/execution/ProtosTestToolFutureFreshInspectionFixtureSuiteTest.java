@@ -43,12 +43,7 @@ final class ProtosTestToolFutureFreshInspectionFixtureSuiteTest {
     private static final Path MANIFEST =
             TOOLING_ROOT.resolve("tool002-f3d-fresh-inspection-fixtures.tsv");
     private static final Path RETAINED_SOURCE =
-            Path.of(
-                    "protos",
-                    "tests",
-                    "conformance",
-                    "future",
-                    "cancelled-value-fresh-error.protos");
+            TOOLING_ROOT.resolve("tool002-future-shape-fresh.protos");
 
     @TestFactory
     Stream<DynamicTest> futureFreshInspectionFixtures() throws IOException {

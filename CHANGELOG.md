@@ -1,3 +1,42 @@
+## 0.3.62-SNAPSHOT
+
+- TOOL009: reconcile the JUnit/harness surface with the now-complete
+  suite-native corpus migration (`protos/tests/conformance/manifest.tsv` has
+  zero non-`suite-native` entries). No runtime, parser, or Standard Library
+  behavior changed; this slice is test-harness and test-fixture only.
+  - Remove `ProtosFutureObservationFixtureShapeTest`: it asserted the old
+    bare-object shape (`future`/`error`/`observe`) of
+    `future/failed-value-resignals-recorded-error.protos`, which is now owned
+    and re-asserted by that corpus source's own suite-native `Test` body —
+    duplicated incumbent ownership over an already-migrated manifest source.
+  - Decouple the still-authoritative TOOL002 Test Tool mechanism harnesses
+    (`ProtosTestToolFutureResolvedMechanismTest` (F1),
+    `ProtosTestToolFutureTerminalMechanismTest` (F2),
+    `ProtosTestToolFutureStoredInspectionFixtureSuiteTest` (F3C1B/F3C2),
+    `ProtosTestToolFutureObservationPolicyFixtureSuiteTest` (F3E),
+    `ProtosTestToolFutureFreshInspectionFixtureSuiteTest` (F3D)) from the
+    conformance corpus, whose sample sources they used to borrow by raw text
+    before the corpus fixtures changed shape under them. Each harness keeps
+    its exact existing mechanism (real filesystem-backed reading,
+    `executionInspect` live inspection, fresh-child-process boundary); only
+    the sample sources moved to new tooling-owned fixtures under
+    `protos/tests/tooling/` (`tool002-future-shape-stored.protos`,
+    `tool002-future-shape-fresh.protos`, and five standalone F1/F2 samples),
+    reproducing exactly the structural properties (`future`, `error`,
+    `observe`, parent identities, dispatch counts) those harnesses require.
+  - Update the `tool002-d2-manifest-plan.protos` tooling fixture's first-row
+    expectation from the pre-migration `"integer"`/`"2"` to the current
+    `"suite-native"`/`"-"`, matching the real corpus manifest without
+    restoring any legacy manifest metadata.
+  - Adapt `ProtosCoreBootstrapTest#objectMatchConformanceUsesDynamicEqualityExactlyOnceAndReturnsExactResult`
+    and `#guestCannotCreateAStandardRootSlotAfterPublication` to inline,
+    CORE-only-compatible Protos sources (no `std:test` import), preserving
+    the exact CORE-only bootstrap boundary and the exact semantic property
+    each test proves, instead of depending on now-suite-native corpus
+    fixtures that require a full Standard Library bootstrap.
+  - Focal JUnit set and the full `make test-java` lane pass; `make test`
+    (integrated Java + native Protos suite) passes.
+
 ## 0.3.61-SNAPSHOT
 
 - Implement ratified `D174` and `D176` as `TOOL009-A` (GitHub #684): expose

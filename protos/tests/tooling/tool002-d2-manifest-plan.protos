@@ -28,6 +28,6 @@ sourceReader.close().value()
 (cases.size() > 100) &&
 (Manifest.caseId(first) == "integer/add-small.protos") &&
 (firstPath == Manifest.caseId(first)) &&
-(Manifest.caseExpectation(first) == "integer") &&
-(Manifest.caseExpected(first) == "2") &&
+(Manifest.caseExpectation(first) == "suite-native") &&
+(Manifest.caseExpected(first) == "-") &&
 (firstChunk.size() > 0)

@@ -17,7 +17,7 @@ Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
 spec: Manifest.parseLine(
-    "future/failed-value-resignals-recorded-error.protos\tfuture-observation-error-identity\tstored:Error"
+    "tool002-future-shape-stored.protos\tfuture-observation-error-identity\tstored:Error"
 )
 
 evaluation: Runner.evaluateFutureStoredObservation(

@@ -45,12 +45,7 @@ final class ProtosTestToolFutureStoredInspectionFixtureSuiteTest {
     private static final Path MANIFEST =
             TOOLING_ROOT.resolve("tool002-f3c1b-inspection-fixtures.tsv");
     private static final Path RETAINED_SOURCE =
-            Path.of(
-                    "protos",
-                    "tests",
-                    "conformance",
-                    "future",
-                    "failed-value-resignals-recorded-error.protos");
+            TOOLING_ROOT.resolve("tool002-future-shape-stored.protos");
 
     @TestFactory
     Stream<DynamicTest> futureStoredInspectionFixtures() throws IOException {

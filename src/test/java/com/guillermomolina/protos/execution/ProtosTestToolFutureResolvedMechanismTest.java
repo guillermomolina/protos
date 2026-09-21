@@ -35,8 +35,8 @@ final class ProtosTestToolFutureResolvedMechanismTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
-    private static final Path CORPUS_ROOT =
-            Path.of("protos", "tests", "conformance");
+    private static final Path SAMPLE_SOURCE_ROOT =
+            Path.of("protos", "tests", "tooling");
     private static final Path FIXTURE =
             Path.of(
                     "protos",
@@ -60,7 +60,7 @@ final class ProtosTestToolFutureResolvedMechanismTest {
         ProtosExactExecutionFacility.installInspection(activation);
 
         try (ProtosNioReadOnlyTreeFilesystemBackend backend =
-                new ProtosNioReadOnlyTreeFilesystemBackend(CORPUS_ROOT)) {
+                new ProtosNioReadOnlyTreeFilesystemBackend(SAMPLE_SOURCE_ROOT)) {
             assumeTrue(
                     backend.secureConfinementAvailable(),
                     "host provider has no SecureDirectoryStream");

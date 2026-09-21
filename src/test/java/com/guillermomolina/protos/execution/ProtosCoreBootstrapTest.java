@@ -309,13 +309,19 @@ class ProtosCoreBootstrapTest {
                         .bootstrap(Path.of("protos", "lib", "core"));
 
         Object result =
-                ProtosTestExecutionSupport.evaluateFile(
-                        Path.of(
-                                "protos",
-                                "tests",
-                                "conformance",
-                                "equality",
-                                "object-match-dynamic-equality-exact-once.protos"),
+                ProtosTestExecutionSupport.evaluate(
+                        "calls: { count: 0 }\n"
+                                + "marker: {}\n"
+                                + "source: {\n"
+                                + "    equals: (other) => {\n"
+                                + "        calls.count = calls.count + 1\n"
+                                + "        marker\n"
+                                + "    }\n"
+                                + "}\n"
+                                + "view: source.alias(\"equals\", \"==\")\n"
+                                + "pattern: view {}\n"
+                                + "result: pattern.match(pattern)\n"
+                                + "(result === marker) && (calls.count == 1)",
                         prelude.newModuleActivation());
 
         assertSame(ProtosBooleanValue.TRUE, result);
@@ -342,13 +348,8 @@ class ProtosCoreBootstrapTest {
                 org.junit.jupiter.api.Assertions.assertThrows(
                         ProtosSignalException.class,
                         () ->
-                                ProtosTestExecutionSupport.evaluateFile(
-                                        Path.of(
-                                                "protos",
-                                                "tests",
-                                                "conformance",
-                                                "object",
-                                                "d049-root-object-frozen-error.protos"),
+                                ProtosTestExecutionSupport.evaluate(
+                                        "Object._d049Probe: 1",
                                         prelude.newModuleActivation()));
 
         assertSame(prelude.errorPrototype(), failure.error().parent().orElseThrow());
