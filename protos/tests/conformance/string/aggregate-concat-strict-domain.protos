@@ -1,60 +1,69 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
- * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
- * https://github.com/guillermomolina/protos
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the License.
- */
-
-ok: true
-
-("hello" === ("hel" + "lo")).ifFalse(() => { ok = false })
-("hello" == ("hel" + "lo")).ifFalse(() => { ok = false })
-("é" !== "e\u{301}").ifFalse(() => { ok = false })
-("é" == "e\u{301}").ifTrue(() => { ok = false })
-
-ok
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Assertions.signals(Error, () => {
-    "x".concat(1)
-})
+tests: [
+    Test("aggregate concat strict domain", () => {
+        tool009LegacyCase: () => {
+            ok: true
 
-Assertions.signals(Error, () => {
-    "x".concat(true)
-})
+            ("hello" === ("hel" + "lo")).ifFalse(() => { ok = false })
+            ("hello" == ("hel" + "lo")).ifFalse(() => { ok = false })
+            ("é" !== "e\u{301}").ifFalse(() => { ok = false })
+            ("é" == "e\u{301}").ifTrue(() => { ok = false })
 
-Assertions.signals(Error, () => {
-    "x".concat(false)
-})
+            ok
 
-Assertions.signals(Error, () => {
-    "x".concat(null)
-})
+            Assertions: import("std:test/Assertions")
 
-Assertions.signals(Error, () => {
-    "x".concat(Bytes())
-})
+            Assertions.signals(Error, () => {
+                "x".concat(1)
+            })
 
-Assertions.signals(Error, () => {
-    value: {}
-    "x".concat(value)
-})
+            Assertions.signals(Error, () => {
+                "x".concat(true)
+            })
 
-FakeString: String {}
+            Assertions.signals(Error, () => {
+                "x".concat(false)
+            })
 
-Assertions.signals(Error, () => {
-    FakeString.concat("x")
-})
+            Assertions.signals(Error, () => {
+                "x".concat(null)
+            })
 
-true
+            Assertions.signals(Error, () => {
+                "x".concat(Bytes())
+            })
+
+            Assertions.signals(Error, () => {
+                value: {}
+                "x".concat(value)
+            })
+
+            FakeString: String {}
+
+            Assertions.signals(Error, () => {
+                FakeString.concat("x")
+            })
+
+            true
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()
