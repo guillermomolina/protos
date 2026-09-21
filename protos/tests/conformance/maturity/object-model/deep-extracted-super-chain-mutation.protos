@@ -1,66 +1,81 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-root: {
-    shared: 1
-    read: () => {
-        value + branch + shared
-    }
-}
-level1: root {
-    branch: 2
-}
-level2: level1 {
-    read: () => {
-        super.read() * 2
-    }
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-    makeSuperReader: () => {
-        () => { super.read() }
-    }
-}
-level3: level2 {}
-level4: level3 {}
-leaf: level4 {
-    value: 10
-}
+tests: [
+    Test("deep extracted super chain mutation", () => {
+        tool009LegacyCase: () => {
+            root: {
+                shared: 1
+                read: () => {
+                    value + branch + shared
+                }
+            }
+            level1: root {
+                branch: 2
+            }
+            level2: level1 {
+                read: () => {
+                    super.read() * 2
+                }
 
-// Both values retain the original receiver and the level2 methodHome. The
-// nested Closure also retains the super lookup origin after makeSuperReader has
-// already returned.
-extracted: leaf.read
-nested: leaf.makeSuperReader()
+                makeSuperReader: () => {
+                    () => { super.read() }
+                }
+            }
+            level3: level2 {}
+            level4: level3 {}
+            leaf: level4 {
+                value: 10
+            }
 
-firstExtracted: extracted()
-firstNested: nested()
+            // Both values retain the original receiver and the level2 methodHome. The
+            // nested Closure also retains the super lookup origin after makeSuperReader has
+            // already returned.
+            extracted: leaf.read
+            nested: leaf.makeSuperReader()
 
-leaf.value = 20
-secondExtracted: extracted()
-secondNested: nested()
+            firstExtracted: extracted()
+            firstNested: nested()
 
-level1.branch = 4
-thirdExtracted: extracted()
-thirdNested: nested()
+            leaf.value = 20
+            secondExtracted: extracted()
+            secondNested: nested()
 
-root.shared = 3
-fourthExtracted: extracted()
-fourthNested: nested()
+            level1.branch = 4
+            thirdExtracted: extracted()
+            thirdNested: nested()
 
-result:
-    (firstExtracted * 100000000000000) +
-    (firstNested * 1000000000000) +
-    (secondExtracted * 10000000000) +
-    (secondNested * 100000000) +
-    (thirdExtracted * 1000000) +
-    (thirdNested * 10000) +
-    (fourthExtracted * 100) +
-    fourthNested
-result
+            root.shared = 3
+            fourthExtracted: extracted()
+            fourthNested: nested()
+
+            result:
+                (firstExtracted * 100000000000000) +
+                (firstNested * 1000000000000) +
+                (secondExtracted * 10000000000) +
+                (secondNested * 100000000) +
+                (thirdExtracted * 1000000) +
+                (thirdNested * 10000) +
+                (fourthExtracted * 100) +
+                fourthNested
+            result
+        }
+        Assertions.require(tool009LegacyCase() == 2613462350255427)
+    })
+]
+tests.freeze()

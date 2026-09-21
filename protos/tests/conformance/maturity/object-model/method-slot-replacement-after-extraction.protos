@@ -1,47 +1,62 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-prototype: {
-    read: () => { value + 1 }
-}
-level1: prototype {}
-level2: level1 {}
-level3: level2 {}
-leaf: level3 {
-    value: 5
-}
+tests: [
+    Test("method slot replacement after extraction", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
 
-old: leaf.read
-oldBefore: old()
+            prototype: {
+                read: () => { value + 1 }
+            }
+            level1: prototype {}
+            level2: level1 {}
+            level3: level2 {}
+            leaf: level3 {
+                value: 5
+            }
 
-// Replacing the prototype's local method slot affects future lookup, not the
-// already-extracted Closure value.
-prototype.read = () => { value + 100 }
-fresh: leaf.read
-freshBefore: fresh()
+            old: leaf.read
+            oldBefore: old()
 
-leaf.value = 10
-oldAfter: old()
-freshAfter: fresh()
-again: leaf.read
+            // Replacing the prototype's local method slot affects future lookup, not the
+            // already-extracted Closure value.
+            prototype.read = () => { value + 100 }
+            fresh: leaf.read
+            freshBefore: fresh()
 
-currentValues: Arrays.map(Array(old, fresh, again), (callable) => { callable() })
-currentSum: Arrays.reduce(currentValues, (sum, value) => { sum + value }, 0)
+            leaf.value = 10
+            oldAfter: old()
+            freshAfter: fresh()
+            again: leaf.read
 
-result:
-    (oldBefore * 1000000000000) +
-    (freshBefore * 1000000000) +
-    (oldAfter * 1000000) +
-    (freshAfter * 1000) +
-    currentSum
-result
+            currentValues: Arrays.map(Array(old, fresh, again), (callable) => { callable() })
+            currentSum: Arrays.reduce(currentValues, (sum, value) => { sum + value }, 0)
+
+            result:
+                (oldBefore * 1000000000000) +
+                (freshBefore * 1000000000) +
+                (oldAfter * 1000000) +
+                (freshAfter * 1000) +
+                currentSum
+            result
+        }
+        Assertions.require(tool009LegacyCase() == 6105011110231)
+    })
+]
+tests.freeze()

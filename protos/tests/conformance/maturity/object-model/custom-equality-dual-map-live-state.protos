@@ -1,123 +1,138 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-entitySource: {
-    id: 0
-    state: 0
+tests: [
+    Test("custom equality dual map live state", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
 
-    equals: (other) => { id == other.id }
-    hash: () => { id }
+            entitySource: {
+                id: 0
+                state: 0
 
-    bump: (delta) => {
-        state = state + delta
-        state
-    }
+                equals: (other) => { id == other.id }
+                hash: () => { id }
 
-    makeReader: () => {
-        () => { state }
-    }
-}
+                bump: (delta) => {
+                    state = state + delta
+                    state
+                }
 
-// Operator spellings are not bare slot-creation targets. Use the ordinary
-// structural alias protocol to expose the equality Closure under selector "==".
-entity: entitySource.alias("equals", "==")
+                makeReader: () => {
+                    () => { state }
+                }
+            }
 
-left: entity {
-    id: 7
-    state: 10
-}
-peer: entity {
-    id: 7
-    state: 20
-}
-other: entity {
-    id: 8
-    state: 30
-}
+            // Operator spellings are not bare slot-creation targets. Use the ordinary
+            // structural alias protocol to expose the equality Closure under selector "==".
+            entity: entitySource.alias("equals", "==")
 
-logical: Map()
-exact: IdentityMap()
-logical[left] = left.makeReader()
-exact[left] = left.makeReader()
-logical[peer] = peer.makeReader()
-exact[peer] = peer.makeReader()
-logical[other] = other.makeReader()
-exact[other] = other.makeReader()
+            left: entity {
+                id: 7
+                state: 10
+            }
+            peer: entity {
+                id: 7
+                state: 20
+            }
+            other: entity {
+                id: 8
+                state: 30
+            }
 
-flags: 0
-(logical.size() == 2).ifTrue(() => { flags = flags + 1 })
-(exact.size() == 3).ifTrue(() => { flags = flags + 1 })
-(left == peer).ifTrue(() => { flags = flags + 1 })
-(left === peer).ifFalse(() => { flags = flags + 1 })
+            logical: Map()
+            exact: IdentityMap()
+            logical[left] = left.makeReader()
+            exact[left] = left.makeReader()
+            logical[peer] = peer.makeReader()
+            exact[peer] = peer.makeReader()
+            logical[other] = other.makeReader()
+            exact[other] = other.makeReader()
 
-mutations: Array(
-    () => { left.bump(1) },
-    () => { peer.bump(2) },
-    () => { other.bump(3) }
-)
-mutationResults: Arrays.map(mutations, (mutation) => { mutation() })
-mutationTotal: Arrays.reduce(mutationResults, (sum, value) => { sum + value }, 0)
+            flags: 0
+            (logical.size() == 2).ifTrue(() => { flags = flags + 1 })
+            (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
+            (left == peer).ifTrue(() => { flags = flags + 1 })
+            (left === peer).ifFalse(() => { flags = flags + 1 })
 
-invokeFrom: (registry, key) => {
-    reader: registry[key]
-    reader()
-}
+            mutations: Array(
+                () => { left.bump(1) },
+                () => { peer.bump(2) },
+                () => { other.bump(3) }
+            )
+            mutationResults: Arrays.map(mutations, (mutation) => { mutation() })
+            mutationTotal: Arrays.reduce(mutationResults, (sum, value) => { sum + value }, 0)
 
-initialLogicalSum:
-    invokeFrom(logical, left) +
-    invokeFrom(logical, peer) +
-    invokeFrom(logical, other)
-initialExactSum:
-    invokeFrom(exact, left) +
-    invokeFrom(exact, peer) +
-    invokeFrom(exact, other)
+            invokeFrom: (registry, key) => {
+                reader: registry[key]
+                reader()
+            }
 
-// id is the complete equality/hash key and remains stable while stored; only
-// unrelated live receiver state changes below.
-logical[left] = left.makeReader()
-left.bump(4)
-peer.bump(5)
-midLogicalPeer: invokeFrom(logical, peer)
-midExactSum: invokeFrom(exact, left) + invokeFrom(exact, peer)
+            initialLogicalSum:
+                invokeFrom(logical, left) +
+                invokeFrom(logical, peer) +
+                invokeFrom(logical, other)
+            initialExactSum:
+                invokeFrom(exact, left) +
+                invokeFrom(exact, peer) +
+                invokeFrom(exact, other)
 
-logical.remove(peer)
-logical.containsKey(left).ifFalse(() => { flags = flags + 1 })
-logical.containsKey(peer).ifFalse(() => { flags = flags + 1 })
-exact.containsKey(left).ifTrue(() => { flags = flags + 1 })
-exact.containsKey(peer).ifTrue(() => { flags = flags + 1 })
+            // id is the complete equality/hash key and remains stable while stored; only
+            // unrelated live receiver state changes below.
+            logical[left] = left.makeReader()
+            left.bump(4)
+            peer.bump(5)
+            midLogicalPeer: invokeFrom(logical, peer)
+            midExactSum: invokeFrom(exact, left) + invokeFrom(exact, peer)
 
-logical[peer] = peer.makeReader()
-peer.bump(1)
-(logical.size() == 2).ifTrue(() => { flags = flags + 1 })
-(exact.size() == 3).ifTrue(() => { flags = flags + 1 })
-logical.containsKey(left).ifTrue(() => { flags = flags + 1 })
+            logical.remove(peer)
+            logical.containsKey(left).ifFalse(() => { flags = flags + 1 })
+            logical.containsKey(peer).ifFalse(() => { flags = flags + 1 })
+            exact.containsKey(left).ifTrue(() => { flags = flags + 1 })
+            exact.containsKey(peer).ifTrue(() => { flags = flags + 1 })
 
-finalLogicalLeft: invokeFrom(logical, left)
-finalExactPeer: invokeFrom(exact, peer)
+            logical[peer] = peer.makeReader()
+            peer.bump(1)
+            (logical.size() == 2).ifTrue(() => { flags = flags + 1 })
+            (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
+            logical.containsKey(left).ifTrue(() => { flags = flags + 1 })
 
-// Map collapses the two id=7 entities by their stable custom equality/hash law;
-// IdentityMap never does. Replacing/removing the logical key changes only that
-// registry, while exact-object readers remain receiver-bound through every live
-// state transition.
-result:
-    (mutationTotal * 1000000000000000000000000) +
-    (initialLogicalSum * 1000000000000000000000) +
-    (initialExactSum * 1000000000000000000) +
-    (midLogicalPeer * 1000000000000000) +
-    (midExactSum * 1000000000000) +
-    (finalLogicalLeft * 1000000000) +
-    (finalExactPeer * 1000000) +
-    (logical.size() * 10000) +
-    (exact.size() * 100) +
-    flags
-result
+            finalLogicalLeft: invokeFrom(logical, left)
+            finalExactPeer: invokeFrom(exact, peer)
+
+            // Map collapses the two id=7 entities by their stable custom equality/hash law;
+            // IdentityMap never does. Replacing/removing the logical key changes only that
+            // registry, while exact-object readers remain receiver-bound through every live
+            // state transition.
+            result:
+                (mutationTotal * 1000000000000000000000000) +
+                (initialLogicalSum * 1000000000000000000000) +
+                (initialExactSum * 1000000000000000000) +
+                (midLogicalPeer * 1000000000000000) +
+                (midExactSum * 1000000000000) +
+                (finalLogicalLeft * 1000000000) +
+                (finalExactPeer * 1000000) +
+                (logical.size() * 10000) +
+                (exact.size() * 100) +
+                flags
+            result
+        }
+        Assertions.require(tool009LegacyCase() == 66077066015042028028020311)
+    })
+]
+tests.freeze()

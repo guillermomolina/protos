@@ -1,111 +1,126 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-record: {
-    key: ""
-    value: 0
-    transitions: 0
+tests: [
+    Test("dual index entity registry transitions", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
 
-    step: (delta) => {
-        value = value + delta
-        transitions = transitions + 1
-        value
-    }
+            record: {
+                key: ""
+                value: 0
+                transitions: 0
 
-    makeReader: () => {
-        () => { value }
-    }
-}
+                step: (delta) => {
+                    value = value + delta
+                    transitions = transitions + 1
+                    value
+                }
 
-a: record {
-    key: "shared"
-    value: 10
-    transitions: 0
-}
-b: record {
-    key: "shared"
-    value: 20
-    transitions: 0
-}
-c: record {
-    key: "other"
-    value: 30
-    transitions: 0
-}
+                makeReader: () => {
+                    () => { value }
+                }
+            }
 
-logical: Map()
-exact: IdentityMap()
+            a: record {
+                key: "shared"
+                value: 10
+                transitions: 0
+            }
+            b: record {
+                key: "shared"
+                value: 20
+                transitions: 0
+            }
+            c: record {
+                key: "other"
+                value: 30
+                transitions: 0
+            }
 
-logical[a.key] = a
-exact[a] = a.makeReader()
-logical[b.key] = b
-exact[b] = b.makeReader()
-logical[c.key] = c
-exact[c] = c.makeReader()
+            logical: Map()
+            exact: IdentityMap()
 
-flags: 0
-(logical["shared"] === b).ifTrue(() => { flags = flags + 1 })
-(exact.size() == 3).ifTrue(() => { flags = flags + 1 })
+            logical[a.key] = a
+            exact[a] = a.makeReader()
+            logical[b.key] = b
+            exact[b] = b.makeReader()
+            logical[c.key] = c
+            exact[c] = c.makeReader()
 
-operations: Array(
-    () => { a.step(5) },
-    () => { b.step(7) },
-    () => { c.step(-4) },
-    () => {
-        logical["shared"] = a
-        a.step(2)
-    },
-    () => {
-        b.step(3)
-        exact.remove(c)
-        exact[c] = c.makeReader()
-        c.step(6)
-    }
-)
-operationResults: Arrays.map(operations, (operation) => { operation() })
-operationTotal: Arrays.reduce(operationResults, (sum, value) => { sum + value }, 0)
+            flags: 0
+            (logical["shared"] === b).ifTrue(() => { flags = flags + 1 })
+            (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
 
-logical.remove("other")
-logical.containsKey("other").ifFalse(() => { flags = flags + 1 })
-logical["other"] = c
+            operations: Array(
+                () => { a.step(5) },
+                () => { b.step(7) },
+                () => { c.step(-4) },
+                () => {
+                    logical["shared"] = a
+                    a.step(2)
+                },
+                () => {
+                    b.step(3)
+                    exact.remove(c)
+                    exact[c] = c.makeReader()
+                    c.step(6)
+                }
+            )
+            operationResults: Arrays.map(operations, (operation) => { operation() })
+            operationTotal: Arrays.reduce(operationResults, (sum, value) => { sum + value }, 0)
 
-(logical["shared"] === a).ifTrue(() => { flags = flags + 1 })
-(exact.containsKey(c)).ifTrue(() => { flags = flags + 1 })
+            logical.remove("other")
+            logical.containsKey("other").ifFalse(() => { flags = flags + 1 })
+            logical["other"] = c
 
-readExact: (entity) => {
-    reader: exact[entity]
-    reader()
-}
-readerTotal: readExact(a) + readExact(b) + readExact(c)
+            (logical["shared"] === a).ifTrue(() => { flags = flags + 1 })
+            (exact.containsKey(c)).ifTrue(() => { flags = flags + 1 })
 
-logical["shared"] = b
-(logical["shared"] === b).ifTrue(() => { flags = flags + 1 })
-(logical["other"] === c).ifTrue(() => { flags = flags + 1 })
-(exact.size() == 3).ifTrue(() => { flags = flags + 1 })
+            readExact: (entity) => {
+                reader: exact[entity]
+                reader()
+            }
+            readerTotal: readExact(a) + readExact(b) + readExact(c)
 
-transitionTotal: a.transitions + b.transitions + c.transitions
+            logical["shared"] = b
+            (logical["shared"] === b).ifTrue(() => { flags = flags + 1 })
+            (logical["other"] === c).ifTrue(() => { flags = flags + 1 })
+            (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
 
-// Map is the logical-key index, so the second "shared" registration replaces
-// the first and later transitions can redirect it. IdentityMap retains all three
-// exact entities, including the remove/reinsert lifecycle of c, and its stored
-// receiver-bound readers continue to observe later receiver mutation.
-result:
-    (operationTotal * 1000000000000000) +
-    (readerTotal * 1000000000000) +
-    (logical["shared"].value * 1000000000) +
-    (logical["other"].value * 1000000) +
-    (transitionTotal * 1000) +
-    (logical.size() * 100) +
-    (exact.size() * 10) +
-    flags
-result
+            transitionTotal: a.transitions + b.transitions + c.transitions
+
+            // Map is the logical-key index, so the second "shared" registration replaces
+            // the first and later transitions can redirect it. IdentityMap retains all three
+            // exact entities, including the remove/reinsert lifecycle of c, and its stored
+            // receiver-bound readers continue to observe later receiver mutation.
+            result:
+                (operationTotal * 1000000000000000) +
+                (readerTotal * 1000000000000) +
+                (logical["shared"].value * 1000000000) +
+                (logical["other"].value * 1000000) +
+                (transitionTotal * 1000) +
+                (logical.size() * 100) +
+                (exact.size() * 10) +
+                flags
+            result
+        }
+        Assertions.require(tool009LegacyCase() == 117079030032006238)
+    })
+]
+tests.freeze()

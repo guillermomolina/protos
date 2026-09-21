@@ -1,56 +1,71 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-prototype: {
-    offset: 1
-    read: () => { value + offset }
-    makeReader: () => { () => { read() } }
-}
-branch: prototype {
-    offset: 10
-}
-left: branch {
-    value: 2
-}
-right: branch {
-    value: 5
-}
+tests: [
+    Test("sibling extractions repeated rounds", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
 
-leftA: left.read
-leftB: left.read
-rightA: right.read
-leftNested: left.makeReader()
-rightNested: right.makeReader()
+            prototype: {
+                offset: 1
+                read: () => { value + offset }
+                makeReader: () => { () => { read() } }
+            }
+            branch: prototype {
+                offset: 10
+            }
+            left: branch {
+                value: 2
+            }
+            right: branch {
+                value: 5
+            }
 
-round1Callables: Array(leftA, leftB, rightA, leftNested, rightNested)
-round1Values: Arrays.map(round1Callables, (callable) => { callable() })
-round1: Arrays.reduce(round1Values, (sum, value) => { sum + value }, 0)
+            leftA: left.read
+            leftB: left.read
+            rightA: right.read
+            leftNested: left.makeReader()
+            rightNested: right.makeReader()
 
-left.value = 20
-right.value = 30
-branch.offset = 7
+            round1Callables: Array(leftA, leftB, rightA, leftNested, rightNested)
+            round1Values: Arrays.map(round1Callables, (callable) => { callable() })
+            round1: Arrays.reduce(round1Values, (sum, value) => { sum + value }, 0)
 
-round2Values: Arrays.map(round1Callables, (callable) => { callable() })
-round2: Arrays.reduce(round2Values, (sum, value) => { sum + value }, 0)
+            left.value = 20
+            right.value = 30
+            branch.offset = 7
 
-// Re-reading a Closure-valued member is a new extraction. It therefore binds
-// the stored Closure to holder, while leftA and leftNested remain bound to left.
-holder: left {
-    saved: leftA
-}
-again: holder.saved
-holder.value: 40
-round3: again() + leftA() + leftNested()
+            round2Values: Arrays.map(round1Callables, (callable) => { callable() })
+            round2: Arrays.reduce(round2Values, (sum, value) => { sum + value }, 0)
 
-result: (round1 * 1000000) + (round2 * 1000) + round3
-result
+            // Re-reading a Closure-valued member is a new extraction. It therefore binds
+            // the stored Closure to holder, while leftA and leftNested remain bound to left.
+            holder: left {
+                saved: leftA
+            }
+            again: holder.saved
+            holder.value: 40
+            round3: again() + leftA() + leftNested()
+
+            result: (round1 * 1000000) + (round2 * 1000) + round3
+            result
+        }
+        Assertions.require(tool009LegacyCase() == 66155101)
+    })
+]
+tests.freeze()

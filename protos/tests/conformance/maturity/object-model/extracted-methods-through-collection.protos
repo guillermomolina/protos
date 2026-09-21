@@ -1,35 +1,50 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-base: {
-    value: 0
-    read: () => { value }
-    makeReader: () => { () => { value } }
-}
-mid: base {}
-left: mid { value: 11 }
-right: mid { value: 13 }
+tests: [
+    Test("extracted methods through collection", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
 
-leftMethod: left.read
-rightMethod: right.read
-leftReader: left.makeReader()
-rightReader: right.makeReader()
+            base: {
+                value: 0
+                read: () => { value }
+                makeReader: () => { () => { value } }
+            }
+            mid: base {}
+            left: mid { value: 11 }
+            right: mid { value: 13 }
 
-// Both extracted methods and nested closures must retain their receivers while
-// observing later mutations of local receiver slots.
-left.value = 17
-right.value = 19
+            leftMethod: left.read
+            rightMethod: right.read
+            leftReader: left.makeReader()
+            rightReader: right.makeReader()
 
-callables: Array(leftMethod, rightMethod, leftReader, rightReader)
-values: Arrays.map(callables, (callable) => { callable() })
-Arrays.reduce(values, (sum, value) => { sum + value }, 0)
+            // Both extracted methods and nested closures must retain their receivers while
+            // observing later mutations of local receiver slots.
+            left.value = 17
+            right.value = 19
+
+            callables: Array(leftMethod, rightMethod, leftReader, rightReader)
+            values: Arrays.map(callables, (callable) => { callable() })
+            Arrays.reduce(values, (sum, value) => { sum + value }, 0)
+        }
+        Assertions.require(tool009LegacyCase() == 72)
+    })
+]
+tests.freeze()

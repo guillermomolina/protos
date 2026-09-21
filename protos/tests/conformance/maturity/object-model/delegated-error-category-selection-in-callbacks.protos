@@ -1,86 +1,101 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ValidationError: Error {}
-FatalValidation: ValidationError {}
+tests: [
+    Test("delegated error category selection in callbacks", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
 
-engine: {
-    classify: (value) => {
-        calls = calls + 1
-        (value == 2).ifTrue(() => {
-            minor.signal()
-        })
-        (value == 4).ifTrue(() => {
-            major.signal()
-        })
-        successes = successes + 1
-        value * 10
-    }
-}
+            ValidationError: Error {}
+            FatalValidation: ValidationError {}
 
-worker: engine {
-    calls: 0
-    successes: 0
-    recoveries: 0
-    minor: ValidationError()
-    major: FatalValidation()
-}
-
-minorHits: 0
-majorHits: 0
-identityHits: 0
-
-safe: (value) => {
-    ValidationError.handle(
-        () => {
-            FatalValidation.handle(
-                () => {
-                    worker.classify(value)
-                },
-                (caught) => {
-                    majorHits = majorHits + 1
-                    (caught === worker.major).ifTrue(() => {
-                        identityHits = identityHits + 1
+            engine: {
+                classify: (value) => {
+                    calls = calls + 1
+                    (value == 2).ifTrue(() => {
+                        minor.signal()
                     })
-                    worker.recoveries = worker.recoveries + 1
-                    400 + value
+                    (value == 4).ifTrue(() => {
+                        major.signal()
+                    })
+                    successes = successes + 1
+                    value * 10
                 }
-            )
-        },
-        (caught) => {
-            minorHits = minorHits + 1
-            (caught === worker.minor).ifTrue(() => {
-                identityHits = identityHits + 1
-            })
-            worker.recoveries = worker.recoveries + 1
-            200 + value
+            }
+
+            worker: engine {
+                calls: 0
+                successes: 0
+                recoveries: 0
+                minor: ValidationError()
+                major: FatalValidation()
+            }
+
+            minorHits: 0
+            majorHits: 0
+            identityHits: 0
+
+            safe: (value) => {
+                ValidationError.handle(
+                    () => {
+                        FatalValidation.handle(
+                            () => {
+                                worker.classify(value)
+                            },
+                            (caught) => {
+                                majorHits = majorHits + 1
+                                (caught === worker.major).ifTrue(() => {
+                                    identityHits = identityHits + 1
+                                })
+                                worker.recoveries = worker.recoveries + 1
+                                400 + value
+                            }
+                        )
+                    },
+                    (caught) => {
+                        minorHits = minorHits + 1
+                        (caught === worker.minor).ifTrue(() => {
+                            identityHits = identityHits + 1
+                        })
+                        worker.recoveries = worker.recoveries + 1
+                        200 + value
+                    }
+                )
+            }
+
+            sum: Arrays.reduce(Array(1, 2, 3, 4, 5), (total, value) => {
+                total + safe(value)
+            }, 0)
+
+            // Minor ValidationError bypasses the nonmatching FatalValidation handler and is
+            // caught by the outer category. FatalValidation matches both categories, so the
+            // dynamically innermost matching handler wins. The results are 10,202,30,404,50.
+            result:
+                (sum * 1000000) +
+                (worker.calls * 100000) +
+                (worker.successes * 10000) +
+                (worker.recoveries * 1000) +
+                (identityHits * 100) +
+                (minorHits * 10) +
+                majorHits
+            result
         }
-    )
-}
-
-sum: Arrays.reduce(Array(1, 2, 3, 4, 5), (total, value) => {
-    total + safe(value)
-}, 0)
-
-// Minor ValidationError bypasses the nonmatching FatalValidation handler and is
-// caught by the outer category. FatalValidation matches both categories, so the
-// dynamically innermost matching handler wins. The results are 10,202,30,404,50.
-result:
-    (sum * 1000000) +
-    (worker.calls * 100000) +
-    (worker.successes * 10000) +
-    (worker.recoveries * 1000) +
-    (identityHits * 100) +
-    (minorHits * 10) +
-    majorHits
-result
+        Assertions.require(tool009LegacyCase() == 696532211)
+    })
+]
+tests.freeze()

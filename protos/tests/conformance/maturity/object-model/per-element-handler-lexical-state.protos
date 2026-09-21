@@ -1,68 +1,83 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE.
- */
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
-Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-processor: {
-    apply: (value) => {
-        attempts = attempts + 1
-        (value > limit).ifTrue(() => {
-            problem.signal()
-        })
-        successes = successes + 1
-        value + bonus
-    }
-}
+tests: [
+    Test("per element handler lexical state", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
 
-worker: processor {
-    limit: 3
-    bonus: 10
-    attempts: 0
-    successes: 0
-    failures: 0
-    problem: Error()
-}
+            processor: {
+                apply: (value) => {
+                    attempts = attempts + 1
+                    (value > limit).ifTrue(() => {
+                        problem.signal()
+                    })
+                    successes = successes + 1
+                    value + bonus
+                }
+            }
 
-fallbackSeed: 40
-handlerCalls: 0
-identityHits: 0
+            worker: processor {
+                limit: 3
+                bonus: 10
+                attempts: 0
+                successes: 0
+                failures: 0
+                problem: Error()
+            }
 
-results: Arrays.map(Array(1, 5, 2, 6), (value) => {
-    Error.handle(
-        () => {
-            worker.apply(value)
-        },
-        (caught) => {
-            handlerCalls = handlerCalls + 1
-            (caught === worker.problem).ifTrue(() => {
-                identityHits = identityHits + 1
+            fallbackSeed: 40
+            handlerCalls: 0
+            identityHits: 0
+
+            results: Arrays.map(Array(1, 5, 2, 6), (value) => {
+                Error.handle(
+                    () => {
+                        worker.apply(value)
+                    },
+                    (caught) => {
+                        handlerCalls = handlerCalls + 1
+                        (caught === worker.problem).ifTrue(() => {
+                            identityHits = identityHits + 1
+                        })
+                        worker.failures = worker.failures + 1
+                        fallbackSeed = fallbackSeed + 1
+                        fallbackSeed + worker.failures
+                    }
+                )
             })
-            worker.failures = worker.failures + 1
-            fallbackSeed = fallbackSeed + 1
-            fallbackSeed + worker.failures
+
+            sum: Arrays.reduce(results, (total, value) => { total + value }, 0)
+
+            // Results are 11, 42, 12 and 44. Two independently installed handlers mutate
+            // the same captured lexical state while the delegated receiver keeps its own
+            // attempts/success/failure state.
+            result:
+                (sum * 1000000) +
+                (worker.attempts * 100000) +
+                (worker.successes * 10000) +
+                (worker.failures * 1000) +
+                (handlerCalls * 100) +
+                (identityHits * 10) +
+                (fallbackSeed - 40)
+            result
         }
-    )
-})
-
-sum: Arrays.reduce(results, (total, value) => { total + value }, 0)
-
-// Results are 11, 42, 12 and 44. Two independently installed handlers mutate
-// the same captured lexical state while the delegated receiver keeps its own
-// attempts/success/failure state.
-result:
-    (sum * 1000000) +
-    (worker.attempts * 100000) +
-    (worker.successes * 10000) +
-    (worker.failures * 1000) +
-    (handlerCalls * 100) +
-    (identityHits * 10) +
-    (fallbackSeed - 40)
-result
+        Assertions.require(tool009LegacyCase() == 109422222)
+    })
+]
+tests.freeze()
