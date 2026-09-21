@@ -13,16 +13,32 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-a: 1
-// line comment
-b:    2
-/* block
-commentstill comment */
-c: 3
-d: 1 +    2
-f: (x, y) =>
-    { x + y }g: f(
-    a,
-    b)
-h: 4; i: 5
-a + b + c + d + g + h + i
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("grammar separators comments continuation", () => {
+        tool009LegacyCase: () => {
+            a: 1
+            // line comment
+            b:
+                2
+            /* block
+            comment
+            still comment */
+            c: 3
+            d: 1 +
+                2
+            f: (x, y) =>
+                { x + y }
+            g: f(
+                a,
+                b
+            )
+            h: 4; i: 5
+            a + b + c + d + g + h + i
+        }
+        Assertions.require(tool009LegacyCase() == 21)
+    })
+]
+tests.freeze()

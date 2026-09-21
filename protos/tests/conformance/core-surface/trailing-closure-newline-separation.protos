@@ -13,16 +13,27 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-count: 0
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ignore: (tail = null) => {
-    count = count + 1
-    40
-}
+tests: [
+    Test("trailing closure newline separation", () => {
+        tool009LegacyCase: () => {
+            count: 0
 
-ignore()
-{
-    count = count + 10
-}
+            ignore: (tail = null) => {
+                count = count + 1
+                40
+            }
 
-count
+            ignore()
+            {
+                count = count + 10
+            }
+
+            count
+        }
+        Assertions.require(tool009LegacyCase() == 11)
+    })
+]
+tests.freeze()

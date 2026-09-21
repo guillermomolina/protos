@@ -13,33 +13,44 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-trace: {
-    value: 0
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-source: {
-    put: (index, value) => {
-        trace.value = trace.value * 10 + 4
-        999
-    }
-}
-receiver: source.alias("put", "atPut")
+tests: [
+    Test("indexed assignment evaluation order", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
 
-selectReceiver: () => {
-    trace.value = trace.value * 10 + 1
-    receiver
-}
+            source: {
+                put: (index, value) => {
+                    trace.value = trace.value * 10 + 4
+                    999
+                }
+            }
+            receiver: source.alias("put", "atPut")
 
-selectIndex: () => {
-    trace.value = trace.value * 10 + 2
-    5
-}
+            selectReceiver: () => {
+                trace.value = trace.value * 10 + 1
+                receiver
+            }
 
-selectValue: () => {
-    trace.value = trace.value * 10 + 3
-    7
-}
+            selectIndex: () => {
+                trace.value = trace.value * 10 + 2
+                5
+            }
 
-result: (selectReceiver()[selectIndex()] = selectValue())
+            selectValue: () => {
+                trace.value = trace.value * 10 + 3
+                7
+            }
 
-(trace.value * 10) + result
+            result: (selectReceiver()[selectIndex()] = selectValue())
+
+            (trace.value * 10) + result
+        }
+        Assertions.require(tool009LegacyCase() == 12347)
+    })
+]
+tests.freeze()

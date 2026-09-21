@@ -13,9 +13,20 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-binary: 0b1010_0101
-octal: 0o7_7
-hexadecimal: 0xCA_FE
-decimal: 1_000_000
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-binary + octal + hexadecimal + decimal
+tests: [
+    Test("grammar integer literals", () => {
+        tool009LegacyCase: () => {
+            binary: 0b1010_0101
+            octal: 0o7_7
+            hexadecimal: 0xCA_FE
+            decimal: 1_000_000
+
+            binary + octal + hexadecimal + decimal
+        }
+        Assertions.require(tool009LegacyCase() == 1052194)
+    })
+]
+tests.freeze()

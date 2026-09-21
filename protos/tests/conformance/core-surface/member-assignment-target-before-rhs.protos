@@ -13,28 +13,39 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-trace: {
-    value: 0
-}
-first: {
-    value: 0
-}
-second: {
-    value: 0
-}
-target: first
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-selectTarget: () => {
-    trace.value = trace.value * 10 + 1
-    target
-}
+tests: [
+    Test("member assignment target before rhs", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
+            first: {
+                value: 0
+            }
+            second: {
+                value: 0
+            }
+            target: first
 
-rhs: () => {
-    trace.value = trace.value * 10 + 2
-    target = second
-    7
-}
+            selectTarget: () => {
+                trace.value = trace.value * 10 + 1
+                target
+            }
 
-result: (selectTarget().value = rhs())
+            rhs: () => {
+                trace.value = trace.value * 10 + 2
+                target = second
+                7
+            }
 
-(trace.value * 1000) + (first.value * 100) + (second.value * 10) + result
+            result: (selectTarget().value = rhs())
+
+            (trace.value * 1000) + (first.value * 100) + (second.value * 10) + result
+        }
+        Assertions.require(tool009LegacyCase() == 12707)
+    })
+]
+tests.freeze()

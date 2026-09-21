@@ -13,32 +13,43 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-trace: {
-    value: 0
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-parent: {
-    inherited: 5
-}
+tests: [
+    Test("object parent composition evaluation order", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
 
-selectParent: () => {
-    trace.value = trace.value * 10 + 1
-    parent
-}
+            parent: {
+                inherited: 5
+            }
 
-source: {
-    copied: 4
-}
+            selectParent: () => {
+                trace.value = trace.value * 10 + 1
+                parent
+            }
 
-selectSource: () => {
-    trace.value = trace.value * 10 + 2
-    source
-}
+            source: {
+                copied: 4
+            }
 
-result: (selectParent()) {
-    ...selectSource()
-    trace.value = trace.value * 10 + 3
-    body: copied + inherited
-}
+            selectSource: () => {
+                trace.value = trace.value * 10 + 2
+                source
+            }
 
-(trace.value * 100) + (result.body * 10) + result.copied
+            result: (selectParent()) {
+                ...selectSource()
+                trace.value = trace.value * 10 + 3
+                body: copied + inherited
+            }
+
+            (trace.value * 100) + (result.body * 10) + result.copied
+        }
+        Assertions.require(tool009LegacyCase() == 12394)
+    })
+]
+tests.freeze()

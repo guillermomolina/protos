@@ -13,26 +13,37 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-café: 10
-π2: 11
-日本語: 12
-_private: 13
-value9: 14
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-if: 15
-else: 16
-while: 17
-class: 18
+tests: [
+    Test("grammar identifiers and member names", () => {
+        tool009LegacyCase: () => {
+            café: 10
+            π2: 11
+            日本語: 12
+            _private: 13
+            value9: 14
 
-holder: {}
-holder.this: 1
-holder.context: 2
-holder.args: 3
-holder.super: 4
-holder.true: 5
-holder.false: 6
-holder.null: 7
+            if: 15
+            else: 16
+            while: 17
+            class: 18
 
-café + π2 + 日本語 + _private + value9 + if + else + while + class +
-    holder.this + holder.context + holder.args + holder.super +
-    holder.true + holder.false + holder.null
+            holder: {}
+            holder.this: 1
+            holder.context: 2
+            holder.args: 3
+            holder.super: 4
+            holder.true: 5
+            holder.false: 6
+            holder.null: 7
+
+            café + π2 + 日本語 + _private + value9 + if + else + while + class +
+                holder.this + holder.context + holder.args + holder.super +
+                holder.true + holder.false + holder.null
+        }
+        Assertions.require(tool009LegacyCase() == 154)
+    })
+]
+tests.freeze()

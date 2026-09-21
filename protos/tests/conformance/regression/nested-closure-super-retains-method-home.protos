@@ -13,20 +13,31 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-base: {
-    value: 1
-    read: () => { value }
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-middle: base {
-    read: () => {
-        nested: () => { super.read() }
-        nested()
-    }
-}
+tests: [
+    Test("nested closure super retains method home", () => {
+        tool009LegacyCase: () => {
+            base: {
+                value: 1
+                read: () => { value }
+            }
 
-leaf: middle {
-    value: 9
-}
+            middle: base {
+                read: () => {
+                    nested: () => { super.read() }
+                    nested()
+                }
+            }
 
-leaf.read()
+            leaf: middle {
+                value: 9
+            }
+
+            leaf.read()
+        }
+        Assertions.require(tool009LegacyCase() == 9)
+    })
+]
+tests.freeze()

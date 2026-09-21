@@ -13,14 +13,25 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-bare: x => x + 1
-parenthesized: (x) => x + 1
-braced: x => { x + 1 }
-zero: () => 5
-nested: x => y => x + y
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-(bare(1) * 10000) +
-    (parenthesized(2) * 1000) +
-    (braced(3) * 100) +
-    (zero() * 10) +
-    nested(2)(3)
+tests: [
+    Test("closure form equivalence", () => {
+        tool009LegacyCase: () => {
+            bare: x => x + 1
+            parenthesized: (x) => x + 1
+            braced: x => { x + 1 }
+            zero: () => 5
+            nested: x => y => x + y
+
+            (bare(1) * 10000) +
+                (parenthesized(2) * 1000) +
+                (braced(3) * 100) +
+                (zero() * 10) +
+                nested(2)(3)
+        }
+        Assertions.require(tool009LegacyCase() == 23455)
+    })
+]
+tests.freeze()

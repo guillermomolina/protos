@@ -14,121 +14,132 @@
 // the specific language governing rights and limitations under the License.
 
 Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-// String: exact semantic family, not delegation.
-StringLike: String {}
+tests: [
+    Test("standard owner recognition", () => {
+        tool009LegacyCase: () => {
+            Assertions: import("std:test/Assertions")
 
-Assertions.require(String.recognizes("x") === true)
-Assertions.require(String.recognizes(StringLike) === false)
-Assertions.require(String.recognizes(String) === false)
+            // String: exact semantic family, not delegation.
+            StringLike: String {}
 
-// Integer: ordinary unbounded family only.
-Assertions.require(Integer.recognizes(1) === true)
-Assertions.require(
-    Integer.recognizes(1234567890123456789012345678901234567890) === true
-)
+            Assertions.require(String.recognizes("x") === true)
+            Assertions.require(String.recognizes(StringLike) === false)
+            Assertions.require(String.recognizes(String) === false)
 
-Assertions.require(Integer.recognizes(Integer) === false)
+            // Integer: ordinary unbounded family only.
+            Assertions.require(Integer.recognizes(1) === true)
+            Assertions.require(
+                Integer.recognizes(1234567890123456789012345678901234567890) === true
+            )
 
-// Float: exact semantic Float, with no numeric promotion.
-Assertions.require(Float.recognizes(1.0) === true)
-Assertions.require(Float.recognizes(1) === false)
-Assertions.require(Float.recognizes(Float) === false)
+            Assertions.require(Integer.recognizes(Integer) === false)
 
-// Array: receiver-owned standard indexed state, independent of parent/maturity.
-openArray: Array(1)
+            // Float: exact semantic Float, with no numeric promotion.
+            Assertions.require(Float.recognizes(1.0) === true)
+            Assertions.require(Float.recognizes(1) === false)
+            Assertions.require(Float.recognizes(Float) === false)
 
-closedArray: Array(2)
-closedArray.close()
+            // Array: receiver-owned standard indexed state, independent of parent/maturity.
+            openArray: Array(1)
 
-frozenArray: Array(3)
-frozenArray.freeze()
+            closedArray: Array(2)
+            closedArray.close()
 
-MyArray: Array {
-    label: 9
-}
-descendantArray: MyArray(10, 20)
+            frozenArray: Array(3)
+            frozenArray.freeze()
 
-ArrayLookalike: Array {}
+            MyArray: Array {
+                label: 9
+            }
+            descendantArray: MyArray(10, 20)
 
-Assertions.require(Array.recognizes(openArray) === true)
-Assertions.require(Array.recognizes(closedArray) === true)
-Assertions.require(Array.recognizes(frozenArray) === true)
-Assertions.require(Array.recognizes(descendantArray) === true)
-Assertions.require(descendantArray.parent() === MyArray)
-Assertions.require(Array.recognizes(ArrayLookalike) === false)
-Assertions.require(Array.recognizes(Array) === false)
+            ArrayLookalike: Array {}
 
-// Exact canonical owner receiver.
-Assertions.signals(Error, () => { StringLike.recognizes("x") })
+            Assertions.require(Array.recognizes(openArray) === true)
+            Assertions.require(Array.recognizes(closedArray) === true)
+            Assertions.require(Array.recognizes(frozenArray) === true)
+            Assertions.require(Array.recognizes(descendantArray) === true)
+            Assertions.require(descendantArray.parent() === MyArray)
+            Assertions.require(Array.recognizes(ArrayLookalike) === false)
+            Assertions.require(Array.recognizes(Array) === false)
 
-IntegerLike: Integer {}
-Assertions.signals(Error, () => { IntegerLike.recognizes(1) })
+            // Exact canonical owner receiver.
+            Assertions.signals(Error, () => { StringLike.recognizes("x") })
 
-FloatLike: Float {}
-Assertions.signals(Error, () => { FloatLike.recognizes(1.0) })
+            IntegerLike: Integer {}
+            Assertions.signals(Error, () => { IntegerLike.recognizes(1) })
 
-Assertions.signals(Error, () => { MyArray.recognizes(descendantArray) })
+            FloatLike: Float {}
+            Assertions.signals(Error, () => { FloatLike.recognizes(1.0) })
 
-// Exactly one supplied argument for every recognizer.
-assertArity: (owner) => {
-    Assertions.signals(Error, () => { owner.recognizes() })
-    Assertions.signals(Error, () => { owner.recognizes(null, null) })
-    null
-}
+            Assertions.signals(Error, () => { MyArray.recognizes(descendantArray) })
 
-assertArity(String)
-assertArity(Integer)
-assertArity(Float)
-assertArity(Array)
+            // Exactly one supplied argument for every recognizer.
+            assertArity: (owner) => {
+                Assertions.signals(Error, () => { owner.recognizes() })
+                Assertions.signals(Error, () => { owner.recognizes(null, null) })
+                null
+            }
 
-// Recognition must not dispatch candidate behavior.
-calls: {
-    parent: 0
-    equality: 0
-    hash: 0
-    recognizes: 0
-}
+            assertArity(String)
+            assertArity(Integer)
+            assertArity(Float)
+            assertArity(Array)
 
-candidateSource: {
-    parent: () => {
-        calls.parent = calls.parent + 1
-        Object
-    }
+            // Recognition must not dispatch candidate behavior.
+            calls: {
+                parent: 0
+                equality: 0
+                hash: 0
+                recognizes: 0
+            }
 
-    equals: (other) => {
-        calls.equality = calls.equality + 1
-        true
-    }
+            candidateSource: {
+                parent: () => {
+                    calls.parent = calls.parent + 1
+                    Object
+                }
 
-    hash: () => {
-        calls.hash = calls.hash + 1
-        1
-    }
+                equals: (other) => {
+                    calls.equality = calls.equality + 1
+                    true
+                }
 
-    recognizes: (value) => {
-        calls.recognizes = calls.recognizes + 1
-        true
-    }
-}
+                hash: () => {
+                    calls.hash = calls.hash + 1
+                    1
+                }
 
-candidate: candidateSource.alias("equals", "==")
+                recognizes: (value) => {
+                    calls.recognizes = calls.recognizes + 1
+                    true
+                }
+            }
 
-Assertions.require(String.recognizes(candidate) === false)
-Assertions.require(Integer.recognizes(candidate) === false)
-Assertions.require(Float.recognizes(candidate) === false)
-Assertions.require(Array.recognizes(candidate) === false)
+            candidate: candidateSource.alias("equals", "==")
 
-Assertions.require(calls.parent == 0)
-Assertions.require(calls.equality == 0)
-Assertions.require(calls.hash == 0)
-Assertions.require(calls.recognizes == 0)
+            Assertions.require(String.recognizes(candidate) === false)
+            Assertions.require(Integer.recognizes(candidate) === false)
+            Assertions.require(Float.recognizes(candidate) === false)
+            Assertions.require(Array.recognizes(candidate) === false)
 
-// No additional standard owner acquires an approved recognizer.
+            Assertions.require(calls.parent == 0)
+            Assertions.require(calls.equality == 0)
+            Assertions.require(calls.hash == 0)
+            Assertions.require(calls.recognizes == 0)
 
-Assertions.signals(Error, () => { Number.recognizes(1) })
-Assertions.signals(Error, () => { Map.recognizes(null) })
-Assertions.signals(Error, () => { IdentityMap.recognizes(null) })
-Assertions.signals(Error, () => { Bytes.recognizes(null) })
+            // No additional standard owner acquires an approved recognizer.
 
-true
+            Assertions.signals(Error, () => { Number.recognizes(1) })
+            Assertions.signals(Error, () => { Map.recognizes(null) })
+            Assertions.signals(Error, () => { IdentityMap.recognizes(null) })
+            Assertions.signals(Error, () => { Bytes.recognizes(null) })
+
+            true
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

@@ -13,27 +13,38 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-trace: {
-    value: 0
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-runner: () => {
-    Error.handle(
-        () => {
-            super.missing(
-                (() => {
-                    trace.value = trace.value * 10 + 1
-                    41
-                })(),
-                ...(() => {
-                    trace.value = trace.value * 10 + 2
-                    Array(1)
-                })()
-            )
-            -1
-        },
-        (caught) => trace.value
-    )
-}
+tests: [
+    Test("super missing home after argument vector", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
 
-runner()
+            runner: () => {
+                Error.handle(
+                    () => {
+                        super.missing(
+                            (() => {
+                                trace.value = trace.value * 10 + 1
+                                41
+                            })(),
+                            ...(() => {
+                                trace.value = trace.value * 10 + 2
+                                Array(1)
+                            })()
+                        )
+                        -1
+                    },
+                    (caught) => trace.value
+                )
+            }
+
+            runner()
+        }
+        Assertions.require(tool009LegacyCase() == 12)
+    })
+]
+tests.freeze()

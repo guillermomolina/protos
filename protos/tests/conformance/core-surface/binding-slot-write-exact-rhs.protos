@@ -13,27 +13,38 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-bareCreateRhs: {}
-bareCreateResult: (bareCreated: bareCreateRhs)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-bareAssigned: null
-bareAssignRhs: {}
-bareAssignResult: (bareAssigned = bareAssignRhs)
+tests: [
+    Test("binding slot write exact rhs", () => {
+        tool009LegacyCase: () => {
+            bareCreateRhs: {}
+            bareCreateResult: (bareCreated: bareCreateRhs)
 
-holder: {
-    assigned: null
-}
-memberCreateRhs: {}
-memberCreateResult: (holder.created: memberCreateRhs)
+            bareAssigned: null
+            bareAssignRhs: {}
+            bareAssignResult: (bareAssigned = bareAssignRhs)
 
-memberAssignRhs: {}
-memberAssignResult: (holder.assigned = memberAssignRhs)
+            holder: {
+                assigned: null
+            }
+            memberCreateRhs: {}
+            memberCreateResult: (holder.created: memberCreateRhs)
 
-(bareCreateResult === bareCreateRhs) &&
-    (bareCreated === bareCreateRhs) &&
-    (bareAssignResult === bareAssignRhs) &&
-    (bareAssigned === bareAssignRhs) &&
-    (memberCreateResult === memberCreateRhs) &&
-    (holder.created === memberCreateRhs) &&
-    (memberAssignResult === memberAssignRhs) &&
-    (holder.assigned === memberAssignRhs)
+            memberAssignRhs: {}
+            memberAssignResult: (holder.assigned = memberAssignRhs)
+
+            (bareCreateResult === bareCreateRhs) &&
+                (bareCreated === bareCreateRhs) &&
+                (bareAssignResult === bareAssignRhs) &&
+                (bareAssigned === bareAssignRhs) &&
+                (memberCreateResult === memberCreateRhs) &&
+                (holder.created === memberCreateRhs) &&
+                (memberAssignResult === memberAssignRhs) &&
+                (holder.assigned === memberAssignRhs)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

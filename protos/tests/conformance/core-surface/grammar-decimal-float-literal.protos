@@ -13,4 +13,15 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-1.5e2
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("grammar decimal float literal", () => {
+        tool009LegacyCase: () => {
+            1.5e2
+        }
+        Assertions.require(tool009LegacyCase() === 150.0)
+    })
+]
+tests.freeze()

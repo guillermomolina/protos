@@ -13,27 +13,38 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-trace: {
-    value: 0
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-target: (a, b, c) => {
-    (trace.value * 1000) + (a * 100) + (b * 10) + c
-}
+tests: [
+    Test("direct call argument vector order", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
 
-selectTarget: () => {
-    trace.value = trace.value * 10 + 1
-    target
-}
+            target: (a, b, c) => {
+                (trace.value * 1000) + (a * 100) + (b * 10) + c
+            }
 
-ordinary: () => {
-    trace.value = trace.value * 10 + 2
-    2
-}
+            selectTarget: () => {
+                trace.value = trace.value * 10 + 1
+                target
+            }
 
-spread: () => {
-    trace.value = trace.value * 10 + 3
-    Array(3, 4)
-}
+            ordinary: () => {
+                trace.value = trace.value * 10 + 2
+                2
+            }
 
-selectTarget()(ordinary(), ...spread())
+            spread: () => {
+                trace.value = trace.value * 10 + 3
+                Array(3, 4)
+            }
+
+            selectTarget()(ordinary(), ...spread())
+        }
+        Assertions.require(tool009LegacyCase() == 123234)
+    })
+]
+tests.freeze()

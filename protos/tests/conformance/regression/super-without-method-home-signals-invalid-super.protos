@@ -13,8 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-runner: () => {
-    super.noSuchSelector()
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-runner()
+tests: [
+    Test("super without method home signals invalid super", () => {
+        Assertions.signals(InvalidSuper, () => {
+            runner: () => {
+                super.noSuchSelector()
+            }
+
+            runner()
+        })
+    })
+]
+tests.freeze()

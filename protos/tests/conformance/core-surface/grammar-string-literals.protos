@@ -13,16 +13,27 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-single: 'a\n\u{41}'
-double: "a\n\u{41}"
-triple: """a\n\u{41}"""
-emptyTriple: """"""
-multiline: """
-    hello
-      world
-    """
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-(single == double) &&
-    (double == triple) &&
-    (emptyTriple == "") &&
-    (multiline == "hello\n  world")
+tests: [
+    Test("grammar string literals", () => {
+        tool009LegacyCase: () => {
+            single: 'a\n\u{41}'
+            double: "a\n\u{41}"
+            triple: """a\n\u{41}"""
+            emptyTriple: """"""
+            multiline: """
+                hello
+                  world
+                """
+
+            (single == double) &&
+                (double == triple) &&
+                (emptyTriple == "") &&
+                (multiline == "hello\n  world")
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

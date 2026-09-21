@@ -13,20 +13,31 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-trace: {
-    value: 0
-}
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-left: () => {
-    trace.value = trace.value * 10 + 1
-    40
-}
+tests: [
+    Test("binary operator evaluation order", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
 
-right: () => {
-    trace.value = trace.value * 10 + 2
-    2
-}
+            left: () => {
+                trace.value = trace.value * 10 + 1
+                40
+            }
 
-result: left() + right()
+            right: () => {
+                trace.value = trace.value * 10 + 2
+                2
+            }
 
-(trace.value * 100) + result
+            result: left() + right()
+
+            (trace.value * 100) + result
+        }
+        Assertions.require(tool009LegacyCase() == 1242)
+    })
+]
+tests.freeze()
