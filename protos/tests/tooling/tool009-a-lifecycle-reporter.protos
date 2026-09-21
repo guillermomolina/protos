@@ -1,0 +1,122 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! TOOL009-A guest side of the D174 lifecycle boundary.
+//!
+//! The tracker must forward presentation-neutral facts to the D176 host
+//! watchdog: one invocation-local token per Case, the caller-rendered display
+//! reference on admission, and the same token on terminal. It must keep the
+//! existing in-flight tracking, and it must forward nothing at all when no
+//! watchdog sink is attached.
+
+Progress: import("self:Progress")
+
+observations: Array()
+
+sink: (kind, token, display) => {
+    observation: Array(kind, token, display)
+    observation.freeze()
+    observations = Array(...observations, observation)
+    null
+}
+
+displayReference: (caseRef) => {
+    caseRef[0]
+}
+
+matches: (observation, kind, token, display) => {
+    result:
+        (observation[0] === kind) &&
+        (observation[1] == token)
+
+    (display === null).ifTrue(() => {
+        result = result && (observation[2] === null)
+    })
+
+    (display === null).ifFalse(() => {
+        result = result && (observation[2] === display)
+    })
+
+    result
+}
+
+state: Progress.beginLifecycle(sink)
+observer: Progress.lifecycleObserver(state, displayReference)
+
+firstRef: Array("alpha")
+firstRef.freeze()
+
+secondRef: Array("beta")
+secondRef.freeze()
+
+thirdRef: Array("gamma")
+thirdRef.freeze()
+
+observer("started", firstRef, null)
+observer("started", secondRef, null)
+
+passed: Progress.inFlightCount(state) == 2
+
+snapshot: Progress.inFlightSnapshot(state)
+passed = passed && (snapshot[0] === firstRef)
+passed = passed && (snapshot[1] === secondRef)
+
+observer("terminal", firstRef, 1)
+
+passed = passed && (Progress.inFlightCount(state) == 1)
+
+snapshot = Progress.inFlightSnapshot(state)
+passed = passed && (snapshot[0] === secondRef)
+
+// A Case admitted after an earlier terminal receives a fresh token; the
+// released token is never reused.
+observer("started", thirdRef, null)
+
+passed = passed && (Progress.inFlightCount(state) == 2)
+
+observer("terminal", secondRef, 2)
+observer("terminal", thirdRef, 3)
+
+passed = passed && (Progress.inFlightCount(state) == 0)
+
+passed = passed && (observations.size() == 6)
+passed = passed && matches(observations[0], "started", 0, "alpha")
+passed = passed && matches(observations[1], "started", 1, "beta")
+passed = passed && matches(observations[2], "terminal", 0, null)
+passed = passed && matches(observations[3], "started", 2, "gamma")
+passed = passed && matches(observations[4], "terminal", 1, null)
+passed = passed && matches(observations[5], "terminal", 2, null)
+
+// D174 observation without an attached D176 watchdog stays entirely local.
+plainState: Progress.beginLifecycle()
+plainObserver: Progress.lifecycleObserver(plainState)
+
+plainRef: Array("delta")
+plainRef.freeze()
+
+plainObserver("started", plainRef, null)
+
+plainPassed:
+    (Progress.inFlightCount(plainState) == 1) &&
+    (observations.size() == 6)
+
+plainObserver("terminal", plainRef, 4)
+
+plainPassed =
+    plainPassed &&
+    (Progress.inFlightCount(plainState) == 0) &&
+    (observations.size() == 6)
+
+passed && plainPassed

@@ -27,7 +27,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-final class ProtosTestToolTool004CProgressPresentationTest {
+/** TOOL009-A: the D174 observation boundary feeding the separate D176 reporting machinery. */
+final class ProtosTestToolTool009ALifecycleReporterTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
@@ -37,12 +38,14 @@ final class ProtosTestToolTool004CProgressPresentationTest {
                     "protos",
                     "tests",
                     "tooling",
-                    "tool004-c-progress-presentation.protos");
+                    "tool009-a-lifecycle-reporter.protos");
     private static final Path MAIN = TOOL_ROOT.resolve("Main.protos");
     private static final Path PROGRESS = TOOL_ROOT.resolve("Progress.protos");
+    private static final Path LOGICAL_CASE_RUNNER =
+            TOOL_ROOT.resolve("LogicalCaseRunner.protos");
 
     @Test
-    void d120CandidateERendersBoundedMilestonesFailuresAndPhaseSummaries()
+    void lifecycleTrackerForwardsTokensAndDisplayReferencesToTheWatchdogSink()
             throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
@@ -53,61 +56,70 @@ final class ProtosTestToolTool004CProgressPresentationTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
 
         ProtosExecutionOutcome outcome =
-                com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
-Files.readString(FIXTURE, StandardCharsets.UTF_8),
-prelude.newModuleActivation());
+                ProtosTestExecutionSupport.execute(
+                        Files.readString(FIXTURE, StandardCharsets.UTF_8),
+                        prelude.newModuleActivation());
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 outcome.state(),
                 () ->
-                        "TOOL004-C root outcome="
+                        "TOOL009-A root outcome="
                                 + outcome.state()
                                 + ", error="
                                 + outcome.error());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
+    }
 
+    @Test
+    void bothExecutionPathsReportThroughOneInvocationWideLifecycleTracker() throws Exception {
         String progress = Files.readString(PROGRESS, StandardCharsets.UTF_8);
-        assertTrue(progress.contains("beginPlan: (phaseName, plan, emitLine) => {"));
-        assertTrue(progress.contains("observer: (state) => {"));
         assertTrue(progress.contains("beginLifecycle: (sink = null) => {"));
         assertTrue(
                 progress.contains(
                         "lifecycleObserver: (state, displayReference = null) => {"));
         assertTrue(progress.contains("inFlightCount: (state) => {"));
         assertTrue(progress.contains("inFlightSnapshot: (state) => {"));
-        assertTrue(progress.contains("finishPhase: (state, infrastructureAborted) => {"));
-        assertTrue(progress.contains("finishInvocation: (states, status, emitLine) => {"));
-        assertTrue(progress.contains("\"FAIL\""));
-        assertTrue(progress.contains("\"INFRA\""));
+
+        String runner = normalized(Files.readString(LOGICAL_CASE_RUNNER, StandardCharsets.UTF_8));
+        assertTrue(
+                runner.contains("lifecycleObserver( \"started\", entry, null )"),
+                "the suite-native scheduler must emit CaseStarted before admission");
+        assertTrue(
+                runner.contains("lifecycleObserver( \"terminal\", entry, completion )"),
+                "the suite-native scheduler must emit CaseTerminal after completion");
 
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
-        assertTrue(main.contains("Progress: import(\"self:Progress\")"));
         assertTrue(
-                main.contains(
-                        "TextWriter(process.stderr(), process.stderrEncoding())"));
-        assertEquals(1, occurrences(main, "startProgress("));
+                normalized(main)
+                        .contains(
+                                "Progress.beginLifecycle( "
+                                        + ProtosTestToolStalledCaseDiagnosticFacility
+                                                .BOOTSTRAP_SLOT
+                                        + " )"),
+                "the D176 host watchdog is the only reporting sink the Tool attaches");
+        assertEquals(2, occurrences(main, "Progress.lifecycleObserver("));
+        assertTrue(main.contains("legacyCaseDisplayReference: (spec) => {"));
+        assertTrue(main.contains("logicalCaseDisplayReference: (entry) => {"));
+        assertTrue(
+                normalized(main)
+                        .contains("jobs, logicalLifecycleObserver ).value()"),
+                "the suite-native path reports through the logical renderer");
+        assertTrue(
+                normalized(main)
+                        .contains("caseAuthorityExecutorAsync, legacyLifecycleObserver )"),
+                "the incumbent path reports through the legacy renderer");
+
+        // D174/D176 add no mandatory per-Case terminal write: normal output stays the
+        // compact D120 aggregate progress.
+        assertEquals(1, occurrences(main, "progressWriter.writeLine("));
         assertEquals(2, occurrences(main, "Progress.observer("));
         assertEquals(1, occurrences(main, "Progress.finishPhase("));
-        assertTrue(main.contains("Progress.finishInvocation("));
-        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
-        assertTrue(main.contains("logicalCaseExecutionAsync"));
-        // The D176 watchdog wiring is guarded by the TOOL009-A presentation test; D120 only
-        // requires that the invocation-wide tracker exists before any Case is scheduled.
-        assertTrue(main.contains("Progress.beginLifecycle("));
-        assertTrue(main.contains("Progress.lifecycleObserver("));
-        assertTrue(main.contains("Progress.inFlightCount(invocationLifecycle)"));
-        assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
+    }
 
-        int progressBinding = main.indexOf("suiteProgress:");
-        int progressStart =
-                main.indexOf("startProgress(", progressBinding);
-        assertTrue(progressBinding >= 0);
-        assertTrue(progressStart > progressBinding);
-        assertTrue(main.contains("\"main\""));
-        assertTrue(main.contains("\"actor\""));
-        assertTrue(main.contains("\"group\""));
-        assertTrue(main.contains("\"package-toml\""));
+    /** Structural guards assert wiring, not layout, so whitespace runs collapse first. */
+    private static String normalized(String text) {
+        return text.replaceAll("\\s+", " ");
     }
 
     private static int occurrences(String text, String needle) {

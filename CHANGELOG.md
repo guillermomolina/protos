@@ -1,3 +1,33 @@
+## 0.3.61-SNAPSHOT
+
+- Implement ratified `D174` and `D176` as `TOOL009-A` (GitHub #684): expose
+  bounded in-flight progress observability for the Test Tool so a hung Case can
+  be identified during a directory-scoped run. The invocation-wide `D174`
+  lifecycle tracker in `Progress.protos` now assigns an invocation-local token
+  per Case and forwards presentation-neutral `CaseStarted`/`CaseTerminal` facts,
+  plus a caller-rendered display reference, to separate reporting machinery.
+  `Main.protos` attaches that machinery and supplies one display renderer per
+  execution path, so both the incumbent and the suite-native scheduler report
+  through a single tracker. A new Test-Tool-private host facility
+  (`ProtosTestToolStalledCaseDiagnosticFacility` and
+  `ProtosTestToolStalledCaseReporter`) owns the `D176` policy: after 30 seconds
+  with no `CaseTerminal` while work remains in flight, one bounded snapshot of
+  at most 8 Case references plus a collapsed `+N more` is written to Test Tool
+  stderr, re-arming only after later terminal progress and disarming when
+  nothing remains in flight. The diagnostic is advisory only — it never fails,
+  cancels, times out, classifies, retries or reschedules a Case, and it changes
+  no result or exit code. Normal Tool output remains the compact `D120`
+  aggregate progress with no mandatory per-Case terminal write, and Protos guest
+  code gains no Clock or Timer capability. Add focused regressions for the
+  lifecycle boundary, in-flight tracking, the bounded snapshot, re-arming,
+  quiescence under continuing terminal progress, and concurrent observation.
+  No timeout policy, retry policy, public event/JSON protocol, JUnit reporting,
+  telemetry, or terminal UI framework is introduced. The new facility installs
+  one bootstrap-local native Closure, so the `I018` guard records it in the
+  audited non-Core native-provider inventory alongside the existing Test Tool
+  acquisition and file-selection facilities; the Core native boundary is
+  unchanged.
+
 ## 0.3.60-SNAPSHOT
 
 - Implement ratified `D159` as `I055` (GitHub #656): remove the public

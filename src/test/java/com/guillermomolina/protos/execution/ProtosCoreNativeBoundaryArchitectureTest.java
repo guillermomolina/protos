@@ -90,7 +90,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
             Map.ofEntries(
                     Map.entry("execution/ProtosExactExecutionFacility.java", 2),
                     Map.entry("execution/ProtosTestToolCatalogAcquisitionFacility.java", 1),
-                    Map.entry("execution/ProtosTestToolFileSelectionFacility.java", 2));
+                    Map.entry("execution/ProtosTestToolFileSelectionFacility.java", 2),
+                    Map.entry("execution/ProtosTestToolStalledCaseDiagnosticFacility.java", 1));
 
     @Test
     void javaNativeClosureProvidersMatchTheAuditedBoundaryExactly() throws IOException {
@@ -109,7 +110,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                             || relative.equals(
                                     "execution/ProtosTestToolCatalogAcquisitionFacility.java")
                             || relative.equals(
-                                    "execution/ProtosTestToolFileSelectionFacility.java")) {
+                                    "execution/ProtosTestToolFileSelectionFacility.java")
+                            || relative.equals(
+                                    "execution/ProtosTestToolStalledCaseDiagnosticFacility.java")) {
                         actualNonCore.put(relative, count);
                     } else {
                         actualCore.put(relative, count);

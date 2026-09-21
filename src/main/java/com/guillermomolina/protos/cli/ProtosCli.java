@@ -552,8 +552,17 @@ public final class ProtosCli {
                                     session.activation,
                                     invocationWorkingDirectory,
                                     fileSelectionSourceRoots);
+                            ProtosTestToolStalledCaseDiagnosticFacility stalledCaseDiagnostic =
+                                    ProtosTestToolStalledCaseDiagnosticFacility.install(
+                                            session.activation, err);
                             provisioned = true;
-                            return executionScope::close;
+                            return () -> {
+                                try {
+                                    stalledCaseDiagnostic.close();
+                                } finally {
+                                    executionScope.close();
+                                }
+                            };
                         } finally {
                             if (!provisioned) {
                                 executionScope.close();

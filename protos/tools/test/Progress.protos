@@ -1,5 +1,17 @@
 // THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
-// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
 
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
@@ -105,9 +117,23 @@ beginPlan: (phaseName, plan, emitLine) => {
 }
 
 // D174 invocation-wide lifecycle tracker.
-// State layout: [inFlight]
-beginLifecycle: () => {
-    Array(Array())
+//
+// State layout is private to this module:
+// [inFlightRefs, inFlightTokens, nextToken, sink]
+//
+// `sink`, when supplied, is the D176 Test-Tool-internal host watchdog entry
+// point. This tracker forwards only presentation-neutral facts to it: an
+// invocation-local Integer token identifying the Case for the rest of the
+// invocation, plus the display reference produced by the caller's renderer.
+// It never formats, bounds, schedules or writes a diagnostic itself, and it
+// never writes per-Case terminal output.
+beginLifecycle: (sink = null) => {
+    Array(
+        Array(),
+        Array(),
+        0,
+        sink
+    )
 }
 
 inFlightCount: (state) => {
@@ -119,7 +145,18 @@ inFlightSnapshot: (state) => {
     snapshot.freeze()
 }
 
-lifecycleObserver: (state) => {
+// `displayReference` renders one caseRef into a human-identifiable reference.
+// Each execution path supplies its own renderer because the caseRef shape is
+// owned by that path; the tracker deliberately does not inspect caseRef.
+lifecycleObserver: (state, displayReference = null) => {
+    // An attached watchdog can only be fed display references, so the renderer
+    // is mandatory exactly when a sink is present.
+    (state[3] === null).ifFalse(() => {
+        (displayReference === null).ifTrue(() => {
+            policyError()
+        })
+    })
+
     (kind, caseRef, result) => {
         (kind === "started").ifTrue(() => {
             duplicate: false
@@ -134,16 +171,35 @@ lifecycleObserver: (state) => {
                 policyError()
             })
 
+            token: state[2]
+            state[2] = token + 1
+
             state[0] =
                 Array(
                     ...state[0],
                     caseRef
                 )
+            state[1] =
+                Array(
+                    ...state[1],
+                    token
+                )
+
+            (state[3] === null).ifFalse(() => {
+                state[3](
+                    "started",
+                    token,
+                    displayReference(caseRef)
+                )
+            })
         })
 
         (kind === "terminal").ifTrue(() => {
             retained: Array()
+            retainedTokens: Array()
             found: false
+            token: null
+            index: 0
 
             state[0].each((running) => {
                 (running === caseRef).ifTrue(() => {
@@ -151,6 +207,7 @@ lifecycleObserver: (state) => {
                         policyError()
                     })
                     found = true
+                    token = state[1][index]
                 })
 
                 (running === caseRef).ifFalse(() => {
@@ -159,7 +216,14 @@ lifecycleObserver: (state) => {
                             ...retained,
                             running
                         )
+                    retainedTokens =
+                        Array(
+                            ...retainedTokens,
+                            state[1][index]
+                        )
                 })
+
+                index = index + 1
             })
 
             found.ifFalse(() => {
@@ -167,6 +231,15 @@ lifecycleObserver: (state) => {
             })
 
             state[0] = retained
+            state[1] = retainedTokens
+
+            (state[3] === null).ifFalse(() => {
+                state[3](
+                    "terminal",
+                    token,
+                    null
+                )
+            })
         })
 
         (
