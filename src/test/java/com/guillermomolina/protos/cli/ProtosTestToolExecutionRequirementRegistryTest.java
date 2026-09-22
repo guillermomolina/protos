@@ -100,6 +100,7 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
                                 resolver,
                                 resolver,
                                 resolver,
+                                resolver,
                                 List.of(
                                         new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
                                                 "test-corpus",
@@ -150,19 +151,6 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
                             .orElseThrow(),
                     ordinaryBinding.readLocalSlot("logicalCaseExecutionAsync").orElseThrow());
 
-            // TOOL009-C Slice 3/Slice 4 infrastructure: the Actor and Group Logical
-            // Case facilities are now installed, so "protos/test/actor" and
-            // "protos/test/group" gain the suite-native route below, but
-            // "protos/test/package" remains a legacy-shaped D125 binding that must
-            // not silently gain a suite-native route.
-            for (String requirementId : List.of("protos/test/package")) {
-                ProtosObjectValue binding =
-                        assertInstanceOf(
-                                ProtosObjectValue.class,
-                                registry.readLocalSlot(requirementId).orElseThrow());
-                assertFalse(binding.hasLocalSlot("logicalCaseExecutionAsync"), requirementId);
-            }
-
             ProtosObjectValue actorBinding =
                     assertInstanceOf(
                             ProtosObjectValue.class,
@@ -192,6 +180,25 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
                                             .GROUP_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT)
                             .orElseThrow(),
                     groupBinding.readLocalSlot("logicalCaseExecutionAsync").orElseThrow());
+
+            // TOOL009 Package Tool infrastructure: the Package Logical Case facility is
+            // now installed, so "protos/test/package" gains the suite-native route
+            // below, reusing whichever host facility already installed
+            // packageLogicalCaseExecutionAsync rather than provisioning a parallel one.
+            ProtosObjectValue packageBinding =
+                    assertInstanceOf(
+                            ProtosObjectValue.class,
+                            registry.readLocalSlot("protos/test/package").orElseThrow());
+            assertTrue(packageBinding.isFrozen());
+            assertEquals(5, packageBinding.localSlotsSnapshot().size());
+            assertSame(
+                    fixture.activation()
+                            .context()
+                            .readLocalSlot(
+                                    ProtosTestToolAsyncExecutionScope
+                                            .PACKAGE_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT)
+                            .orElseThrow(),
+                    packageBinding.readLocalSlot("logicalCaseExecutionAsync").orElseThrow());
 
             // TOOL009-E: process-snapshot now also carries the suite-native logical Case
             // execution route, reusing whichever host facility already installed

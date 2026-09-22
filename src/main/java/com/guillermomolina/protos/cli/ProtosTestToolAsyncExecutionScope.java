@@ -64,12 +64,24 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
     static final String GROUP_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT =
             "groupLogicalCaseExecutionAsync";
 
+    /**
+     * TOOL009 Package Tool infrastructure: the bootstrap slot for the Package-flavored
+     * suite-native logical Case execution route, distinct from
+     * {@link ProtosTestLogicalCaseExecutionFacility#BOOTSTRAP_SLOT},
+     * {@link #ACTOR_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT} and
+     * {@link #GROUP_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT} so all four routes can be
+     * installed side by side in the same activation.
+     */
+    static final String PACKAGE_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT =
+            "packageLogicalCaseExecutionAsync";
+
     private final PlatformThreadPerTaskSubmission submission;
     private final List<ProtosAsyncExactExecutionFacility> facilities;
     private final ProtosTestResourceExecutionScope resourceExecutionScope;
     private ProtosTestLogicalCaseExecutionFacility logicalCaseExecutionFacility;
     private ProtosTestLogicalCaseExecutionFacility actorLogicalCaseExecutionFacility;
     private ProtosTestLogicalCaseExecutionFacility groupLogicalCaseExecutionFacility;
+    private ProtosTestLogicalCaseExecutionFacility packageLogicalCaseExecutionFacility;
     private ProtosProcessSnapshotLogicalCaseExecutionFacility
             processSnapshotLogicalCaseExecutionFacility;
     private ProtosTestCaseAuthorityExecutionScope caseAuthorityExecutionScope;
@@ -194,6 +206,7 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             ProtosModuleResolver logicalCaseFallbackResolver,
             ProtosModuleResolver actorLogicalCaseFallbackResolver,
             ProtosModuleResolver groupLogicalCaseFallbackResolver,
+            ProtosModuleResolver packageLogicalCaseFallbackResolver,
             List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
                     logicalCaseSourceRoots,
             ProtosPrelude actorPrelude,
@@ -267,6 +280,25 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                             runtimeHost,
                             scope.submission);
 
+            // TOOL009 Package Tool infrastructure: a fourth instance of the same
+            // suite-native logical Case execution facility, installed under its own
+            // bootstrap slot and reusing the Package-flavored fallback resolver so a
+            // selected Test body resolves inside the Package Tool bootstrap boundary.
+            // This does not introduce a parallel Case authority: it is the same
+            // ProtosTestLogicalCaseExecutionFacility/ProtosTestLogicalCaseAttemptBridge
+            // machinery, parameterized differently, giving each Case a fresh
+            // Process/Prelude per attempt. The legacy packageExecutionAsync facility
+            // and its own packagePrelude bootstrap are untouched.
+            scope.packageLogicalCaseExecutionFacility =
+                    ProtosTestLogicalCaseExecutionFacility.install(
+                            activation,
+                            PACKAGE_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT,
+                            core,
+                            packageLogicalCaseFallbackResolver,
+                            logicalCaseSourceRoots,
+                            runtimeHost,
+                            scope.submission);
+
             ProtosPrelude primaryPrelude =
                     activation
                             .prelude()
@@ -317,6 +349,9 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
         }
         if (groupLogicalCaseExecutionFacility != null) {
             groupLogicalCaseExecutionFacility.close();
+        }
+        if (packageLogicalCaseExecutionFacility != null) {
+            packageLogicalCaseExecutionFacility.close();
         }
         if (processSnapshotLogicalCaseExecutionFacility != null) {
             processSnapshotLogicalCaseExecutionFacility.close();

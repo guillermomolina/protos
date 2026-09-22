@@ -77,7 +77,8 @@ final class ProtosTestExecutionRequirementRegistry {
                 "packageExecutionAsync",
                 "packageExecutionInspectAsync",
                 "packageResourceExecutionAsync",
-                "packageResourceExecutionInspectAsync");
+                "packageResourceExecutionInspectAsync",
+                ProtosTestToolAsyncExecutionScope.PACKAGE_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT);
         addExecutionOnlyBinding(
                 registry,
                 activation,

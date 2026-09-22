@@ -432,6 +432,26 @@ public final class ProtosCli {
                                         "package",
                                         packageToolRoot, (packageToolRoot).resolveSibling("shared"),
                                         standardLibraryResolver));
+        // TOOL009 Package Tool infrastructure: the Package-flavored suite-native
+        // logical Case route reuses the same ordinary bundled Test Tool fallback
+        // resolver as the base (exactly as the Actor/Group routes above do; the
+        // route's own "self:Discovery" selection machinery lives under the
+        // ordinary Test Tool root, not under packageToolRoot), overlaid with a
+        // single exact host-selected reference to Package Tool's own RuntimeNames
+        // module, so a selected Test body can prove it resolved the
+        // Package-flavored bootstrap (via an import unreachable under any other
+        // flavor's fallback resolver) instead of falling back to the ordinary,
+        // unoverlaid test resolver. This does not change packagePrelude or the
+        // legacy packageExecutionAsync facility, which keep resolving self:/
+        // tool-shared: imports against packageToolRoot exactly as before.
+        ProtosModuleResolver packageLogicalCaseFallbackResolver =
+                new ProtosExactModuleOverlayResolver(
+                        Map.of(
+                                "package-runtime-names",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:runtime-names"),
+                                        packageToolRoot.resolve("RuntimeNames.protos"))),
+                        logicalCaseFallbackResolver);
         ProtosPrelude actorPrelude =
                 new ProtosCoreBootstrap()
                         .bootstrap(
@@ -510,6 +530,7 @@ public final class ProtosCli {
                                         logicalCaseFallbackResolver,
                                         actorLogicalCaseFallbackResolver,
                                         groupLogicalCaseFallbackResolver,
+                                        packageLogicalCaseFallbackResolver,
                                         fileSelectionSourceRoots,
                                         actorPrelude,
                                         groupPrelude,

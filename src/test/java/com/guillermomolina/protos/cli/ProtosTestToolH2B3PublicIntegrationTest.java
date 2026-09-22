@@ -131,6 +131,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                                 resolver,
                                 resolver,
                                 resolver,
+                                resolver,
                                 List.of(
                                         new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
                                                 "test-corpus",

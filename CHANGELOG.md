@@ -1,3 +1,53 @@
+## 0.3.72-SNAPSHOT
+
+- `TOOL009` (GitHub #692 infrastructure): add the Package-flavored
+  suite-native logical Case execution route so `protos/test/package` can
+  reuse the same `ProtosTestLogicalCaseExecutionFacility` /
+  `ProtosTestLogicalCaseAttemptBridge` machinery the ordinary/Actor/Group
+  routes already use, without touching Package Tool's own bootstrap. This
+  is plumbing only: the Package Tool corpus (102 TOML manifest fixtures
+  under `protos/tests/package-tool/toml-syntax`) is not migrated by this
+  change and remains entirely legacy-shaped.
+  - `ProtosCli` now builds a `packageLogicalCaseFallbackResolver`: the
+    same ordinary bundled Test Tool fallback resolver the ordinary/
+    Actor/Group routes already use as their base (the suite-native
+    bridge's own selection machinery resolves `self:Discovery` against
+    that root regardless of flavor), overlaid with one host-selected
+    exact reference to Package Tool's own `RuntimeNames.protos` module
+    (specifier `package-runtime-names`) so a selected Test body can prove
+    it resolved the Package-flavored bootstrap rather than the plain
+    unoverlaid ordinary resolver. `packagePrelude` and the legacy
+    `packageExecutionAsync` facility, which resolve against
+    `packageToolRoot` directly, are unchanged.
+  - `ProtosTestToolAsyncExecutionScope` installs a fourth
+    `ProtosTestLogicalCaseExecutionFacility` instance under the new
+    `packageLogicalCaseExecutionAsync` bootstrap slot
+    (`PACKAGE_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT`), distinct from the
+    ordinary, Actor- and Group-flavored slots so all four routes coexist;
+    each selected Test Case still receives a fresh Process/Prelude per
+    attempt.
+  - `ProtosTestExecutionRequirementRegistry` now publishes
+    `logicalCaseExecutionAsync` on the `protos/test/package` D125 binding,
+    reusing the newly installed facility rather than provisioning a
+    parallel one. The legacy `packageExecutionAsync` /
+    `packageExecutionInspectAsync` / `packageResourceExecutionAsync` /
+    `packageResourceExecutionInspectAsync` bindings are unchanged and
+    remain fully functional (TOOL009-B legacy removal is out of scope).
+  - Added `ProtosPackageTestLogicalCaseExecutionFacilityTest`, dedicated
+    inline-fixture focal coverage demonstrating the Package Tool
+    `RuntimeNames` overlay resolves inside a selected Test body, selected
+    `Test.call()` authority (module declaration completing does not make
+    a failing selected Test pass), exactly-once execution, correct
+    multi-Test selector resolution, a fresh Process per Case with no
+    state leaking between Cases, and rejection (without executing the
+    body) on selector and signature mismatch.
+  - Updated `ProtosTestToolExecutionRequirementRegistryTest` and
+    `ProtosTestToolH2B3PublicIntegrationTest` for the new
+    `packageLogicalCaseFallbackResolver` parameter and the
+    `protos/test/package` binding now carrying
+    `logicalCaseExecutionAsync`.
+  Implementation version becomes `0.3.72-SNAPSHOT`.
+
 ## 0.3.71-SNAPSHOT
 
 - `TOOL009-B` (GitHub #685): remove the unused
