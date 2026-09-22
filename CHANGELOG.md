@@ -1,3 +1,42 @@
+## 0.3.68-SNAPSHOT
+
+- TOOL009-C Slice 3 infrastructure (#686): add the suite-native Actor
+  Logical Case execution facility that Slice 3's actual migration of the
+  11 `protos/tests/conformance/actor` fixtures will depend on.
+  `protos/test/actor` now additionally exposes `logicalCaseExecutionAsync`
+  in `ProtosTestExecutionRequirementRegistry`, backed by a second
+  installation of the existing `ProtosTestLogicalCaseExecutionFacility` /
+  `ProtosTestLogicalCaseAttemptBridge` machinery under its own
+  `actorLogicalCaseExecutionAsync` bootstrap slot
+  (`ProtosTestToolAsyncExecutionScope`). No new Case authority or bridge
+  class was introduced: the Actor route reuses the ordinary D152/D153
+  logical Case protocol unchanged, parameterized with an Actor-flavored
+  fallback resolver that overlays the same `workers` module the legacy
+  `actorExecutionAsync` facility resolves through `actorPrelude`, so
+  `Actor.spawn("workers", ...)` inside a selected Test body resolves the
+  Actor-flavored blueprint set instead of falling back to the ordinary
+  Test Tool resolver. Each Case still gets a fresh Process/Prelude/Actor
+  graph per attempt (unchanged bridge behavior), giving Case isolation and
+  intra-Case Actor state persistence for free. The 11 corpus fixtures and
+  `manifest.tsv` are untouched; legacy `actorExecutionAsync` /
+  `actorExecutionInspectAsync` / `actorResourceExecutionAsync` /
+  `actorResourceExecutionInspectAsync` routes are unmodified. D152, D153,
+  D178, CaseAuthority, TOOL009-D, and Group are unmodified.
+  - Added `ProtosActorTestLogicalCaseExecutionFacilityTest` (focal
+    infrastructure tests: workers overlay resolution + selected-Test
+    execution, intra-Case Actor state persistence across requests,
+    Case-to-Case Actor isolation, selector mismatch rejection, signature
+    mismatch rejection — all against dedicated inline fixtures, not the
+    corpus).
+  - Extended `ProtosTestToolExecutionRequirementRegistryTest` to assert
+    the new `protos/test/actor` binding shape and updated its existing
+    assertions that previously encoded "Actor has no suite-native route
+    yet".
+  - `ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities` and
+    `ProtosCli` gained one new `ProtosModuleResolver` parameter/argument
+    for the Actor-flavored fallback resolver; other call sites
+    (`ProtosTestToolH2B3PublicIntegrationTest`) were updated accordingly.
+
 ## 0.3.67-SNAPSHOT
 
 - TOOL009-C Slice 2 (#686): migrate all 15

@@ -59,7 +59,8 @@ final class ProtosTestExecutionRequirementRegistry {
                 "actorExecutionAsync",
                 "actorExecutionInspectAsync",
                 "actorResourceExecutionAsync",
-                "actorResourceExecutionInspectAsync");
+                "actorResourceExecutionInspectAsync",
+                ProtosTestToolAsyncExecutionScope.ACTOR_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT);
         addBinding(
                 registry,
                 activation,

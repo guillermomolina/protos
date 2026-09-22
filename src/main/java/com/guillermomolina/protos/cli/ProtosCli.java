@@ -396,6 +396,20 @@ public final class ProtosCli {
                         testToolRoot,
                         testToolRoot.resolveSibling("shared"),
                         standardLibraryResolver);
+        // TOOL009-C Slice 3 infrastructure: the Actor-flavored suite-native logical
+        // Case route reuses the same ordinary bundled Test Tool fallback resolver,
+        // overlaid with the Actor-specific "workers" module exactly as actorPrelude
+        // below does, so Actor.spawn("workers", ...) inside a selected Test body
+        // resolves the Actor-flavored blueprint set instead of falling back to the
+        // ordinary test resolver.
+        ProtosModuleResolver actorLogicalCaseFallbackResolver =
+                new ProtosExactModuleOverlayResolver(
+                        Map.of(
+                                "workers",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool002-actor:workers"),
+                                        actorModulesRoot.resolve("workers.protos"))),
+                        logicalCaseFallbackResolver);
         ProtosPrelude packagePrelude =
                 new ProtosCoreBootstrap()
                         .bootstrap(
@@ -480,6 +494,7 @@ public final class ProtosCli {
                                         session.runtimeHost,
                                         core,
                                         logicalCaseFallbackResolver,
+                                        actorLogicalCaseFallbackResolver,
                                         fileSelectionSourceRoots,
                                         actorPrelude,
                                         groupPrelude,

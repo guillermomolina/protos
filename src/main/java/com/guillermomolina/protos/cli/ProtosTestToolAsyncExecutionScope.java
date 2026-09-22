@@ -45,10 +45,20 @@ import java.util.concurrent.atomic.AtomicLong;
  * carrier substrate.
  */
 final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
+    /**
+     * TOOL009-C Slice 3 infrastructure: the bootstrap slot for the Actor-flavored
+     * suite-native logical Case execution route, distinct from the ordinary
+     * {@link ProtosTestLogicalCaseExecutionFacility#BOOTSTRAP_SLOT} so both routes
+     * can be installed side by side in the same activation.
+     */
+    static final String ACTOR_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT =
+            "actorLogicalCaseExecutionAsync";
+
     private final PlatformThreadPerTaskSubmission submission;
     private final List<ProtosAsyncExactExecutionFacility> facilities;
     private final ProtosTestResourceExecutionScope resourceExecutionScope;
     private ProtosTestLogicalCaseExecutionFacility logicalCaseExecutionFacility;
+    private ProtosTestLogicalCaseExecutionFacility actorLogicalCaseExecutionFacility;
     private ProtosProcessSnapshotLogicalCaseExecutionFacility
             processSnapshotLogicalCaseExecutionFacility;
     private ProtosTestCaseAuthorityExecutionScope caseAuthorityExecutionScope;
@@ -171,6 +181,7 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             ProtosPolyglotRuntimeHost runtimeHost,
             Path core,
             ProtosModuleResolver logicalCaseFallbackResolver,
+            ProtosModuleResolver actorLogicalCaseFallbackResolver,
             List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
                     logicalCaseSourceRoots,
             ProtosPrelude actorPrelude,
@@ -201,6 +212,25 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                             activation,
                             core,
                             logicalCaseFallbackResolver,
+                            logicalCaseSourceRoots,
+                            runtimeHost,
+                            scope.submission);
+
+            // TOOL009-C Slice 3 infrastructure: a second instance of the same
+            // suite-native logical Case execution facility, installed under its
+            // own bootstrap slot and reusing the Actor-flavored fallback resolver
+            // (workers overlay) so Actor.spawn resolves inside a selected Test
+            // body, exactly as the legacy actorExecutionAsync facility resolves it
+            // through actorPrelude. This does not introduce a parallel Case
+            // authority: it is the same ProtosTestLogicalCaseExecutionFacility/
+            // ProtosTestLogicalCaseAttemptBridge machinery, parameterized
+            // differently, giving each Case a fresh Process/Prelude per attempt.
+            scope.actorLogicalCaseExecutionFacility =
+                    ProtosTestLogicalCaseExecutionFacility.install(
+                            activation,
+                            ACTOR_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT,
+                            core,
+                            actorLogicalCaseFallbackResolver,
                             logicalCaseSourceRoots,
                             runtimeHost,
                             scope.submission);
@@ -249,6 +279,9 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
         closed = true;
         if (logicalCaseExecutionFacility != null) {
             logicalCaseExecutionFacility.close();
+        }
+        if (actorLogicalCaseExecutionFacility != null) {
+            actorLogicalCaseExecutionFacility.close();
         }
         if (processSnapshotLogicalCaseExecutionFacility != null) {
             processSnapshotLogicalCaseExecutionFacility.close();

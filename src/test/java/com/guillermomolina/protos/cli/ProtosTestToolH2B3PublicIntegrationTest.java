@@ -129,6 +129,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                                 runtimeHost,
                                 CORE,
                                 resolver,
+                                resolver,
                                 List.of(
                                         new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
                                                 "test-corpus",

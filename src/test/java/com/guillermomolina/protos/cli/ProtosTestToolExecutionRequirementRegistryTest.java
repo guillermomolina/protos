@@ -98,6 +98,7 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
                                 runtimeHost,
                                 CORE,
                                 resolver,
+                                resolver,
                                 List.of(
                                         new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
                                                 "test-corpus",
@@ -148,16 +149,33 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
                             .orElseThrow(),
                     ordinaryBinding.readLocalSlot("logicalCaseExecutionAsync").orElseThrow());
 
-            // TOOL009-C/#686 has not migrated Process/Actor/Group corpora yet, so their
-            // legacy-shaped D125 bindings must not silently gain a suite-native route.
-            for (String requirementId :
-                    List.of("protos/test/actor", "protos/test/group", "protos/test/package")) {
+            // TOOL009-C Slice 3 infrastructure: the Actor Logical Case facility is now
+            // installed, so "protos/test/actor" gains the suite-native route below, but
+            // the 11 corpus fixtures are not migrated yet and Process/Group remain
+            // legacy-shaped D125 bindings that must not silently gain a suite-native
+            // route.
+            for (String requirementId : List.of("protos/test/group", "protos/test/package")) {
                 ProtosObjectValue binding =
                         assertInstanceOf(
                                 ProtosObjectValue.class,
                                 registry.readLocalSlot(requirementId).orElseThrow());
                 assertFalse(binding.hasLocalSlot("logicalCaseExecutionAsync"), requirementId);
             }
+
+            ProtosObjectValue actorBinding =
+                    assertInstanceOf(
+                            ProtosObjectValue.class,
+                            registry.readLocalSlot("protos/test/actor").orElseThrow());
+            assertTrue(actorBinding.isFrozen());
+            assertEquals(5, actorBinding.localSlotsSnapshot().size());
+            assertSame(
+                    fixture.activation()
+                            .context()
+                            .readLocalSlot(
+                                    ProtosTestToolAsyncExecutionScope
+                                            .ACTOR_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT)
+                            .orElseThrow(),
+                    actorBinding.readLocalSlot("logicalCaseExecutionAsync").orElseThrow());
 
             // TOOL009-E: process-snapshot now also carries the suite-native logical Case
             // execution route, reusing whichever host facility already installed
