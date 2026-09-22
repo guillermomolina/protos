@@ -1,3 +1,53 @@
+## 0.3.65-SNAPSHOT
+
+- TOOL009-E (#688): add a suite-native Logical Case execution route for the
+  `protos/test/process-snapshot` Test Tool lane, so a Logical Case can reach
+  `protos/test/process-snapshot` through the same discovery-driven
+  `logicalCaseExecutionAsync` protocol already wired for `protos/test/ordinary`
+  (TOOL009-D/#687). The D135 Process-snapshot bootstrap
+  (`ProtosProcessSnapshotExecution.execute` -> fresh `ProtosProcessRuntime` ->
+  `establishArgumentsForRuntime`/`establishEnvironmentForRuntime`) is reused
+  unchanged; it is not duplicated or reimplemented. `CaseAuthority`, D152, and
+  D153 are unmodified, and Process/Actor/Group corpus migration
+  (`protos/tests/conformance/process/manifest.tsv`) remains out of scope.
+  - Adds `ProtosProcessSnapshotLogicalCaseExecutionFacility` (Java), a thin
+    protocol adapter that translates the 4-argument discovery-driven Logical
+    Case call (`sourceAssociation, source, signature, selector`) into the
+    existing single-source Process-snapshot execution mechanism. Because the
+    Process-snapshot corpus has no Suite/Discovery module structure — each
+    source unit is exactly one Case — the adapter validates the degenerate
+    one-Case protocol shape (the signature names exactly one Case and the
+    selector selects it) and fails closed synchronously on a mismatch,
+    without performing a host-side rematerialization search. Execution itself
+    is delegated to `ProtosProcessSnapshotExecution.execute(...)`, so every
+    accepted Case rematerializes its own fresh Process; two Logical Cases
+    never share Process state.
+  - `ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities` installs
+    the new facility alongside the existing
+    `ProtosAsyncProcessSnapshotExecutionFacility` and closes it with the rest
+    of the scope.
+  - `ProtosTestExecutionRequirementRegistry` extends `addExecutionOnlyBinding`
+    with the same optional-route pattern TOOL009-D introduced for the
+    7-argument `addBinding` overload: when the new facility's bootstrap slot
+    is installed, the `protos/test/process-snapshot` binding additionally
+    exposes `logicalCaseExecutionAsync`, reusing that installed slot rather
+    than provisioning a parallel one. The binding remains otherwise
+    unchanged, and `protos/test/actor`/`protos/test/group`/`protos/test/package`
+    are untouched.
+  - Adds `ProtosProcessSnapshotLogicalCaseExecutionFacilityTest` demonstrating
+    that a `logicalCaseExecutionAsync` call actually reaches
+    `ProtosProcessSnapshotExecution` (not merely that the slot exists),
+    including successful completion driven by `snapshot-identity.protos`
+    (so `process.args()`/`process.environment()` still read from the D135
+    bootstrap snapshots), synchronous fail-closed rejection of a
+    signature/selector mismatch, and two independent Logical Case invocations
+    each observing their own rematerialized Process.
+  - Extends `ProtosTestToolExecutionRequirementRegistryTest
+    .ordinaryBindingCarriesSuiteNativeLogicalCaseExecutionRouteWhenInstalled`
+    to assert the `protos/test/process-snapshot` binding now carries the
+    exact installed `ProtosProcessSnapshotLogicalCaseExecutionFacility`
+    bootstrap object under `logicalCaseExecutionAsync`.
+
 ## 0.3.64-SNAPSHOT
 
 - TOOL009-D (#687): transport the D125 `ExecutionRequirementId` selected by a

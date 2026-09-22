@@ -15,6 +15,7 @@ import com.guillermomolina.protos.execution.ProtosAsyncProcessSnapshotExecutionF
 import com.guillermomolina.protos.execution.ProtosBundledToolModuleResolver;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
+import com.guillermomolina.protos.execution.ProtosProcessSnapshotLogicalCaseExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.execution.ProtosTestLogicalCaseExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosTestToolFileSelectionFacility;
@@ -158,14 +159,26 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
                 assertFalse(binding.hasLocalSlot("logicalCaseExecutionAsync"), requirementId);
             }
 
+            // TOOL009-E: process-snapshot now also carries the suite-native logical Case
+            // execution route, reusing whichever host facility already installed
+            // processSnapshotLogicalCaseExecutionAsync rather than provisioning a parallel one.
             ProtosObjectValue processSnapshotBinding =
                     assertInstanceOf(
                             ProtosObjectValue.class,
                             registry.readLocalSlot("protos/test/process-snapshot")
                                     .orElseThrow());
-            assertFalse(
-                    processSnapshotBinding.hasLocalSlot("logicalCaseExecutionAsync"),
-                    "protos/test/process-snapshot");
+            assertTrue(processSnapshotBinding.isFrozen());
+            assertEquals(2, processSnapshotBinding.localSlotsSnapshot().size());
+            assertSame(
+                    fixture.activation()
+                            .context()
+                            .readLocalSlot(
+                                    ProtosProcessSnapshotLogicalCaseExecutionFacility
+                                            .BOOTSTRAP_SLOT)
+                            .orElseThrow(),
+                    processSnapshotBinding
+                            .readLocalSlot("logicalCaseExecutionAsync")
+                            .orElseThrow());
         }
     }
 

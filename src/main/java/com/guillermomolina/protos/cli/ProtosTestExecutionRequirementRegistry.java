@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.execution.ProtosAsyncProcessSnapshotExecutionFacility;
+import com.guillermomolina.protos.execution.ProtosProcessSnapshotLogicalCaseExecutionFacility;
 import com.guillermomolina.protos.execution.ProtosTestLogicalCaseExecutionFacility;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -79,7 +80,8 @@ final class ProtosTestExecutionRequirementRegistry {
                 registry,
                 activation,
                 "protos/test/process-snapshot",
-                ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT);
+                ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT,
+                ProtosProcessSnapshotLogicalCaseExecutionFacility.BOOTSTRAP_SLOT);
 
         registry.freeze();
         activation.context().createLocalSlot(REGISTRY_SLOT, registry);
@@ -146,11 +148,19 @@ final class ProtosTestExecutionRequirementRegistry {
         registry.createLocalSlot(requirementId, binding);
     }
 
+    /**
+     * TOOL009-E: {@code logicalCaseExecutionSlot}, when non-null and installed, additionally
+     * exposes this requirement's suite-native logical Case execution route alongside the legacy
+     * single-source {@code executionSlot} protocol, mirroring the optional route wired by the
+     * 7-argument {@code addBinding} overload above. It reuses whichever host facility already
+     * installed that bootstrap slot rather than provisioning a parallel one.
+     */
     private static void addExecutionOnlyBinding(
             ProtosObjectValue registry,
             ProtosActivation activation,
             String requirementId,
-            String executionSlot) {
+            String executionSlot,
+            String logicalCaseExecutionSlot) {
         if (registry.hasLocalSlot(requirementId)) {
             throw new IllegalStateException(
                     "duplicate Test Tool execution requirement binding: " + requirementId);
@@ -158,6 +168,12 @@ final class ProtosTestExecutionRequirementRegistry {
 
         ProtosObjectValue binding = new ProtosObjectValue(ProtosObjectValue.rootObject());
         binding.createLocalSlot("executionAsync", requiredSlot(activation, executionSlot));
+        if (logicalCaseExecutionSlot != null
+                && activation.context().hasLocalSlot(logicalCaseExecutionSlot)) {
+            binding.createLocalSlot(
+                    "logicalCaseExecutionAsync",
+                    requiredSlot(activation, logicalCaseExecutionSlot));
+        }
         binding.freeze();
         registry.createLocalSlot(requirementId, binding);
     }
