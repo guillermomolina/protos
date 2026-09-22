@@ -30,6 +30,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -50,6 +51,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
     private final ProtosTestLogicalCaseAttemptBridge bridge;
     private final List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
             sourceRoots;
+    private final Map<String, Path> projectTreeCasesRootByCorpusId;
     private final ProtosAsyncExactExecutionFacility.Submission submission;
     private final Set<Operation> outstanding = new LinkedHashSet<>();
     private boolean closed;
@@ -59,6 +61,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             ProtosModuleResolver fallbackResolver,
             List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
                     sourceRoots,
+            Map<String, Path> projectTreeCasesRootByCorpusId,
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosAsyncExactExecutionFacility.Submission submission) {
         this.bridge =
@@ -75,6 +78,11 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                         Objects.requireNonNull(
                                 sourceRoots,
                                 "sourceRoots"));
+        this.projectTreeCasesRootByCorpusId =
+                Map.copyOf(
+                        Objects.requireNonNull(
+                                projectTreeCasesRootByCorpusId,
+                                "projectTreeCasesRootByCorpusId"));
         this.submission =
                 Objects.requireNonNull(
                         submission,
@@ -108,6 +116,35 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                     sourceRoots,
             ProtosPolyglotRuntimeHost runtimeHost,
             ProtosAsyncExactExecutionFacility.Submission submission) {
+        return install(
+                activation,
+                slotName,
+                core,
+                fallbackResolver,
+                sourceRoots,
+                Map.of(),
+                runtimeHost,
+                submission);
+    }
+
+    /**
+     * TOOL009 Package Non-TOML Publication 2: installs this facility additionally aware of
+     * project-tree CaseAuthority corpora. {@code projectTreeCasesRootByCorpusId} maps a corpusId to
+     * its trusted physical {@code cases/} root; a corpusId absent from the map never accepts a
+     * project-tree logical Case, exactly like the other three installations of this same facility
+     * (ordinary, Actor-flavored, Group-flavored), which continue to pass an empty map through the
+     * overload above and so never accept a project-tree authority descriptor.
+     */
+    public static ProtosTestLogicalCaseExecutionFacility install(
+            ProtosActivation activation,
+            String slotName,
+            Path core,
+            ProtosModuleResolver fallbackResolver,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots,
+            Map<String, Path> projectTreeCasesRootByCorpusId,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            ProtosAsyncExactExecutionFacility.Submission submission) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(slotName, "slotName");
 
@@ -127,6 +164,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                         core,
                         fallbackResolver,
                         sourceRoots,
+                        projectTreeCasesRootByCorpusId,
                         runtimeHost,
                         submission);
 
@@ -161,7 +199,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
         List<Object> association =
                 sourceAssociation.indexedSnapshot();
 
-        if (association.size() != 2
+        if ((association.size() != 2 && association.size() != 3)
                 || !(association.get(0)
                         instanceof ProtosStringValue corpusId)
                 || !(association.get(1)
@@ -169,6 +207,31 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                 || corpusId.value().isEmpty()
                 || sourcePath.value().isEmpty()) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
+        }
+
+        // TOOL009 Package Non-TOML Publication 2: a third sourceAssociation element carries the
+        // D133 project-tree CaseAuthority descriptor. This stays the ordinary 4-argument logical
+        // Case protocol; the descriptor travels inside the single sourceAssociation argument
+        // rather than widening the protocol's arity.
+        Path projectTreeCasesRoot = null;
+        String projectTreeFixtureIdentity = null;
+
+        if (association.size() == 3) {
+            if (!(association.get(2) instanceof ProtosArrayValue descriptor)) {
+                throw ProtosExactExecutionFacility.ordinaryError(caller);
+            }
+
+            projectTreeFixtureIdentity =
+                    ProtosTestCaseAuthorityExecutionFacility.fixtureIdentity(
+                            descriptor,
+                            caller);
+
+            projectTreeCasesRoot =
+                    projectTreeCasesRootByCorpusId.get(corpusId.value());
+
+            if (projectTreeCasesRoot == null) {
+                throw ProtosExactExecutionFacility.ordinaryError(caller);
+            }
         }
 
         final Path physicalPath;
@@ -201,7 +264,9 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                             physicalPath,
                             source.value(),
                             expectedSignature,
-                            selector.value());
+                            selector.value(),
+                            projectTreeCasesRoot,
+                            projectTreeFixtureIdentity);
         } catch (IllegalArgumentException failure) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }

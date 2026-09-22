@@ -13,22 +13,30 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Project: import("self:ProjectFile")
-Document: import("self:ProjectDocument")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-model: Project.buildCurrent(projectTreeFilesystem)
-text: Document.write(model)
+tests: [
+    Test("build-current", () => {
+        Project: import("self:ProjectFile")
+        Document: import("self:ProjectDocument")
 
-expected:
-    "project-format 1\n" +
-    "resolution-input protos-resolution-input-v1 sha256:7041a8afff9ffd0879673557d5c88e47b5fa7f577b369165679d8899f382f579\n" +
-    "metadata-content protos-project-metadata-v1 sha256:73134514d0f4869230bdf9a7528ab695ce126d4381e49bcce791ed5d4271c953\n\n" +
-    "root workspace \"root\"\n"
+        model: Project.buildCurrent(projectTreeFilesystem)
+        text: Document.write(model)
 
-ok: model.projectFormat == 1
-(model.rootPackageId == "root").ifFalse(() => { ok = false })
-(model.members.size() == 0).ifFalse(() => { ok = false })
-(model.resolutionInput.method == "protos-resolution-input-v1").ifFalse(() => { ok = false })
-(model.metadataContent.method == "protos-project-metadata-v1").ifFalse(() => { ok = false })
-(text == expected).ifFalse(() => { ok = false })
-ok
+        expected:
+            "project-format 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:7041a8afff9ffd0879673557d5c88e47b5fa7f577b369165679d8899f382f579\n" +
+            "metadata-content protos-project-metadata-v1 sha256:73134514d0f4869230bdf9a7528ab695ce126d4381e49bcce791ed5d4271c953\n\n" +
+            "root workspace \"root\"\n"
+
+        ok: model.projectFormat == 1
+        (model.rootPackageId == "root").ifFalse(() => { ok = false })
+        (model.members.size() == 0).ifFalse(() => { ok = false })
+        (model.resolutionInput.method == "protos-resolution-input-v1").ifFalse(() => { ok = false })
+        (model.metadataContent.method == "protos-project-metadata-v1").ifFalse(() => { ok = false })
+        (text == expected).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

@@ -1,10 +1,18 @@
-Identity: import("self:ContentIdentity")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-captured: projectTreeFilesystem.captureTree(Path.relative()).value()
-expected: {
-    method: "protos-package-tree-v1"
-    algorithm: "sha256"
-    hex: "ff22975888d65d4dd9563bd09ca67190c02473bdead0c536faf101cd66f72ec2"
-}
+tests: [
+    Test("verify-exact-case-lower", () => {
+        Identity: import("self:ContentIdentity")
 
-Identity.verify(captured, expected) === captured
+        captured: projectTreeFilesystem.captureTree(Path.relative()).value()
+        expected: {
+            method: "protos-package-tree-v1"
+            algorithm: "sha256"
+            hex: "ff22975888d65d4dd9563bd09ca67190c02473bdead0c536faf101cd66f72ec2"
+        }
+
+        Assertions.require(Identity.verify(captured, expected) === captured)
+    })
+]
+tests.freeze()

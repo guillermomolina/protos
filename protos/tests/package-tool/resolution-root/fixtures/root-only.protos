@@ -13,13 +13,21 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Root: import("self:ResolutionRoot")
-model: Root.assemble(projectTreeFilesystem)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ok: model.languageCompatibility == "0.1"
-(model.root.packageId == "root").ifFalse(() => { ok = false })
-(model.root.version.text == "1.2.3").ifFalse(() => { ok = false })
-(model.root.compatibility === null).ifFalse(() => { ok = false })
-(model.root.dependencies.size() == 0).ifFalse(() => { ok = false })
-(model.members.size() == 0).ifFalse(() => { ok = false })
-ok
+tests: [
+    Test("root-only", () => {
+        Root: import("self:ResolutionRoot")
+        model: Root.assemble(projectTreeFilesystem)
+
+        ok: model.languageCompatibility == "0.1"
+        (model.root.packageId == "root").ifFalse(() => { ok = false })
+        (model.root.version.text == "1.2.3").ifFalse(() => { ok = false })
+        (model.root.compatibility === null).ifFalse(() => { ok = false })
+        (model.root.dependencies.size() == 0).ifFalse(() => { ok = false })
+        (model.members.size() == 0).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

@@ -13,26 +13,34 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Metadata: import("self:ProjectMetadata")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-digest:
-    Metadata.digest(
-        projectTreeFilesystem,
-        Array(
-            {
-                location: "z"
-                packageId: "z-pkg"
-            },
-            {
-                location: "a"
-                packageId: "a-pkg"
-            }
-        )
-    )
+tests: [
+    Test("metadata-members", () => {
+        Metadata: import("self:ProjectMetadata")
 
-ok: digest.method == "protos-project-metadata-v1"
-(digest.algorithm == "sha256").ifFalse(() => { ok = false })
-(digest.hex == "dde95b306f57fc6ac4c85e36d09fc07f1c07fb4472c62dff9874fd6e2b58b434").ifFalse(() => {
-    ok = false
-})
-ok
+        digest:
+            Metadata.digest(
+                projectTreeFilesystem,
+                Array(
+                    {
+                        location: "z"
+                        packageId: "z-pkg"
+                    },
+                    {
+                        location: "a"
+                        packageId: "a-pkg"
+                    }
+                )
+            )
+
+        ok: digest.method == "protos-project-metadata-v1"
+        (digest.algorithm == "sha256").ifFalse(() => { ok = false })
+        (digest.hex == "dde95b306f57fc6ac4c85e36d09fc07f1c07fb4472c62dff9874fd6e2b58b434").ifFalse(() => {
+            ok = false
+        })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

@@ -138,7 +138,12 @@ public final class ProtosTestCaseAuthorityExecutionFacility implements AutoClose
         return start(caller, request);
     }
 
-    private static String fixtureIdentity(
+    /**
+     * D133 project-tree CaseAuthority descriptor validation, reused by {@link
+     * ProtosTestLogicalCaseExecutionFacility} so the suite-native project-tree adapter decodes the
+     * exact same descriptor shape rather than a parallel one.
+     */
+    static String fixtureIdentity(
             ProtosArrayValue descriptor,
             ProtosActivation caller) {
         if (!descriptor.indexedSize().equals(BigInteger.valueOf(4))) {

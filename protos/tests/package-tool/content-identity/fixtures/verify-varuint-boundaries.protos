@@ -1,10 +1,18 @@
-Identity: import("self:ContentIdentity")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-captured: projectTreeFilesystem.captureTree(Path.relative()).value()
-expected: {
-    method: "protos-package-tree-v1"
-    algorithm: "sha256"
-    hex: "4ae0bad7f7915a5e6db1ad4bb29ee71351fcf812b562b41da34f99b8fd4b8f02"
-}
+tests: [
+    Test("verify-varuint-boundaries", () => {
+        Identity: import("self:ContentIdentity")
 
-Identity.verify(captured, expected) === captured
+        captured: projectTreeFilesystem.captureTree(Path.relative()).value()
+        expected: {
+            method: "protos-package-tree-v1"
+            algorithm: "sha256"
+            hex: "4ae0bad7f7915a5e6db1ad4bb29ee71351fcf812b562b41da34f99b8fd4b8f02"
+        }
+
+        Assertions.require(Identity.verify(captured, expected) === captured)
+    })
+]
+tests.freeze()

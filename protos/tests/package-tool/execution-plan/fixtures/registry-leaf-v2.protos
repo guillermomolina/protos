@@ -13,61 +13,69 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Plan: import("self:ExecutionPlan")
-Version: import("self:ReleaseVersion")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-exports: Map()
-exports["Public"] = "internal/Thing"
+tests: [
+    Test("registry-leaf-v2", () => {
+        Plan: import("self:ExecutionPlan")
+        Version: import("self:ReleaseVersion")
 
-verified:
-    Array(
-        {
-            ref: {
-                kind: "registry"
-                packageId: "external-id"
-                version: Version.parse("1.0.0")
-            }
-            content: {
-                method: "protos-package-tree-v1"
-                algorithm: "sha256"
-                hex: "1111111111111111111111111111111111111111111111111111111111111111"
-            }
-            exports: exports
-        }
-    )
+        exports: Map()
+        exports["Public"] = "internal/Thing"
 
-plan:
-    Plan.buildV2FromVerifiedLeaves(
-        projectTreeFilesystem,
-        verified
-    )
+        verified:
+            Array(
+                {
+                    ref: {
+                        kind: "registry"
+                        packageId: "external-id"
+                        version: Version.parse("1.0.0")
+                    }
+                    content: {
+                        method: "protos-package-tree-v1"
+                        algorithm: "sha256"
+                        hex: "1111111111111111111111111111111111111111111111111111111111111111"
+                    }
+                    exports: exports
+                }
+            )
 
-ok: plan.generation == 2
-(plan.root.kind == "workspace").ifFalse(() => { ok = false })
-(plan.root.packageId == "root").ifFalse(() => { ok = false })
-(plan.packages.size() == 2).ifFalse(() => { ok = false })
-(plan.dependencies.size() == 1).ifFalse(() => { ok = false })
+        plan:
+            Plan.buildV2FromVerifiedLeaves(
+                projectTreeFilesystem,
+                verified
+            )
 
-rootPackage: plan.packages[0]
-externalPackage: plan.packages[1]
-edge: plan.dependencies[0]
+        ok: plan.generation == 2
+        (plan.root.kind == "workspace").ifFalse(() => { ok = false })
+        (plan.root.packageId == "root").ifFalse(() => { ok = false })
+        (plan.packages.size() == 2).ifFalse(() => { ok = false })
+        (plan.dependencies.size() == 1).ifFalse(() => { ok = false })
 
-(rootPackage.ref.kind == "workspace").ifFalse(() => { ok = false })
-(rootPackage.ref.packageId == "root").ifFalse(() => { ok = false })
+        rootPackage: plan.packages[0]
+        externalPackage: plan.packages[1]
+        edge: plan.dependencies[0]
 
-(externalPackage.ref.kind == "registry").ifFalse(() => { ok = false })
-(externalPackage.ref.packageId == "external-id").ifFalse(() => { ok = false })
-(externalPackage.ref.version.text == "1.0.0").ifFalse(() => { ok = false })
-(externalPackage.content.method == "protos-package-tree-v1").ifFalse(() => { ok = false })
-(externalPackage.content.algorithm == "sha256").ifFalse(() => { ok = false })
-(externalPackage.content.hex == "1111111111111111111111111111111111111111111111111111111111111111").ifFalse(() => { ok = false })
-(externalPackage.exports["Public"] == "internal/Thing").ifFalse(() => { ok = false })
+        (rootPackage.ref.kind == "workspace").ifFalse(() => { ok = false })
+        (rootPackage.ref.packageId == "root").ifFalse(() => { ok = false })
 
-(edge.declaring.kind == "workspace").ifFalse(() => { ok = false })
-(edge.declaring.packageId == "root").ifFalse(() => { ok = false })
-(edge.alias == "reg").ifFalse(() => { ok = false })
-(edge.target.kind == "registry").ifFalse(() => { ok = false })
-(edge.target.packageId == "external-id").ifFalse(() => { ok = false })
-(edge.target.version.text == "1.0.0").ifFalse(() => { ok = false })
+        (externalPackage.ref.kind == "registry").ifFalse(() => { ok = false })
+        (externalPackage.ref.packageId == "external-id").ifFalse(() => { ok = false })
+        (externalPackage.ref.version.text == "1.0.0").ifFalse(() => { ok = false })
+        (externalPackage.content.method == "protos-package-tree-v1").ifFalse(() => { ok = false })
+        (externalPackage.content.algorithm == "sha256").ifFalse(() => { ok = false })
+        (externalPackage.content.hex == "1111111111111111111111111111111111111111111111111111111111111111").ifFalse(() => { ok = false })
+        (externalPackage.exports["Public"] == "internal/Thing").ifFalse(() => { ok = false })
 
-ok
+        (edge.declaring.kind == "workspace").ifFalse(() => { ok = false })
+        (edge.declaring.packageId == "root").ifFalse(() => { ok = false })
+        (edge.alias == "reg").ifFalse(() => { ok = false })
+        (edge.target.kind == "registry").ifFalse(() => { ok = false })
+        (edge.target.packageId == "external-id").ifFalse(() => { ok = false })
+        (edge.target.version.text == "1.0.0").ifFalse(() => { ok = false })
+
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

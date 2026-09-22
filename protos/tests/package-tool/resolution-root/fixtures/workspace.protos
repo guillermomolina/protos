@@ -13,29 +13,37 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Root: import("self:ResolutionRoot")
-Input: import("self:ResolutionInput")
-model: Root.assemble(projectTreeFilesystem)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ok: model.root.packageId == "root"
-(model.members.size() == 2).ifFalse(() => { ok = false })
+tests: [
+    Test("workspace", () => {
+        Root: import("self:ResolutionRoot")
+        Input: import("self:ResolutionInput")
+        model: Root.assemble(projectTreeFilesystem)
 
-a: model.members[1]
-b: model.members[0]
+        ok: model.root.packageId == "root"
+        (model.members.size() == 2).ifFalse(() => { ok = false })
 
-(b.location == "libs/b").ifFalse(() => { ok = false })
-(b.packageId == "b-pkg").ifFalse(() => { ok = false })
-(b.manifest.compatibility == "0.1").ifFalse(() => { ok = false })
-(b.manifest.dependencies[0].targetLocation == "libs/a").ifFalse(() => { ok = false })
-(b.manifest.dependencies[0].targetPackageId == "a-pkg").ifFalse(() => { ok = false })
+        a: model.members[1]
+        b: model.members[0]
 
-(a.location == "libs/a").ifFalse(() => { ok = false })
-(a.packageId == "a-pkg").ifFalse(() => { ok = false })
-(a.manifest.dependencies[0].targetLocation == "").ifFalse(() => { ok = false })
-(a.manifest.dependencies[0].targetPackageId == "root").ifFalse(() => { ok = false })
+        (b.location == "libs/b").ifFalse(() => { ok = false })
+        (b.packageId == "b-pkg").ifFalse(() => { ok = false })
+        (b.manifest.compatibility == "0.1").ifFalse(() => { ok = false })
+        (b.manifest.dependencies[0].targetLocation == "libs/a").ifFalse(() => { ok = false })
+        (b.manifest.dependencies[0].targetPackageId == "a-pkg").ifFalse(() => { ok = false })
 
-// Member-local workspace declaration is inactive in the enclosing root.
-// Successful digest construction proves it was not recursively expanded.
-digest: Input.digest(model)
-(digest.hex.size() == 64).ifFalse(() => { ok = false })
-ok
+        (a.location == "libs/a").ifFalse(() => { ok = false })
+        (a.packageId == "a-pkg").ifFalse(() => { ok = false })
+        (a.manifest.dependencies[0].targetLocation == "").ifFalse(() => { ok = false })
+        (a.manifest.dependencies[0].targetPackageId == "root").ifFalse(() => { ok = false })
+
+        // Member-local workspace declaration is inactive in the enclosing root.
+        // Successful digest construction proves it was not recursively expanded.
+        digest: Input.digest(model)
+        (digest.hex.size() == 64).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

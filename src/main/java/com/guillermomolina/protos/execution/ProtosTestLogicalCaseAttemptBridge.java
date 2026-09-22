@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
@@ -24,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.source.Source;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -37,6 +39,15 @@ import java.util.Objects;
  * re-materializes the source declaration before publishing any Case authority, validates the exact
  * discovery signature, resolves one local selector in Protos, and only then invokes the selected
  * Test value. Live Test/body values never cross a Process boundary.
+ *
+ * <p>TOOL009 Package Non-TOML Publication 2: when a request also carries a project-tree
+ * CaseAuthority root and fixture identity, this bridge additionally provisions a fresh read-only
+ * physical project-tree authority for the exact same Process, before the source declaration
+ * executes, and installs it under the {@code projectTreeFilesystem} slot the declaration's module
+ * scope closes over. Discovery, selection and the selected Test's {@code call()} then run in that
+ * one Process, so the CaseAuthority provisioning and the suite-native selection authority are never
+ * split across two Processes. This composes {@link ProtosTestCaseAuthorityAttemptBridge}'s trusted
+ * confinement mechanics rather than introducing a second CaseAuthority model.
  *
  * <p>This bridge owns no CaseId encoding, scheduling, retry, fixtures, tags, result policy or
  * resource policy.
@@ -52,7 +63,9 @@ final class ProtosTestLogicalCaseAttemptBridge {
             Path sourcePath,
             String source,
             List<String> expectedSignature,
-            String selector) {
+            String selector,
+            Path projectTreeCasesRoot,
+            String projectTreeFixtureIdentity) {
 
         Request {
             sourcePath =
@@ -78,6 +91,29 @@ final class ProtosTestLogicalCaseAttemptBridge {
                             "declaration signature contains an invalid selector");
                 }
             }
+
+            if ((projectTreeCasesRoot == null) != (projectTreeFixtureIdentity == null)) {
+                throw new IllegalArgumentException(
+                        "project-tree CaseAuthority root and fixture identity must be supplied"
+                                + " together");
+            }
+
+            if (projectTreeCasesRoot != null) {
+                projectTreeCasesRoot = projectTreeCasesRoot.toAbsolutePath().normalize();
+
+                if (projectTreeFixtureIdentity.isEmpty()) {
+                    throw new IllegalArgumentException(
+                            "project-tree CaseAuthority fixture identity must not be empty");
+                }
+            }
+        }
+
+        Request(
+                Path sourcePath,
+                String source,
+                List<String> expectedSignature,
+                String selector) {
+            this(sourcePath, source, expectedSignature, selector, null, null);
         }
     }
 
@@ -152,83 +188,168 @@ final class ProtosTestLogicalCaseAttemptBridge {
                             prelude.newExecutionContext(),
                             rootActor.executionDomain());
 
-            ByteArrayOutputStream stdout =
-                    new ByteArrayOutputStream();
-            ByteArrayOutputStream stderr =
-                    new ByteArrayOutputStream();
-
-            ProtosPolyglotProcessContext processContext =
-                    runtimeHost.hostProcess(
-                            process,
-                            InputStream.nullInputStream(),
-                            stdout,
-                            stderr);
+            ProtosNioReadOnlyTreeFilesystemBackend projectTreeBackend =
+                    request.projectTreeCasesRoot() == null
+                            ? null
+                            : new ProtosNioReadOnlyTreeFilesystemBackend(
+                                    ProtosTestCaseAuthorityAttemptBridge.resolveAuthorityRoot(
+                                            request.projectTreeCasesRoot(),
+                                            request.projectTreeFixtureIdentity()));
 
             try {
-                ProtosExecutionOutcome declaration =
-                        ProtosCanonicalInitialModuleExecution.execute(
-                                prelude,
-                                resolver,
-                                resolver.entryModule(),
-                                declarationActivation);
-
-                if (declaration.state()
-                        != ProtosExecutionOutcome.State.COMPLETED) {
-                    return result(
-                            Phase.REMATERIALIZATION_ERROR,
-                            declaration,
-                            stdout,
-                            stderr,
-                            prelude);
+                if (projectTreeBackend != null
+                        && !projectTreeBackend.secureConfinementAvailable()) {
+                    throw new IOException(
+                            "secure project-tree CaseAuthority confinement is unavailable");
                 }
 
-                ProtosObjectValue module =
-                        rootActor.moduleState()
-                                .lookup(resolver.entryModule())
-                                .orElseThrow(
-                                        () ->
-                                                new IllegalStateException(
-                                                        "rematerialized suite module is not cached"))
-                                .instance();
-
-                ProtosActivation selectionActivation =
-                        selectionActivation(
-                                prelude,
-                                rootActor,
-                                module,
-                                request);
-
-                try {
-                    processContext.evaluatePersistent(
-                            selectionSource(),
-                            selectionActivation);
-                } catch (ProtosSignalException mismatch) {
-                    return result(
-                            Phase.REMATERIALIZATION_ERROR,
-                            ProtosExecutionOutcome.failed(
-                                    mismatch.error()),
-                            stdout,
-                            stderr,
-                            prelude);
+                return executeWithinProcess(
+                        request,
+                        prelude,
+                        resolver,
+                        process,
+                        rootActor,
+                        declarationActivation,
+                        projectTreeBackend);
+            } finally {
+                if (projectTreeBackend != null) {
+                    projectTreeBackend.close();
                 }
+            }
+        }
+    }
 
-                ProtosExecutionOutcome body =
-                        processContext.execute(
-                                invocationSource(),
-                                selectionActivation);
+    private Result executeWithinProcess(
+            Request request,
+            ProtosPrelude prelude,
+            ProtosDirectFileModuleResolver resolver,
+            ProtosProcessRuntime process,
+            com.guillermomolina.protos.runtime.ProtosActor rootActor,
+            ProtosActivation declarationActivation,
+            ProtosNioReadOnlyTreeFilesystemBackend projectTreeBackend)
+            throws Exception {
+        ByteArrayOutputStream stdout =
+                new ByteArrayOutputStream();
+        ByteArrayOutputStream stderr =
+                new ByteArrayOutputStream();
 
+        ProtosPolyglotProcessContext processContext =
+                runtimeHost.hostProcess(
+                        process,
+                        InputStream.nullInputStream(),
+                        stdout,
+                        stderr);
+
+        try {
+            ProtosExecutionOutcome declaration =
+                    ProtosCanonicalInitialModuleExecution.execute(
+                            prelude,
+                            resolver,
+                            resolver.entryModule(),
+                            declarationActivation);
+
+            if (declaration.state()
+                    != ProtosExecutionOutcome.State.COMPLETED) {
                 return result(
-                        Phase.CASE_EXECUTION,
-                        body,
+                        Phase.REMATERIALIZATION_ERROR,
+                        declaration,
                         stdout,
                         stderr,
                         prelude);
-            } finally {
-                process.requestTerminationForRuntime();
-                process.awaitTerminationForRuntime();
-                processContext.awaitTerminalDispositionForRuntime();
             }
+
+            ProtosObjectValue module =
+                    rootActor.moduleState()
+                            .lookup(resolver.entryModule())
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "rematerialized suite module is not cached"))
+                            .instance();
+
+            if (projectTreeBackend != null) {
+                installProjectTreeFilesystem(
+                        module,
+                        prelude,
+                        declarationActivation,
+                        projectTreeBackend);
+            }
+
+            ProtosActivation selectionActivation =
+                    selectionActivation(
+                            prelude,
+                            rootActor,
+                            module,
+                            request);
+
+            try {
+                processContext.evaluatePersistent(
+                        selectionSource(),
+                        selectionActivation);
+            } catch (ProtosSignalException mismatch) {
+                return result(
+                        Phase.REMATERIALIZATION_ERROR,
+                        ProtosExecutionOutcome.failed(
+                                mismatch.error()),
+                        stdout,
+                        stderr,
+                        prelude);
+            }
+
+            ProtosExecutionOutcome body =
+                    processContext.execute(
+                            invocationSource(),
+                            selectionActivation);
+
+            return result(
+                    Phase.CASE_EXECUTION,
+                    body,
+                    stdout,
+                    stderr,
+                    prelude);
+        } finally {
+            process.requestTerminationForRuntime();
+            process.awaitTerminationForRuntime();
+            processContext.awaitTerminalDispositionForRuntime();
         }
+    }
+
+    /**
+     * Installs the project-tree CaseAuthority Filesystem onto the already-declared module
+     * instance, after {@link ProtosCanonicalInitialModuleExecution} has cached and executed it.
+     *
+     * <p>{@code ProtosCanonicalInitialModuleExecution.execute} caches the declaration
+     * activation's own context as the module's instance before running the module's top-level
+     * declarations ("the normative cache-before-execute point"); a pre-existing slot on that
+     * object at that point is host contamination of the module's own declaration surface, not an
+     * ambient capability. Installing the capability afterward, directly on the resulting module
+     * instance, keeps declaration pristine while remaining visible to any Test Closure declared
+     * during that same declaration: a Closure captures a live reference to its enclosing module
+     * instance, not a snapshot, so a slot added immediately after declaration is still visible
+     * when the selected Test later calls {@code call()}.
+     */
+    private static void installProjectTreeFilesystem(
+            ProtosObjectValue module,
+            ProtosPrelude prelude,
+            ProtosActivation declarationActivation,
+            ProtosNioReadOnlyTreeFilesystemBackend projectTreeBackend) {
+        ProtosObjectValue rawFilesystem =
+                ProtosStandardFilesystemProtocol.createCapability(
+                        prelude.bytesPrototypeForRuntime(),
+                        declarationActivation,
+                        projectTreeBackend);
+
+        if (!(rawFilesystem instanceof ProtosFilesystemValue filesystem)) {
+            throw new IllegalStateException(
+                    "project-tree CaseAuthority Filesystem has the wrong value family");
+        }
+
+        if (module.hasLocalSlot("projectTreeFilesystem")) {
+            throw new IllegalStateException(
+                    "project-tree CaseAuthority slot already exists");
+        }
+
+        module.createLocalSlot("projectTreeFilesystem", filesystem);
     }
 
     private static Result result(

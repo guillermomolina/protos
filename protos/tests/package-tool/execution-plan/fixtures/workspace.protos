@@ -13,31 +13,39 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Plan: import("self:ExecutionPlan")
-plan: Plan.build(projectTreeFilesystem)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-ok: plan.generation == 1
-(plan.packages.size() == 2).ifFalse(() => { ok = false })
-(plan.dependencies.size() == 2).ifFalse(() => { ok = false })
+tests: [
+    Test("workspace", () => {
+        Plan: import("self:ExecutionPlan")
+        plan: Plan.build(projectTreeFilesystem)
 
-rootPackage: plan.packages[0]
-memberPackage: plan.packages[1]
+        ok: plan.generation == 1
+        (plan.packages.size() == 2).ifFalse(() => { ok = false })
+        (plan.dependencies.size() == 2).ifFalse(() => { ok = false })
 
-(rootPackage.ref.packageId == "root").ifFalse(() => { ok = false })
-(rootPackage.location == "").ifFalse(() => { ok = false })
-(memberPackage.ref.packageId == "a-pkg").ifFalse(() => { ok = false })
-(memberPackage.location == "libs/a").ifFalse(() => { ok = false })
-(memberPackage.exports["Public"] == "internal/Thing").ifFalse(() => { ok = false })
+        rootPackage: plan.packages[0]
+        memberPackage: plan.packages[1]
 
-rootEdge: null
-memberEdge: null
-plan.dependencies.each((edge) => {
-    (edge.declaring.packageId == "root").ifTrue(() => { rootEdge = edge })
-    (edge.declaring.packageId == "a-pkg").ifTrue(() => { memberEdge = edge })
-})
+        (rootPackage.ref.packageId == "root").ifFalse(() => { ok = false })
+        (rootPackage.location == "").ifFalse(() => { ok = false })
+        (memberPackage.ref.packageId == "a-pkg").ifFalse(() => { ok = false })
+        (memberPackage.location == "libs/a").ifFalse(() => { ok = false })
+        (memberPackage.exports["Public"] == "internal/Thing").ifFalse(() => { ok = false })
 
-(rootEdge.alias == "local").ifFalse(() => { ok = false })
-(rootEdge.target.packageId == "a-pkg").ifFalse(() => { ok = false })
-(memberEdge.alias == "rootdep").ifFalse(() => { ok = false })
-(memberEdge.target.packageId == "root").ifFalse(() => { ok = false })
-ok
+        rootEdge: null
+        memberEdge: null
+        plan.dependencies.each((edge) => {
+            (edge.declaring.packageId == "root").ifTrue(() => { rootEdge = edge })
+            (edge.declaring.packageId == "a-pkg").ifTrue(() => { memberEdge = edge })
+        })
+
+        (rootEdge.alias == "local").ifFalse(() => { ok = false })
+        (rootEdge.target.packageId == "a-pkg").ifFalse(() => { ok = false })
+        (memberEdge.alias == "rootdep").ifFalse(() => { ok = false })
+        (memberEdge.target.packageId == "root").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

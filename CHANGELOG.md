@@ -1,3 +1,69 @@
+## 0.3.76-SNAPSHOT
+
+- `TOOL009`: migrate the complete 54-case Package Tool project-tree corpus
+  (`protos/tests/package-tool/content-identity` (12),
+  `protos/tests/package-tool/resolution-input-lock` (2),
+  `protos/tests/package-tool/resolution-root` (8),
+  `protos/tests/package-tool/execution-plan` (28),
+  `protos/tests/package-tool/project-projection` (4)) from the legacy
+  project-tree `CaseAuthority` execution path to suite-native Logical Case
+  execution (Publication 2 of the Package non-TOML migration), completing the
+  Package non-TOML migration alongside Publication 1's 157 case-outcomes
+  cases.
+  - Adds the previously missing project-tree-aware Package Logical Case
+    authority adapter: `ProtosTestLogicalCaseAttemptBridge` optionally
+    provisions a fresh read-only physical project-tree authority (reusing
+    `ProtosTestCaseAuthorityAttemptBridge`'s trusted confinement mechanics)
+    and installs it under the `projectTreeFilesystem` slot the declaration's
+    module scope closes over, before Discovery/selection run and the
+    selected Test's `call()` executes — all inside the same fresh Process.
+    `ProtosTestLogicalCaseExecutionFacility` gains a `Map<corpusId, casesRoot>`
+    parameter (empty for the ordinary/Actor/Group installations, populated
+    for the Package-flavored installation) and decodes an optional third
+    `sourceAssociation` element carrying the D133 project-tree CaseAuthority
+    descriptor. This stays the ordinary four-argument suite-native Logical
+    Case protocol; the descriptor travels inside the single
+    `sourceAssociation` argument. `ProtosTestLogicalCaseDiscoveryFacility`,
+    the separate authority-free discovery boundary that runs earlier in the
+    same pipeline, is extended the same way: it now accepts an optional
+    third `sourceAssociation` element and preserves it opaquely (without
+    interpreting it) into every discovered CasePlan entry's own
+    `sourceAssociation`, so the descriptor a project-tree spec supplies at
+    discovery time is still present when that Case later reaches execution.
+  - `LogicalCaseMigration.sourceAssociation` now appends the CaseAuthority
+    descriptor as a third element when a suite-native spec carries one, so
+    distinct project identities that reuse the same fixture source path
+    remain distinct logical records; `splitPlan` now accepts a well-formed
+    project-tree/case/case descriptor alongside `suite-native` instead of
+    rejecting it; `logicalCaseExecutorAsync` forwards a 2- or 3-element
+    association unchanged.
+  - `Manifest.protos`'s `projectTreeCaseSpec` now also accepts the
+    `suite-native` outcome marker (normalized to `expectation =
+    "suite-native"`, `expected = "-"`), alongside the already-supported
+    `true`/`error` markers, while still attaching the D133 CaseAuthority
+    descriptor.
+  - `Main.protos`'s suite-native discovery bookkeeping is keyed by
+    `(sourcePath, fixtureIdentity)` rather than `sourcePath` alone, so
+    project-tree fixture scripts reused across distinct project identities
+    (for example `execution-plan`'s shared `f2e3b-build-v2-error.protos`)
+    are discovered and re-read independently per project identity instead of
+    colliding.
+  - The 40 distinct project-tree fixture scripts are rewritten from the
+    legacy whole-source boolean/error convention into the `std:test/Test`
+    suite-native convention (`tests: [Test("<name>", () => { ... })]`),
+    preserving each fixture's original assertions verbatim: a `true`
+    expectation's trailing completion expression is wrapped in
+    `Assertions.require(...)`; an `error` expectation's whole body is
+    wrapped in `Assertions.signals(Error, () => { ... })`. The five
+    `manifest.tsv` files are updated to the `suite-native` outcome marker.
+  - `ProtosTestCaseAuthorityAttemptBridge.resolveAuthorityRoot` and
+    `ProtosTestCaseAuthorityExecutionFacility.fixtureIdentity` are widened
+    from `private` to package-private so the new adapter reuses the exact
+    same confinement/descriptor-validation logic rather than duplicating it.
+    TOOL009-B legacy cleanup (removing the now-unused legacy CaseAuthority
+    scope/facilities once no CaseSpec references them) remains out of scope
+    for this publication.
+
 ## 0.3.75-SNAPSHOT
 
 - `TOOL009`: migrate the complete 157-case-outcomes Package non-TOML corpus

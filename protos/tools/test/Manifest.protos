@@ -532,6 +532,11 @@ projectTreeCaseSpec: (fields, caseNamespace) => {
         expected = "-"
         known = true
     })
+    (retainedOutcome == "suite-native").ifTrue(() => {
+        expectation = "suite-native"
+        expected = "-"
+        known = true
+    })
     known.ifFalse(() => {
         fail()
     })

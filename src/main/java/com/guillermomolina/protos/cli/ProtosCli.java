@@ -467,15 +467,15 @@ public final class ProtosCli {
         // Package-owned module the suite-native route resolves. Their shared
         // "std:collections/Array" and "std:crypto/SHA256" dependencies already
         // resolve through the standard library resolver and need no overlay.
-        // D132/TOOL009 note: this overlay now carries 13 entries, past the 10-pair
-        // limit of the Map.of(...) factory overloads used elsewhere in this file;
-        // Map.ofEntries(Map.entry(...), ...) is the ordinary JDK replacement with
-        // identical (immutable, unordered) Map semantics.
+        // D132/TOOL009 note: this overlay now carries more entries than the
+        // 10-pair limit of the Map.of(...) factory overloads used elsewhere in
+        // this file; Map.ofEntries(Map.entry(...), ...) is the ordinary JDK
+        // replacement with identical (immutable, unordered) Map semantics.
         ProtosModuleResolver packageLogicalCaseFallbackResolver =
                 new ProtosExactModuleOverlayResolver(
                         Map.ofEntries(
                                 Map.entry(
-                                        "package-runtime-names",
+                                        "self:RuntimeNames",
                                         new ProtosExactModuleOverlayResolver.ExactModule(
                                                 new ProtosModuleKey(
                                                         "tool001-package:runtime-names"),
@@ -545,6 +545,72 @@ public final class ProtosCli {
                                                         "tool001-package:resolution-input"),
                                                 packageToolRoot.resolve(
                                                         "ResolutionInput.protos"))),
+                                // TOOL009 Package Non-TOML Publication 2: the project-tree
+                                // corpora's suite-native fixtures reach these six additional
+                                // Package Tool modules and their own transitive self: imports
+                                // (ManifestCommand -> self:ManifestSchemaV1, already overlaid
+                                // above).
+                                Map.entry(
+                                        "self:ResolutionRoot",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:resolution-root"),
+                                                packageToolRoot.resolve(
+                                                        "ResolutionRoot.protos"))),
+                                Map.entry(
+                                        "self:LockFile",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:lock-file"),
+                                                packageToolRoot.resolve("LockFile.protos"))),
+                                Map.entry(
+                                        "self:ContentIdentity",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:content-identity"),
+                                                packageToolRoot.resolve(
+                                                        "ContentIdentity.protos"))),
+                                Map.entry(
+                                        "self:ExecutionPlan",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:execution-plan"),
+                                                packageToolRoot.resolve(
+                                                        "ExecutionPlan.protos"))),
+                                Map.entry(
+                                        "self:ProjectFile",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:project-file"),
+                                                packageToolRoot.resolve("ProjectFile.protos"))),
+                                Map.entry(
+                                        "self:ProjectDocument",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:project-document"),
+                                                packageToolRoot.resolve(
+                                                        "ProjectDocument.protos"))),
+                                Map.entry(
+                                        "self:ProjectMetadata",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:project-metadata"),
+                                                packageToolRoot.resolve(
+                                                        "ProjectMetadata.protos"))),
+                                Map.entry(
+                                        "self:MetadataPublication",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:metadata-publication"),
+                                                packageToolRoot.resolve(
+                                                        "MetadataPublication.protos"))),
+                                Map.entry(
+                                        "self:ManifestCommand",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:manifest-command"),
+                                                packageToolRoot.resolve(
+                                                        "ManifestCommand.protos"))),
                                 Map.entry(
                                         "tool-shared:Toml10/TomlSyntax",
                                         new ProtosExactModuleOverlayResolver.ExactModule(

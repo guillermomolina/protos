@@ -13,45 +13,53 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:ProjectDocument")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-zeros: "0000000000000000000000000000000000000000000000000000000000000000"
-ones: "1111111111111111111111111111111111111111111111111111111111111111"
+tests: [
+    Test("canonical-document-order", () => {
+        Document: import("self:ProjectDocument")
 
-text:
-    Document.write(
-        {
-            projectFormat: 1
-            resolutionInput: {
-                method: "protos-resolution-input-v1"
-                algorithm: "sha256"
-                hex: zeros
-            }
-            metadataContent: {
-                method: "protos-project-metadata-v1"
-                algorithm: "sha256"
-                hex: ones
-            }
-            rootPackageId: "root"
-            members: Array(
+        zeros: "0000000000000000000000000000000000000000000000000000000000000000"
+        ones: "1111111111111111111111111111111111111111111111111111111111111111"
+
+        text:
+            Document.write(
                 {
-                location: "z"
-                packageId: "z-pkg"
-            },
-                {
-                location: "a"
-                packageId: "a-pkg"
-            }
+                    projectFormat: 1
+                    resolutionInput: {
+                        method: "protos-resolution-input-v1"
+                        algorithm: "sha256"
+                        hex: zeros
+                    }
+                    metadataContent: {
+                        method: "protos-project-metadata-v1"
+                        algorithm: "sha256"
+                        hex: ones
+                    }
+                    rootPackageId: "root"
+                    members: Array(
+                        {
+                        location: "z"
+                        packageId: "z-pkg"
+                    },
+                        {
+                        location: "a"
+                        packageId: "a-pkg"
+                    }
+                    )
+                }
             )
-        }
-    )
 
-expected:
-    "project-format 1\n" +
-    "resolution-input protos-resolution-input-v1 sha256:" + zeros + "\n" +
-    "metadata-content protos-project-metadata-v1 sha256:" + ones + "\n\n" +
-    "root workspace \"root\"\n" +
-    "workspace-member \"a\" workspace \"a-pkg\"\n" +
-    "workspace-member \"z\" workspace \"z-pkg\"\n"
+        expected:
+            "project-format 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:" + zeros + "\n" +
+            "metadata-content protos-project-metadata-v1 sha256:" + ones + "\n\n" +
+            "root workspace \"root\"\n" +
+            "workspace-member \"a\" workspace \"a-pkg\"\n" +
+            "workspace-member \"z\" workspace \"z-pkg\"\n"
 
-text == expected
+        Assertions.require(text == expected)
+    })
+]
+tests.freeze()

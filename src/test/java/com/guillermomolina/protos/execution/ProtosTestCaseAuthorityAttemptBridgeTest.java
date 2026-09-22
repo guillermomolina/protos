@@ -25,8 +25,6 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -47,6 +45,28 @@ final class ProtosTestCaseAuthorityAttemptBridgeTest {
                     "package-tool",
                     "resolution-root");
 
+    // D133/D134 infrastructure fixture: this bridge test exercises the legacy
+    // whole-source CaseAuthority execution path directly and only needs any
+    // boolean-completing script that reads the provisioned
+    // projectTreeFilesystem against the real "root-only" physical authority
+    // below. It is deliberately inline rather than read from
+    // protos/tests/package-tool/resolution-root/fixtures/root-only.protos, so
+    // this infrastructure test stays independent of that corpus's own
+    // suite-native Test Tool content and lifecycle.
+    private static final String ROOT_ONLY_SOURCE =
+            """
+            Root: import("self:ResolutionRoot")
+            model: Root.assemble(projectTreeFilesystem)
+
+            ok: model.languageCompatibility == "0.1"
+            (model.root.packageId == "root").ifFalse(() => { ok = false })
+            (model.root.version.text == "1.2.3").ifFalse(() => { ok = false })
+            (model.root.compatibility === null).ifFalse(() => { ok = false })
+            (model.root.dependencies.size() == 0).ifFalse(() => { ok = false })
+            (model.members.size() == 0).ifFalse(() => { ok = false })
+            ok
+            """;
+
     @Test
     void d133PhysicalProjectTreeAuthorityExecutesOneRealCase()
             throws Exception {
@@ -62,16 +82,9 @@ final class ProtosTestCaseAuthorityAttemptBridgeTest {
 
         ProtosPrelude packagePrelude = newPackagePrelude();
 
-        String source =
-                Files.readString(
-                        CORPUS_ROOT
-                                .resolve("fixtures")
-                                .resolve("root-only.protos"),
-                        StandardCharsets.UTF_8);
-
         ProtosCapturedProcessExecution.Request execution =
                 ProtosExactExecutionFacility.executionRequest(
-                        new ProtosStringValue(source),
+                        new ProtosStringValue(ROOT_ONLY_SOURCE),
                         packagePrelude);
 
         try (ProtosPolyglotRuntimeHost runtimeHost =
@@ -117,16 +130,9 @@ final class ProtosTestCaseAuthorityAttemptBridgeTest {
 
         ProtosPrelude packagePrelude = newPackagePrelude();
 
-        String source =
-                Files.readString(
-                        CORPUS_ROOT
-                                .resolve("fixtures")
-                                .resolve("root-only.protos"),
-                        StandardCharsets.UTF_8);
-
         ProtosCapturedProcessExecution.Request execution =
                 ProtosExactExecutionFacility.executionRequest(
-                        new ProtosStringValue(source),
+                        new ProtosStringValue(ROOT_ONLY_SOURCE),
                         packagePrelude);
 
         try (ProtosPolyglotRuntimeHost runtimeHost =

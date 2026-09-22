@@ -13,19 +13,27 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Identity: import("self:ContentIdentity")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-captured: projectTreeFilesystem.captureTree(Path.relative()).value()
-actual: Identity.digest(captured)
+tests: [
+    Test("digest-minimal", () => {
+        Identity: import("self:ContentIdentity")
 
-ok: true
-(actual.method == "protos-package-tree-v1").ifFalse(() => {
-    ok = false
-})
-(actual.algorithm == "sha256").ifFalse(() => {
-    ok = false
-})
-(actual.hex == "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04").ifFalse(() => {
-    ok = false
-})
-ok
+        captured: projectTreeFilesystem.captureTree(Path.relative()).value()
+        actual: Identity.digest(captured)
+
+        ok: true
+        (actual.method == "protos-package-tree-v1").ifFalse(() => {
+            ok = false
+        })
+        (actual.algorithm == "sha256").ifFalse(() => {
+            ok = false
+        })
+        (actual.hex == "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04").ifFalse(() => {
+            ok = false
+        })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

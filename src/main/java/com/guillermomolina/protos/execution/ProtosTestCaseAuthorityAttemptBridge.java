@@ -185,7 +185,7 @@ final class ProtosTestCaseAuthorityAttemptBridge {
         }
     }
 
-    private static Path resolveAuthorityRoot(
+    static Path resolveAuthorityRoot(
             Path casesRoot,
             String fixtureIdentity) {
         Path logical = Path.of(fixtureIdentity);

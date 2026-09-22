@@ -1,8 +1,8 @@
-root-only	root-only.protos	true
-workspace	workspace.protos	true
-dependencies	dependencies.protos	true
-invalid-member-path	invalid-member-path-error.protos	error
-duplicate-package-id	duplicate-package-id-error.protos	error
-missing-member	missing-member-error.protos	error
-undeclared-path-target	undeclared-path-target-error.protos	error
-escape-path	escape-path-error.protos	error
+root-only	root-only.protos	suite-native
+workspace	workspace.protos	suite-native
+dependencies	dependencies.protos	suite-native
+invalid-member-path	invalid-member-path-error.protos	suite-native
+duplicate-package-id	duplicate-package-id-error.protos	suite-native
+missing-member	missing-member-error.protos	suite-native
+undeclared-path-target	undeclared-path-target-error.protos	suite-native
+escape-path	escape-path-error.protos	suite-native

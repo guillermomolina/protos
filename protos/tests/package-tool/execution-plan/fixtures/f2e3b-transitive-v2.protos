@@ -13,114 +13,122 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Plan: import("self:ExecutionPlan")
-LockFile: import("self:LockFile")
-Identity: import("self:ContentIdentity")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-pathFor: (ref) => {
-    Path.relative()
-        .child("external")
-        .child(ref.packageId)
-}
+tests: [
+    Test("f2e3b-transitive-v2", () => {
+        Plan: import("self:ExecutionPlan")
+        LockFile: import("self:LockFile")
+        Identity: import("self:ContentIdentity")
 
-verifiedAll: (lock) => {
-    result: Array()
+        pathFor: (ref) => {
+            Path.relative()
+                .child("external")
+                .child(ref.packageId)
+        }
 
-    append: (node) => {
-        captured:
-            projectTreeFilesystem
-                .captureTree(pathFor(node.ref))
-                .value()
+        verifiedAll: (lock) => {
+            result: Array()
 
-        verified:
-            Identity.verify(
-                captured,
-                node.content
+            append: (node) => {
+                captured:
+                    projectTreeFilesystem
+                        .captureTree(pathFor(node.ref))
+                        .value()
+
+                verified:
+                    Identity.verify(
+                        captured,
+                        node.content
+                    )
+
+                result =
+                    Array(
+                        ...result,
+                        {
+                            ref: node.ref
+                            content: node.content
+                            filesystem: verified
+                        }
+                    )
+            }
+
+            lock.registryNodes.each((node) => {
+                append(node)
+            })
+            lock.gitNodes.each((node) => {
+                append(node)
+            })
+
+            result
+        }
+
+        lock: LockFile.load(projectTreeFilesystem)
+        verified: verifiedAll(lock)
+        plan:
+            Plan.buildV2FromVerifiedCaptures(
+                projectTreeFilesystem,
+                verified
             )
 
-        result =
-            Array(
-                ...result,
-                {
-                    ref: node.ref
-                    content: node.content
-                    filesystem: verified
-                }
-            )
-    }
+        ok: plan.generation == 2
+        (plan.packages.size() == 4).ifFalse(() => { ok = false })
+        (plan.dependencies.size() == 3).ifFalse(() => { ok = false })
 
-    lock.registryNodes.each((node) => {
-        append(node)
-    })
-    lock.gitNodes.each((node) => {
-        append(node)
-    })
+        foundA: false
+        foundB: false
+        foundC: false
 
-    result
-}
-
-lock: LockFile.load(projectTreeFilesystem)
-verified: verifiedAll(lock)
-plan:
-    Plan.buildV2FromVerifiedCaptures(
-        projectTreeFilesystem,
-        verified
-    )
-
-ok: plan.generation == 2
-(plan.packages.size() == 4).ifFalse(() => { ok = false })
-(plan.dependencies.size() == 3).ifFalse(() => { ok = false })
-
-foundA: false
-foundB: false
-foundC: false
-
-plan.packages.each((package) => {
-    (package.ref.kind == "registry").ifTrue(() => {
-        (package.ref.packageId == "external-a").ifTrue(() => {
-            foundA = package.exports["PublicA"] == "ThingA"
-        })
-        (package.ref.packageId == "external-b").ifTrue(() => {
-            foundB = package.exports["PublicB"] == "ThingB"
-        })
-    })
-
-    (package.ref.kind == "git").ifTrue(() => {
-        (package.ref.packageId == "external-c").ifTrue(() => {
-            foundC = package.exports["PublicC"] == "ThingC"
-        })
-    })
-})
-
-foundA.ifFalse(() => { ok = false })
-foundB.ifFalse(() => { ok = false })
-foundC.ifFalse(() => { ok = false })
-
-rootEdge: false
-registryEdge: false
-gitEdge: false
-
-plan.dependencies.each((edge) => {
-    (edge.declaring.kind == "workspace").ifTrue(() => {
-        (edge.alias == "reg").ifTrue(() => {
-            rootEdge = edge.target.kind == "registry"
-        })
-    })
-
-    (edge.declaring.kind == "registry").ifTrue(() => {
-        (edge.declaring.packageId == "external-a").ifTrue(() => {
-            (edge.alias == "depreg").ifTrue(() => {
-                registryEdge = edge.target.kind == "registry"
+        plan.packages.each((package) => {
+            (package.ref.kind == "registry").ifTrue(() => {
+                (package.ref.packageId == "external-a").ifTrue(() => {
+                    foundA = package.exports["PublicA"] == "ThingA"
+                })
+                (package.ref.packageId == "external-b").ifTrue(() => {
+                    foundB = package.exports["PublicB"] == "ThingB"
+                })
             })
-            (edge.alias == "depgit").ifTrue(() => {
-                gitEdge = edge.target.kind == "git"
+
+            (package.ref.kind == "git").ifTrue(() => {
+                (package.ref.packageId == "external-c").ifTrue(() => {
+                    foundC = package.exports["PublicC"] == "ThingC"
+                })
             })
         })
+
+        foundA.ifFalse(() => { ok = false })
+        foundB.ifFalse(() => { ok = false })
+        foundC.ifFalse(() => { ok = false })
+
+        rootEdge: false
+        registryEdge: false
+        gitEdge: false
+
+        plan.dependencies.each((edge) => {
+            (edge.declaring.kind == "workspace").ifTrue(() => {
+                (edge.alias == "reg").ifTrue(() => {
+                    rootEdge = edge.target.kind == "registry"
+                })
+            })
+
+            (edge.declaring.kind == "registry").ifTrue(() => {
+                (edge.declaring.packageId == "external-a").ifTrue(() => {
+                    (edge.alias == "depreg").ifTrue(() => {
+                        registryEdge = edge.target.kind == "registry"
+                    })
+                    (edge.alias == "depgit").ifTrue(() => {
+                        gitEdge = edge.target.kind == "git"
+                    })
+                })
+            })
+        })
+
+        rootEdge.ifFalse(() => { ok = false })
+        registryEdge.ifFalse(() => { ok = false })
+        gitEdge.ifFalse(() => { ok = false })
+
+        Assertions.require(ok)
     })
-})
-
-rootEdge.ifFalse(() => { ok = false })
-registryEdge.ifFalse(() => { ok = false })
-gitEdge.ifFalse(() => { ok = false })
-
-ok
+]
+tests.freeze()

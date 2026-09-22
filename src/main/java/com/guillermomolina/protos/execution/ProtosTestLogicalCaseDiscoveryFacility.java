@@ -120,7 +120,7 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
         List<Object> association =
                 sourceAssociation.indexedSnapshot();
 
-        if (association.size() != 2
+        if ((association.size() != 2 && association.size() != 3)
                 || !(association.get(0)
                         instanceof ProtosStringValue corpusId)
                 || !(association.get(1)
@@ -128,6 +128,21 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
                 || corpusId.value().isEmpty()
                 || sourcePath.value().isEmpty()) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
+        }
+
+        // TOOL009 Package Non-TOML Publication 2: a third association element is
+        // the D133 project-tree CaseAuthority descriptor. Discovery remains
+        // authority-free and does not interpret it; it only preserves it
+        // opaquely into the discovered CasePlan's own sourceAssociation so the
+        // later execution boundary can decode and provision it.
+        ProtosArrayValue projectTreeDescriptor = null;
+
+        if (association.size() == 3) {
+            if (!(association.get(2) instanceof ProtosArrayValue descriptor)) {
+                throw ProtosExactExecutionFacility.ordinaryError(caller);
+            }
+
+            projectTreeDescriptor = descriptor;
         }
 
         final Path physicalPath;
@@ -176,16 +191,24 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
                                                     "discovered suite module is not cached"))
                             .instance();
 
+            ArrayList<Object> discoverySourceAssociation = new ArrayList<>();
+            discoverySourceAssociation.add(new ProtosStringValue(corpusId.value()));
+            discoverySourceAssociation.add(new ProtosStringValue(sourcePath.value()));
+
+            if (projectTreeDescriptor != null) {
+                discoverySourceAssociation.add(
+                        rematerializeDescriptor(
+                                projectTreeDescriptor,
+                                discoveryPrelude,
+                                caller));
+            }
+
             ProtosObjectValue context =
                     discoveryPrelude.newExecutionContext();
             context.createLocalSlot(
                     "sourceAssociation",
                     discoveryPrelude.newFrozenArray(
-                            List.of(
-                                    new ProtosStringValue(
-                                            corpusId.value()),
-                                    new ProtosStringValue(
-                                            sourcePath.value()))));
+                            discoverySourceAssociation));
             context.createLocalSlot(
                     "discoverySubject",
                     module);
@@ -217,6 +240,37 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
         } catch (IOException failure) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
+    }
+
+    /**
+     * TOOL009 Package Non-TOML Publication 2: rematerializes the D133 project-tree
+     * CaseAuthority descriptor into the fresh discovery Prelude. Arrays are prototype-bound to
+     * the Prelude that created them, so the caller's descriptor cannot be reused directly inside
+     * the discovery Prelude's own frozen Array; only its four inert String elements cross the
+     * boundary.
+     */
+    private static ProtosArrayValue rematerializeDescriptor(
+            ProtosArrayValue descriptor,
+            ProtosPrelude discoveryPrelude,
+            ProtosActivation caller) {
+        List<Object> elements = descriptor.indexedSnapshot();
+
+        if (elements.size() != 4) {
+            throw ProtosExactExecutionFacility.ordinaryError(caller);
+        }
+
+        ArrayList<Object> copy = new ArrayList<>(elements.size());
+
+        for (Object element : elements) {
+            if (!(element instanceof ProtosStringValue value)) {
+                throw ProtosExactExecutionFacility.ordinaryError(caller);
+            }
+
+            copy.add(new ProtosStringValue(value.value()));
+        }
+
+        ProtosArrayValue rematerialized = discoveryPrelude.newFrozenArray(copy);
+        return rematerialized;
     }
 
     /**

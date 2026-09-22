@@ -46,14 +46,28 @@ splitPlan: (plan) => {
         suiteNative: isSuiteNativeSpec(spec)
 
         suiteNative.ifTrue(() => {
-            // D153 case-environment provisioning remains separately deferred.
-            // M2 therefore migrates only cases with no incumbent per-case
-            // resource or authority requirements.
+            // D153 case-environment provisioning remains separately deferred
+            // for D077 resource requirements: a suite-native Case may still
+            // carry none of those. TOOL009 Package Non-TOML Publication 2
+            // additionally permits a well-formed D133 project-tree
+            // CaseAuthority descriptor to accompany a suite-native spec; the
+            // descriptor travels onward through sourceAssociation below
+            // rather than being rejected here.
             (Manifest.caseRequirements(spec).size() == 0).ifFalse(() => {
                 migrationError()
             })
-            (Manifest.caseAuthorityDescriptor(spec) === null).ifFalse(() => {
-                migrationError()
+
+            descriptor: Manifest.caseAuthorityDescriptor(spec)
+            (descriptor === null).ifFalse(() => {
+                (Manifest.caseAuthorityKind(descriptor) == "project-tree").ifFalse(() => {
+                    migrationError()
+                })
+                (Manifest.caseAuthorityIsolation(descriptor) == "case").ifFalse(() => {
+                    migrationError()
+                })
+                (Manifest.caseAuthorityLifecycle(descriptor) == "case").ifFalse(() => {
+                    migrationError()
+                })
             })
 
             suiteNativeSpecs =
@@ -94,6 +108,11 @@ suiteNativeSpecs: (split) => {
     split[1]
 }
 
+// TOOL009 Package Non-TOML Publication 2: a project-tree suite-native spec's
+// D133 CaseAuthority descriptor travels as a third sourceAssociation element.
+// Distinct project identities sharing one fixture sourcePath therefore remain
+// distinct source associations rather than collapsing into one logical
+// record; project identity is not obsolete once suite-native.
 sourceAssociation: (corpusId, spec) => {
     String.recognizes(corpusId).ifFalse(() => {
         migrationError()
@@ -102,11 +121,23 @@ sourceAssociation: (corpusId, spec) => {
         migrationError()
     })
 
+    descriptor: Manifest.caseAuthorityDescriptor(spec)
+
     association:
         Array(
             corpusId,
             Manifest.casePath(spec)
         )
+
+    (descriptor === null).ifFalse(() => {
+        association =
+            Array(
+                corpusId,
+                Manifest.casePath(spec),
+                descriptor
+            )
+    })
+
     association.freeze()
 }
 
@@ -131,7 +162,15 @@ logicalCaseExecutorAsync: (
     testExecutionRequirementBindings
 ) => {
     (sourceAssociation, source, signature, selector) => {
-        (sourceAssociation.size() == 2).ifFalse(() => {
+        // A third element, when present, is the D133 project-tree CaseAuthority
+        // descriptor (TOOL009 Package Non-TOML Publication 2). This dispatcher
+        // does not decode it; it forwards sourceAssociation intact to the bound
+        // execution requirement's logicalCaseExecutionAsync, which is the sole
+        // authority that decodes and provisions it.
+        (
+            (sourceAssociation.size() == 2) ||
+            (sourceAssociation.size() == 3)
+        ).ifFalse(() => {
             migrationError()
         })
 

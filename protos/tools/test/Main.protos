@@ -376,6 +376,19 @@ executionSuites.each((planned) => {
         corpusId: planned.leaf.corpus
         sourcePath: Manifest.casePath(spec)
 
+        // TOOL009 Package Non-TOML Publication 2: distinct project-tree
+        // project identities may reuse the same fixture source path value.
+        // The per-corpus source-spec lookup is therefore keyed by that
+        // source path and then by fixtureKey ("" when the spec carries no
+        // D133 CaseAuthority descriptor, otherwise the descriptor's fixture
+        // identity), so distinct authorities never collapse into one
+        // logical record.
+        authorityDescriptor: Manifest.caseAuthorityDescriptor(spec)
+        fixtureKey: ""
+        (authorityDescriptor === null).ifFalse(() => {
+            fixtureKey = Manifest.caseAuthorityFixtureIdentity(authorityDescriptor)
+        })
+
         corpusSpecs: null
 
         logicalSourceSpecs.containsKey(corpusId).ifTrue(() => {
@@ -387,10 +400,21 @@ executionSuites.each((planned) => {
             logicalSourceSpecs[corpusId] = corpusSpecs
         })
 
+        sourceSpecs: null
+
         corpusSpecs.containsKey(sourcePath).ifTrue(() => {
+            sourceSpecs = corpusSpecs[sourcePath]
+        })
+
+        corpusSpecs.containsKey(sourcePath).ifFalse(() => {
+            sourceSpecs = Map()
+            corpusSpecs[sourcePath] = sourceSpecs
+        })
+
+        sourceSpecs.containsKey(fixtureKey).ifTrue(() => {
             Error().signal()
         })
-        corpusSpecs[sourcePath] = spec
+        sourceSpecs[fixtureKey] = spec
 
         sourceAssociation:
             LogicalCaseMigration.sourceAssociation(
@@ -528,7 +552,10 @@ logicalLifecycleObserver:
                         entry
                     )
 
-                (association.size() == 2).ifFalse(() => {
+                (
+                    (association.size() == 2) ||
+                    (association.size() == 3)
+                ).ifFalse(() => {
                     Error().signal()
                 })
 
@@ -542,6 +569,16 @@ logicalLifecycleObserver:
                     Error().signal()
                 })
 
+                // TOOL009 Package Non-TOML Publication 2: reconstruct the same
+                // fixtureKey the discovery-time lookup was stored under.
+                fixtureKey: ""
+                (association.size() == 3).ifTrue(() => {
+                    fixtureKey =
+                        Manifest.caseAuthorityFixtureIdentity(
+                            association[2]
+                        )
+                })
+
                 logicalSourceSpecs.containsKey(corpusId).ifFalse(() => {
                     Error().signal()
                 })
@@ -550,6 +587,13 @@ logicalLifecycleObserver:
                     logicalSourceSpecs[corpusId]
 
                 corpusSpecs.containsKey(sourcePath).ifFalse(() => {
+                    Error().signal()
+                })
+
+                sourceSpecs:
+                    corpusSpecs[sourcePath]
+
+                sourceSpecs.containsKey(fixtureKey).ifFalse(() => {
                     Error().signal()
                 })
 
@@ -566,7 +610,7 @@ logicalLifecycleObserver:
                 // Discovery source text is deliberately not cached across the
                 // D153 rematerialization boundary.
                 Runner.readSource(
-                    corpusSpecs[sourcePath],
+                    sourceSpecs[fixtureKey],
                     sourceBinding.filesystem
                 )
             },

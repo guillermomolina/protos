@@ -13,41 +13,51 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Plan: import("self:ExecutionPlan")
-LockFile: import("self:LockFile")
-Identity: import("self:ContentIdentity")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-lock: LockFile.load(projectTreeFilesystem)
-verified: Array()
+tests: [
+    Test("f2e3b-missing-descriptor-error", () => {
+        Assertions.signals(Error, () => {
+            Plan: import("self:ExecutionPlan")
+            LockFile: import("self:LockFile")
+            Identity: import("self:ContentIdentity")
 
-lock.registryNodes.each((node) => {
-    captured:
-        projectTreeFilesystem
-            .captureTree(
-                Path.relative()
-                    .child("external")
-                    .child(node.ref.packageId)
+            lock: LockFile.load(projectTreeFilesystem)
+            verified: Array()
+
+            lock.registryNodes.each((node) => {
+                captured:
+                    projectTreeFilesystem
+                        .captureTree(
+                            Path.relative()
+                                .child("external")
+                                .child(node.ref.packageId)
+                        )
+                        .value()
+
+                verifiedFilesystem:
+                    Identity.verify(
+                        captured,
+                        node.content
+                    )
+
+                verified =
+                    Array(
+                        ...verified,
+                        {
+                            ref: node.ref
+                            content: node.content
+                            filesystem: verifiedFilesystem
+                        }
+                    )
+            })
+
+            Plan.buildV2FromVerifiedCaptures(
+                projectTreeFilesystem,
+                verified
             )
-            .value()
-
-    verifiedFilesystem:
-        Identity.verify(
-            captured,
-            node.content
-        )
-
-    verified =
-        Array(
-            ...verified,
-            {
-                ref: node.ref
-                content: node.content
-                filesystem: verifiedFilesystem
-            }
-        )
-})
-
-Plan.buildV2FromVerifiedCaptures(
-    projectTreeFilesystem,
-    verified
-)
+        })
+    })
+]
+tests.freeze()

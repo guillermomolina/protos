@@ -13,37 +13,45 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Root: import("self:ResolutionRoot")
-Input: import("self:ResolutionInput")
-model: Root.assemble(projectTreeFilesystem)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-root: model.root
-ok: root.dependencies.size() == 3
+tests: [
+    Test("dependencies", () => {
+        Root: import("self:ResolutionRoot")
+        Input: import("self:ResolutionInput")
+        model: Root.assemble(projectTreeFilesystem)
 
-registry: null
-git: null
-path: null
-root.dependencies.each((dependency) => {
-    (dependency.kind == "registry").ifTrue(() => { registry = dependency })
-    (dependency.kind == "git").ifTrue(() => { git = dependency })
-    (dependency.kind == "path").ifTrue(() => { path = dependency })
-})
+        root: model.root
+        ok: root.dependencies.size() == 3
 
-(registry === null).ifTrue(() => { ok = false })
-(git === null).ifTrue(() => { ok = false })
-(path === null).ifTrue(() => { ok = false })
+        registry: null
+        git: null
+        path: null
+        root.dependencies.each((dependency) => {
+            (dependency.kind == "registry").ifTrue(() => { registry = dependency })
+            (dependency.kind == "git").ifTrue(() => { git = dependency })
+            (dependency.kind == "path").ifTrue(() => { path = dependency })
+        })
 
-(registry.alias == "registry").ifFalse(() => { ok = false })
-(registry.constraint.kind == "interval").ifFalse(() => { ok = false })
-(registry.constraint.lower.version.text == "1.0.0").ifFalse(() => { ok = false })
-(registry.constraint.upper.version.text == "2.0.0").ifFalse(() => { ok = false })
+        (registry === null).ifTrue(() => { ok = false })
+        (git === null).ifTrue(() => { ok = false })
+        (path === null).ifTrue(() => { ok = false })
 
-(git.repository == "https://example.invalid/repo.git").ifFalse(() => { ok = false })
-(git.revision == "abc123").ifFalse(() => { ok = false })
+        (registry.alias == "registry").ifFalse(() => { ok = false })
+        (registry.constraint.kind == "interval").ifFalse(() => { ok = false })
+        (registry.constraint.lower.version.text == "1.0.0").ifFalse(() => { ok = false })
+        (registry.constraint.upper.version.text == "2.0.0").ifFalse(() => { ok = false })
 
-(path.targetLocation == "libs/a").ifFalse(() => { ok = false })
-(path.targetPackageId == "a-pkg").ifFalse(() => { ok = false })
+        (git.repository == "https://example.invalid/repo.git").ifFalse(() => { ok = false })
+        (git.revision == "abc123").ifFalse(() => { ok = false })
 
-canonical: Input.text(model)
-(canonical.size() > 0).ifFalse(() => { ok = false })
-ok
+        (path.targetLocation == "libs/a").ifFalse(() => { ok = false })
+        (path.targetPackageId == "a-pkg").ifFalse(() => { ok = false })
+
+        canonical: Input.text(model)
+        (canonical.size() > 0).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

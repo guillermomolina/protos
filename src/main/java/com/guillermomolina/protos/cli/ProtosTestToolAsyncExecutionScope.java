@@ -31,6 +31,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -289,6 +290,26 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             // machinery, parameterized differently, giving each Case a fresh
             // Process/Prelude per attempt. The legacy packageExecutionAsync facility
             // and its own packagePrelude bootstrap are untouched.
+            //
+            // TOOL009 Package Non-TOML Publication 2: this instance additionally maps
+            // each project-tree Package Tool corpus to its already-trusted physical
+            // cases/ root, the same roots the legacy CaseAuthority scope below uses.
+            // A selected Test whose sourceAssociation carries the D133 project-tree
+            // descriptor is provisioned and executed inside this one fresh Process;
+            // no second CaseAuthority facility is created for it.
+            Map<String, Path> packageProjectTreeCasesRootByCorpusId =
+                    Map.of(
+                            "protos/corpus/package-tool/content-identity",
+                            contentIdentityCases,
+                            "protos/corpus/package-tool/resolution-input-lock",
+                            resolutionInputLockCases,
+                            "protos/corpus/package-tool/resolution-root",
+                            resolutionRootCases,
+                            "protos/corpus/package-tool/execution-plan",
+                            executionPlanCases,
+                            "protos/corpus/package-tool/project-projection",
+                            projectProjectionCases);
+
             scope.packageLogicalCaseExecutionFacility =
                     ProtosTestLogicalCaseExecutionFacility.install(
                             activation,
@@ -296,6 +317,7 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                             core,
                             packageLogicalCaseFallbackResolver,
                             logicalCaseSourceRoots,
+                            packageProjectTreeCasesRootByCorpusId,
                             runtimeHost,
                             scope.submission);
 

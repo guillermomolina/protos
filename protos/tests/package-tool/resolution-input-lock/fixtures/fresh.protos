@@ -13,23 +13,31 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Version: import("self:ReleaseVersion")
-LockFile: import("self:LockFile")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-manifest: (versionText) => {
-    {
-        packageId: "root"
-        version: Version.parse(versionText)
-        compatibility: null
-        dependencies: Array()
-    }
-}
+tests: [
+    Test("fresh", () => {
+        Version: import("self:ReleaseVersion")
+        LockFile: import("self:LockFile")
 
-root:
-    {
-        languageCompatibility: "0.1"
-        root: manifest("1.0.0")
-        members: Array()
-    }
+        manifest: (versionText) => {
+            {
+                packageId: "root"
+                version: Version.parse(versionText)
+                compatibility: null
+                dependencies: Array()
+            }
+        }
 
-LockFile.isStale(projectTreeFilesystem, root) == false
+        root:
+            {
+                languageCompatibility: "0.1"
+                root: manifest("1.0.0")
+                members: Array()
+            }
+
+        Assertions.require(LockFile.isStale(projectTreeFilesystem, root) == false)
+    })
+]
+tests.freeze()

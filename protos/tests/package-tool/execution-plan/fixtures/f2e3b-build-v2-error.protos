@@ -13,58 +13,68 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Plan: import("self:ExecutionPlan")
-LockFile: import("self:LockFile")
-Identity: import("self:ContentIdentity")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-pathFor: (ref) => {
-    Path.relative()
-        .child("external")
-        .child(ref.packageId)
-}
+tests: [
+    Test("f2e3b-build-v2-error", () => {
+        Assertions.signals(Error, () => {
+            Plan: import("self:ExecutionPlan")
+            LockFile: import("self:LockFile")
+            Identity: import("self:ContentIdentity")
 
-verifiedAll: (lock) => {
-    result: Array()
+            pathFor: (ref) => {
+                Path.relative()
+                    .child("external")
+                    .child(ref.packageId)
+            }
 
-    append: (node) => {
-        captured:
-            projectTreeFilesystem
-                .captureTree(pathFor(node.ref))
-                .value()
+            verifiedAll: (lock) => {
+                result: Array()
 
-        verified:
-            Identity.verify(
-                captured,
-                node.content
-            )
+                append: (node) => {
+                    captured:
+                        projectTreeFilesystem
+                            .captureTree(pathFor(node.ref))
+                            .value()
 
-        result =
-            Array(
-                ...result,
-                {
-                    ref: node.ref
-                    content: node.content
-                    filesystem: verified
+                    verified:
+                        Identity.verify(
+                            captured,
+                            node.content
+                        )
+
+                    result =
+                        Array(
+                            ...result,
+                            {
+                                ref: node.ref
+                                content: node.content
+                                filesystem: verified
+                            }
+                        )
                 }
-            )
-    }
 
-    lock.registryNodes.each((node) => {
-        append(node)
+                lock.registryNodes.each((node) => {
+                    append(node)
+                })
+                lock.gitNodes.each((node) => {
+                    append(node)
+                })
+
+                result
+            }
+
+            lock: LockFile.load(projectTreeFilesystem)
+            verified: verifiedAll(lock)
+            plan:
+                Plan.buildV2FromVerifiedCaptures(
+                    projectTreeFilesystem,
+                    verified
+                )
+
+            true
+        })
     })
-    lock.gitNodes.each((node) => {
-        append(node)
-    })
-
-    result
-}
-
-lock: LockFile.load(projectTreeFilesystem)
-verified: verifiedAll(lock)
-plan:
-    Plan.buildV2FromVerifiedCaptures(
-        projectTreeFilesystem,
-        verified
-    )
-
-true
+]
+tests.freeze()
