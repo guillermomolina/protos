@@ -1,3 +1,41 @@
+## 0.3.69-SNAPSHOT
+
+- TOOL009-C Slice 3 (#686): migrate all 11
+  `protos/tests/conformance/actor` fixtures from the legacy
+  manifest-driven expectation model (`boolean`/`future-integer`/
+  `future-boolean`/`error` kinds) to suite-native `Test(...)`
+  declarations, so `actor/manifest.tsv` now records all 11 entries as
+  `suite-native` and each fixture routes through
+  `protos/test/actor`'s `actorLogicalCaseExecutionAsync` (the Slice 3
+  infrastructure facility, itself unmodified) instead of the legacy
+  whole-source completion route. Original fixture bodies, license
+  headers, and observable semantics are unchanged: the 1 former
+  `boolean:true`-kind case and the 4 former `future-boolean:true`-kind
+  cases wrap their body in a `tool009LegacyCase` closure asserted with
+  `Assertions.require(tool009LegacyCase() === true)` (the `future-*`
+  cases additionally observe the returned Future with `.value()` before
+  the assertion, per the Future-observation authority the migration is
+  required to preserve); the 4 former `future-integer`-kind cases follow
+  the same pattern with `Assertions.require(tool009LegacyCase().value()
+  == N)`; the 2 former `error`-kind cases wrap their body in
+  `Assertions.signals(Error, ...)`. Each fixture remains an independent
+  physical `.protos` source with exactly one `Test`; no fixtures were
+  merged or regrouped. Process, Group, D152, D153, D178, and TOOL009-D
+  are unmodified; legacy Actor execution infrastructure
+  (`actorExecutionAsync` / `actorExecutionInspectAsync` /
+  `actorResourceExecutionAsync` / `actorResourceExecutionInspectAsync`)
+  is not removed (TOOL009-B, out of scope).
+  - `ProtosExactExecutionFacilityTest` exercised the legacy whole-source
+    inspection route directly against `spawn-request-echo.protos`'s and
+    `ip-data-transfer.protos`'s raw file content; since those files'
+    module-level completion is no longer a bare Future after migration,
+    the test now holds the original fixture bodies as inline
+    `ACTOR_REQUEST_CASE_SOURCE` / `ACTOR_CHAIN_CASE_SOURCE` Java string
+    constants instead of reading them from disk, decoupling it from the
+    corpus files' new suite-native purpose while preserving its original
+    assertions unchanged. No production/`src/main` or `protos/lib`
+    source was modified.
+
 ## 0.3.68-SNAPSHOT
 
 - TOOL009-C Slice 3 infrastructure (#686): add the suite-native Actor

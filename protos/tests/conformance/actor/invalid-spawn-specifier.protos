@@ -9,4 +9,14 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Actor.spawn(7, "echo")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("invalid spawn specifier", () => {
+        Assertions.signals(Error, () => {
+            Actor.spawn(7, "echo")
+        })
+    })
+]
+tests.freeze()

@@ -9,6 +9,17 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "mailbox")
-worker.send("set", 7)
-worker.request("get")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("send before request fifo", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "mailbox")
+            worker.send("set", 7)
+            worker.request("get")
+        }
+        Assertions.require(tool009LegacyCase().value() == 7)
+    })
+]
+tests.freeze()

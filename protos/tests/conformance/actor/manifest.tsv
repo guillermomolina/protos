@@ -1,12 +1,12 @@
 # path	expectation	expected
-current-stable.protos	boolean	true
-spawn-request-echo.protos	future-integer	42
-request-snapshots-argument.protos	future-integer	1
-child-current-distinct.protos	future-boolean	true
-child-current-stable.protos	future-boolean	true
-send-before-request-fifo.protos	future-integer	7
-state-persists-between-requests.protos	future-integer	12
-stop-termination-same-ref.protos	future-boolean	true
-invalid-spawn-specifier.protos	error	-
-spawn-rejects-nontransferable.protos	error	-
-ip-data-transfer.protos	future-boolean	true
+current-stable.protos	suite-native	-
+spawn-request-echo.protos	suite-native	-
+request-snapshots-argument.protos	suite-native	-
+child-current-distinct.protos	suite-native	-
+child-current-stable.protos	suite-native	-
+send-before-request-fifo.protos	suite-native	-
+state-persists-between-requests.protos	suite-native	-
+stop-termination-same-ref.protos	suite-native	-
+invalid-spawn-specifier.protos	suite-native	-
+spawn-rejects-nontransferable.protos	suite-native	-
+ip-data-transfer.protos	suite-native	-

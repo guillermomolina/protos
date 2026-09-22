@@ -13,28 +13,39 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-address: IpAddress(6, 340282366920938463463374607431768211455)
-endpoint: IpEndpoint(address, 65535)
-worker: Actor.spawn("workers", "echo")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-worker.request("echo", endpoint).then((copy) => {
-    ok: true
+tests: [
+    Test("ip data transfer", () => {
+        tool009LegacyCase: () => {
+            address: IpAddress(6, 340282366920938463463374607431768211455)
+            endpoint: IpEndpoint(address, 65535)
+            worker: Actor.spawn("workers", "echo")
 
-    IpEndpoint.recognizes(copy).ifFalse(() => { ok = false })
-    (copy.parent() === IpEndpoint).ifFalse(() => { ok = false })
-    (copy !== endpoint).ifFalse(() => { ok = false })
-    (copy.port == 65535).ifFalse(() => { ok = false })
-    (copy == endpoint).ifFalse(() => { ok = false })
-    (copy.hash() == endpoint.hash()).ifFalse(() => { ok = false })
+            worker.request("echo", endpoint).then((copy) => {
+                ok: true
 
-    IpAddress.recognizes(copy.address).ifFalse(() => { ok = false })
-    (copy.address.parent() === IpAddress).ifFalse(() => { ok = false })
-    (copy.address !== address).ifFalse(() => { ok = false })
-    (copy.address.version == 6).ifFalse(() => { ok = false })
-    (copy.address.bits == 340282366920938463463374607431768211455).ifFalse(() => { ok = false })
-    (copy.address == address).ifFalse(() => { ok = false })
-    (copy.address.hash() == address.hash()).ifFalse(() => { ok = false })
+                IpEndpoint.recognizes(copy).ifFalse(() => { ok = false })
+                (copy.parent() === IpEndpoint).ifFalse(() => { ok = false })
+                (copy !== endpoint).ifFalse(() => { ok = false })
+                (copy.port == 65535).ifFalse(() => { ok = false })
+                (copy == endpoint).ifFalse(() => { ok = false })
+                (copy.hash() == endpoint.hash()).ifFalse(() => { ok = false })
 
-    worker.stop()
-    ok
-})
+                IpAddress.recognizes(copy.address).ifFalse(() => { ok = false })
+                (copy.address.parent() === IpAddress).ifFalse(() => { ok = false })
+                (copy.address !== address).ifFalse(() => { ok = false })
+                (copy.address.version == 6).ifFalse(() => { ok = false })
+                (copy.address.bits == 340282366920938463463374607431768211455).ifFalse(() => { ok = false })
+                (copy.address == address).ifFalse(() => { ok = false })
+                (copy.address.hash() == address.hash()).ifFalse(() => { ok = false })
+
+                worker.stop()
+                ok
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    })
+]
+tests.freeze()

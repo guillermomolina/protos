@@ -9,5 +9,16 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "echo")
-worker.request("currentStable")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("child current stable", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "echo")
+            worker.request("currentStable")
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    })
+]
+tests.freeze()

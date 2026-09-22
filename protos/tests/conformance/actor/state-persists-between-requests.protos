@@ -9,9 +9,20 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "counter", 0)
-worker.request("increment").then((first) => {
-    worker.request("increment").then((second) => {
-        first * 10 + second
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("state persists between requests", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "counter", 0)
+            worker.request("increment").then((first) => {
+                worker.request("increment").then((second) => {
+                    first * 10 + second
+                })
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() == 12)
     })
-})
+]
+tests.freeze()

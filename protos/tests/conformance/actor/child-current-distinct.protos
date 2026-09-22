@@ -9,6 +9,17 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-me: Actor.current()
-worker: Actor.spawn("workers", "echo")
-worker.request("current").then((child) => { child !== me })
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("child current distinct", () => {
+        tool009LegacyCase: () => {
+            me: Actor.current()
+            worker: Actor.spawn("workers", "echo")
+            worker.request("current").then((child) => { child !== me })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    })
+]
+tests.freeze()

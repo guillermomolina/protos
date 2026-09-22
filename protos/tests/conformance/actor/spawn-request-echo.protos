@@ -9,5 +9,16 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "echo")
-worker.request("echo", 42)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("spawn request echo", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "echo")
+            worker.request("echo", 42)
+        }
+        Assertions.require(tool009LegacyCase().value() == 42)
+    })
+]
+tests.freeze()

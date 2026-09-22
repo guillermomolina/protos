@@ -9,4 +9,15 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Actor.current() === Actor.current()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("current stable", () => {
+        tool009LegacyCase: () => {
+            Actor.current() === Actor.current()
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

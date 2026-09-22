@@ -9,4 +9,14 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Actor.spawn("workers", "echo", () => { 1 })
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("spawn rejects nontransferable", () => {
+        Assertions.signals(Error, () => {
+            Actor.spawn("workers", "echo", () => { 1 })
+        })
+    })
+]
+tests.freeze()

@@ -9,7 +9,18 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "echo")
-terminated: worker.termination()
-worker.stop()
-terminated.then((observed) => { observed === worker })
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("stop termination same ref", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "echo")
+            terminated: worker.termination()
+            worker.stop()
+            terminated.then((observed) => { observed === worker })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    })
+]
+tests.freeze()
