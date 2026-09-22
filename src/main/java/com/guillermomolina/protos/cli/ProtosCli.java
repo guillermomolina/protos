@@ -436,12 +436,25 @@ public final class ProtosCli {
         // logical Case route reuses the same ordinary bundled Test Tool fallback
         // resolver as the base (exactly as the Actor/Group routes above do; the
         // route's own "self:Discovery" selection machinery lives under the
-        // ordinary Test Tool root, not under packageToolRoot), overlaid with a
-        // single exact host-selected reference to Package Tool's own RuntimeNames
-        // module, so a selected Test body can prove it resolved the
-        // Package-flavored bootstrap (via an import unreachable under any other
-        // flavor's fallback resolver) instead of falling back to the ordinary,
-        // unoverlaid test resolver. This does not change packagePrelude or the
+        // ordinary Test Tool root, not under packageToolRoot), overlaid with
+        // exact host-selected references to Package Tool's own RuntimeNames
+        // module and to the finite Package TOML module graph
+        // (TomlSyntax/TomlDocument/ManifestSchemaV1 and the shared Toml10
+        // modules they depend on), so a selected Test body can prove it
+        // resolved the Package-flavored bootstrap (via imports unreachable
+        // under any other flavor's fallback resolver) instead of falling back
+        // to the ordinary, unoverlaid test resolver. A corpus-loaded suite is
+        // materialized through ProtosDirectFileModuleResolver and therefore
+        // carries a "direct-file:" ModuleKey, which never satisfies
+        // ProtosBundledToolModuleResolver's "self:"/"tool-shared:" closure
+        // guards; the exact overlay below resolves those literal specifiers
+        // before the closure-checked fallback ever sees them, so the generic
+        // bundled-tool closure guards remain unchanged for every other
+        // consumer. The shared Toml10 modules are given the same canonical
+        // "bundled-tool-shared:" ModuleKey that ProtosBundledToolModuleResolver
+        // would itself produce for the same specifier, so the shared modules
+        // keep one single canonical identity regardless of which resolution
+        // path reaches them. This does not change packagePrelude or the
         // legacy packageExecutionAsync facility, which keep resolving self:/
         // tool-shared: imports against packageToolRoot exactly as before.
         ProtosModuleResolver packageLogicalCaseFallbackResolver =
@@ -450,7 +463,33 @@ public final class ProtosCli {
                                 "package-runtime-names",
                                 new ProtosExactModuleOverlayResolver.ExactModule(
                                         new ProtosModuleKey("tool001-package:runtime-names"),
-                                        packageToolRoot.resolve("RuntimeNames.protos"))),
+                                        packageToolRoot.resolve("RuntimeNames.protos")),
+                                "self:TomlSyntax",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:toml-syntax"),
+                                        packageToolRoot.resolve("TomlSyntax.protos")),
+                                "self:TomlDocument",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:toml-document"),
+                                        packageToolRoot.resolve("TomlDocument.protos")),
+                                "self:ManifestSchemaV1",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:manifest-schema-v1"),
+                                        packageToolRoot.resolve("ManifestSchemaV1.protos")),
+                                "tool-shared:Toml10/TomlSyntax",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("bundled-tool-shared:Toml10/TomlSyntax"),
+                                        packageToolRoot
+                                                .resolveSibling("shared")
+                                                .resolve("Toml10")
+                                                .resolve("TomlSyntax.protos")),
+                                "tool-shared:Toml10/TomlDocument",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("bundled-tool-shared:Toml10/TomlDocument"),
+                                        packageToolRoot
+                                                .resolveSibling("shared")
+                                                .resolve("Toml10")
+                                                .resolve("TomlDocument.protos"))),
                         logicalCaseFallbackResolver);
         ProtosPrelude actorPrelude =
                 new ProtosCoreBootstrap()

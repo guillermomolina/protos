@@ -1,3 +1,53 @@
+## 0.3.73-SNAPSHOT
+
+- `TOOL009`: complete the Package-flavored suite-native logical Case
+  resolver coverage required by the real Package Tool TOML module graph.
+  This is a bounded prerequisite for migrating the Package Tool TOML
+  corpus; the 102 TOML manifest fixtures under
+  `protos/tests/package-tool/toml-syntax` are not migrated by this change.
+  - The previously published `packageLogicalCaseFallbackResolver`
+    (`0.3.72-SNAPSHOT`) overlaid only `package-runtime-names`, a
+    dedicated proof-of-bootstrap module. It did not resolve the actual
+    modules the TOML corpus imports: `self:TomlSyntax`,
+    `self:TomlDocument`, and `self:ManifestSchemaV1`. A corpus-loaded
+    suite is materialized through `ProtosDirectFileModuleResolver` and
+    therefore carries a `direct-file:` `ProtosModuleKey`, which never
+    satisfies `ProtosBundledToolModuleResolver`'s `self:`/`tool-shared:`
+    importer-closure guards, so every one of those imports failed.
+  - `ProtosCli`'s `packageLogicalCaseFallbackResolver` now also overlays
+    the finite Package TOML module graph as exact specifiers, each with
+    an explicit canonical `ProtosModuleKey` and exact source path:
+    `self:TomlSyntax`, `self:TomlDocument`, `self:ManifestSchemaV1`
+    (the three Package-owned modules, keyed under a `tool001-package:`
+    namespace consistent with `package-runtime-names`), and
+    `tool-shared:Toml10/TomlSyntax` /
+    `tool-shared:Toml10/TomlDocument` (the shared Toml10 modules those
+    modules depend on, keyed with the same `bundled-tool-shared:`
+    canonical identity `ProtosBundledToolModuleResolver` would itself
+    assign for the same specifier, so the shared modules keep one single
+    canonical identity regardless of which resolution path reaches
+    them). `ProtosExactModuleOverlayResolver` matches on the literal
+    import specifier before any importer-closure check runs, so this
+    closes the gap without relaxing
+    `ProtosBundledToolModuleResolver`'s generic `self:`/`tool-shared:`
+    closure guards for any other consumer. `packagePrelude` and the
+    legacy `packageExecutionAsync` facility are unchanged.
+  - Strengthened `ProtosPackageTestLogicalCaseExecutionFacilityTest` with
+    focal coverage that resolves and executes the real
+    `protos/tools/package/TomlSyntax.protos`,
+    `protos/tools/package/TomlDocument.protos`, and
+    `protos/tools/package/ManifestSchemaV1.protos` modules (not copies
+    embedded in the test) from a direct-file suite, proving: `self:
+    TomlSyntax` resolves its `tool-shared:Toml10/TomlSyntax` dependency;
+    `self:TomlDocument` resolves its `tool-shared:Toml10/TomlDocument`
+    dependency, which itself resolves `tool-shared:Toml10/TomlSyntax`;
+    and `self:ManifestSchemaV1`'s `self:TomlDocument` import, which is
+    lazy (declared inside the `parseBase` callable body rather than at
+    module top level), actually resolves when the selected Test body
+    calls `Schema.parseBase(...)`. Each case asserts the real parsed
+    TOML structure, not merely that a module loaded.
+  Implementation version becomes `0.3.73-SNAPSHOT`.
+
 ## 0.3.72-SNAPSHOT
 
 - `TOOL009` (GitHub #692 infrastructure): add the Package-flavored
