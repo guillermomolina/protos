@@ -718,7 +718,8 @@ fixture.activation());
                 corpusRoot.resolve("manifest.tsv"),
                 "# key\toutcome\n"
                         + "keep.protos\ttrue\n"
-                        + "reject.protos\terror\n",
+                        + "reject.protos\terror\n"
+                        + "migrated.protos\tsuite-native\n",
                 StandardCharsets.UTF_8);
 
         Fixture fixture = fixture();
@@ -745,12 +746,16 @@ fixture.activation());
                                             + "Manifest.caseId(cases[1]), "
                                             + "Manifest.casePath(cases[1]), "
                                             + "Manifest.caseExpectation(cases[1]), "
-                                            + "Manifest.caseExpected(cases[1]))",
+                                            + "Manifest.caseExpected(cases[1]), "
+                                            + "Manifest.caseId(cases[2]), "
+                                            + "Manifest.casePath(cases[2]), "
+                                            + "Manifest.caseExpectation(cases[2]), "
+                                            + "Manifest.caseExpected(cases[2]))",
                                     fixture.activation()));
 
-            assertEquals(9, observed.indexedSize().intValueExact());
+            assertEquals(13, observed.indexedSize().intValueExact());
             assertEquals(
-                    2,
+                    3,
                     assertInstanceOf(
                                     ProtosIntegerValue.class,
                                     observed.indexedAt(java.math.BigInteger.ZERO))
@@ -764,6 +769,13 @@ fixture.activation());
             assertEquals("reject.protos", stringAt(observed, 6));
             assertEquals("error", stringAt(observed, 7));
             assertEquals("-", stringAt(observed, 8));
+            // TOOL009 Publication 1: the generic case-outcomes loader also accepts the
+            // established "suite-native" outcome marker, normalized the same way
+            // packageTomlCaseSpec already normalizes it for the Package TOML corpus.
+            assertEquals("ns/migrated.protos", stringAt(observed, 9));
+            assertEquals("migrated.protos", stringAt(observed, 10));
+            assertEquals("suite-native", stringAt(observed, 11));
+            assertEquals("-", stringAt(observed, 12));
         }
     }
 

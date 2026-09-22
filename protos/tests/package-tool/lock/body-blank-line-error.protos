@@ -13,10 +13,20 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Lock: import("self:LockDocument")
-text:
-    "lock-format 1\n" +
-    "resolver-version 1\n" +
-    "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
-    "root workspace \"root\"\n\n"
-Lock.parse(text)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("body-blank-line-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    })
+]
+tests.freeze()

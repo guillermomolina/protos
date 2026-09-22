@@ -13,8 +13,16 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Constraint: import("self:DependencyConstraint")
-ok: true
-Constraint.satisfiesText("^0.0.0", "0.0.0").ifFalse(() => { ok = false })
-Constraint.satisfiesText("^0.0.0", "0.0.1").ifTrue(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("constraint-caret-zero-zero", () => {
+        Constraint: import("self:DependencyConstraint")
+        ok: true
+        Constraint.satisfiesText("^0.0.0", "0.0.0").ifFalse(() => { ok = false })
+        Constraint.satisfiesText("^0.0.0", "0.0.1").ifTrue(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

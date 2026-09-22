@@ -13,16 +13,24 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Constraint: import("self:DependencyConstraint")
-c: Constraint.parse("^1.4.2")
-ok: true
-(c.kind === "caret").ifFalse(() => { ok = false })
-(c.lower.major == 1).ifFalse(() => { ok = false })
-(c.upper.major == 2).ifFalse(() => { ok = false })
-(c.upper.minor == 0).ifFalse(() => { ok = false })
-(c.upper.patch == 0).ifFalse(() => { ok = false })
-Constraint.satisfiesText("^1.4.2", "1.4.2").ifFalse(() => { ok = false })
-Constraint.satisfiesText("^1.4.2", "1.9.9").ifFalse(() => { ok = false })
-Constraint.satisfiesText("^1.4.2", "1.4.1").ifTrue(() => { ok = false })
-Constraint.satisfiesText("^1.4.2", "2.0.0").ifTrue(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("constraint-caret-major", () => {
+        Constraint: import("self:DependencyConstraint")
+        c: Constraint.parse("^1.4.2")
+        ok: true
+        (c.kind === "caret").ifFalse(() => { ok = false })
+        (c.lower.major == 1).ifFalse(() => { ok = false })
+        (c.upper.major == 2).ifFalse(() => { ok = false })
+        (c.upper.minor == 0).ifFalse(() => { ok = false })
+        (c.upper.patch == 0).ifFalse(() => { ok = false })
+        Constraint.satisfiesText("^1.4.2", "1.4.2").ifFalse(() => { ok = false })
+        Constraint.satisfiesText("^1.4.2", "1.9.9").ifFalse(() => { ok = false })
+        Constraint.satisfiesText("^1.4.2", "1.4.1").ifTrue(() => { ok = false })
+        Constraint.satisfiesText("^1.4.2", "2.0.0").ifTrue(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

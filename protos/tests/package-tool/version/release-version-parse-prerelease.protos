@@ -13,14 +13,21 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Version: import("self:ReleaseVersion")
-v: Version.parse("2.0.0-alpha.1.rc-2")
-ok: true
-(v.prerelease.size() == 3).ifFalse(() => { ok = false })
-(v.prerelease[0].numeric === false).ifFalse(() => { ok = false })
-(v.prerelease[0].text === "alpha").ifFalse(() => { ok = false })
-(v.prerelease[1].numeric === true).ifFalse(() => { ok = false })
-(v.prerelease[1].number == 1).ifFalse(() => { ok = false })
-(v.prerelease[2].text === "rc-2").ifFalse(() => { ok = false })
-ok
+tests: [
+    Test("release-version-parse-prerelease", () => {
+        Version: import("self:ReleaseVersion")
+        v: Version.parse("2.0.0-alpha.1.rc-2")
+        ok: true
+        (v.prerelease.size() == 3).ifFalse(() => { ok = false })
+        (v.prerelease[0].numeric === false).ifFalse(() => { ok = false })
+        (v.prerelease[0].text === "alpha").ifFalse(() => { ok = false })
+        (v.prerelease[1].numeric === true).ifFalse(() => { ok = false })
+        (v.prerelease[1].number == 1).ifFalse(() => { ok = false })
+        (v.prerelease[2].text === "rc-2").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

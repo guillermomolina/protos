@@ -13,8 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Syntax: import("self:LockSyntax")
-bytes: Encoding.UTF8.encode("root")
-bytes.add(9)
-bytes.add(119)
-Syntax.lineTokens(Encoding.UTF8.decode(bytes))
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("line-tab-error", () => {
+        Syntax: import("self:LockSyntax")
+        bytes: Encoding.UTF8.encode("root")
+        bytes.add(9)
+        bytes.add(119)
+        Assertions.signals(Error, () => {
+            Syntax.lineTokens(Encoding.UTF8.decode(bytes))
+        })
+    })
+]
+tests.freeze()

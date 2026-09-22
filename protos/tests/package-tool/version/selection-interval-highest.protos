@@ -13,8 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Selection: import("self:FreshVersionSelection")
-Selection.selectText(
-    ">=1.4.2 <1.8.0",
-    Array("1.4.2", "1.7.9", "1.6.0", "1.8.0", "1.3.9")
-) === "1.7.9"
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("selection-interval-highest", () => {
+        Selection: import("self:FreshVersionSelection")
+        Assertions.require(
+            Selection.selectText(
+                ">=1.4.2 <1.8.0",
+                Array("1.4.2", "1.7.9", "1.6.0", "1.8.0", "1.3.9")
+            ) === "1.7.9"
+        )
+    })
+]
+tests.freeze()

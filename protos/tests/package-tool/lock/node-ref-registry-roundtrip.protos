@@ -13,11 +13,19 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Syntax: import("self:LockSyntax")
-ref: Syntax.parseNodeRef("registry \"pkg\" \"2.0.0-rc.1\"")
-ok: ref.kind == "registry"
-(ref.packageId == "pkg").ifFalse(() => { ok = false })
-(ref.version.text == "2.0.0-rc.1").ifFalse(() => { ok = false })
-(ref.version.major == 2).ifFalse(() => { ok = false })
-(Syntax.renderNodeRef(ref) == "registry \"pkg\" \"2.0.0-rc.1\"").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("node-ref-registry-roundtrip", () => {
+        Syntax: import("self:LockSyntax")
+        ref: Syntax.parseNodeRef("registry \"pkg\" \"2.0.0-rc.1\"")
+        ok: ref.kind == "registry"
+        (ref.packageId == "pkg").ifFalse(() => { ok = false })
+        (ref.version.text == "2.0.0-rc.1").ifFalse(() => { ok = false })
+        (ref.version.major == 2).ifFalse(() => { ok = false })
+        (Syntax.renderNodeRef(ref) == "registry \"pkg\" \"2.0.0-rc.1\"").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

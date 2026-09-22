@@ -13,6 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Syntax: import("self:LockSyntax")
-token: Syntax.lineTokens("protos-resolution-input-v1")[0]
-Syntax.parseMethodToken(token) == "protos-resolution-input-v1"
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("primitive-method", () => {
+        Syntax: import("self:LockSyntax")
+        token: Syntax.lineTokens("protos-resolution-input-v1")[0]
+        Assertions.require(Syntax.parseMethodToken(token) == "protos-resolution-input-v1")
+    })
+]
+tests.freeze()

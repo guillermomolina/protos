@@ -13,15 +13,23 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Syntax: import("self:LockSyntax")
-text:
-    "lock-format 1\n" +
-    "resolver-version 1\n" +
-    "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n"
-header: Syntax.parseHeader(text)
-ok: header.lockFormat == 1
-(header.resolverVersion == 1).ifFalse(() => { ok = false })
-(header.resolutionMethod == "protos-resolution-input-v1").ifFalse(() => { ok = false })
-(header.digestAlgorithm == "sha256").ifFalse(() => { ok = false })
-(header.digestHex == "0123456789abcdef").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("header-parse-only", () => {
+        Syntax: import("self:LockSyntax")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n"
+        header: Syntax.parseHeader(text)
+        ok: header.lockFormat == 1
+        (header.resolverVersion == 1).ifFalse(() => { ok = false })
+        (header.resolutionMethod == "protos-resolution-input-v1").ifFalse(() => { ok = false })
+        (header.digestAlgorithm == "sha256").ifFalse(() => { ok = false })
+        (header.digestHex == "0123456789abcdef").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

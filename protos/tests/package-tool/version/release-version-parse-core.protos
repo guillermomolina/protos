@@ -13,13 +13,20 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Version: import("self:ReleaseVersion")
-v: Version.parse("12.34.56")
-ok: true
-(v.major == 12).ifFalse(() => { ok = false })
-(v.minor == 34).ifFalse(() => { ok = false })
-(v.patch == 56).ifFalse(() => { ok = false })
-(v.prerelease === null).ifFalse(() => { ok = false })
-(v.text === "12.34.56").ifFalse(() => { ok = false })
-ok
+tests: [
+    Test("release-version-parse-core", () => {
+        Version: import("self:ReleaseVersion")
+        v: Version.parse("12.34.56")
+        ok: true
+        (v.major == 12).ifFalse(() => { ok = false })
+        (v.minor == 34).ifFalse(() => { ok = false })
+        (v.patch == 56).ifFalse(() => { ok = false })
+        (v.prerelease === null).ifFalse(() => { ok = false })
+        (v.text === "12.34.56").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

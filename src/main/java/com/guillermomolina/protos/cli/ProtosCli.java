@@ -457,39 +457,112 @@ public final class ProtosCli {
         // path reaches them. This does not change packagePrelude or the
         // legacy packageExecutionAsync facility, which keep resolving self:/
         // tool-shared: imports against packageToolRoot exactly as before.
+        // TOOL009 Publication 1: the finite Package non-TOML module graph (the
+        // seven ReleaseVersion/DependencyConstraint/FreshVersionSelection/
+        // RetainedVersionSelection/LockSyntax/LockDocument/ResolutionInput
+        // "self:" specifiers the 157 version/lock/resolution-input case-outcomes
+        // corpora depend on) is overlaid exactly like the TOML module graph
+        // above: exact host-selected references to the real Package Tool
+        // source files, so the same finite exact-overlay strategy governs every
+        // Package-owned module the suite-native route resolves. Their shared
+        // "std:collections/Array" and "std:crypto/SHA256" dependencies already
+        // resolve through the standard library resolver and need no overlay.
+        // D132/TOOL009 note: this overlay now carries 13 entries, past the 10-pair
+        // limit of the Map.of(...) factory overloads used elsewhere in this file;
+        // Map.ofEntries(Map.entry(...), ...) is the ordinary JDK replacement with
+        // identical (immutable, unordered) Map semantics.
         ProtosModuleResolver packageLogicalCaseFallbackResolver =
                 new ProtosExactModuleOverlayResolver(
-                        Map.of(
-                                "package-runtime-names",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:runtime-names"),
-                                        packageToolRoot.resolve("RuntimeNames.protos")),
-                                "self:TomlSyntax",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:toml-syntax"),
-                                        packageToolRoot.resolve("TomlSyntax.protos")),
-                                "self:TomlDocument",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:toml-document"),
-                                        packageToolRoot.resolve("TomlDocument.protos")),
-                                "self:ManifestSchemaV1",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("tool001-package:manifest-schema-v1"),
-                                        packageToolRoot.resolve("ManifestSchemaV1.protos")),
-                                "tool-shared:Toml10/TomlSyntax",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("bundled-tool-shared:Toml10/TomlSyntax"),
-                                        packageToolRoot
-                                                .resolveSibling("shared")
-                                                .resolve("Toml10")
-                                                .resolve("TomlSyntax.protos")),
-                                "tool-shared:Toml10/TomlDocument",
-                                new ProtosExactModuleOverlayResolver.ExactModule(
-                                        new ProtosModuleKey("bundled-tool-shared:Toml10/TomlDocument"),
-                                        packageToolRoot
-                                                .resolveSibling("shared")
-                                                .resolve("Toml10")
-                                                .resolve("TomlDocument.protos"))),
+                        Map.ofEntries(
+                                Map.entry(
+                                        "package-runtime-names",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:runtime-names"),
+                                                packageToolRoot.resolve("RuntimeNames.protos"))),
+                                Map.entry(
+                                        "self:TomlSyntax",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:toml-syntax"),
+                                                packageToolRoot.resolve("TomlSyntax.protos"))),
+                                Map.entry(
+                                        "self:TomlDocument",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:toml-document"),
+                                                packageToolRoot.resolve("TomlDocument.protos"))),
+                                Map.entry(
+                                        "self:ManifestSchemaV1",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:manifest-schema-v1"),
+                                                packageToolRoot.resolve(
+                                                        "ManifestSchemaV1.protos"))),
+                                Map.entry(
+                                        "self:ReleaseVersion",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:release-version"),
+                                                packageToolRoot.resolve("ReleaseVersion.protos"))),
+                                Map.entry(
+                                        "self:DependencyConstraint",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:dependency-constraint"),
+                                                packageToolRoot.resolve(
+                                                        "DependencyConstraint.protos"))),
+                                Map.entry(
+                                        "self:FreshVersionSelection",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:fresh-version-selection"),
+                                                packageToolRoot.resolve(
+                                                        "FreshVersionSelection.protos"))),
+                                Map.entry(
+                                        "self:RetainedVersionSelection",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:retained-version-selection"),
+                                                packageToolRoot.resolve(
+                                                        "RetainedVersionSelection.protos"))),
+                                Map.entry(
+                                        "self:LockSyntax",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:lock-syntax"),
+                                                packageToolRoot.resolve("LockSyntax.protos"))),
+                                Map.entry(
+                                        "self:LockDocument",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:lock-document"),
+                                                packageToolRoot.resolve("LockDocument.protos"))),
+                                Map.entry(
+                                        "self:ResolutionInput",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "tool001-package:resolution-input"),
+                                                packageToolRoot.resolve(
+                                                        "ResolutionInput.protos"))),
+                                Map.entry(
+                                        "tool-shared:Toml10/TomlSyntax",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "bundled-tool-shared:Toml10/TomlSyntax"),
+                                                packageToolRoot
+                                                        .resolveSibling("shared")
+                                                        .resolve("Toml10")
+                                                        .resolve("TomlSyntax.protos"))),
+                                Map.entry(
+                                        "tool-shared:Toml10/TomlDocument",
+                                        new ProtosExactModuleOverlayResolver.ExactModule(
+                                                new ProtosModuleKey(
+                                                        "bundled-tool-shared:Toml10/TomlDocument"),
+                                                packageToolRoot
+                                                        .resolveSibling("shared")
+                                                        .resolve("Toml10")
+                                                        .resolve("TomlDocument.protos")))),
                         logicalCaseFallbackResolver);
         ProtosPrelude actorPrelude =
                 new ProtosCoreBootstrap()

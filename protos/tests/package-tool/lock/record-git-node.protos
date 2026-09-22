@@ -13,13 +13,21 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Lock: import("self:LockDocument")
-record: Lock.parseRecord(
-    "git-node git \"pkg\" \"deadbeef\" fetch \"https://example.invalid/repo.git\" content protos-package-tree-v1 sha256:abcd"
-)
-ok: record.kind == "git-node"
-(record.ref.kind == "git").ifFalse(() => { ok = false })
-(record.ref.revision == "deadbeef").ifFalse(() => { ok = false })
-(record.fetch == "https://example.invalid/repo.git").ifFalse(() => { ok = false })
-(record.content.method == "protos-package-tree-v1").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("record-git-node", () => {
+        Lock: import("self:LockDocument")
+        record: Lock.parseRecord(
+            "git-node git \"pkg\" \"deadbeef\" fetch \"https://example.invalid/repo.git\" content protos-package-tree-v1 sha256:abcd"
+        )
+        ok: record.kind == "git-node"
+        (record.ref.kind == "git").ifFalse(() => { ok = false })
+        (record.ref.revision == "deadbeef").ifFalse(() => { ok = false })
+        (record.fetch == "https://example.invalid/repo.git").ifFalse(() => { ok = false })
+        (record.content.method == "protos-package-tree-v1").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

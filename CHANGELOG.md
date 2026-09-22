@@ -1,3 +1,60 @@
+## 0.3.75-SNAPSHOT
+
+- `TOOL009`: migrate the complete 157-case-outcomes Package non-TOML corpus
+  (`protos/tests/package-tool/version` (74), `protos/tests/package-tool/lock`
+  (71), `protos/tests/package-tool/resolution-input` (12)) from the legacy
+  Test Tool execution path to suite-native Logical Case execution
+  (Publication 1 of the Package non-TOML migration).
+  - `protos/tools/test/Manifest.protos`'s generic two-column
+    `caseOutcomeSpec`/`loadCaseOutcomes` loader now also accepts the
+    established `suite-native` outcome marker (normalized to
+    `expectation = "suite-native"`, `expected = "-"`), alongside the
+    already-supported `true`/`error` markers. The loader remains generic
+    and Package-Tool-name-free; the change is the same normalization
+    `packageTomlCaseSpec` already performs for the Package TOML corpus.
+  - The Package-flavored suite-native logical Case fallback resolver
+    (`packageLogicalCaseFallbackResolver` in `ProtosCli`) is extended with
+    seven finite exact overlays for the real
+    `self:ReleaseVersion`/`self:DependencyConstraint`/
+    `self:FreshVersionSelection`/`self:RetainedVersionSelection`/
+    `self:LockSyntax`/`self:LockDocument`/`self:ResolutionInput` modules
+    under `protos/tools/package/`, following the same finite exact-overlay
+    strategy already published for the Package TOML module graph. Their
+    shared `std:collections/Array` and `std:crypto/SHA256` dependencies
+    already resolve through the standard library resolver and need no
+    overlay. Generic `ProtosBundledToolModuleResolver` closure guards and
+    ambient Package-directory search remain unchanged.
+  - `ProtosPackageTestLogicalCaseExecutionFacilityTest` gains matching
+    resolver overlay coverage plus three new focal tests proving real
+    execution through the new graph: `RetainedVersionSelection ->
+    FreshVersionSelection -> DependencyConstraint -> ReleaseVersion`,
+    `LockDocument -> LockSyntax -> ReleaseVersion`, and `ResolutionInput ->
+    LockSyntax / ReleaseVersion` plus the required `std:collections/Array`
+    and `std:crypto/SHA256` standard library dependencies.
+  - All 157 `.protos` fixtures (74 `version`, 71 `lock`, 12
+    `resolution-input`) now declare `std:test/Test` cases using
+    `std:test/Assertions.require(...)` (former `true` expectation) or
+    `std:test/Assertions.signals(Error, ...)` (former `error`
+    expectation), preserving the exact behavior each fixture tests inside
+    the selected Test body. Each fixture's `self:` imports are declared
+    inside the selected Test's closure body rather than at module top
+    level, for the same discovery/execution resolver-boundary reason
+    already recorded for the `0.3.74-SNAPSHOT` Package TOML migration.
+  - The three corpora's `manifest.tsv` files now record `suite-native` for
+    all 157 entries (`CASE_OUTCOMES_SUITE_NATIVE=157`,
+    `CASE_OUTCOMES_LEGACY=0`), with row count, row order, source path, and
+    case namespace preserved.
+  - The 54 `project-tree` Package Tool cases
+    (`content-identity`/`resolution-input-lock`/`resolution-root`/
+    `execution-plan`/`project-projection`) intentionally remain on the
+    legacy Runner/CaseAuthority path (`PROJECT_TREE_LEGACY=54`); they
+    require a project-tree-aware Package Logical Case authority adapter
+    (Publication 2) and are out of scope for this change.
+    `LogicalCaseMigration`/`splitPlan`/`legacyPlan`/`suiteNativeSpecs`/
+    `Runner.runD108WithResources` and the other legacy mixed-ownership
+    infrastructure remain production-live and unremoved; TOOL009-B legacy
+    cleanup remains blocked until Publication 2 also completes.
+
 ## 0.3.74-SNAPSHOT
 
 - `TOOL009`: migrate the complete 102-case Package Tool TOML corpus under

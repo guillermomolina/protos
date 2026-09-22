@@ -13,14 +13,22 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Lock: import("self:LockDocument")
-record: Lock.parseRecord(
-    "dependency workspace \"root\" alias \"json\" target registry \"pkg\" \"1.0.0\""
-)
-ok: record.kind == "dependency"
-(record.declaring.kind == "workspace").ifFalse(() => { ok = false })
-(record.declaring.packageId == "root").ifFalse(() => { ok = false })
-(record.alias == "json").ifFalse(() => { ok = false })
-(record.target.kind == "registry").ifFalse(() => { ok = false })
-(record.target.version.text == "1.0.0").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("record-dependency", () => {
+        Lock: import("self:LockDocument")
+        record: Lock.parseRecord(
+            "dependency workspace \"root\" alias \"json\" target registry \"pkg\" \"1.0.0\""
+        )
+        ok: record.kind == "dependency"
+        (record.declaring.kind == "workspace").ifFalse(() => { ok = false })
+        (record.declaring.packageId == "root").ifFalse(() => { ok = false })
+        (record.alias == "json").ifFalse(() => { ok = false })
+        (record.target.kind == "registry").ifFalse(() => { ok = false })
+        (record.target.version.text == "1.0.0").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

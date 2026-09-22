@@ -13,9 +13,19 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Syntax: import("self:LockSyntax")
-Syntax.parseHeader(
-    "lock-format 1\n" +
-    "resolver-version 1\n" +
-    "resolution-input protos-resolution-input-v1 sha256:abCD\n\n"
-)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("header-uppercase-digest-error", () => {
+        Syntax: import("self:LockSyntax")
+        Assertions.signals(Error, () => {
+            Syntax.parseHeader(
+                "lock-format 1\n" +
+                "resolver-version 1\n" +
+                "resolution-input protos-resolution-input-v1 sha256:abCD\n\n"
+            )
+        })
+    })
+]
+tests.freeze()

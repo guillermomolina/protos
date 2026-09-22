@@ -13,39 +13,47 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Version: import("self:ReleaseVersion")
-Constraint: import("self:DependencyConstraint")
-Input: import("self:ResolutionInput")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-manifest: (packageId, versionText, compatibility, dependencies) => {
-    {
-        packageId: packageId
-        version: Version.parse(versionText)
-        compatibility: compatibility
-        dependencies: dependencies
-    }
-}
+tests: [
+    Test("compatibility-affects-digest", () => {
+        Version: import("self:ReleaseVersion")
+        Constraint: import("self:DependencyConstraint")
+        Input: import("self:ResolutionInput")
 
-member: (location, packageId, manifestValue) => {
-    {
-        location: location
-        packageId: packageId
-        manifest: manifestValue
-    }
-}
+        manifest: (packageId, versionText, compatibility, dependencies) => {
+            {
+                packageId: packageId
+                version: Version.parse(versionText)
+                compatibility: compatibility
+                dependencies: dependencies
+            }
+        }
 
-withoutRestriction:
-    {
-        languageCompatibility: "0.1"
-        root: manifest("root", "1.0.0", null, Array())
-        members: Array()
-    }
+        member: (location, packageId, manifestValue) => {
+            {
+                location: location
+                packageId: packageId
+                manifest: manifestValue
+            }
+        }
 
-withRestriction:
-    {
-        languageCompatibility: "0.1"
-        root: manifest("root", "1.0.0", "0.1", Array())
-        members: Array()
-    }
+        withoutRestriction:
+            {
+                languageCompatibility: "0.1"
+                root: manifest("root", "1.0.0", null, Array())
+                members: Array()
+            }
 
-Input.digest(withoutRestriction).hex != Input.digest(withRestriction).hex
+        withRestriction:
+            {
+                languageCompatibility: "0.1"
+                root: manifest("root", "1.0.0", "0.1", Array())
+                members: Array()
+            }
+
+        Assertions.require(Input.digest(withoutRestriction).hex != Input.digest(withRestriction).hex)
+    })
+]
+tests.freeze()

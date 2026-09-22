@@ -13,13 +13,21 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Constraint: import("self:DependencyConstraint")
-c: Constraint.parse("12.34.56")
-ok: true
-(c.kind === "exact").ifFalse(() => { ok = false })
-(c.version.major == 12).ifFalse(() => { ok = false })
-(c.version.minor == 34).ifFalse(() => { ok = false })
-(c.version.patch == 56).ifFalse(() => { ok = false })
-(c.version.prerelease === null).ifFalse(() => { ok = false })
-(c.text === "12.34.56").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("constraint-exact-parse", () => {
+        Constraint: import("self:DependencyConstraint")
+        c: Constraint.parse("12.34.56")
+        ok: true
+        (c.kind === "exact").ifFalse(() => { ok = false })
+        (c.version.major == 12).ifFalse(() => { ok = false })
+        (c.version.minor == 34).ifFalse(() => { ok = false })
+        (c.version.patch == 56).ifFalse(() => { ok = false })
+        (c.version.prerelease === null).ifFalse(() => { ok = false })
+        (c.text === "12.34.56").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

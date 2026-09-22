@@ -13,10 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Syntax: import("self:LockSyntax")
-ref: Syntax.parseNodeRef("git \"pkg\" \"012345abcdef\"")
-ok: ref.kind == "git"
-(ref.packageId == "pkg").ifFalse(() => { ok = false })
-(ref.revision == "012345abcdef").ifFalse(() => { ok = false })
-(Syntax.renderNodeRef(ref) == "git \"pkg\" \"012345abcdef\"").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("node-ref-git-roundtrip", () => {
+        Syntax: import("self:LockSyntax")
+        ref: Syntax.parseNodeRef("git \"pkg\" \"012345abcdef\"")
+        ok: ref.kind == "git"
+        (ref.packageId == "pkg").ifFalse(() => { ok = false })
+        (ref.revision == "012345abcdef").ifFalse(() => { ok = false })
+        (Syntax.renderNodeRef(ref) == "git \"pkg\" \"012345abcdef\"").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

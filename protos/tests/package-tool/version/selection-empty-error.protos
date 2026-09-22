@@ -13,8 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Selection: import("self:FreshVersionSelection")
-Selection.selectText(
-    "^1.4.2",
-    Array()
-)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("selection-empty-error", () => {
+        Selection: import("self:FreshVersionSelection")
+        Assertions.signals(Error, () => {
+            Selection.selectText(
+                "^1.4.2",
+                Array()
+            )
+        })
+    })
+]
+tests.freeze()

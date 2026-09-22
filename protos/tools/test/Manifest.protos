@@ -587,10 +587,11 @@ loadProjectTreeCases: (filesystem, caseNamespace) => {
 
 // D132 generic two-column explicit-outcome loader. It keeps the strict
 // three-column Manifest.load contract unchanged and normalizes retained
-// relative-case-key<TAB>true|error rows into the canonical boolean/error
-// CaseSpec representation under the explicit logical case namespace supplied
-// by the CorpusBinding. The loader is generic and contains no Package Tool
-// names. Duplicate logical CaseIds fail closed.
+// relative-case-key<TAB>true|error|suite-native rows into the canonical
+// boolean/error/suite-native CaseSpec representation under the explicit
+// logical case namespace supplied by the CorpusBinding. The loader is
+// generic and contains no Package Tool names. Duplicate logical CaseIds
+// fail closed.
 caseOutcomeFieldArray: (line) => {
     fields: splitFields(line)
     (fields.size() == 2).ifFalse(() => {
@@ -615,6 +616,11 @@ caseOutcomeSpec: (fields, caseNamespace) => {
     })
     (retainedOutcome == "error").ifTrue(() => {
         expectation = "error"
+        expected = "-"
+        known = true
+    })
+    (retainedOutcome == "suite-native").ifTrue(() => {
+        expectation = "suite-native"
         expected = "-"
         known = true
     })

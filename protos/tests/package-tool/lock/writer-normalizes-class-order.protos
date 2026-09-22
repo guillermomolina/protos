@@ -13,22 +13,30 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Lock: import("self:LockDocument")
-source:
-    "lock-format 1\n" +
-    "resolver-version 1\n" +
-    "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
-    "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n" +
-    "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
-    "workspace-member \"libs/a\" workspace \"wa\"\n" +
-    "root workspace \"root\"\n"
-expected:
-    "lock-format 1\n" +
-    "resolver-version 1\n" +
-    "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
-    "root workspace \"root\"\n" +
-    "workspace-member \"libs/a\" workspace \"wa\"\n" +
-    "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
-    "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n"
-model: Lock.parseStructural(source)
-Lock.write(model) == expected
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("writer-normalizes-class-order", () => {
+        Lock: import("self:LockDocument")
+        source:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "workspace-member \"libs/a\" workspace \"wa\"\n" +
+            "root workspace \"root\"\n"
+        expected:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "workspace-member \"libs/a\" workspace \"wa\"\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n"
+        model: Lock.parseStructural(source)
+        Assertions.require(Lock.write(model) == expected)
+    })
+]
+tests.freeze()

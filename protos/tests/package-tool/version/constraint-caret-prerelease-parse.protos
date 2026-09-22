@@ -13,10 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Constraint: import("self:DependencyConstraint")
-c: Constraint.parse("^2.0.0-rc.1")
-ok: true
-(c.kind === "caret").ifFalse(() => { ok = false })
-(c.lower.prerelease.size() == 2).ifFalse(() => { ok = false })
-(c.upper.major == 3).ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("constraint-caret-prerelease-parse", () => {
+        Constraint: import("self:DependencyConstraint")
+        c: Constraint.parse("^2.0.0-rc.1")
+        ok: true
+        (c.kind === "caret").ifFalse(() => { ok = false })
+        (c.lower.prerelease.size() == 2).ifFalse(() => { ok = false })
+        (c.upper.major == 3).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

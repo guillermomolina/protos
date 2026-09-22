@@ -13,45 +13,55 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Version: import("self:ReleaseVersion")
-Constraint: import("self:DependencyConstraint")
-Input: import("self:ResolutionInput")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-manifest: (packageId, versionText, compatibility, dependencies) => {
-    {
-        packageId: packageId
-        version: Version.parse(versionText)
-        compatibility: compatibility
-        dependencies: dependencies
-    }
-}
+tests: [
+    Test("duplicate-dependency-alias-error", () => {
+        Version: import("self:ReleaseVersion")
+        Constraint: import("self:DependencyConstraint")
+        Input: import("self:ResolutionInput")
 
-member: (location, packageId, manifestValue) => {
-    {
-        location: location
-        packageId: packageId
-        manifest: manifestValue
-    }
-}
+        manifest: (packageId, versionText, compatibility, dependencies) => {
+            {
+                packageId: packageId
+                version: Version.parse(versionText)
+                compatibility: compatibility
+                dependencies: dependencies
+            }
+        }
 
-first:
-    {
-        alias: "dep"
-        kind: "git"
-        repository: "https://example.invalid/a.git"
-        revision: "aaa"
-    }
-second:
-    {
-        alias: "dep"
-        kind: "git"
-        repository: "https://example.invalid/b.git"
-        revision: "bbb"
-    }
-root:
-    {
-        languageCompatibility: "0.1"
-        root: manifest("root", "1.0.0", null, Array(first, second))
-        members: Array()
-    }
-Input.digest(root)
+        member: (location, packageId, manifestValue) => {
+            {
+                location: location
+                packageId: packageId
+                manifest: manifestValue
+            }
+        }
+
+        first:
+            {
+                alias: "dep"
+                kind: "git"
+                repository: "https://example.invalid/a.git"
+                revision: "aaa"
+            }
+        second:
+            {
+                alias: "dep"
+                kind: "git"
+                repository: "https://example.invalid/b.git"
+                revision: "bbb"
+            }
+        root:
+            {
+                languageCompatibility: "0.1"
+                root: manifest("root", "1.0.0", null, Array(first, second))
+                members: Array()
+            }
+        Assertions.signals(Error, () => {
+            Input.digest(root)
+        })
+    })
+]
+tests.freeze()

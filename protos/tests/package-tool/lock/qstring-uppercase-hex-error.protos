@@ -13,14 +13,24 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Syntax: import("self:LockSyntax")
-bytes: Encoding.UTF8.encode("")
-bytes.add(34)
-bytes.add(92)
-bytes.add(117)
-bytes.add(48)
-bytes.add(48)
-bytes.add(55)
-bytes.add(70)
-bytes.add(34)
-Syntax.parseQstring(Encoding.UTF8.decode(bytes))
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("qstring-uppercase-hex-error", () => {
+        Syntax: import("self:LockSyntax")
+        bytes: Encoding.UTF8.encode("")
+        bytes.add(34)
+        bytes.add(92)
+        bytes.add(117)
+        bytes.add(48)
+        bytes.add(48)
+        bytes.add(55)
+        bytes.add(70)
+        bytes.add(34)
+        Assertions.signals(Error, () => {
+            Syntax.parseQstring(Encoding.UTF8.decode(bytes))
+        })
+    })
+]
+tests.freeze()

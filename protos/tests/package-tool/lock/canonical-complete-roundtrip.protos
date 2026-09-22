@@ -13,20 +13,28 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Lock: import("self:LockDocument")
-text:
-    "lock-format 1\n" +
-    "resolver-version 1\n" +
-    "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
-    "root workspace \"root\"\n" +
-    "workspace-member \"libs/a\" workspace \"wa\"\n" +
-    "workspace-member \"libs/b\" workspace \"wb\"\n" +
-    "registry-node registry \"pkg\" \"1.2.0\" locator \"pkg/one\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
-    "registry-node registry \"pkg\" \"1.10.0\" locator \"pkg/two\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n" +
-    "git-node git \"git-a\" \"aaa\" fetch \"https://example.invalid/a.git\" content protos-package-tree-v1 sha256:cccc\n" +
-    "git-node git \"git-b\" \"bbb\" fetch \"https://example.invalid/b.git\" content protos-package-tree-v1 sha256:dddd\n" +
-    "dependency workspace \"root\" alias \"a\" target registry \"pkg\" \"1.2.0\"\n" +
-    "dependency workspace \"root\" alias \"b\" target registry \"pkg\" \"1.10.0\"\n" +
-    "dependency registry \"pkg\" \"1.2.0\" alias \"g\" target git \"git-a\" \"aaa\"\n"
-model: Lock.parse(text)
-Lock.write(model) == text
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("canonical-complete-roundtrip", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "workspace-member \"libs/a\" workspace \"wa\"\n" +
+            "workspace-member \"libs/b\" workspace \"wb\"\n" +
+            "registry-node registry \"pkg\" \"1.2.0\" locator \"pkg/one\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "registry-node registry \"pkg\" \"1.10.0\" locator \"pkg/two\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n" +
+            "git-node git \"git-a\" \"aaa\" fetch \"https://example.invalid/a.git\" content protos-package-tree-v1 sha256:cccc\n" +
+            "git-node git \"git-b\" \"bbb\" fetch \"https://example.invalid/b.git\" content protos-package-tree-v1 sha256:dddd\n" +
+            "dependency workspace \"root\" alias \"a\" target registry \"pkg\" \"1.2.0\"\n" +
+            "dependency workspace \"root\" alias \"b\" target registry \"pkg\" \"1.10.0\"\n" +
+            "dependency registry \"pkg\" \"1.2.0\" alias \"g\" target git \"git-a\" \"aaa\"\n"
+        model: Lock.parse(text)
+        Assertions.require(Lock.write(model) == text)
+    })
+]
+tests.freeze()

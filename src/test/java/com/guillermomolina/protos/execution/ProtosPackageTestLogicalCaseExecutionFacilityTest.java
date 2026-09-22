@@ -61,6 +61,17 @@ import org.junit.jupiter.api.io.TempDir;
  * corpus dependency graph. None of the 102 TOML corpus fixtures under
  * {@code protos/tests/package-tool/toml-syntax} are used here; every suite source is a dedicated
  * inline fixture for this infrastructure, exercising the real modules through ordinary imports.
+ *
+ * <p>TOOL009 Publication 1 extends the same finite exact-overlay strategy to the non-TOML
+ * Package module graph consumed by the 157 version/lock/resolution-input case-outcomes corpora:
+ * {@code ReleaseVersion}, {@code DependencyConstraint}, {@code FreshVersionSelection},
+ * {@code RetainedVersionSelection}, {@code LockSyntax}, {@code LockDocument}, and
+ * {@code ResolutionInput}. The tests below invoke the real modules under those names to prove
+ * {@code DependencyConstraint -> ReleaseVersion}, {@code FreshVersionSelection ->
+ * DependencyConstraint -> ReleaseVersion}, {@code RetainedVersionSelection ->
+ * FreshVersionSelection -> DependencyConstraint -> ReleaseVersion}, {@code LockDocument ->
+ * LockSyntax -> ReleaseVersion}, and {@code ResolutionInput -> LockSyntax / ReleaseVersion +
+ * std:collections/Array + std:crypto/SHA256} all resolve and execute for real.
  */
 final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -155,6 +166,85 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                     (model.package.version == "1.2.3").ifFalse(() => { ok = false })
                     ok
                 })
+            )
+            """;
+
+    // TOOL009 Publication 1: the finite Package non-TOML module graph
+    // (ReleaseVersion/DependencyConstraint/FreshVersionSelection/
+    // RetainedVersionSelection/LockSyntax/LockDocument/ResolutionInput).
+    private static final String SOURCE_USES_RETAINED_VERSION_SELECTION =
+            """
+            TestValue: import("std:test/Test")
+            Selection: import("self:RetainedVersionSelection")
+
+            tests: Array(
+                TestValue("selectsFreshCandidateWhenRetainedIsUnavailable", () => {
+                    result: Selection.selectText(
+                        "^1.0.0",
+                        "9.9.9",
+                        Array("1.0.0", "1.2.0", "1.5.0"))
+                    result == "1.5.0"
+                })
+            )
+            """;
+
+    private static final String SOURCE_USES_LOCK_DOCUMENT =
+            """
+            TestValue: import("std:test/Test")
+            Document: import("self:LockDocument")
+
+            tests: Array(
+                TestValue("resolvesRealLockDocumentModuleAndItsTransitiveLockSyntaxDependency", () => {
+                    model: {
+                        header: {
+                            lockFormatText: "1"
+                            resolverVersionText: "1"
+                            resolutionMethod: "protos-resolution-input-v1"
+                            digestAlgorithm: "sha256"
+                            digestHex: "ab"
+                        }
+                        root: {
+                            kind: "workspace"
+                            packageId: "root-pkg"
+                        }
+                        workspaceMembers: Array()
+                        registryNodes: Array()
+                        gitNodes: Array()
+                        dependencies: Array()
+                    }
+                    rendered: Document.write(model)
+                    rendered ==
+                        "lock-format 1\\nresolver-version 1\\nresolution-input protos-resolution-input-v1 sha256:ab\\n\\nroot workspace \\"root-pkg\\"\\n"
+                })
+            )
+            """;
+
+    private static final String SOURCE_USES_RESOLUTION_INPUT =
+            """
+            TestValue: import("std:test/Test")
+            Input: import("self:ResolutionInput")
+            Version: import("self:ReleaseVersion")
+
+            tests: Array(
+                TestValue(
+                    "resolvesRealResolutionInputModuleAndItsTransitiveLockSyntaxReleaseVersionAndStandardLibraryDependencies",
+                    () => {
+                        resolutionRoot: {
+                            languageCompatibility: "0.1"
+                            root: {
+                                packageId: "root-pkg"
+                                version: Version.parse("1.0.0")
+                                compatibility: null
+                                dependencies: Array()
+                            }
+                            members: Array()
+                        }
+                        digest: Input.digest(resolutionRoot)
+                        ok: digest.method == "protos-resolution-input-v1"
+                        (digest.algorithm == "sha256").ifFalse(() => { ok = false })
+                        (Encoding.UTF8.encode(digest.hex).size() == 64).ifFalse(() => { ok = false })
+                        ok
+                    })
             )
             """;
 
@@ -338,6 +428,154 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             // selected Test body calls "Schema.parseBase(...)", which is the only thing that
             // forces that lazy import to actually resolve. A dormant, never-imported module
             // would not produce this "true" observation.
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    assertCompletedObservationValue(future));
+        }
+    }
+
+    @Test
+    void resolvesRealRetainedVersionSelectionAndItsTransitiveFreshAndConstraintGraph(
+            @TempDir Path root) throws Exception {
+        writeSuite(root, SOURCE_USES_RETAINED_VERSION_SELECTION);
+
+        ManualSubmission submission = new ManualSubmission();
+        ProtosModuleResolver resolver = packageResolver();
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+                ProtosTestLogicalCaseExecutionFacility facility =
+                        ProtosTestLogicalCaseExecutionFacility.install(
+                                activation,
+                                "packageLogicalCaseExecutionAsync",
+                                CORE,
+                                resolver,
+                                List.of(
+                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                                "package-corpus", root)),
+                                runtimeHost,
+                                submission)) {
+
+            ProtosFutureValue future =
+                    invoke(
+                            facility,
+                            prelude,
+                            activation,
+                            SOURCE_USES_RETAINED_VERSION_SELECTION,
+                            List.of("selectsFreshCandidateWhenRetainedIsUnavailable"),
+                            "selectsFreshCandidateWhenRetainedIsUnavailable");
+
+            assertTrue(submission.runNext());
+            assertTrue(activation.executionDomain().dispatchOne());
+
+            // "self:RetainedVersionSelection" resolves to the real
+            // protos/tools/package/RetainedVersionSelection.protos, which imports
+            // "self:FreshVersionSelection", which imports "self:DependencyConstraint" and
+            // "self:ReleaseVersion". The retained candidate ("9.9.9") is absent from the
+            // candidate set, so RetainedVersionSelection.select falls back to
+            // Fresh.select, which itself calls Constraint.satisfies and Version.compare
+            // to pick the highest satisfying candidate. A "true" observation is reachable
+            // only if the complete real chain resolved and executed.
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    assertCompletedObservationValue(future));
+        }
+    }
+
+    @Test
+    void resolvesRealLockDocumentModuleAndItsTransitiveLockSyntaxDependency(
+            @TempDir Path root) throws Exception {
+        writeSuite(root, SOURCE_USES_LOCK_DOCUMENT);
+
+        ManualSubmission submission = new ManualSubmission();
+        ProtosModuleResolver resolver = packageResolver();
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+                ProtosTestLogicalCaseExecutionFacility facility =
+                        ProtosTestLogicalCaseExecutionFacility.install(
+                                activation,
+                                "packageLogicalCaseExecutionAsync",
+                                CORE,
+                                resolver,
+                                List.of(
+                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                                "package-corpus", root)),
+                                runtimeHost,
+                                submission)) {
+
+            ProtosFutureValue future =
+                    invoke(
+                            facility,
+                            prelude,
+                            activation,
+                            SOURCE_USES_LOCK_DOCUMENT,
+                            List.of(
+                                    "resolvesRealLockDocumentModuleAndItsTransitiveLockSyntaxDependency"),
+                            "resolvesRealLockDocumentModuleAndItsTransitiveLockSyntaxDependency");
+
+            assertTrue(submission.runNext());
+            assertTrue(activation.executionDomain().dispatchOne());
+
+            // "self:LockDocument" resolves to the real protos/tools/package/LockDocument.protos,
+            // which imports "self:LockSyntax" and "self:ReleaseVersion". Document.write renders
+            // the header/root lines through the real LockSyntax renderHeader/renderNodeRef/
+            // renderQstring functions and then re-validates the result through
+            // LockSyntax.parseStructural/parseHeader before returning it. The exact rendered
+            // text is only reachable if the whole chain resolved and executed for real.
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    assertCompletedObservationValue(future));
+        }
+    }
+
+    @Test
+    void resolvesRealResolutionInputModuleAndItsTransitiveGraphAndStandardLibraryDependencies(
+            @TempDir Path root) throws Exception {
+        writeSuite(root, SOURCE_USES_RESOLUTION_INPUT);
+
+        ManualSubmission submission = new ManualSubmission();
+        ProtosModuleResolver resolver = packageResolver();
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+                ProtosTestLogicalCaseExecutionFacility facility =
+                        ProtosTestLogicalCaseExecutionFacility.install(
+                                activation,
+                                "packageLogicalCaseExecutionAsync",
+                                CORE,
+                                resolver,
+                                List.of(
+                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                                "package-corpus", root)),
+                                runtimeHost,
+                                submission)) {
+
+            ProtosFutureValue future =
+                    invoke(
+                            facility,
+                            prelude,
+                            activation,
+                            SOURCE_USES_RESOLUTION_INPUT,
+                            List.of(
+                                    "resolvesRealResolutionInputModuleAndItsTransitiveLockSyntaxReleaseVersionAndStandardLibraryDependencies"),
+                            "resolvesRealResolutionInputModuleAndItsTransitiveLockSyntaxReleaseVersionAndStandardLibraryDependencies");
+
+            assertTrue(submission.runNext());
+            assertTrue(activation.executionDomain().dispatchOne());
+
+            // "self:ResolutionInput" resolves to the real
+            // protos/tools/package/ResolutionInput.protos, which imports "self:LockSyntax",
+            // "self:ReleaseVersion", "std:collections/Array", and "std:crypto/SHA256".
+            // Input.digest renders the canonical resolution-input text through the real
+            // LockSyntax.renderQstring and ReleaseVersion.parse/compare (via versionText),
+            // sorts the (empty) member array through the real standard Array library, and
+            // hashes the result through the real standard SHA256 library. A 64-hex-character
+            // sha256 digest is only reachable if the complete real graph resolved and
+            // executed.
             assertSame(
                     ProtosBooleanValue.TRUE,
                     assertCompletedObservationValue(future));
@@ -678,32 +916,83 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
         ProtosModuleResolver ordinaryTestResolver =
                 new ProtosBundledToolModuleResolver(
                         "test", TOOL_ROOT, SHARED_ROOT, standardLibraryResolver);
+        // 13 overlay entries: past the 10-pair limit of Map.of(...), hence
+        // Map.ofEntries(Map.entry(...), ...) here (identical Map semantics).
         return new ProtosExactModuleOverlayResolver(
-                Map.of(
-                        "package-runtime-names",
-                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                new ProtosModuleKey("tool001-package:runtime-names"),
-                                PACKAGE_TOOL_ROOT.resolve("RuntimeNames.protos")),
-                        "self:TomlSyntax",
-                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                new ProtosModuleKey("tool001-package:toml-syntax"),
-                                PACKAGE_TOOL_ROOT.resolve("TomlSyntax.protos")),
-                        "self:TomlDocument",
-                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                new ProtosModuleKey("tool001-package:toml-document"),
-                                PACKAGE_TOOL_ROOT.resolve("TomlDocument.protos")),
-                        "self:ManifestSchemaV1",
-                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                new ProtosModuleKey("tool001-package:manifest-schema-v1"),
-                                PACKAGE_TOOL_ROOT.resolve("ManifestSchemaV1.protos")),
-                        "tool-shared:Toml10/TomlSyntax",
-                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                new ProtosModuleKey("bundled-tool-shared:Toml10/TomlSyntax"),
-                                SHARED_ROOT.resolve("Toml10").resolve("TomlSyntax.protos")),
-                        "tool-shared:Toml10/TomlDocument",
-                        new ProtosExactModuleOverlayResolver.ExactModule(
-                                new ProtosModuleKey("bundled-tool-shared:Toml10/TomlDocument"),
-                                SHARED_ROOT.resolve("Toml10").resolve("TomlDocument.protos"))),
+                Map.ofEntries(
+                        Map.entry(
+                                "package-runtime-names",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:runtime-names"),
+                                        PACKAGE_TOOL_ROOT.resolve("RuntimeNames.protos"))),
+                        Map.entry(
+                                "self:TomlSyntax",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:toml-syntax"),
+                                        PACKAGE_TOOL_ROOT.resolve("TomlSyntax.protos"))),
+                        Map.entry(
+                                "self:TomlDocument",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:toml-document"),
+                                        PACKAGE_TOOL_ROOT.resolve("TomlDocument.protos"))),
+                        Map.entry(
+                                "self:ManifestSchemaV1",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:manifest-schema-v1"),
+                                        PACKAGE_TOOL_ROOT.resolve("ManifestSchemaV1.protos"))),
+                        Map.entry(
+                                "self:ReleaseVersion",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:release-version"),
+                                        PACKAGE_TOOL_ROOT.resolve("ReleaseVersion.protos"))),
+                        Map.entry(
+                                "self:DependencyConstraint",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey(
+                                                "tool001-package:dependency-constraint"),
+                                        PACKAGE_TOOL_ROOT.resolve("DependencyConstraint.protos"))),
+                        Map.entry(
+                                "self:FreshVersionSelection",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey(
+                                                "tool001-package:fresh-version-selection"),
+                                        PACKAGE_TOOL_ROOT.resolve(
+                                                "FreshVersionSelection.protos"))),
+                        Map.entry(
+                                "self:RetainedVersionSelection",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey(
+                                                "tool001-package:retained-version-selection"),
+                                        PACKAGE_TOOL_ROOT.resolve(
+                                                "RetainedVersionSelection.protos"))),
+                        Map.entry(
+                                "self:LockSyntax",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:lock-syntax"),
+                                        PACKAGE_TOOL_ROOT.resolve("LockSyntax.protos"))),
+                        Map.entry(
+                                "self:LockDocument",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:lock-document"),
+                                        PACKAGE_TOOL_ROOT.resolve("LockDocument.protos"))),
+                        Map.entry(
+                                "self:ResolutionInput",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool001-package:resolution-input"),
+                                        PACKAGE_TOOL_ROOT.resolve("ResolutionInput.protos"))),
+                        Map.entry(
+                                "tool-shared:Toml10/TomlSyntax",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("bundled-tool-shared:Toml10/TomlSyntax"),
+                                        SHARED_ROOT.resolve("Toml10").resolve("TomlSyntax.protos"))),
+                        Map.entry(
+                                "tool-shared:Toml10/TomlDocument",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey(
+                                                "bundled-tool-shared:Toml10/TomlDocument"),
+                                        SHARED_ROOT
+                                                .resolve("Toml10")
+                                                .resolve("TomlDocument.protos")))),
                 ordinaryTestResolver);
     }
 

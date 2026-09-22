@@ -13,9 +13,19 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Selection: import("self:RetainedVersionSelection")
-Selection.selectText(
-    "^1.0.0",
-    "v1.2.0",
-    Array("1.2.0", "1.9.0")
-)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("selection-retained-invalid-error", () => {
+        Selection: import("self:RetainedVersionSelection")
+        Assertions.signals(Error, () => {
+            Selection.selectText(
+                "^1.0.0",
+                "v1.2.0",
+                Array("1.2.0", "1.9.0")
+            )
+        })
+    })
+]
+tests.freeze()

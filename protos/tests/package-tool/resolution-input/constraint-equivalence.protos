@@ -13,58 +13,66 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Version: import("self:ReleaseVersion")
-Constraint: import("self:DependencyConstraint")
-Input: import("self:ResolutionInput")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-manifest: (packageId, versionText, compatibility, dependencies) => {
-    {
-        packageId: packageId
-        version: Version.parse(versionText)
-        compatibility: compatibility
-        dependencies: dependencies
-    }
-}
+tests: [
+    Test("constraint-equivalence", () => {
+        Version: import("self:ReleaseVersion")
+        Constraint: import("self:DependencyConstraint")
+        Input: import("self:ResolutionInput")
 
-member: (location, packageId, manifestValue) => {
-    {
-        location: location
-        packageId: packageId
-        manifest: manifestValue
-    }
-}
+        manifest: (packageId, versionText, compatibility, dependencies) => {
+            {
+                packageId: packageId
+                version: Version.parse(versionText)
+                compatibility: compatibility
+                dependencies: dependencies
+            }
+        }
 
-dependencyWith: (constraint) => {
-    {
-        alias: "dep"
-        kind: "registry"
-        authority: "public"
-        packageId: "pkg"
-        constraint: constraint
-    }
-}
+        member: (location, packageId, manifestValue) => {
+            {
+                location: location
+                packageId: packageId
+                manifest: manifestValue
+            }
+        }
 
-rootWith: (constraint) => {
-    {
-        languageCompatibility: "0.1"
-        root: manifest(
-            "root",
-            "1.0.0",
-            null,
-            Array(dependencyWith(constraint))
-        )
-        members: Array()
-    }
-}
+        dependencyWith: (constraint) => {
+            {
+                alias: "dep"
+                kind: "registry"
+                authority: "public"
+                packageId: "pkg"
+                constraint: constraint
+            }
+        }
 
-left: rootWith(Constraint.parse(">=1.0.0 <2.0.0"))
-right: rootWith(Constraint.parse("<2.0.0\t>=1.0.0"))
+        rootWith: (constraint) => {
+            {
+                languageCompatibility: "0.1"
+                root: manifest(
+                    "root",
+                    "1.0.0",
+                    null,
+                    Array(dependencyWith(constraint))
+                )
+                members: Array()
+            }
+        }
 
-leftText: Input.text(left)
-rightText: Input.text(right)
+        left: rootWith(Constraint.parse(">=1.0.0 <2.0.0"))
+        right: rootWith(Constraint.parse("<2.0.0\t>=1.0.0"))
 
-ok: leftText == rightText
-(Input.digest(left).hex == Input.digest(right).hex).ifFalse(() => {
-    ok = false
-})
-ok
+        leftText: Input.text(left)
+        rightText: Input.text(right)
+
+        ok: leftText == rightText
+        (Input.digest(left).hex == Input.digest(right).hex).ifFalse(() => {
+            ok = false
+        })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()
