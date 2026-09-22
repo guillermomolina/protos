@@ -68,7 +68,8 @@ final class ProtosTestExecutionRequirementRegistry {
                 "groupExecutionAsync",
                 "groupExecutionInspectAsync",
                 "groupResourceExecutionAsync",
-                "groupResourceExecutionInspectAsync");
+                "groupResourceExecutionInspectAsync",
+                ProtosTestToolAsyncExecutionScope.GROUP_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT);
         addBinding(
                 registry,
                 activation,

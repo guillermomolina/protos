@@ -410,6 +410,20 @@ public final class ProtosCli {
                                         new ProtosModuleKey("tool002-actor:workers"),
                                         actorModulesRoot.resolve("workers.protos"))),
                         logicalCaseFallbackResolver);
+        // TOOL009-C Slice 4 infrastructure: the Group-flavored suite-native logical
+        // Case route reuses the same ordinary bundled Test Tool fallback resolver,
+        // overlaid with the Group-specific "workers" module exactly as groupPrelude
+        // below does, so Actor.spawn("workers", ...)/Actor.group(...) inside a
+        // selected Test body resolves the Group-flavored blueprint set instead of
+        // falling back to the ordinary test resolver.
+        ProtosModuleResolver groupLogicalCaseFallbackResolver =
+                new ProtosExactModuleOverlayResolver(
+                        Map.of(
+                                "workers",
+                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                        new ProtosModuleKey("tool002-group:workers"),
+                                        groupModulesRoot.resolve("workers.protos"))),
+                        logicalCaseFallbackResolver);
         ProtosPrelude packagePrelude =
                 new ProtosCoreBootstrap()
                         .bootstrap(
@@ -495,6 +509,7 @@ public final class ProtosCli {
                                         core,
                                         logicalCaseFallbackResolver,
                                         actorLogicalCaseFallbackResolver,
+                                        groupLogicalCaseFallbackResolver,
                                         fileSelectionSourceRoots,
                                         actorPrelude,
                                         groupPrelude,

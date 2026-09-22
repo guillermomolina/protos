@@ -9,9 +9,20 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "tagged", 0)
-group: Actor.group(worker)
-box: { value: 1 }
-reply: group.request("readValue", box)
-box.value = 2
-reply
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("request snapshots argument", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "tagged", 0)
+            group: Actor.group(worker)
+            box: { value: 1 }
+            reply: group.request("readValue", box)
+            box.value = 2
+            reply
+        }
+        Assertions.require(tool009LegacyCase().value() == 1)
+    })
+]
+tests.freeze()

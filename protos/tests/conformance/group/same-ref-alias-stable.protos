@@ -9,7 +9,18 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "tagged", 1)
-group: Actor.group(worker)
-alias: group
-alias === group
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("same ref alias stable", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "tagged", 1)
+            group: Actor.group(worker)
+            alias: group
+            alias === group
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

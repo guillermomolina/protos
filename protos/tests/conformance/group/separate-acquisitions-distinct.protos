@@ -9,7 +9,18 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "tagged", 1)
-first: Actor.group(worker)
-second: Actor.group(worker)
-first === second
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("separate acquisitions distinct", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "tagged", 1)
+            first: Actor.group(worker)
+            second: Actor.group(worker)
+            first === second
+        }
+        Assertions.require(tool009LegacyCase() === false)
+    })
+]
+tests.freeze()

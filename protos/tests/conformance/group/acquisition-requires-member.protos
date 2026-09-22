@@ -9,4 +9,14 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Actor.group()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("acquisition requires member", () => {
+        Assertions.signals(Error, () => {
+            Actor.group()
+        })
+    })
+]
+tests.freeze()

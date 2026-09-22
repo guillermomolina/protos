@@ -9,11 +9,22 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-first: Actor.spawn("workers", "tagged", 1)
-second: Actor.spawn("workers", "tagged", 2)
-group: Actor.group(first, second)
-terminated: first.termination()
-first.stop()
-terminated.then((ignored) => {
-    group.request("tag")
-})
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("stopped member not routed", () => {
+        tool009LegacyCase: () => {
+            first: Actor.spawn("workers", "tagged", 1)
+            second: Actor.spawn("workers", "tagged", 2)
+            group: Actor.group(first, second)
+            terminated: first.termination()
+            first.stop()
+            terminated.then((ignored) => {
+                group.request("tag")
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() == 2)
+    })
+]
+tests.freeze()

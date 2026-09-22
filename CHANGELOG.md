@@ -1,3 +1,76 @@
+## 0.3.70-SNAPSHOT
+
+- TOOL009-C Slice 4 (#686): add a Group-flavored suite-native logical
+  Case execution route and migrate all 10
+  `protos/tests/conformance/group` fixtures to it, reusing the same
+  `ProtosTestLogicalCaseExecutionFacility` /
+  `ProtosTestLogicalCaseAttemptBridge` machinery the Actor route (Slice
+  3) already established rather than a parallel implementation.
+  - `ProtosCli` now builds a `groupLogicalCaseFallbackResolver`
+    (ordinary bundled Test Tool fallback resolver overlaid with the
+    Group-specific `tool002-group:workers` module, exactly as
+    `groupPrelude` already resolves it) and passes it to
+    `ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities`.
+  - `ProtosTestToolAsyncExecutionScope` installs a second
+    `ProtosTestLogicalCaseExecutionFacility` instance under the new
+    `groupLogicalCaseExecutionAsync` bootstrap slot
+    (`GROUP_LOGICAL_CASE_EXECUTION_BOOTSTRAP_SLOT`), distinct from the
+    ordinary and Actor-flavored slots so all three routes coexist; each
+    selected Test Case still receives a fresh Process/Prelude per
+    attempt.
+  - `ProtosTestExecutionRequirementRegistry` now publishes
+    `logicalCaseExecutionAsync` on the `protos/test/group` D125
+    binding, reusing the newly installed facility rather than
+    provisioning a parallel one. The legacy `groupExecutionAsync` /
+    `groupExecutionInspectAsync` / `groupResourceExecutionAsync` /
+    `groupResourceExecutionInspectAsync` bindings are unchanged and
+    remain fully functional (TOOL009-B legacy removal is out of scope).
+  - Added `ProtosGroupTestLogicalCaseExecutionFacilityTest`, dedicated
+    inline-fixture focal coverage demonstrating the Group "workers"
+    module overlay resolves inside a selected Test body, selected
+    `Test.call()` authority, exactly-once execution, a fresh
+    Process/Group per Case with no state leaking between Cases,
+    intra-Case Group state across multiple requests within one Case,
+    and rejection (without executing the body) on selector and
+    signature mismatch.
+  - Migrated all 10 `protos/tests/conformance/group` fixtures from the
+    legacy manifest-driven expectation model (`boolean`/
+    `future-integer`/`future-integer-one-of`/`future-boolean`/`error`
+    kinds) to suite-native `Test(...)` declarations, so
+    `group/manifest.tsv` now records all 10 entries as `suite-native`.
+    Original fixture bodies, license headers, and observable semantics
+    (member readiness, eligible-member selection, argument
+    snapshotting, GroupRef identity/transfer, and routing after member
+    termination) are unchanged: the 2 former `boolean`-kind cases wrap
+    their body in a `tool009LegacyCase` closure asserted with
+    `Assertions.require(tool009LegacyCase() === <expected>)`; the 3
+    former `future-integer`-kind cases follow the same pattern with
+    `Assertions.require(tool009LegacyCase().value() == N)`; the 1
+    former `future-boolean`-kind case follows the same pattern with
+    `Assertions.require(tool009LegacyCase().value() === true)`; the 1
+    former `future-integer-one-of`-kind case
+    (`request-selects-one-eligible-member.protos`) preserves its exact
+    `1,2` acceptable-result set with
+    `Assertions.require((value == 1) || (value == 2))`; the 3 former
+    `error`-kind cases wrap their body in
+    `Assertions.signals(Error, ...)`. Each fixture remains an
+    independent physical `.protos` source with exactly one `Test`; no
+    fixtures were merged or regrouped. Process, Actor, D152, D153,
+    D178, and TOOL009-D are unmodified; legacy Group execution
+    infrastructure (`groupExecutionAsync` / `groupExecutionInspectAsync`
+    / `groupResourceExecutionAsync` / `groupResourceExecutionInspectAsync`)
+    is not removed (TOOL009-B, out of scope).
+    - `ProtosExactExecutionFacilityTest` exercised the legacy
+      whole-source inspection route directly against
+      `request-selects-one-eligible-member.protos`'s raw file content;
+      since that file's module-level completion is no longer a bare
+      Future after migration, the test now holds the original fixture
+      body as an inline `GROUP_REQUEST_CASE_SOURCE` Java string
+      constant instead of reading it from disk, decoupling it from the
+      corpus file's new suite-native purpose while preserving its
+      original assertions unchanged. No production/`src/main` or
+      `protos/lib` source was modified by this decoupling.
+
 ## 0.3.69-SNAPSHOT
 
 - TOOL009-C Slice 3 (#686): migrate all 11

@@ -9,9 +9,20 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-member: Actor.spawn("workers", "tagged", 1)
-group: Actor.group(member)
-carrier: Actor.spawn("workers", "echo")
-carrier.request("echo", group).then((returned) => {
-    returned === group
-})
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("groupref transfer preserves identity", () => {
+        tool009LegacyCase: () => {
+            member: Actor.spawn("workers", "tagged", 1)
+            group: Actor.group(member)
+            carrier: Actor.spawn("workers", "echo")
+            carrier.request("echo", group).then((returned) => {
+                returned === group
+            })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    })
+]
+tests.freeze()

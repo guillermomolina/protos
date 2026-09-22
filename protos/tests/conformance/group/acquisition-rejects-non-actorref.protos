@@ -9,5 +9,15 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "tagged", 1)
-Actor.group(worker, 7)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("acquisition rejects non actorref", () => {
+        Assertions.signals(Error, () => {
+            worker: Actor.spawn("workers", "tagged", 1)
+            Actor.group(worker, 7)
+        })
+    })
+]
+tests.freeze()

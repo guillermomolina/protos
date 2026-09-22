@@ -52,16 +52,16 @@ final class ProtosExactExecutionFacilityTest {
     private static final Path GROUP_ROOT =
             Path.of("protos", "tests", "conformance", "group");
     private static final Path ACTOR_WORKERS = ACTOR_ROOT.resolve("modules").resolve("workers.protos");
-    private static final Path GROUP_REQUEST_CASE =
-            GROUP_ROOT.resolve("request-selects-one-eligible-member.protos");
     private static final Path GROUP_WORKERS = GROUP_ROOT.resolve("modules").resolve("workers.protos");
 
     // Legacy-route source fixtures kept as inline literals rather than read from
-    // protos/tests/conformance/actor/spawn-request-echo.protos and
-    // protos/tests/conformance/actor/ip-data-transfer.protos: TOOL009-C Slice 3 migrated
-    // those files to suite-native Test Tool corpus members whose raw module completion is
-    // no longer a bare Future, so this whole-source legacy inspection route needs its own
-    // copy of the original behavior it exercises.
+    // protos/tests/conformance/actor/spawn-request-echo.protos,
+    // protos/tests/conformance/actor/ip-data-transfer.protos, and
+    // protos/tests/conformance/group/request-selects-one-eligible-member.protos:
+    // TOOL009-C Slice 3/Slice 4 migrated those files to suite-native Test Tool corpus
+    // members whose raw module completion is no longer a bare Future, so this
+    // whole-source legacy inspection route needs its own copy of the original behavior
+    // it exercises.
     private static final String ACTOR_REQUEST_CASE_SOURCE =
             "worker: Actor.spawn(\"workers\", \"echo\")\n"
                     + "worker.request(\"echo\", 42)";
@@ -92,6 +92,11 @@ final class ProtosExactExecutionFacilityTest {
                     + "    worker.stop()\n"
                     + "    ok\n"
                     + "})";
+    private static final String GROUP_REQUEST_CASE_SOURCE =
+            "first: Actor.spawn(\"workers\", \"tagged\", 1)\n"
+                    + "second: Actor.spawn(\"workers\", \"tagged\", 2)\n"
+                    + "group: Actor.group(first, second)\n"
+                    + "group.request(\"tag\")";
 
     @Test
     void protosFixtureConsumesDetachedCompletedAndFailedOutcomes()
@@ -212,7 +217,7 @@ final class ProtosExactExecutionFacilityTest {
         ProtosObjectValue observation =
                 inspectionObservation(
                         fixture(GROUP_WORKERS),
-                        GROUP_REQUEST_CASE,
+                        GROUP_REQUEST_CASE_SOURCE,
                         "(subject) => { subject.value() }");
 
         assertCompletedObservation(observation);

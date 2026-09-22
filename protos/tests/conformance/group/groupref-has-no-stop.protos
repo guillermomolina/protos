@@ -9,6 +9,16 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "tagged", 1)
-group: Actor.group(worker)
-group.stop()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("groupref has no stop", () => {
+        Assertions.signals(Error, () => {
+            worker: Actor.spawn("workers", "tagged", 1)
+            group: Actor.group(worker)
+            group.stop()
+        })
+    })
+]
+tests.freeze()

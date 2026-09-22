@@ -9,6 +9,17 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-worker: Actor.spawn("workers", "tagged", 7)
-group: Actor.group(worker)
-group.request("tag")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("request before members ready", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "tagged", 7)
+            group: Actor.group(worker)
+            group.request("tag")
+        }
+        Assertions.require(tool009LegacyCase().value() == 7)
+    })
+]
+tests.freeze()
