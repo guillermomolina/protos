@@ -1,3 +1,22 @@
+## 0.3.71-SNAPSHOT
+
+- `TOOL009-B` (GitHub #685): remove the unused
+  `LogicalCaseMigration.selectSuiteNativeSpecs` migration helper and its
+  migration-only characterization coverage in
+  `protos/tests/tooling/tool009-logical-case-migration.protos`. The global
+  reconciliation for TOOL009-B established that this helper had zero
+  production consumers while every other `LogicalCaseMigration` slot
+  (`splitPlan`, `legacyPlan`, `suiteNativeSpecs`, `sourceAssociation`,
+  `logicalCaseExecutorAsync`, `mergeOutcome`, `neutralLegacyOutcome`) remains
+  required by the hybrid `Main.protos` execution path while Package Tool
+  legacy corpora still generate legacy `CaseSpec`s. Drop the now-unused
+  `FileSelection` import this helper alone required, and correct the stale
+  module-header claim that "M3/M4 must remove this module": the module
+  remains production infrastructure and is not scheduled for automatic
+  removal. This does not remove or simplify the legacy execution path, the
+  D108 Runner, the expectation engine, or any host execution facility.
+  Implementation version becomes `0.3.71-SNAPSHOT`.
+
 ## 0.3.70-SNAPSHOT
 
 - TOOL009-C Slice 4 (#686): add a Group-flavored suite-native logical

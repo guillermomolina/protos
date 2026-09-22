@@ -13,14 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-//! Temporary TOOL009 M2 mixed-ownership migration scaffold.
+//! TOOL009 mixed-ownership migration bridge.
 //!
-//! This module exists only while D152 M2 incrementally transfers production
-//! sources from the incumbent manifest runner to suite-native logical Cases.
-//! M3/M4 must remove this module and every `suite-native` manifest marker.
+//! This module partitions an incumbent CaseSpec plan into a legacy Runner
+//! plan and inert suite-native logical Case specs, projects inert logical
+//! Case source associations, dispatches suite-native execution through the
+//! corpus's bound execution requirement, and reconciles legacy and logical
+//! outcomes under D155 precedence. It remains production infrastructure
+//! while any Package Tool corpus retains legacy CaseSpecs; it does not
+//! disappear merely because a corpus has been fully migrated to suite-native
+//! ownership.
 
 Manifest: import("self:Manifest")
-FileSelection: import("self:FileSelection")
 LogicalCaseResult: import("self:LogicalCaseResult")
 Runner: import("self:Runner")
 
@@ -104,40 +108,6 @@ sourceAssociation: (corpusId, spec) => {
             Manifest.casePath(spec)
         )
     association.freeze()
-}
-
-// D151 selection over sources whose incumbent CaseSpecs have already been
-// removed from the legacy execution plan by splitPlan.
-selectSuiteNativeSpecs: (
-    corpusId,
-    specs,
-    associations
-) => {
-    selected: Array()
-
-    specs.each((spec) => {
-        retained: false
-
-        associations.each((association) => {
-            FileSelection.associationMatches(
-                association,
-                corpusId,
-                Manifest.casePath(spec)
-            ).ifTrue(() => {
-                retained = true
-            })
-        })
-
-        retained.ifTrue(() => {
-            selected =
-                Array(
-                    ...selected,
-                    spec
-                )
-        })
-    })
-
-    selected.freeze()
 }
 
 // TOOL009-D transport boundary.

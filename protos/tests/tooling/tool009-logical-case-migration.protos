@@ -88,31 +88,6 @@ Assertions.require(
     association[1] == "native.protos"
 )
 
-selected:
-    Migration.selectSuiteNativeSpecs(
-        "corpus",
-        nativeSpecs,
-        Array(association)
-    )
-
-Assertions.require(
-    selected.size() == 1
-)
-Assertions.require(
-    selected[0] === native
-)
-
-notSelected:
-    Migration.selectSuiteNativeSpecs(
-        "other-corpus",
-        nativeSpecs,
-        Array(association)
-    )
-
-Assertions.require(
-    notSelected.size() == 0
-)
-
 completion: (phase, state) => {
     observation: {
         state: state
