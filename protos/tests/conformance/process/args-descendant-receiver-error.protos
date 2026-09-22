@@ -9,6 +9,16 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-snapshot: process.args()
-Fake: snapshot {}
-Fake.size()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("args descendant receiver error", () => {
+        Assertions.signals(Error, () => {
+            snapshot: process.args()
+            Fake: snapshot {}
+            Fake.size()
+        })
+    })
+]
+tests.freeze()

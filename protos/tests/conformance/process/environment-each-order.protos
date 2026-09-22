@@ -9,21 +9,32 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-environment: process.environment()
-seen: Array(null, null, null)
-index: 0
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-callback: {
-    call: (name, value) => {
-        seen[index] = name
-        index = index + 1
-        null
-    }
-}
+tests: [
+    Test("environment each order", () => {
+        tool009LegacyCase: () => {
+            environment: process.environment()
+            seen: Array(null, null, null)
+            index: 0
 
-result: environment.each(callback)
+            callback: {
+                call: (name, value) => {
+                    seen[index] = name
+                    index = index + 1
+                    null
+                }
+            }
 
-(result === environment) &&
-    (seen[0] == "A") &&
-    (seen[1] == "\u{e000}") &&
-    (seen[2] == "\u{10000}")
+            result: environment.each(callback)
+
+            (result === environment) &&
+                (seen[0] == "A") &&
+                (seen[1] == "\u{e000}") &&
+                (seen[2] == "\u{10000}")
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

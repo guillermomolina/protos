@@ -9,4 +9,14 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-process.args().at(3)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("args at out of range error", () => {
+        Assertions.signals(Error, () => {
+            process.args().at(3)
+        })
+    })
+]
+tests.freeze()

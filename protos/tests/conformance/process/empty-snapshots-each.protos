@@ -9,20 +9,31 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-argumentSnapshot: emptyProcess.args()
-environment: emptyProcess.environment()
-calls: 0
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-argsResult: argumentSnapshot.each((value) => {
-    calls = calls + 1
-    null
-})
+tests: [
+    Test("empty snapshots each", () => {
+        tool009LegacyCase: () => {
+            argumentSnapshot: emptyProcess.args()
+            environment: emptyProcess.environment()
+            calls: 0
 
-environmentResult: environment.each((name, value) => {
-    calls = calls + 1
-    null
-})
+            argsResult: argumentSnapshot.each((value) => {
+                calls = calls + 1
+                null
+            })
 
-(argsResult === argumentSnapshot) &&
-    (environmentResult === environment) &&
-    (calls == 0)
+            environmentResult: environment.each((name, value) => {
+                calls = calls + 1
+                null
+            })
+
+            (argsResult === argumentSnapshot) &&
+                (environmentResult === environment) &&
+                (calls == 0)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

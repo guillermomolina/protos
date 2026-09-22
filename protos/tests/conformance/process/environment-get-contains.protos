@@ -9,9 +9,20 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-environment: process.environment()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-environment.contains("A") &&
-    (environment.get("A") == "first") &&
-    (environment.contains("MISSING") == false) &&
-    (environment.get("MISSING") === null)
+tests: [
+    Test("environment get contains", () => {
+        tool009LegacyCase: () => {
+            environment: process.environment()
+
+            environment.contains("A") &&
+                (environment.get("A") == "first") &&
+                (environment.contains("MISSING") == false) &&
+                (environment.get("MISSING") === null)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

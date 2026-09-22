@@ -9,6 +9,16 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-environment: process.environment()
-Fake: environment {}
-Fake.get("A")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("environment descendant receiver error", () => {
+        Assertions.signals(Error, () => {
+            environment: process.environment()
+            Fake: environment {}
+            Fake.get("A")
+        })
+    })
+]
+tests.freeze()

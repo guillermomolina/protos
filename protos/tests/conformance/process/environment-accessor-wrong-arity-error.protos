@@ -9,4 +9,14 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-process.environment(null)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("environment accessor wrong arity error", () => {
+        Assertions.signals(Error, () => {
+            process.environment(null)
+        })
+    })
+]
+tests.freeze()

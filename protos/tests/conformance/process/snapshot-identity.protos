@@ -9,15 +9,26 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-args1: process.args()
-args2: process.args()
-otherArgs: otherProcess.args()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-environment1: process.environment()
-environment2: process.environment()
-otherEnvironment: otherProcess.environment()
+tests: [
+    Test("snapshot identity", () => {
+        tool009LegacyCase: () => {
+            args1: process.args()
+            args2: process.args()
+            otherArgs: otherProcess.args()
 
-(args1 === args2) &&
-    (args1 !== otherArgs) &&
-    (environment1 === environment2) &&
-    (environment1 !== otherEnvironment)
+            environment1: process.environment()
+            environment2: process.environment()
+            otherEnvironment: otherProcess.environment()
+
+            (args1 === args2) &&
+                (args1 !== otherArgs) &&
+                (environment1 === environment2) &&
+                (environment1 !== otherEnvironment)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

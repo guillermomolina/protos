@@ -9,7 +9,17 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-bad: {
-    call: 1
-}
-process.environment().each(bad)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("environment each noninvokable error", () => {
+        Assertions.signals(Error, () => {
+            bad: {
+                call: 1
+            }
+            process.environment().each(bad)
+        })
+    })
+]
+tests.freeze()

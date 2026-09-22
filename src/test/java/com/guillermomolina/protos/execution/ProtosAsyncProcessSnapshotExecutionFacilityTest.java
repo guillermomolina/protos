@@ -21,8 +21,6 @@ import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -32,13 +30,25 @@ import org.junit.jupiter.api.Test;
 final class ProtosAsyncProcessSnapshotExecutionFacilityTest {
     private static final Path CORE =
             Path.of("protos", "lib", "core");
-    private static final Path SNAPSHOT_IDENTITY =
-            Path.of(
-                    "protos",
-                    "tests",
-                    "conformance",
-                    "process",
-                    "snapshot-identity.protos");
+
+    // Legacy-route source fixture kept as an inline literal rather than read from
+    // protos/tests/conformance/process/snapshot-identity.protos: TOOL009-C migrated that
+    // file to a suite-native Test Tool corpus member whose raw module completion is no
+    // longer a boolean, so this whole-source legacy execution route needs its own copy of
+    // the original behavior it exercises.
+    private static final String SNAPSHOT_IDENTITY_SOURCE =
+            "args1: process.args()\n"
+                    + "args2: process.args()\n"
+                    + "otherArgs: otherProcess.args()\n"
+                    + "\n"
+                    + "environment1: process.environment()\n"
+                    + "environment2: process.environment()\n"
+                    + "otherEnvironment: otherProcess.environment()\n"
+                    + "\n"
+                    + "(args1 === args2) &&\n"
+                    + "    (args1 !== otherArgs) &&\n"
+                    + "    (environment1 === environment2) &&\n"
+                    + "    (environment1 !== otherEnvironment)";
 
     @Test
     void completionReturnsThroughCallerDomainWithD135Bootstrap() throws Exception {
@@ -65,17 +75,12 @@ final class ProtosAsyncProcessSnapshotExecutionFacilityTest {
                                     ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT)
                             .orElseThrow();
 
-            String source =
-                    Files.readString(
-                            SNAPSHOT_IDENTITY,
-                            StandardCharsets.UTF_8);
-
             ProtosFutureValue future =
                     assertInstanceOf(
                             ProtosFutureValue.class,
                             ProtosInvocation.invoke(
                                     execution,
-                                    List.of(new ProtosStringValue(source)),
+                                    List.of(new ProtosStringValue(SNAPSHOT_IDENTITY_SOURCE)),
                                     activation));
 
             assertEquals(

@@ -9,25 +9,36 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-snapshot: process.args()
-seen: Array(null, null, null)
-index: 0
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-callback: {
-    call: (value) => {
-        seen[index] = value
-        index = index + 1
-        null
-    }
-}
+tests: [
+    Test("args sequential", () => {
+        tool009LegacyCase: () => {
+            snapshot: process.args()
+            seen: Array(null, null, null)
+            index: 0
 
-result: snapshot.each(callback)
+            callback: {
+                call: (value) => {
+                    seen[index] = value
+                    index = index + 1
+                    null
+                }
+            }
 
-(snapshot.size() == 3) &&
-    (snapshot[0] == "alpha") &&
-    (snapshot[1] == "\u{3b2}") &&
-    (snapshot[2] == "\u{1f600}") &&
-    (result === snapshot) &&
-    (seen[0] == "alpha") &&
-    (seen[1] == "\u{3b2}") &&
-    (seen[2] == "\u{1f600}")
+            result: snapshot.each(callback)
+
+            (snapshot.size() == 3) &&
+                (snapshot[0] == "alpha") &&
+                (snapshot[1] == "\u{3b2}") &&
+                (snapshot[2] == "\u{1f600}") &&
+                (result === snapshot) &&
+                (seen[0] == "alpha") &&
+                (seen[1] == "\u{3b2}") &&
+                (seen[2] == "\u{1f600}")
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

@@ -1,3 +1,30 @@
+## 0.3.67-SNAPSHOT
+
+- TOOL009-C Slice 2 (#686): migrate all 15
+  `protos/tests/conformance/process` fixtures from the legacy
+  manifest-driven expectation model (`error`/`boolean` kinds) to
+  suite-native `Test(...)` declarations, so `manifest.tsv` now records all
+  15 entries as `suite-native` and each fixture routes through
+  `protos/test/process-snapshot`'s `logicalCaseExecutionAsync` (the D178
+  selected-`Test.call()` authority) instead of the legacy whole-source
+  completion route. Original fixture bodies, license headers, and
+  observable semantics are unchanged: the 8 former `error`-kind cases wrap
+  their body in `Assertions.signals(Error, ...)`, and the 7 former
+  `boolean:true`-kind cases wrap their body in a `tool009LegacyCase`
+  closure asserted with `Assertions.require(tool009LegacyCase() === true)`.
+  Actor, Group, D152, D153, D178, and TOOL009-D are unmodified; legacy
+  execution infrastructure is not removed (TOOL009-B, out of scope).
+  - `ProtosProcessSnapshotExecutionTest` and
+    `ProtosAsyncProcessSnapshotExecutionFacilityTest` exercised the legacy
+    whole-source execution route directly against
+    `snapshot-identity.protos`'s raw file content; since that file's
+    module-level completion is no longer a boolean after migration, both
+    tests now hold the original fixture body as an inline
+    `SNAPSHOT_IDENTITY_SOURCE` Java string constant instead of reading it
+    from disk, decoupling them from the corpus file's new suite-native
+    purpose while preserving their original assertions unchanged. No
+    production/`src/main` or `protos/lib` source was modified.
+
 ## 0.3.66-SNAPSHOT
 
 - D178: implement the ratified `A_TEST_BODY_AUTHORITY` Process-snapshot Logical

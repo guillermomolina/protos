@@ -16,21 +16,31 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 final class ProtosProcessSnapshotExecutionTest {
     private static final Path CORE =
             Path.of("protos", "lib", "core");
-    private static final Path SNAPSHOT_IDENTITY =
-            Path.of(
-                    "protos",
-                    "tests",
-                    "conformance",
-                    "process",
-                    "snapshot-identity.protos");
+
+    // Legacy-route source fixture kept as an inline literal rather than read from
+    // protos/tests/conformance/process/snapshot-identity.protos: TOOL009-C migrated that
+    // file to a suite-native Test Tool corpus member whose raw module completion is no
+    // longer a boolean, so this whole-source legacy execution route needs its own copy of
+    // the original behavior it exercises.
+    private static final String SNAPSHOT_IDENTITY_SOURCE =
+            "args1: process.args()\n"
+                    + "args2: process.args()\n"
+                    + "otherArgs: otherProcess.args()\n"
+                    + "\n"
+                    + "environment1: process.environment()\n"
+                    + "environment2: process.environment()\n"
+                    + "otherEnvironment: otherProcess.environment()\n"
+                    + "\n"
+                    + "(args1 === args2) &&\n"
+                    + "    (args1 !== otherArgs) &&\n"
+                    + "    (environment1 === environment2) &&\n"
+                    + "    (environment1 !== otherEnvironment)";
 
     @Test
     void createsFreshEquivalentBootstrapForEveryExecution() throws Exception {
@@ -53,13 +63,9 @@ final class ProtosProcessSnapshotExecutionTest {
                 secondArguments.state());
         assertNotSame(firstArguments.value(), secondArguments.value());
 
-        String identityCase =
-                Files.readString(
-                        SNAPSHOT_IDENTITY,
-                        StandardCharsets.UTF_8);
         ProtosExecutionOutcome identity =
                 ProtosProcessSnapshotExecution.execute(
-                        identityCase,
+                        SNAPSHOT_IDENTITY_SOURCE,
                         prelude);
 
         assertEquals(

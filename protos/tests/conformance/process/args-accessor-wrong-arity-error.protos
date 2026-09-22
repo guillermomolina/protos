@@ -9,4 +9,14 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-process.args(null)
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("args accessor wrong arity error", () => {
+        Assertions.signals(Error, () => {
+            process.args(null)
+        })
+    })
+]
+tests.freeze()

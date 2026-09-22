@@ -9,4 +9,14 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-process.args().at("1")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("args at noninteger error", () => {
+        Assertions.signals(Error, () => {
+            process.args().at("1")
+        })
+    })
+]
+tests.freeze()

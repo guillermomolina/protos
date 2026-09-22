@@ -9,5 +9,15 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Fake: process {}
-Fake.args()
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("process descendant receiver error", () => {
+        Assertions.signals(Error, () => {
+            Fake: process {}
+            Fake.args()
+        })
+    })
+]
+tests.freeze()
