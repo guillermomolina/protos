@@ -1,3 +1,53 @@
+## 0.3.66-SNAPSHOT
+
+- D178: implement the ratified `A_TEST_BODY_AUTHORITY` Process-snapshot Logical
+  Case authority model in isolation (docs/project/decisions/tooling/D178_
+  PROCESS_SNAPSHOT_LOGICAL_CASE_AUTHORITY_MODEL.md,
+  guillermomolina/protos-project-docs@5cbcee32). `logicalCaseExecutionAsync`
+  for `protos/test/process-snapshot` no longer treats whole-source-module
+  completion as Case authority: it now declares `source`'s top-level `tests`
+  (discovery-observational — constructing a named Test never invokes its
+  body), resolves exactly one selected Test through the same
+  `Discovery.resolveSelectedTest` authority the ordinary suite-native lane
+  uses, and invokes only that selected Test's `call()` exactly once; that
+  invocation's completion is the Case authority. A signature or selector
+  mismatch is classified `rematerialization-error` and rejects before the
+  selected Test body ever runs, mirroring `ProtosTestLogicalCaseAttemptBridge`'s
+  phase model. The D135 Process-snapshot bootstrap (fresh
+  `ProtosProcessRuntime` -> `establishArgumentsForRuntime`/
+  `establishEnvironmentForRuntime`) is reused unchanged and still produces a
+  fresh Process per Logical Case; `process.args()`/`process.environment()`
+  semantics, D152, D153, `CaseAuthority`, and TOOL009-D are unmodified. Actor,
+  Group, and the Process conformance corpus/manifest are untouched, and the 15
+  `protos/tests/conformance/process` fixtures are not migrated in this slice.
+  - `ProtosProcessSnapshotExecution` gains `executeCase(source, prelude,
+    expectedSignature, selector)` alongside the unchanged `execute(source,
+    prelude)` (still used by `ProtosAsyncProcessSnapshotExecutionFacility`'s
+    unrelated whole-source `processSnapshotExecutionAsync` route). Both share
+    one extracted bootstrap helper, so the D135 Process/arguments/Environment
+    materialization is not duplicated. `executeCase` runs `source` once to
+    materialize its `tests` declaration in the bootstrap activation, then
+    evaluates the same `Discovery.resolveSelectedTest` selection script
+    `ProtosTestLogicalCaseAttemptBridge` uses (sharing its actor module
+    state/execution domain so the selected Test closure still resolves
+    `process`/`otherProcess`/`emptyProcess` lexically), and finally invokes
+    `selected()` as one separate root execution.
+  - `ProtosProcessSnapshotLogicalCaseExecutionFacility` no longer validates
+    the degenerate "signature names exactly one Case equal to the selector"
+    shape; it now validates only argument/entry types (mirroring
+    `ProtosTestLogicalCaseExecutionFacility`) and defers real signature/
+    selector verification to `executeCase`'s Discovery-based resolution, so a
+    Process-snapshot source may now declare more than one named Test.
+  - Rewrites `ProtosProcessSnapshotLogicalCaseExecutionFacilityTest` to
+    demonstrate the selected-Test authority end to end: the selected Test body
+    actually executes exactly once, a failing selected Test body fails the
+    Case, selecting one of two declared Tests runs only that one, a signature
+    mismatch and a selector mismatch both reject before the selected body
+    runs (each distinguished from a body failure by the `rematerialization-
+    error` vs `case-execution` phase), and `process.args()`/
+    `process.environment()` still read the real D135 bootstrap snapshots
+    with a fresh Process per independent Logical Case.
+
 ## 0.3.65-SNAPSHOT
 
 - TOOL009-E (#688): add a suite-native Logical Case execution route for the

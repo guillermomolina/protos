@@ -25,23 +25,27 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * TOOL009-E suite-native Logical Case protocol adapter for the Process-snapshot Test Tool lane.
+ * TOOL009-E / D178 suite-native Logical Case protocol adapter for the Process-snapshot Test Tool
+ * lane.
  *
  * <p>This adapter translates the 4-argument discovery-driven Logical Case protocol ({@code
- * sourceAssociation, source, signature, selector}) into the existing Process-snapshot execution
- * mechanism. The Process-snapshot corpus has no Suite/Discovery module structure of its own: each
- * source unit is exactly one Case body, so {@code signature} and {@code selector} are validated
- * for that degenerate one-Case shape only and never drive a host-side rematerialization search.
+ * sourceAssociation, source, signature, selector}) into a selected-{@code Test.call()}-authority
+ * execution: {@code source} declares its top-level {@code tests} (discovery-observational; no Test
+ * body runs during declaration), one Test is resolved through the same {@code
+ * Discovery.resolveSelectedTest} authority the ordinary suite-native lane uses, and only that
+ * selected Test's {@code call()} completion is the Case authority. A signature or selector mismatch
+ * is rejected before the selected Test body ever runs.
  *
- * <p>Real execution is delegated to {@link ProtosProcessSnapshotExecution#execute(String,
- * ProtosPrelude)}, which remains the sole bootstrap for this lane: every accepted Case
- * rematerializes a fresh Process there, so two Logical Cases never share Process state. Async
+ * <p>Real execution is delegated to {@link ProtosProcessSnapshotExecution#executeCase(String,
+ * ProtosPrelude, List, String)}, which remains the sole bootstrap for this lane: every accepted
+ * Case rematerializes a fresh Process there, so two Logical Cases never share Process state. Async
  * custody, cancellation and caller-domain completion mirror {@link
  * ProtosTestLogicalCaseExecutionFacility}.
  *
@@ -123,22 +127,26 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
-        // The Process-snapshot corpus publishes exactly one Case per source unit, so the
-        // discovery-driven signature must name that one Case and the selector must select it;
-        // there is no Suite module to search.
-        List<Object> declaredSignature = signature.indexedSnapshot();
-        if (selector.value().isEmpty()
-                || declaredSignature.size() != 1
-                || !(declaredSignature.get(0) instanceof ProtosStringValue only)
-                || only.value().isEmpty()
-                || !only.value().equals(selector.value())) {
+        if (selector.value().isEmpty()) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
-        return start(caller, source);
+        ArrayList<String> expectedSignature = new ArrayList<>();
+        for (Object value : signature.indexedSnapshot()) {
+            if (!(value instanceof ProtosStringValue name) || name.value().isEmpty()) {
+                throw ProtosExactExecutionFacility.ordinaryError(caller);
+            }
+            expectedSignature.add(name.value());
+        }
+
+        return start(caller, source, expectedSignature, selector.value());
     }
 
-    private ProtosFutureValue start(ProtosActivation caller, ProtosStringValue source) {
+    private ProtosFutureValue start(
+            ProtosActivation caller,
+            ProtosStringValue source,
+            List<String> expectedSignature,
+            String selector) {
         ProtosPrelude callerPrelude =
                 caller.prelude()
                         .orElseThrow(
@@ -150,7 +158,8 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
         ProtosFutureValue future =
                 new ProtosFutureValue(callerPrelude.futurePrototype(), caller.executionDomain());
 
-        Operation operation = new Operation(caller, callerPrelude, future, source);
+        Operation operation =
+                new Operation(caller, callerPrelude, future, source, expectedSignature, selector);
 
         registerOutstanding(operation);
         future.attachCancellationProducer(operation::requestCancellation);
@@ -182,16 +191,26 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
     }
 
     private ProtosObjectValue rematerialize(
-            ProtosCapturedProcessExecution.Result result,
+            ProtosProcessSnapshotExecution.CaseResult result,
             ProtosActivation caller,
             ProtosPrelude callerPrelude) {
         ProtosObjectValue envelope = new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-        envelope.createLocalSlot("phase", new ProtosStringValue("case-execution"));
+        String phase =
+                switch (result.phase()) {
+                    case REMATERIALIZATION_ERROR -> "rematerialization-error";
+                    case CASE_EXECUTION -> "case-execution";
+                };
+
+        envelope.createLocalSlot("phase", new ProtosStringValue(phase));
         envelope.createLocalSlot(
                 "observation",
                 ProtosExactExecutionFacility.observation(
-                        result, caller, callerPrelude, executionPrelude));
+                        new ProtosCapturedProcessExecution.Result(
+                                result.outcome(), new byte[0], new byte[0]),
+                        caller,
+                        callerPrelude,
+                        executionPrelude));
 
         envelope.freeze();
         return envelope;
@@ -223,6 +242,8 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
         private final ProtosPrelude callerPrelude;
         private final ProtosFutureValue future;
         private final ProtosStringValue source;
+        private final List<String> expectedSignature;
+        private final String selector;
 
         private ProtosAsyncExactExecutionFacility.Submitted submitted;
         private boolean cancellationRequested;
@@ -233,11 +254,16 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                 ProtosActivation caller,
                 ProtosPrelude callerPrelude,
                 ProtosFutureValue future,
-                ProtosStringValue source) {
+                ProtosStringValue source,
+                List<String> expectedSignature,
+                String selector) {
             this.caller = Objects.requireNonNull(caller, "caller");
             this.callerPrelude = Objects.requireNonNull(callerPrelude, "callerPrelude");
             this.future = Objects.requireNonNull(future, "future");
             this.source = Objects.requireNonNull(source, "source");
+            this.expectedSignature =
+                    List.copyOf(Objects.requireNonNull(expectedSignature, "expectedSignature"));
+            this.selector = Objects.requireNonNull(selector, "selector");
         }
 
         private void submit() {
@@ -285,16 +311,13 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                 return;
             }
 
-            ProtosCapturedProcessExecution.Result result = null;
+            ProtosProcessSnapshotExecution.CaseResult result = null;
             RuntimeException hostFailure = null;
 
             try {
                 result =
-                        new ProtosCapturedProcessExecution.Result(
-                                ProtosProcessSnapshotExecution.execute(
-                                        source.value(), executionPrelude),
-                                new byte[0],
-                                new byte[0]);
+                        ProtosProcessSnapshotExecution.executeCase(
+                                source.value(), executionPrelude, expectedSignature, selector);
             } catch (RuntimeException failure) {
                 hostFailure = failure;
             }
@@ -304,7 +327,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
         }
 
         private void enqueueCallerCompletion(
-                ProtosCapturedProcessExecution.Result result, RuntimeException hostFailure) {
+                ProtosProcessSnapshotExecution.CaseResult result, RuntimeException hostFailure) {
             try {
                 caller.executionDomain()
                         .createTask(
