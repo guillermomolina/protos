@@ -13,11 +13,19 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Schema: import("self:ManifestSchemaV1")
-model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n")
-ok: model.package.id == "pkg"
-(model.compatibility === null).ifFalse(() => { ok = false })
-(model.exports.size() == 0).ifFalse(() => { ok = false })
-(model.dependencies.size() == 0).ifFalse(() => { ok = false })
-(model.workspace === null).ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("manifest-schema-final-minimal", () => {
+        Schema: import("self:ManifestSchemaV1")
+        model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n")
+        ok: model.package.id == "pkg"
+        (model.compatibility === null).ifFalse(() => { ok = false })
+        (model.exports.size() == 0).ifFalse(() => { ok = false })
+        (model.dependencies.size() == 0).ifFalse(() => { ok = false })
+        (model.workspace === null).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

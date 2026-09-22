@@ -13,5 +13,15 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:TomlDocument")
-Document.table("[[fruits]]\nname = \"apple\"\n[fruits]\nowner = \"x\"\n")
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("document-table-array-of-tables-array-to-table-conflict-error", () => {
+        Document: import("self:TomlDocument")
+        Assertions.signals(Error, () => {
+            Document.table("[[fruits]]\nname = \"apple\"\n[fruits]\nowner = \"x\"\n")
+        })
+    })
+]
+tests.freeze()

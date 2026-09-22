@@ -13,6 +13,14 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Schema: import("self:ManifestSchemaV1")
-model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[dependencies]\n")
-model.dependencies.size() == 0
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("manifest-schema-final-empty-dependencies", () => {
+        Schema: import("self:ManifestSchemaV1")
+        model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[dependencies]\n")
+        Assertions.require(model.dependencies.size() == 0)
+    })
+]
+tests.freeze()

@@ -1,3 +1,76 @@
+## 0.3.74-SNAPSHOT
+
+- `TOOL009`: migrate the complete 102-case Package Tool TOML corpus under
+  `protos/tests/package-tool/toml-syntax` from the legacy Test Tool
+  execution path to suite-native Logical Case execution, using the
+  Package-flavored resolver coverage published in `0.3.73-SNAPSHOT`.
+  - All 102 `.protos` fixtures (27 `TomlSyntax`, 31 `TomlDocument`, 44
+    `ManifestSchemaV1`) now declare `std:test/Test` cases using
+    `std:test/Assertions.require(...)` (former `true` expectation) or
+    `std:test/Assertions.signals(Error, ...)` (former `error`
+    expectation), preserving the exact behavior each fixture tests
+    inside the selected Test body.
+  - Each fixture's `self:TomlSyntax` / `self:TomlDocument` /
+    `self:ManifestSchemaV1` import is declared inside the selected
+    Test's closure body rather than at module top level. The Test Tool
+    CLI's suite-native discovery boundary
+    (`ProtosTestLogicalCaseDiscoveryFacility`) is flavor-agnostic and
+    installed once with the ordinary, non-overlaid Test Tool fallback
+    resolver; it fully evaluates a suite's module source to read its
+    `tests` declaration, before any flavor-specific (Package/Actor/
+    Group) execution resolver is ever consulted. A module-top-level
+    `self:` import is therefore unresolvable at discovery time for this
+    corpus, even though the already-published Package-flavored
+    execution resolver overlay resolves it correctly once a selected
+    Test is actually invoked. Group/Actor's suite-native corpora never
+    surfaced this discovery/execution resolver-boundary seam because
+    their flavor-specific dependency (`workers`) is referenced only
+    from inside a Test body at runtime, never as a module-top-level
+    import. Moving the import inside the Test closure (syntactically
+    ordinary, since `import(specifier)` is an ordinary call expression
+    per `spec/PROTOS_GRAMMAR.md`, not top-level-only syntax) defers its
+    resolution to execution time, matching the pattern Group/Actor
+    already rely on; this is a fixture-authoring adjustment, not a
+    resolver or discovery-facility change, and
+    `ProtosTestLogicalCaseDiscoveryFacility`'s generic wiring is
+    unchanged.
+  - `manifest.tsv` now records `suite-native` for all 102 entries
+    (`LEGACY_TRUE_METADATA_REMAINING=0`,
+    `LEGACY_ERROR_METADATA_REMAINING=0`).
+  - `protos/tools/test/Manifest.protos`'s `packageTomlCaseSpec` (the
+    two-column Package TOML manifest parser) now recognizes
+    `suite-native` as a third valid `expectation`/`expected` pair
+    (`"suite-native"`/`"-"`), alongside its existing `true`/`error`
+    handling, so `Manifest.caseExpectation(...) == "suite-native"`
+    routes these cases through the already-published
+    `LogicalCaseMigration` suite-native dispatch. The `true`/`error`
+    handling is unchanged.
+  - Two pre-existing legacy exact-execution infrastructure fixtures
+    (`protos/tests/tooling/tool002-e2a1-package-resolved-execution.protos`
+    and
+    `protos/tests/tooling/tool002-e2a2b-package-failed-fixture.protos`)
+    directly executed raw source read from
+    `key-bare-dotted.protos`/`invalid-key-error.protos` in the corpus,
+    which no longer evaluate to a bare boolean/signal now that those
+    files are suite-native Test declarations. Both fixtures now execute
+    a dedicated inline source string reproducing the exact former
+    corpus behavior, decoupling this legacy-plumbing infrastructure
+    check from the now-migrated corpus content; the corresponding Java
+    tests (`ProtosTestToolPackageExecutionEnvironmentTest`,
+    `ProtosTestToolPackageFailedExecutionTest`) are unchanged.
+  - `protos/tests/tooling/tool002-e1b-package-toml-filesystem.protos`
+    (which asserts on the real corpus's first manifest row) now expects
+    `caseExpectation == "suite-native"` / `caseExpected == "-"` instead
+    of `"boolean"`/`"true"`, matching the migrated
+    `key-bare-dotted.protos` entry.
+  - This migration does not modify Java production code, does not
+    remove legacy Test Tool infrastructure
+    (`LogicalCaseMigration`/`splitPlan`/`legacyPlan`/`mergeOutcome`, the
+    D108 Runner route, or the `packageExecutionAsync` family), and does
+    not change `D108`/`D152`/`D153`/`D178`/Case Authority semantics.
+    Global legacy-infrastructure liveness reconciliation remains
+    separate follow-up work (`TOOL009-B` / #685).
+
 ## 0.3.73-SNAPSHOT
 
 - `TOOL009`: complete the Package-flavored suite-native logical Case

@@ -134,6 +134,11 @@ packageTomlCaseSpec: (fields) => {
         expected = "-"
         known = true
     })
+    (retainedExpectation == "suite-native").ifTrue(() => {
+        expectation = "suite-native"
+        expected = "-"
+        known = true
+    })
     known.ifFalse(() => {
         fail()
     })

@@ -13,14 +13,22 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:TomlDocument")
-root: Document.table("manifest-version = 1\n[package]\nid = \"pkg-1\"\nversion = \"1.2.3\"\n")
-version: root.value["manifest-version"]
-package: root.value["package"]
-ok: root.kind == "table"
-(version.kind == "integer").ifFalse(() => { ok = false })
-(version.value == 1).ifFalse(() => { ok = false })
-(package.kind == "table").ifFalse(() => { ok = false })
-(package.value["id"].value == "pkg-1").ifFalse(() => { ok = false })
-(package.value["version"].value == "1.2.3").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("document-table-basic", () => {
+        Document: import("self:TomlDocument")
+        root: Document.table("manifest-version = 1\n[package]\nid = \"pkg-1\"\nversion = \"1.2.3\"\n")
+        version: root.value["manifest-version"]
+        package: root.value["package"]
+        ok: root.kind == "table"
+        (version.kind == "integer").ifFalse(() => { ok = false })
+        (version.value == 1).ifFalse(() => { ok = false })
+        (package.kind == "table").ifFalse(() => { ok = false })
+        (package.value["id"].value == "pkg-1").ifFalse(() => { ok = false })
+        (package.value["version"].value == "1.2.3").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

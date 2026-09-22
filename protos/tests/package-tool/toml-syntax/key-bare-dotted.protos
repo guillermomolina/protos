@@ -13,9 +13,17 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Toml: import("self:TomlSyntax")
-parts: Toml.keyPath("dependencies . parser-core")
-ok: parts.size() == 2
-(parts[0] == "dependencies").ifFalse(() => { ok = false })
-(parts[1] == "parser-core").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("key-bare-dotted", () => {
+        Toml: import("self:TomlSyntax")
+        parts: Toml.keyPath("dependencies . parser-core")
+        ok: parts.size() == 2
+        (parts[0] == "dependencies").ifFalse(() => { ok = false })
+        (parts[1] == "parser-core").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

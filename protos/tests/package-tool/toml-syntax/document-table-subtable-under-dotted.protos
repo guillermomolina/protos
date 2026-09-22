@@ -13,10 +13,18 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:TomlDocument")
-root: Document.table("[fruit]\napple.color = \"red\"\napple.taste.sweet = true\n[fruit.apple.texture]\nsmooth = true\n")
-apple: root.value["fruit"].value["apple"].value
-ok: apple["color"].value == "red"
-(apple["taste"].value["sweet"].value == true).ifFalse(() => { ok = false })
-(apple["texture"].value["smooth"].value == true).ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("document-table-subtable-under-dotted", () => {
+        Document: import("self:TomlDocument")
+        root: Document.table("[fruit]\napple.color = \"red\"\napple.taste.sweet = true\n[fruit.apple.texture]\nsmooth = true\n")
+        apple: root.value["fruit"].value["apple"].value
+        ok: apple["color"].value == "red"
+        (apple["taste"].value["sweet"].value == true).ifFalse(() => { ok = false })
+        (apple["texture"].value["smooth"].value == true).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

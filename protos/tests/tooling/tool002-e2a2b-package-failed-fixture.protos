@@ -13,14 +13,23 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+// TOOL009: the Package TOML corpus under
+// protos/tests/package-tool/toml-syntax is now suite-native (Test/Assertions
+// declarations), so this legacy exact-execution E2A2B slice no longer sources
+// its subject from that corpus (its bare-signal raw-execution contract no
+// longer applies there). Manifest.parsePackageTomlLine still validates the
+// unrelated CaseId/parser plumbing; the executed source is a dedicated
+// inline fixture mirroring the corpus's own former invalid-key-error.protos
+// behavior without depending on corpus content that now belongs to the
+// suite-native route.
 Manifest: import("self:Manifest")
-Runner: import("self:Runner")
 
 spec: Manifest.parsePackageTomlLine(
     "invalid-key-error.protos\terror"
 )
-source: Runner.readSource(spec, packageTomlFilesystem)
-observation: packageExecution(source)
+observation: packageExecution(
+    "Toml: import(\"self:TomlSyntax\")\nToml.keyPath(\"a..b\")\n"
+)
 
 passed:
     Manifest.caseId(spec) ==

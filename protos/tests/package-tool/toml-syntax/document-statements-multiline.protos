@@ -13,9 +13,17 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:TomlDocument")
-items: Document.statements("text = \"\"\"\nalpha # data\nbeta\n\"\"\"\n[package]\n")
-ok: items.size() == 2
-(items[0] == "text = \"\"\"\nalpha # data\nbeta\n\"\"\"").ifFalse(() => { ok = false })
-(items[1] == "[package]").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("document-statements-multiline", () => {
+        Document: import("self:TomlDocument")
+        items: Document.statements("text = \"\"\"\nalpha # data\nbeta\n\"\"\"\n[package]\n")
+        ok: items.size() == 2
+        (items[0] == "text = \"\"\"\nalpha # data\nbeta\n\"\"\"").ifFalse(() => { ok = false })
+        (items[1] == "[package]").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

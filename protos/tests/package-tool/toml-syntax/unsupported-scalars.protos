@@ -13,11 +13,19 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Toml: import("self:TomlSyntax")
-float: Toml.value("1.5")
-date: Toml.value("1979-05-27")
-large: Toml.value("9223372036854775808")
-ok: float.kind == "unsupported"
-(date.kind == "unsupported").ifFalse(() => { ok = false })
-(large.kind == "unsupported").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("unsupported-scalars", () => {
+        Toml: import("self:TomlSyntax")
+        float: Toml.value("1.5")
+        date: Toml.value("1979-05-27")
+        large: Toml.value("9223372036854775808")
+        ok: float.kind == "unsupported"
+        (date.kind == "unsupported").ifFalse(() => { ok = false })
+        (large.kind == "unsupported").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

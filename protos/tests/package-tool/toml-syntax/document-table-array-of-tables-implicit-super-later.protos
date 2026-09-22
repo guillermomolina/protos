@@ -13,13 +13,21 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:TomlDocument")
-root: Document.table("[[catalog.products]]\nname = \"hammer\"\n[catalog]\nowner = \"tools\"\n")
-catalog: root.value["catalog"]
-products: catalog.value["products"]
-ok: catalog.kind == "table"
-(catalog.value["owner"].value == "tools").ifFalse(() => { ok = false })
-(products.kind == "array").ifFalse(() => { ok = false })
-(products.value.size() == 1).ifFalse(() => { ok = false })
-(products.value[0].value["name"].value == "hammer").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("document-table-array-of-tables-implicit-super-later", () => {
+        Document: import("self:TomlDocument")
+        root: Document.table("[[catalog.products]]\nname = \"hammer\"\n[catalog]\nowner = \"tools\"\n")
+        catalog: root.value["catalog"]
+        products: catalog.value["products"]
+        ok: catalog.kind == "table"
+        (catalog.value["owner"].value == "tools").ifFalse(() => { ok = false })
+        (products.kind == "array").ifFalse(() => { ok = false })
+        (products.value.size() == 1).ifFalse(() => { ok = false })
+        (products.value[0].value["name"].value == "hammer").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

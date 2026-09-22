@@ -13,23 +13,21 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Manifest: import("self:Manifest")
-Runner: import("self:Runner")
+// TOOL009: the Package TOML corpus under
+// protos/tests/package-tool/toml-syntax is now suite-native (Test/Assertions
+// declarations), so this legacy exact-execution E2A1 slice no longer sources
+// its subject from that corpus (its bare-boolean raw-execution contract no
+// longer applies there). It instead exercises the exact same
+// packageExecution/self:TomlSyntax resolution path against a dedicated
+// inline fixture, mirroring the corpus's own former key-bare-dotted.protos
+// behavior without depending on corpus content that now belongs to the
+// suite-native route.
+observation: packageExecution(
+    "Toml: import(\"self:TomlSyntax\")\nparts: Toml.keyPath(\"dependencies . parser-core\")\nparts.size() == 2\n"
+)
 
-plan: Manifest.loadPackageToml(packageTomlFilesystem)
-cases: Manifest.planCases(plan)
-spec: cases[0]
+passed: observation.state === "completed"
 
-source: Runner.readSource(spec, packageTomlFilesystem)
-observation: packageExecution(source)
-
-passed:
-    Manifest.caseId(spec) ==
-    "package-tool/toml-syntax/key-bare-dotted.protos"
-
-passed.ifTrue(() => {
-    passed = observation.state === "completed"
-})
 passed.ifTrue(() => {
     passed = observation.error === null
 })

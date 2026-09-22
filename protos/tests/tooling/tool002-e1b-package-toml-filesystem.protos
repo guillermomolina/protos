@@ -37,8 +37,8 @@ passed = passed &&
 passed = passed &&
     (Manifest.casePath(packageTomlFirst) == "key-bare-dotted.protos")
 passed = passed &&
-    (Manifest.caseExpectation(packageTomlFirst) == "boolean")
+    (Manifest.caseExpectation(packageTomlFirst) == "suite-native")
 passed = passed &&
-    (Manifest.caseExpected(packageTomlFirst) == "true")
+    (Manifest.caseExpected(packageTomlFirst) == "-")
 
 passed

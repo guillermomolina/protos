@@ -13,11 +13,19 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:TomlDocument")
-items: Document.statements("manifest-version = 1\n[package]\nid = \"pkg#1\"# trailing\nversion = \"1.0.0\"\n")
-ok: items.size() == 4
-(items[0] == "manifest-version = 1").ifFalse(() => { ok = false })
-(items[1] == "[package]").ifFalse(() => { ok = false })
-(items[2] == "id = \"pkg#1\"").ifFalse(() => { ok = false })
-(items[3] == "version = \"1.0.0\"").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("document-statements-basic", () => {
+        Document: import("self:TomlDocument")
+        items: Document.statements("manifest-version = 1\n[package]\nid = \"pkg#1\"# trailing\nversion = \"1.0.0\"\n")
+        ok: items.size() == 4
+        (items[0] == "manifest-version = 1").ifFalse(() => { ok = false })
+        (items[1] == "[package]").ifFalse(() => { ok = false })
+        (items[2] == "id = \"pkg#1\"").ifFalse(() => { ok = false })
+        (items[3] == "version = \"1.0.0\"").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

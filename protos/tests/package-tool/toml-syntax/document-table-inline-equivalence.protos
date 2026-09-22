@@ -13,12 +13,20 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:TomlDocument")
-inline: Document.table("dependencies = { parser = { authority = \"public\", package = \"community/parser\", version = \"^2.1.0\" } }\n")
-expanded: Document.table("[dependencies.parser]\nauthority = \"public\"\npackage = \"community/parser\"\nversion = \"^2.1.0\"\n")
-a: inline.value["dependencies"].value["parser"].value
-b: expanded.value["dependencies"].value["parser"].value
-ok: a["authority"].value == b["authority"].value
-(a["package"].value == b["package"].value).ifFalse(() => { ok = false })
-(a["version"].value == b["version"].value).ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("document-table-inline-equivalence", () => {
+        Document: import("self:TomlDocument")
+        inline: Document.table("dependencies = { parser = { authority = \"public\", package = \"community/parser\", version = \"^2.1.0\" } }\n")
+        expanded: Document.table("[dependencies.parser]\nauthority = \"public\"\npackage = \"community/parser\"\nversion = \"^2.1.0\"\n")
+        a: inline.value["dependencies"].value["parser"].value
+        b: expanded.value["dependencies"].value["parser"].value
+        ok: a["authority"].value == b["authority"].value
+        (a["package"].value == b["package"].value).ifFalse(() => { ok = false })
+        (a["version"].value == b["version"].value).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

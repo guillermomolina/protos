@@ -13,8 +13,16 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Toml: import("self:TomlSyntax")
-parsed: Toml.value("\"\"\"\r\nalpha\r\nbeta\"\"\"")
-ok: parsed.kind == "string"
-(parsed.value == "alpha\nbeta").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("string-multiline-crlf", () => {
+        Toml: import("self:TomlSyntax")
+        parsed: Toml.value("\"\"\"\r\nalpha\r\nbeta\"\"\"")
+        ok: parsed.kind == "string"
+        (parsed.value == "alpha\nbeta").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

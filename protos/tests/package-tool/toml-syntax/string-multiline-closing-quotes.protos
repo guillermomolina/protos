@@ -13,13 +13,21 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Toml: import("self:TomlSyntax")
-a: Toml.value("\"\"\"x\"\"\"\"")
-b: Toml.value("\"\"\"x\"\"\"\"\"")
-c: Toml.value("'''x''''")
-d: Toml.value("'''x'''''")
-ok: a.value == "x\""
-(b.value == "x\"\"").ifFalse(() => { ok = false })
-(c.value == "x'").ifFalse(() => { ok = false })
-(d.value == "x''").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("string-multiline-closing-quotes", () => {
+        Toml: import("self:TomlSyntax")
+        a: Toml.value("\"\"\"x\"\"\"\"")
+        b: Toml.value("\"\"\"x\"\"\"\"\"")
+        c: Toml.value("'''x''''")
+        d: Toml.value("'''x'''''")
+        ok: a.value == "x\""
+        (b.value == "x\"\"").ifFalse(() => { ok = false })
+        (c.value == "x'").ifFalse(() => { ok = false })
+        (d.value == "x''").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

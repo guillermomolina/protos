@@ -13,21 +13,29 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Document: import("self:TomlDocument")
-root: Document.table("[[fruits]]\nname = \"apple\"\n[fruits.physical]\ncolor = \"red\"\n[[fruits.varieties]]\nname = \"red delicious\"\n[[fruits.varieties]]\nname = \"granny smith\"\n[[fruits]]\nname = \"banana\"\n[[fruits.varieties]]\nname = \"plantain\"\n")
-fruits: root.value["fruits"].value
-apple: fruits[0]
-banana: fruits[1]
-appleVarieties: apple.value["varieties"].value
-bananaVarieties: banana.value["varieties"].value
-ok: fruits.size() == 2
-(apple.value["name"].value == "apple").ifFalse(() => { ok = false })
-(apple.value["physical"].value["color"].value == "red").ifFalse(() => { ok = false })
-(appleVarieties.size() == 2).ifFalse(() => { ok = false })
-(appleVarieties[0].value["name"].value == "red delicious").ifFalse(() => { ok = false })
-(appleVarieties[1].value["name"].value == "granny smith").ifFalse(() => { ok = false })
-(banana.value["name"].value == "banana").ifFalse(() => { ok = false })
-(banana.value.containsKey("physical")).ifTrue(() => { ok = false })
-(bananaVarieties.size() == 1).ifFalse(() => { ok = false })
-(bananaVarieties[0].value["name"].value == "plantain").ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("document-table-array-of-tables-nested-latest", () => {
+        Document: import("self:TomlDocument")
+        root: Document.table("[[fruits]]\nname = \"apple\"\n[fruits.physical]\ncolor = \"red\"\n[[fruits.varieties]]\nname = \"red delicious\"\n[[fruits.varieties]]\nname = \"granny smith\"\n[[fruits]]\nname = \"banana\"\n[[fruits.varieties]]\nname = \"plantain\"\n")
+        fruits: root.value["fruits"].value
+        apple: fruits[0]
+        banana: fruits[1]
+        appleVarieties: apple.value["varieties"].value
+        bananaVarieties: banana.value["varieties"].value
+        ok: fruits.size() == 2
+        (apple.value["name"].value == "apple").ifFalse(() => { ok = false })
+        (apple.value["physical"].value["color"].value == "red").ifFalse(() => { ok = false })
+        (appleVarieties.size() == 2).ifFalse(() => { ok = false })
+        (appleVarieties[0].value["name"].value == "red delicious").ifFalse(() => { ok = false })
+        (appleVarieties[1].value["name"].value == "granny smith").ifFalse(() => { ok = false })
+        (banana.value["name"].value == "banana").ifFalse(() => { ok = false })
+        (banana.value.containsKey("physical")).ifTrue(() => { ok = false })
+        (bananaVarieties.size() == 1).ifFalse(() => { ok = false })
+        (bananaVarieties[0].value["name"].value == "plantain").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()

@@ -13,17 +13,25 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Schema: import("self:ManifestSchemaV1")
-model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\nlocator = \"community/pkg\"\n[compatibility]\nlanguage = \">=0.1\"\n[exports]\nParser = \"parser/Parser\"\n[dependencies.registry]\nauthority = \"protos-public\"\npackage = \"community/parser\"\nversion = \"^2.1.0\"\n[dependencies.metrics]\ngit = \"https://example.invalid/metrics.git\"\nrev = \"0123456789abcdef\"\n[dependencies.fixture]\npath = \"../fixture\"\n[workspace]\nmembers = [\"app\", \"parser\"]\n")
-ok: model.package.locator == "community/pkg"
-(model.compatibility.language == ">=0.1").ifFalse(() => { ok = false })
-(model.exports["Parser"] == "parser/Parser").ifFalse(() => { ok = false })
-(model.dependencies.size() == 3).ifFalse(() => { ok = false })
-(model.dependencies["registry"].authority == "protos-public").ifFalse(() => { ok = false })
-(model.dependencies["registry"].package == "community/parser").ifFalse(() => { ok = false })
-(model.dependencies["registry"].version == "^2.1.0").ifFalse(() => { ok = false })
-(model.dependencies["metrics"].git == "https://example.invalid/metrics.git").ifFalse(() => { ok = false })
-(model.dependencies["metrics"].rev == "0123456789abcdef").ifFalse(() => { ok = false })
-(model.dependencies["fixture"].path == "../fixture").ifFalse(() => { ok = false })
-(model.workspace.members.size() == 2).ifFalse(() => { ok = false })
-ok
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("manifest-schema-final-all-dependency-forms", () => {
+        Schema: import("self:ManifestSchemaV1")
+        model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\nlocator = \"community/pkg\"\n[compatibility]\nlanguage = \">=0.1\"\n[exports]\nParser = \"parser/Parser\"\n[dependencies.registry]\nauthority = \"protos-public\"\npackage = \"community/parser\"\nversion = \"^2.1.0\"\n[dependencies.metrics]\ngit = \"https://example.invalid/metrics.git\"\nrev = \"0123456789abcdef\"\n[dependencies.fixture]\npath = \"../fixture\"\n[workspace]\nmembers = [\"app\", \"parser\"]\n")
+        ok: model.package.locator == "community/pkg"
+        (model.compatibility.language == ">=0.1").ifFalse(() => { ok = false })
+        (model.exports["Parser"] == "parser/Parser").ifFalse(() => { ok = false })
+        (model.dependencies.size() == 3).ifFalse(() => { ok = false })
+        (model.dependencies["registry"].authority == "protos-public").ifFalse(() => { ok = false })
+        (model.dependencies["registry"].package == "community/parser").ifFalse(() => { ok = false })
+        (model.dependencies["registry"].version == "^2.1.0").ifFalse(() => { ok = false })
+        (model.dependencies["metrics"].git == "https://example.invalid/metrics.git").ifFalse(() => { ok = false })
+        (model.dependencies["metrics"].rev == "0123456789abcdef").ifFalse(() => { ok = false })
+        (model.dependencies["fixture"].path == "../fixture").ifFalse(() => { ok = false })
+        (model.workspace.members.size() == 2).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    })
+]
+tests.freeze()
