@@ -1,3 +1,28 @@
+## 0.3.79-SNAPSHOT
+
+- `PERF010-A`: replace the `fastOrdinarySend` cache guard's `closure`/
+  `methodHome` object-identity check with a `ProtosClosureValue.definition()`
+  identity check in `ProtosBytecodeRootNode.PrepareSendArguments`. The
+  selected Closure and its `methodHome` are legitimately fresh runtime
+  objects on every invocation that re-executes the Source producing them
+  (a re-materialized Closure literal, a freshly constructed receiver), even
+  when D013 keeps selecting the same executable behavior; guarding on their
+  object identity consumed a fresh cache entry per execution and, after the
+  cache limit, permanently generalized the call site to the generic
+  `perform` fallback (the PERF010-A stable-specialization-identity-churn
+  root cause). The effective Context-owned Bytecode activation target
+  depends only on the selected Closure's immutable `CanonicalClosure`
+  definition and the entered `ProtosLanguageContext`, never on the selected
+  Closure or `methodHome` instance, so keying the cache on that definition
+  instead keeps the fast hit stable across fresh materializations of the
+  same executable behavior while remaining exactly as discriminating
+  whenever D013 genuinely selects a different Closure. The currently
+  selected Closure and `methodHome` are still bound fresh on every hit and
+  flow into a fresh `ProtosActivation` exactly as before; only the cache
+  guard identity changes. D013 re-lookup per invocation, mutation
+  visibility/shadowing/delegation, and every other preserved PERF010-A
+  invariant are unaffected.
+
 ## 0.3.78-SNAPSHOT
 
 - `PERF010-A`: add a prepared Context-owned target specialization for

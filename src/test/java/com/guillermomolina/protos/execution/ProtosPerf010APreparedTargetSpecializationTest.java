@@ -108,6 +108,68 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
     }
 
     @Test
+    void freshClosureAndReceiverMaterializationsOfTheSameDefinitionRemainCorrectPastTheCacheLimit()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosActivation module = moduleActivation();
+                ProtosObjectValue marker =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                module.context().createLocalSlot("marker", marker);
+
+                String methodCharacters = "(value) => { value }";
+                Source methodSource =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        methodCharacters,
+                                        "perf010a-churn-identity.protos")
+                                .build();
+                CanonicalClosure methodDefinition = closureDefinition(methodCharacters);
+                ProtosClosureExecutionPlan sharedTemplate =
+                        ProtosClosureExecutionPlan.bytecode(
+                                methodDefinition, language, methodSource);
+
+                RootCallTarget callTarget =
+                        lower(
+                                language,
+                                "receiver.identity(marker)",
+                                "perf010a-churn-send.protos");
+
+                // Same D013-selected executable behavior (methodDefinition,
+                // via the shared template plan) on every iteration, but a
+                // fresh receiver, fresh ProtosClosureValue and fresh
+                // methodHome each time, exercising more iterations than the
+                // fastOrdinarySend cache limit. This reproduces the
+                // PERF010-A identity-churn scenario: the selected Closure
+                // and its home differ by identity every hit even though D013
+                // keeps selecting the same executable behavior.
+                for (int i = 0; i < 10; i++) {
+                    ProtosActivation creator = moduleActivation();
+                    ProtosObjectValue receiver =
+                            new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    ProtosClosureValue closure =
+                            semanticClosure(methodDefinition, sharedTemplate, creator);
+                    receiver.createLocalSlot("identity", closure);
+                    if (i == 0) {
+                        module.context().createLocalSlot("receiver", receiver);
+                    } else {
+                        module.context().assignLocalSlot("receiver", receiver);
+                    }
+
+                    assertSame(marker, callTarget.call(module));
+                }
+            } finally {
+                context.leave();
+            }
+        }
+
+        System.out.println("PERF010A_FRESH_MATERIALIZATION_IDENTITY_CHURN_STABLE=PASS");
+    }
+
+    @Test
     void repeatedSuspendingSendGetsFreshActivationAndExactMethodHomeEachHit()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {

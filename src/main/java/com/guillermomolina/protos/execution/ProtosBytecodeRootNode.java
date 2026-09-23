@@ -4780,11 +4780,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * non-native, source-backed ordinary Closure can never actually need
      * (see the retained PERF010-A causal evidence). {@code fastOrdinarySend}
      * re-runs authoritative D013 lookup on every hit, admits only an exact
-     * cached selector/Closure/methodHome/entered-Context match, and reuses
-     * an effective Context-owned activation target materialized once at
-     * cache-population time. Any mismatch, native Closure, or unsupported
-     * case falls through to the exact existing generic {@code perform}
-     * fallback.
+     * cached selector/entered-Context match against the selected Closure's
+     * stable executable identity, and reuses an effective Context-owned
+     * activation target materialized once at cache-population time. Any
+     * mismatch, native Closure, or unsupported case falls through to the
+     * exact existing generic {@code perform} fallback.
+     *
+     * <p>The selected {@code ProtosClosureValue} and its {@code methodHome}
+     * are fresh runtime objects on every invocation that re-executes the
+     * Source producing them (for example a repeatedly re-materialized
+     * Closure literal or a freshly constructed receiver): D013 selects the
+     * same executable behavior every time, but the wrapper object and its
+     * home differ by identity, so guarding on their identity previously
+     * consumed a fresh cache entry per execution and, after {@code limit}
+     * entries, permanently generalized to {@code perform} (see the retained
+     * PERF010-A causal evidence). The cache key instead uses
+     * {@link ProtosClosureValue#definition()}: the canonical, immutable
+     * Closure definition that {@code MaterializeClosure} always rematerializes
+     * from the exact same semantic AST node for one Closure literal, and
+     * therefore stays identity-stable across fresh materializations of the
+     * same executable behavior while remaining distinct whenever D013
+     * genuinely selects a different Closure. The effective Context-owned
+     * activation target depends only on that definition and the entered
+     * Context (see {@link #fastOrdinarySendTarget}), never on the selected
+     * Closure or methodHome instance, so this key remains exactly as
+     * discriminating as the target it guards. The currently selected
+     * {@code closure} and {@code methodHome} are still bound fresh on every
+     * hit and flow into a fresh {@code ProtosActivation} exactly as before;
+     * only the cache guard identity changes.
      */
     @Operation
     public static final class PrepareSendArguments {
@@ -4793,8 +4816,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     "closure != null",
                     "enteredContext != null",
                     "selector.equals(cachedSelector)",
-                    "closure == cachedClosure",
-                    "methodHome == cachedMethodHome",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
                     "enteredContext == cachedContext",
                     "cachedTarget != null"
                 },
@@ -4809,11 +4832,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind("ordinarySendClosureOrNull(selected)")
                         ProtosClosureValue closure,
                 @Bind("selected.home()") ProtosObjectValue methodHome,
+                @Bind("ordinarySendClosureDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
                 @Bind("currentEnteredContext()")
                         ProtosLanguageContext enteredContext,
                 @Cached("selector") String cachedSelector,
-                @Cached("closure") ProtosClosureValue cachedClosure,
-                @Cached("methodHome") ProtosObjectValue cachedMethodHome,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
@@ -4878,6 +4902,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return closure;
             }
             return null;
+        }
+
+        /**
+         * Returns the stable executable-identity key for {@code closure}, or
+         * {@code null} when there is no selected Closure. Same-definition
+         * Closures always rematerialize this exact {@link CanonicalClosure}
+         * instance (see the class-level PERF010-A note), so this key stays
+         * stable across fresh {@code ProtosClosureValue}/{@code methodHome}
+         * materializations of the same executable behavior.
+         */
+        static CanonicalClosure ordinarySendClosureDefinitionOrNull(
+                ProtosClosureValue closure) {
+            return closure == null ? null : closure.definition();
         }
 
         static ProtosLanguageContext currentEnteredContext() {
