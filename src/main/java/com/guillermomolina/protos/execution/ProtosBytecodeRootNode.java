@@ -51,6 +51,7 @@ import com.oracle.truffle.api.bytecode.ContinuationRootNode;
 import com.oracle.truffle.api.bytecode.GenerateBytecode;
 import com.oracle.truffle.api.bytecode.Operation;
 import com.oracle.truffle.api.bytecode.Variadic;
+import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
@@ -4768,9 +4769,69 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /*
+     * PERF010-A prepared-target specialization.
+     *
+     * <p>The generic ordinary-send path re-classifies every monomorphic hit
+     * against the canonical standard-import native intrinsic and re-derives
+     * the Context-owned Bytecode execution plan through
+     * {@code sharedBytecodeExecutionPlans.computeIfAbsent(...)}. Both
+     * operations are compiler-visible host machinery that a proven
+     * non-native, source-backed ordinary Closure can never actually need
+     * (see the retained PERF010-A causal evidence). {@code fastOrdinarySend}
+     * re-runs authoritative D013 lookup on every hit, admits only an exact
+     * cached selector/Closure/methodHome/entered-Context match, and reuses
+     * an effective Context-owned activation target materialized once at
+     * cache-population time. Any mismatch, native Closure, or unsupported
+     * case falls through to the exact existing generic {@code perform}
+     * fallback.
+     */
     @Operation
     public static final class PrepareSendArguments {
-        @Specialization
+        @Specialization(
+                guards = {
+                    "closure != null",
+                    "enteredContext != null",
+                    "selector.equals(cachedSelector)",
+                    "closure == cachedClosure",
+                    "methodHome == cachedMethodHome",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastOrdinarySend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                @Variadic Object[] supplied,
+                @Bind("performOrdinarySendLookup(receiver, selector, caller)")
+                        ProtosSlotLookupResult selected,
+                @Bind("ordinarySendClosureOrNull(selected)")
+                        ProtosClosureValue closure,
+                @Bind("selected.home()") ProtosObjectValue methodHome,
+                @Bind("currentEnteredContext()")
+                        ProtosLanguageContext enteredContext,
+                @Cached("selector") String cachedSelector,
+                @Cached("closure") ProtosClosureValue cachedClosure,
+                @Cached("methodHome") ProtosObjectValue cachedMethodHome,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+            ProtosActivation activation =
+                    ProtosActivation.forImmediateMethodInvocation(
+                            closure,
+                            List.of(supplied),
+                            receiver,
+                            methodHome,
+                            caller.prelude().orElse(null),
+                            caller.actorModuleState(),
+                            caller.currentModuleKey().orElse(null),
+                            caller.executionDomain());
+            attachTaskOrInheritDynamicControlState(activation, caller);
+            return new PreparedClosureCall(cachedTarget, activation);
+        }
+
+        @Specialization(replaces = "fastOrdinarySend")
         public static PreparedClosureCall perform(
                 Object receiver,
                 String selector,
@@ -4781,6 +4842,72 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     selector,
                     caller,
                     List.of(supplied));
+        }
+
+        /*
+         * Bytecode DSL guard/@Bind expressions in this Operation are resolved
+         * by the DSL processor's own expression parser, which only sees
+         * members declared directly on this class (not private members of the
+         * enclosing ProtosBytecodeRootNode, and not other top-level types by
+         * simple name). These forwarders keep that resolution local while
+         * delegating to the exact shared implementation, avoiding a duplicate
+         * source of truth for lookup/error semantics.
+         */
+
+        static ProtosSlotLookupResult performOrdinarySendLookup(
+                Object receiver,
+                String selector,
+                ProtosActivation caller) {
+            return ProtosBytecodeRootNode.performOrdinarySendLookup(
+                    receiver,
+                    selector,
+                    caller);
+        }
+
+        /**
+         * Returns the non-native ordinary Closure selected by {@code selected},
+         * or {@code null} when the selection is not an ordinary source-backed
+         * Closure. Native Closures (including the canonical standard-import
+         * intrinsic) always miss here and remain on the exact generic
+         * {@code perform} path.
+         */
+        static ProtosClosureValue ordinarySendClosureOrNull(
+                ProtosSlotLookupResult selected) {
+            if (selected.value() instanceof ProtosClosureValue closure
+                    && closure.nativeBody().isEmpty()) {
+                return closure;
+            }
+            return null;
+        }
+
+        static ProtosLanguageContext currentEnteredContext() {
+            return ProtosLanguageContext.currentIfEnteredForRuntime();
+        }
+
+        /**
+         * Materializes the effective Context-owned Bytecode activation target
+         * for one cached fast-hit specialization instance.
+         *
+         * <p>This runs once, at cache-population time, and may use the
+         * existing Context-owned-plan machinery
+         * ({@link ProtosBytecodeRootNode#taskOwnedBytecodePlan}); it is not
+         * called again on the resulting hot hit. Returns {@code null} when no
+         * safe target can be produced for the current entered Context, which
+         * keeps the fast specialization from being instantiated for this call
+         * and leaves the exact generic path as the fallback.
+         */
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure,
+                ProtosLanguageContext enteredContext) {
+            if (currentEnteredContext() != enteredContext) {
+                return null;
+            }
+            ProtosClosureExecutionPlan plan =
+                    ProtosBytecodeRootNode.taskOwnedBytecodePlan(closure);
+            if (plan == null || !plan.isBytecodeBackendForRuntime()) {
+                return null;
+            }
+            return plan.bytecodeActivationTargetForComposition();
         }
     }
 
@@ -4805,24 +4932,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             String selector,
             ProtosActivation caller,
             List<?> supplied) {
-        ProtosPrelude prelude =
-                caller.prelude().orElse(null);
-        ProtosSlotLookupResult selected;
-        try {
-            selected =
-                    ProtosValueLookup.lookup(
-                                    receiver,
-                                    selector,
-                                    prelude)
-                            .orElseThrow(
-                                    () ->
-                                            new ProtosSignalException(
-                                                    ProtosCoreErrors.newSlotNotFound(
-                                                            caller)));
-        } catch (UnsupportedOperationException unsupportedRepresentation) {
-            throw new ProtosSignalException(
-                    ProtosCoreErrors.newError(caller));
-        }
+        ProtosSlotLookupResult selected =
+                performOrdinarySendLookup(receiver, selector, caller);
         if (!(selected.value() instanceof ProtosClosureValue closure)) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(caller));
@@ -4833,6 +4944,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 selected.home(),
                 supplied,
                 caller);
+    }
+
+    /**
+     * Performs the authoritative D013 ordinary-send lookup shared by the
+     * generic {@link #prepareSend} path and the {@code PrepareSendArguments}
+     * fast-hit specialization, preserving the exact existing lookup-failure
+     * and unsupported-representation error semantics.
+     */
+    static ProtosSlotLookupResult performOrdinarySendLookup(
+            Object receiver,
+            String selector,
+            ProtosActivation caller) {
+        ProtosPrelude prelude =
+                caller.prelude().orElse(null);
+        try {
+            return ProtosValueLookup.lookup(
+                            receiver,
+                            selector,
+                            prelude)
+                    .orElseThrow(
+                            () ->
+                                    new ProtosSignalException(
+                                            ProtosCoreErrors.newSlotNotFound(
+                                                    caller)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
     }
 
     @Operation

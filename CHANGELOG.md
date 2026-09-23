@@ -1,3 +1,30 @@
+## 0.3.78-SNAPSHOT
+
+- `PERF010-A`: add a prepared Context-owned target specialization for
+  `ProtosBytecodeRootNode.PrepareSendArguments`, the exact hot caller
+  identified by the retained PERF010-A causal evidence as compiler-stranded
+  behind generic ordinary-send preparation. A new `fastOrdinarySend`
+  specialization re-runs authoritative D013 lookup on every hit and, only
+  when the selector, selected Closure identity, `methodHome` identity, and
+  entered `ProtosLanguageContext` identity all match a cached hit, reuses an
+  effective Context-owned Bytecode activation target materialized once at
+  cache-population time; it builds a fresh activation/invocation on every
+  call as before. This keeps the fast hit from calling
+  `ProtosStandardImportProtocol.selectedRuntimeForBytecodeIntrinsic`/
+  `prepareBytecodeImport` and `ProtosLanguageContext.
+  bytecodeExecutionPlanForDefinition`'s `sharedBytecodeExecutionPlans.
+  computeIfAbsent(...)`, both of which the retained evidence traces directly
+  into the caller helper's permanent compiler bailout, for a proven
+  non-native, source-backed ordinary Closure that can never reach either
+  branch. Any native Closure, standard-import selection, Closure/home/
+  selector/Context mismatch, or unsupported representation falls through to
+  the exact existing generic `perform` path, which is unchanged in
+  behavior (only its lookup logic is now shared via the extracted
+  `performOrdinarySendLookup` helper). This is a bounded implementation
+  experiment: it does not itself establish PERF010-A's dominant cause or
+  attributable fraction, and no production optimization is selected by this
+  change alone.
+
 ## 0.3.77-SNAPSHOT
 
 - `TOOL009-B`: final legacy Test Tool migration cleanup. Repository production
