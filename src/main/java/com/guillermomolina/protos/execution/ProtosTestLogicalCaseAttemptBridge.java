@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -27,6 +28,7 @@ import com.oracle.truffle.api.source.Source;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,8 +48,9 @@ import java.util.Objects;
  * executes, and installs it under the {@code projectTreeFilesystem} slot the declaration's module
  * scope closes over. Discovery, selection and the selected Test's {@code call()} then run in that
  * one Process, so the CaseAuthority provisioning and the suite-native selection authority are never
- * split across two Processes. This composes {@link ProtosTestCaseAuthorityAttemptBridge}'s trusted
- * confinement mechanics rather than introducing a second CaseAuthority model.
+ * split across two Processes. {@link #resolveAuthorityRoot} and {@link #fixtureIdentity} own the
+ * D133/D134 trusted-root confinement mechanics this bridge and {@link
+ * ProtosTestLogicalCaseExecutionFacility} share; there is exactly one CaseAuthority model.
  *
  * <p>This bridge owns no CaseId encoding, scheduling, retry, fixtures, tags, result policy or
  * resource policy.
@@ -192,7 +195,7 @@ final class ProtosTestLogicalCaseAttemptBridge {
                     request.projectTreeCasesRoot() == null
                             ? null
                             : new ProtosNioReadOnlyTreeFilesystemBackend(
-                                    ProtosTestCaseAuthorityAttemptBridge.resolveAuthorityRoot(
+                                    resolveAuthorityRoot(
                                             request.projectTreeCasesRoot(),
                                             request.projectTreeFixtureIdentity()));
 
@@ -399,6 +402,64 @@ final class ProtosTestLogicalCaseAttemptBridge {
                 null,
                 context,
                 rootActor.executionDomain());
+    }
+
+    /**
+     * D133 project-tree CaseAuthority descriptor validation, shared with {@link
+     * ProtosTestLogicalCaseExecutionFacility} so the async facility decodes a
+     * sourceAssociation's optional third element with the exact same descriptor
+     * shape this bridge provisions against.
+     */
+    static String fixtureIdentity(
+            ProtosArrayValue descriptor,
+            ProtosActivation caller) {
+        if (!descriptor.indexedSize().equals(BigInteger.valueOf(4))) {
+            throw ProtosExactExecutionFacility.ordinaryError(caller);
+        }
+
+        Object kind = descriptor.indexedAt(BigInteger.ZERO);
+        Object fixture = descriptor.indexedAt(BigInteger.ONE);
+        Object isolation = descriptor.indexedAt(BigInteger.valueOf(2));
+        Object lifecycle = descriptor.indexedAt(BigInteger.valueOf(3));
+
+        if (!(kind instanceof ProtosStringValue kindValue)
+                || !(fixture instanceof ProtosStringValue fixtureValue)
+                || !(isolation instanceof ProtosStringValue isolationValue)
+                || !(lifecycle instanceof ProtosStringValue lifecycleValue)
+                || !kindValue.value().equals("project-tree")
+                || !isolationValue.value().equals("case")
+                || !lifecycleValue.value().equals("case")
+                || fixtureValue.value().isEmpty()) {
+            throw ProtosExactExecutionFacility.ordinaryError(caller);
+        }
+
+        return fixtureValue.value();
+    }
+
+    /**
+     * D133/D134 trusted-root confinement: resolves one fixture's physical authority
+     * root under {@code casesRoot}, rejecting an absolute or escaping fixture
+     * identity before any Filesystem backend is opened against it.
+     */
+    static Path resolveAuthorityRoot(
+            Path casesRoot,
+            String fixtureIdentity) {
+        Path logical = Path.of(fixtureIdentity);
+
+        if (logical.isAbsolute()) {
+            throw new IllegalArgumentException(
+                    "CaseAuthority fixture identity must be relative");
+        }
+
+        Path resolved =
+                casesRoot.toAbsolutePath().normalize().resolve(logical).normalize();
+
+        if (!resolved.startsWith(casesRoot.toAbsolutePath().normalize())) {
+            throw new IllegalArgumentException(
+                    "CaseAuthority fixture identity escapes cases root");
+        }
+
+        return resolved;
     }
 
     private static Source selectionSource() {

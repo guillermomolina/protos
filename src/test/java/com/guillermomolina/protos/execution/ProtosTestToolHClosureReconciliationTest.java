@@ -43,15 +43,19 @@ final class ProtosTestToolHClosureReconciliationTest {
 
         assertTrue(main.contains("arguments: process.args()"));
         assertTrue(main.contains("jobs: Options.jobs(arguments)"));
-        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
+        // TOOL009-B: repository production is logical-only; there is no
+        // D108/bounded-Runner repository branch and no across-runs/
+        // across-invocation legacy aggregation left.
+        assertEquals(0, occurrences(main, "Runner.runD108WithResources("));
         assertEquals(0, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));
         assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
         assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
-        assertTrue(main.contains("binding.executionAsync"));
-        assertTrue(main.contains("binding.executionInspectAsync"));
-        assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
-        assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertFalse(main.contains("binding.executionAsync"));
+        assertFalse(main.contains("binding.executionInspectAsync"));
+        assertFalse(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
+        assertFalse(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertTrue(main.contains("LogicalCaseResult.exitCode(logicalResults)"));
         assertTrue(main.trim().endsWith("finalOutcome"));
         assertTrue(options.contains("jobs: (arguments) => {"));
         assertTrue(options.contains("jobsValue: 1"));

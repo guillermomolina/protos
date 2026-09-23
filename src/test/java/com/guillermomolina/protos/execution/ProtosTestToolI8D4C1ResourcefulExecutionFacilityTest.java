@@ -201,7 +201,11 @@ activation);
         String runner = Files.readString(RUNNER, StandardCharsets.UTF_8);
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
         assertFalse(runner.contains("resourceExecutionAsync"));
-        assertTrue(main.contains("resourceExecutionAsync"));
+        // TOOL009-B: repository production is logical-only; Main.protos no
+        // longer resolves or invokes any requirement binding's
+        // resourceExecutionAsync (that only happened on the now-removed
+        // D108 repository branch).
+        assertFalse(main.contains("resourceExecutionAsync"));
         assertFalse(runner.contains("runInfrastructureFailed"));
         assertFalse(main.contains("runInfrastructureFailed"));
     }

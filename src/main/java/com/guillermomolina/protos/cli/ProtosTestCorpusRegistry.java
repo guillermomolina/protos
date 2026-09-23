@@ -103,41 +103,41 @@ final class ProtosTestCorpusRegistry {
                 "case-outcomes",
                 "packageToolResolutionInputFilesystem",
                 "protos/package-tool/resolution-input");
-        addProjectTreeBinding(
+        addBinding(
                 registry,
                 activation,
                 "protos/corpus/package-tool/content-identity",
+                "project-tree",
                 "packageToolContentIdentityFilesystem",
-                "protos/package-tool/content-identity",
-                ProtosTestCaseAuthorityExecutionScope.CONTENT_IDENTITY_SLOT);
-        addProjectTreeBinding(
+                "protos/package-tool/content-identity");
+        addBinding(
                 registry,
                 activation,
                 "protos/corpus/package-tool/resolution-input-lock",
+                "project-tree",
                 "packageToolResolutionInputLockFilesystem",
-                "protos/package-tool/resolution-input-lock",
-                ProtosTestCaseAuthorityExecutionScope.RESOLUTION_INPUT_LOCK_SLOT);
-                addProjectTreeBinding(
+                "protos/package-tool/resolution-input-lock");
+        addBinding(
                 registry,
                 activation,
                 "protos/corpus/package-tool/resolution-root",
+                "project-tree",
                 "packageToolResolutionRootFilesystem",
-                "protos/package-tool/resolution-root",
-                ProtosTestCaseAuthorityExecutionScope.RESOLUTION_ROOT_SLOT);
-                addProjectTreeBinding(
+                "protos/package-tool/resolution-root");
+        addBinding(
                 registry,
                 activation,
                 "protos/corpus/package-tool/execution-plan",
+                "project-tree",
                 "packageToolExecutionPlanFilesystem",
-                "protos/package-tool/execution-plan",
-                ProtosTestCaseAuthorityExecutionScope.EXECUTION_PLAN_SLOT);
-                addProjectTreeBinding(
+                "protos/package-tool/execution-plan");
+        addBinding(
                 registry,
                 activation,
                 "protos/corpus/package-tool/project-projection",
+                "project-tree",
                 "packageToolProjectProjectionFilesystem",
-                "protos/package-tool/project-projection",
-                ProtosTestCaseAuthorityExecutionScope.PROJECT_PROJECTION_SLOT);
+                "protos/package-tool/project-projection");
 
         registry.freeze();
         activation.context().createLocalSlot(REGISTRY_SLOT, registry);
@@ -185,55 +185,6 @@ final class ProtosTestCorpusRegistry {
         }
         binding.freeze();
         registry.createLocalSlot(corpusId, binding);
-    }
-
-    private static void addProjectTreeBinding(
-            ProtosObjectValue registry,
-            ProtosActivation activation,
-            String corpusId,
-            String filesystemSlot,
-            String caseNamespace,
-            String caseAuthorityExecutionSlot) {
-        if (registry.hasLocalSlot(corpusId)) {
-            throw new IllegalStateException(
-                    "duplicate Test Tool corpus binding: " + corpusId);
-        }
-
-        Object filesystem = requiredSlot(activation, filesystemSlot);
-        if (!(filesystem instanceof ProtosFilesystemValue)) {
-            throw new IllegalStateException(
-                    "Test Tool corpus binding "
-                            + corpusId
-                            + " requires Filesystem capability in slot "
-                            + filesystemSlot);
-        }
-
-        Object caseAuthorityExecution =
-                requiredSlot(
-                        activation,
-                        caseAuthorityExecutionSlot);
-
-        ProtosObjectValue binding =
-                new ProtosObjectValue(
-                        ProtosObjectValue.rootObject());
-
-        binding.createLocalSlot(
-                "filesystem",
-                filesystem);
-        binding.createLocalSlot(
-                "planLoader",
-                new ProtosStringValue("project-tree"));
-        binding.createLocalSlot(
-                "caseNamespace",
-                new ProtosStringValue(caseNamespace));
-        binding.createLocalSlot(
-                "caseAuthorityExecutionAsync",
-                caseAuthorityExecution);
-        binding.freeze();
-
-        registry.createLocalSlot(
-                corpusId,
-                binding);
     }
 
     private static Object requiredSlot(ProtosActivation activation, String slotName) {

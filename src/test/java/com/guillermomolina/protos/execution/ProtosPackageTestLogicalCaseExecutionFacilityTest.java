@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
@@ -79,6 +80,8 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
     private static final Path SHARED_ROOT = Path.of("protos", "tools", "shared");
     private static final Path PACKAGE_TOOL_ROOT = Path.of("protos", "tools", "package");
+    private static final Path RESOLUTION_INPUT_LOCK_CORPUS =
+            Path.of("protos", "tests", "package-tool", "resolution-input-lock");
 
     private static final String SOURCE_USES_PACKAGE_RUNTIME_NAMES =
             """
@@ -295,6 +298,94 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
             assertSame(
                     ProtosBooleanValue.TRUE,
                     assertCompletedObservationValue(future));
+        }
+    }
+
+    // TOOL009-B: proves the Package-flavored facility itself (not only the
+    // lower-level ProtosTestLogicalCaseAttemptBridge) decodes a 3-element
+    // sourceAssociation's D133 project-tree CaseAuthority descriptor, provisions
+    // the trusted physical authority through the projectTreeCasesRootByCorpusId
+    // map, and dispatches through the ordinary async completion boundary exactly
+    // once. This is the current authoritative owner of what the removed
+    // whole-source CaseAuthority execution facility used to cover before its
+    // removal.
+    @Test
+    void resolvesProjectTreeDescriptorAndProvisionsPhysicalAuthorityExactlyOnce()
+            throws Exception {
+        Path casesRoot = RESOLUTION_INPUT_LOCK_CORPUS.resolve("cases");
+        Path authorityRoot = casesRoot.resolve("fresh");
+
+        try (ProtosNioReadOnlyTreeFilesystemBackend probe =
+                new ProtosNioReadOnlyTreeFilesystemBackend(authorityRoot)) {
+            assumeTrue(
+                    probe.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+        }
+
+        Path fixturesRoot = RESOLUTION_INPUT_LOCK_CORPUS.resolve("fixtures");
+        String source =
+                Files.readString(fixturesRoot.resolve("fresh.protos"), StandardCharsets.UTF_8);
+
+        ManualSubmission submission = new ManualSubmission();
+        ProtosModuleResolver resolver = packageResolver();
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+                ProtosTestLogicalCaseExecutionFacility facility =
+                        ProtosTestLogicalCaseExecutionFacility.install(
+                                activation,
+                                "packageLogicalCaseExecutionAsync",
+                                CORE,
+                                resolver,
+                                List.of(
+                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                                "package-corpus", fixturesRoot)),
+                                Map.of("package-corpus", casesRoot),
+                                runtimeHost,
+                                submission)) {
+
+            Object execution =
+                    activation
+                            .context()
+                            .readLocalSlot("packageLogicalCaseExecutionAsync")
+                            .orElseThrow();
+
+            ProtosArrayValue descriptor =
+                    prelude.newFrozenArray(
+                            List.of(
+                                    new ProtosStringValue("project-tree"),
+                                    new ProtosStringValue("fresh"),
+                                    new ProtosStringValue("case"),
+                                    new ProtosStringValue("case")));
+
+            ProtosArrayValue sourceAssociation =
+                    prelude.newFrozenArray(
+                            List.of(
+                                    new ProtosStringValue("package-corpus"),
+                                    new ProtosStringValue("fresh.protos"),
+                                    descriptor));
+
+            ProtosArrayValue signatureValue =
+                    prelude.newFrozenArray(List.of(new ProtosStringValue("fresh")));
+
+            ProtosFutureValue future =
+                    assertInstanceOf(
+                            ProtosFutureValue.class,
+                            ProtosInvocation.invoke(
+                                    execution,
+                                    List.of(
+                                            sourceAssociation,
+                                            new ProtosStringValue(source),
+                                            signatureValue,
+                                            new ProtosStringValue("fresh")),
+                                    activation));
+
+            assertEquals(1, submission.queuedCount());
+            assertTrue(submission.runNext());
+            assertTrue(activation.executionDomain().dispatchOne());
+
+            assertEquals("case-execution", phaseOf(future));
         }
     }
 

@@ -46,7 +46,7 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertTrue(source.contains("executeStandaloneRootTask(session.executeModuleSource(source))"));
         assertTrue(
                 source.matches(
-                        "(?s).*ProtosTestToolAsyncExecutionScope\\.installWithCaseAuthorities\\("
+                        "(?s).*ProtosTestToolAsyncExecutionScope\\.installWithProjectTreeAuthorities\\("
                                 + "\\s*session\\.activation,"
                                 + "\\s*session\\.runtimeHost,"
                                 + ".*"));

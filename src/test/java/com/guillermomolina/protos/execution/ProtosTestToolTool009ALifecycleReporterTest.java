@@ -98,22 +98,20 @@ final class ProtosTestToolTool009ALifecycleReporterTest {
                                                 .BOOTSTRAP_SLOT
                                         + " )"),
                 "the D176 host watchdog is the only reporting sink the Tool attaches");
-        assertEquals(2, occurrences(main, "Progress.lifecycleObserver("));
-        assertTrue(main.contains("legacyCaseDisplayReference: (spec) => {"));
+        // TOOL009-B: repository execution is logical-only, so there is
+        // exactly one execution path and exactly one lifecycle observer/
+        // display renderer left; the legacy renderer no longer exists.
+        assertEquals(1, occurrences(main, "Progress.lifecycleObserver("));
         assertTrue(main.contains("logicalCaseDisplayReference: (entry) => {"));
         assertTrue(
                 normalized(main)
                         .contains("jobs, logicalLifecycleObserver ).value()"),
                 "the suite-native path reports through the logical renderer");
-        assertTrue(
-                normalized(main)
-                        .contains("caseAuthorityExecutorAsync, legacyLifecycleObserver )"),
-                "the incumbent path reports through the legacy renderer");
 
         // D174/D176 add no mandatory per-Case terminal write: normal output stays the
         // compact D120 aggregate progress.
         assertEquals(1, occurrences(main, "progressWriter.writeLine("));
-        assertEquals(2, occurrences(main, "Progress.observer("));
+        assertEquals(1, occurrences(main, "Progress.observer("));
         assertEquals(1, occurrences(main, "Progress.finishPhase("));
     }
 

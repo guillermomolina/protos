@@ -87,11 +87,12 @@ prelude.newModuleActivation());
                 main.contains(
                         "TextWriter(process.stderr(), process.stderrEncoding())"));
         assertEquals(1, occurrences(main, "startProgress("));
-        assertEquals(2, occurrences(main, "Progress.observer("));
+        assertEquals(1, occurrences(main, "Progress.observer("));
         assertEquals(1, occurrences(main, "Progress.finishPhase("));
         assertTrue(main.contains("Progress.finishInvocation("));
-        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
-        assertTrue(main.contains("LogicalCaseMigration.logicalCaseExecutorAsync("));
+        // TOOL009-B: repository production is logical-only.
+        assertEquals(0, occurrences(main, "Runner.runD108WithResources("));
+        assertTrue(main.contains("LogicalCaseDispatch.logicalCaseExecutorAsync("));
         // The D176 watchdog wiring is guarded by the TOOL009-A presentation test; D120 only
         // requires that the invocation-wide tracker exists before any Case is scheduled.
         assertTrue(main.contains("Progress.beginLifecycle("));

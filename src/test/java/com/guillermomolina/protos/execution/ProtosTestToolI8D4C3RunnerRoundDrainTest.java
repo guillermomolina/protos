@@ -88,9 +88,14 @@ prelude.newModuleActivation());
 
         // I8D4C3 remains a private Runner composition. Public Main/reporting and
         // production provider-registry wiring are separate later boundaries.
+        //
+        // TOOL009-B: repository production is logical-only, so Main.protos no
+        // longer calls runD108WithResources or resolves resourceExecutionAsync/
+        // resourceExecutionInspectAsync; this I8D4C3 machinery remains fully
+        // intact and independently authoritative under Runner.protos above.
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
-        assertTrue(main.contains("runD108WithResources"));
-        assertTrue(main.contains("resourceExecutionAsync"));
-        assertTrue(main.contains("resourceExecutionInspectAsync"));
+        assertFalse(main.contains("runD108WithResources"));
+        assertFalse(main.contains("resourceExecutionAsync"));
+        assertFalse(main.contains("resourceExecutionInspectAsync"));
     }
 }

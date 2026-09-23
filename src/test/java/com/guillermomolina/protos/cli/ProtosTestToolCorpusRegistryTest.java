@@ -105,32 +105,6 @@ final class ProtosTestToolCorpusRegistryTest {
             installFilesystem(fixture, "packageToolExecutionPlanFilesystem", executionPlanBackend);
             installFilesystem(fixture, "packageToolProjectProjectionFilesystem", projectProjectionBackend);
 
-            fixture.activation()
-                    .context()
-                    .createLocalSlot(
-                            ProtosTestCaseAuthorityExecutionScope.CONTENT_IDENTITY_SLOT,
-                            new ProtosStringValue("content-identity-case-authority"));
-            fixture.activation()
-                    .context()
-                    .createLocalSlot(
-                            ProtosTestCaseAuthorityExecutionScope.RESOLUTION_INPUT_LOCK_SLOT,
-                            new ProtosStringValue("resolution-input-lock-case-authority"));
-            fixture.activation()
-                    .context()
-                    .createLocalSlot(
-                            ProtosTestCaseAuthorityExecutionScope.RESOLUTION_ROOT_SLOT,
-                            new ProtosStringValue("resolution-root-case-authority"));
-            fixture.activation()
-                    .context()
-                    .createLocalSlot(
-                            ProtosTestCaseAuthorityExecutionScope.EXECUTION_PLAN_SLOT,
-                            new ProtosStringValue("execution-plan-case-authority"));
-            fixture.activation()
-                    .context()
-                    .createLocalSlot(
-                            ProtosTestCaseAuthorityExecutionScope.PROJECT_PROJECTION_SLOT,
-                            new ProtosStringValue("project-projection-case-authority"));
-
             ProtosTestCorpusRegistry.install(fixture.activation());
             ProtosObjectValue registry =
                     assertInstanceOf(
@@ -349,7 +323,7 @@ final class ProtosTestToolCorpusRegistryTest {
                         ProtosObjectValue.class,
                         registry.readLocalSlot(corpusId).orElseThrow());
         assertTrue(binding.isFrozen());
-        assertEquals(4, binding.localSlotsSnapshot().size());
+        assertEquals(3, binding.localSlotsSnapshot().size());
         assertSame(
                 activation.context().readLocalSlot(filesystemSlot).orElseThrow(),
                 binding.readLocalSlot("filesystem").orElseThrow());
@@ -365,7 +339,7 @@ final class ProtosTestToolCorpusRegistryTest {
                                 ProtosStringValue.class,
                                 binding.readLocalSlot("caseNamespace").orElseThrow())
                         .value());
-        assertTrue(binding.hasLocalSlot("caseAuthorityExecutionAsync"));
+        assertFalse(binding.hasLocalSlot("caseAuthorityExecutionAsync"));
         assertFalse(binding.hasLocalSlot("executionAsync"));
         assertFalse(binding.hasLocalSlot("resourceExecutionAsync"));
     }

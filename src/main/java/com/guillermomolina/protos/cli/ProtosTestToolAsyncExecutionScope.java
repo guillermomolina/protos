@@ -85,7 +85,6 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
     private ProtosTestLogicalCaseExecutionFacility packageLogicalCaseExecutionFacility;
     private ProtosProcessSnapshotLogicalCaseExecutionFacility
             processSnapshotLogicalCaseExecutionFacility;
-    private ProtosTestCaseAuthorityExecutionScope caseAuthorityExecutionScope;
     private boolean closed;
 
     private ProtosTestToolAsyncExecutionScope(
@@ -200,7 +199,7 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
         }
     }
 
-    static ProtosTestToolAsyncExecutionScope installWithCaseAuthorities(
+    static ProtosTestToolAsyncExecutionScope installWithProjectTreeAuthorities(
             ProtosActivation activation,
             ProtosPolyglotRuntimeHost runtimeHost,
             Path core,
@@ -293,10 +292,9 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
             //
             // TOOL009 Package Non-TOML Publication 2: this instance additionally maps
             // each project-tree Package Tool corpus to its already-trusted physical
-            // cases/ root, the same roots the legacy CaseAuthority scope below uses.
-            // A selected Test whose sourceAssociation carries the D133 project-tree
-            // descriptor is provisioned and executed inside this one fresh Process;
-            // no second CaseAuthority facility is created for it.
+            // cases/ root. A selected Test whose sourceAssociation carries the D133
+            // project-tree descriptor is provisioned and executed inside this one
+            // fresh Process.
             Map<String, Path> packageProjectTreeCasesRootByCorpusId =
                     Map.of(
                             "protos/corpus/package-tool/content-identity",
@@ -333,17 +331,6 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                     ProtosProcessSnapshotLogicalCaseExecutionFacility.install(
                             activation, primaryPrelude, scope.submission);
 
-            scope.caseAuthorityExecutionScope =
-                    ProtosTestCaseAuthorityExecutionScope.install(
-                            activation,
-                            runtimeHost,
-                            scope.submission,
-                            packagePrelude,
-                            contentIdentityCases,
-                            resolutionInputLockCases,
-                            resolutionRootCases,
-                            executionPlanCases,
-                            projectProjectionCases);
             return scope;
         } catch (RuntimeException | Error failure) {
             scope.close();
@@ -377,9 +364,6 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
         }
         if (processSnapshotLogicalCaseExecutionFacility != null) {
             processSnapshotLogicalCaseExecutionFacility.close();
-        }
-        if (caseAuthorityExecutionScope != null) {
-            caseAuthorityExecutionScope.close();
         }
         resourceExecutionScope.close();
         closeFacilities(facilities);

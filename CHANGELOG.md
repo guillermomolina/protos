@@ -1,3 +1,68 @@
+## 0.3.77-SNAPSHOT
+
+- `TOOL009-B`: final legacy Test Tool migration cleanup. Repository production
+  execution is now logical-only end to end:
+  - `RepositorySuite` execution no longer partitions a corpus's TestPlan into
+    a legacy Runner plan and suite-native logical Cases: `Main.protos`
+    instead validates, per Case, that every registered production Case is
+    `suite-native` and fails closed otherwise. `Runner.runD108WithResources`
+    is no longer called from repository production, `completedRuns`/
+    `primaryRun` reconciliation across D108 runs is gone, and the final
+    `TestRunOutcome` is derived solely from the current Logical Case result
+    projection (`LogicalCaseResult.exitCode`) rather than from a legacy/
+    logical outcome merge. `Runner.runD108WithResources` and the rest of the
+    D108/D114/D116 infrastructure-outcome machinery remain fully intact and
+    independently authoritative for their own callers.
+  - `LogicalCaseMigration.protos` (the mixed-ownership partition/merge
+    bridge: `splitPlan`, `legacyPlan`, `suiteNativeSpecs`,
+    `isSuiteNativeSpec`, `neutralLegacyOutcome`, `mergeOutcome`) is removed.
+    Its two still-authoritative helpers, `sourceAssociation` and
+    `logicalCaseExecutorAsync`, are re-homed to a new small current-owner
+    module, `protos/tools/test/LogicalCaseDispatch.protos`, unchanged in
+    behavior.
+  - The legacy repository lifecycle/display adapter is removed:
+    `Main.protos` no longer builds a `legacyCaseDisplayReference` or a
+    `legacyLifecycleObserver`; the invocation-wide D174 lifecycle tracker now
+    has exactly one observer, the logical one.
+  - The whole-source project-tree `CaseAuthority` execution path is removed:
+    `ProtosTestCaseAuthorityExecutionScope`,
+    `ProtosTestCaseAuthorityExecutionFacility`,
+    `ProtosTestCaseAuthorityAttemptBridge` and
+    `ProtosTestCaseAuthorityAttemptCompletion` are deleted, along with the
+    five `caseAuthorityExecutionAsync` project-tree corpus bootstrap slots
+    and `ProtosTestCorpusRegistry`'s dedicated project-tree binding helper
+    (a project-tree corpus binding is now the same shape as a case-outcomes
+    binding: `filesystem`/`planLoader`/`caseNamespace`). The two still-live
+    D133/D134 primitives this path owned, project-tree CaseAuthority
+    descriptor validation and trusted-root confinement resolution, are
+    re-homed as `ProtosTestLogicalCaseAttemptBridge.fixtureIdentity` and
+    `ProtosTestLogicalCaseAttemptBridge.resolveAuthorityRoot`, the current
+    authoritative owner of D133/D134 physical project-tree authority for
+    suite-native Logical Case execution.
+    `ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities` is renamed
+    to `installWithProjectTreeAuthorities`, reflecting that it no longer
+    installs any `CaseAuthority` execution scope.
+  - Repository-suite-native execution's current route is otherwise
+    unchanged: `CorpusBinding`/`planLoader` → suite-native `TestPlan`
+    validation → fail-closed native-plan validation → source associations →
+    Logical Case discovery → `CasePlan` → `ExecutionRequirementId` →
+    `logicalCaseExecutionAsync` → `LogicalCaseRunner` → `LogicalCaseResult` →
+    logical-only final `TestRunOutcome` → `Progress.finishInvocation`. The
+    Package project-tree suite-native route
+    (`protos/test/package` → Package `logicalCaseExecutionAsync` →
+    `sourceAssociation` authority descriptor → trusted `casesRoot` →
+    physical project-tree authority → `projectTreeFilesystem` → selected
+    `Test.call()`) is unaffected and has no dependency on the removed
+    whole-source `CaseAuthority` execution facility.
+  - Retained unchanged and independently authoritative: D108/D114/D116
+    outcome/fail-stop machinery and the legacy expectation engine; Manifest
+    `true`/`error` compatibility for `packageTomlCaseSpec`/
+    `caseOutcomeSpec`/`projectTreeCaseSpec`; the D125/D077/D108
+    `executionAsync`/`executionInspectAsync`/`resourceExecutionAsync`/
+    `resourceExecutionInspectAsync` APIs; Process Snapshot; and the ordinary/
+    Actor/Group/Package/Package-project-tree Logical Case execution
+    facilities.
+
 ## 0.3.76-SNAPSHOT
 
 - `TOOL009`: migrate the complete 54-case Package Tool project-tree corpus

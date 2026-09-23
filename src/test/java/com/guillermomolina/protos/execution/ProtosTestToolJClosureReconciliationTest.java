@@ -139,14 +139,18 @@ final class ProtosTestToolJClosureReconciliationTest {
                                 "ProtosCli.java"),
                         StandardCharsets.UTF_8);
 
-        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
+        // TOOL009-B: repository production is logical-only; there is no
+        // D108 repository branch and no across-runs/across-invocation legacy
+        // aggregation left in Main.protos.
+        assertEquals(0, occurrences(main, "Runner.runD108WithResources("));
         assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
         assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
         assertFalse(main.contains("actorExecutionAsync"));
         assertFalse(main.contains("groupExecutionAsync"));
         assertFalse(main.contains("packageExecutionAsync"));
-        assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
-        assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertFalse(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
+        assertFalse(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertTrue(main.contains("LogicalCaseResult.exitCode(logicalResults)"));
         assertTrue(main.trim().endsWith("finalOutcome"));
 
         assertTrue(cli.contains("return testToolExitCodeForRuntime(toolResult, err);"));

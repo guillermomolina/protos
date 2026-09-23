@@ -81,10 +81,17 @@ prelude.newModuleActivation());
                 runner.contains(
                         "testRunInfrastructureAbortRetainedUnsafeReservationCount: ("));
 
-        // I8D5C now owns the public Main routing above the closed B projection.
+        // TOOL009-B: repository production is logical-only. Main.protos no
+        // longer routes through the D108/D114 across-runs/across-invocation
+        // aggregation this Case proves at the Runner layer above; the final
+        // repository outcome now derives solely from the Logical Case result
+        // projection. The D108/D114 machinery itself remains fully intact
+        // and independently authoritative for its own (non-repository)
+        // callers.
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
-        assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
-        assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertFalse(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
+        assertFalse(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertTrue(main.contains("LogicalCaseResult.exitCode(logicalResults)"));
         assertTrue(main.trim().endsWith("finalOutcome"));
     }
 }

@@ -93,7 +93,7 @@ final class ProtosTestToolExecutionRequirementRegistryTest {
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestToolAsyncExecutionScope scope =
-                        ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities(
+                        ProtosTestToolAsyncExecutionScope.installWithProjectTreeAuthorities(
                                 fixture.activation(),
                                 runtimeHost,
                                 CORE,

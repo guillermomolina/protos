@@ -701,7 +701,7 @@ public final class ProtosCli {
                     err,
                     session -> {
                         ProtosTestToolAsyncExecutionScope executionScope =
-                                ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities(
+                                ProtosTestToolAsyncExecutionScope.installWithProjectTreeAuthorities(
                                         session.activation,
                                         session.runtimeHost,
                                         core,

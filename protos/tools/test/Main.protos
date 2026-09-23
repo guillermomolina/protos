@@ -27,7 +27,7 @@ Discovery: import("self:Discovery")
 CasePlan: import("self:LogicalCasePlan")
 LogicalCaseRunner: import("self:LogicalCaseRunner")
 LogicalCaseResult: import("self:LogicalCaseResult")
-LogicalCaseMigration: import("self:LogicalCaseMigration")
+LogicalCaseDispatch: import("self:LogicalCaseDispatch")
 
 arguments: process.args()
 jobs: Options.jobs(arguments)
@@ -54,13 +54,11 @@ progressPhases: Array()
 
 startProgress: (
     phaseName,
-    phasePlan,
-    additionalLogicalCases
+    totalLogicalCases
 ) => {
     state: Progress.begin(
         phaseName,
-        Progress.selectedCount(phasePlan) +
-            additionalLogicalCases,
+        totalLogicalCases,
         emitProgress
     )
     progressPhases = Array(...progressPhases, state)
@@ -142,9 +140,6 @@ resolveIndex: 0
     (planLoader === "project-tree").ifTrue(() => {
         supportedLoader = true
         corpusBinding.hasSlot("caseNamespace").ifFalse(() => {
-            Error().signal()
-        })
-        corpusBinding.hasSlot("caseAuthorityExecutionAsync").ifFalse(() => {
             Error().signal()
         })
     })
@@ -337,13 +332,12 @@ selectorsActive.ifTrue(() => {
     executionSuites = selectedSuites
 })
 
-// D152 M2 temporary mixed-ownership bridge.
-//
-// Every suite-native source is removed from incumbent ownership before either
-// runner is scheduled. D153 discovery for the complete selected suite-native
-// set is completed first. The resulting logical Cases are then scheduled as
-// one flat global plan, independent of the historical corpus/phase topology.
-migrationExecutionSuites: Array()
+// TOOL009-B: repository production is logical-only. Every corpus's TestPlan is
+// required to be suite-native; there is no legacy CaseSpec partition, no D108
+// repository execution branch and no legacy/logical outcome merge. A plan
+// carrying anything other than a suite-native Case fails closed here rather
+// than falling back to D108.
+logicalExecutionSuites: Array()
 logicalProjections: Array()
 logicalCaseMetadata: Array()
 logicalSourceSpecs: Map()
@@ -355,24 +349,41 @@ logicalSourceSpecs: Map()
 // own corpus's execution requirement.
 corpusExecutionRequirements: Map()
 
-migrationSuiteIndex: 0
+executionSuiteIndex: 0
 executionSuites.each((planned) => {
     corpusExecutionRequirements[planned.leaf.corpus] =
         planned.leaf.executionRequirement
 
-    split:
-        LogicalCaseMigration.splitPlan(
-            planned.plan
-        )
-
-    nativeSpecs:
-        LogicalCaseMigration.suiteNativeSpecs(
-            split
-        )
-
     logicalCaseCount: 0
 
-    nativeSpecs.each((spec) => {
+    Manifest.planCases(planned.plan).each((spec) => {
+        (Manifest.caseExpectation(spec) == "suite-native").ifFalse(() => {
+            Error().signal()
+        })
+
+        // D153 case-environment provisioning remains separately deferred for
+        // D077 resource requirements: a suite-native Case may still carry
+        // none of those. TOOL009 Package Non-TOML Publication 2 additionally
+        // permits a well-formed D133 project-tree CaseAuthority descriptor to
+        // accompany a suite-native spec; the descriptor travels onward
+        // through sourceAssociation below rather than being rejected here.
+        (Manifest.caseRequirements(spec).size() == 0).ifFalse(() => {
+            Error().signal()
+        })
+
+        descriptor: Manifest.caseAuthorityDescriptor(spec)
+        (descriptor === null).ifFalse(() => {
+            (Manifest.caseAuthorityKind(descriptor) == "project-tree").ifFalse(() => {
+                Error().signal()
+            })
+            (Manifest.caseAuthorityIsolation(descriptor) == "case").ifFalse(() => {
+                Error().signal()
+            })
+            (Manifest.caseAuthorityLifecycle(descriptor) == "case").ifFalse(() => {
+                Error().signal()
+            })
+        })
+
         corpusId: planned.leaf.corpus
         sourcePath: Manifest.casePath(spec)
 
@@ -383,10 +394,9 @@ executionSuites.each((planned) => {
         // D133 CaseAuthority descriptor, otherwise the descriptor's fixture
         // identity), so distinct authorities never collapse into one
         // logical record.
-        authorityDescriptor: Manifest.caseAuthorityDescriptor(spec)
         fixtureKey: ""
-        (authorityDescriptor === null).ifFalse(() => {
-            fixtureKey = Manifest.caseAuthorityFixtureIdentity(authorityDescriptor)
+        (descriptor === null).ifFalse(() => {
+            fixtureKey = Manifest.caseAuthorityFixtureIdentity(descriptor)
         })
 
         corpusSpecs: null
@@ -416,8 +426,8 @@ executionSuites.each((planned) => {
         })
         sourceSpecs[fixtureKey] = spec
 
-        sourceAssociation:
-            LogicalCaseMigration.sourceAssociation(
+        association:
+            LogicalCaseDispatch.sourceAssociation(
                 corpusId,
                 spec
             )
@@ -430,7 +440,7 @@ executionSuites.each((planned) => {
 
         projection:
             logicalCaseDiscovery(
-                sourceAssociation,
+                association,
                 discoverySource
             )
 
@@ -439,8 +449,7 @@ executionSuites.each((planned) => {
                 projection
             )
 
-        // A migration marker must transfer at least one logical Case. Otherwise
-        // the bounded M2 change would silently leave the source with no owner.
+        // A suite-native Case must transfer at least one logical Case.
         (projectionCases.size() == 0).ifTrue(() => {
             Error().signal()
         })
@@ -454,7 +463,7 @@ executionSuites.each((planned) => {
         projectionCases.each((ignored) => {
             metadata:
                 Array(
-                    migrationSuiteIndex,
+                    executionSuiteIndex,
                     spec
                 )
             metadata.freeze()
@@ -470,33 +479,29 @@ executionSuites.each((planned) => {
         })
     })
 
-    migrated: {
+    suite: {
         leaf: planned.leaf
         phaseName: planned.phaseName
         corpusBinding: planned.corpusBinding
         binding: planned.binding
-        plan:
-            LogicalCaseMigration.legacyPlan(
-                split
-            )
         logicalCaseCount: logicalCaseCount
     }
-    migrated.freeze()
+    suite.freeze()
 
-    migrationExecutionSuites =
+    logicalExecutionSuites =
         Array(
-            ...migrationExecutionSuites,
-            migrated
+            ...logicalExecutionSuites,
+            suite
         )
 
-    migrationSuiteIndex =
-        migrationSuiteIndex + 1
+    executionSuiteIndex =
+        executionSuiteIndex + 1
 })
 
-migrationExecutionSuites.freeze()
+logicalExecutionSuites.freeze()
 logicalProjections.freeze()
 logicalCaseMetadata.freeze()
-executionSuites = migrationExecutionSuites
+executionSuites = logicalExecutionSuites
 
 logicalResults: Array()
 logicalResults.freeze()
@@ -506,17 +511,11 @@ logicalResults.freeze()
 //
 // D176: `caseLifecycleSink` is the Test-Tool-internal host watchdog. It owns
 // the stalled in-flight diagnostic entirely, so normal Tool output stays the
-// compact D120 aggregate progress above. Both execution paths share one
-// invocation-wide tracker; each supplies the display renderer for its own
-// caseRef shape.
+// compact D120 aggregate progress above.
 invocationLifecycle:
     Progress.beginLifecycle(
         caseLifecycleSink
     )
-
-legacyCaseDisplayReference: (spec) => {
-    Manifest.caseId(spec)
-}
 
 logicalCaseDisplayReference: (entry) => {
     association:
@@ -529,12 +528,6 @@ logicalCaseDisplayReference: (entry) => {
 
     reference
 }
-
-legacyLifecycleObserver:
-    Progress.lifecycleObserver(
-        invocationLifecycle,
-        legacyCaseDisplayReference
-    )
 
 logicalLifecycleObserver:
     Progress.lifecycleObserver(
@@ -614,7 +607,7 @@ logicalLifecycleObserver:
                     sourceBinding.filesystem
                 )
             },
-            LogicalCaseMigration.logicalCaseExecutorAsync(
+            LogicalCaseDispatch.logicalCaseExecutorAsync(
                 corpusExecutionRequirements,
                 testExecutionRequirementBindings
             ),
@@ -673,74 +666,16 @@ logicalResultsBySuite.each((group) => {
 })
 logicalResultsBySuite.freeze()
 
-completedRuns: Array()
-primaryRun: null
-finalOutcome: null
-invocationAborted: false
-
 suiteIndex: 0
-(() =>
-    (suiteIndex < executionSuites.size()) &&
-    invocationAborted.not()
-).while() {
+(() => suiteIndex < executionSuites.size()).while() {
     planned: executionSuites[suiteIndex]
-    corpusBinding: planned.corpusBinding
-    binding: planned.binding
     suiteProgress:
         startProgress(
             planned.phaseName,
-            planned.plan,
             planned.logicalCaseCount
         )
 
-    caseAuthorityExecutorAsync: null
-    corpusBinding.hasSlot("caseAuthorityExecutionAsync").ifTrue(() => {
-        caseAuthorityExecutorAsync =
-            corpusBinding.caseAuthorityExecutionAsync
-    })
-
-    executionInspectAsync: null
-    binding.hasSlot("executionInspectAsync").ifTrue(() => {
-        executionInspectAsync = binding.executionInspectAsync
-    })
-
-    resourceExecutionAsync: null
-    binding.hasSlot("resourceExecutionAsync").ifTrue(() => {
-        resourceExecutionAsync = binding.resourceExecutionAsync
-    })
-
-    resourceExecutionInspectAsync: null
-    binding.hasSlot("resourceExecutionInspectAsync").ifTrue(() => {
-        resourceExecutionInspectAsync =
-            binding.resourceExecutionInspectAsync
-    })
-
-    suiteD108: null
-    infrastructureFailed: false
-
-    (Manifest.planCases(planned.plan).size() > 0).ifTrue(() => {
-        suiteD108 =
-            Runner.runD108WithResources(
-                planned.plan,
-                resourceCatalog,
-                corpusBinding.filesystem,
-                binding.executionAsync,
-                executionInspectAsync,
-                resourceExecutionAsync,
-                resourceExecutionInspectAsync,
-                jobs,
-                Progress.observer(suiteProgress),
-                caseAuthorityExecutorAsync,
-                legacyLifecycleObserver
-            )
-
-        infrastructureFailed =
-            Runner.d108RunInfrastructureFailed(
-                suiteD108
-            )
-    })
-
-    logicalInfrastructureFailed: false
+    suiteInfrastructureFailed: false
     logicalObserver:
         Progress.observer(
             suiteProgress
@@ -776,7 +711,7 @@ suiteIndex: 0
 
         (classification == "tool-error").ifTrue(() => {
             resultInfrastructureFailed = true
-            logicalInfrastructureFailed = true
+            suiteInfrastructureFailed = true
         })
 
         logicalObserver(
@@ -788,49 +723,8 @@ suiteIndex: 0
 
     Progress.finishPhase(
         suiteProgress,
-        infrastructureFailed ||
-            logicalInfrastructureFailed
+        suiteInfrastructureFailed
     )
-
-    infrastructureFailed.ifTrue(() => {
-        laterPlans: Array()
-        laterIndex: suiteIndex + 1
-        (() => laterIndex < executionSuites.size()).while() {
-            laterPlans = Array(
-                ...laterPlans,
-                executionSuites[laterIndex].plan
-            )
-            laterIndex = laterIndex + 1
-        }
-
-        finalOutcome =
-            Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation(
-                completedRuns,
-                suiteD108,
-                laterPlans
-            )
-        invocationAborted = true
-    })
-
-    (
-        !infrastructureFailed &&
-        (suiteD108 !== null)
-    ).ifTrue(() => {
-        healthyRun:
-            Runner.d108RunHealthyRun(
-                suiteD108
-            )
-
-        completedRuns =
-            Array(
-                ...completedRuns,
-                healthyRun
-            )
-
-        (primaryRun === null).ifTrue(() => {
-            primaryRun = healthyRun
-        })
-    })
 
     suiteIndex = suiteIndex + 1
 }
@@ -839,26 +733,30 @@ suiteIndex: 0
     Error().signal()
 })
 
-(!invocationAborted).ifTrue(() => {
-    (completedRuns.size() > 0).ifTrue(() => {
-        finalOutcome =
-            Runner.testRunOutcomeCompletedAcrossRuns(
-                primaryRun,
-                completedRuns
-            )
-    })
+// D155 precedence, derived solely from the current Logical Case result
+// projection: any tool error => infrastructure-aborted/3; otherwise any guest
+// failure => completed/1; otherwise completed/0.
+logicalExitCode: LogicalCaseResult.exitCode(logicalResults)
 
-    (completedRuns.size() == 0).ifTrue(() => {
-        finalOutcome =
-            LogicalCaseMigration.neutralLegacyOutcome()
-    })
+finalOutcome: null
+
+(logicalExitCode == 3).ifTrue(() => {
+    finalOutcome =
+        Runner.testRunOutcome(
+            "infrastructure-aborted",
+            null,
+            null,
+            3
+        )
 })
 
-finalOutcome =
-    LogicalCaseMigration.mergeOutcome(
-        finalOutcome,
-        logicalResults
-    )
+(logicalExitCode == 3).ifFalse(() => {
+    finalOutcome =
+        Runner.testRunOutcomeCompletedWithExit(
+            null,
+            logicalExitCode
+        )
+})
 
 Progress.finishInvocation(
     progressPhases,

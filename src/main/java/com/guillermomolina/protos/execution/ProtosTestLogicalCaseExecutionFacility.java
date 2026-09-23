@@ -222,7 +222,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             }
 
             projectTreeFixtureIdentity =
-                    ProtosTestCaseAuthorityExecutionFacility.fixtureIdentity(
+                    ProtosTestLogicalCaseAttemptBridge.fixtureIdentity(
                             descriptor,
                             caller);
 

@@ -43,23 +43,24 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
                         "FileSelection.selectPlanWithDirectories(");
         int zeroMatch =
                 source.indexOf("(selectedSuites.size() == 0)");
-        int ownershipSplit =
-                source.indexOf("LogicalCaseMigration.suiteNativeSpecs(");
+        int suiteNativeValidation =
+                source.indexOf(
+                        "(Manifest.caseExpectation(spec) == \"suite-native\")");
         int logicalDiscovery =
                 source.indexOf("logicalCaseDiscovery(");
         int progressBinding = source.indexOf("suiteProgress:");
         int progress =
                 source.indexOf("startProgress(", progressBinding);
         int scheduler =
-                source.indexOf("Runner.runD108WithResources(");
+                source.indexOf("logicalResultsBySuite[suiteIndex].each(");
 
         assertTrue(plansFrozen >= 0);
         assertTrue(fileResolver > plansFrozen);
         assertTrue(directoryResolver > fileResolver);
         assertTrue(filter > directoryResolver);
         assertTrue(zeroMatch > filter);
-        assertTrue(ownershipSplit > zeroMatch);
-        assertTrue(logicalDiscovery > ownershipSplit);
+        assertTrue(suiteNativeValidation > zeroMatch);
+        assertTrue(logicalDiscovery > suiteNativeValidation);
         assertTrue(progressBinding > logicalDiscovery);
         assertTrue(progress > progressBinding);
         assertTrue(scheduler > progress);
@@ -126,7 +127,7 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
 
         assertTrue(
                 source.contains(
-                        "(suiteIndex < executionSuites.size())"));
+                        "(() => suiteIndex < executionSuites.size()).while()"));
 
         assertTrue(
                 source.contains(

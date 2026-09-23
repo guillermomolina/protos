@@ -118,7 +118,9 @@ final class ProtosTestToolActorGroupOwnershipArchitectureTest {
         assertTrue(main.contains("testCorpusBindings.slotValue(corpus)"));
         assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
         assertTrue(main.contains("corpusBinding.filesystem"));
-        assertTrue(main.contains("binding.resourceExecutionAsync"));
+        // TOOL009-B: repository production is logical-only; Main.protos no
+        // longer invokes any requirement binding's resourceExecutionAsync.
+        assertFalse(main.contains("binding.resourceExecutionAsync"));
         assertFalse(main.contains("actorExecutionAsync"));
         assertFalse(main.contains("groupExecutionAsync"));
 

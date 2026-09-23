@@ -260,7 +260,10 @@ final class ProtosTestToolI8D4BResourcefulAttemptBridgeTest {
 
         assertFalse(runner.contains("resourceExecutionAsync"));
         assertTrue(runner.contains("resourceExecutorAsync"));
-        assertTrue(main.contains("resourceExecutionAsync"));
+        // TOOL009-B: repository production is logical-only; Main.protos no
+        // longer resolves or invokes resourceExecutionAsync (that only
+        // happened on the now-removed D108 repository branch).
+        assertFalse(main.contains("resourceExecutionAsync"));
         assertFalse(main.contains("resourceExecutorAsync"));
         assertFalse(runner.contains("ProtosTestResourcefulAttemptBridge"));
         assertFalse(main.contains("ProtosTestResourcefulAttemptBridge"));

@@ -81,7 +81,7 @@ prelude.newModuleActivation());
     }
 
     @Test
-    void publicMainUsesD108ForLegacyOwnershipAndReturnsOneFinalOutcome() throws Exception {
+    void publicMainIsLogicalOnlyAndReturnsOneFinalOutcome() throws Exception {
         String main = Files.readString(MAIN, StandardCharsets.UTF_8);
 
         int requirementsJoin =
@@ -90,8 +90,6 @@ prelude.newModuleActivation());
                 main.indexOf("suiteProgress:");
         int progressStart =
                 main.indexOf("startProgress(", progressBinding);
-        int d108 =
-                main.indexOf("Runner.runD108WithResources(");
 
         assertTrue(
                 main.contains(
@@ -105,17 +103,29 @@ prelude.newModuleActivation());
         assertTrue(requirementsJoin >= 0);
         assertTrue(progressBinding > requirementsJoin);
         assertTrue(progressStart > progressBinding);
-        assertTrue(d108 > progressStart);
 
-        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
-        assertTrue(main.contains("LogicalCaseMigration.logicalCaseExecutorAsync("));
+        // TOOL009-B: repository production is logical-only. There is no
+        // legacy D108 repository branch, no mixed legacy/suite-native
+        // partition and no legacy/logical outcome merge left in Main.protos.
+        assertEquals(0, occurrences(main, "Runner.runD108WithResources("));
+        assertEquals(0, occurrences(main, "LogicalCaseMigration"));
         assertEquals(0, occurrences(main, "Runner.runBounded("));
+        assertEquals(
+                0,
+                occurrences(main, "Runner.testRunOutcomeCompletedAcrossRuns("));
+        assertEquals(
+                0,
+                occurrences(
+                        main,
+                        "Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+
+        assertTrue(main.contains("LogicalCaseDispatch.logicalCaseExecutorAsync("));
+        assertTrue(
+                main.contains(
+                        "(Manifest.caseExpectation(spec) == \"suite-native\").ifFalse(() => {"));
         assertTrue(main.contains("SuiteGraph.flattenLeaves(RepositorySuite.root)"));
         assertTrue(main.contains("testExecutionRequirementBindings.slotValue(requirement)"));
-        assertTrue(main.contains("binding.resourceExecutionAsync"));
-        assertTrue(main.contains("binding.resourceExecutionInspectAsync"));
-        assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
-        assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertTrue(main.contains("LogicalCaseResult.exitCode(logicalResults)"));
         assertTrue(main.trim().endsWith("finalOutcome"));
     }
 

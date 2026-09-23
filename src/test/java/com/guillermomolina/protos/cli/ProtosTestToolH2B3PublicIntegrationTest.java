@@ -124,7 +124,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
                 ProtosTestToolAsyncExecutionScope scope =
-                        ProtosTestToolAsyncExecutionScope.installWithCaseAuthorities(
+                        ProtosTestToolAsyncExecutionScope.installWithProjectTreeAuthorities(
                                 activation,
                                 runtimeHost,
                                 CORE,
@@ -188,12 +188,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                     "packageResourceExecutionInspectAsync",
                     ProtosAsyncProcessSnapshotExecutionFacility.BOOTSTRAP_SLOT,
                     ProtosTestLogicalCaseDiscoveryFacility.BOOTSTRAP_SLOT,
-                    ProtosTestLogicalCaseExecutionFacility.BOOTSTRAP_SLOT,
-                    ProtosTestCaseAuthorityExecutionScope.CONTENT_IDENTITY_SLOT,
-                    ProtosTestCaseAuthorityExecutionScope.RESOLUTION_INPUT_LOCK_SLOT,
-                    ProtosTestCaseAuthorityExecutionScope.RESOLUTION_ROOT_SLOT,
-                    ProtosTestCaseAuthorityExecutionScope.EXECUTION_PLAN_SLOT,
-                    ProtosTestCaseAuthorityExecutionScope.PROJECT_PROJECTION_SLOT)) {
+                    ProtosTestLogicalCaseExecutionFacility.BOOTSTRAP_SLOT)) {
                 assertTrue(activation.context().hasLocalSlot(slot), "missing async route " + slot);
             }
 
@@ -268,7 +263,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
     }
 
     @Test
-    void publicMainUsesOneGraphDrivenBoundedRunnerPathForAllSuites() throws Exception {
+    void publicMainUsesOneGraphDrivenLogicalCaseRunnerPathForAllSuites() throws Exception {
         String main = Files.readString(TOOL_ROOT.resolve("Main.protos"), StandardCharsets.UTF_8);
 
         assertTrue(main.contains("Options: import(\"self:Options\")"));
@@ -285,13 +280,19 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         assertTrue(main.contains("Manifest.loadPackageToml(corpusBinding.filesystem)"));
         assertTrue(main.contains("(planLoader === \"project-tree\")"));
         assertTrue(main.contains("Manifest.loadProjectTreeCases("));
-        assertEquals(1, occurrences(main, "Runner.runD108WithResources("));
+
+        // TOOL009-B: repository production is logical-only, so there is no
+        // D108/bounded-Runner repository branch and no legacy binding
+        // invocation left; only the generic well-formedness validation
+        // (`binding.hasSlot("executionAsync")`) remains.
+        assertEquals(0, occurrences(main, "Runner.runD108WithResources("));
         assertEquals(0, occurrences(main, "Runner.runBounded("));
         assertFalse(main.contains("Runner.runSimple("));
-        assertTrue(main.contains("binding.executionAsync"));
-        assertTrue(main.contains("binding.executionInspectAsync"));
-        assertTrue(main.contains("binding.resourceExecutionAsync"));
-        assertTrue(main.contains("binding.resourceExecutionInspectAsync"));
+        assertFalse(main.contains("binding.executionAsync"));
+        assertFalse(main.contains("binding.executionInspectAsync"));
+        assertFalse(main.contains("binding.resourceExecutionAsync"));
+        assertFalse(main.contains("binding.resourceExecutionInspectAsync"));
+        assertTrue(main.contains("binding.hasSlot(\"executionAsync\")"));
         assertTrue(main.contains("corpusBinding.filesystem"));
         assertFalse(main.contains("binding.filesystem"));
         assertFalse(main.contains("binding.planLoader"));
@@ -305,8 +306,14 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
         assertFalse(main.contains("\"protos/actor\""));
         assertFalse(main.contains("\"protos/group\""));
         assertFalse(main.contains("\"protos/package-toml\""));
-        assertTrue(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
-        assertTrue(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+
+        // The current sole result source is the Logical Case result
+        // projection; the legacy across-runs/across-invocation aggregation
+        // functions are no longer called from repository production.
+        assertFalse(main.contains("Runner.testRunOutcomeCompletedAcrossRuns("));
+        assertFalse(main.contains("Runner.testRunOutcomeInfrastructureAbortedAcrossInvocation("));
+        assertTrue(main.contains("LogicalCaseResult.exitCode(logicalResults)"));
+        assertTrue(main.contains("LogicalCaseDispatch.logicalCaseExecutorAsync("));
     }
 
     private static OptionRun runOptionsExpression(String argsExpression) throws Exception {
