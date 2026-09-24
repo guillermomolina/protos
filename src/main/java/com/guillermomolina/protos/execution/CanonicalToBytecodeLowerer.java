@@ -308,30 +308,20 @@ final class CanonicalToBytecodeLowerer {
                             builder.beginRoot();
 
                             /*
-                             * PLAT036 Candidate D, Slice 3: give every current-scope
-                             * binding admitted to this slice's direct-local layout its
-                             * own stable BytecodeLocal, and install the frame-backed
-                             * authority as the very first operation, before any other
-                             * code in this root (including parameter binding) can
-                             * establish a binding on this context. Closure parameters
-                             * are excluded by name: their identity stays on the
-                             * existing generic path (I068 Slice 4), so they simply
-                             * fall through this authority's dynamic overflow.
+                             * PLAT036 Candidate D, I068 Slice 4: every statically
+                             * declared binding owned by this genuine execution-context
+                             * root, including Closure parameters, receives one stable
+                             * BytecodeLocal. Allocating that physical local does not
+                             * establish semantic presence: it stays cleared until the
+                             * existing createLocalSlot binding point writes through the
+                             * frame-backed authority.
                              */
                             if (genuineExecutionContextRoot) {
-                                java.util.Set<String> excludedParameterNames =
-                                        activationDefinition == null
-                                                ? java.util.Set.of()
-                                                : activationDefinition.parameters().stream()
-                                                        .map(CanonicalParameter::name)
-                                                        .collect(java.util.stream.Collectors.toSet());
                                 java.util.Map<String, BytecodeLocal> frameLocals =
                                         new java.util.LinkedHashMap<>();
                                 for (String name : currentRootTopScope.declaredNames()) {
-                                    if (!excludedParameterNames.contains(name)) {
-                                        BytecodeLocal local = builder.createLocal(name, null);
-                                        frameLocals.put(name, local);
-                                    }
+                                    BytecodeLocal local = builder.createLocal(name, null);
+                                    frameLocals.put(name, local);
                                 }
                                 currentRootFrameLocals = java.util.Map.copyOf(frameLocals);
                                 if (!frameLocals.isEmpty()) {
@@ -4377,8 +4367,8 @@ final class CanonicalToBytecodeLowerer {
      * guaranteed by the static proof itself, so no runtime presence check is
      * needed here. {@code Candidate} and {@code Dynamic} resolutions, and any
      * {@code Resolved} binding owned by a different scope (an {@code
-     * OBJECT_BODY}, a parameter, or a different root entirely), always fall
-     * through to the unchanged generic path.
+     * OBJECT_BODY} or a different root entirely), always fall through to the
+     * unchanged generic path.
      */
     private void emitLookup(
             ProtosBytecodeRootNodeGen.Builder builder,

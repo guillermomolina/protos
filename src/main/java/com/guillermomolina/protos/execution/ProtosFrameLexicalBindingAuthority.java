@@ -36,10 +36,10 @@ import java.util.Optional;
  * com.guillermomolina.protos.runtime.ProtosExecutionContextValue#installFrameLexicalBindingAuthority}
  * before any binding exists on that context.
  *
- * <p>Every name statically admitted to this slice's direct-local layout (see
- * {@code CanonicalToBytecodeLowerer}) is backed by its own {@link
- * LocalAccessor}; any other name (a parameter, or a genuinely dynamic name)
- * falls through to an ordinary insertion-ordered overflow map, coordinated by
+ * <p>Every name statically admitted to the direct-local layout (see
+ * {@code CanonicalToBytecodeLowerer}), including Closure parameters since
+ * I068 Slice 4, is backed by its own {@link LocalAccessor}; genuinely dynamic
+ * names fall through to an ordinary insertion-ordered overflow map, coordinated by
  * this single authority instance rather than a second competing store. This
  * is the {@code DYNAMIC_OVERFLOW} shape PLAT036 anticipates: one authority
  * object, hybrid physical storage.

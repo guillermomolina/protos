@@ -1,3 +1,26 @@
+## 0.3.84-SNAPSHOT
+
+- `I068` / PLAT036 Candidate D, Slice 4 ("sequential/default parameter
+  lowering"): Closure parameters now participate in the genuine current
+  execution-context root's stable Truffle Bytecode DSL `BytecodeLocal` layout.
+  Physical local allocation still does not establish semantic presence:
+  parameter locals begin cleared and become PRESENT only when the existing
+  left-to-right parameter-binding operation successfully creates that binding
+  through the single frame-backed lexical authority. Supplied arguments still
+  suppress defaults, omitted defaults execute exactly once in the invocation
+  activation, earlier parameters are available to later defaults, and current
+  or later parameters remain semantically absent during an earlier/default-own
+  lookup and therefore retain ordinary fallback behavior. Rest parameters
+  continue to receive a fresh frozen Array containing exactly the unconsumed
+  supplied suffix, and `PRESENT(null) != ABSENT` remains preserved. Parameter
+  reads that are statically `Resolved` in the current activation can now use
+  the same direct frame-local read path established by Slice 3, while
+  `Candidate`/`Dynamic` lookups remain on the exact generic path. Escaped
+  execution contexts continue to project the same authoritative parameter
+  values after activation return. Captured/materialized outer lexical lowering
+  remains allocated to Slice 5; no second authoritative binding store and no
+  lazy execution-context materialization are introduced.
+
 ## 0.3.83-SNAPSHOT
 
 - `I068` / PLAT036 Candidate D, Slice 3 ("definitely-current local lowering"):

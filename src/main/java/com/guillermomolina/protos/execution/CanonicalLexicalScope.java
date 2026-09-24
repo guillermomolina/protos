@@ -94,11 +94,11 @@ final class CanonicalLexicalScope {
     }
 
     /**
-     * PLAT036 Candidate D, Slice 3: every name this scope ever declares,
+     * PLAT036 Candidate D: every name this scope ever declares,
      * order-independent (matching {@link #declare(String)}). Used by the
-     * lowerer to size a genuine execution-context's Bytecode-local layout;
-     * callers must independently exclude names that must stay off the direct
-     * local path for this slice (parameters).
+     * lowerer to size a genuine execution-context's Bytecode-local layout.
+     * Since I068 Slice 4 this includes Closure parameters; semantic presence
+     * still begins only at each parameter's sequential binding point.
      */
     Set<String> declaredNames() {
         return Collections.unmodifiableSet(declared.keySet());
