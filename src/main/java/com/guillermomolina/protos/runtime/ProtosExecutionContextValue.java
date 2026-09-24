@@ -66,4 +66,17 @@ public final class ProtosExecutionContextValue extends ProtosObjectValue {
         }
         return super.removeLocalSlot(name);
     }
+
+    /**
+     * PLAT036 Candidate D, Slice 3 backend-private hook: a genuine {@code
+     * ROOT}/{@code CLOSURE} Bytecode lowering unit calls this exactly once, as
+     * its own first executed operation, to replace the context's default
+     * map-backed authority with one backed by that unit's own Truffle Bytecode
+     * DSL frame/local layout. Bindings established before root execution are
+     * migrated during the authority handoff, preserving their insertion order
+     * and values without exposing two simultaneous authorities.
+     */
+    public void installFrameLexicalBindingAuthority(ProtosLexicalBindingAuthority frameBackedAuthority) {
+        replaceLexicalBindingAuthorityPreservingBindings(frameBackedAuthority);
+    }
 }

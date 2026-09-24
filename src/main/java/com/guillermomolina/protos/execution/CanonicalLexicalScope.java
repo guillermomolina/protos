@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -90,6 +91,17 @@ final class CanonicalLexicalScope {
 
     boolean declaresName(String name) {
         return declared.containsKey(name);
+    }
+
+    /**
+     * PLAT036 Candidate D, Slice 3: every name this scope ever declares,
+     * order-independent (matching {@link #declare(String)}). Used by the
+     * lowerer to size a genuine execution-context's Bytecode-local layout;
+     * callers must independently exclude names that must stay off the direct
+     * local path for this slice (parameters).
+     */
+    Set<String> declaredNames() {
+        return Collections.unmodifiableSet(declared.keySet());
     }
 
     CanonicalBindingIdentity identity(String name) {

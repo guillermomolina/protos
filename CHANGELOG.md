@@ -1,3 +1,28 @@
+## 0.3.83-SNAPSHOT
+
+- `I068` / PLAT036 Candidate D, Slice 3 ("definitely-current local lowering"):
+  the first runtime lexical-authority cutover is now active for statically
+  `Resolved` bindings owned by the genuine current execution-context scope
+  (`ROOT` / `CLOSURE`). Those bindings receive stable Truffle Bytecode DSL
+  `BytecodeLocal` storage and eligible bare reads lower directly through the
+  generated local-accessor path instead of
+  `Lookup -> ProtosActivation.lookup(String)`. The same frame-backed storage
+  remains observable through the first-class `ProtosExecutionContextValue`
+  authority seam, including after the context escapes its activation; no
+  duplicate map-backed authoritative value copy is maintained for a migrated
+  binding. Semantic presence remains independent from physical local
+  allocation (`STATIC_LOCAL_EXISTS != SEMANTIC_BINDING_PRESENT`,
+  `PRESENT(null) != ABSENT`), and the existing OPEN/CLOSED/FROZEN mutation
+  rules plus D179 C3 monotonic membership are preserved. `Candidate` and
+  `Dynamic` references retain the exact existing presence/topology and
+  receiver/member fallback path, object-construction (`OBJECT_BODY`) slots
+  remain ordinary object state, and legacy/internal activations whose current
+  lexical context is an ordinary `ProtosObjectValue` retain the historical
+  String-keyed lookup path. Closure parameters/default establishment remain
+  for Slice 4 and captured/materialized outer lexical access remains for
+  Slice 5; lazy execution-context materialization and performance attribution
+  remain out of scope. `RUNTIME_AUTHORITY_CUTOVER=CURRENT_RESOLVED_ONLY`.
+
 ## 0.3.82-SNAPSHOT
 
 - `I068` / PLAT036 Candidate D, Slice 2 ("frame/context single-authority

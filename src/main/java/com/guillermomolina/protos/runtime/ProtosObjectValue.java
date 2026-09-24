@@ -42,13 +42,22 @@ public class ProtosObjectValue implements TruffleObject {
     private final Object parent;
     /**
      * The single authority for this object's lexical local-slot bindings
-     * (PLAT036 Candidate D). Installed once at construction; every local-slot
+     * (PLAT036 Candidate D). Installed at construction; every local-slot
      * operation below is routed through it rather than touching a storage
      * field directly, so a subclass such as {@link ProtosExecutionContextValue}
      * can install a different concrete authority without any operation here
      * changing.
+     *
+     * <p>PLAT036 Slice 3: not {@code final}, because a genuine execution
+     * context's frame-backed authority is only obtainable once lowering-time
+     * Bytecode local/frame state exists, which is after object construction.
+     * {@link #replaceLexicalBindingAuthorityPreservingBindings} performs a
+     * backend-private handoff to a replacement authority, preserving any
+     * bindings established before root execution. The old authority remains
+     * the only visible authority until migration succeeds and the single
+     * authority reference is switched.
      */
-    private final ProtosLexicalBindingAuthority lexicalBindingAuthority;
+    private ProtosLexicalBindingAuthority lexicalBindingAuthority;
     private MutationState mutationState = MutationState.OPEN;
 
     private ProtosObjectValue() {
@@ -265,6 +274,35 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         return lexicalBindingAuthority.removeBinding(name);
+    }
+
+    /**
+     * PLAT036 Candidate D, Slice 3 backend-private one-time authority
+     * replacement, reserved for a subclass (currently only {@link
+     * ProtosExecutionContextValue}) that discovers its true authoritative
+     * storage only after construction (a Truffle Bytecode DSL frame/local
+     * layout, known only once the owning generated root begins executing).
+     * Rejected once any binding has been established, so no caller can ever
+     * observe two different authoritative values for the same binding name.
+     */
+    protected final void replaceLexicalBindingAuthorityPreservingBindings(
+            ProtosLexicalBindingAuthority replacement) {
+        Objects.requireNonNull(replacement, "replacement");
+
+        /*
+         * The current authority remains the sole visible authority while the
+         * replacement is populated. Only after migration succeeds is the
+         * authority pointer switched. The old authority then becomes
+         * unreachable from this object.
+         */
+        Map<String, Object> existing =
+                lexicalBindingAuthority.bindingsSnapshot();
+
+        for (Map.Entry<String, Object> entry : existing.entrySet()) {
+            replacement.putBinding(entry.getKey(), entry.getValue());
+        }
+
+        this.lexicalBindingAuthority = replacement;
     }
     /*
      * I026-D1 / PLAT013: tooling observation is local reflection only.

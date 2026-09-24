@@ -19,7 +19,11 @@ package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
+import com.oracle.truffle.api.bytecode.ConstantOperand;
+import com.oracle.truffle.api.bytecode.LocalAccessor;
+import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
@@ -263,6 +267,89 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class Lookup {
         @Specialization
         public static Object perform(ProtosActivation activation, String name) {
+            return activation.lookup(name)
+                    .orElseThrow(
+                            () ->
+                                    new ProtosSignalException(
+                                            ProtosCoreErrors.newUnqualifiedLookupError(
+                                                    activation)));
+        }
+    }
+
+    /**
+     * PLAT036 Candidate D, Slice 3: installs a frame-backed {@link
+     * com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority} on the
+     * current genuine execution context, exactly once, as the first operation
+     * of every {@code ROOT}/{@code CLOSURE} Bytecode root that {@code
+     * CanonicalToBytecodeLowerer} found at least one eligible current-scope
+     * binding for. The frame is retained (materialized) so a context that
+     * later escapes its own activation keeps observing the same authoritative
+     * values through this same authority instance.
+     *
+     * <p>No-op when {@code activation.context()} is not a genuine execution
+     * context (never the case for a real ROOT/CLOSURE lowering unit, but
+     * defensively harmless otherwise).
+     */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = java.util.List.class,
+            name = "frameBackedNames")
+    public static final class InstallFrameLexicalAuthority {
+        @Specialization
+        public static void perform(
+                LocalRangeAccessor frameBackedLocals,
+                java.util.List<?> frameBackedNames,
+                ProtosActivation activation,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            if (activation.context()
+                    instanceof ProtosExecutionContextValue executionContext) {
+                executionContext.installFrameLexicalBindingAuthority(
+                        new ProtosFrameLexicalBindingAuthority(
+                                frameBackedNames,
+                                frameBackedLocals,
+                                bytecodeNode,
+                                frame.materialize()));
+            }
+        }
+    }
+
+    /**
+     * PLAT036 Candidate D, Slice 3: the direct/fast read of a {@code
+     * Resolved} current-scope binding. Deliberately uses the same {@link
+     * LocalAccessor} mechanism {@link ProtosFrameLexicalBindingAuthority}
+     * itself uses to read/write this local, rather than the raw generated
+     * {@code LoadLocal} bytecode instruction: a local ever written only
+     * through the dynamic {@link LocalAccessor} API does not participate in
+     * the frame-slot-kind speculation the DSL's own literal {@code
+     * StoreLocal}/{@code LoadLocal} instruction pair relies on, so mixing the
+     * two access mechanisms for the same local is not safe. Presence is
+     * guaranteed by the static proof itself (Resolved), so no runtime
+     * presence check is needed here.
+     */
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    public static final class ReadFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalAccessor accessor,
+                ProtosActivation activation,
+                String name,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            if (activation.context() instanceof ProtosExecutionContextValue) {
+                return accessor.getObject(bytecodeNode, frame);
+            }
+
+            /*
+             * Compatibility path for legacy/internal activations whose current
+             * lexical context is an ordinary ProtosObjectValue rather than a
+             * genuine execution context. Such objects are deliberately not
+             * frame-backed by PLAT036 Candidate D.
+             */
             return activation.lookup(name)
                     .orElseThrow(
                             () ->

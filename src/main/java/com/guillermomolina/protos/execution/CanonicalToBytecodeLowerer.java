@@ -95,6 +95,50 @@ final class CanonicalToBytecodeLowerer {
             bindingAnalysisByClosure = new java.util.IdentityHashMap<>();
     private CanonicalBindingAnalysis moduleBindingAnalysis;
 
+    /**
+     * PLAT036 Candidate D, Slice 3 fast-path context for whichever genuine
+     * {@code ROOT}/{@code CLOSURE} Bytecode root is currently being lowered
+     * (null/empty while lowering an object-construction body, which is never
+     * eligible). Saved and restored around each {@link #lowerRoot} call so
+     * lowering an object body nested inside an enclosing root's own body
+     * (reentrant) never corrupts the enclosing root's context.
+     */
+    private CanonicalBindingAnalysis currentRootAnalysis;
+    private CanonicalLexicalScope currentRootTopScope;
+    private java.util.Map<String, BytecodeLocal> currentRootFrameLocals =
+            java.util.Map.of();
+
+    /*
+     * BytecodeRootNodes retains its parser and may invoke it again when source
+     * or instrumentation metadata is materialized. Every parser invocation
+     * must therefore re-establish the exact root-local Slice 3 lowering state.
+     */
+    private void withCurrentRootLoweringState(
+            CanonicalBindingAnalysis analysisForThisRoot,
+            boolean genuineExecutionContextRoot,
+            Runnable action) {
+        CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
+        CanonicalLexicalScope savedTopScope = currentRootTopScope;
+        java.util.Map<String, BytecodeLocal> savedFrameLocals =
+                currentRootFrameLocals;
+
+        try {
+            if (genuineExecutionContextRoot) {
+                currentRootAnalysis = analysisForThisRoot;
+                currentRootTopScope = analysisForThisRoot.topScope();
+            } else {
+                currentRootAnalysis = null;
+                currentRootTopScope = null;
+            }
+            currentRootFrameLocals = java.util.Map.of();
+            action.run();
+        } finally {
+            currentRootAnalysis = savedAnalysis;
+            currentRootTopScope = savedTopScope;
+            currentRootFrameLocals = savedFrameLocals;
+        }
+    }
+
     CanonicalToBytecodeLowerer(ProtosLanguage language, Source source) {
         this.language = Objects.requireNonNull(language, "language");
         this.source = Objects.requireNonNull(source, "source");
@@ -152,7 +196,7 @@ final class CanonicalToBytecodeLowerer {
             }
         }
 
-        RootCallTarget target = lowerRoot(object.body(), null).getCallTarget();
+        RootCallTarget target = lowerObjectBodyRoot(object.body()).getCallTarget();
         bytecodeObjectBodyTargets.put(object, target);
         return target;
     }
@@ -172,31 +216,84 @@ final class CanonicalToBytecodeLowerer {
     }
 
     ProtosBytecodeRootNode lowerRoot(CanonicalSequence sequence) {
-        return lowerRoot(sequence, null);
+        return lowerRoot(sequence, null, true);
     }
 
     ProtosBytecodeRootNode lowerClosureActivationRoot(
             CanonicalClosure definition) {
         Objects.requireNonNull(definition, "definition");
         validateSupportedDefaults(definition);
-        return lowerRoot(definition.body(), definition);
+        return lowerRoot(definition.body(), definition, true);
+    }
+
+    /**
+     * PLAT036 Candidate D, Slice 3: an object-construction body is never a
+     * genuine execution context (see {@code EXECUTION_AND_CONTROL.md} "Object
+     * Construction Is Not a Lexical Capture Scope"), so it must never receive
+     * a frame-backed lexical-binding authority even though its own {@link
+     * CanonicalBindingAnalysis} (recomputed here, same as before Slice 3) is
+     * shaped like a {@code ROOT}. The {@code genuineExecutionContextRoot=false}
+     * flag below is the sole gate that keeps this call site off the direct
+     * Bytecode-local path.
+     */
+    private ProtosBytecodeRootNode lowerObjectBodyRoot(CanonicalSequence body) {
+        return lowerRoot(body, null, false);
     }
 
     private ProtosBytecodeRootNode lowerRoot(
             CanonicalSequence sequence,
-            CanonicalClosure activationDefinition) {
+            CanonicalClosure activationDefinition,
+            boolean genuineExecutionContextRoot) {
         Objects.requireNonNull(sequence, "sequence");
         validateSupported(sequence);
         validateSpan(sequence.span());
         /* PLAT036 Slice 1: compute/cache binding-identity metadata for this lowering
-         * unit; preparatory only, not yet read by codegen below. */
-        bindingAnalysisFor(sequence, activationDefinition);
+         * unit. PLAT036 Slice 3 consumes it below (genuine roots only) to build the
+         * direct Bytecode-local layout for statically admitted current bindings. */
+        CanonicalBindingAnalysis analysisForThisRoot = bindingAnalysisFor(sequence, activationDefinition);
 
+        /* PLAT036 Slice 3: save/restore around this (possibly reentrant, e.g. an
+         * object body lowered while lowering its enclosing root's body) lowering
+         * pass's fast-path context. */
+        CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
+        CanonicalLexicalScope savedTopScope = currentRootTopScope;
+        java.util.Map<String, BytecodeLocal> savedFrameLocals =
+                currentRootFrameLocals;
+        try {
+            if (genuineExecutionContextRoot) {
+                currentRootAnalysis = analysisForThisRoot;
+                currentRootTopScope = analysisForThisRoot.topScope();
+            } else {
+                currentRootAnalysis = null;
+                currentRootTopScope = null;
+            }
+            currentRootFrameLocals = java.util.Map.of();
+            return lowerRootBody(
+                    sequence,
+                    activationDefinition,
+                    genuineExecutionContextRoot,
+                    analysisForThisRoot);
+        } finally {
+            currentRootAnalysis = savedAnalysis;
+            currentRootTopScope = savedTopScope;
+            currentRootFrameLocals = savedFrameLocals;
+        }
+    }
+
+    private ProtosBytecodeRootNode lowerRootBody(
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition,
+            boolean genuineExecutionContextRoot,
+            CanonicalBindingAnalysis analysisForThisRoot) {
         BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                 ProtosBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
-                        builder -> {
+                        builder ->
+                                withCurrentRootLoweringState(
+                                        analysisForThisRoot,
+                                        genuineExecutionContextRoot,
+                                        () -> {
                             SourceSpan rootSpan = sequence.span();
 
                             /*
@@ -209,6 +306,46 @@ final class CanonicalToBytecodeLowerer {
                                     rootSpan.startOffset(),
                                     rootSpan.length());
                             builder.beginRoot();
+
+                            /*
+                             * PLAT036 Candidate D, Slice 3: give every current-scope
+                             * binding admitted to this slice's direct-local layout its
+                             * own stable BytecodeLocal, and install the frame-backed
+                             * authority as the very first operation, before any other
+                             * code in this root (including parameter binding) can
+                             * establish a binding on this context. Closure parameters
+                             * are excluded by name: their identity stays on the
+                             * existing generic path (I068 Slice 4), so they simply
+                             * fall through this authority's dynamic overflow.
+                             */
+                            if (genuineExecutionContextRoot) {
+                                java.util.Set<String> excludedParameterNames =
+                                        activationDefinition == null
+                                                ? java.util.Set.of()
+                                                : activationDefinition.parameters().stream()
+                                                        .map(CanonicalParameter::name)
+                                                        .collect(java.util.stream.Collectors.toSet());
+                                java.util.Map<String, BytecodeLocal> frameLocals =
+                                        new java.util.LinkedHashMap<>();
+                                for (String name : currentRootTopScope.declaredNames()) {
+                                    if (!excludedParameterNames.contains(name)) {
+                                        BytecodeLocal local = builder.createLocal(name, null);
+                                        frameLocals.put(name, local);
+                                    }
+                                }
+                                currentRootFrameLocals = java.util.Map.copyOf(frameLocals);
+                                if (!frameLocals.isEmpty()) {
+                                    BytecodeLocal[] frameLocalRange =
+                                            frameLocals.values().toArray(BytecodeLocal[]::new);
+                                    java.util.List<String> frameLocalNames =
+                                            java.util.List.copyOf(frameLocals.keySet());
+                                    builder.beginInstallFrameLexicalAuthority(
+                                            frameLocalRange,
+                                            frameLocalNames);
+                                    builder.emitLoadArgument(0);
+                                    builder.endInstallFrameLexicalAuthority();
+                                }
+                            }
 
                             BytecodeLocal defaultValue = null;
                             BytecodeLocal defaultPreparedCall = null;
@@ -303,7 +440,7 @@ final class CanonicalToBytecodeLowerer {
                             builder.endRoot();
                             builder.endSourceSection();
                             builder.endSource();
-                        });
+                                        }));
 
         return roots.getNode(0);
     }
@@ -4224,9 +4361,45 @@ final class CanonicalToBytecodeLowerer {
                         + expression.getClass().getSimpleName());
     }
 
+    /**
+     * PLAT036 Candidate D, Slice 3 key direct/fast path: a reference that is
+     * statically {@link CanonicalBindingResolution.Resolved} in the exact
+     * genuine execution-context scope currently being lowered compiles
+     * straight to a {@code ReadFrameLocal} of its own stable {@link
+     * com.oracle.truffle.api.bytecode.LocalAccessor}, bypassing {@code
+     * Lookup}/{@code ProtosActivation.lookup(String)} entirely. This uses the
+     * same accessor-based mechanism the installed frame-backed authority uses
+     * to write this local (see {@code ProtosFrameLexicalBindingAuthority}),
+     * deliberately never the raw generated {@code LoadLocal} instruction: a
+     * local written only through the dynamic accessor API does not
+     * participate in the frame-slot-kind speculation the DSL's own literal
+     * {@code StoreLocal}/{@code LoadLocal} pair relies on. Presence is
+     * guaranteed by the static proof itself, so no runtime presence check is
+     * needed here. {@code Candidate} and {@code Dynamic} resolutions, and any
+     * {@code Resolved} binding owned by a different scope (an {@code
+     * OBJECT_BODY}, a parameter, or a different root entirely), always fall
+     * through to the unchanged generic path.
+     */
     private void emitLookup(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalLookup lookup) {
+        if (currentRootAnalysis != null) {
+            java.util.Optional<CanonicalBindingResolution> resolution =
+                    currentRootAnalysis.resolutionOf(lookup);
+            if (resolution.isPresent()
+                    && resolution.orElseThrow() instanceof CanonicalBindingResolution.Resolved resolved
+                    && resolved.identity().owner() == currentRootTopScope) {
+                BytecodeLocal local =
+                        currentRootFrameLocals.get(resolved.identity().name());
+                if (local != null) {
+                    builder.beginReadFrameLocal(local);
+                    builder.emitLoadArgument(0);
+                    builder.emitLoadConstant(resolved.identity().name());
+                    builder.endReadFrameLocal();
+                    return;
+                }
+            }
+        }
         builder.beginLookup();
         builder.emitLoadArgument(0);
         builder.emitLoadConstant(lookup.name());
