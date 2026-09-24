@@ -1,3 +1,33 @@
+## 0.3.85-SNAPSHOT
+
+- `I068` / PLAT036 Candidate D, Slice 5 ("captured/materialized lexical
+  lowering"): statically proven captured lexical bindings now retain their
+  canonical owner/depth proof through nested Closure plan construction and
+  lower eligible reads through a dedicated frame-native
+  `ReadCapturedFrameLocal` operation against the same materialized
+  frame-backed lexical authority already projected by the escaped first-class
+  execution context. Captured writes resolve and retain their exact lexical
+  destination before RHS evaluation, then update that same authoritative
+  frame-backed binding through `ResolveCapturedWritableLexicalTarget` /
+  `AssignCapturedFrameLocal`; no captured value copy or second authoritative
+  store is introduced. Capture remains by reference after the outer activation
+  returns, later outer mutation remains visible, lexical depth greater than one
+  is preserved, and `PRESENT(null)` remains distinct from `ABSENT`.
+  D179 candidate C3 late `ABSENT -> PRESENT` creation remains observable:
+  dynamically-created nearer bindings retarget subsequent captured reads and
+  writes, while a write whose destination was already resolved before its RHS
+  continues to mutate that previously selected destination. Presence-ambiguous
+  `Candidate` references and truly `Dynamic` references preserve the existing
+  generic/receiver fallback, and Object-construction bodies remain outside the
+  genuine lexical execution-context chain. Context-local/source reparsing now
+  remaps previously proven captured sites onto fresh canonical AST identities
+  using portable source-position/name metadata plus the stable owner local
+  layout, without storing Truffle `Frame`, `BytecodeNode`, or other
+  Context-owned execution objects in semantic `ProtosClosureValue` state.
+  `DUAL_AUTHORITATIVE_COPIES=NO`, `LAZY_CONTEXT_MATERIALIZATION=NO`, and
+  observable Protos semantics are unchanged. Debugger/reflection projection
+  cleanup remains allocated to Slice 6.
+
 ## 0.3.84-SNAPSHOT
 
 - `I068` / PLAT036 Candidate D, Slice 4 ("sequential/default parameter

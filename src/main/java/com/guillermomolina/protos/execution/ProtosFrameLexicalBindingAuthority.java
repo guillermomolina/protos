@@ -57,11 +57,13 @@ import java.util.Optional;
  * <p>The frame reference held here is the owning root's own frame, retained
  * (materialized by the installer) so this context's frame-backed bindings
  * remain observable even after that root's own activation returns, for the
- * case where the execution context itself escapes. This is current-context
- * retention only: no other root's frame is ever referenced here (that is
- * Slice 5's {@code MaterializedLocalAccessor}-based captured/outer access).
+ * case where the execution context itself escapes. I068 Slice 5 reuses this
+ * same retained materialized authority for proven captured access: the child
+ * root never owns or copies the outer frame, and no Truffle frame object is
+ * stored in the semantic Closure value.
  */
 final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAuthority {
+    private final List<String> frameBackedNames;
     private final Map<String, Integer> frameBackedOffsets;
     private final LocalRangeAccessor frameBackedLocals;
     private final BytecodeNode bytecodeNode;
@@ -85,6 +87,8 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                     "frame-backed binding-name count must match local range length");
         }
 
+        java.util.ArrayList<String> names =
+                new java.util.ArrayList<>(frameBackedNames.size());
         Map<String, Integer> offsets = new LinkedHashMap<>();
         for (int index = 0; index < frameBackedNames.size(); index++) {
             Object candidate =
@@ -102,8 +106,56 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                 throw new IllegalArgumentException(
                         "duplicate frame-backed binding name: " + name);
             }
+            names.add(name);
         }
+        this.frameBackedNames = List.copyOf(names);
         this.frameBackedOffsets = Map.copyOf(offsets);
+    }
+
+    /**
+     * I068 Slice 5 frame-native captured-read seam. The ordinal comes from the
+     * same CanonicalLexicalScope declaration order used to create this
+     * authority's LocalRangeAccessor layout. The expected name is checked as a
+     * defensive guard against stale or mismatched lowering metadata.
+     */
+    boolean hasFrameBackedBindingAt(String expectedName, int ordinal) {
+        Objects.requireNonNull(expectedName, "expectedName");
+        if (ordinal < 0 || ordinal >= frameBackedNames.size()) {
+            return false;
+        }
+        if (!frameBackedNames.get(ordinal).equals(expectedName)) {
+            return false;
+        }
+        return !frameBackedLocals.isCleared(
+                bytecodeNode, frame, ordinal);
+    }
+
+    Object readFrameBackedBindingAt(String expectedName, int ordinal) {
+        if (!hasFrameBackedBindingAt(expectedName, ordinal)) {
+            throw new IllegalStateException(
+                    "captured frame-backed binding is absent or layout metadata mismatched: "
+                            + expectedName
+                            + "@"
+                            + ordinal);
+        }
+        return frameBackedLocals.getObject(
+                bytecodeNode, frame, ordinal);
+    }
+
+    void assignFrameBackedBindingAt(
+            String expectedName,
+            int ordinal,
+            Object value) {
+        Objects.requireNonNull(value, "value");
+        if (!hasFrameBackedBindingAt(expectedName, ordinal)) {
+            throw new IllegalStateException(
+                    "captured frame-backed binding is absent or layout metadata mismatched: "
+                            + expectedName
+                            + "@"
+                            + ordinal);
+        }
+        frameBackedLocals.setObject(
+                bytecodeNode, frame, ordinal, value);
     }
 
     @Override

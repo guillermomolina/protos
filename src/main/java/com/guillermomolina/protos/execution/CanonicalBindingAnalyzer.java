@@ -359,8 +359,11 @@ final class CanonicalBindingAnalyzer {
         while (scope != null) {
             if (scope.declaresName(name)) {
                 CanonicalBindingIdentity identity = scope.identity(name);
-                if (depth == 0 && scope.isEstablished(name)) {
-                    return new CanonicalBindingResolution.Resolved(identity);
+                if (scope.isEstablished(name)) {
+                    if (depth == 0) {
+                        return new CanonicalBindingResolution.Resolved(identity);
+                    }
+                    return new CanonicalBindingResolution.CapturedResolved(identity, depth);
                 }
                 return new CanonicalBindingResolution.Candidate(identity, depth);
             }

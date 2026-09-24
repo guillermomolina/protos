@@ -134,6 +134,15 @@ public class ProtosObjectValue implements TruffleObject {
         return lexicalBindingAuthority.bindingsSnapshot();
     }
 
+    /**
+     * Backend-private subclass hook for execution machinery that must operate
+     * on this object's single lexical-binding authority without introducing a
+     * second semantic store.
+     */
+    protected final ProtosLexicalBindingAuthority lexicalBindingAuthorityForSubclass() {
+        return lexicalBindingAuthority;
+    }
+
     public ProtosObjectValue withoutLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
         if (!lexicalBindingAuthority.containsBinding(name)) {

@@ -31,7 +31,10 @@ import java.util.Objects;
  * guarantee even though it carries the same kind of identity, because a
  * nearer scope may still legally create the same name later (D179 candidate
  * C3 monotonic membership only forbids the reverse transition). {@link
- * Dynamic} means no scope in the static chain declares the name anywhere, so
+ * CapturedResolved} identifies an already-PRESENT binding owned by an outer
+ * genuine lexical scope; runtime lowering must still preserve nearer-context
+ * retargeting before taking its direct captured path. {@link Dynamic} means
+ * no scope in the static chain declares the name anywhere, so
  * the existing exact String-keyed runtime lookup/receiver-fallback path
  * remains the only correct resolution, unchanged by this slice.
  */
@@ -44,11 +47,29 @@ sealed interface CanonicalBindingResolution {
     }
 
     /**
+     * An already-PRESENT binding owned by an outer genuine lexical scope.
+     *
+     * <p>{@code lexicalDepth} counts genuine execution-context hops; object
+     * construction scopes are skipped by {@link CanonicalLexicalScope#outwardScope()}.
+     * The owner is stable, but a nearer execution context may still acquire the
+     * same name later, so captured lowering must retain an exact nearer-presence
+     * guard before taking a direct frame-backed path.
+     */
+    record CapturedResolved(CanonicalBindingIdentity identity, int lexicalDepth)
+            implements CanonicalBindingResolution {
+        public CapturedResolved {
+            Objects.requireNonNull(identity, "identity");
+            if (lexicalDepth <= 0) {
+                throw new IllegalArgumentException("captured lexicalDepth must be positive");
+            }
+        }
+    }
+
+    /**
      * The nearest scope (by {@code lexicalDepth} hops from the reference)
      * that statically declares this name anywhere, without a presence
      * guarantee at this program point. A runtime presence/topology check or
-     * exact dynamic fallback remains required; this slice does not implement
-     * that check.
+     * exact dynamic fallback remains required.
      */
     record Candidate(CanonicalBindingIdentity identity, int lexicalDepth) implements CanonicalBindingResolution {
         public Candidate {

@@ -98,9 +98,9 @@ class CanonicalBindingAnalyzerTest {
         assertInstanceOf(
                 CanonicalBindingResolution.Resolved.class, analysis.resolutionOf(currentRead).orElseThrow());
 
-        CanonicalBindingResolution.Candidate capturedResolution =
+        CanonicalBindingResolution.CapturedResolved capturedResolution =
                 assertInstanceOf(
-                        CanonicalBindingResolution.Candidate.class,
+                        CanonicalBindingResolution.CapturedResolved.class,
                         analysis.resolutionOf(capturedRead).orElseThrow());
         assertEquals(1, capturedResolution.lexicalDepth());
     }

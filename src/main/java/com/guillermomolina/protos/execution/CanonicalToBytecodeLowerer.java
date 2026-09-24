@@ -85,6 +85,15 @@ import java.util.Objects;
 final class CanonicalToBytecodeLowerer {
     private final ProtosLanguage language;
     private final Source source;
+
+    /**
+     * I068 Slice 5 backend-private whole-tree lexical analysis supplied by an
+     * enclosing lowering unit. When present, nested Closure activation roots
+     * reuse this analysis so captured binding owners/depths are not lost by
+     * re-analyzing the Closure in isolation.
+     */
+    private final CanonicalBindingAnalysis inheritedBindingAnalysis;
+
     private final java.util.IdentityHashMap<CanonicalClosure, ProtosClosureExecutionPlan>
             bytecodeClosurePlans = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalObject, RootCallTarget>
@@ -115,6 +124,7 @@ final class CanonicalToBytecodeLowerer {
      */
     private void withCurrentRootLoweringState(
             CanonicalBindingAnalysis analysisForThisRoot,
+            CanonicalLexicalScope scopeForThisRoot,
             boolean genuineExecutionContextRoot,
             Runnable action) {
         CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
@@ -125,7 +135,7 @@ final class CanonicalToBytecodeLowerer {
         try {
             if (genuineExecutionContextRoot) {
                 currentRootAnalysis = analysisForThisRoot;
-                currentRootTopScope = analysisForThisRoot.topScope();
+                currentRootTopScope = scopeForThisRoot;
             } else {
                 currentRootAnalysis = null;
                 currentRootTopScope = null;
@@ -140,8 +150,16 @@ final class CanonicalToBytecodeLowerer {
     }
 
     CanonicalToBytecodeLowerer(ProtosLanguage language, Source source) {
+        this(language, source, null);
+    }
+
+    CanonicalToBytecodeLowerer(
+            ProtosLanguage language,
+            Source source,
+            CanonicalBindingAnalysis inheritedBindingAnalysis) {
         this.language = Objects.requireNonNull(language, "language");
         this.source = Objects.requireNonNull(source, "source");
+        this.inheritedBindingAnalysis = inheritedBindingAnalysis;
     }
 
     /**
@@ -155,13 +173,55 @@ final class CanonicalToBytecodeLowerer {
     private CanonicalBindingAnalysis bindingAnalysisFor(
             CanonicalSequence sequence, CanonicalClosure activationDefinition) {
         if (activationDefinition != null) {
+            if (inheritedBindingAnalysis != null
+                    && inheritedBindingAnalysis.scopeOf(activationDefinition).isPresent()) {
+                return inheritedBindingAnalysis;
+            }
             return bindingAnalysisByClosure.computeIfAbsent(
                     activationDefinition, CanonicalBindingAnalyzer::analyzeClosure);
         }
+
+        /*
+         * Object-body roots reached while lowering a Closure with inherited
+         * whole-tree analysis keep that same analysis available for Closure
+         * literals nested inside the object. The object body itself remains
+         * non-authoritative and never takes the direct-local path.
+         */
+        if (inheritedBindingAnalysis != null) {
+            return inheritedBindingAnalysis;
+        }
+
         if (moduleBindingAnalysis == null) {
             moduleBindingAnalysis = CanonicalBindingAnalyzer.analyzeModule(sequence);
         }
         return moduleBindingAnalysis;
+    }
+
+    private CanonicalBindingAnalysis bindingAnalysisForNestedClosure(
+            CanonicalClosure definition) {
+        if (currentRootAnalysis != null
+                && currentRootAnalysis.scopeOf(definition).isPresent()) {
+            return currentRootAnalysis;
+        }
+        if (inheritedBindingAnalysis != null
+                && inheritedBindingAnalysis.scopeOf(definition).isPresent()) {
+            return inheritedBindingAnalysis;
+        }
+        if (moduleBindingAnalysis != null
+                && moduleBindingAnalysis.scopeOf(definition).isPresent()) {
+            return moduleBindingAnalysis;
+        }
+        return CanonicalBindingAnalyzer.analyzeClosure(definition);
+    }
+
+    private CanonicalLexicalScope rootScopeFor(
+            CanonicalBindingAnalysis analysis,
+            CanonicalClosure activationDefinition) {
+        if (activationDefinition == null) {
+            return analysis.topScope();
+        }
+        return analysis.scopeOf(activationDefinition)
+                .orElseGet(analysis::topScope);
     }
 
     private ProtosClosureExecutionPlan bytecodeClosurePlan(
@@ -171,7 +231,11 @@ final class CanonicalToBytecodeLowerer {
             return existing;
         }
         ProtosClosureExecutionPlan plan =
-                ProtosClosureExecutionPlan.bytecode(definition, language, source);
+                ProtosClosureExecutionPlan.bytecode(
+                        definition,
+                        language,
+                        source,
+                        bindingAnalysisForNestedClosure(definition));
         bytecodeClosurePlans.put(definition, plan);
         return plan;
     }
@@ -245,12 +309,19 @@ final class CanonicalToBytecodeLowerer {
             CanonicalClosure activationDefinition,
             boolean genuineExecutionContextRoot) {
         Objects.requireNonNull(sequence, "sequence");
+        /*
+         * I068 Slice 5: establish whole-tree binding metadata before recursive
+         * validation constructs nested Closure/Object plans. Otherwise those
+         * plans would conservatively re-analyze nested Closures in isolation
+         * and lose their captured owner/depth metadata.
+         */
+        CanonicalBindingAnalysis analysisForThisRoot =
+                bindingAnalysisFor(sequence, activationDefinition);
+        CanonicalLexicalScope scopeForThisRoot =
+                rootScopeFor(analysisForThisRoot, activationDefinition);
+
         validateSupported(sequence);
         validateSpan(sequence.span());
-        /* PLAT036 Slice 1: compute/cache binding-identity metadata for this lowering
-         * unit. PLAT036 Slice 3 consumes it below (genuine roots only) to build the
-         * direct Bytecode-local layout for statically admitted current bindings. */
-        CanonicalBindingAnalysis analysisForThisRoot = bindingAnalysisFor(sequence, activationDefinition);
 
         /* PLAT036 Slice 3: save/restore around this (possibly reentrant, e.g. an
          * object body lowered while lowering its enclosing root's body) lowering
@@ -262,7 +333,7 @@ final class CanonicalToBytecodeLowerer {
         try {
             if (genuineExecutionContextRoot) {
                 currentRootAnalysis = analysisForThisRoot;
-                currentRootTopScope = analysisForThisRoot.topScope();
+                currentRootTopScope = scopeForThisRoot;
             } else {
                 currentRootAnalysis = null;
                 currentRootTopScope = null;
@@ -272,7 +343,8 @@ final class CanonicalToBytecodeLowerer {
                     sequence,
                     activationDefinition,
                     genuineExecutionContextRoot,
-                    analysisForThisRoot);
+                    analysisForThisRoot,
+                    scopeForThisRoot);
         } finally {
             currentRootAnalysis = savedAnalysis;
             currentRootTopScope = savedTopScope;
@@ -284,7 +356,8 @@ final class CanonicalToBytecodeLowerer {
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
             boolean genuineExecutionContextRoot,
-            CanonicalBindingAnalysis analysisForThisRoot) {
+            CanonicalBindingAnalysis analysisForThisRoot,
+            CanonicalLexicalScope scopeForThisRoot) {
         BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                 ProtosBytecodeRootNodeGen.create(
                         language,
@@ -292,6 +365,7 @@ final class CanonicalToBytecodeLowerer {
                         builder ->
                                 withCurrentRootLoweringState(
                                         analysisForThisRoot,
+                                        scopeForThisRoot,
                                         genuineExecutionContextRoot,
                                         () -> {
                             SourceSpan rootSpan = sequence.span();
@@ -1747,6 +1821,8 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         BytecodeLocal value = builder.createLocal("assignValue", null);
         BytecodeLocal mutationTarget = builder.createLocal("assignMutationTarget", null);
+        java.util.Optional<CanonicalBindingResolution.CapturedResolved> capturedResolution =
+                capturedResolvedAssignment(assign);
 
         if (assign.target().isPresent()) {
             BytecodeLocal rawTarget = builder.createLocal("assignRawTarget", null);
@@ -1763,6 +1839,21 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(rawTarget);
             builder.endRequireObjectMutationTarget();
             builder.endStoreLocal();
+        } else if (capturedResolution.isPresent()) {
+            CanonicalBindingResolution.CapturedResolved captured =
+                    capturedResolution.orElseThrow();
+            /*
+             * Critical ordering invariant: resolve and retain the exact
+             * destination before the RHS is evaluated.
+             */
+            builder.beginStoreLocal(mutationTarget);
+            builder.beginResolveCapturedWritableLexicalTarget();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadConstant(captured.lexicalDepth());
+            builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
+            builder.endResolveCapturedWritableLexicalTarget();
+            builder.endStoreLocal();
         } else {
             /* AST authority resolves the writable lexical destination before RHS evaluation. */
             builder.beginStoreLocal(mutationTarget);
@@ -1776,12 +1867,21 @@ final class CanonicalToBytecodeLowerer {
         emitBodyExpressionToLocal(
                 builder, assign.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
-        builder.beginAssignLocalSlot();
-        builder.emitLoadArgument(0);
-        builder.emitLoadLocal(mutationTarget);
-        builder.emitLoadConstant(assign.name());
-        builder.emitLoadLocal(value);
-        builder.endAssignLocalSlot();
+        if (capturedResolution.isPresent()) {
+            builder.beginAssignCapturedFrameLocal();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(mutationTarget);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadLocal(value);
+            builder.endAssignCapturedFrameLocal();
+        } else {
+            builder.beginAssignLocalSlot();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(mutationTarget);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadLocal(value);
+            builder.endAssignLocalSlot();
+        }
         builder.endStoreLocal();
     }
 
@@ -1929,6 +2029,8 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         BytecodeLocal value = builder.createLocal("defaultAssignValue", null);
         BytecodeLocal mutationTarget = builder.createLocal("defaultAssignMutationTarget", null);
+        java.util.Optional<CanonicalBindingResolution.CapturedResolved> capturedResolution =
+                capturedResolvedAssignment(assign);
 
         if (assign.target().isPresent()) {
             BytecodeLocal rawTarget = builder.createLocal("defaultAssignRawTarget", null);
@@ -1945,6 +2047,17 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(rawTarget);
             builder.endRequireObjectMutationTarget();
             builder.endStoreLocal();
+        } else if (capturedResolution.isPresent()) {
+            CanonicalBindingResolution.CapturedResolved captured =
+                    capturedResolution.orElseThrow();
+            builder.beginStoreLocal(mutationTarget);
+            builder.beginResolveCapturedWritableLexicalTarget();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadConstant(captured.lexicalDepth());
+            builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
+            builder.endResolveCapturedWritableLexicalTarget();
+            builder.endStoreLocal();
         } else {
             builder.beginStoreLocal(mutationTarget);
             builder.beginResolveWritableLexicalContext();
@@ -1957,12 +2070,21 @@ final class CanonicalToBytecodeLowerer {
         emitDefaultExpressionToLocal(
                 builder, assign.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
-        builder.beginAssignLocalSlot();
-        builder.emitLoadArgument(0);
-        builder.emitLoadLocal(mutationTarget);
-        builder.emitLoadConstant(assign.name());
-        builder.emitLoadLocal(value);
-        builder.endAssignLocalSlot();
+        if (capturedResolution.isPresent()) {
+            builder.beginAssignCapturedFrameLocal();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(mutationTarget);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadLocal(value);
+            builder.endAssignCapturedFrameLocal();
+        } else {
+            builder.beginAssignLocalSlot();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(mutationTarget);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadLocal(value);
+            builder.endAssignLocalSlot();
+        }
         builder.endStoreLocal();
     }
 
@@ -4389,11 +4511,69 @@ final class CanonicalToBytecodeLowerer {
                     return;
                 }
             }
+
+            if (resolution.isPresent()
+                    && resolution.orElseThrow()
+                            instanceof CanonicalBindingResolution.CapturedResolved captured) {
+                builder.beginReadCapturedFrameLocal();
+                builder.emitLoadArgument(0);
+                builder.emitLoadConstant(captured.identity().name());
+                builder.emitLoadConstant(captured.lexicalDepth());
+                builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
+                builder.endReadCapturedFrameLocal();
+                return;
+            }
         }
         builder.beginLookup();
         builder.emitLoadArgument(0);
         builder.emitLoadConstant(lookup.name());
         builder.endLookup();
+    }
+
+    private java.util.Optional<CanonicalBindingResolution.CapturedResolved>
+            capturedResolvedAssignment(CanonicalAssign assign) {
+        if (assign.target().isPresent() || currentRootAnalysis == null) {
+            return java.util.Optional.empty();
+        }
+
+        java.util.Optional<CanonicalBindingResolution> resolution =
+                currentRootAnalysis.resolutionOf(assign);
+        if (resolution.isPresent()
+                && resolution.orElseThrow()
+                        instanceof CanonicalBindingResolution.CapturedResolved captured) {
+            return java.util.Optional.of(captured);
+        }
+        return java.util.Optional.empty();
+    }
+
+    private boolean capturedOwnerMatchesCurrentRoot(
+            CanonicalBindingResolution.CapturedResolved captured) {
+        if (currentRootTopScope == null) {
+            return false;
+        }
+
+        CanonicalLexicalScope scope = currentRootTopScope;
+        for (int depth = 0; depth < captured.lexicalDepth(); depth++) {
+            scope = scope.outwardScope();
+            if (scope == null) {
+                return false;
+            }
+        }
+        return scope == captured.identity().owner();
+    }
+
+    private static int frameBackedOrdinal(
+            CanonicalBindingIdentity identity) {
+        int ordinal = 0;
+        for (String declaredName : identity.owner().declaredNames()) {
+            if (declaredName.equals(identity.name())) {
+                return ordinal;
+            }
+            ordinal++;
+        }
+        throw new AssertionError(
+                "binding identity owner no longer declares its own name: "
+                        + identity.name());
     }
 
     private void emitComposedSend(

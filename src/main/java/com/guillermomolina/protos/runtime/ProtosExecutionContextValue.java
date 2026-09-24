@@ -79,4 +79,14 @@ public final class ProtosExecutionContextValue extends ProtosObjectValue {
     public void installFrameLexicalBindingAuthority(ProtosLexicalBindingAuthority frameBackedAuthority) {
         replaceLexicalBindingAuthorityPreservingBindings(frameBackedAuthority);
     }
+
+    /**
+     * I068 Slice 5 execution-backend hook. The returned interface remains
+     * backend-neutral; callers in the Bytecode backend may recognize their
+     * own concrete authority without storing Truffle objects in semantic
+     * Closure values.
+     */
+    public ProtosLexicalBindingAuthority lexicalBindingAuthorityForRuntime() {
+        return lexicalBindingAuthorityForSubclass();
+    }
 }

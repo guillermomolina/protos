@@ -48,6 +48,19 @@ public final class ProtosClosureExecutionPlan {
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,
+            CanonicalBindingAnalysis bindingAnalysis) {
+        return new ProtosClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
+                        definition,
+                        language,
+                        source,
+                        bindingAnalysis));
+    }
+
+    static ProtosClosureExecutionPlan bytecode(
+            CanonicalClosure definition,
+            ProtosLanguage language,
+            Source source,
             ProtosBytecodeRootNode bodyRoot) {
         return new ProtosClosureExecutionPlan(
                 new ProtosBytecodeClosureExecutionPlan(
@@ -55,6 +68,19 @@ public final class ProtosClosureExecutionPlan {
                         language,
                         source,
                         bodyRoot));
+    }
+
+    CanonicalBindingAnalysis bytecodeBindingAnalysisForTesting() {
+        return bytecodePlan.bindingAnalysisForTesting();
+    }
+
+    Object executeBytecodeActivationForTesting(
+            com.guillermomolina.protos.runtime.ProtosActivation activation) {
+        return bytecodePlan.executeActivation(activation);
+    }
+
+    ProtosBytecodeRootNode bytecodeActivationRootForTesting() {
+        return bytecodePlan.activationRootForTesting();
     }
 
     boolean isBytecodeBackendForRuntime() {

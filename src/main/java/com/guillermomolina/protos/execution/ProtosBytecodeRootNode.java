@@ -359,6 +359,197 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * I068 Slice 5 direct captured read.
+     *
+     * <p>The statically proven owner is addressed by lexical depth and stable
+     * frame-layout ordinal. Before taking that path, every semantically nearer
+     * execution context is checked for PRESENT membership. This preserves
+     * D179/C3 late nearer creation retargeting. Any topology/layout mismatch
+     * falls back to the exact existing String-keyed lookup path.
+     */
+    @Operation
+    public static final class ReadCapturedFrameLocal {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                String name,
+                int lexicalDepth,
+                int frameOrdinal) {
+            if (lexicalDepth <= 0) {
+                return lookupCapturedFallback(activation, name);
+            }
+
+            if (activation.context().hasLocalSlot(name)) {
+                return lookupCapturedFallback(activation, name);
+            }
+
+            List<ProtosObjectValue> captured =
+                    activation.capturedLexicalContexts();
+            int ownerIndex = lexicalDepth - 1;
+            if (ownerIndex >= captured.size()) {
+                return lookupCapturedFallback(activation, name);
+            }
+
+            for (int index = 0; index < ownerIndex; index++) {
+                if (captured.get(index).hasLocalSlot(name)) {
+                    return lookupCapturedFallback(activation, name);
+                }
+            }
+
+            ProtosObjectValue owner = captured.get(ownerIndex);
+            if (owner instanceof ProtosExecutionContextValue executionContext
+                    && executionContext.lexicalBindingAuthorityForRuntime()
+                            instanceof ProtosFrameLexicalBindingAuthority authority
+                    && authority.hasFrameBackedBindingAt(name, frameOrdinal)) {
+                return authority.readFrameBackedBindingAt(
+                        name,
+                        frameOrdinal);
+            }
+
+            return lookupCapturedFallback(activation, name);
+        }
+    }
+
+    private static Object lookupCapturedFallback(
+            ProtosActivation activation,
+            String name) {
+        return activation.lookup(name)
+                .orElseThrow(
+                        () ->
+                                new ProtosSignalException(
+                                        ProtosCoreErrors.newUnqualifiedLookupError(
+                                                activation)));
+    }
+
+    /**
+     * I068 Slice 5 ephemeral write destination. It exists only inside one
+     * executing activation; it is never stored in a semantic Closure value.
+     *
+     * <p>For a proven captured frame binding, {@code frameAuthority} and
+     * {@code frameOrdinal} identify the same single authoritative outer local.
+     * Otherwise {@code target} preserves the exact generic destination chosen
+     * before RHS evaluation.
+     */
+    public static final class CapturedLexicalWriteTarget {
+        private final ProtosObjectValue target;
+        private final ProtosFrameLexicalBindingAuthority frameAuthority;
+        private final int frameOrdinal;
+
+        private CapturedLexicalWriteTarget(
+                ProtosObjectValue target,
+                ProtosFrameLexicalBindingAuthority frameAuthority,
+                int frameOrdinal) {
+            this.target = java.util.Objects.requireNonNull(target, "target");
+            this.frameAuthority = frameAuthority;
+            this.frameOrdinal = frameOrdinal;
+        }
+
+        static CapturedLexicalWriteTarget generic(
+                ProtosObjectValue target) {
+            return new CapturedLexicalWriteTarget(
+                    target,
+                    null,
+                    -1);
+        }
+
+        static CapturedLexicalWriteTarget frameBacked(
+                ProtosExecutionContextValue target,
+                ProtosFrameLexicalBindingAuthority authority,
+                int frameOrdinal) {
+            return new CapturedLexicalWriteTarget(
+                    target,
+                    java.util.Objects.requireNonNull(authority, "authority"),
+                    frameOrdinal);
+        }
+    }
+
+    @Operation
+    public static final class ResolveCapturedWritableLexicalTarget {
+        @Specialization
+        public static CapturedLexicalWriteTarget perform(
+                ProtosActivation activation,
+                String name,
+                int lexicalDepth,
+                int frameOrdinal) {
+            if (lexicalDepth > 0) {
+                if (activation.context().hasLocalSlot(name)) {
+                    return CapturedLexicalWriteTarget.generic(
+                            activation.context());
+                }
+
+                List<ProtosObjectValue> captured =
+                        activation.capturedLexicalContexts();
+                int ownerIndex = lexicalDepth - 1;
+
+                if (ownerIndex < captured.size()) {
+                    for (int index = 0; index < ownerIndex; index++) {
+                        ProtosObjectValue nearer = captured.get(index);
+                        if (nearer.hasLocalSlot(name)) {
+                            return CapturedLexicalWriteTarget.generic(
+                                    nearer);
+                        }
+                    }
+
+                    ProtosObjectValue owner = captured.get(ownerIndex);
+                    if (owner instanceof ProtosExecutionContextValue executionContext
+                            && executionContext.lexicalBindingAuthorityForRuntime()
+                                    instanceof ProtosFrameLexicalBindingAuthority authority
+                            && authority.hasFrameBackedBindingAt(
+                                    name,
+                                    frameOrdinal)) {
+                        return CapturedLexicalWriteTarget.frameBacked(
+                                executionContext,
+                                authority,
+                                frameOrdinal);
+                    }
+                }
+            }
+
+            ProtosObjectValue fallback =
+                    activation.writableLexicalContext(name)
+                            .orElseThrow(
+                                    () ->
+                                            new ProtosSignalException(
+                                                    ProtosCoreErrors.newSlotNotFound(
+                                                            activation)));
+            return CapturedLexicalWriteTarget.generic(fallback);
+        }
+    }
+
+    @Operation
+    public static final class AssignCapturedFrameLocal {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                CapturedLexicalWriteTarget destination,
+                String name,
+                Object value) {
+            try {
+                if (destination.frameAuthority != null) {
+                    /*
+                     * Match ProtosObjectValue.assignLocalSlot: CLOSED remains
+                     * writable, FROZEN does not. Presence/layout are checked
+                     * again at the actual mutation point.
+                     */
+                    if (destination.target.isFrozen()) {
+                        throw new IllegalStateException("object is frozen");
+                    }
+                    destination.frameAuthority.assignFrameBackedBindingAt(
+                            name,
+                            destination.frameOrdinal,
+                            value);
+                } else {
+                    destination.target.assignLocalSlot(name, value);
+                }
+            } catch (IllegalStateException invalidMutation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            return value;
+        }
+    }
+
     @Operation
     public static final class ResolveWritableLexicalContext {
         @Specialization

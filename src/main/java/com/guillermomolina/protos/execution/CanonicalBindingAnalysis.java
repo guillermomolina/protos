@@ -109,4 +109,161 @@ final class CanonicalBindingAnalysis {
     Optional<CanonicalBindingIdentity> identityOf(CanonicalParameter parameter) {
         return Optional.ofNullable(parameterIdentities.get(parameter));
     }
+
+    /**
+     * I068 Slice 5 source/parser rematerialization seam.
+     *
+     * <p>Canonical AST maps are identity-keyed, so a reparsed Closure cannot
+     * reuse this analysis directly. Re-analyze the new Closure normally, then
+     * restore only capture sites that this analysis had already proven
+     * CapturedResolved. Sites are matched by immutable source coordinates,
+     * access kind and binding name.
+     *
+     * <p>The reconstructed CapturedResolved identity carries only a synthetic
+     * copy of the owner's declared-name layout. That is sufficient to preserve
+     * the stable frame ordinal used by captured frame access. No old AST node,
+     * runtime Context, Truffle Frame or Bytecode object becomes semantic
+     * Closure state.
+     */
+    CanonicalBindingAnalysis rematerializeForReparsedClosure(
+            CanonicalClosure reparsedDefinition) {
+        Objects.requireNonNull(
+                reparsedDefinition,
+                "reparsedDefinition");
+
+        CanonicalBindingAnalysis reparsed =
+                CanonicalBindingAnalyzer.analyzeClosure(
+                        reparsedDefinition);
+
+        Map<CapturedSiteKey, CanonicalBindingResolution.CapturedResolved>
+                oldCapturedLookups = new java.util.HashMap<>();
+        for (Map.Entry<CanonicalLookup, CanonicalBindingResolution> entry
+                : lookupResolutions.entrySet()) {
+            if (entry.getValue()
+                    instanceof CanonicalBindingResolution.CapturedResolved captured) {
+                oldCapturedLookups.put(
+                        CapturedSiteKey.lookup(entry.getKey()),
+                        captured);
+            }
+        }
+
+        Map<CapturedSiteKey, CanonicalBindingResolution.CapturedResolved>
+                oldCapturedAssigns = new java.util.HashMap<>();
+        for (Map.Entry<CanonicalAssign, CanonicalBindingResolution> entry
+                : assignResolutions.entrySet()) {
+            if (entry.getValue()
+                    instanceof CanonicalBindingResolution.CapturedResolved captured) {
+                oldCapturedAssigns.put(
+                        CapturedSiteKey.assign(entry.getKey()),
+                        captured);
+            }
+        }
+
+        IdentityHashMap<CanonicalLookup, CanonicalBindingResolution>
+                remappedLookups =
+                        new IdentityHashMap<>(
+                                reparsed.lookupResolutions);
+        IdentityHashMap<CanonicalAssign, CanonicalBindingResolution>
+                remappedAssigns =
+                        new IdentityHashMap<>(
+                                reparsed.assignResolutions);
+
+        IdentityHashMap<CanonicalLexicalScope, CanonicalLexicalScope>
+                portableOwnerLayouts =
+                        new IdentityHashMap<>();
+
+        for (CanonicalLookup lookup
+                : reparsed.lookupResolutions.keySet()) {
+            CanonicalBindingResolution.CapturedResolved previous =
+                    oldCapturedLookups.get(
+                            CapturedSiteKey.lookup(lookup));
+            if (previous != null) {
+                remappedLookups.put(
+                        lookup,
+                        portableCapturedResolution(
+                                previous,
+                                portableOwnerLayouts));
+            }
+        }
+
+        for (CanonicalAssign assign
+                : reparsed.assignResolutions.keySet()) {
+            CanonicalBindingResolution.CapturedResolved previous =
+                    oldCapturedAssigns.get(
+                            CapturedSiteKey.assign(assign));
+            if (previous != null) {
+                remappedAssigns.put(
+                        assign,
+                        portableCapturedResolution(
+                                previous,
+                                portableOwnerLayouts));
+            }
+        }
+
+        return new CanonicalBindingAnalysis(
+                reparsed.topScope,
+                reparsed.closureScopes,
+                reparsed.objectScopes,
+                remappedLookups,
+                remappedAssigns,
+                reparsed.createIdentities,
+                reparsed.multipleCreateIdentities,
+                reparsed.parameterIdentities);
+    }
+
+    private static CanonicalBindingResolution.CapturedResolved
+            portableCapturedResolution(
+                    CanonicalBindingResolution.CapturedResolved previous,
+                    IdentityHashMap<
+                                    CanonicalLexicalScope,
+                                    CanonicalLexicalScope>
+                            portableOwnerLayouts) {
+        CanonicalLexicalScope previousOwner =
+                previous.identity().owner();
+
+        CanonicalLexicalScope portableOwner =
+                portableOwnerLayouts.computeIfAbsent(
+                        previousOwner,
+                        owner -> {
+                            CanonicalLexicalScope copy =
+                                    new CanonicalLexicalScope(
+                                            owner.kind(),
+                                            null);
+                            for (String name
+                                    : owner.declaredNames()) {
+                                copy.declare(name);
+                            }
+                            return copy;
+                        });
+
+        return new CanonicalBindingResolution.CapturedResolved(
+                portableOwner.identity(
+                        previous.identity().name()),
+                previous.lexicalDepth());
+    }
+
+    private record CapturedSiteKey(
+            int startOffset,
+            int length,
+            String name) {
+        private CapturedSiteKey {
+            Objects.requireNonNull(name, "name");
+        }
+
+        static CapturedSiteKey lookup(
+                CanonicalLookup lookup) {
+            return new CapturedSiteKey(
+                    lookup.span().startOffset(),
+                    lookup.span().length(),
+                    lookup.name());
+        }
+
+        static CapturedSiteKey assign(
+                CanonicalAssign assign) {
+            return new CapturedSiteKey(
+                    assign.span().startOffset(),
+                    assign.span().length(),
+                    assign.name());
+        }
+    }
 }
