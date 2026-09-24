@@ -40,3 +40,5 @@ USER vscode
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
 WORKDIR /workspaces/protos
+
+ENV MAVEN_OPTS="--enable-native-access=ALL-UNNAMED"
