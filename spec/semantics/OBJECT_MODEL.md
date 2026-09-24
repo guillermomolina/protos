@@ -592,6 +592,8 @@ dog.removeSlot("age")
 
 `removeSlot(name)` uses the common semantic-String name-domain rule defined by Core Reflection below, then removes only a local slot of `this`. If the named slot is not local, the operation signals an error rather than searching the delegation chain. Removing a local overriding slot can therefore expose a delegated slot with the same name on subsequent reads.
 
+This general contract governs ordinary objects. A genuine execution context additionally observes the monotonic local-slot-membership specialization owned by `EXECUTION_AND_CONTROL.md` §4, under which `removeSlot(name)` is rejected whenever `name` currently identifies one of that execution context's local slots.
+
 ```js
 animal: { alive: true }
 dog: animal { alive: false }

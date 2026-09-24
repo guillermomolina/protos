@@ -14,6 +14,31 @@ exact per-file history; normative documents do not carry independent
 merely to synchronize revision metadata.
 
 
+## [0.1.433] - 2026-09-24
+
+### D179 — Execution Context Object-Model Capability Boundary (Candidate C3: monotonic context membership)
+- Implements ratified D179 Candidate C3. `spec/semantics/EXECUTION_AND_CONTROL.md`
+  §4 adds "Monotonic Local-Slot Membership": once a local slot of a genuine
+  execution context (the object bound to a Closure invocation's fresh
+  activation, or to a module's `moduleContext`) becomes present, it can never
+  become absent again. `removeSlot(name)` on such an execution context is
+  rejected whenever `name` currently identifies a local slot, regardless of
+  open/closed/frozen state, and signals the same ordinary `Error` that
+  `OBJECT_MODEL.md` §22 already defines for a rejected structural mutation. No
+  new Error family or public selector is introduced. Absent-to-present
+  creation while open, present-to-present value mutation while writable, late
+  creation and its effect on subsequent lexical lookup, closure
+  capture-by-reference, context escape, `close()`, `freeze()`, and the
+  existing present-`null`-distinct-from-absent invariant are unchanged.
+- `spec/semantics/OBJECT_MODEL.md` §22 cross-references this specialization
+  from the general `removeSlot(name)` contract it owns; the general contract
+  for ordinary objects, including the object under construction that
+  temporarily serves as an object-literal body's slot-creation context, is
+  unchanged.
+- Candidate C0 (retaining unrestricted execution-context slot removal) is
+  deferred, not rejected, pending concrete evidence from the Bytecode DSL
+  platform work.
+
 ## [0.1.432] - 2026-09-21
 
 ### D159 — Remove `Future.detach()`; strict structured child lifetime

@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
@@ -47,6 +48,10 @@ class ProtosPreludeTest {
         assertNotSame(first, second);
         assertSame(contextPrototype, first.parent().orElseThrow());
         assertSame(contextPrototype, second.parent().orElseThrow());
+        // D179 candidate C3: a genuine execution context observes monotonic
+        // local-slot membership, so the factory must return that runtime family.
+        assertInstanceOf(ProtosExecutionContextValue.class, first);
+        assertInstanceOf(ProtosExecutionContextValue.class, second);
     }
 
     @Test

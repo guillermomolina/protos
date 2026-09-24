@@ -1,3 +1,24 @@
+## 0.3.80-SNAPSHOT
+
+- `I067` / D179 candidate C3 ("monotonic context membership"): a genuine
+  execution context (the object bound to a Closure invocation's fresh
+  activation, or to a module's `moduleContext`) now rejects `removeSlot(name)`
+  whenever `name` currently identifies one of its local slots, regardless of
+  whether the execution context is open, closed, or frozen. The new
+  `ProtosExecutionContextValue` runtime family (a `ProtosObjectValue`
+  subclass) overrides `removeLocalSlot` to reject removal of a present local
+  slot and otherwise defer to the ordinary contract; `ProtosPrelude
+  .newExecutionContext()` is the sole factory for this family and now returns
+  it. The rejection reuses the existing generic structural-mutation `Error`
+  already raised by `ProtosStandardObjectProtocol.removeSlot` for every other
+  removal failure; no new Error family or public selector was introduced.
+  `Object.removeSlot(name)` on ordinary objects, including the object under
+  construction that temporarily serves as an object-literal body's
+  slot-creation context, is unaffected. Late absent-to-present local
+  creation while open, present-to-present value mutation while writable,
+  closure capture-by-reference, context escape, `close()`, `freeze()`, and
+  present-`null`-distinct-from-absent semantics are all unaffected.
+
 ## 0.3.79-SNAPSHOT
 
 - `PERF010-A`: replace the `fastOrdinarySend` cache guard's `closure`/

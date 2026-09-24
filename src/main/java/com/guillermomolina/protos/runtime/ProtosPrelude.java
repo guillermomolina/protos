@@ -283,7 +283,7 @@ public final class ProtosPrelude {
     }
 
     public ProtosObjectValue newExecutionContext() {
-        return new ProtosObjectValue(contextPrototype);
+        return new ProtosExecutionContextValue(contextPrototype);
     }
 
     public ProtosActivation newModuleActivation() {
