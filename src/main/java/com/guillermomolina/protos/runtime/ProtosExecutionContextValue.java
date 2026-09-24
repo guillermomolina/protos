@@ -41,10 +41,20 @@ import java.util.Objects;
  * executes is likewise an ordinary object, not an instance of this class, per
  * {@code EXECUTION_AND_CONTROL.md} §4 ("Object Construction Is Not a Lexical
  * Capture Scope").
+ *
+ * <p>PLAT036 Candidate D requires exactly one authoritative store for a
+ * statically admitted lexical binding. Each execution context therefore
+ * installs its own {@link ProtosLexicalBindingAuthority} once, at
+ * construction, through the {@code ProtosObjectValue} authority-attachment
+ * constructor, rather than relying on the base class's inherited default. In
+ * this slice the installed authority is still the same map-backed storage
+ * ordinary objects use, so no runtime lexical behavior changes; a later slice
+ * may install a Truffle Bytecode DSL frame-backed authority here instead
+ * without any caller of the local-slot operations below changing.
  */
 public final class ProtosExecutionContextValue extends ProtosObjectValue {
     public ProtosExecutionContextValue(Object parent) {
-        super(parent);
+        super(parent, new ProtosMapBackedLexicalBindingAuthority());
     }
 
     @Override

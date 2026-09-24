@@ -1,3 +1,24 @@
+## 0.3.82-SNAPSHOT
+
+- `I068` / PLAT036 Candidate D, Slice 2 ("frame/context single-authority
+  seam"): `ProtosObjectValue`'s local-slot storage is now reached through an
+  explicit, backend-private `ProtosLexicalBindingAuthority` seam installed
+  once at construction, instead of every operation (`hasLocalSlot`,
+  `readLocalSlot`, `localSlotsSnapshot`, `withoutLocalSlot`, `aliasLocalSlot`,
+  `composeLocalSlotsFrom`, `lookupSlot`, `readSlot`, `createLocalSlot`,
+  `assignLocalSlot`, `removeLocalSlot`) touching a private map field directly.
+  The default `ProtosMapBackedLexicalBindingAuthority` is the same ordinary
+  `LinkedHashMap` storage used before this slice, installed for both ordinary
+  objects and, via a new authority-attachment constructor, for
+  `ProtosExecutionContextValue`. No second authoritative binding-value copy
+  exists anywhere: each object holds exactly one authority instance backed by
+  exactly one map. This establishes the seam a later slice can use to install
+  a Truffle Bytecode DSL frame-backed authority for statically admitted
+  lexical bindings without changing any caller of these operations. D179
+  candidate C3 monotonic-removal rejection, `PRESENT(null) != ABSENT`,
+  close/freeze behavior, and delegated lookup through an execution context are
+  all preserved exactly. `RUNTIME_AUTHORITY_CUTOVER=NO`.
+
 ## 0.3.81-SNAPSHOT
 
 - `I068` / PLAT036 Candidate D, Slice 1 ("canonical binding identity and

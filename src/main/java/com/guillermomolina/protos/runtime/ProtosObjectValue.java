@@ -40,15 +40,35 @@ public class ProtosObjectValue implements TruffleObject {
     private static final ProtosObjectValue ROOT = new ProtosObjectValue();
 
     private final Object parent;
-    private final Map<String, Object> localSlots = new LinkedHashMap<>();
+    /**
+     * The single authority for this object's lexical local-slot bindings
+     * (PLAT036 Candidate D). Installed once at construction; every local-slot
+     * operation below is routed through it rather than touching a storage
+     * field directly, so a subclass such as {@link ProtosExecutionContextValue}
+     * can install a different concrete authority without any operation here
+     * changing.
+     */
+    private final ProtosLexicalBindingAuthority lexicalBindingAuthority;
     private MutationState mutationState = MutationState.OPEN;
 
     private ProtosObjectValue() {
         this.parent = null;
+        this.lexicalBindingAuthority = new ProtosMapBackedLexicalBindingAuthority();
     }
 
     public ProtosObjectValue(Object parent) {
+        this(parent, new ProtosMapBackedLexicalBindingAuthority());
+    }
+
+    /**
+     * Installs an explicit lexical-binding authority for this object. Reserved
+     * for subclasses that need their own authority attachment (for example
+     * {@link ProtosExecutionContextValue}); ordinary objects always use the
+     * public single-argument constructor and the default map-backed authority.
+     */
+    protected ProtosObjectValue(Object parent, ProtosLexicalBindingAuthority lexicalBindingAuthority) {
         this.parent = Objects.requireNonNull(parent, "parent");
+        this.lexicalBindingAuthority = Objects.requireNonNull(lexicalBindingAuthority, "lexicalBindingAuthority");
     }
 
     public static ProtosObjectValue rootObject() {
@@ -93,28 +113,26 @@ public class ProtosObjectValue implements TruffleObject {
 
     public boolean hasLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
-        return localSlots.containsKey(name);
+        return lexicalBindingAuthority.containsBinding(name);
     }
 
     public Optional<Object> readLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
-        return localSlots.containsKey(name)
-                ? Optional.of(localSlots.get(name))
-                : Optional.empty();
+        return lexicalBindingAuthority.readBinding(name);
     }
 
     public Map<String, Object> localSlotsSnapshot() {
-        return java.util.Collections.unmodifiableMap(new LinkedHashMap<>(localSlots));
+        return lexicalBindingAuthority.bindingsSnapshot();
     }
 
     public ProtosObjectValue withoutLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
-        if (!localSlots.containsKey(name)) {
+        if (!lexicalBindingAuthority.containsBinding(name)) {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
         ProtosObjectValue result = new ProtosObjectValue(rootObject());
-        for (Map.Entry<String, Object> entry : localSlots.entrySet()) {
+        for (Map.Entry<String, Object> entry : lexicalBindingAuthority.bindingsSnapshot().entrySet()) {
             if (!entry.getKey().equals(name)) {
                 result.createLocalSlot(entry.getKey(), entry.getValue());
             }
@@ -127,18 +145,19 @@ public class ProtosObjectValue implements TruffleObject {
             String aliasName) {
         Objects.requireNonNull(sourceName, "sourceName");
         Objects.requireNonNull(aliasName, "aliasName");
-        if (!localSlots.containsKey(sourceName)) {
+        if (!lexicalBindingAuthority.containsBinding(sourceName)) {
             throw new IllegalStateException("local slot does not exist: " + sourceName);
         }
-        if (localSlots.containsKey(aliasName)) {
+        if (lexicalBindingAuthority.containsBinding(aliasName)) {
             throw new IllegalStateException("local slot already exists: " + aliasName);
         }
 
         ProtosObjectValue result = new ProtosObjectValue(rootObject());
-        for (Map.Entry<String, Object> entry : localSlots.entrySet()) {
+        Map<String, Object> snapshot = lexicalBindingAuthority.bindingsSnapshot();
+        for (Map.Entry<String, Object> entry : snapshot.entrySet()) {
             result.createLocalSlot(entry.getKey(), entry.getValue());
         }
-        result.createLocalSlot(aliasName, localSlots.get(sourceName));
+        result.createLocalSlot(aliasName, snapshot.get(sourceName));
         return result;
     }
 
@@ -156,19 +175,21 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         Map<String, Object> contributions = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : source.localSlots.entrySet()) {
+        for (Map.Entry<String, Object> entry : source.lexicalBindingAuthority.bindingsSnapshot().entrySet()) {
             if (!reservedNames.contains(entry.getKey())) {
                 contributions.put(entry.getKey(), entry.getValue());
             }
         }
 
         for (String name : contributions.keySet()) {
-            if (localSlots.containsKey(name)) {
+            if (lexicalBindingAuthority.containsBinding(name)) {
                 throw new IllegalStateException("composition conflict: " + name);
             }
         }
 
-        localSlots.putAll(contributions);
+        for (Map.Entry<String, Object> entry : contributions.entrySet()) {
+            lexicalBindingAuthority.putBinding(entry.getKey(), entry.getValue());
+        }
     }
 
     public Optional<ProtosSlotLookupResult> lookupSlot(String name) {
@@ -176,9 +197,9 @@ public class ProtosObjectValue implements TruffleObject {
 
         ProtosObjectValue current = this;
         while (true) {
-            if (current.localSlots.containsKey(name)) {
-                return Optional.of(
-                        new ProtosSlotLookupResult(current.localSlots.get(name), current));
+            Optional<Object> local = current.lexicalBindingAuthority.readBinding(name);
+            if (local.isPresent()) {
+                return Optional.of(new ProtosSlotLookupResult(local.get(), current));
             }
 
             if (current.parent == null) {
@@ -209,11 +230,11 @@ public class ProtosObjectValue implements TruffleObject {
         if (mutationState == MutationState.CLOSED) {
             throw new IllegalStateException("object is closed");
         }
-        if (localSlots.containsKey(name)) {
+        if (lexicalBindingAuthority.containsBinding(name)) {
             throw new IllegalStateException("local slot already exists: " + name);
         }
 
-        localSlots.put(name, value);
+        lexicalBindingAuthority.putBinding(name, value);
     }
 
     public void assignLocalSlot(String name, Object value) {
@@ -223,11 +244,11 @@ public class ProtosObjectValue implements TruffleObject {
         if (mutationState == MutationState.FROZEN) {
             throw new IllegalStateException("object is frozen");
         }
-        if (!localSlots.containsKey(name)) {
+        if (!lexicalBindingAuthority.containsBinding(name)) {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
-        localSlots.put(name, value);
+        lexicalBindingAuthority.putBinding(name, value);
     }
 
     public Object removeLocalSlot(String name) {
@@ -239,11 +260,11 @@ public class ProtosObjectValue implements TruffleObject {
         if (mutationState == MutationState.CLOSED) {
             throw new IllegalStateException("object is closed");
         }
-        if (!localSlots.containsKey(name)) {
+        if (!lexicalBindingAuthority.containsBinding(name)) {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
-        return localSlots.remove(name);
+        return lexicalBindingAuthority.removeBinding(name);
     }
     /*
      * I026-D1 / PLAT013: tooling observation is local reflection only.
