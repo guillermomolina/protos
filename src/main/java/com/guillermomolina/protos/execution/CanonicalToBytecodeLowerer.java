@@ -91,10 +91,33 @@ final class CanonicalToBytecodeLowerer {
             bytecodeObjectBodyTargets = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalCompose, java.util.Set<String>>
             bytecodeComposeReservedNames = new java.util.IdentityHashMap<>();
+    private final java.util.IdentityHashMap<CanonicalClosure, CanonicalBindingAnalysis>
+            bindingAnalysisByClosure = new java.util.IdentityHashMap<>();
+    private CanonicalBindingAnalysis moduleBindingAnalysis;
 
     CanonicalToBytecodeLowerer(ProtosLanguage language, Source source) {
         this.language = Objects.requireNonNull(language, "language");
         this.source = Objects.requireNonNull(source, "source");
+    }
+
+    /**
+     * PLAT036 Candidate D, Slice 1 preparatory metadata: computes and caches
+     * statically proven lexical binding identity/presence-candidate metadata
+     * for the unit currently being lowered, so it is available at lowering
+     * time. Not yet consumed by codegen ({@code RUNTIME_AUTHORITY_CUTOVER=NO});
+     * {@link #emitLookup}, {@link #emitBodyAssign} and {@link #emitBodyCreate}
+     * continue to emit the exact existing String-keyed runtime operations.
+     */
+    private CanonicalBindingAnalysis bindingAnalysisFor(
+            CanonicalSequence sequence, CanonicalClosure activationDefinition) {
+        if (activationDefinition != null) {
+            return bindingAnalysisByClosure.computeIfAbsent(
+                    activationDefinition, CanonicalBindingAnalyzer::analyzeClosure);
+        }
+        if (moduleBindingAnalysis == null) {
+            moduleBindingAnalysis = CanonicalBindingAnalyzer.analyzeModule(sequence);
+        }
+        return moduleBindingAnalysis;
     }
 
     private ProtosClosureExecutionPlan bytecodeClosurePlan(
@@ -165,6 +188,9 @@ final class CanonicalToBytecodeLowerer {
         Objects.requireNonNull(sequence, "sequence");
         validateSupported(sequence);
         validateSpan(sequence.span());
+        /* PLAT036 Slice 1: compute/cache binding-identity metadata for this lowering
+         * unit; preparatory only, not yet read by codegen below. */
+        bindingAnalysisFor(sequence, activationDefinition);
 
         BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                 ProtosBytecodeRootNodeGen.create(

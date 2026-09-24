@@ -1,3 +1,28 @@
+## 0.3.81-SNAPSHOT
+
+- `I068` / PLAT036 Candidate D, Slice 1 ("canonical binding identity and
+  presence metadata"): the Bytecode DSL lowering backend now carries
+  statically proven lexical binding identity from canonical analysis into
+  lowering, preparing for later frame-backed lexical authority without
+  changing any observable behavior. Five new backend-private classes under
+  `com.guillermomolina.protos.execution`
+  (`CanonicalLexicalScope`, `CanonicalBindingIdentity`,
+  `CanonicalBindingResolution`, `CanonicalBindingAnalyzer`,
+  `CanonicalBindingAnalysis`) discover, for a canonical subtree, the owning
+  lexical scope (module root, Closure activation, or Object-construction
+  body) of every bare local creation and closure parameter, and classify
+  every bare lexical read/write reference as `Resolved` (guaranteed PRESENT
+  in the current scope at this exact program point), `Candidate` (a
+  statically known owning scope and lexical depth, without a presence
+  guarantee, because a nearer scope may still legally create the same name
+  later per D179 candidate C3 monotonic membership), or `Dynamic` (no scope
+  in the static chain declares the name anywhere, preserving today's exact
+  receiver/member-fallback path unchanged). `CanonicalToBytecodeLowerer`
+  computes and caches this analysis for each lowering unit as a side effect
+  of `lowerRoot`; it is not yet read by any codegen path, so
+  `ProtosActivation`'s existing exact String-keyed lookup/write operations
+  remain the sole runtime lexical authority. `RUNTIME_AUTHORITY_CUTOVER=NO`.
+
 ## 0.3.80-SNAPSHOT
 
 - `I067` / D179 candidate C3 ("monotonic context membership"): a genuine
