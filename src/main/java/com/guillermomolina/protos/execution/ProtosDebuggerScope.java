@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
@@ -85,7 +86,7 @@ final class ProtosDebuggerScope implements TruffleObject {
         Objects.requireNonNull(member, "member");
         final Optional<Object> value;
         try {
-            value = activation.lookup(member);
+            value = ProtosLexicalFallback.readByName(activation, member);
         } catch (UnsupportedOperationException failure) {
             throw UnknownIdentifierException.create(member);
         }

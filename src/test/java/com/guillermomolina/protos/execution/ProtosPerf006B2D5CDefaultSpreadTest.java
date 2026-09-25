@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -105,8 +106,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                 assertSame(marker, execution.result());
                 assertSame(
                         marker,
-                        execution.invocation()
-                                .lookup("value")
+                        ProtosLexicalFallback.readByName(execution.invocation(), "value")
                                 .orElseThrow());
                 assertEquals(
                         List.of(a, b, c, d, e),
@@ -365,8 +365,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                 assertEquals(0, laterCount.get());
                 assertEquals(0, methodCount.get());
                 assertTrue(
-                        suspended.invocation()
-                                .lookup("value")
+                        ProtosLexicalFallback.readByName(suspended.invocation(), "value")
                                 .isEmpty());
 
                 Object completed =
@@ -382,8 +381,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                         seen.get());
                 assertSame(
                         marker,
-                        suspended.invocation()
-                                .lookup("value")
+                        ProtosLexicalFallback.readByName(suspended.invocation(), "value")
                                 .orElseThrow());
             } finally {
                 context.leave();
@@ -514,8 +512,7 @@ final class ProtosPerf006B2D5CDefaultSpreadTest {
                 assertSame(supplied, execution.result());
                 assertSame(
                         supplied,
-                        execution.invocation()
-                                .lookup("value")
+                        ProtosLexicalFallback.readByName(execution.invocation(), "value")
                                 .orElseThrow());
                 assertEquals(0, producerCount.get());
                 assertEquals(0, targetCount.get());

@@ -464,42 +464,4 @@ public final class ProtosActivation {
         return List.copyOf(contexts);
     }
 
-    public Optional<Object> lookup(String name) {
-        Objects.requireNonNull(name, "name");
-
-        Optional<Object> current = context.readLocalSlot(name);
-        if (current.isPresent()) {
-            return current;
-        }
-
-        for (ProtosObjectValue lexicalContext : capturedLexicalContexts) {
-            Optional<Object> captured = lexicalContext.readLocalSlot(name);
-            if (captured.isPresent()) {
-                return captured;
-            }
-        }
-
-        return ProtosValueLookup.readMember(receiver, name, prelude);
-    }
-
-    public Optional<ProtosObjectValue> writableLexicalContext(String name) {
-        Objects.requireNonNull(name, "name");
-
-        if (context.hasLocalSlot(name)) {
-            return Optional.of(context);
-        }
-
-        for (ProtosObjectValue lexicalContext : capturedLexicalContexts) {
-            if (lexicalContext.hasLocalSlot(name)) {
-                return Optional.of(lexicalContext);
-            }
-        }
-
-        if (receiver instanceof ProtosObjectValue ordinaryReceiver
-                && ordinaryReceiver.hasLocalSlot(name)) {
-            return Optional.of(ordinaryReceiver);
-        }
-
-        return Optional.empty();
-    }
 }

@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -383,7 +384,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                 assertSame(marker, result);
                 assertSame(
                         marker,
-                        invocation.lookup("value").orElseThrow());
+                        ProtosLexicalFallback.readByName(invocation, "value").orElseThrow());
             } finally {
                 context.leave();
             }

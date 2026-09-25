@@ -18,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -65,11 +66,11 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
                 Object first = new ProtosBytecodeClosureExecutionPlan(def, language, source).executeActivation(invocation);
                 ContinuationResult parent = assertInstanceOf(ContinuationResult.class, first);
                 assertInstanceOf(ContinuationResult.class, parent.getResult());
-                assertTrue(invocation.lookup("first").isEmpty());
+                assertTrue(ProtosLexicalFallback.readByName(invocation, "first").isEmpty());
                 Object completed = parent.continueWith(ProtosNullValue.INSTANCE);
                 assertSame(finalValue, completed);
-                assertSame(finalValue, invocation.lookup("first").orElseThrow());
-                assertSame(finalValue, invocation.lookup("second").orElseThrow());
+                assertSame(finalValue, ProtosLexicalFallback.readByName(invocation, "first").orElseThrow());
+                assertSame(finalValue, ProtosLexicalFallback.readByName(invocation, "second").orElseThrow());
             } finally {
                 context.leave();
             }
@@ -103,7 +104,7 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
                         module.currentModuleKey().orElse(null), module.executionDomain());
                 Object result = new ProtosBytecodeClosureExecutionPlan(def, language, source).executeActivation(invocation);
                 assertSame(marker, result);
-                assertSame(marker, invocation.lookup("fallback").orElseThrow());
+                assertSame(marker, ProtosLexicalFallback.readByName(invocation, "fallback").orElseThrow());
             } finally {
                 context.leave();
             }

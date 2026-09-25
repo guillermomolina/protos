@@ -48,10 +48,10 @@ class ProtosActivationTest {
         ProtosActivation activation =
                 new ProtosActivation(current, List.of(inner, outer), receiver);
 
-        assertSame(currentValue, activation.lookup("name").orElseThrow());
+        assertSame(currentValue, ProtosLexicalFallback.readByName(activation, "name").orElseThrow());
 
         current.assignLocalSlot("name", ProtosNullValue.INSTANCE);
-        assertSame(ProtosNullValue.INSTANCE, activation.lookup("name").orElseThrow());
+        assertSame(ProtosNullValue.INSTANCE, ProtosLexicalFallback.readByName(activation, "name").orElseThrow());
     }
 
     @Test
@@ -73,7 +73,7 @@ class ProtosActivationTest {
         ProtosActivation activation =
                 new ProtosActivation(current, List.of(inner, outer), receiver);
 
-        assertSame(innerValue, activation.lookup("state").orElseThrow());
+        assertSame(innerValue, ProtosLexicalFallback.readByName(activation, "state").orElseThrow());
     }
 
     @Test
@@ -89,7 +89,7 @@ class ProtosActivationTest {
         ProtosActivation activation =
                 new ProtosActivation(current, List.of(), receiver);
 
-        assertSame(inherited, activation.lookup("name").orElseThrow());
+        assertSame(inherited, ProtosLexicalFallback.readByName(activation, "name").orElseThrow());
     }
 
     @Test
@@ -109,13 +109,13 @@ class ProtosActivationTest {
         ProtosClosureValue bound =
                 assertInstanceOf(
                         ProtosClosureValue.class,
-                        activation.lookup("method").orElseThrow());
+                        ProtosLexicalFallback.readByName(activation, "method").orElseThrow());
         assertNotSame(method, bound);
         assertSame(receiver, bound.capturedReceiver());
         assertSame(prototype, bound.methodHome().orElseThrow());
 
         current.createLocalSlot("method", method);
-        assertSame(method, activation.lookup("method").orElseThrow());
+        assertSame(method, ProtosLexicalFallback.readByName(activation, "method").orElseThrow());
     }
 
     @Test
@@ -193,10 +193,10 @@ class ProtosActivationTest {
         ProtosActivation activation =
                 new ProtosActivation(current, List.of(lexical), receiver);
 
-        assertSame(current, activation.writableLexicalContext("local").orElseThrow());
-        assertSame(lexical, activation.writableLexicalContext("captured").orElseThrow());
-        assertSame(receiver, activation.writableLexicalContext("receiverLocal").orElseThrow());
-        assertTrue(activation.writableLexicalContext("inherited").isEmpty());
-        assertTrue(activation.writableLexicalContext("missing").isEmpty());
+        assertSame(current, ProtosLexicalFallback.writableContextByName(activation, "local").orElseThrow());
+        assertSame(lexical, ProtosLexicalFallback.writableContextByName(activation, "captured").orElseThrow());
+        assertSame(receiver, ProtosLexicalFallback.writableContextByName(activation, "receiverLocal").orElseThrow());
+        assertTrue(ProtosLexicalFallback.writableContextByName(activation, "inherited").isEmpty());
+        assertTrue(ProtosLexicalFallback.writableContextByName(activation, "missing").isEmpty());
     }
 }

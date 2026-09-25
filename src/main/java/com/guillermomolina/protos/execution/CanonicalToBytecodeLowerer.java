@@ -4478,8 +4478,8 @@ final class CanonicalToBytecodeLowerer {
      * statically {@link CanonicalBindingResolution.Resolved} in the exact
      * genuine execution-context scope currently being lowered compiles
      * straight to a {@code ReadFrameLocal} of its own stable {@link
-     * com.oracle.truffle.api.bytecode.LocalAccessor}, bypassing {@code
-     * Lookup}/{@code ProtosActivation.lookup(String)} entirely. This uses the
+     * com.oracle.truffle.api.bytecode.LocalAccessor}, bypassing the generic {@code Lookup} operation and exact name-based
+     * lexical fallback entirely. This uses the
      * same accessor-based mechanism the installed frame-backed authority uses
      * to write this local (see {@code ProtosFrameLexicalBindingAuthority}),
      * deliberately never the raw generated {@code LoadLocal} instruction: a

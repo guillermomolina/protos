@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -267,13 +268,13 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
 
                 ContinuationResult parent =
                         assertInstanceOf(ContinuationResult.class, first);
-                assertTrue(invocation.lookup("value").isEmpty());
+                assertTrue(ProtosLexicalFallback.readByName(invocation, "value").isEmpty());
 
                 Object completed =
                         parent.continueWith(ProtosNullValue.INSTANCE);
 
                 assertSame(marker, completed);
-                assertSame(marker, invocation.lookup("value").orElseThrow());
+                assertSame(marker, ProtosLexicalFallback.readByName(invocation, "value").orElseThrow());
             } finally {
                 context.leave();
             }

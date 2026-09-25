@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -94,11 +95,11 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                 ProtosStringValue literal =
                         assertInstanceOf(
                                 ProtosStringValue.class,
-                                invocation.lookup("literalDefault").orElseThrow());
+                                ProtosLexicalFallback.readByName(invocation, "literalDefault").orElseThrow());
                 assertEquals("fallback", literal.value());
                 assertSame(
                         head,
-                        invocation.lookup("inherited").orElseThrow());
+                        ProtosLexicalFallback.readByName(invocation, "inherited").orElseThrow());
 
                 ProtosArrayValue args =
                         invocation.arguments().orElseThrow();
@@ -229,7 +230,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         assertInstanceOf(
                                 ProtosArrayValue.class,
                                 plan.executeActivation(omitted));
-                assertSame(first, omitted.lookup("fallback").orElseThrow());
+                assertSame(first, ProtosLexicalFallback.readByName(omitted, "fallback").orElseThrow());
                 assertEquals(0, omittedRest.indexedSnapshot().size());
 
                 ProtosActivation supplied =
@@ -244,7 +245,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         assertInstanceOf(
                                 ProtosArrayValue.class,
                                 plan.executeActivation(supplied));
-                assertSame(second, supplied.lookup("fallback").orElseThrow());
+                assertSame(second, ProtosLexicalFallback.readByName(supplied, "fallback").orElseThrow());
                 assertEquals(1, suppliedRest.indexedSnapshot().size());
                 assertSame(third, suppliedRest.indexedSnapshot().get(0));
                 assertSame(

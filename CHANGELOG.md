@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.87-SNAPSHOT
+
+- `I068` / PLAT036 Candidate D, Slice 7 ("activation lexical
+  decomposition/fallback cleanup"): exact name-based lexical fallback is no
+  longer an intrinsic responsibility of `ProtosActivation`.
+  `ProtosLexicalFallback` now owns the residual bare-name read and
+  bare-assignment destination-resolution paths that remain necessary when
+  canonical binding analysis cannot prove a direct frame-backed binding or
+  runtime presence/topology requires fallback. Statically proven current
+  `Resolved` reads continue to lower through `ReadFrameLocal`, and proven
+  `CapturedResolved` reads/writes continue through the captured frame-backed
+  operations without regressing through generic name lookup. Candidate and
+  Dynamic reads, compatibility paths for non-genuine execution contexts,
+  captured late-presence/retargeting fallback, non-statically-proven bare
+  assignment destination selection, debugger semantic reads, and receiver
+  fallback retain their exact prior semantics. Bare assignment still selects
+  its destination before RHS evaluation and never follows receiver
+  delegation for writes. `capturedLexicalContexts` and
+  `lexicalContextsForClosureCapture` remain on `ProtosActivation` as required
+  activation/capture topology rather than obsolete lookup machinery.
+  Existing activation-inspection tests now target the explicit lexical
+  fallback boundary. No second lexical-binding authority, lazy execution
+  context materialization, or observable language-semantic change is
+  introduced. This completes the planned I068 Slice 1-7 implementation
+  sequence for PLAT036 Candidate D.
+
 ## 0.3.86-SNAPSHOT
 
 - `I068` / PLAT036 Candidate D, Slice 6 ("debugger/reflection projection"):

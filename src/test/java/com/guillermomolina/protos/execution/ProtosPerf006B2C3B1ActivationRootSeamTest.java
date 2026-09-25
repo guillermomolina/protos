@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -102,10 +103,10 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                  */
                 Object result = plan.executeActivation(invocation);
 
-                assertSame(first, invocation.lookup("head").orElseThrow());
+                assertSame(first, ProtosLexicalFallback.readByName(invocation, "head").orElseThrow());
                 ProtosArrayValue rest =
                         assertInstanceOf(ProtosArrayValue.class, result);
-                assertSame(rest, invocation.lookup("tail").orElseThrow());
+                assertSame(rest, ProtosLexicalFallback.readByName(invocation, "tail").orElseThrow());
                 assertNotSame(supplied, rest);
                 assertSame(
                         ProtosObjectValue.MutationState.FROZEN,

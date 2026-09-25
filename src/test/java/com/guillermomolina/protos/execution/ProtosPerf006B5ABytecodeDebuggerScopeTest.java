@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.oracle.truffle.api.Truffle;
@@ -70,7 +71,7 @@ final class ProtosPerf006B5ABytecodeDebuggerScopeTest {
         assertSame(currentShadow, interop.readMember(scope, "shadow"));
         assertSame(lexicalOnly, interop.readMember(scope, "lexicalOnly"));
         assertSame(receiverOnly, interop.readMember(scope, "receiverOnly"));
-        assertSame(activation.lookup("shadow").orElseThrow(), interop.readMember(scope, "shadow"));
+        assertSame(ProtosLexicalFallback.readByName(activation, "shadow").orElseThrow(), interop.readMember(scope, "shadow"));
 
         List<String> names = memberNames(scope);
         assertTrue(names.contains("currentOnly"));

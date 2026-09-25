@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -44,7 +45,7 @@ class CanonicalBareSlotMutationExecutionTest {
                 activation);
 
         assertSame(result, current.readLocalSlot("x").orElseThrow());
-        assertSame(result, activation.lookup("x").orElseThrow());
+        assertSame(result, ProtosLexicalFallback.readByName(activation, "x").orElseThrow());
     }
 
     @Test

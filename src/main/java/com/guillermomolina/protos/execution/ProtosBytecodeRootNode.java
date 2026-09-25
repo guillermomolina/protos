@@ -23,6 +23,7 @@ import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -267,7 +268,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class Lookup {
         @Specialization
         public static Object perform(ProtosActivation activation, String name) {
-            return activation.lookup(name)
+            return ProtosLexicalFallback.readByName(activation, name)
                     .orElseThrow(
                             () ->
                                     new ProtosSignalException(
@@ -350,7 +351,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * genuine execution context. Such objects are deliberately not
              * frame-backed by PLAT036 Candidate D.
              */
-            return activation.lookup(name)
+            return ProtosLexicalFallback.readByName(activation, name)
                     .orElseThrow(
                             () ->
                                     new ProtosSignalException(
@@ -414,7 +415,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     private static Object lookupCapturedFallback(
             ProtosActivation activation,
             String name) {
-        return activation.lookup(name)
+        return ProtosLexicalFallback.readByName(activation, name)
                 .orElseThrow(
                         () ->
                                 new ProtosSignalException(
@@ -507,7 +508,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
 
             ProtosObjectValue fallback =
-                    activation.writableLexicalContext(name)
+                    ProtosLexicalFallback.writableContextByName(activation, name)
                             .orElseThrow(
                                     () ->
                                             new ProtosSignalException(
@@ -556,7 +557,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosObjectValue perform(
                 ProtosActivation activation,
                 String name) {
-            return activation.writableLexicalContext(name)
+            return ProtosLexicalFallback.writableContextByName(activation, name)
                     .orElseThrow(
                             () ->
                                     new ProtosSignalException(
