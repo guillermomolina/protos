@@ -58,41 +58,39 @@ Following lexical parents therefore visits execution-context objects, but it nev
 
 Implementations may represent lexical-parent associations in activation metadata, environment records, links between context objects, or another form. That representation is not observable; the lexical traversal defined in §6 is.
 
-### Monotonic Local-Slot Membership
+### Execution-Context Local-Slot Structure
 
 A genuine execution context — the object bound to a Closure invocation's fresh
-activation, or to a module's `moduleContext`, as established above — observes
-one structural invariant in addition to the ordinary `Object` contract owned by
-`OBJECT_MODEL.md` §22:
+activation, or to a module's `moduleContext`, as established above — follows
+the ordinary structural `Object` contract owned by `OBJECT_MODEL.md` §22:
 
 1. While the execution context is open, a local slot that is currently absent
-   may still become present through ordinary bare creation or explicit member
-   creation, exactly as for any open object.
-2. An existing local slot's value may still change while that slot remains
-   writable, exactly as for any object.
-3. Once a local slot of a genuine execution context is present, it cannot
-   become absent again. `removeSlot(name)` signals the same ordinary `Error`
-   that `OBJECT_MODEL.md` §22 already defines for a rejected structural
-   mutation whenever `name` currently identifies a local slot of a genuine
-   execution context, regardless of whether that execution context is open,
-   closed, or frozen. No new Error family or public selector is introduced.
+   may become present through ordinary bare creation or explicit member
+   creation.
+2. An existing local slot's value may change while that slot remains writable.
+3. While the execution context is open, `removeSlot(name)` may remove a
+   PRESENT local slot and returns the exact removed value under the ordinary
+   `Object` rule. The slot is then ABSENT.
+4. `close()` and `freeze()` retain the ordinary structural restrictions defined
+   for objects: a closed or frozen execution context rejects structural
+   removal, and a frozen execution context also rejects value mutation.
 
-Local-slot membership of a genuine execution context is therefore
-monotonically increasing once established. `Object.removeSlot(name)` on an
-ordinary object is unaffected and retains the unrestricted local-removal
-contract of `OBJECT_MODEL.md` §22. In particular, the object under
-construction that temporarily serves as the current slot-creation context for
-an object-literal body (see "Object Construction Is Not a Lexical Capture
-Scope" below) is an ordinary object, not a genuine execution context, and its
-`removeSlot` behavior is therefore unaffected by this rule.
+Removing a local slot changes semantic presence, not the lexical topology of
+the activation. A subsequent bare read therefore performs the ordinary lookup
+defined in §6 from the state that exists after the removal: an outer lexical
+binding with the same name may become visible, and after lexical exhaustion the
+ordinary receiver fallback may become visible.
 
-This invariant introduces no lexical-versus-dynamic slot-provenance category:
-it applies uniformly to every local slot of a genuine execution context
-regardless of when or how that slot was created. It does not change late slot
-creation and its effect on subsequent lexical lookup (§6), value mutation
-while writable, closure capture-by-reference and context escape
-(`CALLABLES.md`), `close()`, `freeze()`, or the existing distinction between a
-present `null` value and an absent slot.
+Closure capture and context escape remain by reference (`CALLABLES.md`).
+Consequently, removal through any captured or escaped reference to the same
+execution context is observed by later lexical reads. A later legal creation
+of the same name while the context is open may make that binding PRESENT again.
+
+A PRESENT slot whose value is `null` remains distinct from an ABSENT slot.
+These rules introduce no lexical-versus-dynamic slot-provenance category and
+do not alter the evaluation-order rule for bare assignment: the assignment
+destination is selected before evaluation of the right-hand side and is not
+re-resolved after right-hand-side effects.
 
 ### Object Construction Is Not a Lexical Capture Scope
 

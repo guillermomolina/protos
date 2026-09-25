@@ -327,9 +327,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * through the dynamic {@link LocalAccessor} API does not participate in
      * the frame-slot-kind speculation the DSL's own literal {@code
      * StoreLocal}/{@code LoadLocal} instruction pair relies on, so mixing the
-     * two access mechanisms for the same local is not safe. Presence is
-     * guaranteed by the static proof itself (Resolved), so no runtime
-     * presence check is needed here.
+     * two access mechanisms for the same local is not safe. Static resolution
+     * proves binding identity, not permanent presence: D179 C0 allows a
+     * PRESENT execution-context local to become ABSENT, so a cleared local
+     * must resume the exact lexical/receiver fallback path.
      */
     @Operation
     @ConstantOperand(type = LocalAccessor.class, name = "accessor")
@@ -341,15 +342,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
-            if (activation.context() instanceof ProtosExecutionContextValue) {
+            if (activation.context() instanceof ProtosExecutionContextValue
+                    && !accessor.isCleared(bytecodeNode, frame)) {
                 return accessor.getObject(bytecodeNode, frame);
             }
 
             /*
-             * Compatibility path for legacy/internal activations whose current
-             * lexical context is an ordinary ProtosObjectValue rather than a
-             * genuine execution context. Such objects are deliberately not
-             * frame-backed by PLAT036 Candidate D.
+             * A cleared genuine execution-context local is semantically ABSENT
+             * under D179 C0 and therefore resumes exact lexical/receiver
+             * fallback. Legacy/internal activations whose current lexical
+             * context is an ordinary ProtosObjectValue use the same fallback.
              */
             return ProtosLexicalFallback.readByName(activation, name)
                     .orElseThrow(
@@ -366,7 +368,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * <p>The statically proven owner is addressed by lexical depth and stable
      * frame-layout ordinal. Before taking that path, every semantically nearer
      * execution context is checked for PRESENT membership. This preserves
-     * D179/C3 late nearer creation retargeting. Any topology/layout mismatch
+     * D179 C0 late creation/removal retargeting. Any topology/layout mismatch
      * falls back to the exact existing String-keyed lookup path.
      */
     @Operation

@@ -48,8 +48,8 @@ class ProtosPreludeTest {
         assertNotSame(first, second);
         assertSame(contextPrototype, first.parent().orElseThrow());
         assertSame(contextPrototype, second.parent().orElseThrow());
-        // D179 candidate C3: a genuine execution context observes monotonic
-        // local-slot membership, so the factory must return that runtime family.
+        // D179 C0 still requires the genuine execution-context runtime family
+        // so context identity, frame-backed presence, capture and reflection stay exact.
         assertInstanceOf(ProtosExecutionContextValue.class, first);
         assertInstanceOf(ProtosExecutionContextValue.class, second);
     }

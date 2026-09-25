@@ -17,20 +17,22 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("D179 C3: an escaped execution context retains ordinary reflection", () => {
+    Test("D179 C0: an escaped execution context retains ordinary reflection", () => {
         tool009LegacyCase: () => {
             makeEscaped: () => {
                 secret: 7
                 context
             }
+
             escaped: makeEscaped()
 
-            escaped.hasSlot("secret") && (escaped.slotValue("secret") == 7)
+            escaped.hasSlot("secret") &&
+                (escaped.slotValue("secret") == 7)
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
 
-    Test("D179 C3: close() on an execution context preserves its existing contract and rejects removal", () => {
+    Test("D179 C0: close() preserves value mutation and rejects structural removal", () => {
         tool009LegacyCase: () => {
             fn: () => {
                 a: 1
@@ -58,74 +60,61 @@ tests: [
                     null
                 })
 
-                creationFailed && (a == 5) && removalFailed && here.hasSlot("a")
+                creationFailed &&
+                    (a == 5) &&
+                    removalFailed &&
+                    here.hasSlot("a")
             }
+
             fn()
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
 
-    Test("D179 C3: freeze() on an execution context preserves its existing contract and rejects removal", () => {
+    Test("D179 C0: freeze() still rejects creation assignment and removal", () => {
         tool009LegacyCase: () => {
             fn: () => {
                 a: 1
                 here: context
-                creationFailed: false
-                assignFailed: false
-                removalFailed: false
 
                 here.freeze()
 
-                Error.handle(() => {
+                Assertions.signals(Error, () => {
                     here.b: 2
-                    null
-                }, (error) => {
-                    creationFailed = true
-                    null
                 })
 
-                Error.handle(() => {
+                Assertions.signals(Error, () => {
                     a = 5
-                    null
-                }, (error) => {
-                    assignFailed = true
-                    null
                 })
 
-                Error.handle(() => {
+                Assertions.signals(Error, () => {
                     here.removeSlot("a")
-                    null
-                }, (error) => {
-                    removalFailed = true
-                    null
                 })
 
-                creationFailed && assignFailed && removalFailed && (a == 1) && here.hasSlot("a")
+                (a == 1) && here.hasSlot("a")
             }
+
             fn()
         }
         Assertions.require(tool009LegacyCase() === true)
     }),
 
-    Test("D179 C3: a present null local slot on an execution context remains present and its removal is rejected", () => {
+    Test("D179 C0: PRESENT(null) remains distinct from ABSENT across removal", () => {
         tool009LegacyCase: () => {
             fn: () => {
                 here: context
                 x: null
-                hasX: here.hasSlot("x")
-                valueX: here.slotValue("x")
-                removalFailed: false
 
-                Error.handle(() => {
-                    here.removeSlot("x")
-                    null
-                }, (error) => {
-                    removalFailed = true
-                    null
-                })
+                presentBefore: here.hasSlot("x")
+                valueBefore: here.slotValue("x")
+                removed: here.removeSlot("x")
 
-                hasX && (valueX === null) && removalFailed && here.hasSlot("x")
+                presentBefore &&
+                    (valueBefore === null) &&
+                    (removed === null) &&
+                    (here.hasSlot("x") === false)
             }
+
             fn()
         }
         Assertions.require(tool009LegacyCase() === true)

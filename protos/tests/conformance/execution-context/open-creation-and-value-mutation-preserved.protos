@@ -17,7 +17,7 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("D179 C3: an open execution context still allows absent-to-present local creation", () => {
+    Test("D179 C0: an open execution context allows absent-to-present local creation", () => {
         tool009LegacyCase: () => {
             fn: () => {
                 here: context
@@ -32,7 +32,7 @@ tests: [
         Assertions.require(tool009LegacyCase() === true)
     }),
 
-    Test("D179 C3: an execution context still allows present-to-present value mutation while writable", () => {
+    Test("D179 C0: an execution context allows present-to-present value mutation while writable", () => {
         tool009LegacyCase: () => {
             fn: () => {
                 v: 1

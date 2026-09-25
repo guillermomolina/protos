@@ -212,6 +212,73 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
     }
 
     @Test
+    void removedStaticFrameLocalStaysOnStableLayoutButIsSemanticallyAbsent()
+            throws Exception {
+        withEnteredLanguage(
+                (language, module) -> {
+                    runRoot(
+                            language,
+                            module,
+                            "removed: \"before\"\n"
+                                    + "context.removeSlot(\"removed\")\n"
+                                    + "null");
+
+                    ProtosExecutionContextValue context =
+                            assertInstanceOf(
+                                    ProtosExecutionContextValue.class,
+                                    module.context());
+                    ProtosFrameLexicalBindingAuthority authority =
+                            assertInstanceOf(
+                                    ProtosFrameLexicalBindingAuthority.class,
+                                    context.lexicalBindingAuthorityForRuntime());
+
+                    assertFalse(
+                            authority.hasFrameBackedBindingAt(
+                                    "removed", 0));
+                    assertFalse(context.hasLocalSlot("removed"));
+                    assertFalse(
+                            reflectedSlotNames(context, module)
+                                    .contains("removed"));
+
+                    Object absentScope = debuggerScope(module);
+                    assertFalse(
+                            memberNames(absentScope)
+                                    .contains("removed"));
+
+                    ProtosStringValue replacement =
+                            new ProtosStringValue("after");
+                    context.createLocalSlot(
+                            "removed",
+                            replacement);
+
+                    /*
+                     * Re-creation uses the same statically allocated ordinal:
+                     * semantic presence changed, physical binding identity did
+                     * not migrate to dynamic overflow or a second authority.
+                     */
+                    assertTrue(
+                            authority.hasFrameBackedBindingAt(
+                                    "removed", 0));
+                    assertSame(
+                            replacement,
+                            context.readLocalSlot("removed")
+                                    .orElseThrow());
+                    assertTrue(
+                            reflectedSlotNames(context, module)
+                                    .contains("removed"));
+
+                    Object presentScope = debuggerScope(module);
+                    assertTrue(
+                            memberNames(presentScope)
+                                    .contains("removed"));
+                    assertSame(
+                            replacement,
+                            interop.readMember(
+                                    presentScope, "removed"));
+                });
+    }
+
+    @Test
     void capturedFrameBackedBindingRemainsLiveInDebuggerProjection()
             throws Exception {
         withEnteredLanguage(

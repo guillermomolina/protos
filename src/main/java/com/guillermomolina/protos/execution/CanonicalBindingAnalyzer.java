@@ -73,9 +73,10 @@ import java.util.Objects;
  *
  * <p>A reference classifies as {@link CanonicalBindingResolution.Resolved}
  * only when the owning scope is the reference's own current scope AND that
- * scope has already established the name at this exact program point
- * (matching D179 candidate C3 monotonic membership: once true, never
- * reverts). Any other statically discoverable owner classifies as {@link
+ * scope has already established the name at this exact program point.
+ * Under D179 C0 this proves stable binding identity/layout, not permanent
+ * runtime presence, so direct lowering must retain the applicable presence
+ * guard. Any other statically discoverable owner classifies as {@link
  * CanonicalBindingResolution.Candidate}; a name no scope in the chain ever
  * declares classifies as {@link CanonicalBindingResolution.Dynamic}, exactly
  * preserving today's receiver/member-fallback dynamic path.

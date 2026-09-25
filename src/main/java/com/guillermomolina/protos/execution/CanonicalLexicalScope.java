@@ -45,8 +45,9 @@ import java.util.HashSet;
  * left-to-right, evaluation-order walk of exactly this scope's own body, so
  * that {@link CanonicalBindingAnalyzer} can tell "declared somewhere in this
  * scope" (a legal future/late creation candidate) apart from "already
- * PRESENT at this exact program point" (D179 candidate C3 monotonic
- * membership already reached this point in this activation).
+ * PRESENT at this exact program point". Under D179 C0, that compile-time fact
+ * identifies the stable binding/layout but does not imply permanent runtime
+ * presence: a later removeSlot may clear the binding again.
  */
 final class CanonicalLexicalScope {
     enum Kind {

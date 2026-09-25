@@ -17,21 +17,17 @@
 
 package com.guillermomolina.protos.runtime;
 
-import java.util.Objects;
-
 /**
  * The runtime representation of a genuine Protos execution context: the object
  * bound to a Closure invocation's fresh activation and to a module's
  * {@code moduleContext}, as defined by {@code EXECUTION_AND_CONTROL.md} §4.
  *
- * <p>Execution contexts remain ordinary Protos objects for every other purpose
- * (delegation through {@code Context -> Object}, reflection, capture, escape).
- * The only distinguishing runtime rule, ratified by D179 candidate C3
- * ("monotonic context membership"), is that a local slot which has become
- * PRESENT on an execution context can never become ABSENT again: structural
- * removal is unconditionally rejected once the named local slot exists,
- * regardless of open/closed/frozen state. Growth while OPEN and value mutation
- * while writable are otherwise unaffected.
+ * <p>Execution contexts remain ordinary Protos objects for structural mutation,
+ * delegation through {@code Context -> Object}, reflection, capture, and
+ * escape. Under ratified D179 candidate C0, an OPEN execution context may
+ * remove a PRESENT local slot, making it semantically ABSENT; later lookup may
+ * therefore continue through the ordinary outer-lexical and receiver fallback
+ * path. CLOSED/FROZEN structural rules remain those of ordinary objects.
  *
  * <p>An ordinary object that merely delegates through {@code Context} (for
  * example because guest code wrote {@code foo: Context {}}) is not made from
@@ -55,16 +51,6 @@ import java.util.Objects;
 public final class ProtosExecutionContextValue extends ProtosObjectValue {
     public ProtosExecutionContextValue(Object parent) {
         super(parent, new ProtosMapBackedLexicalBindingAuthority());
-    }
-
-    @Override
-    public Object removeLocalSlot(String name) {
-        Objects.requireNonNull(name, "name");
-        if (hasLocalSlot(name)) {
-            throw new IllegalStateException(
-                    "execution-context local slot membership is monotonic once present: " + name);
-        }
-        return super.removeLocalSlot(name);
     }
 
     /**

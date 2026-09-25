@@ -23,6 +23,31 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.434] - 2026-09-25
+
+### D179 — Restore Candidate C0 execution-context structural removal
+- Supersedes the active normative C3 monotonic-membership rule introduced by
+  specification revision 0.1.433 while preserving that earlier entry as
+  historical record.
+- `spec/semantics/EXECUTION_AND_CONTROL.md` §4 now applies the ordinary
+  structural `Object` contract to genuine execution contexts: while OPEN, a
+  PRESENT local slot may be removed and becomes ABSENT; CLOSED/FROZEN
+  structural restrictions remain unchanged.
+- A successful removal returns the exact removed value. Subsequent bare lookup
+  observes the resulting semantic absence, so an outer lexical binding may
+  become visible and, after lexical exhaustion, ordinary receiver fallback may
+  become visible.
+- Closure capture and escaped contexts remain by reference, so removal through
+  any reference to the same execution context is observed by later reads. A
+  later legal creation of the same name while OPEN may make the binding PRESENT
+  again.
+- `PRESENT(null)` remains distinct from ABSENT, ordinary non-execution-context
+  `Object.removeSlot(name)` behavior is unchanged, and bare assignment still
+  fixes its destination before evaluating the right-hand side.
+- `spec/semantics/OBJECT_MODEL.md` §22 removes the former C3 specialization
+  cross-reference and instead points to the lexical consequences owned by
+  `EXECUTION_AND_CONTROL.md`.
+
 ## [0.1.433] - 2026-09-24
 
 ### D179 — Execution Context Object-Model Capability Boundary (Candidate C3: monotonic context membership)

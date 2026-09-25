@@ -66,14 +66,18 @@ class ProtosLexicalBindingAuthoritySeamTest {
     }
 
     @Test
-    void d179C3RemovalRejectionRemainsExactThroughTheSeam() {
+    void d179C0RemovalAndRecreationRemainExactThroughTheSeam() {
         ProtosExecutionContextValue context =
                 new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
         context.createLocalSlot("x", "value");
 
-        assertThrows(IllegalStateException.class, () -> context.removeLocalSlot("x"));
+        assertEquals("value", context.removeLocalSlot("x"));
+        assertFalse(context.hasLocalSlot("x"));
+        assertTrue(context.readLocalSlot("x").isEmpty());
+
+        context.createLocalSlot("x", "recreated");
         assertTrue(context.hasLocalSlot("x"));
-        assertEquals("value", context.readLocalSlot("x").orElseThrow());
+        assertEquals("recreated", context.readLocalSlot("x").orElseThrow());
     }
 
     @Test

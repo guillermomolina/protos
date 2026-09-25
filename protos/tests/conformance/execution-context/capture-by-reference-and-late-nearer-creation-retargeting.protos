@@ -17,7 +17,7 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("D179 C3: a captured context still exposes a local slot created after capture", () => {
+    Test("D179 C0: a captured context still exposes a local slot created after capture", () => {
         tool009LegacyCase: () => {
             outer: () => {
                 inner: () => late
@@ -29,10 +29,11 @@ tests: [
         Assertions.require(tool009LegacyCase() == 42)
     }),
 
-    Test("D179 C3: a nearer late-created binding still retargets subsequent lexical lookup", () => {
+    Test("D179 C0: a nearer late-created binding still retargets subsequent lexical lookup", () => {
         tool009LegacyCase: () => {
             outer: () => {
                 x: "outer"
+
                 middle: () => {
                     reader: () => x
                     firstRead: reader()
@@ -40,10 +41,37 @@ tests: [
                     secondRead: reader()
                     [firstRead, secondRead]
                 }
+
                 middle()
             }
+
             result: outer()
             (result[0] == "outer") && (result[1] == "middle")
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+
+    Test("D179 C0: removal through an escaped captured context retargets later lookup", () => {
+        tool009LegacyCase: () => {
+            x: "module"
+
+            makeCaptured: () => {
+                x: "captured"
+                [context, () => x]
+            }
+
+            captured: makeCaptured()
+            escaped: captured[0]
+            reader: captured[1]
+
+            before: reader()
+            removed: escaped.removeSlot("x")
+            after: reader()
+
+            (before == "captured") &&
+                (removed == "captured") &&
+                (escaped.hasSlot("x") === false) &&
+                (after == "module")
         }
         Assertions.require(tool009LegacyCase() === true)
     })

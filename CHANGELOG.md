@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.88-SNAPSHOT
+
+- `I071` / D179 Candidate C0 with implementation Candidate E restores
+  execution-context `PRESENT -> ABSENT` removal on top of the PLAT036/I068
+  frame-backed lexical architecture. `ProtosExecutionContextValue` again uses
+  the ordinary open/closed/frozen structural rules instead of the superseded
+  C3 monotonic-membership rejection.
+- Statically admitted bindings keep their existing Bytecode DSL frame-local
+  identity and ordinal. Removal uses the existing frame-local cleared state as
+  semantic absence; later legal re-creation reuses the same frame-backed
+  binding rather than introducing a sentinel, bitmap, dynamic-map migration,
+  or second binding authority.
+- `ReadFrameLocal` is now presence-aware: a cleared current local takes the
+  exact lexical/receiver fallback path instead of reading an absent frame
+  local. Captured frame-backed reads retain their existing presence/topology
+  guards.
+- Conformance coverage now exercises current-local removal revealing an outer
+  lexical binding, receiver fallback after removal, captured/escaped removal,
+  remove/recreate, PRESENT-null versus ABSENT, CLOSED/FROZEN rejection, and
+  ordinary-object removal. Focused Java coverage additionally proves stable
+  frame layout across clear/recreate, debugger/reflection hiding of cleared
+  bindings, and that a captured assignment destination fixed before RHS
+  evaluation is not retargeted if the RHS removes that destination.
+- No PLAT036/I068 architecture is reopened, no broad Truffle boundary is added,
+  and the change remains compatible with PLAT039's PE-visible guest-kernel
+  boundary.
+
 ## 0.3.87-SNAPSHOT
 
 - `I068` / PLAT036 Candidate D, Slice 7 ("activation lexical

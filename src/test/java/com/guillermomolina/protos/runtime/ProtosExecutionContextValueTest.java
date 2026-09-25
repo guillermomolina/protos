@@ -24,8 +24,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 /**
- * D179 candidate C3 ("monotonic context membership"): an execution context's
- * local-slot membership can only grow, never shrink, once a slot is present.
+ * D179 candidate C0: execution-context local-slot membership follows ordinary
+ * structural Object semantics, including PRESENT -> ABSENT removal while OPEN.
  * These tests exercise {@link ProtosExecutionContextValue} directly at the
  * runtime-object level; {@code protos/tests/conformance/execution-context/}
  * exercises the same boundary from guest Protos programs.
@@ -53,14 +53,18 @@ class ProtosExecutionContextValueTest {
     }
 
     @Test
-    void openContextRejectsRemovalOfAPresentLocalSlot() {
+    void openContextAllowsRemovalAndRecreationOfAPresentLocalSlot() {
         ProtosExecutionContextValue context =
                 new ProtosExecutionContextValue(ProtosObjectValue.rootObject());
         context.createLocalSlot("x", "value");
 
-        assertThrows(IllegalStateException.class, () -> context.removeLocalSlot("x"));
+        assertSame("value", context.removeLocalSlot("x"));
+        assertTrue(!context.hasLocalSlot("x"));
+        assertTrue(context.readLocalSlot("x").isEmpty());
+
+        context.createLocalSlot("x", "recreated");
         assertTrue(context.hasLocalSlot("x"));
-        assertSame("value", context.readLocalSlot("x").orElseThrow());
+        assertSame("recreated", context.readLocalSlot("x").orElseThrow());
     }
 
     @Test

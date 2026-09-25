@@ -26,12 +26,12 @@ import java.util.Objects;
  *
  * <p>Preserves {@code STATIC_BINDING_IDENTITY != SEMANTIC_PRESENCE}: knowing
  * which declaration a name would refer to is never conflated with knowing
- * that the binding is already PRESENT. Only {@link Resolved} asserts
- * guaranteed presence; {@link Candidate} deliberately withholds that
- * guarantee even though it carries the same kind of identity, because a
- * nearer scope may still legally create the same name later (D179 candidate
- * C3 monotonic membership only forbids the reverse transition). {@link
- * CapturedResolved} identifies an already-PRESENT binding owned by an outer
+ * that the binding is PRESENT at runtime. {@link Resolved} identifies
+ * a binding already established at this program point, but under D179 C0 its
+ * stable identity/layout does not guarantee that runtime presence survives a
+ * later removeSlot. {@link Candidate} deliberately carries no presence
+ * guarantee even though it carries the same kind of identity. {@link
+ * CapturedResolved} identifies a statically established binding owned by an outer
  * genuine lexical scope; runtime lowering must still preserve nearer-context
  * retargeting before taking its direct captured path. {@link Dynamic} means
  * no scope in the static chain declares the name anywhere, so

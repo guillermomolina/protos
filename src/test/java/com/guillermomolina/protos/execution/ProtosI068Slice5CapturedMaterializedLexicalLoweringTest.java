@@ -18,8 +18,10 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
@@ -28,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
@@ -449,7 +452,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
 
                 /*
                  * Static analysis proved the outer x before this dynamic
-                 * creation existed. D179/C3 requires this later nearer
+                 * creation existed. D179 C0 still requires this later nearer
                  * PRESENT binding to retarget subsequent lexical lookup.
                  */
                 invocation.context().createLocalSlot("x", nearer);
@@ -1155,6 +1158,116 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                         token,
                         rebuilt.executeBytecodeActivationForTesting(
                                 invocation));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    @Test
+    void capturedWriteDestinationRemovedDuringRhsDoesNotRetarget()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosActivation module = moduleActivation();
+
+                ProtosObjectValue original =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue replacement =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue nearer =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+                module.context().createLocalSlot("seed", original);
+                module.context().createLocalSlot("replacement", replacement);
+
+                String characters =
+                        "x: seed\n"
+                                + "() => { x = replacement }";
+                Source source =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        characters,
+                                        "i071-write-destination-removed-during-rhs.protos")
+                                .build();
+
+                CanonicalSequence sequence = canonicalize(characters);
+                CanonicalClosure definition =
+                        assertInstanceOf(
+                                CanonicalClosure.class,
+                                sequence.expressions().get(1));
+                CanonicalAssign capturedWrite =
+                        assertInstanceOf(
+                                CanonicalAssign.class,
+                                definition.body().expressions().get(0));
+
+                ProtosBytecodeRootNode root =
+                        new CanonicalToBytecodeLowerer(language, source)
+                                .lowerRoot(sequence);
+
+                ProtosClosureValue closure =
+                        assertInstanceOf(
+                                ProtosClosureValue.class,
+                                root.getCallTarget().call(module));
+                ProtosClosureExecutionPlan plan =
+                        closure.executionPlan().orElseThrow();
+
+                CanonicalBindingResolution.CapturedResolved resolution =
+                        assertInstanceOf(
+                                CanonicalBindingResolution.CapturedResolved.class,
+                                plan.bytecodeBindingAnalysisForTesting()
+                                        .resolutionOf(capturedWrite)
+                                        .orElseThrow());
+
+                int ordinal = frameOrdinal(resolution.identity());
+
+                ProtosActivation invocation =
+                        ProtosActivation.forClosureInvocation(
+                                closure,
+                                java.util.List.of(),
+                                module.prelude().orElseThrow(),
+                                module.actorModuleState(),
+                                module.currentModuleKey().orElse(null),
+                                module.executionDomain());
+
+                ProtosBytecodeRootNode.CapturedLexicalWriteTarget destination =
+                        ProtosBytecodeRootNode
+                                .ResolveCapturedWritableLexicalTarget
+                                .perform(
+                                        invocation,
+                                        "x",
+                                        resolution.lexicalDepth(),
+                                        ordinal);
+
+                /*
+                 * Simulate RHS effects after destination selection:
+                 * remove the selected captured destination and create a new
+                 * nearer binding that would win if assignment were incorrectly
+                 * resolved again after RHS evaluation.
+                 */
+                module.context().removeLocalSlot("x");
+                invocation.context().createLocalSlot("x", nearer);
+
+                assertThrows(
+                        ProtosSignalException.class,
+                        () ->
+                                ProtosBytecodeRootNode
+                                        .AssignCapturedFrameLocal
+                                        .perform(
+                                                invocation,
+                                                destination,
+                                                "x",
+                                                replacement));
+
+                assertFalse(module.context().hasLocalSlot("x"));
+                assertSame(
+                        nearer,
+                        invocation.context()
+                                .readLocalSlot("x")
+                                .orElseThrow());
             } finally {
                 context.leave();
             }
