@@ -41,4 +41,4 @@ RUN curl -fsSL https://claude.ai/install.sh | bash
 
 WORKDIR /workspaces/protos
 
-ENV MAVEN_OPTS="--enable-native-access=ALL-UNNAMED"
+ENV MAVEN_OPTS="--enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow"
