@@ -427,6 +427,29 @@ documentation-only commits do not increment the implementation version merely
 because `spec/` or `docs/` changed, and normative specification changes remain 
 recorded in `spec/PROTOS_SPEC_CHANGELOG.md`. 
 
+### Implementation changelog archive discipline
+
+The root `CHANGELOG.md` is the only live implementation changelog. New
+implementation-version entries MUST be added there, never directly to files
+under `changelog/`.
+
+Files under `changelog/` are historical archives. They MUST NOT be modified by
+ordinary implementation, bug-fix, library, tool, test, performance, release, or
+documentation work. Editing an archived changelog requires an explicit
+changelog-archive maintenance task whose purpose includes that historical edit.
+
+The archive layout follows implementation version series:
+
+- `CHANGELOG.md` contains the current implementation series;
+- `changelog/CHANGELOG-0.2.md` contains the closed `0.2.x` series; and
+- `changelog/CHANGELOG-0.1.md` contains the closed `0.1.x` series.
+
+When an explicitly approved implementation major/minor transition closes the
+current series, archive that closed series as a whole under
+`changelog/CHANGELOG-X.Y.md` and leave the root `CHANGELOG.md` as the live file
+for the new series. Do not move or rewrite historical entries as part of
+unrelated work.
+
 For concurrent interactive work, **separate substantive implementation from
 moving publication metadata**. An implementation agent owns its substantive
 source/test delta as an independent developer would: inspect the current

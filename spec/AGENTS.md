@@ -364,6 +364,40 @@ changes semantics or another precondition relevant to the pending delta.
 The final normative commit MUST still contain the required global changelog entry;
 late revision assignment changes timing only, not atomicity or authority.
 
+### Specification changelog archive discipline
+
+`spec/PROTOS_SPEC_CHANGELOG.md` is the only live specification changelog. Every
+new global specification revision MUST be added there, never directly to a file
+under `spec/changelog/`.
+
+Files under `spec/changelog/` are historical archives and are non-normative.
+They MUST NOT be modified by ordinary design, specification, implementation,
+documentation, or release work. Editing an archived specification changelog
+requires an explicit changelog-archive maintenance task whose purpose includes
+that historical edit.
+
+The current archive convention groups closed `0.1` revisions into blocks of
+100:
+
+- `0.1.041` through `0.1.099`;
+- `0.1.100` through `0.1.199`;
+- `0.1.200` through `0.1.299`; and
+- `0.1.300` through `0.1.399`.
+
+The live file owns the current not-yet-archived revision block. When assigning
+the first revision of a new hundred-revision block (for example `0.1.500`),
+archive
+the just-completed block (`0.1.400` through `0.1.499`) under
+`spec/changelog/` in the same archive naming convention, update the live
+changelog's historical index, and keep the new revision in
+`spec/PROTOS_SPEC_CHANGELOG.md`.
+
+Archiving is structural maintenance only: preserve the archived entry text and
+ordering exactly. Do not rewrite, renumber, or redistribute historical entries
+as part of unrelated normative work. A future specification series transition
+must define its archive boundary explicitly rather than silently extending the
+`0.1` block convention.
+
 Git history is the authoritative exact history of an individual specification
 file. Use `git log -- <path>` (and the corresponding commit diffs) when exact
 per-file history is required.
