@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.86-SNAPSHOT
+
+- `I068` / PLAT036 Candidate D, Slice 6 ("debugger/reflection projection"):
+  debugger scope and Core reflection are now covered against the frame-backed
+  lexical-state architecture established by Slices 2-5. The projection remains
+  semantic rather than backend-native: PRESENT frame-backed bindings and
+  dynamic-overflow bindings are visible, statically allocated but not yet
+  established bindings remain hidden, and Bytecode DSL implementation
+  temporaries are not exposed. Debugger reads continue to route through
+  `ProtosActivation` lookup precedence, including live captured frame-backed
+  bindings after outer mutation, while Core `slotNames` / `slotValue` observe
+  the same single lexical-binding authority. The existing read-only tooling
+  baseline, receiver fallback, object-body lexical boundary, and
+  `NO_DUAL_BINDING_AUTHORITY` invariant remain unchanged. No production-code
+  change was required; the slice closes the missing focused evidence over real
+  frame-backed execution. Slice 7 retains the
+  `ProtosActivation` lexical-decomposition/fallback cleanup.
+
 ## 0.3.85-SNAPSHOT
 
 - `I068` / PLAT036 Candidate D, Slice 5 ("captured/materialized lexical
