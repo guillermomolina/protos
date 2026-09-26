@@ -7,6 +7,7 @@ import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIoReleaseExecution;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
@@ -218,7 +219,7 @@ public final class ProtosIoReleaseCPrimeExecution {
             Objects.requireNonNull(outcome, "outcome");
             Step step = currentStep();
             switch (outcome.kind) {
-                case RESOLVED -> step.resolvedAction.run();
+                case RESOLVED -> runResolvedAction(step.resolvedAction);
                 case FAILED -> recordFailure(step, Objects.requireNonNull(outcome.error, "error"));
                 case CANCELLED, INVALID, INVOCATION_FAILED ->
                         recordFailure(step, ioError());
@@ -239,7 +240,19 @@ public final class ProtosIoReleaseCPrimeExecution {
             if (primaryFailure == null) {
                 primaryFailure = error;
             }
-            step.failedAction.accept(error);
+            runFailedAction(step.failedAction, error);
+        }
+
+        @TruffleBoundary
+        private static void runResolvedAction(Runnable action) {
+            action.run();
+        }
+
+        @TruffleBoundary
+        private static void runFailedAction(
+                Consumer<ProtosObjectValue> action,
+                ProtosObjectValue error) {
+            action.accept(error);
         }
 
         private ProtosObjectValue ioError() {

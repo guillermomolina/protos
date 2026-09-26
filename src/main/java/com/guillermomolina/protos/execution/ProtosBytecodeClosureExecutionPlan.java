@@ -217,7 +217,9 @@ final class ProtosBytecodeClosureExecutionPlan {
             ProtosActivation activation) {
         Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(activation, "activation");
-        for (CanonicalParameter parameter : definition.parameters()) {
+        java.util.List<CanonicalParameter> parameters = definition.parameters();
+        for (int parameterIndex = 0; parameterIndex < parameters.size(); parameterIndex++) {
+            CanonicalParameter parameter = parameters.get(parameterIndex);
             if (parameter.defaultValue().isPresent()) {
                 throw new UnsupportedOperationException(
                         "PERF006-B2C3B2 direct Java bind helper does not execute default expressions");
@@ -238,7 +240,8 @@ final class ProtosBytecodeClosureExecutionPlan {
                                                 "parameter binding requires an owning Core prelude"));
 
         int suppliedIndex = 0;
-        for (CanonicalParameter parameter : definition.parameters()) {
+        for (int parameterIndex = 0; parameterIndex < parameters.size(); parameterIndex++) {
+            CanonicalParameter parameter = parameters.get(parameterIndex);
             if (parameter.rest()) {
                 ProtosArrayValue rest =
                         prelude.newFrozenArray(

@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+
 import com.oracle.truffle.api.bytecode.TagTreeNode;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.interop.NodeLibrary;
@@ -40,7 +41,12 @@ final class ProtosBytecodeTagTreeNodeExports {
     static boolean hasScope(
             @SuppressWarnings("unused") TagTreeNode node,
             Frame frame) {
-        return ProtosFrameArguments.hasActivation(frame);
+        if (frame == null) {
+            return false;
+        }
+        Object[] arguments = frame.getArguments();
+        return arguments.length > 0
+                && arguments[0] instanceof com.guillermomolina.protos.runtime.ProtosActivation;
     }
 
     @ExportMessage

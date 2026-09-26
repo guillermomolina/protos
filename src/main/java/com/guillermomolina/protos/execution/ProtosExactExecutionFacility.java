@@ -306,6 +306,7 @@ public final class ProtosExactExecutionFacility {
                 null);
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     private static Source exactSource(String characters, String name) {
         return Source.newBuilder(ProtosLanguage.ID, characters, name)
                 .mimeType(ProtosLanguage.MIME_TYPE)

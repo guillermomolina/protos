@@ -7,6 +7,59 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.89-SNAPSHOT
+
+- `I069` implements the PLAT038/PLAT039 Native Image runtime architecture as a
+  first-class Maven `native` build path while retaining the Stage1 JVM path.
+  The native profile uses GraalVM Build Tools to produce the `protos` executable
+  and generates its Native Image class-initialization arguments as a dedicated
+  build step rather than coupling native packaging to ordinary JVM builds.
+- Native Image initialization is now deterministic and deliberately narrower
+  than package-wide `--initialize-at-build-time`. The generated policy includes
+  the language provider and generated Truffle library exports, both generated
+  Bytecode DSL root structures, every generated helper and semantic operation
+  node, and the narrowly required hosted constants
+  `ProtosTextReaderCPrimeExecution.Advance` and
+  `ProtosCoreErrors.StandardError`. The validated policy contains 311 unique
+  build-time initialized classes.
+- The PLAT039 PE-visible guest kernel was audited across bytecode execution,
+  closure invocation, argument/default/rest binding, frame-backed lexical
+  access, object/member lookup, module execution-plan caching, continuation and
+  suspension handling, Future/Task/Actor state, parallel execution, Core value
+  operations, standard protocols, debugger/interop projections, and guest
+  callbacks. Guest-runtime paths that previously exposed opaque iterator,
+  collection-view, stream, Optional, or structurally unsuitable access shapes
+  were replaced with PE-visible indexed or explicit structural operations where
+  required.
+- Lexical and object-state helpers now provide explicit ordered projections for
+  PE-sensitive traversal while preserving a single authoritative binding store,
+  stable frame-backed local identity, `PRESENT(null) != ABSENT`, capture by
+  reference, current/captured fallback semantics, and the PLAT036/I068
+  frame-backed execution-context architecture. No second lexical authority or
+  observable Protos semantic change is introduced.
+- Native host/cold edges are isolated with narrow Truffle boundaries where the
+  operation is genuinely outside the guest PE kernel, including selected host
+  filesystem/network/runtime and cold materialization paths. Ordinary guest
+  send/call/lookup, continuation decisions, guest callbacks, runtime state, and
+  the main Bytecode DSL execution loops remain PE-visible; no broad
+  enter/resume boundary is introduced.
+- Standard Object `caseOf`, IdentityMap `at:ifAbsent:`, Map matching, and Array
+  matching fast paths now use explicit marker `ProtosNativeClosureBody`
+  implementations instead of identity-sensitive lambda singleton bodies. This
+  preserves the existing protocol behavior while keeping those native closures
+  structurally safe for Native Image hosted/runtime compilation.
+- Runtime compilation support was validated on the produced Native Image rather
+  than accepting an interpreter-only executable. The final image reports 2,132
+  runtime-compiled methods, and forced compilation completes successfully for
+  both `ProtosBytecodeRootNodeGen` and
+  `ProtosSemanticBytecodeRootNodeGen` at Truffle Tier 2 with `OPT_FAILED=0` and
+  no `FrameWithoutBoxing` materialization failure.
+- Native `--version`, `--help`, and basic guest evaluation all pass, followed by
+  the complete Maven `verify` gate. The investigation-only Native Image graph,
+  blocklist, frontier, policy, and PE-audit Python programs used during I069 are
+  not retained as product tooling; the durable native build inputs are
+  `build/native/Dockerfile` and `build/native/generate-init-args.sh`.
+
 ## 0.3.88-SNAPSHOT
 
 - `I071` / D179 Candidate C0 with implementation Candidate E restores

@@ -57,6 +57,7 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                 Math.max(1, Runtime.getRuntime().availableProcessors());
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     public static ProtosPolyglotRuntimeHost open() {
         return new ProtosPolyglotRuntimeHost(Engine.create(ProtosLanguage.ID), null);
     }
@@ -68,6 +69,7 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
      * port. Graal-specific startup text is captured by a version-bounded adapter rather than
      * becoming public launcher protocol. Normal {@link #open()} hosts do not enable DAP.
      */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     public static ProtosPolyglotRuntimeHost openDebug(OutputStream diagnostics) {
         Objects.requireNonNull(diagnostics, "diagnostics");
         ProtosGraalDapReadinessAdapter readiness =

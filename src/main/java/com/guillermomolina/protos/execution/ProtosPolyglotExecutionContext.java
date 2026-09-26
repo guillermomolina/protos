@@ -75,6 +75,7 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         return open(null, in, out, err, () -> {});
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     static ProtosPolyglotExecutionContext open(
             Engine engine,
             InputStream in,
@@ -244,6 +245,7 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         }
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     private void finishRequestedClose() {
         if (!closeRequested || closed || closeTerminal || lifecycle.getReadHoldCount() != 0) {
             return;

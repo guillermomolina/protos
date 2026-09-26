@@ -63,16 +63,48 @@ import java.util.Optional;
  * stored in the semantic Closure value.
  */
 final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAuthority {
-    private final List<String> frameBackedNames;
-    private final Map<String, Integer> frameBackedOffsets;
+    private final java.util.ArrayList<String> frameBackedNames;
+    private final LinkedHashMap<String, Integer> frameBackedOffsets;
     private final LocalRangeAccessor frameBackedLocals;
     private final BytecodeNode bytecodeNode;
     private final VirtualFrame frame;
-    private final Map<String, Object> dynamicOverflow = new LinkedHashMap<>();
+    private final LinkedHashMap<String, Object> dynamicOverflow = new LinkedHashMap<>();
     private final LinkedHashSet<String> establishmentOrder = new LinkedHashSet<>();
 
     ProtosFrameLexicalBindingAuthority(
             List<?> frameBackedNames,
+            LocalRangeAccessor frameBackedLocals,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        this(
+                frameBackedNamesArray(frameBackedNames),
+                frameBackedLocals,
+                bytecodeNode,
+                frame);
+    }
+
+    private static String[] frameBackedNamesArray(List<?> frameBackedNames) {
+        Objects.requireNonNull(frameBackedNames, "frameBackedNames");
+        String[] result = new String[frameBackedNames.size()];
+        for (int index = 0; index < result.length; index++) {
+            Object candidate =
+                    Objects.requireNonNull(
+                            frameBackedNames.get(index),
+                            "frameBackedNames[" + index + "]");
+            if (!(candidate instanceof String name)) {
+                throw new IllegalArgumentException(
+                        "frame-backed binding name must be a String at index "
+                                + index
+                                + ": "
+                                + candidate.getClass().getName());
+            }
+            result[index] = name;
+        }
+        return result;
+    }
+
+    ProtosFrameLexicalBindingAuthority(
+            String[] frameBackedNames,
             LocalRangeAccessor frameBackedLocals,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
@@ -82,18 +114,18 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         this.bytecodeNode = Objects.requireNonNull(bytecodeNode, "bytecodeNode");
         this.frame = Objects.requireNonNull(frame, "frame");
 
-        if (frameBackedNames.size() != frameBackedLocals.getLength()) {
+        if (frameBackedNames.length != frameBackedLocals.getLength()) {
             throw new IllegalArgumentException(
                     "frame-backed binding-name count must match local range length");
         }
 
         java.util.ArrayList<String> names =
-                new java.util.ArrayList<>(frameBackedNames.size());
-        Map<String, Integer> offsets = new LinkedHashMap<>();
-        for (int index = 0; index < frameBackedNames.size(); index++) {
+                new java.util.ArrayList<>(frameBackedNames.length);
+        LinkedHashMap<String, Integer> offsets = new LinkedHashMap<>();
+        for (int index = 0; index < frameBackedNames.length; index++) {
             Object candidate =
                     Objects.requireNonNull(
-                            frameBackedNames.get(index),
+                            frameBackedNames[index],
                             "frameBackedNames[" + index + "]");
             if (!(candidate instanceof String name)) {
                 throw new IllegalArgumentException(
@@ -108,8 +140,8 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
             }
             names.add(name);
         }
-        this.frameBackedNames = List.copyOf(names);
-        this.frameBackedOffsets = Map.copyOf(offsets);
+        this.frameBackedNames = names;
+        this.frameBackedOffsets = offsets;
     }
 
     /**
@@ -205,6 +237,30 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
             }
         }
         return Collections.unmodifiableMap(snapshot);
+    }
+
+    @Override
+    public void appendBindingsTo(
+            java.util.ArrayList<String> names,
+            java.util.ArrayList<Object> values) {
+        Objects.requireNonNull(names, "names");
+        Objects.requireNonNull(values, "values");
+
+        for (String name : establishmentOrder) {
+            Integer offset = frameBackedOffsets.get(name);
+            if (offset != null) {
+                if (!frameBackedLocals.isCleared(
+                        bytecodeNode, frame, offset)) {
+                    names.add(name);
+                    values.add(
+                            frameBackedLocals.getObject(
+                                    bytecodeNode, frame, offset));
+                }
+            } else if (dynamicOverflow.containsKey(name)) {
+                names.add(name);
+                values.add(dynamicOverflow.get(name));
+            }
+        }
     }
 
     @Override

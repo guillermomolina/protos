@@ -130,18 +130,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * the established Protos root calling convention.</p>
      */
     @Operation
-    public static final class BindClosureParameters {
-        @Specialization
-        public static void perform(
-                ProtosActivation activation,
-                CanonicalClosure definition) {
-            ProtosBytecodeClosureExecutionPlan.bindParameters(
-                    definition,
-                    activation);
-        }
-    }
-
-    @Operation
     public static final class HasClosureArgument {
         @Specialization
         public static boolean perform(
@@ -296,13 +284,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             type = LocalRangeAccessor.class,
             name = "frameBackedLocals")
     @ConstantOperand(
-            type = java.util.List.class,
+            type = String[].class,
             name = "frameBackedNames")
     public static final class InstallFrameLexicalAuthority {
         @Specialization
         public static void perform(
                 LocalRangeAccessor frameBackedLocals,
-                java.util.List<?> frameBackedNames,
+                String[] frameBackedNames,
                 ProtosActivation activation,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
@@ -602,14 +590,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Specialization
         public static Object perform(
                 ProtosActivation activation,
-                List<String> names,
+                String[] names,
                 Object source) {
             if (!(source instanceof ProtosArrayValue array)) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
             }
 
-            int required = names.size();
+            int required = names.length;
             if (array.indexedSize().compareTo(BigInteger.valueOf(required)) < 0) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
@@ -628,7 +616,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosObjectValue target = activation.context();
             for (int index = 0; index < required; index++) {
                 try {
-                    target.createLocalSlot(names.get(index), observed.get(index));
+                    target.createLocalSlot(names[index], observed.get(index));
                 } catch (IllegalStateException invalidMutation) {
                     /*
                      * Deliberately no rollback: D143 applies ordinary ':'
@@ -867,7 +855,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosObjectValue perform(
                 ProtosActivation activation,
                 Object sourceValue,
-                java.util.Set<String> reservedNames) {
+                java.util.List<String> reservedNames) {
             if (!(sourceValue instanceof ProtosObjectValue source)) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
             }
@@ -2260,7 +2248,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             ProtosCoreErrors.newError(activation));
                 }
 
-                captures.addAll(observedCaptures);
+                for (int captureIndex = 0;
+                        captureIndex < observedCaptures.size();
+                        captureIndex++) {
+                    captures.add(observedCaptures.get(captureIndex));
+                }
                 index++;
                 return;
             }
@@ -3147,7 +3139,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             ProtosCoreErrors.newError(activation));
                 }
 
-                captures.addAll(observedCaptures);
+                for (int captureIndex = 0;
+                        captureIndex < observedCaptures.size();
+                        captureIndex++) {
+                    captures.add(observedCaptures.get(captureIndex));
+                }
                 childIndex++;
                 return;
             }
@@ -4655,7 +4651,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              * item's own left-to-right evaluation position, before any later
              * argument expression can mutate the source Array.
              */
-            values.addAll(array.indexedSnapshot());
+            List<Object> spread = array.indexedSnapshot();
+            for (int index = 0; index < spread.size(); index++) {
+                values.add(spread.get(index));
+            }
         }
 
         List<Object> snapshot() {
@@ -5275,17 +5274,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             String selector,
             ProtosActivation caller) {
         ProtosPrelude prelude =
-                caller.prelude().orElse(null);
+                caller.preludeOrNullForRuntime();
         try {
-            return ProtosValueLookup.lookup(
+            var selected =
+                    ProtosValueLookup.lookup(
                             receiver,
                             selector,
-                            prelude)
-                    .orElseThrow(
-                            () ->
-                                    new ProtosSignalException(
-                                            ProtosCoreErrors.newSlotNotFound(
-                                                    caller)));
+                            prelude);
+            if (selected.isEmpty()) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newSlotNotFound(caller));
+            }
+            return selected.orElseThrow();
         } catch (UnsupportedOperationException unsupportedRepresentation) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(caller));

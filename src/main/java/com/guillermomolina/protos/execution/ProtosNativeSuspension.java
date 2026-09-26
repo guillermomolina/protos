@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+
 import com.guillermomolina.protos.runtime.ProtosTask;
 import java.util.Objects;
 import java.util.function.Supplier;
@@ -70,7 +72,13 @@ final class ProtosNativeSuspension {
             resumeAction = resumer;
         }
         return Objects.requireNonNull(
-                resumeAction.get(),
+                invokeResumer(resumeAction),
                 "native suspension resumer returned null");
     }
+
+    @TruffleBoundary
+    private static Object invokeResumer(Supplier<Object> resumeAction) {
+        return resumeAction.get();
+    }
+
 }

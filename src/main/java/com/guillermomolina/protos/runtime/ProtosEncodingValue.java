@@ -221,7 +221,9 @@ public final class ProtosEncodingValue implements ProtosRepresentedValue {
 
         int consumed = 0;
         StringBuilder result = new StringBuilder();
-        for (DecodedUnit unit : preview.units()) {
+        java.util.List<DecodedUnit> units = preview.units();
+        for (int index = 0; index < units.size(); index++) {
+            DecodedUnit unit = units.get(index);
             consumed += unit.sourceBytes();
             result.append(unit.text());
         }

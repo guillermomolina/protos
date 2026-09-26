@@ -42,6 +42,7 @@ public final class ProtosActorGroupRuntime {
 
     private final UUID groupIdentity = UUID.randomUUID();
     private final Map<Long, Member> members = new LinkedHashMap<>();
+    private final ArrayList<Member> memberOrder = new ArrayList<>();
     private final ArrayDeque<RoutingOperation> pending = new ArrayDeque<>();
     private final Set<RoutingOperation> active = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.LIVE;
@@ -67,6 +68,9 @@ public final class ProtosActorGroupRuntime {
                 throw new IllegalStateException("terminated Group cannot acquire members");
             }
             added = members.putIfAbsent(member.identity(), member) == null;
+            if (added) {
+                memberOrder.add(member);
+            }
         }
         if (added) {
             actor.registerRoutingGroupForRuntime(this);
@@ -91,6 +95,9 @@ public final class ProtosActorGroupRuntime {
                 throw new IllegalStateException("terminated Group cannot acquire members");
             }
             added = members.putIfAbsent(member.identity(), member) == null;
+            if (added) {
+                memberOrder.add(member);
+            }
         }
         if (added) {
             member.localActor.registerRoutingGroupForRuntime(this);
@@ -119,6 +126,9 @@ public final class ProtosActorGroupRuntime {
                 throw new IllegalStateException("terminated Group cannot acquire members");
             }
             added = members.putIfAbsent(member.identity(), member) == null;
+            if (added) {
+                memberOrder.add(member);
+            }
         }
         if (added) {
             drainPendingForRuntime();
@@ -137,6 +147,7 @@ public final class ProtosActorGroupRuntime {
                 return false;
             }
             removed = members.remove(current.identity());
+            removeMemberFromOrderLocked(removed);
             normalizeSelectionIndexLocked();
             operations = List.copyOf(active);
         }
@@ -159,6 +170,7 @@ public final class ProtosActorGroupRuntime {
                 return false;
             }
             removed = members.remove(current.identity());
+            removeMemberFromOrderLocked(removed);
             normalizeSelectionIndexLocked();
             operations = List.copyOf(active);
         }
@@ -175,7 +187,8 @@ public final class ProtosActorGroupRuntime {
             return Optional.empty();
         }
         List<Member> eligible = new ArrayList<>();
-        for (Member member : members.values()) {
+        for (int index = 0; index < memberOrder.size(); index++) {
+            Member member = memberOrder.get(index);
             if (member.localActor != null && member.routingEligible()) {
                 eligible.add(member);
             }
@@ -196,7 +209,8 @@ public final class ProtosActorGroupRuntime {
             return null;
         }
         List<Member> eligible = new ArrayList<>();
-        for (Member member : members.values()) {
+        for (int index = 0; index < memberOrder.size(); index++) {
+            Member member = memberOrder.get(index);
             if (member.routingEligible()) {
                 eligible.add(member);
             }
@@ -213,12 +227,22 @@ public final class ProtosActorGroupRuntime {
     }
 
     private void normalizeSelectionIndexLocked() {
-        if (nextSelectionIndex >= members.size()) {
+        if (nextSelectionIndex >= memberOrder.size()) {
             nextSelectionIndex = 0;
         }
-        if (nextLocalSelectionIndex >= members.size()) {
+        if (nextLocalSelectionIndex >= memberOrder.size()) {
             nextLocalSelectionIndex = 0;
         }
+    }
+
+    private void removeMemberFromOrderLocked(Member removed) {
+        for (int index = 0; index < memberOrder.size(); index++) {
+            if (memberOrder.get(index) == removed) {
+                memberOrder.remove(index);
+                return;
+            }
+        }
+        throw new IllegalStateException("ActorGroup member order lost authoritative member");
     }
 
     /** Runtime acquisition of a new GroupRef capability to this exact Group identity. */
@@ -355,7 +379,11 @@ public final class ProtosActorGroupRuntime {
             lifecycle = LifecycleState.TERMINATED;
             pending.clear();
             operations = List.copyOf(active);
-            currentMembers = List.copyOf(members.values());
+            ArrayList<Member> snapshot = new ArrayList<>(memberOrder.size());
+            for (int index = 0; index < memberOrder.size(); index++) {
+                snapshot.add(memberOrder.get(index));
+            }
+            currentMembers = List.copyOf(snapshot);
         }
         for (Member member : currentMembers) {
             if (member.localActor != null) {

@@ -2,6 +2,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosIoReleaseExecution;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.Objects;
 import java.util.function.Supplier;
 
@@ -72,6 +73,12 @@ final class ProtosIoReleaseSuspension {
             resumeAction = resumer;
         }
         return Objects.requireNonNull(
-                resumeAction.get(), "release-owned suspension resumer returned null");
+                invokeResumer(resumeAction), "release-owned suspension resumer returned null");
     }
+
+    @TruffleBoundary
+    private static Object invokeResumer(Supplier<Object> resumeAction) {
+        return resumeAction.get();
+    }
+
 }

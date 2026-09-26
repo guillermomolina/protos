@@ -68,7 +68,11 @@ public final class ProtosParallelRuntime {
 
         ArrayList<Snapshot> children=new ArrayList<>(sourceSnapshot.size());
         for(Object element:sourceSnapshot){
-            ArrayList<Object> args=new ArrayList<>();args.add(element);args.addAll(extra);
+            ArrayList<Object> args=new ArrayList<>(1 + extra.size());
+            args.add(element);
+            for(int extraIndex=0;extraIndex<extra.size();extraIndex++){
+                args.add(extra.get(extraIndex));
+            }
             children.add(Snapshot.capture(callback,args,a));
         }
         Completion all=new Completion();
@@ -76,7 +80,7 @@ public final class ProtosParallelRuntime {
         Outcome[] outcomes=new Outcome[children.size()];
         AtomicInteger remaining=new AtomicInteger(children.size());
         AtomicBoolean abandoned=new AtomicBoolean();
-        all.onCancel(()->abandoned.set(true));
+        all.onCancelAbandon(abandoned);
         for(int i=0;i<children.size();i++){
             int index=i;Completion child=new Completion();
             child.onReady(o->{outcomes[index]=o;if(remaining.decrementAndGet()==0&&!abandoned.get())
@@ -126,7 +130,11 @@ public final class ProtosParallelRuntime {
                 for(int i=0;i<round.size();i+=2){
                     if(i+1==round.size()){next.add(round.get(i));continue;}
                     ArrayList<Object> args=new ArrayList<>();
-                    args.add(round.get(i));args.add(round.get(i+1));args.addAll(staged.extra);
+                    args.add(round.get(i));
+                args.add(round.get(i+1));
+                for(int extraIndex=0;extraIndex<staged.extra.size();extraIndex++){
+                    args.add(staged.extra.get(extraIndex));
+                }
                     Outcome o=runInline(Snapshot.capture(staged.callable,args,a));
                     if(o.error!=null){c.fail(o.error);return;}
                     next.add(o.value);
@@ -183,7 +191,12 @@ public final class ProtosParallelRuntime {
     }
 
     private static Outcome compare(Object less,Object a,Object b,List<Object> extra,ProtosActivation caller){
-        ArrayList<Object> args=new ArrayList<>();args.add(a);args.add(b);args.addAll(extra);
+        ArrayList<Object> args=new ArrayList<>(2 + extra.size());
+            args.add(a);
+            args.add(b);
+            for(int extraIndex=0;extraIndex<extra.size();extraIndex++){
+                args.add(extra.get(extraIndex));
+            }
         return runInline(Snapshot.capture(less,args,caller));
     }
     private static boolean bool(Object v){return v==ProtosBooleanValue.TRUE||v==ProtosBooleanValue.FALSE;}
@@ -205,12 +218,16 @@ public final class ProtosParallelRuntime {
         List<Object> bytes=receiver instanceof ProtosBytesValue b?b.rangeSnapshot(start,length):
                 ((ProtosByteRegionValue)receiver).rangeSnapshot(start,length);
         ProtosByteRegionValue region=new ProtosByteRegionValue(bytes);installRegion(region);
-        ArrayList<Object> args=new ArrayList<>();args.add(region);args.addAll(supplied.subList(3,supplied.size()));
+        ArrayList<Object> args=new ArrayList<>(1 + Math.max(0, supplied.size() - 3));
+            args.add(region);
+            for(int suppliedIndex=3;suppliedIndex<supplied.size();suppliedIndex++){
+                args.add(supplied.get(suppliedIndex));
+            }
         Snapshot snapshot;
         try{snapshot=Snapshot.capture(worker,args,a);}
         catch(RuntimeException e){release(receiver,token);throw e;}
         return ownedFuture(a,c->{
-            c.onCancel(()->release(receiver,token));
+            c.onCancelRelease(receiver,token);
             c.onCommit(()->{
                 if(receiver instanceof ProtosBytesValue b)b.commitReserved(start,region.indexedSnapshot(),token);
                 else ((ProtosByteRegionValue)receiver).commitReserved(start,region.indexedSnapshot(),token);
@@ -264,18 +281,46 @@ public final class ProtosParallelRuntime {
     }
 
     private static final class Completion implements ProtosTask.WaitDependency {
-        private volatile ProtosTask task;private volatile Outcome outcome;private volatile Runnable cancel,commit;
+        private volatile ProtosTask task;private volatile Outcome outcome;private volatile Runnable commit;
+        private volatile int cancelKind;
+        private volatile AtomicBoolean cancelAbandoned;
+        private volatile Object cancelReceiver,cancelToken;
+        private volatile Completion cancelTarget;
         private volatile java.util.function.Consumer<Outcome> ready;private final AtomicBoolean cancelled=new AtomicBoolean();
         void bind(ProtosTask t){task=t;if(outcome!=null)t.resume(this);}
-        void forwardTo(Completion target){onReady(o->{if(o.error!=null)target.fail(o.error);else target.resolve(o.value);});onCancel(target::cancel);}
+        void forwardTo(Completion target){onReady(o->{if(o.error!=null)target.fail(o.error);else target.resolve(o.value);});onCancelForward(target);}
         void onReady(java.util.function.Consumer<Outcome> c){ready=c;if(outcome!=null)c.accept(outcome);}
-        void onCancel(Runnable r){cancel=r;if(cancelled.get())r.run();}
+        void onCancelAbandon(AtomicBoolean abandoned){
+            cancelAbandoned=Objects.requireNonNull(abandoned);
+            cancelKind=1;
+            if(cancelled.get())runCancelAction();
+        }
+        void onCancelRelease(Object receiver,Object token){
+            cancelReceiver=Objects.requireNonNull(receiver);
+            cancelToken=Objects.requireNonNull(token);
+            cancelKind=2;
+            if(cancelled.get())runCancelAction();
+        }
+        void onCancelForward(Completion target){
+            cancelTarget=Objects.requireNonNull(target);
+            cancelKind=3;
+            if(cancelled.get())runCancelAction();
+        }
         void onCommit(Runnable r){commit=r;}Runnable commit(){return commit;}
         public boolean isReady(){return outcome!=null;}Outcome outcome(){return outcome;}
         void resolve(Object v){complete(Outcome.ok(v));}void fail(ProtosObjectValue e){complete(Outcome.fail(e));}
         synchronized void complete(Outcome o){if(outcome!=null||cancelled.get())return;outcome=o;
             if(ready!=null)ready.accept(o);if(task!=null)task.resume(this);}
-        void cancel(){if(cancelled.compareAndSet(false,true)&&cancel!=null)cancel.run();}
+        void cancel(){if(cancelled.compareAndSet(false,true))runCancelAction();}
+        private void runCancelAction(){
+            switch(cancelKind){
+                case 0 -> {}
+                case 1 -> cancelAbandoned.set(true);
+                case 2 -> release(cancelReceiver,cancelToken);
+                case 3 -> cancelTarget.cancel();
+                default -> throw new IllegalStateException("unknown parallel cancellation action");
+            }
+        }
         public void waitingTaskCancelled(ProtosTask ignored){cancel();}
     }
     private static final class Outcome {
@@ -435,17 +480,33 @@ public final class ProtosParallelRuntime {
             if(!(v instanceof ProtosObjectValue o)||!o.isFrozen())return false;
             if(p.isTcpConnectionPrototypeForRuntime(v))return true;
             if(p.isTcpListenerPrototypeForRuntime(v))return true;
-            for(Object x:p.bindings().localSlotsSnapshot().values())if(x==v)return true;return false;
+            ArrayList<String> names=new ArrayList<>();
+            ArrayList<Object> values=new ArrayList<>();
+            p.bindings().appendLocalBindingsTo(names,values);
+            for(int index=0;index<values.size();index++)if(values.get(index)==v)return true;
+            return false;
         }
         static void slots(ProtosObjectValue x,ProtosObjectValue y,ProtosActivation a,IdentityHashMap<Object,Object> memo){
-            for(var e:x.localSlotsSnapshot().entrySet())if(!y.hasLocalSlot(e.getKey()))y.createLocalSlot(e.getKey(),copy(e.getValue(),a,memo));
+            ArrayList<String> names=new ArrayList<>();
+            ArrayList<Object> values=new ArrayList<>();
+            x.appendLocalBindingsTo(names,values);
+            for(int index=0;index<names.size();index++){
+                String name=names.get(index);
+                if(!y.hasLocalSlot(name))y.createLocalSlot(name,copy(values.get(index),a,memo));
+            }
         }
         static void state(ProtosObjectValue x,ProtosObjectValue y){if(x.isFrozen())y.freeze();else if(x.isClosed())y.close();}
     }
 
     private static void validateClosureArity(ProtosClosureValue c,int n,ProtosActivation a){
-        if(c.definition()==null)return;int required=0;boolean rest=false;int total=c.definition().parameters().size();
-        for(var p:c.definition().parameters()){if(p.rest())rest=true;else if(p.defaultValue().isEmpty())required++;}
+        if(c.definition()==null)return;
+        var parameters=c.definition().parameters();
+        int required=0;boolean rest=false;int total=parameters.size();
+        for(int index=0;index<total;index++){
+            var p=parameters.get(index);
+            if(p.rest())rest=true;
+            else if(p.defaultValue().isEmpty())required++;
+        }
         if(n<required||(!rest&&n>total))throw error(a);
     }
     private static void requireInvokable(Object v,ProtosActivation a){

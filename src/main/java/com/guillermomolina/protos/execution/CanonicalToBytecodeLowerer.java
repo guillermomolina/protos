@@ -98,7 +98,7 @@ final class CanonicalToBytecodeLowerer {
             bytecodeClosurePlans = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalObject, RootCallTarget>
             bytecodeObjectBodyTargets = new java.util.IdentityHashMap<>();
-    private final java.util.IdentityHashMap<CanonicalCompose, java.util.Set<String>>
+    private final java.util.IdentityHashMap<CanonicalCompose, java.util.List<String>>
             bytecodeComposeReservedNames = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalClosure, CanonicalBindingAnalysis>
             bindingAnalysisByClosure = new java.util.IdentityHashMap<>();
@@ -248,10 +248,11 @@ final class CanonicalToBytecodeLowerer {
             return existing;
         }
 
-        java.util.Set<String> reservedNames = object.reservedLocalSlotNames();
+        java.util.List<String> reservedNames =
+                java.util.List.copyOf(object.reservedLocalSlotNames());
         for (CanonicalExpression expression : object.body().expressions()) {
             if (expression instanceof CanonicalCompose compose) {
-                java.util.Set<String> previous =
+                java.util.List<String> previous =
                         bytecodeComposeReservedNames.put(compose, reservedNames);
                 if (previous != null && !previous.equals(reservedNames)) {
                     throw new IllegalStateException(
@@ -265,9 +266,9 @@ final class CanonicalToBytecodeLowerer {
         return target;
     }
 
-    private java.util.Set<String> composeReservedNames(
+    private java.util.List<String> composeReservedNames(
             CanonicalCompose compose) {
-        java.util.Set<String> reservedNames = bytecodeComposeReservedNames.get(compose);
+        java.util.List<String> reservedNames = bytecodeComposeReservedNames.get(compose);
         if (reservedNames == null) {
             throw new AssertionError(
                     "contextual composition item was not registered by its object body");
@@ -401,8 +402,8 @@ final class CanonicalToBytecodeLowerer {
                                 if (!frameLocals.isEmpty()) {
                                     BytecodeLocal[] frameLocalRange =
                                             frameLocals.values().toArray(BytecodeLocal[]::new);
-                                    java.util.List<String> frameLocalNames =
-                                            java.util.List.copyOf(frameLocals.keySet());
+                                    String[] frameLocalNames =
+                                            frameLocals.keySet().toArray(String[]::new);
                                     builder.beginInstallFrameLexicalAuthority(
                                             frameLocalRange,
                                             frameLocalNames);
@@ -1786,6 +1787,16 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static String[] multipleCreateNamesConstant(java.util.List<String> names) {
+        Objects.requireNonNull(names, "names");
+        String[] result = new String[names.size()];
+        for (int index = 0; index < result.length; index++) {
+            result[index] = Objects.requireNonNull(names.get(index), "names[" + index + "]");
+        }
+        return result;
+    }
+
     private void emitBodyMultipleCreate(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalMultipleCreate create,
@@ -1806,7 +1817,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginStoreLocal(result);
         builder.beginMultipleCreateLocalSlots();
         builder.emitLoadArgument(0);
-        builder.emitLoadConstant(create.names());
+        builder.emitLoadConstant(multipleCreateNamesConstant(create.names()));
         builder.emitLoadLocal(source);
         builder.endMultipleCreateLocalSlots();
         builder.endStoreLocal();
@@ -2014,7 +2025,7 @@ final class CanonicalToBytecodeLowerer {
         builder.beginStoreLocal(result);
         builder.beginMultipleCreateLocalSlots();
         builder.emitLoadArgument(0);
-        builder.emitLoadConstant(create.names());
+        builder.emitLoadConstant(multipleCreateNamesConstant(create.names()));
         builder.emitLoadLocal(source);
         builder.endMultipleCreateLocalSlots();
         builder.endStoreLocal();

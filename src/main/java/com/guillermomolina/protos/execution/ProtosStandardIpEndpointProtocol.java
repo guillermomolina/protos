@@ -27,7 +27,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.math.BigInteger;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -183,13 +182,19 @@ public final class ProtosStandardIpEndpointProtocol {
                 || endpoint.parent().orElse(null) != prototype) {
             return false;
         }
-        Map<String, Object> slots = endpoint.localSlotsSnapshot();
-        if (slots.size() != 2 || !slots.keySet().equals(STATE_SLOTS)) {
+        java.util.ArrayList<String> slotNames = new java.util.ArrayList<>();
+        java.util.ArrayList<Object> slotValues = new java.util.ArrayList<>();
+        endpoint.appendLocalBindingsTo(slotNames, slotValues);
+        if (slotNames.size() != 2
+                || !endpoint.hasLocalSlot("address")
+                || !endpoint.hasLocalSlot("port")) {
             return false;
         }
         return ProtosStandardIpAddressProtocol.recognizesValue(
-                        slots.get("address"), ipAddressPrototype)
-                && validPort(slots.get("port"));
+                        endpoint.readLocalSlot("address").orElseThrow(),
+                        ipAddressPrototype)
+                && validPort(
+                        endpoint.readLocalSlot("port").orElseThrow());
     }
 
     private static boolean validPort(Object portValue) {

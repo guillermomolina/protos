@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
@@ -152,6 +153,7 @@ public final class ProtosFloatValue implements ProtosRepresentedValue {
     }
 
     @ExportMessage
+    @TruffleBoundary
     String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
         return Double.toString(value);
     }

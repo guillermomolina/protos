@@ -49,8 +49,15 @@ public final class ProtosStandardObjectProtocol {
             ProtosStandardObjectProtocol::whileLoop;
     private static final ProtosClosureValue STANDARD_WHILE =
             ProtosClosureValue.nativeClosure(STANDARD_WHILE_BODY);
+    private static final class StandardCaseOfBody implements ProtosNativeClosureBody {
+        @Override
+        public Object execute(ProtosActivation activation, List<?> arguments) {
+            return caseOf(activation, arguments);
+        }
+    }
+
     private static final ProtosNativeClosureBody STANDARD_CASE_OF_BODY =
-            ProtosStandardObjectProtocol::caseOf;
+            new StandardCaseOfBody();
     private static final ProtosClosureValue STANDARD_CASE_OF =
             ProtosClosureValue.nativeClosure(STANDARD_CASE_OF_BODY);
 
@@ -94,7 +101,7 @@ public final class ProtosStandardObjectProtocol {
 
     static boolean isStandardCaseOfImplementation(
             ProtosNativeClosureBody body) {
-        return body == STANDARD_CASE_OF_BODY;
+        return body instanceof StandardCaseOfBody;
     }
 
     public static void install() {
@@ -235,10 +242,11 @@ public final class ProtosStandardObjectProtocol {
             throw invalid(activation);
         }
 
-        List<String> names = new ArrayList<>();
+        ArrayList<String> names = new ArrayList<>();
         Object receiver = activation.receiver();
         if (receiver instanceof ProtosObjectValue ordinary) {
-            names.addAll(ordinary.localSlotsSnapshot().keySet());
+            ArrayList<Object> ignoredValues = new ArrayList<>();
+            ordinary.appendLocalBindingsTo(names, ignoredValues);
             names.sort(ProtosStandardObjectProtocol::compareUnicodeScalarStrings);
         }
 

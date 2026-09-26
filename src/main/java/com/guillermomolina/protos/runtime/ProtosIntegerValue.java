@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
@@ -49,21 +50,25 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
     }
 
     @ExportMessage
+    @TruffleBoundary
     boolean fitsInByte() {
         return ProtosIntegralInteropSupport.fitsInByte(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     boolean fitsInShort() {
         return ProtosIntegralInteropSupport.fitsInShort(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     boolean fitsInInt() {
         return ProtosIntegralInteropSupport.fitsInInt(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     boolean fitsInLong() {
         return ProtosIntegralInteropSupport.fitsInLong(value);
     }
@@ -74,31 +79,37 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
     }
 
     @ExportMessage
+    @TruffleBoundary
     boolean fitsInFloat() {
         return ProtosIntegralInteropSupport.fitsInFloat(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     boolean fitsInDouble() {
         return ProtosIntegralInteropSupport.fitsInDouble(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     byte asByte() throws UnsupportedMessageException {
         return ProtosIntegralInteropSupport.asByte(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     short asShort() throws UnsupportedMessageException {
         return ProtosIntegralInteropSupport.asShort(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     int asInt() throws UnsupportedMessageException {
         return ProtosIntegralInteropSupport.asInt(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     long asLong() throws UnsupportedMessageException {
         return ProtosIntegralInteropSupport.asLong(value);
     }
@@ -109,16 +120,19 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
     }
 
     @ExportMessage
+    @TruffleBoundary
     float asFloat() throws UnsupportedMessageException {
         return ProtosIntegralInteropSupport.asFloat(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     double asDouble() throws UnsupportedMessageException {
         return ProtosIntegralInteropSupport.asDouble(value);
     }
 
     @ExportMessage
+    @TruffleBoundary
     String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
         return value.toString();
     }

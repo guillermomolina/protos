@@ -26,7 +26,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.math.BigInteger;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -141,11 +140,17 @@ public final class ProtosStandardIpAddressProtocol {
                 || address.parent().orElse(null) != prototype) {
             return false;
         }
-        Map<String, Object> slots = address.localSlotsSnapshot();
-        if (slots.size() != 2 || !slots.keySet().equals(STATE_SLOTS)) {
+        java.util.ArrayList<String> slotNames = new java.util.ArrayList<>();
+        java.util.ArrayList<Object> slotValues = new java.util.ArrayList<>();
+        address.appendLocalBindingsTo(slotNames, slotValues);
+        if (slotNames.size() != 2
+                || !address.hasLocalSlot("version")
+                || !address.hasLocalSlot("bits")) {
             return false;
         }
-        return validNumericState(slots.get("version"), slots.get("bits"));
+        return validNumericState(
+                address.readLocalSlot("version").orElseThrow(),
+                address.readLocalSlot("bits").orElseThrow());
     }
 
     private static boolean validNumericState(Object versionValue, Object bitsValue) {

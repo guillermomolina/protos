@@ -244,10 +244,18 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         synchronized (this) {
             if (executionPlan == null) {
                 executionPlan = Objects.requireNonNull(
-                        rematerializer.get(), "executionPlanRematerializer returned null");
+                        invokeExecutionPlanRematerializer(rematerializer),
+                        "executionPlanRematerializer returned null");
             }
             return executionPlan;
         }
+    }
+
+
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static ProtosClosureExecutionPlan invokeExecutionPlanRematerializer(
+            java.util.function.Supplier<ProtosClosureExecutionPlan> rematerializer) {
+        return rematerializer.get();
     }
 
     public java.util.Optional<ProtosNativeClosureBody> nativeBody() {
@@ -279,8 +287,11 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         if (contextLocalExecutionProjectionRequired) {
             bound.requireContextLocalExecutionProjectionForRuntime();
         }
-        for (java.util.Map.Entry<String, Object> entry : localSlotsSnapshot().entrySet()) {
-            bound.createLocalSlot(entry.getKey(), entry.getValue());
+        java.util.ArrayList<String> localNames = new java.util.ArrayList<>();
+        java.util.ArrayList<Object> localValues = new java.util.ArrayList<>();
+        appendLocalBindingsTo(localNames, localValues);
+        for (int index = 0; index < localNames.size(); index++) {
+            bound.createLocalSlot(localNames.get(index), localValues.get(index));
         }
         if (isFrozen()) {
             bound.freeze();

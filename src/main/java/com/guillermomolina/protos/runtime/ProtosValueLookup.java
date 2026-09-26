@@ -85,8 +85,11 @@ public final class ProtosValueLookup {
             Object receiver,
             String name,
             ProtosPrelude prelude) {
-        return lookup(receiver, name, prelude)
-                .map(result -> materializeMemberRead(receiver, result));
+        Optional<ProtosSlotLookupResult> result = lookup(receiver, name, prelude);
+        if (result.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(materializeMemberRead(receiver, result.orElseThrow()));
     }
 
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary

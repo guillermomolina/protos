@@ -115,6 +115,24 @@ public final class ProtosStandardNetworkProtocol {
         return flow.connect(activation, endpoint);
     }
 
+    private record ListenRequestSlots(
+            Object ipVersion,
+            Object address,
+            Object port) {}
+
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static ListenRequestSlots captureListenRequestSlotsForHost(
+            ProtosObjectValue request) {
+        Map<String, Object> slots = request.localSlotsSnapshot();
+        if (slots.size() != 3 || !slots.keySet().equals(LISTEN_REQUEST_SLOTS)) {
+            return null;
+        }
+        return new ListenRequestSlots(
+                slots.get("ipVersion"),
+                slots.get("address"),
+                slots.get("port"));
+    }
+
     private static ProtosFutureValue listenTcp(
             ProtosActivation activation, List<?> supplied) {
         ProtosPrelude prelude = activation.prelude().orElseThrow();
@@ -126,12 +144,12 @@ public final class ProtosStandardNetworkProtocol {
             return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 
-        Map<String, Object> slots = request.localSlotsSnapshot();
-        if (slots.size() != 3 || !slots.keySet().equals(LISTEN_REQUEST_SLOTS)) {
+        ListenRequestSlots slots = captureListenRequestSlotsForHost(request);
+        if (slots == null) {
             return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
 
-        Object versionValue = slots.get("ipVersion");
+        Object versionValue = slots.ipVersion();
         if (!(versionValue instanceof ProtosIntegerValue version)
                 || !(version.value().equals(BigInteger.valueOf(4))
                         || version.value().equals(BigInteger.valueOf(6)))) {
@@ -140,7 +158,7 @@ public final class ProtosStandardNetworkProtocol {
         int ipVersion = version.value().intValueExact();
 
         ProtosObjectValue addressConstraint = null;
-        Object addressValue = slots.get("address");
+        Object addressValue = slots.address();
         if (addressValue != ProtosNullValue.INSTANCE) {
             Object addressBinding = prelude.bindings().readLocalSlot("IpAddress").orElse(null);
             if (!(addressValue instanceof ProtosObjectValue address)
@@ -157,7 +175,7 @@ public final class ProtosStandardNetworkProtocol {
         }
 
         BigInteger portConstraint = null;
-        Object portValue = slots.get("port");
+        Object portValue = slots.port();
         if (portValue != ProtosNullValue.INSTANCE) {
             if (!(portValue instanceof ProtosIntegerValue port)
                     || port.value().compareTo(MIN_PORT) < 0

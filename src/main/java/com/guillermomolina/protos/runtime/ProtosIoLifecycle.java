@@ -1,6 +1,8 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -110,7 +112,7 @@ public final class ProtosIoLifecycle {
         for (CloseFailure failure : cutover) {
             if (failure.cancellationHandler != null) {
                 try {
-                    failure.cancellationHandler.run();
+                    runCancellationHandler(failure.cancellationHandler);
                 } catch (RuntimeException ignored) {
                     // Backend cancellation is best-effort machinery after the semantic cutover.
                     // It cannot rewrite the required IOLifecycleError terminal outcome.
@@ -123,6 +125,12 @@ public final class ProtosIoLifecycle {
         if (start) startRelease();
         else maybeStartRelease();
         return follower;
+    }
+
+
+    @TruffleBoundary
+    private static void runCancellationHandler(Runnable handler) {
+        handler.run();
     }
 
     private boolean authorizeFirstCloseLocked(ProtosActivation activation, boolean reserveGuestCleanup) {

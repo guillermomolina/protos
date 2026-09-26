@@ -109,6 +109,7 @@ public final class ProtosTestToolFileSelectionFacility {
                                         immutableRoots)));
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     private static Object resolveFile(
             ProtosActivation activation,
             List<?> supplied,
@@ -156,6 +157,7 @@ public final class ProtosTestToolFileSelectionFacility {
         return prelude.newFrozenArray(associations);
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     private static Object resolveDirectory(
             ProtosActivation activation,
             List<?> supplied,
@@ -233,6 +235,7 @@ public final class ProtosTestToolFileSelectionFacility {
      * paths remain inside the host boundary; callers supply only the canonical
      * CorpusId and corpus-relative source path.
      */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     public static Path resolveAuthorizedSource(
             List<CorpusSourceRoot> sourceRoots,
             String corpusId,

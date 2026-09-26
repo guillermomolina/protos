@@ -288,8 +288,11 @@ public final class ProtosActorValueTransfer {
         }
 
         private void copyLocalSlots(ProtosObjectValue sourceObject, ProtosObjectValue destination) {
-            for (Map.Entry<String, Object> slot : sourceObject.localSlotsSnapshot().entrySet()) {
-                destination.createLocalSlot(slot.getKey(), copy(slot.getValue()));
+            ArrayList<String> names = new ArrayList<>();
+            ArrayList<Object> values = new ArrayList<>();
+            sourceObject.appendLocalBindingsTo(names, values);
+            for (int index = 0; index < names.size(); index++) {
+                destination.createLocalSlot(names.get(index), copy(values.get(index)));
             }
         }
 
@@ -309,8 +312,11 @@ public final class ProtosActorValueTransfer {
                     || prelude.isTcpListenerPrototypeForRuntime(object)) {
                 return true;
             }
-            for (Object binding : prelude.bindings().localSlotsSnapshot().values()) {
-                if (binding == object) {
+            ArrayList<String> names = new ArrayList<>();
+            ArrayList<Object> values = new ArrayList<>();
+            prelude.bindings().appendLocalBindingsTo(names, values);
+            for (int index = 0; index < values.size(); index++) {
+                if (values.get(index) == object) {
                     return true;
                 }
             }

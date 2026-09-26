@@ -38,8 +38,15 @@ public final class ProtosStandardArrayProtocol {
             ProtosStandardArrayProtocol::each;
     private static final ProtosClosureValue STANDARD_EACH =
             ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
+    private static final class StandardMatchBody implements ProtosNativeClosureBody {
+        @Override
+        public Object execute(ProtosActivation activation, List<?> arguments) {
+            return match(activation, arguments);
+        }
+    }
+
     private static final ProtosNativeClosureBody STANDARD_MATCH_BODY =
-            ProtosStandardArrayProtocol::match;
+            new StandardMatchBody();
     private static final ProtosClosureValue STANDARD_MATCH =
             ProtosClosureValue.nativeClosure(STANDARD_MATCH_BODY);
 
@@ -50,7 +57,7 @@ public final class ProtosStandardArrayProtocol {
     }
 
     static boolean isStandardMatchImplementation(ProtosNativeClosureBody body) {
-        return body == STANDARD_MATCH_BODY;
+        return body instanceof StandardMatchBody;
     }
 
     static boolean isCanonicalStandardEachSelection(
@@ -192,7 +199,9 @@ public final class ProtosStandardArrayProtocol {
                 if (observedCaptures.isEmpty()) {
                     throw invalid(activation);
                 }
-                captures.addAll(observedCaptures);
+                for (int captureIndex = 0; captureIndex < observedCaptures.size(); captureIndex++) {
+                    captures.add(observedCaptures.get(captureIndex));
+                }
                 continue;
             }
 

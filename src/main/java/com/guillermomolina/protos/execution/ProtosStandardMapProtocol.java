@@ -31,8 +31,15 @@ public final class ProtosStandardMapProtocol {
          ProtosStandardMapProtocol::each;
  private static final ProtosClosureValue STANDARD_EACH =
          ProtosClosureValue.nativeClosure(STANDARD_EACH_BODY);
+ private static final class StandardMatchBody implements ProtosNativeClosureBody {
+  @Override
+  public Object execute(ProtosActivation activation, List<?> arguments) {
+   return match(activation, arguments);
+  }
+ }
+
  private static final ProtosNativeClosureBody STANDARD_MATCH_BODY =
-         ProtosStandardMapProtocol::match;
+         new StandardMatchBody();
  private static final ProtosClosureValue STANDARD_MATCH =
          ProtosClosureValue.nativeClosure(STANDARD_MATCH_BODY);
 
@@ -51,12 +58,18 @@ public final class ProtosStandardMapProtocol {
 
  static List<StableAssociation> stableSnapshot(ProtosMapValue map) {
   Objects.requireNonNull(map, "map");
-  return map.keyedSnapshot().stream()
-          .map(entry -> new StableAssociation(
-                  entry.key(),
-                  entry.recordedHash(),
-                  entry.value()))
-          .toList();
+  List<ProtosMapValue.Entry> entries = map.keyedSnapshot();
+  java.util.ArrayList<StableAssociation> snapshot =
+          new java.util.ArrayList<>(entries.size());
+  for (int index = 0; index < entries.size(); index++) {
+   ProtosMapValue.Entry entry = entries.get(index);
+   snapshot.add(
+           new StableAssociation(
+                   entry.key(),
+                   entry.recordedHash(),
+                   entry.value()));
+  }
+  return List.copyOf(snapshot);
  }
 
  static BigInteger queryHash(
@@ -105,9 +118,9 @@ public final class ProtosStandardMapProtocol {
  private static boolean isCanonicalMapHome(
          ProtosObjectValue home,
          ProtosActivation caller) {
-  return caller.prelude()
-          .map(prelude -> prelude.bindings().readLocalSlot("Map").orElse(null) == home)
-          .orElse(false);
+  ProtosPrelude prelude = caller.prelude().orElse(null);
+  return prelude != null
+          && prelude.bindings().readLocalSlot("Map").orElse(null) == home;
  }
 
  static StructuredReadLookupKind structuredReadLookupKindForCanonicalSelection(
@@ -170,7 +183,7 @@ public final class ProtosStandardMapProtocol {
  }
 
  static boolean isStandardMatchImplementation(ProtosNativeClosureBody body) {
-  return body == STANDARD_MATCH_BODY;
+  return body instanceof StandardMatchBody;
  }
 
  static boolean isCanonicalStandardEachSelection(
@@ -257,10 +270,11 @@ public final class ProtosStandardMapProtocol {
 
  private static Object call(ProtosActivation a, List<?> x) {
   arity(a, x, 0);
+  ProtosPrelude prelude = a.prelude().orElse(null);
   Object canonical =
-          a.prelude()
-                  .map(prelude -> prelude.bindings().readLocalSlot("Map").orElse(null))
-                  .orElse(null);
+          prelude == null
+                  ? null
+                  : prelude.bindings().readLocalSlot("Map").orElse(null);
   if (!(canonical instanceof ProtosObjectValue p)
           || !(a.receiver() instanceof ProtosObjectValue r)
           || !delegatesTo(r, p)) {
@@ -386,7 +400,9 @@ public final class ProtosStandardMapProtocol {
     if (observedCaptures.isEmpty()) {
      throw err(a);
     }
-    captures.addAll(observedCaptures);
+    for (int captureIndex = 0; captureIndex < observedCaptures.size(); captureIndex++) {
+                    captures.add(observedCaptures.get(captureIndex));
+                }
     continue;
    }
 

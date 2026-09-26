@@ -44,43 +44,21 @@ public final class ProtosStandardNumericConversionProtocol {
     }
 
     private static void installIntegerFactory(ProtosObjectValue integerPrototype) {
-        installFactory(
-                integerPrototype,
-                supplied -> {
-                    Object value = supplied.get(0);
-                    if (value instanceof ProtosIntegerValue integer) {
-                        return integer;
-                    }
-                    if (value instanceof ProtosFloatValue floating) {
-                        BigInteger exact = exactIntegralBinary64(floating.value());
-                        if (exact != null) {
-                            return new ProtosIntegerValue(exact);
-                        }
-                    }
-                    return null;
-                });
+        installFactory(integerPrototype, FactoryKind.INTEGER);
     }
 
     private static void installFloatFactory(ProtosObjectValue floatPrototype) {
-        installFactory(
-                floatPrototype,
-                supplied -> {
-                    Object value = supplied.get(0);
-                    if (value instanceof ProtosFloatValue floating) {
-                        return floating;
-                    }
-                    if (value instanceof ProtosIntegerValue integer) {
-                        return new ProtosFloatValue(
-                                ProtosBinary64Rounding.divideExactIntegers(
-                                        integer.value(), BigInteger.ONE));
-                    }
-                    return null;
-                });
+        installFactory(floatPrototype, FactoryKind.FLOAT);
+    }
+
+    private enum FactoryKind {
+        INTEGER,
+        FLOAT
     }
 
     private static void installFactory(
             ProtosObjectValue prototype,
-            java.util.function.Function<java.util.List<?>, Object> conversion) {
+            FactoryKind factoryKind) {
         if (prototype.hasLocalSlot("call")) {
             throw new IllegalStateException(
                     "Core numeric prototype already defines a local call slot");
@@ -93,13 +71,40 @@ public final class ProtosStandardNumericConversionProtocol {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
-                            Object converted = conversion.apply(supplied);
+                            Object converted = convert(factoryKind, supplied.get(0));
                             if (converted == null) {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
                             return converted;
                         }));
+    }
+
+
+    private static Object convert(FactoryKind factoryKind, Object value) {
+        return switch (factoryKind) {
+            case INTEGER -> {
+                if (value instanceof ProtosIntegerValue integer) {
+                    yield integer;
+                }
+                if (value instanceof ProtosFloatValue floating) {
+                    BigInteger exact = exactIntegralBinary64(floating.value());
+                    yield exact == null ? null : new ProtosIntegerValue(exact);
+                }
+                yield null;
+            }
+            case FLOAT -> {
+                if (value instanceof ProtosFloatValue floating) {
+                    yield floating;
+                }
+                if (value instanceof ProtosIntegerValue integer) {
+                    yield new ProtosFloatValue(
+                            ProtosBinary64Rounding.divideExactIntegers(
+                                    integer.value(), BigInteger.ONE));
+                }
+                yield null;
+            }
+        };
     }
 
     static BigInteger exactIntegralBinary64(double value) {

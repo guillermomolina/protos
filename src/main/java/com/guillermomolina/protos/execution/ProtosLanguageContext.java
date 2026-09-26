@@ -175,9 +175,26 @@ final class ProtosLanguageContext {
             CanonicalClosure definition, ProtosClosureExecutionPlan template) {
         Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(template, "template");
-        return sharedBytecodeExecutionPlans.computeIfAbsent(
-                template,
-                ignored -> template.rebuildBytecodeForLanguage(definition, language));
+
+        ProtosClosureExecutionPlan existing = sharedBytecodeExecutionPlans.get(template);
+        if (existing != null) {
+            return existing;
+        }
+        return bytecodeExecutionPlanForDefinitionMiss(definition, template);
+    }
+
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private synchronized ProtosClosureExecutionPlan bytecodeExecutionPlanForDefinitionMiss(
+            CanonicalClosure definition, ProtosClosureExecutionPlan template) {
+        ProtosClosureExecutionPlan existing = sharedBytecodeExecutionPlans.get(template);
+        if (existing != null) {
+            return existing;
+        }
+
+        ProtosClosureExecutionPlan rebuilt =
+                template.rebuildBytecodeForLanguage(definition, language);
+        sharedBytecodeExecutionPlans.put(template, rebuilt);
+        return rebuilt;
     }
 
     int projectedBytecodeExecutionPlanCountForTesting() {
@@ -194,9 +211,11 @@ final class ProtosLanguageContext {
 
     Source materializeModuleSource(ProtosModuleSource source) {
         Objects.requireNonNull(source, "source");
-        return source.physicalPath()
-                .map(path -> materializeFileSource(path, source.characters()))
-                .orElseGet(source::literalSource);
+        Path physicalPath = source.physicalPath().orElse(null);
+        if (physicalPath != null) {
+            return materializeFileSource(physicalPath, source.characters());
+        }
+        return source.literalSource();
     }
 
     Source materializeFileSource(Path path, CharSequence characters) {

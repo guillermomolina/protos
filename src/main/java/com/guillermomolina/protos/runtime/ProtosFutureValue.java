@@ -46,7 +46,7 @@ public final class ProtosFutureValue extends ProtosObjectValue {
     private ProtosFutureValue adoptedSource;
     private Observer adoptedObserver;
     private final List<Waiter> waiters = new ArrayList<>();
-    private final List<Observer> observers = new ArrayList<>();
+    private final ArrayList<Observer> observers = new ArrayList<>();
 
     public ProtosFutureValue(ProtosObjectValue futurePrototype, ProtosActorExecutionDomain domain) {
         super(Objects.requireNonNull(futurePrototype, "futurePrototype"));
@@ -315,7 +315,14 @@ public final class ProtosFutureValue extends ProtosObjectValue {
         if (callNow) observer.terminal(this);
     }
 
-    public synchronized void removeObserver(Observer observer) { observers.remove(observer); }
+    public synchronized void removeObserver(Observer observer) {
+        for (int index = 0; index < observers.size(); index++) {
+            if (observers.get(index) == observer) {
+                observers.remove(index);
+                return;
+            }
+        }
+    }
 
     public void requireDomain(ProtosActivation activation) {
         if (activation.executionDomain() != domain) {

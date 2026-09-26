@@ -1,5 +1,7 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.runtime;
+
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
@@ -17,7 +19,7 @@ public final class ProtosByteRegionValue extends ProtosObjectValue{
  public synchronized List<Object> indexedSnapshot(){return List.copyOf(bytes);}
  public synchronized List<Object> rangeSnapshot(BigInteger s,BigInteger l){return List.copyOf(bytes.subList(s.intValueExact(),s.add(l).intValueExact()));}
  public synchronized boolean tryReserve(BigInteger s,BigInteger l,Object t){if(l.signum()==0)return true;BigInteger e=s.add(l);for(R r:reservations)if(s.compareTo(r.e)<0&&r.s.compareTo(e)<0)return false;reservations.add(new R(s,e,t));return true;}
- public synchronized void releaseReservation(Object t){reservations.removeIf(r->r.token==t);}
+ public synchronized void releaseReservation(Object t){for(int index=reservations.size()-1;index>=0;index--){if(reservations.get(index).token==t)reservations.remove(index);}}
  public synchronized boolean isIndexReserved(BigInteger i){for(R r:reservations)if(i.compareTo(r.s)>=0&&i.compareTo(r.e)<0)return true;return false;}
  public synchronized void commitReserved(BigInteger s,List<?> v,Object t){for(int i=0;i<v.size();i++)bytes.set(s.intValueExact()+i,v.get(i));releaseReservation(t);}
  private int index(BigInteger i){if(i.signum()<0||i.compareTo(BigInteger.valueOf(bytes.size()))>=0)throw new IndexOutOfBoundsException();return i.intValueExact();}
@@ -70,6 +72,7 @@ public final class ProtosByteRegionValue extends ProtosObjectValue{
     }
 
     @ExportMessage
+    @TruffleBoundary
     Object getIterator() throws UnsupportedMessageException {
         throw UnsupportedMessageException.create();
     }

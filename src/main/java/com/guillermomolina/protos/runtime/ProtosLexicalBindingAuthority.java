@@ -48,6 +48,10 @@ public interface ProtosLexicalBindingAuthority {
      */
     Map<String, Object> bindingsSnapshot();
 
+    void appendBindingsTo(
+            java.util.ArrayList<String> names,
+            java.util.ArrayList<Object> values);
+
     void putBinding(String name, Object value);
 
     Object removeBinding(String name);

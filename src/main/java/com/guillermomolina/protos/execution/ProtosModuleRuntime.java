@@ -198,6 +198,17 @@ public final class ProtosModuleRuntime {
                 task);
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private RootCallTarget compileUncachedModuleBody(ProtosModuleKey key) throws Exception {
+        ProtosModuleSource source =
+                Objects.requireNonNull(resolver.loadSource(key), "module source")
+                        .requireKey(key);
+        ProtosLanguageContext languageContext = ProtosLanguageContext.current();
+        return compiler.compileBytecode(
+                languageContext.materializeModuleSource(source),
+                languageContext.languageForRuntime());
+    }
+
     private PreparedModuleInitialization prepareBytecodeCanonicalModule(
             ProtosModuleKey key,
             ProtosActivation caller,
@@ -225,9 +236,6 @@ public final class ProtosModuleRuntime {
         actorState.put(key, record);
 
         try {
-            ProtosModuleSource source =
-                    Objects.requireNonNull(resolver.loadSource(key), "module source")
-                            .requireKey(key);
             ProtosActivation moduleActivation =
                     prelude.newModuleActivation(
                             actorState,
@@ -240,11 +248,8 @@ public final class ProtosModuleRuntime {
                 moduleActivation.inheritDynamicControlState(caller);
             }
 
-            ProtosLanguageContext languageContext = ProtosLanguageContext.current();
             RootCallTarget bodyTarget =
-                    compiler.compileBytecode(
-                            languageContext.materializeModuleSource(source),
-                            languageContext.languageForRuntime());
+                    compileUncachedModuleBody(key);
             return PreparedModuleInitialization.initializing(
                     key,
                     actorState,
@@ -315,6 +320,21 @@ public final class ProtosModuleRuntime {
         return loadCanonicalModuleInternal(key, caller, bootstrapLocals, true);
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private void installBootstrapLocalsForRuntime(
+            ProtosObjectValue moduleInstance,
+            Map<String, ?> bootstrapLocals) {
+        for (Map.Entry<String, ?> entry : bootstrapLocals.entrySet()) {
+            String name = Objects.requireNonNull(entry.getKey(), "bootstrap local name");
+            Object value = Objects.requireNonNull(entry.getValue(), "bootstrap local value");
+            if (moduleInstance.hasLocalSlot(name)) {
+                throw new IllegalStateException(
+                        "duplicate RootActor bootstrap local: " + name);
+            }
+            moduleInstance.createLocalSlot(name, value);
+        }
+    }
+
     private ProtosObjectValue loadCanonicalModuleInternal(
             ProtosModuleKey key,
             ProtosActivation caller,
@@ -343,15 +363,7 @@ public final class ProtosModuleRuntime {
         ProtosObjectValue moduleInstance = prelude.newExecutionContext();
 
         if (initialBootstrap) {
-            for (Map.Entry<String, ?> entry : bootstrapLocals.entrySet()) {
-                String name = Objects.requireNonNull(entry.getKey(), "bootstrap local name");
-                Object value = Objects.requireNonNull(entry.getValue(), "bootstrap local value");
-                if (moduleInstance.hasLocalSlot(name)) {
-                    throw new IllegalStateException(
-                            "duplicate RootActor bootstrap local: " + name);
-                }
-                moduleInstance.createLocalSlot(name, value);
-            }
+            installBootstrapLocalsForRuntime(moduleInstance, bootstrapLocals);
         }
 
         ProtosActorModuleState.ModuleRecord record =

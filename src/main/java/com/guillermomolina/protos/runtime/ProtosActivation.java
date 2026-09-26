@@ -291,6 +291,10 @@ public final class ProtosActivation {
         return Optional.ofNullable(prelude);
     }
 
+    public ProtosPrelude preludeOrNullForRuntime() {
+        return prelude;
+    }
+
     public ProtosActorModuleState actorModuleState() { return actorModuleState; }
 
     public Optional<ProtosModuleKey> currentModuleKey() { return Optional.ofNullable(currentModuleKey); }
@@ -457,11 +461,14 @@ public final class ProtosActivation {
             return capturedLexicalContexts;
         }
 
+        int capturedCount = capturedLexicalContexts.size();
         java.util.ArrayList<ProtosObjectValue> contexts =
-                new java.util.ArrayList<>(1 + capturedLexicalContexts.size());
+                new java.util.ArrayList<>(1 + capturedCount);
         contexts.add(context);
-        contexts.addAll(capturedLexicalContexts);
-        return List.copyOf(contexts);
+        for (int index = 0; index < capturedCount; index++) {
+            contexts.add(capturedLexicalContexts.get(index));
+        }
+        return java.util.Collections.unmodifiableList(contexts);
     }
 
 }

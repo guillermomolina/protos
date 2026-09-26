@@ -25,7 +25,6 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.Objects;
-import java.util.function.BiFunction;
 
 public final class ProtosStandardIntegerProtocol {
     private ProtosStandardIntegerProtocol() {}
@@ -51,11 +50,33 @@ public final class ProtosStandardIntegerProtocol {
                                     supplied.get(0) instanceof ProtosIntegerValue);
                         }));
 
-        installBinary(integerPrototype, "+", java.math.BigInteger::add);
-        installBinary(integerPrototype, "-", java.math.BigInteger::subtract);
-        installBinary(integerPrototype, "*", java.math.BigInteger::multiply);
+        installBinary(integerPrototype, "+", IntegerBinaryOperation.ADD);
+        installBinary(integerPrototype, "-", IntegerBinaryOperation.SUBTRACT);
+        installBinary(integerPrototype, "*", IntegerBinaryOperation.MULTIPLY);
         installDivision(integerPrototype);
         installQuotientRemainder(integerPrototype);
+    }
+
+
+    private enum IntegerBinaryOperation {
+        ADD,
+        SUBTRACT,
+        MULTIPLY,
+        DIVIDE,
+        REMAINDER
+    }
+
+    private static java.math.BigInteger applyIntegerBinary(
+            IntegerBinaryOperation operation,
+            java.math.BigInteger left,
+            java.math.BigInteger right) {
+        return switch (operation) {
+            case ADD -> left.add(right);
+            case SUBTRACT -> left.subtract(right);
+            case MULTIPLY -> left.multiply(right);
+            case DIVIDE -> left.divide(right);
+            case REMAINDER -> left.remainder(right);
+        };
     }
 
     private static void installDivision(ProtosObjectValue integerPrototype) {
@@ -83,18 +104,18 @@ public final class ProtosStandardIntegerProtocol {
         installExactIntegerBinary(
                 integerPrototype,
                 "div",
-                (left, right) -> left.divide(right));
+                IntegerBinaryOperation.DIVIDE);
         installExactIntegerBinary(
                 integerPrototype,
                 "mod",
-                (left, right) -> left.remainder(right));
+                IntegerBinaryOperation.REMAINDER);
         installSourceBackedSelector(integerPrototype, "_coreIntegerPercent", "%");
     }
 
     private static void installExactIntegerBinary(
             ProtosObjectValue integerPrototype,
             String selector,
-            BiFunction<java.math.BigInteger, java.math.BigInteger, java.math.BigInteger> operation) {
+            IntegerBinaryOperation operation) {
         if (integerPrototype.hasLocalSlot(selector)) {
             throw new IllegalStateException(
                     "Core Integer already defines a local " + selector + " slot");
@@ -111,14 +132,14 @@ public final class ProtosStandardIntegerProtocol {
                                         ProtosCoreErrors.newError(activation));
                             }
                             return new ProtosIntegerValue(
-                                    operation.apply(receiver.value(), argument.value()));
+                                    applyIntegerBinary(operation, receiver.value(), argument.value()));
                         }));
     }
 
     private static void installBinary(
             ProtosObjectValue integerPrototype,
             String selector,
-            BiFunction<java.math.BigInteger, java.math.BigInteger, java.math.BigInteger> operation) {
+            IntegerBinaryOperation operation) {
         if (integerPrototype.hasLocalSlot(selector)) {
             throw new IllegalStateException(
                     "Core Integer already defines a local " + selector + " slot");
@@ -134,7 +155,7 @@ public final class ProtosStandardIntegerProtocol {
                                         ProtosCoreErrors.newError(activation));
                             }
                             return new ProtosIntegerValue(
-                                    operation.apply(receiver.value(), argument.value()));
+                                    applyIntegerBinary(operation, receiver.value(), argument.value()));
                         }));
     }
 

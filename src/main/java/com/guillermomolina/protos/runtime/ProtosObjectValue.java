@@ -134,6 +134,14 @@ public class ProtosObjectValue implements TruffleObject {
         return lexicalBindingAuthority.bindingsSnapshot();
     }
 
+    public final void appendLocalBindingsTo(
+            java.util.ArrayList<String> names,
+            java.util.ArrayList<Object> values) {
+        Objects.requireNonNull(names, "names");
+        Objects.requireNonNull(values, "values");
+        lexicalBindingAuthority.appendBindingsTo(names, values);
+    }
+
     /**
      * Backend-private subclass hook for execution machinery that must operate
      * on this object's single lexical-binding authority without introducing a
@@ -149,10 +157,15 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
+        java.util.ArrayList<String> names = new java.util.ArrayList<>();
+        java.util.ArrayList<Object> values = new java.util.ArrayList<>();
+        lexicalBindingAuthority.appendBindingsTo(names, values);
+
         ProtosObjectValue result = new ProtosObjectValue(rootObject());
-        for (Map.Entry<String, Object> entry : lexicalBindingAuthority.bindingsSnapshot().entrySet()) {
-            if (!entry.getKey().equals(name)) {
-                result.createLocalSlot(entry.getKey(), entry.getValue());
+        for (int index = 0; index < names.size(); index++) {
+            String observedName = names.get(index);
+            if (!observedName.equals(name)) {
+                result.createLocalSlot(observedName, values.get(index));
             }
         }
         return result;
@@ -170,18 +183,37 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot already exists: " + aliasName);
         }
 
-        ProtosObjectValue result = new ProtosObjectValue(rootObject());
-        Map<String, Object> snapshot = lexicalBindingAuthority.bindingsSnapshot();
-        for (Map.Entry<String, Object> entry : snapshot.entrySet()) {
-            result.createLocalSlot(entry.getKey(), entry.getValue());
+        Optional<Object> sourceBinding =
+                lexicalBindingAuthority.readBinding(sourceName);
+        if (sourceBinding.isEmpty()) {
+            throw new IllegalStateException(
+                    "local slot does not exist: " + sourceName);
         }
-        result.createLocalSlot(aliasName, snapshot.get(sourceName));
+        Object sourceValue = sourceBinding.get();
+
+        java.util.ArrayList<String> names = new java.util.ArrayList<>();
+        java.util.ArrayList<Object> values = new java.util.ArrayList<>();
+        lexicalBindingAuthority.appendBindingsTo(names, values);
+
+        ProtosObjectValue result = new ProtosObjectValue(rootObject());
+        for (int index = 0; index < names.size(); index++) {
+            result.createLocalSlot(names.get(index), values.get(index));
+        }
+        result.createLocalSlot(aliasName, sourceValue);
         return result;
     }
 
     public void composeLocalSlotsFrom(
             ProtosObjectValue source,
             java.util.Set<String> reservedNames) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(reservedNames, "reservedNames");
+        composeLocalSlotsFrom(source, java.util.List.copyOf(reservedNames));
+    }
+
+    public void composeLocalSlotsFrom(
+            ProtosObjectValue source,
+            java.util.List<String> reservedNames) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(reservedNames, "reservedNames");
 
@@ -192,22 +224,44 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("object is closed");
         }
 
-        Map<String, Object> contributions = new LinkedHashMap<>();
-        for (Map.Entry<String, Object> entry : source.lexicalBindingAuthority.bindingsSnapshot().entrySet()) {
-            if (!reservedNames.contains(entry.getKey())) {
-                contributions.put(entry.getKey(), entry.getValue());
+        java.util.ArrayList<String> sourceNames = new java.util.ArrayList<>();
+        java.util.ArrayList<Object> sourceValues = new java.util.ArrayList<>();
+        source.lexicalBindingAuthority.appendBindingsTo(sourceNames, sourceValues);
+
+        java.util.ArrayList<String> contributionNames = new java.util.ArrayList<>();
+        java.util.ArrayList<Object> contributionValues = new java.util.ArrayList<>();
+
+        for (int index = 0; index < sourceNames.size(); index++) {
+            String name = sourceNames.get(index);
+            if (!containsName(reservedNames, name)) {
+                contributionNames.add(name);
+                contributionValues.add(sourceValues.get(index));
             }
         }
 
-        for (String name : contributions.keySet()) {
+        for (int index = 0; index < contributionNames.size(); index++) {
+            String name = contributionNames.get(index);
             if (lexicalBindingAuthority.containsBinding(name)) {
                 throw new IllegalStateException("composition conflict: " + name);
             }
         }
 
-        for (Map.Entry<String, Object> entry : contributions.entrySet()) {
-            lexicalBindingAuthority.putBinding(entry.getKey(), entry.getValue());
+        for (int index = 0; index < contributionNames.size(); index++) {
+            lexicalBindingAuthority.putBinding(
+                    contributionNames.get(index),
+                    contributionValues.get(index));
         }
+    }
+
+    private static boolean containsName(
+            java.util.List<String> names,
+            String candidate) {
+        for (int index = 0; index < names.size(); index++) {
+            if (names.get(index).equals(candidate)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Optional<ProtosSlotLookupResult> lookupSlot(String name) {
@@ -304,11 +358,14 @@ public class ProtosObjectValue implements TruffleObject {
          * authority pointer switched. The old authority then becomes
          * unreachable from this object.
          */
-        Map<String, Object> existing =
-                lexicalBindingAuthority.bindingsSnapshot();
+        java.util.ArrayList<String> existingNames = new java.util.ArrayList<>();
+        java.util.ArrayList<Object> existingValues = new java.util.ArrayList<>();
+        lexicalBindingAuthority.appendBindingsTo(existingNames, existingValues);
 
-        for (Map.Entry<String, Object> entry : existing.entrySet()) {
-            replacement.putBinding(entry.getKey(), entry.getValue());
+        for (int index = 0; index < existingNames.size(); index++) {
+            replacement.putBinding(
+                    existingNames.get(index),
+                    existingValues.get(index));
         }
 
         this.lexicalBindingAuthority = replacement;
@@ -333,7 +390,10 @@ public class ProtosObjectValue implements TruffleObject {
         if (!supportsInteropObjectMembers()) {
             throw UnsupportedMessageException.create();
         }
-        return new ProtosInteropMemberNames(localSlotsSnapshot().keySet());
+        java.util.ArrayList<String> names = new java.util.ArrayList<>();
+        java.util.ArrayList<Object> ignoredValues = new java.util.ArrayList<>();
+        appendLocalBindingsTo(names, ignoredValues);
+        return new ProtosInteropMemberNames(names);
     }
 
     @ExportMessage

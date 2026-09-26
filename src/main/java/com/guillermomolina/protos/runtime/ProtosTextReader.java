@@ -389,7 +389,9 @@ public final class ProtosTextReader {
             throws ProtosEncodingValue.ConversionFailure {
         ProtosEncodingValue.DecodePreview preview = decoder.preview(bytes, eof);
         int consumed = 0;
-        for (ProtosEncodingValue.DecodedUnit unit : preview.units()) {
+        List<ProtosEncodingValue.DecodedUnit> units = preview.units();
+        for (int index = 0; index < units.size(); index++) {
+            ProtosEncodingValue.DecodedUnit unit = units.get(index);
             consumed += unit.sourceBytes();
             if (unit.text().isEmpty()) continue;
             if ("\n".equals(unit.text())) {
@@ -408,7 +410,9 @@ public final class ProtosTextReader {
         int consumed = 0;
         ProtosEncodingValue.StreamingDecoder next = decoder;
         StringBuilder text = new StringBuilder();
-        for (ProtosEncodingValue.DecodedUnit unit : preview.units()) {
+        List<ProtosEncodingValue.DecodedUnit> units = preview.units();
+        for (int index = 0; index < units.size(); index++) {
+            ProtosEncodingValue.DecodedUnit unit = units.get(index);
             consumed += unit.sourceBytes();
             next = unit.nextDecoder();
             text.append(unit.text());

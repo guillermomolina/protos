@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
@@ -35,8 +37,10 @@ public final class ProtosArrayValue extends ProtosObjectValue {
     public ProtosArrayValue(Object parent, List<?> elements) {
         super(parent);
         Objects.requireNonNull(elements, "elements");
-        this.elements = new ArrayList<>(elements.size());
-        for (Object element : elements) {
+        int size = elements.size();
+        this.elements = new ArrayList<>(size);
+        for (int index = 0; index < size; index++) {
+            Object element = elements.get(index);
             this.elements.add(Objects.requireNonNull(element, "element"));
         }
     }
@@ -78,6 +82,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
     }
 
     @ExportMessage
+    @TruffleBoundary
     long getArraySize() {
         return elements.size();
     }
@@ -109,6 +114,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
     }
 
     @ExportMessage
+    @TruffleBoundary
     Object getIterator() throws UnsupportedMessageException {
         throw UnsupportedMessageException.create();
     }

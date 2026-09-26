@@ -16,6 +16,8 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+
 import java.util.ArrayDeque;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -84,7 +86,7 @@ public final class ProtosActorExecutionDomain {
             }
         }
         if (wakeup != null) {
-            wakeup.run();
+            runSchedulerWakeup(wakeup);
         }
     }
 
@@ -101,7 +103,7 @@ public final class ProtosActorExecutionDomain {
             wakeup = schedulerWakeup;
         }
         if (wakeup != null) {
-            wakeup.run();
+            runSchedulerWakeup(wakeup);
         }
     }
 
@@ -115,7 +117,7 @@ public final class ProtosActorExecutionDomain {
             notifyAll();
             wakeup = schedulerWakeup;
         }
-        if (wakeup != null) wakeup.run();
+        if (wakeup != null) runSchedulerWakeup(wakeup);
     }
 
     /** Dispatches at most one cooperative Task, PLAT029 operation, or PLAT030 release segment. */
@@ -331,4 +333,10 @@ public final class ProtosActorExecutionDomain {
             throw new IllegalArgumentException("task belongs to another Actor execution domain");
         }
     }
+
+    @TruffleBoundary
+    private static void runSchedulerWakeup(Runnable wakeup) {
+        wakeup.run();
+    }
+
 }

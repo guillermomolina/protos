@@ -72,6 +72,19 @@ public final class ProtosFilesystemOpenOptions {
      *
      * @throws IllegalArgumentException when the supplied semantic options value is invalid
      */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static Map<String, Object> captureValidatedSlotsForHost(
+            ProtosObjectValue options) {
+        Map<String, Object> slots = options.localSlotsSnapshot();
+        for (String name : slots.keySet()) {
+            if (!STANDARD_OPTION_NAMES.contains(name)) {
+                throw new IllegalArgumentException(
+                        "unknown filesystem open option: " + name);
+            }
+        }
+        return slots;
+    }
+
     public static ProtosFilesystemOpenOptions capture(Object optionsValue) {
         if (optionsValue == null || optionsValue.getClass() != ProtosObjectValue.class) {
             throw new IllegalArgumentException(
@@ -79,12 +92,7 @@ public final class ProtosFilesystemOpenOptions {
         }
         ProtosObjectValue options = (ProtosObjectValue) optionsValue;
 
-        Map<String, Object> slots = options.localSlotsSnapshot();
-        for (String name : slots.keySet()) {
-            if (!STANDARD_OPTION_NAMES.contains(name)) {
-                throw new IllegalArgumentException("unknown filesystem open option: " + name);
-            }
-        }
+        Map<String, Object> slots = captureValidatedSlotsForHost(options);
 
         boolean read = booleanOption(slots, "read", true);
         boolean write = booleanOption(slots, "write", false);

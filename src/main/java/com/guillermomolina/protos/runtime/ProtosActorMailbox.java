@@ -16,6 +16,8 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -149,6 +151,11 @@ final class ProtosActorMailbox {
         synchronized (this) {
             wakeup = schedulerWakeup;
         }
+        runSchedulerWakeup(wakeup);
+    }
+
+    @TruffleBoundary
+    private static void runSchedulerWakeup(Runnable wakeup) {
         wakeup.run();
     }
 }

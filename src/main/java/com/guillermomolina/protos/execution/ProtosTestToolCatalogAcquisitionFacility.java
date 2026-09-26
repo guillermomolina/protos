@@ -78,6 +78,7 @@ public final class ProtosTestToolCatalogAcquisitionFacility {
                                         consumed)));
     }
 
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     private static Object acquire(
             ProtosActivation activation,
             List<?> supplied,

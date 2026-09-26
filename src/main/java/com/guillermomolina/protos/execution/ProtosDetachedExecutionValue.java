@@ -210,11 +210,13 @@ public final class ProtosDetachedExecutionValue {
                     }
                 }
 
-                for (Map.Entry<String, Object> slot :
-                        source.localSlotsSnapshot().entrySet()) {
+                java.util.ArrayList<String> slotNames = new java.util.ArrayList<>();
+                java.util.ArrayList<Object> slotValues = new java.util.ArrayList<>();
+                source.appendLocalBindingsTo(slotNames, slotValues);
+                for (int index = 0; index < slotNames.size(); index++) {
                     destinationObject.createLocalSlot(
-                            slot.getKey(),
-                            copy(slot.getValue()));
+                            slotNames.get(index),
+                            copy(slotValues.get(index)));
                 }
 
                 if (source.isFrozen()) {
@@ -267,9 +269,11 @@ public final class ProtosDetachedExecutionValue {
                     || object == prelude.contextPrototype()) {
                 return true;
             }
-            for (Object binding :
-                    prelude.bindings().localSlotsSnapshot().values()) {
-                if (binding == object) {
+            java.util.ArrayList<String> bindingNames = new java.util.ArrayList<>();
+            java.util.ArrayList<Object> bindingValues = new java.util.ArrayList<>();
+            prelude.bindings().appendLocalBindingsTo(bindingNames, bindingValues);
+            for (int index = 0; index < bindingValues.size(); index++) {
+                if (bindingValues.get(index) == object) {
                     return true;
                 }
             }

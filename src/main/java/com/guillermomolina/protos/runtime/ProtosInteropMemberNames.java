@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.InvalidArrayIndexException;
 import com.oracle.truffle.api.interop.TruffleObject;
@@ -49,11 +51,13 @@ final class ProtosInteropMemberNames implements TruffleObject {
     }
 
     @ExportMessage
+    @TruffleBoundary
     long getArraySize() {
         return names.size();
     }
 
     @ExportMessage
+    @TruffleBoundary
     boolean isArrayElementReadable(long index) {
         return index >= 0 && index < names.size();
     }

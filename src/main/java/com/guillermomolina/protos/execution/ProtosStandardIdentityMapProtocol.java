@@ -2,8 +2,15 @@
 package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.*; import java.math.BigInteger; import java.util.*;
 public final class ProtosStandardIdentityMapProtocol {
+ private static final class StandardAtIfAbsentBody implements ProtosNativeClosureBody {
+  @Override
+  public Object execute(ProtosActivation activation, List<?> arguments) {
+   return atIfAbsent(activation, arguments);
+  }
+ }
+
  private static final ProtosNativeClosureBody STANDARD_AT_IF_ABSENT_BODY =
-         ProtosStandardIdentityMapProtocol::atIfAbsent;
+         new StandardAtIfAbsentBody();
  private static final ProtosClosureValue STANDARD_AT_IF_ABSENT =
          ProtosClosureValue.nativeClosure(STANDARD_AT_IF_ABSENT_BODY);
  private static final ProtosNativeClosureBody STANDARD_EACH_BODY =
@@ -19,7 +26,7 @@ public final class ProtosStandardIdentityMapProtocol {
 
  static boolean isStandardAtIfAbsentImplementation(
          ProtosNativeClosureBody body) {
-  return body == STANDARD_AT_IF_ABSENT_BODY;
+  return body instanceof StandardAtIfAbsentBody;
  }
 
  static boolean isCanonicalStandardAtIfAbsentSelection(

@@ -1,6 +1,8 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+
 import java.util.Objects;
 
 /** Internal producer-side state for one asynchronous I/O operation. Commitment is not Future state. */
@@ -366,12 +368,18 @@ public final class ProtosIoOperation {
                 deferredCutover=DeferredCutover.CANCELLATION;
             }
         }
-        if (handler != null) handler.run();
+        if (handler != null) runCancellationHandler(handler);
         if (cancel) {
             future.cancelTerminal();
             finishTerminal();
         }
         return true;
+    }
+
+
+    @TruffleBoundary
+    private static void runCancellationHandler(Runnable handler) {
+        handler.run();
     }
 
     public boolean resolve(Object value) {
