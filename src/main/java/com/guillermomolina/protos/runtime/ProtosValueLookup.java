@@ -17,6 +17,9 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerAsserts;
+import com.oracle.truffle.api.Truffle;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -27,20 +30,71 @@ import java.util.Optional;
 public final class ProtosValueLookup {
     private ProtosValueLookup() {}
 
+    /**
+     * A D013 selection protected by one dependency shared by every visited
+     * ordinary object, including nearer objects where the selector is absent.
+     * Checking stability never traverses the delegation chain.
+     */
+    public record GuardedLookup(
+            ProtosSlotLookupResult selected,
+            Assumption stability) {}
+
+    /**
+     * Establishes a cache entry using the same lookup implementation as the
+     * generic path. This is specialization-time work, never valid-hit work.
+     *
+     * <p>Attribute-specific assumption invalidation follows the established
+     * Truffle runtime pattern used by GraalPy's MRO attribute caches.
+     * Protos parents are immutable; selector mutations are the dependencies
+     * for admitted ordinary chains. Represented values and subclass storage
+     * remain unsupported here and use generic lookup.
+     *
+     * @return a protected selection, or null when absent or unsupported
+     */
+    public static GuardedLookup lookupGuarded(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude) {
+        CompilerAsserts.neverPartOfCompilation();
+        Assumption stability =
+                Truffle.getRuntime().createAssumption("Protos selected slot");
+        Optional<ProtosSlotLookupResult> selected =
+                lookup(receiver, name, prelude, stability);
+        if (selected.isEmpty() || !stability.isValid()) {
+            stability.invalidate();
+            return null;
+        }
+        return new GuardedLookup(selected.orElseThrow(), stability);
+    }
+
     public static Optional<ProtosSlotLookupResult> lookup(
             Object receiver,
             String name,
             ProtosPrelude prelude) {
+        return lookup(receiver, name, prelude, null);
+    }
+
+    private static Optional<ProtosSlotLookupResult> lookup(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude,
+            Assumption stability) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(name, "name");
 
         Object current = receiver;
         while (true) {
             if (current instanceof ProtosObjectValue ordinary) {
+                if (stability != null
+                        && !ordinary.trackLookupDependency(name, stability)) {
+                    stability.invalidate();
+                }
                 Optional<Object> local = ordinary.readLocalSlot(name);
                 if (local.isPresent()) {
                     return Optional.of(new ProtosSlotLookupResult(local.orElseThrow(), ordinary));
                 }
+            } else if (stability != null) {
+                stability.invalidate();
             }
 
             Optional<Object> parent = delegationParent(current, prelude);

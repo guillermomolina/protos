@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.90-SNAPSHOT
+
+- `I072` Phase A implements the PLAT040 guarded selected-send substrate for
+  ordinary stable receiver chains. D013 selection is established once under a
+  selector-specific Truffle `Assumption`; the valid monomorphic hit reuses the
+  selected Closure, exact `methodHome`, and Context-owned `RootCallTarget`
+  without repeating general lookup, delegation traversal, or selected-value
+  classification.
+- Slot replacement, removal, and nearer same-selector additions invalidate the
+  exact dependent lookup assumptions, while unrelated selector/object mutation
+  does not. Unsupported represented/subclass/context-backed chains retain the
+  authoritative generic path. The existing activation, execution-context,
+  argument, suspension/control, and generic fallback representation is preserved,
+  with no observable Protos semantic change.
+
 ## 0.3.89-SNAPSHOT
 
 - `I069` implements the PLAT038/PLAT039 Native Image runtime architecture as a

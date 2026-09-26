@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
@@ -28,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.WeakHashMap;
 
 @ExportLibrary(InteropLibrary.class)
 public class ProtosObjectValue implements TruffleObject {
@@ -59,6 +62,14 @@ public class ProtosObjectValue implements TruffleObject {
      */
     private ProtosLexicalBindingAuthority lexicalBindingAuthority;
     private MutationState mutationState = MutationState.OPEN;
+
+    /*
+     * Allocated only when mutable ordinary slots participate in a guarded
+     * lookup. One lookup assumption can depend on several objects, but a
+     * mutation invalidates only dependencies for its exact selector.
+     * Weak keys prevent objects from retaining abandoned specializations.
+     */
+    private Map<String, WeakHashMap<Assumption, Boolean>> lookupDependencies;
 
     private ProtosObjectValue() {
         this.parent = null;
@@ -118,6 +129,59 @@ public class ProtosObjectValue implements TruffleObject {
     public ProtosObjectValue freeze() {
         mutationState = MutationState.FROZEN;
         return this;
+    }
+
+    /**
+     * Registers a lookup dependency for this object's local selector.
+     *
+     * <p>Only the exact ordinary representation is admitted here. Subclasses
+     * may have frame-backed bindings or override lookup/mutation, so they
+     * remain on authoritative lookup until their mutation surfaces are
+     * explicitly covered. Frozen ordinary objects need no mutable registry.
+     *
+     * <p>Mutable objects follow their existing execution-domain ownership;
+     * this registry introduces neither shared guest state nor a global lock.
+     * The boundary encloses dependency bookkeeping only, never guest lookup,
+     * mutation, or execution. The hot guard checks the Assumption directly.
+     */
+    @TruffleBoundary
+    final boolean trackLookupDependency(String name, Assumption dependency) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(dependency, "dependency");
+        if (getClass() != ProtosObjectValue.class) {
+            return false;
+        }
+        if (isFrozen()) {
+            return true;
+        }
+        if (lookupDependencies == null) {
+            lookupDependencies = new LinkedHashMap<>();
+        }
+        WeakHashMap<Assumption, Boolean> dependencies =
+                lookupDependencies.get(name);
+        if (dependencies == null) {
+            dependencies = new WeakHashMap<>();
+            lookupDependencies.put(name, dependencies);
+        }
+        dependencies.put(dependency, Boolean.TRUE);
+        return true;
+    }
+
+    private void invalidateLookupDependencies(String name) {
+        if (lookupDependencies != null) {
+            invalidateTrackedLookupDependencies(name);
+        }
+    }
+
+    @TruffleBoundary
+    private void invalidateTrackedLookupDependencies(String name) {
+        WeakHashMap<Assumption, Boolean> dependencies =
+                lookupDependencies.remove(name);
+        if (dependencies != null) {
+            for (Assumption dependency : dependencies.keySet()) {
+                dependency.invalidate();
+            }
+        }
     }
 
     public boolean hasLocalSlot(String name) {
@@ -250,6 +314,7 @@ public class ProtosObjectValue implements TruffleObject {
             lexicalBindingAuthority.putBinding(
                     contributionNames.get(index),
                     contributionValues.get(index));
+            invalidateLookupDependencies(contributionNames.get(index));
         }
     }
 
@@ -307,6 +372,7 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         lexicalBindingAuthority.putBinding(name, value);
+        invalidateLookupDependencies(name);
     }
 
     public void assignLocalSlot(String name, Object value) {
@@ -321,6 +387,7 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         lexicalBindingAuthority.putBinding(name, value);
+        invalidateLookupDependencies(name);
     }
 
     public Object removeLocalSlot(String name) {
@@ -336,7 +403,9 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
-        return lexicalBindingAuthority.removeBinding(name);
+        Object removed = lexicalBindingAuthority.removeBinding(name);
+        invalidateLookupDependencies(name);
+        return removed;
     }
 
     /**

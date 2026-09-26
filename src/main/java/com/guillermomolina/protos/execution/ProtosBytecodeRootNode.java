@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
@@ -5050,6 +5051,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /*
+     * I072 Phase A guarded selection precedes the retained PERF010-A
+     * prepared-target specialization. A stable ordinary receiver uses one
+     * selector-specific assumption and never repeats lookup on a valid hit.
+     * Unsupported chains and freshly rematerialized receivers can still use
+     * the existing definition-based specialization described below.
+     *
      * PERF010-A prepared-target specialization.
      *
      * <p>The generic ordinary-send path re-classifies every monomorphic hit
@@ -5091,6 +5098,87 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     @Operation
     public static final class PrepareSendArguments {
+        public record GuardedSendTarget(
+                ProtosClosureValue closure,
+                ProtosObjectValue methodHome,
+                RootCallTarget target,
+                Assumption stability) {}
+
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedSend != null"
+                },
+                assumptions = "cachedSend.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedOrdinarySend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                @Variadic Object[] supplied,
+                @Bind("currentEnteredContext()")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedSend(receiver, selector, caller, enteredContext)")
+                        GuardedSendTarget cachedSend) {
+            ProtosActivation activation =
+                    ProtosActivation.forImmediateMethodInvocation(
+                            cachedSend.closure(),
+                            List.of(supplied),
+                            receiver,
+                            cachedSend.methodHome(),
+                            caller.prelude().orElse(null),
+                            caller.actorModuleState(),
+                            caller.currentModuleKey().orElse(null),
+                            caller.executionDomain());
+            attachTaskOrInheritDynamicControlState(activation, caller);
+            return new PreparedClosureCall(cachedSend.target(), activation);
+        }
+
+        /**
+         * Resolves and classifies only while establishing a specialization.
+         * The entered Context owns the target; neither Closure definition
+         * identity alone nor an unguarded method home authorizes this hit.
+         */
+        static GuardedSendTarget createGuardedSend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                ProtosLanguageContext enteredContext) {
+            if (enteredContext == null) {
+                return null;
+            }
+            ProtosValueLookup.GuardedLookup lookup;
+            try {
+                lookup = ProtosValueLookup.lookupGuarded(
+                        receiver, selector, caller.preludeOrNullForRuntime());
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return null;
+            }
+            if (lookup == null) {
+                return null;
+            }
+            ProtosClosureValue closure =
+                    ordinarySendClosureOrNull(lookup.selected());
+            if (closure == null) {
+                lookup.stability().invalidate();
+                return null;
+            }
+            RootCallTarget target =
+                    fastOrdinarySendTarget(closure, enteredContext);
+            if (target == null || !lookup.stability().isValid()) {
+                lookup.stability().invalidate();
+                return null;
+            }
+            return new GuardedSendTarget(
+                    closure, lookup.selected().home(), target, lookup.stability());
+        }
+
         @Specialization(
                 guards = {
                     "closure != null",
@@ -5135,7 +5223,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return new PreparedClosureCall(cachedTarget, activation);
         }
 
-        @Specialization(replaces = "fastOrdinarySend")
+        @Specialization(replaces = {"guardedOrdinarySend", "fastOrdinarySend"})
         public static PreparedClosureCall perform(
                 Object receiver,
                 String selector,
