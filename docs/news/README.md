@@ -19,6 +19,10 @@ permanent news entry.
 
 ## 2026
 
+- **2026-09-26 — [Protos Native Image: a native executable with Truffle guest compilation](2026-09-26-native-image.md)**
+  Build a native Protos executable with the Truffle optimizing runtime and
+  regression coverage for guest compilation, alongside the existing JVM path.
+
 - **2026-09-14 — [LM009 closed: Protos reaches a reproducible VS Code IDE baseline](2026-09-14-lm009-closed.md)**
   The reference VS Code integration becomes a reproducible, installable,
   executable and debuggable product artifact, with GitHub Release established
