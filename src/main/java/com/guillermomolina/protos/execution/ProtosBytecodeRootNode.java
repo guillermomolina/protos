@@ -5574,7 +5574,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ENSURE,
             ERROR_HANDLE,
             WHILE,
-            BOOLEAN
+            BOOLEAN,
+            ARRAY_EACH,
+            BYTES_EACH,
+            PROCESS_ARGUMENTS_EACH,
+            ENVIRONMENT_EACH,
+            IDENTITY_MAP_EACH,
+            MAP_EACH,
+            MAP_READ_LOOKUP,
+            MAP_AT_PUT,
+            MAP_REMOVE,
+            CASE_OF,
+            ARRAY_MATCH,
+            MAP_MATCH,
+            IDENTITY_MAP_AT_IF_ABSENT
         }
 
         public record GuardedStructuredSend(
@@ -5582,6 +5595,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosObjectValue methodHome,
                 GuardedStructuredKind kind,
                 ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
+                ProtosStandardMapProtocol.StructuredReadLookupKind mapReadLookupKind,
                 Assumption stability) {}
 
         @Specialization(
@@ -5760,15 +5774,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     cachedStructured.kind() == GuardedStructuredKind.ERROR_HANDLE,
                     cachedStructured.kind() == GuardedStructuredKind.WHILE,
                     cachedStructured.booleanKind(),
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    null,
-                    false,
-                    false,
+                    cachedStructured.kind() == GuardedStructuredKind.ARRAY_EACH,
+                    cachedStructured.kind() == GuardedStructuredKind.BYTES_EACH,
+                    cachedStructured.kind() == GuardedStructuredKind.PROCESS_ARGUMENTS_EACH,
+                    cachedStructured.kind() == GuardedStructuredKind.ENVIRONMENT_EACH,
+                    cachedStructured.kind() == GuardedStructuredKind.IDENTITY_MAP_EACH,
+                    cachedStructured.kind() == GuardedStructuredKind.MAP_EACH,
+                    cachedStructured.mapReadLookupKind(),
+                    cachedStructured.kind() == GuardedStructuredKind.MAP_AT_PUT,
+                    cachedStructured.kind() == GuardedStructuredKind.MAP_REMOVE,
                     false,
                     false,
                     null);
@@ -5807,6 +5821,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosObjectValue home = selected.home();
             GuardedStructuredKind kind;
             ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind = null;
+            ProtosStandardMapProtocol.StructuredReadLookupKind mapReadLookupKind = null;
             if (ProtosStandardObjectProtocol.isCanonicalStandardEnsureSelection(
                     closure, home)) {
                 kind = GuardedStructuredKind.ENSURE;
@@ -5822,6 +5837,48 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     closure, home))
                     != null) {
                 kind = GuardedStructuredKind.BOOLEAN;
+            } else if (ProtosStandardArrayProtocol.isCanonicalStandardEachSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.ARRAY_EACH;
+            } else if (ProtosStandardBytesProtocol.isCanonicalStandardEachSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.BYTES_EACH;
+            } else if (ProtosStandardProcessArgumentsProtocol.isCanonicalStandardEachSelection(
+                    closure, receiver, home)) {
+                kind = GuardedStructuredKind.PROCESS_ARGUMENTS_EACH;
+            } else if (ProtosStandardEnvironmentProtocol.isCanonicalStandardEachSelection(
+                    closure, receiver, home)) {
+                kind = GuardedStructuredKind.ENVIRONMENT_EACH;
+            } else if (ProtosStandardIdentityMapProtocol.isCanonicalStandardEachSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.IDENTITY_MAP_EACH;
+            } else if (ProtosStandardMapProtocol.isCanonicalStandardEachSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.MAP_EACH;
+            } else if ((mapReadLookupKind =
+                    ProtosStandardMapProtocol
+                            .structuredReadLookupKindForCanonicalSelection(
+                                    closure, home, caller))
+                    != null) {
+                kind = GuardedStructuredKind.MAP_READ_LOOKUP;
+            } else if (ProtosStandardMapProtocol.isCanonicalStandardAtPutSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.MAP_AT_PUT;
+            } else if (ProtosStandardMapProtocol.isCanonicalStandardRemoveSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.MAP_REMOVE;
+            } else if (ProtosStandardObjectProtocol.isCanonicalStandardCaseOfSelection(
+                    closure, home)) {
+                kind = GuardedStructuredKind.CASE_OF;
+            } else if (ProtosStandardArrayProtocol.isCanonicalStandardMatchSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.ARRAY_MATCH;
+            } else if (ProtosStandardMapProtocol.isCanonicalStandardMatchSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.MAP_MATCH;
+            } else if (ProtosStandardIdentityMapProtocol.isCanonicalStandardAtIfAbsentSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.IDENTITY_MAP_AT_IF_ABSENT;
             } else {
                 lookup.stability().invalidate();
                 return null;
@@ -5830,7 +5887,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return null;
             }
             return new GuardedStructuredSend(
-                    closure, home, kind, booleanKind, lookup.stability());
+                    closure, home, kind, booleanKind, mapReadLookupKind, lookup.stability());
         }
 
         @Specialization(

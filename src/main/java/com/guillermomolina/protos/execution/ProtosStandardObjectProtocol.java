@@ -104,6 +104,13 @@ public final class ProtosStandardObjectProtocol {
         return body instanceof StandardCaseOfBody;
     }
 
+    static boolean isCanonicalStandardCaseOfSelection(
+            Object behavior,
+            ProtosObjectValue home) {
+        return behavior == STANDARD_CASE_OF
+                && home.isRootObject();
+    }
+
     public static void install() {
         ProtosObjectValue object = ProtosObjectValue.rootObject();
         ProtosStandardBooleanProtocol.install();

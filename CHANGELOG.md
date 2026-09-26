@@ -7,6 +7,46 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.96-SNAPSHOT
+
+- `I072` Phase E (slice 2) extends structured-control convergence to the
+  remaining collection-callback families admitted by the existing structured
+  capability vector: `Array.each`, `Bytes.each`, `ProcessArguments.each`,
+  `Environment.each`, `IdentityMap.each`, `Map.each`, the `Map` read-lookup
+  family (`at`/`containsKey`/`atIfAbsent`), `Map.atPut`, and `Map.remove`. The
+  `guardedStructuredSend` specialization added in slice 1 now classifies a
+  stable canonically-selected send against all thirteen structured kinds using
+  the existing canonical-selection helpers (behavior identity plus home/
+  provenance, or receiver identity for `ProcessArguments`/`Environment`), and
+  feeds the single cached kind into the unchanged `finishPreparingComposedCall`
+  path; collection-callback order, snapshot timing, mutation visibility,
+  suspension/resume and error propagation are unaffected.
+
+  The slice also converges the four remaining structured paths that were still
+  classified only from native-body identity at native-body execution time:
+  `Object.caseOf`, `Array.match`, `Map.match`, and `IdentityMap.atIfAbsent`.
+  These four are outside the `StructuredCallCapabilities` vector — `NativeCall`
+  recognizes them from `nativeBody` identity independent of that vector — so a
+  canonically-selected ordinary send to one of them previously still paid the
+  full generic D013 lookup and classifier scan on every hit even though the
+  other thirteen kinds had already converged. New canonical-selection helpers
+  (`ProtosStandardObjectProtocol.isCanonicalStandardCaseOfSelection`,
+  `ProtosStandardArrayProtocol.isCanonicalStandardMatchSelection`,
+  `ProtosStandardMapProtocol.isCanonicalStandardMatchSelection`, and the
+  existing `ProtosStandardIdentityMapProtocol.isCanonicalStandardAtIfAbsentSelection`)
+  let `guardedStructuredSend` recognize a stable canonical selection of these
+  four and route it through the same guarded fast path; the resulting
+  `NativeCall` is unchanged, since its `isStructuredCaseOf`/`isStructuredMapMatch`/
+  `isStructuredArrayMatch`/`isStructuredIdentityMapAtIfAbsent` accessors already
+  recognize the operation from `nativeBody` regardless of how the call was
+  prepared. `Object.call`, standard import, and the generic
+  `finishPreparingComposedCallByImplementation` classifier remain unchanged
+  and still required by the cache-miss/megamorphic, direct-Closure-invocation,
+  and Object.call/import paths, which do not carry D013 selection provenance
+  for the guarded specialization to reuse. This completes the structured
+  families identified for `I072` Phase E; no dead compatibility machinery was
+  found to remove. No observable Protos semantics change.
+
 ## 0.3.95-SNAPSHOT
 
 - `I072` Phase E (slice 1) begins structured-control convergence: a stable,

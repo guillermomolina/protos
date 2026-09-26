@@ -70,6 +70,16 @@ public final class ProtosStandardArrayProtocol {
                         .orElse(false);
     }
 
+    static boolean isCanonicalStandardMatchSelection(
+            ProtosClosureValue behavior,
+            ProtosObjectValue home,
+            ProtosActivation caller) {
+        return behavior == STANDARD_MATCH
+                && caller.prelude()
+                        .map(prelude -> prelude.arrayPrototype() == home)
+                        .orElse(false);
+    }
+
     public static void install(ProtosObjectValue arrayPrototype) {
         Objects.requireNonNull(arrayPrototype, "arrayPrototype");
 

@@ -25,8 +25,11 @@ import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -35,7 +38,9 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.source.Source;
+import java.math.BigInteger;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
@@ -154,6 +159,115 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
         }
 
         System.out.println("I072_PHASE_E_WARMED_ERROR_HANDLE_HIT_REMAINS_CORRECT=PASS");
+    }
+
+    @Test
+    void warmedCanonicalArrayEachHitStopsAfterNearerOverrideAddition() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosArrayValue array =
+                    prelude.newArray(
+                            List.of(
+                                    new ProtosIntegerValue(BigInteger.ONE),
+                                    new ProtosIntegerValue(BigInteger.TWO)));
+            ProtosObjectValue overrideResult = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            AtomicInteger callbacks = new AtomicInteger();
+            AtomicInteger overrideCalls = new AtomicInteger();
+
+            module.context().createLocalSlot("array", array);
+            module.context().createLocalSlot(
+                    "probe",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                callbacks.incrementAndGet();
+                                return ProtosNullValue.INSTANCE;
+                            }));
+
+            ProtosBytecodeRootNode root =
+                    lowerRoot(
+                            scope.language(),
+                            "array.each(probe)",
+                            "i072-phase-e-array-each-warm.protos");
+
+            for (int i = 0; i < 4; i++) {
+                assertSame(array, root.getCallTarget().call(module));
+            }
+            assertEquals(
+                    8,
+                    callbacks.get(),
+                    "every canonical each hit must visit both elements exactly once");
+
+            array.createLocalSlot(
+                    "each",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                overrideCalls.incrementAndGet();
+                                return overrideResult;
+                            }));
+
+            Object overriddenResult = root.getCallTarget().call(module);
+
+            assertSame(overrideResult, overriddenResult);
+            assertEquals(1, overrideCalls.get());
+            assertEquals(
+                    8,
+                    callbacks.get(),
+                    "stale structured array.each hit must not run after nearer override");
+        }
+
+        System.out.println("I072_PHASE_E_WARMED_ARRAY_EACH_HIT_INVALIDATES_ON_OVERRIDE=PASS");
+    }
+
+    @Test
+    void warmedCanonicalMapAtPutHitStopsAfterNearerOverrideAddition() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+            ProtosActivation module = activation(prelude, domain);
+            ProtosMapValue map = new ProtosMapValue(prelude.mapPrototype());
+            ProtosObjectValue overrideResult = new ProtosObjectValue(ProtosObjectValue.rootObject());
+            AtomicInteger overrideCalls = new AtomicInteger();
+
+            module.context().createLocalSlot("map", map);
+            module.context().createLocalSlot(
+                    "key",
+                    new ProtosObjectValue(ProtosObjectValue.rootObject()));
+            module.context().createLocalSlot(
+                    "value",
+                    new ProtosObjectValue(ProtosObjectValue.rootObject()));
+
+            ProtosBytecodeRootNode root =
+                    lowerRoot(
+                            scope.language(),
+                            "map.atPut(key, value)",
+                            "i072-phase-e-map-atput-warm.protos");
+
+            for (int i = 0; i < 4; i++) {
+                root.getCallTarget().call(module);
+            }
+            assertEquals(1, map.keyedSize());
+
+            map.createLocalSlot(
+                    "atPut",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                overrideCalls.incrementAndGet();
+                                return overrideResult;
+                            }));
+
+            Object overriddenResult = root.getCallTarget().call(module);
+
+            assertSame(overrideResult, overriddenResult);
+            assertEquals(1, overrideCalls.get());
+            assertEquals(
+                    1,
+                    map.keyedSize(),
+                    "stale structured map.atPut hit must not run after nearer override");
+        }
+
+        System.out.println("I072_PHASE_E_WARMED_MAP_ATPUT_HIT_INVALIDATES_ON_OVERRIDE=PASS");
     }
 
     private static ProtosClosureValue nativeClosure(

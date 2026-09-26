@@ -186,6 +186,14 @@ public final class ProtosStandardMapProtocol {
   return body instanceof StandardMatchBody;
  }
 
+ static boolean isCanonicalStandardMatchSelection(
+         ProtosClosureValue behavior,
+         ProtosObjectValue home,
+         ProtosActivation caller) {
+  return behavior == STANDARD_MATCH
+          && isCanonicalMapHome(home, caller);
+ }
+
  static boolean isCanonicalStandardEachSelection(
          ProtosClosureValue behavior,
          ProtosObjectValue home,
