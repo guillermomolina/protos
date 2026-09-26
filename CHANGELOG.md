@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.94-SNAPSHOT
+
+- `I072` Phase D completes the prepared-call/control-mode separation left open
+  by the D1 slice. The internal `PreparedClosureCall` invocation carrier is no
+  longer one universal class; it is a small dispatch interface implemented by
+  three mutually exclusive leaf representations — a lean `OrdinarySourceCall`
+  (rich-activation and compact frame-argument shapes), `NativeCall` (native
+  body plus the D1 `StructuredCallCapabilities` holder), and
+  `ModuleInitializationCall` (standard-import module lifecycle). An ordinary
+  source-backed, nonsuspending call now physically carries only a selected
+  target, its compact frame arguments (or pre-target activation), and the
+  return-home/ownership state non-local return completion requires; it never
+  allocates native-body, structured-control-capability, or
+  module-initialization fields (PLAT040 Candidate F′: pay only for what is
+  used). Return-home ownership/completion and non-local-return handling are
+  shared between the ordinary and native shapes through a small internal base
+  class instead of being duplicated. Task-owned dispatch, C-prime suspension
+  and continuation resume, guarded selector-specific stability (Phase A), the
+  compact frame-argument ABI (Phase B), and conditional guest-Context/Array
+  materialization (Phase C) are unaffected; no observable Protos semantics
+  change. Structured-control convergence remains Phase E, not started here.
+
 ## 0.3.93-SNAPSHOT
 
 - `I072` Phase D (slice 1) removes the physical structured-control capability
