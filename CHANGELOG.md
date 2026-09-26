@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.93-SNAPSHOT
+
+- `I072` Phase D (slice 1) removes the physical structured-control capability
+  vector from the ordinary/native/module-initialization forms of the internal
+  `PreparedClosureCall` invocation carrier. The sixteen mutually-exclusive
+  `structuredEnsure`/`structuredWhile`/`structuredBoolean`/collection-callback/
+  `structuredObjectCall`/`structuredImportRuntime`/etc. fields are now grouped
+  behind a single nullable `StructuredCallCapabilities` holder that is only
+  allocated when a call genuinely owns one of those capabilities (PLAT040
+  Candidate F′: optional semantic capability must not force unrelated ordinary
+  calls to carry its full physical machinery). Ordinary source-backed calls,
+  compact frame-argument calls, plain native calls, and module-initialization
+  calls now pass `null` and pay no allocation or field cost for structured
+  control. Every mutual-exclusion check, dispatch guard, and error message is
+  preserved exactly; no observable Protos semantics change. Full type-level
+  separation of the ordinary call path from the shared carrier class remains
+  open for a later Phase D slice.
+
 ## 0.3.92-SNAPSHOT
 
 - `I072` Phase C removes unconditional guest execution-context materialization

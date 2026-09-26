@@ -950,6 +950,147 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * Optional structured-control capability carried by a {@link PreparedClosureCall}.
+     *
+     * <p>Ordinary source-backed and plain-native calls never allocate this holder
+     * (PLAT040 Candidate F′: optional semantic capability must not force unrelated
+     * ordinary calls to carry its full physical machinery). It exists only when a
+     * call actually owns one of the mutually exclusive structured-control,
+     * collection-callback, or import capabilities below.
+     */
+    private static final class StructuredCallCapabilities {
+        final boolean ensure;
+        final boolean errorHandler;
+        final boolean whileLoop;
+        final ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind;
+        final boolean arrayEach;
+        final boolean bytesEach;
+        final boolean processArgumentsEach;
+        final boolean environmentEach;
+        final boolean identityMapEach;
+        final boolean mapEach;
+        final ProtosStandardMapProtocol.StructuredReadLookupKind mapReadLookup;
+        final boolean mapAtPut;
+        final boolean mapRemove;
+        final boolean directControlNative;
+        final boolean objectCall;
+        final ProtosModuleRuntime importRuntime;
+
+        private StructuredCallCapabilities(
+                boolean ensure,
+                boolean errorHandler,
+                boolean whileLoop,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
+                boolean arrayEach,
+                boolean bytesEach,
+                boolean processArgumentsEach,
+                boolean environmentEach,
+                boolean identityMapEach,
+                boolean mapEach,
+                ProtosStandardMapProtocol.StructuredReadLookupKind mapReadLookup,
+                boolean mapAtPut,
+                boolean mapRemove,
+                boolean directControlNative,
+                boolean objectCall,
+                ProtosModuleRuntime importRuntime) {
+            this.ensure = ensure;
+            this.errorHandler = errorHandler;
+            this.whileLoop = whileLoop;
+            this.booleanKind = booleanKind;
+            this.arrayEach = arrayEach;
+            this.bytesEach = bytesEach;
+            this.processArgumentsEach = processArgumentsEach;
+            this.environmentEach = environmentEach;
+            this.identityMapEach = identityMapEach;
+            this.mapEach = mapEach;
+            this.mapReadLookup = mapReadLookup;
+            this.mapAtPut = mapAtPut;
+            this.mapRemove = mapRemove;
+            this.directControlNative = directControlNative;
+            this.objectCall = objectCall;
+            this.importRuntime = importRuntime;
+            int controlCapabilities =
+                    (ensure ? 1 : 0)
+                            + (errorHandler ? 1 : 0)
+                            + (whileLoop ? 1 : 0)
+                            + (booleanKind != null ? 1 : 0)
+                            + (arrayEach ? 1 : 0)
+                            + (bytesEach ? 1 : 0)
+                            + (processArgumentsEach ? 1 : 0)
+                            + (environmentEach ? 1 : 0)
+                            + (identityMapEach ? 1 : 0)
+                            + (mapEach ? 1 : 0)
+                            + (mapReadLookup != null ? 1 : 0)
+                            + (mapAtPut ? 1 : 0)
+                            + (mapRemove ? 1 : 0)
+                            + (directControlNative ? 1 : 0)
+                            + (objectCall ? 1 : 0)
+                            + (importRuntime != null ? 1 : 0);
+            if (controlCapabilities > 1) {
+                throw new IllegalArgumentException(
+                        "prepared Closure call cannot own multiple structured-control capabilities");
+            }
+        }
+
+        /** Returns {@code null} when every capability is at its default/unset value. */
+        static StructuredCallCapabilities of(
+                boolean ensure,
+                boolean errorHandler,
+                boolean whileLoop,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
+                boolean arrayEach,
+                boolean bytesEach,
+                boolean processArgumentsEach,
+                boolean environmentEach,
+                boolean identityMapEach,
+                boolean mapEach,
+                ProtosStandardMapProtocol.StructuredReadLookupKind mapReadLookup,
+                boolean mapAtPut,
+                boolean mapRemove,
+                boolean directControlNative,
+                boolean objectCall,
+                ProtosModuleRuntime importRuntime) {
+            boolean any =
+                    ensure
+                            || errorHandler
+                            || whileLoop
+                            || booleanKind != null
+                            || arrayEach
+                            || bytesEach
+                            || processArgumentsEach
+                            || environmentEach
+                            || identityMapEach
+                            || mapEach
+                            || mapReadLookup != null
+                            || mapAtPut
+                            || mapRemove
+                            || directControlNative
+                            || objectCall
+                            || importRuntime != null;
+            if (!any) {
+                return null;
+            }
+            return new StructuredCallCapabilities(
+                    ensure,
+                    errorHandler,
+                    whileLoop,
+                    booleanKind,
+                    arrayEach,
+                    bytesEach,
+                    processArgumentsEach,
+                    environmentEach,
+                    identityMapEach,
+                    mapEach,
+                    mapReadLookup,
+                    mapAtPut,
+                    mapRemove,
+                    directControlNative,
+                    objectCall,
+                    importRuntime);
+        }
+    }
+
     static final class PreparedClosureCall {
         private final RootCallTarget bodyTarget;
         private final ProtosNativeClosureBody nativeBody;
@@ -958,22 +1099,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final Object[] targetArguments;
         private final ProtosReturnHome returnHome;
         private final boolean ownsReturnHome;
-        private final boolean structuredEnsure;
-        private final boolean structuredErrorHandler;
-        private final boolean structuredWhile;
-        private final ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean;
-        private final boolean structuredArrayEach;
-        private final boolean structuredBytesEach;
-        private final boolean structuredProcessArgumentsEach;
-        private final boolean structuredEnvironmentEach;
-        private final boolean structuredIdentityMapEach;
-        private final boolean structuredMapEach;
-        private final ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup;
-        private final boolean structuredMapAtPut;
-        private final boolean structuredMapRemove;
-        private final boolean directControlNative;
-        private final boolean structuredObjectCall;
-        private final ProtosModuleRuntime structuredImportRuntime;
+        private final StructuredCallCapabilities structured;
         private final ProtosModuleRuntime.PreparedModuleInitialization moduleInitialization;
 
         PreparedClosureCall(RootCallTarget bodyTarget, ProtosActivation activation) {
@@ -982,21 +1108,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     null,
                     List.of(),
                     activation,
-                    false,
-                    false,
-                    false,
-                    null,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    null,
-                    false,
-                    false,
-                    false,
-                    false,
                     null);
         }
 
@@ -1005,22 +1116,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosNativeClosureBody nativeBody,
                 List<?> supplied,
                 ProtosActivation activation,
-                boolean structuredEnsure,
-                boolean structuredErrorHandler,
-                boolean structuredWhile,
-                ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean,
-                boolean structuredArrayEach,
-                boolean structuredBytesEach,
-                boolean structuredProcessArgumentsEach,
-                boolean structuredEnvironmentEach,
-                boolean structuredIdentityMapEach,
-                boolean structuredMapEach,
-                ProtosStandardMapProtocol.StructuredReadLookupKind structuredMapReadLookup,
-                boolean structuredMapAtPut,
-                boolean structuredMapRemove,
-                boolean directControlNative,
-                boolean structuredObjectCall,
-                ProtosModuleRuntime structuredImportRuntime) {
+                StructuredCallCapabilities structured) {
             this.bodyTarget = bodyTarget;
             this.nativeBody = nativeBody;
             this.supplied = List.copyOf(supplied);
@@ -1032,44 +1128,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.returnHome = activation.returnHome().orElseThrow(
                     () -> new IllegalStateException("Closure invocation requires a return home"));
             this.ownsReturnHome = activation.ownsReturnHome();
-            this.structuredEnsure = structuredEnsure;
-            this.structuredErrorHandler = structuredErrorHandler;
-            this.structuredWhile = structuredWhile;
-            this.structuredBoolean = structuredBoolean;
-            this.structuredArrayEach = structuredArrayEach;
-            this.structuredBytesEach = structuredBytesEach;
-            this.structuredProcessArgumentsEach = structuredProcessArgumentsEach;
-            this.structuredEnvironmentEach = structuredEnvironmentEach;
-            this.structuredIdentityMapEach = structuredIdentityMapEach;
-            this.structuredMapEach = structuredMapEach;
-            this.structuredMapReadLookup = structuredMapReadLookup;
-            this.structuredMapAtPut = structuredMapAtPut;
-            this.structuredMapRemove = structuredMapRemove;
-            this.directControlNative = directControlNative;
-            this.structuredObjectCall = structuredObjectCall;
-            this.structuredImportRuntime = structuredImportRuntime;
+            this.structured = structured;
             this.moduleInitialization = null;
-            int controlCapabilities =
-                    (structuredEnsure ? 1 : 0)
-                            + (structuredErrorHandler ? 1 : 0)
-                            + (structuredWhile ? 1 : 0)
-                            + (structuredBoolean != null ? 1 : 0)
-                            + (structuredArrayEach ? 1 : 0)
-                            + (structuredBytesEach ? 1 : 0)
-                            + (structuredProcessArgumentsEach ? 1 : 0)
-                            + (structuredEnvironmentEach ? 1 : 0)
-                            + (structuredIdentityMapEach ? 1 : 0)
-                            + (structuredMapEach ? 1 : 0)
-                            + (structuredMapReadLookup != null ? 1 : 0)
-                            + (structuredMapAtPut ? 1 : 0)
-                            + (structuredMapRemove ? 1 : 0)
-                            + (directControlNative ? 1 : 0)
-                            + (structuredObjectCall ? 1 : 0)
-                            + (structuredImportRuntime != null ? 1 : 0);
-            if (controlCapabilities > 1) {
-                throw new IllegalArgumentException(
-                        "prepared Closure call cannot own multiple structured-control capabilities");
-            }
         }
 
         PreparedClosureCall(
@@ -1092,22 +1152,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.ownsReturnHome =
                     ProtosFrameArguments.compactOwnsReturnHome(
                             compactTargetArguments);
-            this.structuredEnsure = false;
-            this.structuredErrorHandler = false;
-            this.structuredWhile = false;
-            this.structuredBoolean = null;
-            this.structuredArrayEach = false;
-            this.structuredBytesEach = false;
-            this.structuredProcessArgumentsEach = false;
-            this.structuredEnvironmentEach = false;
-            this.structuredIdentityMapEach = false;
-            this.structuredMapEach = false;
-            this.structuredMapReadLookup = null;
-            this.structuredMapAtPut = false;
-            this.structuredMapRemove = false;
-            this.directControlNative = false;
-            this.structuredObjectCall = false;
-            this.structuredImportRuntime = null;
+            this.structured = null;
             this.moduleInitialization = null;
         }
 
@@ -1136,22 +1181,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     java.util.Objects.requireNonNull(nativeBody, "nativeBody"),
                     supplied,
                     activation,
-                    structuredEnsure,
-                    structuredErrorHandler,
-                    structuredWhile,
-                    structuredBoolean,
-                    structuredArrayEach,
-                    structuredBytesEach,
-                    structuredProcessArgumentsEach,
-                    structuredEnvironmentEach,
-                    structuredIdentityMapEach,
-                    structuredMapEach,
-                    structuredMapReadLookup,
-                    structuredMapAtPut,
-                    structuredMapRemove,
-                    directControlNative,
-                    structuredObjectCall,
-                    structuredImportRuntime);
+                    StructuredCallCapabilities.of(
+                            structuredEnsure,
+                            structuredErrorHandler,
+                            structuredWhile,
+                            structuredBoolean,
+                            structuredArrayEach,
+                            structuredBytesEach,
+                            structuredProcessArgumentsEach,
+                            structuredEnvironmentEach,
+                            structuredIdentityMapEach,
+                            structuredMapEach,
+                            structuredMapReadLookup,
+                            structuredMapAtPut,
+                            structuredMapRemove,
+                            directControlNative,
+                            structuredObjectCall,
+                            structuredImportRuntime));
         }
 
         private PreparedClosureCall(
@@ -1166,22 +1212,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             : new Object[] {this.activation};
             this.returnHome = null;
             this.ownsReturnHome = false;
-            this.structuredEnsure = false;
-            this.structuredErrorHandler = false;
-            this.structuredWhile = false;
-            this.structuredBoolean = null;
-            this.structuredArrayEach = false;
-            this.structuredBytesEach = false;
-            this.structuredProcessArgumentsEach = false;
-            this.structuredEnvironmentEach = false;
-            this.structuredIdentityMapEach = false;
-            this.structuredMapEach = false;
-            this.structuredMapReadLookup = null;
-            this.structuredMapAtPut = false;
-            this.structuredMapRemove = false;
-            this.directControlNative = false;
-            this.structuredObjectCall = false;
-            this.structuredImportRuntime = null;
+            this.structured = null;
             this.moduleInitialization =
                     java.util.Objects.requireNonNull(
                             moduleInitialization,
@@ -1226,7 +1257,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             return moduleInitialization.immediateResult();
         }
-        boolean isStructuredObjectCall() { return structuredObjectCall; }
+        boolean isStructuredObjectCall() { return structured != null && structured.objectCall; }
         boolean isStructuredCaseOf() {
             return nativeBody != null
                     && ProtosStandardObjectProtocol.isStandardCaseOfImplementation(nativeBody);
@@ -1235,50 +1266,55 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return nativeBody != null
                     && ProtosStandardMapProtocol.isStandardMatchImplementation(nativeBody);
         }
-        boolean isStructuredImportCall() { return structuredImportRuntime != null; }
-        boolean isStructuredEnsure() { return structuredEnsure; }
-        boolean isStructuredErrorHandler() { return structuredErrorHandler; }
-        boolean isStructuredWhile() { return structuredWhile; }
-        boolean isStructuredBoolean() { return structuredBoolean != null; }
-        boolean isStructuredArrayEach() { return structuredArrayEach; }
+        boolean isStructuredImportCall() { return structured != null && structured.importRuntime != null; }
+        boolean isStructuredEnsure() { return structured != null && structured.ensure; }
+        boolean isStructuredErrorHandler() { return structured != null && structured.errorHandler; }
+        boolean isStructuredWhile() { return structured != null && structured.whileLoop; }
+        boolean isStructuredBoolean() { return structured != null && structured.booleanKind != null; }
+        boolean isStructuredArrayEach() { return structured != null && structured.arrayEach; }
         boolean isStructuredArrayMatch() {
             return nativeBody != null
                     && ProtosStandardArrayProtocol.isStandardMatchImplementation(nativeBody);
         }
-        boolean isStructuredBytesEach() { return structuredBytesEach; }
-        boolean isStructuredProcessArgumentsEach() { return structuredProcessArgumentsEach; }
-        boolean isStructuredEnvironmentEach() { return structuredEnvironmentEach; }
+        boolean isStructuredBytesEach() { return structured != null && structured.bytesEach; }
+        boolean isStructuredProcessArgumentsEach() {
+            return structured != null && structured.processArgumentsEach;
+        }
+        boolean isStructuredEnvironmentEach() { return structured != null && structured.environmentEach; }
         boolean isStructuredIdentityMapAtIfAbsent() {
             return nativeBody != null
                     && ProtosStandardIdentityMapProtocol
                             .isStandardAtIfAbsentImplementation(nativeBody);
         }
-        boolean isStructuredIdentityMapEach() { return structuredIdentityMapEach; }
-        boolean isStructuredMapEach() { return structuredMapEach; }
-        boolean isStructuredMapReadLookup() { return structuredMapReadLookup != null; }
-        boolean isStructuredMapAtPut() { return structuredMapAtPut; }
-        boolean isStructuredMapRemove() { return structuredMapRemove; }
+        boolean isStructuredIdentityMapEach() { return structured != null && structured.identityMapEach; }
+        boolean isStructuredMapEach() { return structured != null && structured.mapEach; }
+        boolean isStructuredMapReadLookup() { return structured != null && structured.mapReadLookup != null; }
+        boolean isStructuredMapAtPut() { return structured != null && structured.mapAtPut; }
+        boolean isStructuredMapRemove() { return structured != null && structured.mapRemove; }
 
         boolean requiresStructuredDispatch() {
-            return structuredObjectCall
-                    || isStructuredCaseOf()
+            if (structured != null
+                    && (structured.objectCall
+                            || structured.importRuntime != null
+                            || structured.ensure
+                            || structured.errorHandler
+                            || structured.whileLoop
+                            || structured.booleanKind != null
+                            || structured.arrayEach
+                            || structured.bytesEach
+                            || structured.processArgumentsEach
+                            || structured.environmentEach
+                            || structured.identityMapEach
+                            || structured.mapEach
+                            || structured.mapReadLookup != null
+                            || structured.mapAtPut
+                            || structured.mapRemove)) {
+                return true;
+            }
+            return isStructuredCaseOf()
                     || isStructuredMapMatch()
-                    || structuredImportRuntime != null
-                    || structuredEnsure
-                    || structuredErrorHandler
-                    || structuredWhile
-                    || structuredBoolean != null
-                    || structuredArrayEach
                     || isStructuredArrayMatch()
-                    || structuredBytesEach
-                    || structuredProcessArgumentsEach
-                    || structuredEnvironmentEach
-                    || isStructuredIdentityMapAtIfAbsent()
-                    || structuredIdentityMapEach
-                    || structuredMapEach
-                    || structuredMapReadLookup != null
-                    || structuredMapAtPut
-                    || structuredMapRemove;
+                    || isStructuredIdentityMapAtIfAbsent();
         }
 
         PreparedMapMatchCall prepareStructuredMapMatch() {
@@ -1304,7 +1340,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedStandardObjectCall prepareStructuredObjectCall() {
-            if (!structuredObjectCall) {
+            if (structured == null || !structured.objectCall) {
                 throw new IllegalStateException(
                         "prepared Closure call has no PLAT032 Object.call capability");
             }
@@ -1333,19 +1369,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedStandardImportCall prepareStructuredImportCall() {
-            if (structuredImportRuntime == null) {
+            if (structured == null || structured.importRuntime == null) {
                 throw new IllegalStateException(
                         "prepared Closure call has no PLAT032 import capability");
             }
             return new PreparedStandardImportCall(
                     PreparedClosureCall.moduleInitialization(
-                            structuredImportRuntime.prepareBytecodeImport(
+                            structured.importRuntime.prepareBytecodeImport(
                                     supplied,
                                     activation)));
         }
 
         PreparedEnsureCall prepareStructuredEnsure() {
-            if (!structuredEnsure) {
+            if (structured == null || !structured.ensure) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured ensure capability");
             }
@@ -1363,7 +1399,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedWhileCall prepareStructuredWhile() {
-            if (!structuredWhile) {
+            if (structured == null || !structured.whileLoop) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured while capability");
             }
@@ -1379,7 +1415,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedErrorHandlerCall prepareStructuredErrorHandler() {
-            if (!structuredErrorHandler) {
+            if (structured == null || !structured.errorHandler) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Error.handle capability");
             }
@@ -1411,19 +1447,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedBooleanCall prepareStructuredBoolean() {
-            if (structuredBoolean == null) {
+            if (structured == null || structured.booleanKind == null) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Boolean callback capability");
             }
             return new PreparedBooleanCall(
-                    structuredBoolean,
+                    structured.booleanKind,
                     activation.receiver(),
                     supplied,
                     activation);
         }
 
         PreparedArrayEachCall prepareStructuredArrayEach() {
-            if (!structuredArrayEach) {
+            if (structured == null || !structured.arrayEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Array.each capability");
             }
@@ -1445,7 +1481,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedBytesEachCall prepareStructuredBytesEach() {
-            if (!structuredBytesEach) {
+            if (structured == null || !structured.bytesEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Bytes.each capability");
             }
@@ -1456,7 +1492,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedProcessArgumentsEachCall prepareStructuredProcessArgumentsEach() {
-            if (!structuredProcessArgumentsEach) {
+            if (structured == null || !structured.processArgumentsEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured ProcessArguments.each capability");
             }
@@ -1467,7 +1503,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedEnvironmentEachCall prepareStructuredEnvironmentEach() {
-            if (!structuredEnvironmentEach) {
+            if (structured == null || !structured.environmentEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Environment.each capability");
             }
@@ -1489,7 +1525,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedIdentityMapEachCall prepareStructuredIdentityMapEach() {
-            if (!structuredIdentityMapEach) {
+            if (structured == null || !structured.identityMapEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured IdentityMap.each capability");
             }
@@ -1500,7 +1536,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedMapEachCall prepareStructuredMapEach() {
-            if (!structuredMapEach) {
+            if (structured == null || !structured.mapEach) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Map.each capability");
             }
@@ -1511,19 +1547,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedMapReadLookupCall prepareStructuredMapReadLookup() {
-            if (structuredMapReadLookup == null) {
+            if (structured == null || structured.mapReadLookup == null) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Map read-lookup capability");
             }
             return new PreparedMapReadLookupCall(
-                    structuredMapReadLookup,
+                    structured.mapReadLookup,
                     activation.receiver(),
                     supplied,
                     activation);
         }
 
         PreparedMapAtPutCall prepareStructuredMapAtPut() {
-            if (!structuredMapAtPut) {
+            if (structured == null || !structured.mapAtPut) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Map.atPut capability");
             }
@@ -1534,7 +1570,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         PreparedMapRemoveCall prepareStructuredMapRemove() {
-            if (!structuredMapRemove) {
+            if (structured == null || !structured.mapRemove) {
                 throw new IllegalStateException(
                         "prepared Closure call has no structured Map.remove capability");
             }
@@ -1549,25 +1585,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw new IllegalStateException(
                         "prepared Closure call is not native");
             }
-            if (structuredObjectCall
+            if ((structured != null
+                            && (structured.objectCall
+                                    || structured.importRuntime != null
+                                    || structured.ensure
+                                    || structured.errorHandler
+                                    || structured.whileLoop
+                                    || structured.booleanKind != null
+                                    || structured.arrayEach
+                                    || structured.bytesEach
+                                    || structured.processArgumentsEach
+                                    || structured.environmentEach
+                                    || structured.identityMapEach
+                                    || structured.mapEach
+                                    || structured.mapReadLookup != null
+                                    || structured.mapAtPut
+                                    || structured.mapRemove))
                     || isStructuredCaseOf()
                     || isStructuredMapMatch()
-                    || structuredImportRuntime != null
-                    || structuredEnsure
-                    || structuredErrorHandler
-                    || structuredWhile
-                    || structuredBoolean != null
-                    || structuredArrayEach
                     || isStructuredArrayMatch()
-                    || structuredBytesEach
-                    || structuredProcessArgumentsEach
-                    || structuredEnvironmentEach
-                    || isStructuredIdentityMapAtIfAbsent()
-                    || structuredIdentityMapEach
-                    || structuredMapEach
-                    || structuredMapReadLookup != null
-                    || structuredMapAtPut
-                    || structuredMapRemove) {
+                    || isStructuredIdentityMapAtIfAbsent()) {
                 throw new IllegalStateException(
                         "structured control native must execute through Bytecode control operations");
             }
