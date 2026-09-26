@@ -486,6 +486,35 @@ development. Their live work/status is coordinated through
 durable implementation and closure history remains recorded in
 [`docs/project/registries/IMPLEMENTATION_STATUS.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md).
 
+## Native Image
+
+Protos can also be built as a GraalVM Native Image:
+
+``` sh
+make -C build/native build
+```
+
+The resulting executable is written to:
+
+``` text
+target/native/protos
+```
+
+Native Image tooling is intentionally isolated under `build/native/`; it is
+separate from the ordinary JVM build, portable distribution creation, and
+release publication.
+
+To rebuild the Native Image and run its regression suite:
+
+``` sh
+make -C build/native test
+```
+
+The Native regression suite verifies the CLI and basic guest execution, then
+forces Truffle guest compilation and requires both generated Protos Bytecode DSL
+roots to compile successfully at Tier 2. It also guards against runtime-compiler
+regressions such as `FrameWithoutBoxing` materialization failures.
+
 ## Learn Protos
 
 -   [Try Protos](docs/guide/00-try-protos.md) — get a runnable Protos environment
