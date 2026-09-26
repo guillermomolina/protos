@@ -28,8 +28,10 @@ import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.GenerateBytecode;
 import com.oracle.truffle.api.bytecode.Operation;
+import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
@@ -66,7 +68,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         public static Object perform(
                 CallTarget helperTarget,
-                ProtosActivation activation) {
+                @Bind("$frame") VirtualFrame frame) {
+            ProtosActivation activation =
+                    ProtosFrameArguments.activation(frame);
             return Objects.requireNonNull(
                     helperTarget.call(activation),
                     "semantic Bytecode helper root returned null");
@@ -130,7 +134,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                             builder.beginStoreLocal(child);
                             builder.beginInvokeSemanticHelper();
                             builder.emitLoadConstant(helperTarget);
-                            builder.emitLoadArgument(0);
                             builder.endInvokeSemanticHelper();
                             builder.endStoreLocal();
 

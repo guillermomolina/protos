@@ -220,6 +220,58 @@ public final class ProtosActivation {
                 Objects.requireNonNull(executionDomain, "executionDomain"));
     }
 
+    /**
+     * Internal PLAT040 frame-ABI materialization seam.
+     *
+     * <p>The invocation home is established before the Truffle call boundary so the
+     * caller can retain exact non-local-return completion semantics. The rich
+     * activation itself, including the guest execution context and guest supplied
+     * Array, is still created only after target entry.
+     */
+    public static ProtosActivation forImmediateMethodInvocationWithReturnHomeForRuntime(
+            ProtosClosureValue closure,
+            java.util.List<?> supplied,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            ProtosPrelude fallbackPrelude,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey,
+            ProtosActorExecutionDomain executionDomain,
+            ProtosReturnHome invocationHome) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(methodHome, "methodHome");
+        Objects.requireNonNull(actorModuleState, "actorModuleState");
+        Objects.requireNonNull(invocationHome, "invocationHome");
+
+        ProtosPrelude prelude = closure.prelude().orElse(fallbackPrelude);
+        if (prelude == null) {
+            throw new IllegalStateException("Closure invocation requires an owning Core prelude");
+        }
+
+        ProtosReturnHome capturedHome = closure.returnHome().orElse(null);
+        boolean ownsReturnHome = capturedHome == null;
+        if (!ownsReturnHome && capturedHome != invocationHome) {
+            throw new IllegalArgumentException(
+                    "compact invocation return home does not match the Closure capture");
+        }
+
+        return new ProtosActivation(
+                prelude.newExecutionContext(),
+                closure.capturedLexicalContexts(),
+                receiver,
+                prelude,
+                prelude.newFrozenArray(supplied),
+                invocationHome,
+                methodHome,
+                ownsReturnHome,
+                false,
+                actorModuleState,
+                currentModuleKey,
+                Objects.requireNonNull(executionDomain, "executionDomain"));
+    }
+
     private ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,

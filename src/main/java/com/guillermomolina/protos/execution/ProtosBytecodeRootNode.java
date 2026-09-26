@@ -892,6 +892,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final ProtosNativeClosureBody nativeBody;
         private final List<?> supplied;
         private final ProtosActivation activation;
+        private final Object[] targetArguments;
         private final ProtosReturnHome returnHome;
         private final boolean ownsReturnHome;
         private final boolean structuredEnsure;
@@ -961,6 +962,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.nativeBody = nativeBody;
             this.supplied = List.copyOf(supplied);
             this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            this.targetArguments =
+                    bodyTarget == null
+                            ? null
+                            : new Object[] {activation};
             this.returnHome = activation.returnHome().orElseThrow(
                     () -> new IllegalStateException("Closure invocation requires a return home"));
             this.ownsReturnHome = activation.ownsReturnHome();
@@ -1002,6 +1007,45 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw new IllegalArgumentException(
                         "prepared Closure call cannot own multiple structured-control capabilities");
             }
+        }
+
+        PreparedClosureCall(
+                RootCallTarget bodyTarget,
+                Object[] compactTargetArguments) {
+            this.bodyTarget =
+                    java.util.Objects.requireNonNull(
+                            bodyTarget,
+                            "bodyTarget");
+            this.nativeBody = null;
+            this.supplied = List.of();
+            this.activation = null;
+            this.targetArguments =
+                    java.util.Objects.requireNonNull(
+                            compactTargetArguments,
+                            "compactTargetArguments");
+            this.returnHome =
+                    ProtosFrameArguments.compactReturnHome(
+                            compactTargetArguments);
+            this.ownsReturnHome =
+                    ProtosFrameArguments.compactOwnsReturnHome(
+                            compactTargetArguments);
+            this.structuredEnsure = false;
+            this.structuredErrorHandler = false;
+            this.structuredWhile = false;
+            this.structuredBoolean = null;
+            this.structuredArrayEach = false;
+            this.structuredBytesEach = false;
+            this.structuredProcessArgumentsEach = false;
+            this.structuredEnvironmentEach = false;
+            this.structuredIdentityMapEach = false;
+            this.structuredMapEach = false;
+            this.structuredMapReadLookup = null;
+            this.structuredMapAtPut = false;
+            this.structuredMapRemove = false;
+            this.directControlNative = false;
+            this.structuredObjectCall = false;
+            this.structuredImportRuntime = null;
+            this.moduleInitialization = null;
         }
 
         static PreparedClosureCall nativeCall(
@@ -1053,6 +1097,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.nativeBody = null;
             this.supplied = List.of();
             this.activation = moduleInitialization.activation();
+            this.targetArguments =
+                    bodyTarget == null
+                            ? null
+                            : new Object[] {this.activation};
             this.returnHome = null;
             this.ownsReturnHome = false;
             this.structuredEnsure = false;
@@ -1083,7 +1131,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         RootCallTarget bodyTarget() { return bodyTarget; }
-        ProtosActivation activation() { return activation; }
+        ProtosActivation activation() {
+            if (activation == null) {
+                throw new IllegalStateException(
+                        "compact source call has no pre-target rich activation");
+            }
+            return activation;
+        }
+        Object[] targetArguments() {
+            if (targetArguments == null) {
+                throw new IllegalStateException(
+                        "prepared call has no source target arguments");
+            }
+            return targetArguments;
+        }
+        ProtosTask taskForRuntime() {
+            if (activation != null) {
+                return activation.task().orElse(null);
+            }
+            return ProtosFrameArguments.compactCaller(targetArguments)
+                    .task()
+                    .orElse(null);
+        }
         boolean isNative() { return nativeBody != null; }
         boolean isImmediate() {
             return moduleInitialization != null && moduleInitialization.isImmediate();
@@ -5126,18 +5195,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedSend(receiver, selector, caller, enteredContext)")
                         GuardedSendTarget cachedSend) {
-            ProtosActivation activation =
-                    ProtosActivation.forImmediateMethodInvocation(
+            Object[] frameArguments =
+                    ProtosFrameArguments.compactImmediateMethodCall(
                             cachedSend.closure(),
-                            List.of(supplied),
                             receiver,
                             cachedSend.methodHome(),
-                            caller.prelude().orElse(null),
-                            caller.actorModuleState(),
-                            caller.currentModuleKey().orElse(null),
-                            caller.executionDomain());
-            attachTaskOrInheritDynamicControlState(activation, caller);
-            return new PreparedClosureCall(cachedSend.target(), activation);
+                            caller,
+                            supplied);
+            return new PreparedClosureCall(
+                    cachedSend.target(),
+                    frameArguments);
         }
 
         /**
@@ -5209,18 +5276,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("fastOrdinarySendTarget(closure, enteredContext)")
                         RootCallTarget cachedTarget) {
-            ProtosActivation activation =
-                    ProtosActivation.forImmediateMethodInvocation(
+            Object[] frameArguments =
+                    ProtosFrameArguments.compactImmediateMethodCall(
                             closure,
-                            List.of(supplied),
                             receiver,
                             methodHome,
-                            caller.prelude().orElse(null),
-                            caller.actorModuleState(),
-                            caller.currentModuleKey().orElse(null),
-                            caller.executionDomain());
-            attachTaskOrInheritDynamicControlState(activation, caller);
-            return new PreparedClosureCall(cachedTarget, activation);
+                            caller,
+                            supplied);
+            return new PreparedClosureCall(
+                    cachedTarget,
+                    frameArguments);
         }
 
         @Specialization(replaces = {"guardedOrdinarySend", "fastOrdinarySend"})
@@ -6216,7 +6281,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("create(cachedTarget)")
                         DirectCallNode node) {
             try {
-                return node.call(prepared.activation());
+                return node.call(prepared.targetArguments());
             } catch (ProtosBytecodeControlTransferException bridged) {
                 return prepared.handleControlTransfer(bridged.transfer());
             } catch (AbstractTruffleException transfer) {
@@ -6236,7 +6301,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             try {
                 return node.call(
                         prepared.bodyTarget(),
-                        prepared.activation());
+                        prepared.targetArguments());
             } catch (ProtosBytecodeControlTransferException bridged) {
                 return prepared.handleControlTransfer(bridged.transfer());
             } catch (AbstractTruffleException transfer) {
@@ -6281,11 +6346,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
              */
             if (resumeValue instanceof ProtosTaskCancellationException cancellation) {
                 ProtosTask task =
-                        prepared.activation().task()
-                                .orElseThrow(
-                                        () ->
-                                                new IllegalStateException(
-                                                        "C-prime cancellation resume requires a task"));
+                        prepared.taskForRuntime();
+                if (task == null) {
+                    throw new IllegalStateException(
+                            "C-prime cancellation resume requires a task");
+                }
                 if (task.cancellationPhase()
                         != ProtosTask.CancellationPhase.UNWINDING) {
                     throw new IllegalStateException(
