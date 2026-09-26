@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.95-SNAPSHOT
+
+- `I072` Phase E (slice 1) begins structured-control convergence: a stable,
+  canonically-selected send to `Object.ensure`, `Error.handle`, `Object.while`,
+  or a Boolean callback selector (`ifTrue`/`ifFalse`/`ifTrue:ifFalse:`/`and`/
+  `or`) no longer repeats the general D013 lookup and the generic
+  `finishPreparingComposedCallByImplementation` classifier scan on its valid
+  hit. A new `guardedStructuredSend` specialization on `PrepareSendArguments`
+  reuses the exact Phase A `ProtosValueLookup.lookupGuarded`/`Assumption`
+  contract, classifies the selected value exactly once against the existing
+  canonical-selection helpers (behavior identity plus home/provenance, never
+  native-body identity or selector spelling alone), and feeds the cached kind
+  directly into the unchanged `finishPreparingComposedCall`/
+  `PreparedClosureCall.nativeCall` path, so execution, suspension, cleanup and
+  error semantics are byte-identical to the generic path. Any override, alias
+  at a noncanonical home, or invalidated selection falls straight through to
+  the exact existing generic path, unchanged. The remaining structured
+  families (`Array`/`Bytes`/`ProcessArguments`/`Environment`/`IdentityMap`/
+  `Map` callbacks, `Map` read/`atPut`/`remove`, `Object.caseOf`/`match`) and
+  the corresponding dead-compatibility-machinery review remain open follow-up
+  slices of `I072` Phase E; `StructuredCallCapabilities` and the generic
+  classifier cascade are unchanged and still required by those paths. No
+  observable Protos semantics change.
+
 ## 0.3.94-SNAPSHOT
 
 - `I072` Phase D completes the prepared-call/control-mode separation left open

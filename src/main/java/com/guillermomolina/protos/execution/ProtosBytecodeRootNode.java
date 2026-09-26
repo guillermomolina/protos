@@ -5564,6 +5564,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 RootCallTarget target,
                 Assumption stability) {}
 
+        /**
+         * I072 Phase E structured kinds admitted by {@link #guardedStructuredSend}.
+         * Each member corresponds to exactly one canonical-selection helper;
+         * the Boolean family additionally carries its
+         * {@link ProtosStandardBooleanProtocol.StructuredCallbackKind}.
+         */
+        enum GuardedStructuredKind {
+            ENSURE,
+            ERROR_HANDLE,
+            WHILE,
+            BOOLEAN
+        }
+
+        public record GuardedStructuredSend(
+                ProtosClosureValue closure,
+                ProtosObjectValue methodHome,
+                GuardedStructuredKind kind,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
+                Assumption stability) {}
+
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
@@ -5679,7 +5699,146 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     frameArguments);
         }
 
-        @Specialization(replaces = {"guardedOrdinarySend", "fastOrdinarySend"})
+        /*
+         * I072 Phase E: a stable canonical structured native send (Object.ensure,
+         * Error.handle, Object.while, Boolean callbacks) reuses the exact Phase A
+         * lookupGuarded/Assumption contract that guardedOrdinarySend already
+         * establishes for source-backed Closures. createGuardedStructuredSend
+         * runs the authoritative D013 lookup and classifies the selected value
+         * against the canonical-selection helpers (identity + home/provenance,
+         * not native-body identity alone) exactly once, at specialization
+         * establishment. The valid hit below never repeats that lookup or the
+         * generic finishPreparingComposedCallByImplementation classifier scan;
+         * it feeds the single cached kind directly into the unchanged
+         * finishPreparingComposedCall/PreparedClosureCall.nativeCall path, so
+         * ensure/handle/while/Boolean execution, suspension, cleanup and error
+         * semantics remain byte-identical to the generic path. A selector whose
+         * selection is not exactly one canonical standard implementation misses
+         * here and falls through to the exact generic {@code perform} path,
+         * which preserves override/alias/noncanonical-home behavior unchanged.
+         */
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "cachedStructured != null"
+                },
+                assumptions = "cachedStructured.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedStructuredSend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                @Variadic Object[] supplied,
+                @Bind("currentEnteredContext()")
+                        ProtosLanguageContext enteredContext,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("createGuardedStructuredSend(receiver, selector, caller)")
+                        GuardedStructuredSend cachedStructured) {
+            List<?> suppliedList = List.of(supplied);
+            rejectComposedInvocationProjection(cachedStructured.closure());
+            ProtosActivation activation =
+                    ProtosActivation.forImmediateMethodInvocation(
+                            cachedStructured.closure(),
+                            suppliedList,
+                            receiver,
+                            cachedStructured.methodHome(),
+                            caller.prelude().orElse(null),
+                            caller.actorModuleState(),
+                            caller.currentModuleKey().orElse(null),
+                            caller.executionDomain());
+            attachTaskOrInheritDynamicControlState(activation, caller);
+            return finishPreparingComposedCall(
+                    cachedStructured.closure(),
+                    suppliedList,
+                    activation,
+                    cachedStructured.kind() == GuardedStructuredKind.ENSURE,
+                    cachedStructured.kind() == GuardedStructuredKind.ERROR_HANDLE,
+                    cachedStructured.kind() == GuardedStructuredKind.WHILE,
+                    cachedStructured.booleanKind(),
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    false,
+                    null,
+                    false,
+                    false,
+                    false,
+                    false,
+                    null);
+        }
+
+        /**
+         * Resolves and classifies only while establishing a specialization.
+         * Reuses {@link ProtosValueLookup#lookupGuarded} exactly as
+         * {@link #createGuardedSend} does, then admits only a selected native
+         * Closure whose behavior/home satisfies one canonical-selection helper.
+         * A copied/aliased/overridden selection (same native body at a
+         * noncanonical home, or a different selected behavior entirely) misses
+         * here and invalidates the assumption immediately, leaving the exact
+         * generic classification as the sole authority for that selector.
+         */
+        static GuardedStructuredSend createGuardedStructuredSend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller) {
+            ProtosValueLookup.GuardedLookup lookup;
+            try {
+                lookup = ProtosValueLookup.lookupGuarded(
+                        receiver, selector, caller.preludeOrNullForRuntime());
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return null;
+            }
+            if (lookup == null) {
+                return null;
+            }
+            ProtosSlotLookupResult selected = lookup.selected();
+            if (!(selected.value() instanceof ProtosClosureValue closure)
+                    || closure.nativeBody().isEmpty()) {
+                lookup.stability().invalidate();
+                return null;
+            }
+            ProtosObjectValue home = selected.home();
+            GuardedStructuredKind kind;
+            ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind = null;
+            if (ProtosStandardObjectProtocol.isCanonicalStandardEnsureSelection(
+                    closure, home)) {
+                kind = GuardedStructuredKind.ENSURE;
+            } else if (ProtosStandardErrorProtocol.isCanonicalStandardHandleSelection(
+                    closure, home, caller)) {
+                kind = GuardedStructuredKind.ERROR_HANDLE;
+            } else if (ProtosStandardObjectProtocol.isCanonicalStandardWhileSelection(
+                    closure, home)) {
+                kind = GuardedStructuredKind.WHILE;
+            } else if ((booleanKind =
+                    ProtosStandardBooleanProtocol
+                            .structuredCallbackKindForCanonicalSelection(
+                                    closure, home))
+                    != null) {
+                kind = GuardedStructuredKind.BOOLEAN;
+            } else {
+                lookup.stability().invalidate();
+                return null;
+            }
+            if (!lookup.stability().isValid()) {
+                return null;
+            }
+            return new GuardedStructuredSend(
+                    closure, home, kind, booleanKind, lookup.stability());
+        }
+
+        @Specialization(
+                replaces = {
+                    "guardedOrdinarySend",
+                    "fastOrdinarySend",
+                    "guardedStructuredSend"
+                })
         public static PreparedClosureCall perform(
                 Object receiver,
                 String selector,
