@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.92-SNAPSHOT
+
+- `I072` Phase C removes unconditional guest execution-context materialization
+  from ordinary optimized source-backed calls while preserving the Phase A
+  selector-specific lookup guard and the Phase B compact frame-argument ABI.
+  The current root now operates primarily against the single frame-backed
+  lexical authority; a genuine guest `Context` object is materialized only when
+  guest semantics observe, capture, escape, reflect, or otherwise require it.
+- Supplied positional arguments remain an internal compact vector through
+  ordinary parameter/default binding instead of being wrapped eagerly in a
+  frozen guest `Array`. Guest Array materialization remains available on demand,
+  and rest binding still creates the semantically required fresh frozen Array.
+- Current-local create/read/assign paths, unqualified writable-target
+  resolution, captured-lexical nearer-binding checks, and repeated-root lexical
+  authority handoff now avoid forcing a guest Context while preserving
+  `PRESENT(null) != ABSENT`, D179 remove/recreate behavior, capture by reference,
+  late nearer creation/retargeting, receiver fallback, evaluation ordering, and
+  one authoritative lexical store.
+- Frame materialization is deferred until the execution context becomes
+  guest-observable. Closure capture and debugger/reflection projection still
+  force the required escape-safe materialization, while ordinary execution does
+  not. Focused Java regressions, the execution-context conformance corpus,
+  structural falsification of the Phase A/B/C call path, and the integrated
+  `make test` gate pass with no observable Protos semantic change.
+
 ## 0.3.91-SNAPSHOT
 
 - `I072` Phase B implements the PLAT040 compact ordinary-call frame-argument ABI

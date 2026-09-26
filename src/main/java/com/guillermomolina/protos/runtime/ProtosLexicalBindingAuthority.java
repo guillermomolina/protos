@@ -55,4 +55,11 @@ public interface ProtosLexicalBindingAuthority {
     void putBinding(String name, Object value);
 
     Object removeBinding(String name);
+
+    /**
+     * Backend-private hook invoked immediately before a genuine execution
+     * context becomes guest-observable. Authorities whose storage depends on
+     * ephemeral execution state may make that state escape-safe here.
+     */
+    default void prepareForContextObservation() {}
 }

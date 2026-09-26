@@ -136,13 +136,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static boolean perform(
                 ProtosActivation activation,
                 int positionalIndex) {
-            ProtosArrayValue arguments =
+            List<?> arguments =
                     closureArguments(activation);
-            return arguments.indexedSize()
-                            .compareTo(
-                                    BigInteger.valueOf(
-                                            positionalIndex))
-                    > 0;
+            return arguments.size() > positionalIndex;
         }
     }
 
@@ -152,14 +148,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static Object perform(
                 ProtosActivation activation,
                 int positionalIndex) {
-            ProtosArrayValue arguments =
+            List<?> arguments =
                     closureArguments(activation);
-            BigInteger index =
-                    BigInteger.valueOf(positionalIndex);
-            if (arguments.indexedSize().compareTo(index) <= 0) {
+            if (positionalIndex >= arguments.size()) {
                 throw closureArgumentCountError(activation);
             }
-            return arguments.indexedAt(index);
+            return arguments.get(positionalIndex);
         }
     }
 
@@ -184,10 +178,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 String name,
                 int positionalParametersBeforeRest) {
-            ProtosArrayValue arguments =
+            List<?> supplied =
                     closureArguments(activation);
-            List<Object> supplied =
-                    arguments.indexedSnapshot();
             int restStart =
                     Math.min(
                             positionalParametersBeforeRest,
@@ -214,24 +206,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static void perform(
                 ProtosActivation activation,
                 int maximumPositionalArguments) {
-            if (closureArguments(activation)
-                            .indexedSize()
-                            .compareTo(
-                                    BigInteger.valueOf(
-                                            maximumPositionalArguments))
-                    > 0) {
+            if (closureArguments(activation).size()
+                    > maximumPositionalArguments) {
                 throw closureArgumentCountError(activation);
             }
         }
     }
 
-    private static ProtosArrayValue closureArguments(
+    private static List<?> closureArguments(
             ProtosActivation activation) {
-        return activation.arguments()
-                .orElseThrow(
-                        () ->
-                                new IllegalStateException(
-                                        "parameter binding requires an invocation activation"));
+        return activation.suppliedArgumentsForRuntime();
     }
 
     private static void createClosureParameterSlot(
@@ -239,8 +223,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             String name,
             Object value) {
         try {
-            activation.context()
-                    .createLocalSlot(name, value);
+            activation.createCurrentLocalSlotForRuntime(name, value);
         } catch (IllegalStateException invalidCreation) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(activation));
@@ -295,15 +278,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
-            if (activation.context()
-                    instanceof ProtosExecutionContextValue executionContext) {
-                executionContext.installFrameLexicalBindingAuthority(
-                        new ProtosFrameLexicalBindingAuthority(
-                                frameBackedNames,
-                                frameBackedLocals,
-                                bytecodeNode,
-                                frame.materialize()));
-            }
+            activation.installFrameLexicalBindingAuthorityForRuntime(
+                    new ProtosFrameLexicalBindingAuthority(
+                            frameBackedNames,
+                            frameBackedLocals,
+                            bytecodeNode,
+                            frame));
         }
     }
 
@@ -331,7 +311,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
-            if (activation.context() instanceof ProtosExecutionContextValue
+            if (activation.hasGenuineExecutionContextForRuntime()
                     && !accessor.isCleared(bytecodeNode, frame)) {
                 return accessor.getObject(bytecodeNode, frame);
             }
@@ -372,7 +352,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return lookupCapturedFallback(activation, name);
             }
 
-            if (activation.context().hasLocalSlot(name)) {
+            if (activation.currentContextHasLocalSlotForRuntime(name)) {
                 return lookupCapturedFallback(activation, name);
             }
 
@@ -465,7 +445,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 int lexicalDepth,
                 int frameOrdinal) {
             if (lexicalDepth > 0) {
-                if (activation.context().hasLocalSlot(name)) {
+                if (activation.currentContextHasLocalSlotForRuntime(name)) {
                     return CapturedLexicalWriteTarget.generic(
                             activation.context());
                 }
@@ -542,17 +522,82 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    public static final class ResolvedLexicalWriteTarget {
+        private final boolean currentContext;
+        private final ProtosObjectValue object;
+
+        private ResolvedLexicalWriteTarget(
+                boolean currentContext,
+                ProtosObjectValue object) {
+            this.currentContext = currentContext;
+            this.object = object;
+        }
+
+        static ResolvedLexicalWriteTarget currentContext() {
+            return new ResolvedLexicalWriteTarget(true, null);
+        }
+
+        static ResolvedLexicalWriteTarget object(
+                ProtosObjectValue object) {
+            return new ResolvedLexicalWriteTarget(
+                    false,
+                    java.util.Objects.requireNonNull(object, "object"));
+        }
+    }
+
     @Operation
-    public static final class ResolveWritableLexicalContext {
+    public static final class ResolveWritableLexicalTarget {
         @Specialization
-        public static ProtosObjectValue perform(
+        public static ResolvedLexicalWriteTarget perform(
                 ProtosActivation activation,
                 String name) {
-            return ProtosLexicalFallback.writableContextByName(activation, name)
-                    .orElseThrow(
-                            () ->
-                                    new ProtosSignalException(
-                                            ProtosCoreErrors.newSlotNotFound(activation)));
+            if (activation.currentContextHasLocalSlotForRuntime(name)) {
+                return ResolvedLexicalWriteTarget.currentContext();
+            }
+
+            for (ProtosObjectValue lexicalContext :
+                    activation.capturedLexicalContexts()) {
+                if (lexicalContext.hasLocalSlot(name)) {
+                    return ResolvedLexicalWriteTarget.object(
+                            lexicalContext);
+                }
+            }
+
+            if (activation.receiver()
+                            instanceof ProtosObjectValue ordinaryReceiver
+                    && ordinaryReceiver.hasLocalSlot(name)) {
+                return ResolvedLexicalWriteTarget.object(
+                        ordinaryReceiver);
+            }
+
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newSlotNotFound(activation));
+        }
+    }
+
+    @Operation
+    public static final class AssignResolvedLexicalTarget {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                ResolvedLexicalWriteTarget destination,
+                String name,
+                Object value) {
+            try {
+                if (destination.currentContext) {
+                    activation.assignCurrentLocalSlotForRuntime(
+                            name,
+                            value);
+                } else {
+                    destination.object.assignLocalSlot(
+                            name,
+                            value);
+                }
+            } catch (IllegalStateException invalidMutation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            return value;
         }
     }
 
@@ -566,6 +611,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return object;
             }
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    @Operation
+    public static final class CreateCurrentLocalSlot {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                String name,
+                Object value) {
+            try {
+                activation.createCurrentLocalSlotForRuntime(name, value);
+            } catch (IllegalStateException invalidMutation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            return value;
         }
     }
 
@@ -614,10 +676,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 observed.add(array.indexedAt(BigInteger.valueOf(index)));
             }
 
-            ProtosObjectValue target = activation.context();
             for (int index = 0; index < required; index++) {
                 try {
-                    target.createLocalSlot(names[index], observed.get(index));
+                    activation.createCurrentLocalSlotForRuntime(
+                            names[index],
+                            observed.get(index));
                 } catch (IllegalStateException invalidMutation) {
                     /*
                      * Deliberately no rollback: D143 applies ordinary ':'

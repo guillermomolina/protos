@@ -67,7 +67,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     private final LinkedHashMap<String, Integer> frameBackedOffsets;
     private final LocalRangeAccessor frameBackedLocals;
     private final BytecodeNode bytecodeNode;
-    private final VirtualFrame frame;
+    private VirtualFrame frame;
     private final LinkedHashMap<String, Object> dynamicOverflow = new LinkedHashMap<>();
     private final LinkedHashSet<String> establishmentOrder = new LinkedHashSet<>();
 
@@ -188,6 +188,11 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         }
         frameBackedLocals.setObject(
                 bytecodeNode, frame, ordinal, value);
+    }
+
+    @Override
+    public void prepareForContextObservation() {
+        frame = frame.materialize();
     }
 
     @Override

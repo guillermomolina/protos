@@ -1747,15 +1747,11 @@ final class CanonicalToBytecodeLowerer {
             emitBodyExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(result);
-            builder.beginCreateLocalSlot();
+            builder.beginCreateCurrentLocalSlot();
             builder.emitLoadArgument(0);
-            builder.beginLoadIntrinsic();
-            builder.emitLoadArgument(0);
-            builder.emitLoadConstant(CanonicalIntrinsic.Kind.CONTEXT);
-            builder.endLoadIntrinsic();
             builder.emitLoadConstant(create.name());
             builder.emitLoadLocal(value);
-            builder.endCreateLocalSlot();
+            builder.endCreateCurrentLocalSlot();
             builder.endStoreLocal();
             return;
         }
@@ -1868,10 +1864,10 @@ final class CanonicalToBytecodeLowerer {
         } else {
             /* AST authority resolves the writable lexical destination before RHS evaluation. */
             builder.beginStoreLocal(mutationTarget);
-            builder.beginResolveWritableLexicalContext();
+            builder.beginResolveWritableLexicalTarget();
             builder.emitLoadArgument(0);
             builder.emitLoadConstant(assign.name());
-            builder.endResolveWritableLexicalContext();
+            builder.endResolveWritableLexicalTarget();
             builder.endStoreLocal();
         }
 
@@ -1885,13 +1881,20 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
             builder.endAssignCapturedFrameLocal();
-        } else {
+        } else if (assign.target().isPresent()) {
             builder.beginAssignLocalSlot();
             builder.emitLoadArgument(0);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
             builder.endAssignLocalSlot();
+        } else {
+            builder.beginAssignResolvedLexicalTarget();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(mutationTarget);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadLocal(value);
+            builder.endAssignResolvedLexicalTarget();
         }
         builder.endStoreLocal();
     }
@@ -1964,15 +1967,11 @@ final class CanonicalToBytecodeLowerer {
             emitDefaultExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(result);
-            builder.beginCreateLocalSlot();
+            builder.beginCreateCurrentLocalSlot();
             builder.emitLoadArgument(0);
-            builder.beginLoadIntrinsic();
-            builder.emitLoadArgument(0);
-            builder.emitLoadConstant(CanonicalIntrinsic.Kind.CONTEXT);
-            builder.endLoadIntrinsic();
             builder.emitLoadConstant(create.name());
             builder.emitLoadLocal(value);
-            builder.endCreateLocalSlot();
+            builder.endCreateCurrentLocalSlot();
             builder.endStoreLocal();
             return;
         }
@@ -2071,10 +2070,10 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
         } else {
             builder.beginStoreLocal(mutationTarget);
-            builder.beginResolveWritableLexicalContext();
+            builder.beginResolveWritableLexicalTarget();
             builder.emitLoadArgument(0);
             builder.emitLoadConstant(assign.name());
-            builder.endResolveWritableLexicalContext();
+            builder.endResolveWritableLexicalTarget();
             builder.endStoreLocal();
         }
 
@@ -2088,13 +2087,20 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
             builder.endAssignCapturedFrameLocal();
-        } else {
+        } else if (assign.target().isPresent()) {
             builder.beginAssignLocalSlot();
             builder.emitLoadArgument(0);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
             builder.endAssignLocalSlot();
+        } else {
+            builder.beginAssignResolvedLexicalTarget();
+            builder.emitLoadArgument(0);
+            builder.emitLoadLocal(mutationTarget);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadLocal(value);
+            builder.endAssignResolvedLexicalTarget();
         }
         builder.endStoreLocal();
     }

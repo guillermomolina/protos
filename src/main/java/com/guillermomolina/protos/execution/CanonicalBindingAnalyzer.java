@@ -314,7 +314,7 @@ final class CanonicalBindingAnalyzer {
             return;
         }
         /* Destination is resolved before the RHS evaluates, matching the runtime
-         * ResolveWritableLexicalContext-before-value ordering this slice must preserve. */
+         * ResolveWritableLexicalTarget-before-value ordering this slice must preserve. */
         assignResolutions.put(assign, resolve(assign.name(), scope));
         walk(assign.value(), scope);
     }

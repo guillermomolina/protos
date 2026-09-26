@@ -22,11 +22,13 @@ import java.util.Objects;
 import java.util.Optional;
 
 public final class ProtosActivation {
-    private final ProtosObjectValue context;
+    private ProtosObjectValue context;
+    private ProtosLexicalBindingAuthority deferredContextAuthority;
     private final List<ProtosObjectValue> capturedLexicalContexts;
     private final Object receiver;
     private final ProtosPrelude prelude;
     private final ProtosArrayValue arguments;
+    private final DeferredSuppliedArguments deferredSuppliedArguments;
     private final ProtosReturnHome returnHome;
     private final ProtosObjectValue methodHome;
     private final boolean ownsReturnHome;
@@ -38,6 +40,28 @@ public final class ProtosActivation {
     private ProtosIoOperation deferredCPrimeOperation;
     private ProtosIoReleaseExecution deferredCPrimeRelease;
     private ProtosDynamicControlState directDynamicControlState;
+
+    private static final class DeferredSuppliedArguments {
+        private final List<?> values;
+        private ProtosArrayValue guestArray;
+
+        private DeferredSuppliedArguments(List<?> values) {
+            this.values = List.copyOf(Objects.requireNonNull(values, "values"));
+        }
+
+        private List<?> values() {
+            return values;
+        }
+
+        private synchronized ProtosArrayValue guestArray(ProtosPrelude prelude) {
+            if (guestArray == null) {
+                guestArray =
+                        Objects.requireNonNull(prelude, "prelude")
+                                .newFrozenArray(values);
+            }
+            return guestArray;
+        }
+    }
 
     public ProtosActivation(
             ProtosObjectValue context,
@@ -225,8 +249,9 @@ public final class ProtosActivation {
      *
      * <p>The invocation home is established before the Truffle call boundary so the
      * caller can retain exact non-local-return completion semantics. The rich
-     * activation itself, including the guest execution context and guest supplied
-     * Array, is still created only after target entry.
+     * activation carrier is created only after target entry; its fresh guest
+     * execution context and supplied guest Array remain deferred until semantics
+     * actually observe them.
      */
     public static ProtosActivation forImmediateMethodInvocationWithReturnHomeForRuntime(
             ProtosClosureValue closure,
@@ -258,18 +283,19 @@ public final class ProtosActivation {
         }
 
         return new ProtosActivation(
-                prelude.newExecutionContext(),
+                null,
                 closure.capturedLexicalContexts(),
                 receiver,
                 prelude,
-                prelude.newFrozenArray(supplied),
+                null,
                 invocationHome,
                 methodHome,
                 ownsReturnHome,
                 false,
                 actorModuleState,
                 currentModuleKey,
-                Objects.requireNonNull(executionDomain, "executionDomain"));
+                Objects.requireNonNull(executionDomain, "executionDomain"),
+                new DeferredSuppliedArguments(supplied));
     }
 
     private ProtosActivation(
@@ -285,13 +311,49 @@ public final class ProtosActivation {
             ProtosActorModuleState actorModuleState,
             ProtosModuleKey currentModuleKey,
             ProtosActorExecutionDomain executionDomain) {
-        this.context = Objects.requireNonNull(context, "context");
+        this(
+                context,
+                capturedLexicalContexts,
+                receiver,
+                prelude,
+                arguments,
+                returnHome,
+                methodHome,
+                ownsReturnHome,
+                construction,
+                actorModuleState,
+                currentModuleKey,
+                executionDomain,
+                null);
+    }
+
+    private ProtosActivation(
+            ProtosObjectValue context,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object receiver,
+            ProtosPrelude prelude,
+            ProtosArrayValue arguments,
+            ProtosReturnHome returnHome,
+            ProtosObjectValue methodHome,
+            boolean ownsReturnHome,
+            boolean construction,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey,
+            ProtosActorExecutionDomain executionDomain,
+            DeferredSuppliedArguments deferredSuppliedArguments) {
+        if (context == null
+                && (prelude == null || deferredSuppliedArguments == null)) {
+            throw new NullPointerException(
+                    "context may be deferred only for a compact invocation");
+        }
+        this.context = context;
         this.capturedLexicalContexts =
                 List.copyOf(Objects.requireNonNull(
                         capturedLexicalContexts, "capturedLexicalContexts"));
         this.receiver = Objects.requireNonNull(receiver, "receiver");
         this.prelude = prelude;
         this.arguments = arguments;
+        this.deferredSuppliedArguments = deferredSuppliedArguments;
         this.returnHome = returnHome;
         this.methodHome = methodHome;
         this.ownsReturnHome = ownsReturnHome;
@@ -318,7 +380,8 @@ public final class ProtosActivation {
                 true,
                 enclosing.actorModuleState,
                 enclosing.currentModuleKey,
-                enclosing.executionDomain);
+                enclosing.executionDomain,
+                enclosing.deferredSuppliedArguments);
         if (enclosing.task().isPresent()) {
             construction.attachTask(enclosing.task().orElseThrow());
         } else {
@@ -328,7 +391,141 @@ public final class ProtosActivation {
     }
 
     public ProtosObjectValue context() {
+        if (context == null) {
+            if (deferredContextAuthority != null) {
+                deferredContextAuthority.prepareForContextObservation();
+            }
+            ProtosExecutionContextValue materialized =
+                    (ProtosExecutionContextValue) prelude.newExecutionContext();
+            if (deferredContextAuthority != null) {
+                materialized.installFrameLexicalBindingAuthority(
+                        deferredContextAuthority);
+            }
+            context = materialized;
+        }
         return context;
+    }
+
+    /**
+     * I072-C backend seam: installs the current root's frame-backed lexical
+     * authority without forcing the guest execution-context object to exist.
+     * Repeated roots over one activation hand off the same authoritative
+     * bindings exactly as a materialized execution context does.
+     */
+    public void installFrameLexicalBindingAuthorityForRuntime(
+            ProtosLexicalBindingAuthority authority) {
+        Objects.requireNonNull(authority, "authority");
+
+        if (context != null) {
+            if (context instanceof ProtosExecutionContextValue executionContext) {
+                executionContext.installFrameLexicalBindingAuthority(authority);
+                deferredContextAuthority = authority;
+            }
+            return;
+        }
+
+        if (deferredContextAuthority != null
+                && deferredContextAuthority != authority) {
+            java.util.ArrayList<String> existingNames =
+                    new java.util.ArrayList<>();
+            java.util.ArrayList<Object> existingValues =
+                    new java.util.ArrayList<>();
+            deferredContextAuthority.appendBindingsTo(
+                    existingNames,
+                    existingValues);
+
+            for (int index = 0; index < existingNames.size(); index++) {
+                authority.putBinding(
+                        existingNames.get(index),
+                        existingValues.get(index));
+            }
+        }
+
+        deferredContextAuthority = authority;
+    }
+
+    /**
+     * True when the current lexical scope is semantically a genuine execution
+     * context even if its guest object has not been materialized yet.
+     */
+    public boolean hasGenuineExecutionContextForRuntime() {
+        return context == null || context instanceof ProtosExecutionContextValue;
+    }
+
+    /**
+     * Reads current lexical membership without materializing the guest Context.
+     */
+    public boolean currentContextHasLocalSlotForRuntime(String name) {
+        Objects.requireNonNull(name, "name");
+        if (context != null) {
+            return context.hasLocalSlot(name);
+        }
+        return deferredContextAuthority != null
+                && deferredContextAuthority.containsBinding(name);
+    }
+
+    /**
+     * Reads the current lexical authority without materializing the guest Context.
+     */
+    public Optional<Object> readCurrentLocalSlotForRuntime(String name) {
+        Objects.requireNonNull(name, "name");
+        if (context != null) {
+            return context.readLocalSlot(name);
+        }
+        if (deferredContextAuthority == null) {
+            return Optional.empty();
+        }
+        return deferredContextAuthority.readBinding(name);
+    }
+
+    /**
+     * Establishes a current lexical binding directly in the single authoritative
+     * store. An unmaterialized execution context is necessarily still OPEN.
+     */
+    public void createCurrentLocalSlotForRuntime(
+            String name,
+            Object value) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(value, "value");
+
+        if (context != null) {
+            context.createLocalSlot(name, value);
+            return;
+        }
+
+        if (deferredContextAuthority == null) {
+            context().createLocalSlot(name, value);
+            return;
+        }
+
+        if (deferredContextAuthority.containsBinding(name)) {
+            throw new IllegalStateException(
+                    "local slot already exists: " + name);
+        }
+        deferredContextAuthority.putBinding(name, value);
+    }
+
+    public void assignCurrentLocalSlotForRuntime(
+            String name,
+            Object value) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(value, "value");
+
+        if (context != null) {
+            context.assignLocalSlot(name, value);
+            return;
+        }
+
+        if (deferredContextAuthority == null) {
+            context().assignLocalSlot(name, value);
+            return;
+        }
+
+        if (!deferredContextAuthority.containsBinding(name)) {
+            throw new IllegalStateException(
+                    "local slot does not exist: " + name);
+        }
+        deferredContextAuthority.putBinding(name, value);
     }
 
     public List<ProtosObjectValue> capturedLexicalContexts() {
@@ -493,7 +690,24 @@ public final class ProtosActivation {
     }
 
     public Optional<ProtosArrayValue> arguments() {
-        return Optional.ofNullable(arguments);
+        if (arguments != null) {
+            return Optional.of(arguments);
+        }
+        if (deferredSuppliedArguments == null) {
+            return Optional.empty();
+        }
+        return Optional.of(deferredSuppliedArguments.guestArray(prelude));
+    }
+
+    public List<?> suppliedArgumentsForRuntime() {
+        if (deferredSuppliedArguments != null) {
+            return deferredSuppliedArguments.values();
+        }
+        if (arguments != null) {
+            return arguments.indexedSnapshot();
+        }
+        throw new IllegalStateException(
+                "parameter binding requires an invocation activation");
     }
 
     public Optional<ProtosReturnHome> returnHome() {
@@ -516,7 +730,7 @@ public final class ProtosActivation {
         int capturedCount = capturedLexicalContexts.size();
         java.util.ArrayList<ProtosObjectValue> contexts =
                 new java.util.ArrayList<>(1 + capturedCount);
-        contexts.add(context);
+        contexts.add(context());
         for (int index = 0; index < capturedCount; index++) {
             contexts.add(capturedLexicalContexts.get(index));
         }

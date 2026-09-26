@@ -225,13 +225,8 @@ final class ProtosBytecodeClosureExecutionPlan {
                         "PERF006-B2C3B2 direct Java bind helper does not execute default expressions");
             }
         }
-        java.util.List<Object> supplied =
-                activation.arguments()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "parameter binding requires an invocation activation"))
-                        .indexedSnapshot();
+        java.util.List<?> supplied =
+                activation.suppliedArgumentsForRuntime();
         ProtosPrelude prelude =
                 activation.prelude()
                         .orElseThrow(
@@ -277,7 +272,7 @@ final class ProtosBytecodeClosureExecutionPlan {
             String name,
             Object value) {
         try {
-            activation.context().createLocalSlot(name, value);
+            activation.createCurrentLocalSlotForRuntime(name, value);
         } catch (IllegalStateException invalidCreation) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(activation));

@@ -47,7 +47,7 @@ public final class ProtosLexicalFallback {
         Objects.requireNonNull(name, "name");
 
         Optional<Object> current =
-                activation.context().readLocalSlot(name);
+                activation.readCurrentLocalSlotForRuntime(name);
         if (current.isPresent()) {
             return current;
         }
@@ -77,7 +77,7 @@ public final class ProtosLexicalFallback {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(name, "name");
 
-        if (activation.context().hasLocalSlot(name)) {
+        if (activation.currentContextHasLocalSlotForRuntime(name)) {
             return Optional.of(activation.context());
         }
 
