@@ -7,6 +7,40 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.103-SNAPSHOT
+
+- `PERF014` (#725): direct Closure-call invocation (`operation()`,
+  `operation(args)`, and default-argument call positions) gains a guarded
+  fast-hit specialization on `PrepareClosureCall`, `PrepareClosureCallArguments`,
+  and `PrepareDefaultClosureCallArguments`, converging with the I072-A
+  guarded-selection institutions `PrepareSendArguments` already established
+  for ordinary sends instead of introducing a parallel mechanism.
+
+  A new shared helper, `createGuardedDirectClosureCall`, reuses
+  `ProtosValueLookup.lookupGuarded("call")` to obtain the authoritative D013
+  selection under a selector-specific `Assumption`, admits the fast hit only
+  when the selection is exactly the canonical `Object.call` implementation
+  (`ProtosStandardObjectProtocol.isCanonicalStandardCallSelection`) on a
+  non-native, ordinary source-backed Closure receiver, and reuses
+  `PrepareSendArguments.fastOrdinarySendTarget` for the Context-owned
+  Bytecode activation target (including foreign-Context projection). A valid
+  hit builds the ordinary `ProtosActivation.forClosureInvocation` shape and
+  the existing shared `EnterClosureCall.direct` `DirectCallNode` exactly as
+  before, without repeating the D013 lookup or the
+  `finishPreparingComposedCallByImplementation` structured-protocol
+  classification against the ~14 native Object/Boolean/Array/Map/etc.
+  callback shapes on every call. Any override, shadowing, native body,
+  non-canonical selection, or projection failure misses and falls through to
+  the exact, unmodified generic `prepareClosureCall` path, so call
+  shadowing, replacement, and removal/recreation invalidation remain exactly
+  as observable as before.
+
+  This slice is structural/product-correctness only: it does not change the
+  causal timing conclusion from the PERF010-B/PERF013 checkpoint and does not
+  touch `protos-benchmarks`. A separate controlled-timing checkpoint measures
+  whether the closure-call/guest-call increment actually falls by a
+  multiplicative factor.
+
 ## 0.3.102-SNAPSHOT
 
 - `PERF013` Slice B2 (#724): a proven `CapturedResolved` lexical write whose
