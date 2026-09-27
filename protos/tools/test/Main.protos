@@ -503,6 +503,36 @@ logicalProjections.freeze()
 logicalCaseMetadata.freeze()
 executionSuites = logicalExecutionSuites
 
+// BUG010: every suite's D120 progress state/observer is created here, before
+// any logical Case is scheduled, so the first "[phase] 0/N" line and every
+// later milestone are observable while the invocation is still running
+// rather than only after the logical Case runner has fully drained.
+suiteProgressStates: Array()
+suiteObservers: Array()
+suiteInfrastructureFailed: Array()
+
+suiteIndex: 0
+(() => suiteIndex < executionSuites.size()).while() {
+    planned: executionSuites[suiteIndex]
+    suiteProgress:
+        startProgress(
+            planned.phaseName,
+            planned.logicalCaseCount
+        )
+
+    suiteProgressStates =
+        Array(...suiteProgressStates, suiteProgress)
+    suiteObservers =
+        Array(
+            ...suiteObservers,
+            Progress.observer(suiteProgress)
+        )
+    suiteInfrastructureFailed =
+        Array(...suiteInfrastructureFailed, false)
+
+    suiteIndex = suiteIndex + 1
+}
+
 logicalResults: Array()
 logicalResults.freeze()
 
@@ -534,6 +564,53 @@ logicalLifecycleObserver:
         invocationLifecycle,
         logicalCaseDisplayReference
     )
+
+// BUG010: the narrow completion hook LogicalCaseRunner exposes alongside its
+// D174 lifecycle observer. It fires the instant one logical Case's physical
+// execution crosses the terminal barrier, at that Case's stable logical
+// index, independently of when the remaining Cases complete. It only
+// classifies that one completion and forwards it to its suite's already-
+// created D120 observer; it never reorders or reprojects `logicalResults`.
+logicalCompletionObserver: (index, completion) => {
+    metadata: logicalCaseMetadata[index]
+    targetSuiteIndex: metadata[0]
+    spec: metadata[1]
+
+    projected: LogicalCaseResult.project(completion)
+    classification: LogicalCaseResult.classification(projected)
+
+    evaluation: null
+    resultInfrastructureFailed: false
+
+    (classification == "pass").ifTrue(() => {
+        evaluation =
+            Runner.resultTuple(
+                true,
+                null
+            )
+    })
+
+    (classification == "fail").ifTrue(() => {
+        evaluation =
+            Runner.resultTuple(
+                false,
+                null
+            )
+    })
+
+    (classification == "tool-error").ifTrue(() => {
+        resultInfrastructureFailed = true
+        suiteInfrastructureFailed[targetSuiteIndex] = true
+    })
+
+    suiteObservers[targetSuiteIndex](
+        spec,
+        evaluation,
+        resultInfrastructureFailed
+    )
+
+    null
+}
 
 (logicalProjections.size() > 0).ifTrue(() => {
     logicalCompletions:
@@ -612,7 +689,8 @@ logicalLifecycleObserver:
                 testExecutionRequirementBindings
             ),
             jobs,
-            logicalLifecycleObserver
+            logicalLifecycleObserver,
+            logicalCompletionObserver
         ).value()
 
     logicalResults =
@@ -629,104 +707,17 @@ logicalLifecycleObserver:
     Error().signal()
 })
 
-logicalResultsBySuite: Array()
-executionSuites.each((ignored) => {
-    logicalResultsBySuite =
-        Array(
-            ...logicalResultsBySuite,
-            Array()
-        )
-})
-
-logicalResultIndex: 0
-logicalResults.each((result) => {
-    metadata:
-        logicalCaseMetadata[
-            logicalResultIndex
-        ]
-
-    targetSuiteIndex: metadata[0]
-    spec: metadata[1]
-
-    pair: Array(spec, result)
-    pair.freeze()
-
-    logicalResultsBySuite[targetSuiteIndex] =
-        Array(
-            ...logicalResultsBySuite[targetSuiteIndex],
-            pair
-        )
-
-    logicalResultIndex =
-        logicalResultIndex + 1
-})
-
-logicalResultsBySuite.each((group) => {
-    group.freeze()
-})
-logicalResultsBySuite.freeze()
-
-suiteIndex: 0
-(() => suiteIndex < executionSuites.size()).while() {
-    planned: executionSuites[suiteIndex]
-    suiteProgress:
-        startProgress(
-            planned.phaseName,
-            planned.logicalCaseCount
-        )
-
-    suiteInfrastructureFailed: false
-    logicalObserver:
-        Progress.observer(
-            suiteProgress
-        )
-
-    logicalResultsBySuite[suiteIndex].each((pair) => {
-        spec: pair[0]
-        logicalResult: pair[1]
-
-        classification:
-            LogicalCaseResult.classification(
-                logicalResult
-            )
-
-        evaluation: null
-        resultInfrastructureFailed: false
-
-        (classification == "pass").ifTrue(() => {
-            evaluation =
-                Runner.resultTuple(
-                    true,
-                    null
-                )
-        })
-
-        (classification == "fail").ifTrue(() => {
-            evaluation =
-                Runner.resultTuple(
-                    false,
-                    null
-                )
-        })
-
-        (classification == "tool-error").ifTrue(() => {
-            resultInfrastructureFailed = true
-            suiteInfrastructureFailed = true
-        })
-
-        logicalObserver(
-            spec,
-            evaluation,
-            resultInfrastructureFailed
-        )
-    })
-
+// Every suite's D120 progress state was already driven to completion above,
+// incrementally, by logicalCompletionObserver as each logical Case reached
+// its terminal event. Only the per-phase terminal summary remains.
+suiteFinishIndex: 0
+(() => suiteFinishIndex < executionSuites.size()).while() {
     Progress.finishPhase(
-        suiteProgress,
-        suiteInfrastructureFailed
+        suiteProgressStates[suiteFinishIndex],
+        suiteInfrastructureFailed[suiteFinishIndex]
     )
 
-    suiteIndex = suiteIndex + 1
+    suiteFinishIndex = suiteFinishIndex + 1
 }
 
 (Progress.inFlightCount(invocationLifecycle) == 0).ifFalse(() => {

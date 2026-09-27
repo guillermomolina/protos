@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.104-SNAPSHOT
+
+- `BUG010` (#728): the Test Tool's normal D120 progress is now observable
+  from terminal logical Case events while a `protos test` invocation is
+  still running, instead of only after every logical Case has already
+  completed.
+
+  `protos/tools/test/Main.protos` previously created every suite's
+  `Progress` state and drove `Progress.observer(...)` only after
+  `LogicalCaseRunner.run(...).value()` had already awaited the complete
+  logical run, then grouped and replayed the already-finished completions
+  through `Progress.observer(...)` in a single post-run pass. Even the
+  initial `[phase] 0/N` line could not reach the reporting backend until the
+  whole invocation had finished.
+
+  `protos/tools/test/LogicalCaseRunner.protos` gains a new optional,
+  backward-compatible trailing parameter on `run(...)`,
+  `completionObserver = null`, called `(index, completion)` at the exact
+  point an individual logical Case already crosses the existing terminal
+  barrier — the narrow, presentation-neutral counterpart of the D120
+  `terminalObserver` seam already established on the D108 path in
+  `Runner.protos`. `Main.protos` now creates every suite's `Progress` state
+  and `Progress.observer(...)` before scheduling begins, and wires a new
+  `logicalCompletionObserver` through this seam to classify and forward
+  each completion to its suite's observer immediately, independently of
+  when the remaining Cases complete. The final `logicalResults` projection,
+  exit-code classification, `--jobs` bounded admission, D174/D176
+  lifecycle/watchdog behavior, and guest stdout/stderr privacy are
+  unchanged; stable logical TestPlan result order is preserved exactly as
+  before.
+
 ## 0.3.103-SNAPSHOT
 
 - `PERF014` (#725): direct Closure-call invocation (`operation()`,

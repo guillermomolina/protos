@@ -51,8 +51,15 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
         int progressBinding = source.indexOf("suiteProgress:");
         int progress =
                 source.indexOf("startProgress(", progressBinding);
+        // BUG010: every suite's D120 progress state is now created before
+        // scheduling, so the scheduling call site itself is the correct
+        // anchor for "before scheduling" rather than the removed post-run
+        // per-suite result grouping. "logicalCompletions:" is the binding
+        // that immediately precedes the LogicalCaseRunner.run(...) call and,
+        // unlike that call's own text, does not also match an earlier
+        // explanatory comment referencing the same runner.
         int scheduler =
-                source.indexOf("logicalResultsBySuite[suiteIndex].each(");
+                source.indexOf("logicalCompletions:");
 
         assertTrue(plansFrozen >= 0);
         assertTrue(fileResolver > plansFrozen);

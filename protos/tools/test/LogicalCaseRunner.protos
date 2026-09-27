@@ -17,12 +17,22 @@ Arrays: import("std:collections/Array")
 Discovery: import("self:Discovery")
 CasePlan: import("self:LogicalCasePlan")
 
+// `completionObserver`, when supplied, is called `(index, completion)` the
+// instant one logical Case crosses this runner's terminal barrier, using the
+// same stable logical `index` this Case occupies in the returned `results`
+// array. It is the narrow, presentation-neutral counterpart of the D120
+// `terminalObserver` seam already established on the D108 path in
+// `Runner.protos`: it exists so a caller can drive incremental progress
+// while physical executions are still in flight, without waiting for
+// `results` to be complete and without changing the stable logical index
+// each completion is stored at.
 run: (
     projections,
     sourceLoader,
     executorAsync,
     maxInFlight,
-    lifecycleObserver = null
+    lifecycleObserver = null,
+    completionObserver = null
 ) => {
     Integer.recognizes(maxInFlight).ifFalse(() => {
         fail()
@@ -96,6 +106,13 @@ run: (
                 lifecycleObserver(
                     "terminal",
                     entry,
+                    completion
+                )
+            })
+
+            (completionObserver === null).ifFalse(() => {
+                completionObserver(
+                    index,
                     completion
                 )
             })

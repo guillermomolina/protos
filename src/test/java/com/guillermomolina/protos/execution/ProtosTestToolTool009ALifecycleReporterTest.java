@@ -105,8 +105,11 @@ final class ProtosTestToolTool009ALifecycleReporterTest {
         assertTrue(main.contains("logicalCaseDisplayReference: (entry) => {"));
         assertTrue(
                 normalized(main)
-                        .contains("jobs, logicalLifecycleObserver ).value()"),
-                "the suite-native path reports through the logical renderer");
+                        .contains(
+                                "jobs, logicalLifecycleObserver,"
+                                        + " logicalCompletionObserver ).value()"),
+                "the suite-native path reports through the logical renderer and"
+                        + " the BUG010 incremental completion observer");
 
         // D174/D176 add no mandatory per-Case terminal write: normal output stays the
         // compact D120 aggregate progress.
