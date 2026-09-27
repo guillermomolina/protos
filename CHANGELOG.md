@@ -7,6 +7,42 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.102-SNAPSHOT
+
+- `PERF013` Slice B2 (#724): a proven `CapturedResolved` lexical write whose
+  owner root shares the current lowering group (Slice A/A2/A3, Slice B1) now
+  compiles to new `ResolveCapturedMaterializedWritableLexicalTarget`/
+  `AssignCapturedMaterializedLocal` Bytecode operations instead of the
+  runtime-authority `ResolveCapturedWritableLexicalTarget`/
+  `AssignCapturedFrameLocal` path, mirroring Slice B1 on the write side. Both
+  operations share the same constant `MaterializedLocalAccessor` operand,
+  built from the owner's own `BytecodeLocal`, so the accessor's identity is
+  proven and partial-evaluation constant at both resolution and assignment
+  time; only the owner's retained `MaterializedFrame` is looked up
+  dynamically.
+
+  The destination is still fully selected before the RHS is evaluated, and
+  `AssignCapturedMaterializedLocal` only revalidates (via `isCleared`) and
+  writes the exact selection `ResolveCapturedMaterializedWritableLexicalTarget`
+  already returned; it never re-resolves or retargets the destination after
+  the RHS runs, so late nearer-binding creation/removal/recreation during RHS
+  evaluation keeps the exact existing D179 C0 observable semantics.
+  `CapturedLexicalWriteTarget` gained a `materializedOwnerFrame` variant
+  alongside its existing generic/frame-backed ones. `CLOSED` destinations
+  remain writable and `FROZEN` destinations are rejected exactly as before.
+
+  `CanonicalToBytecodeLowerer.emitBodyAssign` and `emitDefaultAssign` both
+  reuse the existing `capturedOwnerBytecodeLocal`/`frameLocalsByScope`
+  infrastructure from Slice B1 to select the new fast path only when the
+  owner's `BytecodeLocal` is actually available in the current shared
+  `BytecodeRootNodes` group; otherwise they fall back to the unchanged
+  runtime-authority path, still necessary for an isolated Closure
+  rebuild/rematerialization that does not include its lexical owner in the
+  same group (PERF013 Slice C).
+
+  Slice B1 captured reads (`ReadCapturedMaterializedLocal`) are unchanged.
+  This slice changes no observable Protos semantics.
+
 ## 0.3.101-SNAPSHOT
 
 - `PERF013` Slice B1 (#724): a proven `CapturedResolved` lexical read whose

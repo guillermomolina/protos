@@ -163,12 +163,13 @@ final class CanonicalToBytecodeLowerer {
      * PERF013 Slice B1 backend-private registry of the frame-backed {@link
      * BytecodeLocal}s created for every genuine lexical scope this lowerer has
      * lowered so far, keyed by the exact {@link CanonicalLexicalScope} object
-     * the whole-tree binding analysis assigned it. A captured read whose owner
-     * scope is proven ({@link #capturedOwnerMatchesCurrentRoot}) to be part of
-     * the current shared {@code BytecodeRootNodes} group looks its owner's
-     * stable {@link BytecodeLocal} up here (see {@link
-     * #capturedOwnerBytecodeLocal}) instead of resolving it dynamically from
-     * the runtime frame-lexical-binding authority. Populated by {@link
+     * the whole-tree binding analysis assigned it. A captured read or write
+     * (Slice B2) whose owner scope is proven ({@link
+     * #capturedOwnerMatchesCurrentRoot}) to be part of the current shared
+     * {@code BytecodeRootNodes} group looks its owner's stable {@link
+     * BytecodeLocal} up here (see {@link #capturedOwnerBytecodeLocal}) instead
+     * of resolving it dynamically from the runtime frame-lexical-binding
+     * authority. Populated by {@link
      * #emitRootBody} for every genuine execution-context root, before that
      * root's own body (and therefore any nested Closure/object-body root that
      * might capture one of its bindings) is lowered, so the owner's current
@@ -2126,6 +2127,8 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal mutationTarget = builder.createLocal("assignMutationTarget", null);
         java.util.Optional<CanonicalBindingResolution.CapturedResolved> capturedResolution =
                 capturedResolvedAssignment(assign);
+        BytecodeLocal capturedOwnerLocal =
+                capturedResolution.map(this::capturedOwnerBytecodeLocal).orElse(null);
 
         if (assign.target().isPresent()) {
             BytecodeLocal rawTarget = builder.createLocal("assignRawTarget", null);
@@ -2150,12 +2153,21 @@ final class CanonicalToBytecodeLowerer {
              * destination before the RHS is evaluated.
              */
             builder.beginStoreLocal(mutationTarget);
-            builder.beginResolveCapturedWritableLexicalTarget();
-            builder.emitLoadArgument(0);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadConstant(captured.lexicalDepth());
-            builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
-            builder.endResolveCapturedWritableLexicalTarget();
+            if (capturedOwnerLocal != null) {
+                builder.beginResolveCapturedMaterializedWritableLexicalTarget(
+                        capturedOwnerLocal);
+                builder.emitLoadArgument(0);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadConstant(captured.lexicalDepth());
+                builder.endResolveCapturedMaterializedWritableLexicalTarget();
+            } else {
+                builder.beginResolveCapturedWritableLexicalTarget();
+                builder.emitLoadArgument(0);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadConstant(captured.lexicalDepth());
+                builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
+                builder.endResolveCapturedWritableLexicalTarget();
+            }
             builder.endStoreLocal();
         } else {
             /* AST authority resolves the writable lexical destination before RHS evaluation. */
@@ -2171,12 +2183,21 @@ final class CanonicalToBytecodeLowerer {
                 builder, assign.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
         if (capturedResolution.isPresent()) {
-            builder.beginAssignCapturedFrameLocal();
-            builder.emitLoadArgument(0);
-            builder.emitLoadLocal(mutationTarget);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadLocal(value);
-            builder.endAssignCapturedFrameLocal();
+            if (capturedOwnerLocal != null) {
+                builder.beginAssignCapturedMaterializedLocal(capturedOwnerLocal);
+                builder.emitLoadArgument(0);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignCapturedMaterializedLocal();
+            } else {
+                builder.beginAssignCapturedFrameLocal();
+                builder.emitLoadArgument(0);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignCapturedFrameLocal();
+            }
         } else if (assign.target().isPresent()) {
             builder.beginAssignLocalSlot();
             builder.emitLoadArgument(0);
@@ -2337,6 +2358,8 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal mutationTarget = builder.createLocal("defaultAssignMutationTarget", null);
         java.util.Optional<CanonicalBindingResolution.CapturedResolved> capturedResolution =
                 capturedResolvedAssignment(assign);
+        BytecodeLocal capturedOwnerLocal =
+                capturedResolution.map(this::capturedOwnerBytecodeLocal).orElse(null);
 
         if (assign.target().isPresent()) {
             BytecodeLocal rawTarget = builder.createLocal("defaultAssignRawTarget", null);
@@ -2357,12 +2380,21 @@ final class CanonicalToBytecodeLowerer {
             CanonicalBindingResolution.CapturedResolved captured =
                     capturedResolution.orElseThrow();
             builder.beginStoreLocal(mutationTarget);
-            builder.beginResolveCapturedWritableLexicalTarget();
-            builder.emitLoadArgument(0);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadConstant(captured.lexicalDepth());
-            builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
-            builder.endResolveCapturedWritableLexicalTarget();
+            if (capturedOwnerLocal != null) {
+                builder.beginResolveCapturedMaterializedWritableLexicalTarget(
+                        capturedOwnerLocal);
+                builder.emitLoadArgument(0);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadConstant(captured.lexicalDepth());
+                builder.endResolveCapturedMaterializedWritableLexicalTarget();
+            } else {
+                builder.beginResolveCapturedWritableLexicalTarget();
+                builder.emitLoadArgument(0);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadConstant(captured.lexicalDepth());
+                builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
+                builder.endResolveCapturedWritableLexicalTarget();
+            }
             builder.endStoreLocal();
         } else {
             builder.beginStoreLocal(mutationTarget);
@@ -2377,12 +2409,21 @@ final class CanonicalToBytecodeLowerer {
                 builder, assign.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
         if (capturedResolution.isPresent()) {
-            builder.beginAssignCapturedFrameLocal();
-            builder.emitLoadArgument(0);
-            builder.emitLoadLocal(mutationTarget);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadLocal(value);
-            builder.endAssignCapturedFrameLocal();
+            if (capturedOwnerLocal != null) {
+                builder.beginAssignCapturedMaterializedLocal(capturedOwnerLocal);
+                builder.emitLoadArgument(0);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignCapturedMaterializedLocal();
+            } else {
+                builder.beginAssignCapturedFrameLocal();
+                builder.emitLoadArgument(0);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignCapturedFrameLocal();
+            }
         } else if (assign.target().isPresent()) {
             builder.beginAssignLocalSlot();
             builder.emitLoadArgument(0);
@@ -4887,18 +4928,19 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * PERF013 Slice B1: the owner {@link BytecodeLocal} for a proven captured
-     * read, when and only when {@code captured}'s owner scope is both
-     * structurally reachable from the exact root currently being lowered
-     * ({@link #capturedOwnerMatchesCurrentRoot}) and already registered in
-     * {@link #frameLocalsByScope} — meaning owner and this Closure share the
-     * same physical {@code BytecodeRootNodes} group. Returns {@code null}
-     * (never partial/best-effort metadata) whenever either condition fails,
-     * so the caller falls back to the exact existing {@code
-     * ReadCapturedFrameLocal} runtime-authority path unchanged. This is
-     * expected, not an error, for an owner root reached through an isolated
-     * Closure rebuild/rematerialization that does not include its lexical
-     * owner in the same lowering group (PERF013 Slice C).
+     * PERF013 Slice B1 (reads) / Slice B2 (writes): the owner {@link
+     * BytecodeLocal} for a proven captured access, when and only when {@code
+     * captured}'s owner scope is both structurally reachable from the exact
+     * root currently being lowered ({@link #capturedOwnerMatchesCurrentRoot})
+     * and already registered in {@link #frameLocalsByScope} — meaning owner
+     * and this Closure share the same physical {@code BytecodeRootNodes}
+     * group. Returns {@code null} (never partial/best-effort metadata)
+     * whenever either condition fails, so the caller falls back to the exact
+     * existing {@code ReadCapturedFrameLocal}/{@code
+     * ResolveCapturedWritableLexicalTarget} runtime-authority path unchanged.
+     * This is expected, not an error, for an owner root reached through an
+     * isolated Closure rebuild/rematerialization that does not include its
+     * lexical owner in the same lowering group (PERF013 Slice C).
      */
     private BytecodeLocal capturedOwnerBytecodeLocal(
             CanonicalBindingResolution.CapturedResolved captured) {

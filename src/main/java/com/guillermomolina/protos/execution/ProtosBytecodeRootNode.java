@@ -470,6 +470,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      *
      * <p>For a proven captured frame binding, {@code frameAuthority} and
      * {@code frameOrdinal} identify the same single authoritative outer local.
+     * For a PERF013 Slice B2 proven same-group captured binding, {@code
+     * materializedOwnerFrame} identifies the exact owner {@link
+     * MaterializedFrame} already selected before RHS evaluation, to be
+     * revalidated and written through the assignment site's own {@link
+     * MaterializedLocalAccessor} constant operand rather than re-resolved.
      * Otherwise {@code target} preserves the exact generic destination chosen
      * before RHS evaluation.
      */
@@ -477,14 +482,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final ProtosObjectValue target;
         private final ProtosFrameLexicalBindingAuthority frameAuthority;
         private final int frameOrdinal;
+        private final MaterializedFrame materializedOwnerFrame;
 
         private CapturedLexicalWriteTarget(
                 ProtosObjectValue target,
                 ProtosFrameLexicalBindingAuthority frameAuthority,
-                int frameOrdinal) {
+                int frameOrdinal,
+                MaterializedFrame materializedOwnerFrame) {
             this.target = java.util.Objects.requireNonNull(target, "target");
             this.frameAuthority = frameAuthority;
             this.frameOrdinal = frameOrdinal;
+            this.materializedOwnerFrame = materializedOwnerFrame;
         }
 
         static CapturedLexicalWriteTarget generic(
@@ -492,7 +500,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return new CapturedLexicalWriteTarget(
                     target,
                     null,
-                    -1);
+                    -1,
+                    null);
         }
 
         static CapturedLexicalWriteTarget frameBacked(
@@ -502,7 +511,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return new CapturedLexicalWriteTarget(
                     target,
                     java.util.Objects.requireNonNull(authority, "authority"),
-                    frameOrdinal);
+                    frameOrdinal,
+                    null);
+        }
+
+        static CapturedLexicalWriteTarget materialized(
+                ProtosExecutionContextValue target,
+                MaterializedFrame ownerFrame) {
+            return new CapturedLexicalWriteTarget(
+                    target,
+                    null,
+                    -1,
+                    java.util.Objects.requireNonNull(ownerFrame, "ownerFrame"));
         }
     }
 
@@ -581,6 +601,123 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             name,
                             destination.frameOrdinal,
                             value);
+                } else {
+                    destination.target.assignLocalSlot(name, value);
+                }
+            } catch (IllegalStateException invalidMutation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            return value;
+        }
+    }
+
+    /**
+     * PERF013 Slice B2 direct captured-write destination resolution using a
+     * compile-time-proven owner {@link BytecodeLocal}, materialized via a
+     * generated {@link MaterializedLocalAccessor}, mirroring {@link
+     * ReadCapturedMaterializedLocal} on the write side. Every semantically
+     * nearer execution-context presence check, and the static owner's own
+     * {@code isCleared} presence check, are preserved exactly as in {@link
+     * ResolveCapturedWritableLexicalTarget}, so D179 C0 late-creation/removal
+     * retargeting is unaffected. The destination is fully selected here,
+     * before RHS evaluation; {@link AssignCapturedMaterializedLocal} only
+     * revalidates and writes the exact selection returned here, it never
+     * re-resolves it.
+     */
+    @Operation
+    @ConstantOperand(type = MaterializedLocalAccessor.class)
+    public static final class ResolveCapturedMaterializedWritableLexicalTarget {
+        @Specialization
+        public static CapturedLexicalWriteTarget perform(
+                MaterializedLocalAccessor accessor,
+                ProtosActivation activation,
+                String name,
+                int lexicalDepth,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
+            if (lexicalDepth > 0) {
+                if (activation.currentContextHasLocalSlotForRuntime(name)) {
+                    return CapturedLexicalWriteTarget.generic(
+                            activation.context());
+                }
+
+                List<ProtosObjectValue> captured =
+                        activation.capturedLexicalContexts();
+                int ownerIndex = lexicalDepth - 1;
+
+                if (ownerIndex < captured.size()) {
+                    for (int index = 0; index < ownerIndex; index++) {
+                        ProtosObjectValue nearer = captured.get(index);
+                        if (nearer.hasLocalSlot(name)) {
+                            return CapturedLexicalWriteTarget.generic(
+                                    nearer);
+                        }
+                    }
+
+                    ProtosObjectValue owner = captured.get(ownerIndex);
+                    if (owner instanceof ProtosExecutionContextValue executionContext
+                            && executionContext.lexicalBindingAuthorityForRuntime()
+                                    instanceof ProtosFrameLexicalBindingAuthority authority) {
+                        MaterializedFrame ownerFrame =
+                                authority.retainedMaterializedFrameForCapturedAccess();
+                        if (ownerFrame != null
+                                && !accessor.isCleared(bytecodeNode, ownerFrame)) {
+                            return CapturedLexicalWriteTarget.materialized(
+                                    executionContext,
+                                    ownerFrame);
+                        }
+                    }
+                }
+            }
+
+            ProtosObjectValue fallback =
+                    ProtosLexicalFallback.writableContextByName(activation, name)
+                            .orElseThrow(
+                                    () ->
+                                            new ProtosSignalException(
+                                                    ProtosCoreErrors.newSlotNotFound(
+                                                            activation)));
+            return CapturedLexicalWriteTarget.generic(fallback);
+        }
+    }
+
+    /**
+     * PERF013 Slice B2 counterpart to {@link
+     * ResolveCapturedMaterializedWritableLexicalTarget}: writes exactly the
+     * destination already selected before RHS evaluation. For a materialized
+     * destination, presence is revalidated (not re-resolved) through the same
+     * constant {@link MaterializedLocalAccessor} used at resolution time; a
+     * binding that has since been removed is a mutation error, never a
+     * retarget. This never re-searches captured contexts.
+     */
+    @Operation
+    @ConstantOperand(type = MaterializedLocalAccessor.class)
+    public static final class AssignCapturedMaterializedLocal {
+        @Specialization
+        public static Object perform(
+                MaterializedLocalAccessor accessor,
+                ProtosActivation activation,
+                CapturedLexicalWriteTarget destination,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
+            try {
+                if (destination.materializedOwnerFrame != null) {
+                    /*
+                     * Match ProtosObjectValue.assignLocalSlot: CLOSED remains
+                     * writable, FROZEN does not. Presence is checked again at
+                     * the actual mutation point, against the exact selected
+                     * owner, never a different one.
+                     */
+                    if (destination.target.isFrozen()) {
+                        throw new IllegalStateException("object is frozen");
+                    }
+                    if (accessor.isCleared(bytecodeNode, destination.materializedOwnerFrame)) {
+                        throw new IllegalStateException(
+                                "captured frame-backed binding is absent or layout metadata mismatched: "
+                                        + name);
+                    }
+                    accessor.setObject(bytecodeNode, destination.materializedOwnerFrame, value);
                 } else {
                     destination.target.assignLocalSlot(name, value);
                 }

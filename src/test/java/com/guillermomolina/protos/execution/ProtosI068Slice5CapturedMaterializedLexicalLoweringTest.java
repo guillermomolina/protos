@@ -234,20 +234,28 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .map(com.oracle.truffle.api.bytecode.Instruction::getName)
                                 .toList();
 
+                /*
+                 * PERF013 Slice B2: this closure and its lexical owner (the
+                 * module root) share the same physical BytecodeRootNodes
+                 * group, so this same-group proven captured write now
+                 * lowers to the MaterializedLocalAccessor-based fast path
+                 * instead of the runtime-authority path exercised directly,
+                 * at the operation level, by the other tests in this file.
+                 */
                 int resolveIndex =
                         instructionIndexContaining(
                                 instructionNames,
-                                "ResolveCapturedWritableLexicalTarget");
+                                "ResolveCapturedMaterializedWritableLexicalTarget");
                 int assignIndex =
                         instructionIndexContaining(
                                 instructionNames,
-                                "AssignCapturedFrameLocal");
+                                "AssignCapturedMaterializedLocal");
 
                 assertTrue(
                         resolveIndex >= 0,
                         () ->
                                 "captured write did not lower its destination "
-                                        + "to ResolveCapturedWritableLexicalTarget: "
+                                        + "to ResolveCapturedMaterializedWritableLexicalTarget: "
                                         + instructionNames);
                 assertTrue(
                         assignIndex > resolveIndex,
