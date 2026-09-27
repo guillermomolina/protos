@@ -108,7 +108,19 @@ final class ProtosBytecodeClosureExecutionPlan {
                 activationRoot);
     }
 
-    private ProtosBytecodeClosureExecutionPlan(
+    /**
+     * PERF013 Slice A: exposed (widened from {@code private}) so a lexically
+     * nested Closure root built by the shared-group lowering path
+     * (backend-private grouping metadata proves the exact whole-tree {@link
+     * CanonicalBindingAnalysis} at lowering time) can be wrapped without
+     * re-deriving that analysis in isolation, which would lose captured
+     * owner/depth metadata (see {@link CanonicalToBytecodeLowerer
+     * #bindingAnalysisForNestedClosure}). The {@code (definition, language,
+     * source, activationRoot)} overload above intentionally keeps its
+     * isolated re-analysis for callers (e.g. focused tests) that hand in a
+     * standalone root with no outer lexical context to lose.
+     */
+    ProtosBytecodeClosureExecutionPlan(
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,

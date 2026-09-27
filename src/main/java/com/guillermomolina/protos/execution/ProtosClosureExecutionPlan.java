@@ -70,6 +70,27 @@ public final class ProtosClosureExecutionPlan {
                         bodyRoot));
     }
 
+    /**
+     * PERF013 Slice A: variant for a Closure root built by the shared-group
+     * lowering path, which already proved the exact whole-tree {@code
+     * bindingAnalysis} while lowering {@code bodyRoot} and must not have it
+     * re-derived in isolation.
+     */
+    static ProtosClosureExecutionPlan bytecode(
+            CanonicalClosure definition,
+            ProtosLanguage language,
+            Source source,
+            CanonicalBindingAnalysis bindingAnalysis,
+            ProtosBytecodeRootNode bodyRoot) {
+        return new ProtosClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
+                        definition,
+                        language,
+                        source,
+                        bindingAnalysis,
+                        bodyRoot));
+    }
+
     CanonicalBindingAnalysis bytecodeBindingAnalysisForTesting() {
         return bytecodePlan.bindingAnalysisForTesting();
     }

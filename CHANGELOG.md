@@ -7,6 +7,42 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.98-SNAPSHOT
+
+- `PERF013` Slice A (#724) restructures `CanonicalToBytecodeLowerer` so a
+  lexical owner root and every Closure it lexically contains now lower into
+  one shared `BytecodeRootNodes<ProtosBytecodeRootNode>` group: a Closure
+  reached while an enclosing root's own `beginRoot()`/`endRoot()` pair is
+  still open nests its own `beginRoot()`/`endRoot()` pair inside that same
+  open builder/`create()` invocation (recursively, to arbitrary lexical
+  depth), instead of opening an independent lowerer/`create()` call the way
+  every Closure did before this slice. This is the prerequisite topology
+  PERF010-B/PERF012 identified for PERF013 Slice B's `MaterializedLocalAccessor`
+  adoption, which requires the reading child root and its lexical owner's
+  root to belong to the same group.
+
+  Because `RootNode.getCallTarget()` refuses until the whole group's
+  `create()` call returns, a nested Closure's real `ProtosClosureExecutionPlan`
+  cannot be constructed at the exact point its `MaterializeClosure` bytecode
+  is emitted. `ProtosClosureExecutionPlanCell` is a new backend-private,
+  immutable-once-frozen indirection emitted as that bytecode's constant
+  instead: the lowerer freezes it with the real plan once the owning group's
+  `create()` call returns. It is never guest-visible and is always frozen
+  before any guest code in the affected lowering unit can execute, so it does
+  not introduce a second, mutable execution-plan authority. A Closure used as
+  a parameter default value keeps its previous independent construction path
+  (validated/lowered before its owner's own `create()` call is even open, so
+  no shared builder exists to nest it in) unchanged.
+
+  `ProtosFrameLexicalLayout` remains precomputed per root exactly as PERF012
+  left it; object-construction bodies remain non-lexical-owner roots with
+  their own independent `BytecodeRootNodes` group, unchanged; `RootTag`/
+  tooling architecture, capture-by-reference, `D179` C0, `I071`, and every
+  other observable Closure/capture semantic are unaffected — this slice is a
+  lowering-topology change only. The captured-local read/write mechanism
+  itself (`ReadCapturedFrameLocal`/`AssignCapturedFrameLocal`) is unchanged
+  and remains PERF013 Slice B's responsibility.
+
 ## 0.3.97-SNAPSHOT
 
 - `PERF012` (#723) removes the JDK `LinkedHashMap`/`ArrayList` construction

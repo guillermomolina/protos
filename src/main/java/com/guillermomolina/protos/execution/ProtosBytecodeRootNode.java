@@ -787,7 +787,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ProtosClosureValue perform(
                 ProtosActivation activation,
                 CanonicalClosure definition,
-                ProtosClosureExecutionPlan executionPlan) {
+                ProtosClosureExecutionPlanCell executionPlanCell) {
             return new ProtosClosureValue(
                     definition,
                     activation.lexicalContextsForClosureCapture(),
@@ -795,7 +795,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation.methodHome().orElse(null),
                     activation.returnHome().orElse(null),
                     activation.prelude().orElse(null),
-                    executionPlan);
+                    executionPlanCell.plan());
         }
     }
 

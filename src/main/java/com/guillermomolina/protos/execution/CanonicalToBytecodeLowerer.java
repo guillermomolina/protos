@@ -94,8 +94,29 @@ final class CanonicalToBytecodeLowerer {
      */
     private final CanonicalBindingAnalysis inheritedBindingAnalysis;
 
-    private final java.util.IdentityHashMap<CanonicalClosure, ProtosClosureExecutionPlan>
+    private final java.util.IdentityHashMap<CanonicalClosure, ProtosClosureExecutionPlanCell>
             bytecodeClosurePlans = new java.util.IdentityHashMap<>();
+
+    /**
+     * PERF013 Slice A: Closure roots nested (via {@link #lowerNestedClosureRoot})
+     * in the group currently being built by the top-level {@link #lowerRoot}
+     * call in progress. Their real {@link ProtosClosureExecutionPlan} cannot be
+     * constructed until that group's {@code create()} call returns ({@link
+     * com.oracle.truffle.api.nodes.RootNode#getCallTarget()} refuses while
+     * parsing is still in progress), so construction is deferred and this list
+     * is drained/frozen right after {@code create()} returns. Save/restored
+     * around each {@link #lowerRoot} call: an object-body root reached while
+     * lowering this root's own body opens its own independent, reentrant
+     * {@code create()} call and must not see or pollute this group's pending
+     * list.
+     */
+    private java.util.List<PendingGroupClosure> pendingGroupClosures;
+
+    private record PendingGroupClosure(
+            CanonicalClosure definition,
+            CanonicalBindingAnalysis bindingAnalysis,
+            ProtosBytecodeRootNode root,
+            ProtosClosureExecutionPlanCell cell) {}
     private final java.util.IdentityHashMap<CanonicalObject, RootCallTarget>
             bytecodeObjectBodyTargets = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalCompose, java.util.List<String>>
@@ -108,46 +129,16 @@ final class CanonicalToBytecodeLowerer {
      * PLAT036 Candidate D, Slice 3 fast-path context for whichever genuine
      * {@code ROOT}/{@code CLOSURE} Bytecode root is currently being lowered
      * (null/empty while lowering an object-construction body, which is never
-     * eligible). Saved and restored around each {@link #lowerRoot} call so
-     * lowering an object body nested inside an enclosing root's own body
-     * (reentrant) never corrupts the enclosing root's context.
+     * eligible). Saved and restored around each {@link #lowerRootInto} call so
+     * lowering an object body or a nested Closure root inside an enclosing
+     * root's own body (reentrant, and — PERF013 Slice A — now frequently
+     * nested in the same open builder) never corrupts the enclosing root's
+     * context.
      */
     private CanonicalBindingAnalysis currentRootAnalysis;
     private CanonicalLexicalScope currentRootTopScope;
     private java.util.Map<String, BytecodeLocal> currentRootFrameLocals =
             java.util.Map.of();
-
-    /*
-     * BytecodeRootNodes retains its parser and may invoke it again when source
-     * or instrumentation metadata is materialized. Every parser invocation
-     * must therefore re-establish the exact root-local Slice 3 lowering state.
-     */
-    private void withCurrentRootLoweringState(
-            CanonicalBindingAnalysis analysisForThisRoot,
-            CanonicalLexicalScope scopeForThisRoot,
-            boolean genuineExecutionContextRoot,
-            Runnable action) {
-        CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
-        CanonicalLexicalScope savedTopScope = currentRootTopScope;
-        java.util.Map<String, BytecodeLocal> savedFrameLocals =
-                currentRootFrameLocals;
-
-        try {
-            if (genuineExecutionContextRoot) {
-                currentRootAnalysis = analysisForThisRoot;
-                currentRootTopScope = scopeForThisRoot;
-            } else {
-                currentRootAnalysis = null;
-                currentRootTopScope = null;
-            }
-            currentRootFrameLocals = java.util.Map.of();
-            action.run();
-        } finally {
-            currentRootAnalysis = savedAnalysis;
-            currentRootTopScope = savedTopScope;
-            currentRootFrameLocals = savedFrameLocals;
-        }
-    }
 
     CanonicalToBytecodeLowerer(ProtosLanguage language, Source source) {
         this(language, source, null);
@@ -224,9 +215,17 @@ final class CanonicalToBytecodeLowerer {
                 .orElseGet(analysis::topScope);
     }
 
-    private ProtosClosureExecutionPlan bytecodeClosurePlan(
+    /**
+     * PERF013 Slice A: construction path retained exactly as before for a
+     * Closure reached from {@link #validateSupportedDefaultExpression} — a
+     * parameter default value — which is validated (and, as a side effect,
+     * fully lowered) before this closure's own root's {@code create()} call
+     * is even opened, so no shared builder is available to nest it in. This
+     * remains an independent {@code BytecodeRootNodes} group, unchanged.
+     */
+    private ProtosClosureExecutionPlanCell independentBytecodeClosurePlan(
             CanonicalClosure definition) {
-        ProtosClosureExecutionPlan existing = bytecodeClosurePlans.get(definition);
+        ProtosClosureExecutionPlanCell existing = bytecodeClosurePlans.get(definition);
         if (existing != null) {
             return existing;
         }
@@ -236,8 +235,65 @@ final class CanonicalToBytecodeLowerer {
                         language,
                         source,
                         bindingAnalysisForNestedClosure(definition));
-        bytecodeClosurePlans.put(definition, plan);
-        return plan;
+        ProtosClosureExecutionPlanCell cell =
+                ProtosClosureExecutionPlanCell.independent(plan);
+        bytecodeClosurePlans.put(definition, cell);
+        return cell;
+    }
+
+    /**
+     * PERF013 Slice A: construction path for a Closure reached while emitting
+     * an already-open enclosing root's own body. Nests the Closure's root in
+     * the same {@code create()} invocation as that enclosing root (see
+     * {@link #lowerNestedClosureRoot}) instead of opening an independent
+     * lowerer/{@code create()} call, so owner and child end up in one shared
+     * {@code BytecodeRootNodes} group.
+     *
+     * <p>Consults the same {@code bytecodeClosurePlans} cache the independent
+     * path populates: a Closure that is also used as a parameter default
+     * value is validated (and thus already built, independently) before this
+     * root's own body is ever emitted, so this returns that existing cell
+     * unchanged rather than lowering the same definition a second time.
+     *
+     * <p>A cache hit that is NOT from the independent path means this exact
+     * group's lambda is being replayed (a {@code BytecodeRootNodes} reparse,
+     * e.g. to materialize source/tag information): {@code beginRoot()}/{@code
+     * endRoot()} must still be replayed for this Closure so every root in the
+     * group keeps the same index it had during the original parse, but the
+     * plan already frozen then remains valid (the Bytecode DSL patches the
+     * same root identity in place on reparse) and must not be rebuilt.
+     */
+    private ProtosClosureExecutionPlanCell bytecodeClosurePlan(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure definition) {
+        ProtosClosureExecutionPlanCell existing = bytecodeClosurePlans.get(definition);
+        if (existing != null && existing.isFromIndependentGroup()) {
+            return existing;
+        }
+
+        ProtosBytecodeRootNode nestedRoot =
+                lowerNestedClosureRoot(builder, definition);
+
+        if (existing != null) {
+            return existing;
+        }
+
+        ProtosClosureExecutionPlanCell cell = ProtosClosureExecutionPlanCell.pendingGroup();
+        bytecodeClosurePlans.put(definition, cell);
+        /*
+         * lowerNestedClosureRoot's own currentRootAnalysis save/restore has
+         * already unwound by this point, so this recomputes the exact same
+         * whole-tree analysis it resolved and used while lowering nestedRoot
+         * (bindingAnalysisForNestedClosure is a cheap, idempotent lookup, not
+         * a re-analysis) rather than re-deriving one in isolation.
+         */
+        pendingGroupClosures.add(
+                new PendingGroupClosure(
+                        definition,
+                        bindingAnalysisForNestedClosure(definition),
+                        nestedRoot,
+                        cell));
+        return cell;
     }
 
 
@@ -311,22 +367,111 @@ final class CanonicalToBytecodeLowerer {
             boolean genuineExecutionContextRoot) {
         Objects.requireNonNull(sequence, "sequence");
         /*
-         * I068 Slice 5: establish whole-tree binding metadata before recursive
-         * validation constructs nested Closure/Object plans. Otherwise those
-         * plans would conservatively re-analyze nested Closures in isolation
-         * and lose their captured owner/depth metadata.
+         * PERF013 Slice A: this top-level entry owns the one Source wrapper for
+         * the whole lexical root group. Every Closure lexically reached while
+         * lowering this root's own body nests its own beginRoot()/endRoot()
+         * pair inside this same open builder (see emitExpression's
+         * CanonicalClosure case and lowerNestedClosureRoot below) instead of
+         * opening an independent create() call, so owner and child end up in
+         * one shared BytecodeRootNodes<ProtosBytecodeRootNode> group.
+         *
+         * A nested Closure's real ProtosClosureExecutionPlan cannot be built
+         * while this create() call is still in progress (getCallTarget()
+         * refuses until parsing completes), so construction is deferred via
+         * pendingGroupClosures and drained right after create() returns, once
+         * every root in the group is real and getCallTarget()-safe. Saved and
+         * restored here for reentrancy: an object body reached while lowering
+         * this root's own body opens its own independent, reentrant lowerRoot/
+         * create() call and must not see or pollute this group's pending list.
          */
+        java.util.List<PendingGroupClosure> savedPendingGroupClosures =
+                pendingGroupClosures;
+        pendingGroupClosures = new java.util.ArrayList<>();
+        try {
+            BytecodeRootNodes<ProtosBytecodeRootNode> roots =
+                    ProtosBytecodeRootNodeGen.create(
+                            language,
+                            BytecodeConfig.DEFAULT,
+                            builder -> {
+                                /*
+                                 * Root-inside-Source is the Bytecode DSL shape
+                                 * that gives every root in the group a
+                                 * reliable exact source section once lazy
+                                 * source information is materialized.
+                                 */
+                                builder.beginSource(source);
+                                lowerRootInto(
+                                        builder,
+                                        sequence,
+                                        activationDefinition,
+                                        genuineExecutionContextRoot);
+                                builder.endSource();
+                            });
+
+            for (PendingGroupClosure pending : pendingGroupClosures) {
+                pending.cell()
+                        .freeze(
+                                ProtosClosureExecutionPlan.bytecode(
+                                        pending.definition(),
+                                        language,
+                                        source,
+                                        pending.bindingAnalysis(),
+                                        pending.root()));
+            }
+
+            return roots.getNode(0);
+        } finally {
+            pendingGroupClosures = savedPendingGroupClosures;
+        }
+    }
+
+    /**
+     * PERF013 Slice A: lowers one root — top-level, or a Closure lexically
+     * nested inside an already-open enclosing root's own {@code beginRoot()}/
+     * {@code endRoot()} pair — into {@code builder}. The caller owns the
+     * enclosing {@code beginSource}/{@code endSource} pair.
+     *
+     * <p>I068 Slice 5: establishes whole-tree binding metadata before
+     * recursive validation constructs nested Closure/Object plans. Otherwise
+     * those plans would conservatively re-analyze nested Closures in
+     * isolation and lose their captured owner/depth metadata.
+     */
+    private ProtosBytecodeRootNode lowerRootInto(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition,
+            boolean genuineExecutionContextRoot) {
         CanonicalBindingAnalysis analysisForThisRoot =
                 bindingAnalysisFor(sequence, activationDefinition);
         CanonicalLexicalScope scopeForThisRoot =
                 rootScopeFor(analysisForThisRoot, activationDefinition);
+        return lowerRootInto(
+                builder,
+                sequence,
+                activationDefinition,
+                genuineExecutionContextRoot,
+                analysisForThisRoot,
+                scopeForThisRoot);
+    }
 
+    private ProtosBytecodeRootNode lowerRootInto(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition,
+            boolean genuineExecutionContextRoot,
+            CanonicalBindingAnalysis analysisForThisRoot,
+            CanonicalLexicalScope scopeForThisRoot) {
         validateSupported(sequence);
         validateSpan(sequence.span());
 
-        /* PLAT036 Slice 3: save/restore around this (possibly reentrant, e.g. an
-         * object body lowered while lowering its enclosing root's body) lowering
-         * pass's fast-path context. */
+        /*
+         * PLAT036 Slice 3: save/restore around this (possibly reentrant, e.g.
+         * an object body or nested Closure lowered while lowering its
+         * enclosing root's own body) lowering pass's fast-path context. This
+         * both protects same-invocation reentrancy and re-establishes state
+         * correctly on every future BytecodeRootNodes reparse invocation of
+         * the retained parser, since the whole nest replays together.
+         */
         CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
         CanonicalLexicalScope savedTopScope = currentRootTopScope;
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
@@ -340,11 +485,11 @@ final class CanonicalToBytecodeLowerer {
                 currentRootTopScope = null;
             }
             currentRootFrameLocals = java.util.Map.of();
-            return lowerRootBody(
+            return emitRootBody(
+                    builder,
                     sequence,
                     activationDefinition,
                     genuineExecutionContextRoot,
-                    analysisForThisRoot,
                     scopeForThisRoot);
         } finally {
             currentRootAnalysis = savedAnalysis;
@@ -353,163 +498,174 @@ final class CanonicalToBytecodeLowerer {
         }
     }
 
-    private ProtosBytecodeRootNode lowerRootBody(
+    /**
+     * PERF013 Slice A: lowers a Closure lexically reached while an enclosing
+     * root's own {@code beginRoot()}/{@code endRoot()} pair is still open,
+     * nesting this Closure's root in the exact same {@code create()}
+     * invocation (and therefore the same {@code BytecodeRootNodes} group) as
+     * that enclosing root, instead of opening an independent lowerer/create()
+     * call the way an out-of-line default-parameter Closure still does.
+     *
+     * <p>Resolves binding analysis exactly as the pre-Slice-A independent path
+     * did ({@link #bindingAnalysisForNestedClosure}): the enclosing root's own
+     * whole-tree analysis takes priority so captured owner/depth metadata is
+     * not lost by re-analyzing this Closure in isolation.
+     */
+    private ProtosBytecodeRootNode lowerNestedClosureRoot(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure definition) {
+        validateSupportedDefaults(definition);
+        CanonicalBindingAnalysis analysisForThisRoot =
+                bindingAnalysisForNestedClosure(definition);
+        CanonicalLexicalScope scopeForThisRoot =
+                rootScopeFor(analysisForThisRoot, definition);
+        return lowerRootInto(
+                builder,
+                definition.body(),
+                definition,
+                true,
+                analysisForThisRoot,
+                scopeForThisRoot);
+    }
+
+    private ProtosBytecodeRootNode emitRootBody(
+            ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
             boolean genuineExecutionContextRoot,
-            CanonicalBindingAnalysis analysisForThisRoot,
             CanonicalLexicalScope scopeForThisRoot) {
-        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
-                ProtosBytecodeRootNodeGen.create(
-                        language,
-                        BytecodeConfig.DEFAULT,
-                        builder ->
-                                withCurrentRootLoweringState(
-                                        analysisForThisRoot,
-                                        scopeForThisRoot,
-                                        genuineExecutionContextRoot,
-                                        () -> {
-                            SourceSpan rootSpan = sequence.span();
+        SourceSpan rootSpan = sequence.span();
 
-                            /*
-                             * Root-inside-SourceSection is the Bytecode DSL shape
-                             * that gives the root a reliable exact source section
-                             * once lazy source information is materialized.
-                             */
-                            builder.beginSource(source);
-                            builder.beginSourceSection(
-                                    rootSpan.startOffset(),
-                                    rootSpan.length());
-                            builder.beginRoot();
+        builder.beginSourceSection(
+                rootSpan.startOffset(),
+                rootSpan.length());
+        builder.beginRoot();
 
-                            /*
-                             * PLAT036 Candidate D, I068 Slice 4: every statically
-                             * declared binding owned by this genuine execution-context
-                             * root, including Closure parameters, receives one stable
-                             * BytecodeLocal. Allocating that physical local does not
-                             * establish semantic presence: it stays cleared until the
-                             * existing createLocalSlot binding point writes through the
-                             * frame-backed authority.
-                             */
-                            if (genuineExecutionContextRoot) {
-                                java.util.Map<String, BytecodeLocal> frameLocals =
-                                        new java.util.LinkedHashMap<>();
-                                for (String name : currentRootTopScope.declaredNames()) {
-                                    BytecodeLocal local = builder.createLocal(name, null);
-                                    frameLocals.put(name, local);
-                                }
-                                currentRootFrameLocals = java.util.Map.copyOf(frameLocals);
-                                if (!frameLocals.isEmpty()) {
-                                    BytecodeLocal[] frameLocalRange =
-                                            frameLocals.values().toArray(BytecodeLocal[]::new);
-                                    String[] frameLocalNames =
-                                            frameLocals.keySet().toArray(String[]::new);
-                                    ProtosFrameLexicalLayout frameLocalLayout =
-                                            ProtosFrameLexicalLayout.of(frameLocalNames);
-                                    builder.beginInstallFrameLexicalAuthority(
-                                            frameLocalRange,
-                                            frameLocalLayout);
-                                    builder.emitLoadArgument(0);
-                                    builder.endInstallFrameLexicalAuthority();
-                                }
-                            }
+        /*
+         * PLAT036 Candidate D, I068 Slice 4: every statically
+         * declared binding owned by this genuine execution-context
+         * root, including Closure parameters, receives one stable
+         * BytecodeLocal. Allocating that physical local does not
+         * establish semantic presence: it stays cleared until the
+         * existing createLocalSlot binding point writes through the
+         * frame-backed authority.
+         */
+        if (genuineExecutionContextRoot) {
+            java.util.Map<String, BytecodeLocal> frameLocals =
+                    new java.util.LinkedHashMap<>();
+            for (String name : scopeForThisRoot.declaredNames()) {
+                BytecodeLocal local = builder.createLocal(name, null);
+                frameLocals.put(name, local);
+            }
+            currentRootFrameLocals = java.util.Map.copyOf(frameLocals);
+            if (!frameLocals.isEmpty()) {
+                BytecodeLocal[] frameLocalRange =
+                        frameLocals.values().toArray(BytecodeLocal[]::new);
+                String[] frameLocalNames =
+                        frameLocals.keySet().toArray(String[]::new);
+                ProtosFrameLexicalLayout frameLocalLayout =
+                        ProtosFrameLexicalLayout.of(frameLocalNames);
+                builder.beginInstallFrameLexicalAuthority(
+                        frameLocalRange,
+                        frameLocalLayout);
+                builder.emitLoadArgument(0);
+                builder.endInstallFrameLexicalAuthority();
+            }
+        }
 
-                            BytecodeLocal defaultValue = null;
-                            BytecodeLocal defaultPreparedCall = null;
-                            BytecodeLocal defaultChildResult = null;
-                            BytecodeLocal defaultResumeValue = null;
-                            if (activationDefinition != null
-                                    && hasComposedDefault(activationDefinition)) {
-                                defaultValue = builder.createLocal("defaultValue", null);
-                                defaultPreparedCall = builder.createLocal("defaultPreparedClosureCall", null);
-                                defaultChildResult = builder.createLocal("defaultChildResult", null);
-                                defaultResumeValue = builder.createLocal("defaultResumeValue", null);
-                            }
+        BytecodeLocal defaultValue = null;
+        BytecodeLocal defaultPreparedCall = null;
+        BytecodeLocal defaultChildResult = null;
+        BytecodeLocal defaultResumeValue = null;
+        if (activationDefinition != null
+                && hasComposedDefault(activationDefinition)) {
+            defaultValue = builder.createLocal("defaultValue", null);
+            defaultPreparedCall = builder.createLocal("defaultPreparedClosureCall", null);
+            defaultChildResult = builder.createLocal("defaultChildResult", null);
+            defaultResumeValue = builder.createLocal("defaultResumeValue", null);
+        }
 
-                            if (activationDefinition != null) {
-                                emitClosureParameterBindings(
-                                        builder,
-                                        activationDefinition,
-                                        defaultValue,
-                                        defaultPreparedCall,
-                                        defaultChildResult,
-                                        defaultResumeValue);
-                            }
+        if (activationDefinition != null) {
+            emitClosureParameterBindings(
+                    builder,
+                    activationDefinition,
+                    defaultValue,
+                    defaultPreparedCall,
+                    defaultChildResult,
+                    defaultResumeValue);
+        }
 
-                            if (sequence.expressions().isEmpty()) {
-                                builder.beginReturn();
-                                builder.emitLoadConstant(ProtosNullValue.INSTANCE);
-                                builder.endReturn();
-                            } else {
-                                BytecodeLocal result =
-                                        builder.createLocal("sequenceResult", null);
-                                boolean hasComposedInvocation =
-                                        sequence.expressions().stream()
-                                                .anyMatch(
-                                                        CanonicalToBytecodeLowerer::requiresComposedInvocation);
-                                BytecodeLocal preparedCall =
-                                        hasComposedInvocation
-                                                ? builder.createLocal(
-                                                        "preparedClosureCall",
-                                                        null)
-                                                : null;
-                                BytecodeLocal childResult =
-                                        hasComposedInvocation
-                                                ? builder.createLocal(
-                                                        "childResult",
-                                                        null)
-                                                : null;
-                                BytecodeLocal resumeValue =
-                                        hasComposedInvocation
-                                                ? builder.createLocal(
-                                                        "resumeValue",
-                                                        null)
-                                                : null;
+        if (sequence.expressions().isEmpty()) {
+            builder.beginReturn();
+            builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+            builder.endReturn();
+        } else {
+            BytecodeLocal result =
+                    builder.createLocal("sequenceResult", null);
+            boolean hasComposedInvocation =
+                    sequence.expressions().stream()
+                            .anyMatch(
+                                    CanonicalToBytecodeLowerer::requiresComposedInvocation);
+            BytecodeLocal preparedCall =
+                    hasComposedInvocation
+                            ? builder.createLocal(
+                                    "preparedClosureCall",
+                                    null)
+                            : null;
+            BytecodeLocal childResult =
+                    hasComposedInvocation
+                            ? builder.createLocal(
+                                    "childResult",
+                                    null)
+                            : null;
+            BytecodeLocal resumeValue =
+                    hasComposedInvocation
+                            ? builder.createLocal(
+                                    "resumeValue",
+                                    null)
+                            : null;
 
-                                for (CanonicalExpression expression :
-                                        sequence.expressions()) {
-                                    SourceSpan span = expression.span();
+            for (CanonicalExpression expression :
+                    sequence.expressions()) {
+                SourceSpan span = expression.span();
 
-                                    builder.beginSourceSection(
-                                            span.startOffset(),
-                                            span.length());
-                                    builder.beginTag(
-                                            StandardTags.StatementTag.class,
-                                            StandardTags.ExpressionTag.class);
-                                    builder.beginBlock();
+                builder.beginSourceSection(
+                        span.startOffset(),
+                        span.length());
+                builder.beginTag(
+                        StandardTags.StatementTag.class,
+                        StandardTags.ExpressionTag.class);
+                builder.beginBlock();
 
-                                    if (requiresComposedInvocation(expression)) {
-                                        emitBodyExpressionToLocal(
-                                                builder,
-                                                expression,
-                                                result,
-                                                preparedCall,
-                                                childResult,
-                                                resumeValue);
-                                    } else {
-                                        builder.beginStoreLocal(result);
-                                        emitExpression(builder, expression);
-                                        builder.endStoreLocal();
-                                    }
+                if (requiresComposedInvocation(expression)) {
+                    emitBodyExpressionToLocal(
+                            builder,
+                            expression,
+                            result,
+                            preparedCall,
+                            childResult,
+                            resumeValue);
+                } else {
+                    builder.beginStoreLocal(result);
+                    emitExpression(builder, expression);
+                    builder.endStoreLocal();
+                }
 
-                                    builder.endBlock();
-                                    builder.endTag(
-                                            StandardTags.StatementTag.class,
-                                            StandardTags.ExpressionTag.class);
-                                    builder.endSourceSection();
-                                }
+                builder.endBlock();
+                builder.endTag(
+                        StandardTags.StatementTag.class,
+                        StandardTags.ExpressionTag.class);
+                builder.endSourceSection();
+            }
 
-                                builder.beginReturn();
-                                builder.emitLoadLocal(result);
-                                builder.endReturn();
-                            }
+            builder.beginReturn();
+            builder.emitLoadLocal(result);
+            builder.endReturn();
+        }
 
-                            builder.endRoot();
-                            builder.endSourceSection();
-                            builder.endSource();
-                                        }));
-
-        return roots.getNode(0);
+        ProtosBytecodeRootNode result = builder.endRoot();
+        builder.endSourceSection();
+        return result;
     }
 
     private void validateSupportedDefaults(
@@ -531,7 +687,7 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalClosure closure) {
-            bytecodeClosurePlan(closure);
+            independentBytecodeClosurePlan(closure);
             return;
         }
         if (expression instanceof CanonicalObject object) {
@@ -4322,7 +4478,20 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalClosure closure) {
-            bytecodeClosurePlan(closure);
+            /*
+             * PERF013 Slice A: structural-support validation only. This must
+             * NOT construct the Closure's execution plan/root here: that
+             * happens later, at real emission time in emitExpression, so the
+             * Closure's root can be nested inside whichever enclosing root's
+             * builder is actually open then (shared BytecodeRootNodes
+             * grouping). Mirrors exactly the checks full construction would
+             * have performed (validateSupportedDefaults + a supported-shape
+             * walk of the body), so an unsupported nested construct is still
+             * reported before any builder is touched.
+             */
+            validateSupportedDefaults(closure);
+            validateSpan(closure.body().span());
+            validateSupported(closure.body());
             return;
         }
         if (expression instanceof CanonicalObject object) {
@@ -4447,10 +4616,18 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalClosure closure) {
+            /*
+             * PERF013 Slice A: resolve/lower the Closure's own root (nesting
+             * its beginRoot()/endRoot() in this same open builder when not
+             * already built independently) before opening the
+             * MaterializeClosure operation, rather than nesting root
+             * construction inside that operation's own argument evaluation.
+             */
+            ProtosClosureExecutionPlanCell cell = bytecodeClosurePlan(builder, closure);
             builder.beginMaterializeClosure();
             builder.emitLoadArgument(0);
             builder.emitLoadConstant(closure);
-            builder.emitLoadConstant(bytecodeClosurePlan(closure));
+            builder.emitLoadConstant(cell);
             builder.endMaterializeClosure();
             return;
         }
