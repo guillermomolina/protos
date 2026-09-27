@@ -108,7 +108,14 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                             instructionNames(
                                     plan.bytecodeActivationRootForTesting());
 
-                    assertContains(instructions, "ReadCapturedFrameLocal");
+                    /*
+                     * PERF013 Slice B1: the module root and this Closure are
+                     * lowered into the same shared BytecodeRootNodes group
+                     * (Slice A), so this proven capture now takes the direct
+                     * MaterializedLocalAccessor fast path instead of the
+                     * runtime frame-lexical-binding-authority path.
+                     */
+                    assertContains(instructions, "ReadCapturedMaterializedLocal");
                     assertNotContains(instructions, "Lookup");
                 });
     }

@@ -42,6 +42,13 @@ Historical implementation changelogs:
   Captured writes are untouched (`ResolveCapturedWritableLexicalTarget`/
   `AssignCapturedFrameLocal`); that migration is PERF013 Slice B2.
 
+  Existing instruction-identity assertions in
+  `ProtosI068Slice5CapturedMaterializedLexicalLoweringTest` and
+  `ProtosI068Slice7ActivationLexicalDecompositionTest` are updated for the
+  same-group proven captures whose selected instruction changed; the
+  isolated-rebuild/Candidate/Dynamic assertions that must keep observing the
+  old runtime-authority path are unchanged.
+
 ## 0.3.100-SNAPSHOT
 
 - `PERF013` Slice A3 (#724) closes the last remaining independent
