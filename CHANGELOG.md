@@ -7,6 +7,41 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.101-SNAPSHOT
+
+- `PERF013` Slice B1 (#724): a proven `CapturedResolved` lexical read whose
+  owner root shares the current lowering group (Slice A/A2/A3) now compiles
+  to a new `ReadCapturedMaterializedLocal` Bytecode operation instead of the
+  runtime-authority `ReadCapturedFrameLocal` path. The operation's constant
+  operand is a Truffle Bytecode DSL-generated `MaterializedLocalAccessor`,
+  built from the owner's own `BytecodeLocal` (never a hand-rolled
+  `rootIndex`), so the accessor's identity is proven and partial-evaluation
+  constant at lowering time; only the owner's retained `MaterializedFrame`
+  (already held by `ProtosFrameLexicalBindingAuthority`, exposed through a
+  new `retainedMaterializedFrameForCapturedAccess` seam) is looked up
+  dynamically. `ProtosBytecodeRootNode` now enables
+  `enableMaterializedLocalAccesses`.
+
+  `CanonicalToBytecodeLowerer` gained a backend-private
+  `frameLocalsByScope` registry mapping each genuine lexical scope to the
+  `BytecodeLocal`s created for it, populated by `emitRootBody` before that
+  root's own body (and therefore any nested Closure/object-body root) is
+  lowered. `emitLookup` now uses this registry, together with the
+  already-present (previously unused) `capturedOwnerMatchesCurrentRoot`
+  structural check, to select the new fast path only when the owner's
+  `BytecodeLocal` is actually available in the current shared
+  `BytecodeRootNodes` group; otherwise it falls back to the unchanged
+  `ReadCapturedFrameLocal` path, which remains necessary for an isolated
+  Closure rebuild/rematerialization that does not include its lexical owner
+  in the same group (PERF013 Slice C).
+
+  The exact D179 C0 presence/fallback algorithm (current-context check,
+  nearer-context presence guard, `isCleared`-based `PRESENT(null) != ABSENT`
+  distinction, owner-removal/recreate observation) is preserved unchanged;
+  only the read's physical local-identity/frame-access mechanism changes.
+  Captured writes are untouched (`ResolveCapturedWritableLexicalTarget`/
+  `AssignCapturedFrameLocal`); that migration is PERF013 Slice B2.
+
 ## 0.3.100-SNAPSHOT
 
 - `PERF013` Slice A3 (#724) closes the last remaining independent

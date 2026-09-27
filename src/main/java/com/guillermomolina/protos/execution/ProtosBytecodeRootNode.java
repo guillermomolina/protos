@@ -23,6 +23,7 @@ import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
+import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
 import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
@@ -62,6 +63,7 @@ import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
@@ -84,6 +86,7 @@ import java.util.List;
         enableTagInstrumentation = true,
         enableRootTagging = false,
         enableRootBodyTagging = false,
+        enableMaterializedLocalAccesses = true,
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
 
@@ -380,6 +383,73 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
 
             return lookupCapturedFallback(activation, name);
+        }
+    }
+
+    /**
+     * PERF013 Slice B1 direct captured read using a compile-time-proven owner
+     * {@link BytecodeLocal}, materialized via a generated {@link
+     * MaterializedLocalAccessor} rather than the runtime frame-lexical-binding
+     * authority's dynamic {@link LocalRangeAccessor}/owner-{@link
+     * BytecodeNode} metadata. The accessor's identity (owner root/local) is
+     * proven at lowering time by {@code CanonicalToBytecodeLowerer} from the
+     * owner's own {@link com.oracle.truffle.api.bytecode.BytecodeLocal}, once
+     * both owner and this Closure are lowered in the same shared {@code
+     * BytecodeRootNodes} group (PERF013 Slice A/A2/A3); only the owner's
+     * {@link MaterializedFrame} is looked up dynamically, through the same
+     * retained {@link ProtosFrameLexicalBindingAuthority} instance {@link
+     * ReadCapturedFrameLocal} already relies on. Every semantically nearer
+     * execution-context presence check is preserved exactly as in {@link
+     * ReadCapturedFrameLocal}, so D179 C0 late-creation/removal retargeting is
+     * unaffected, and {@code isCleared} distinguishes {@code PRESENT(null)}
+     * from {@code ABSENT} exactly as the runtime-authority path does.
+     */
+    @Operation
+    @ConstantOperand(type = MaterializedLocalAccessor.class)
+    public static final class ReadCapturedMaterializedLocal {
+        @Specialization
+        public static Object perform(
+                MaterializedLocalAccessor accessor,
+                ProtosActivation activation,
+                String name,
+                int lexicalDepth,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
+            if (lexicalDepth <= 0) {
+                return lookupCapturedFallback(activation, name);
+            }
+
+            if (activation.currentContextHasLocalSlotForRuntime(name)) {
+                return lookupCapturedFallback(activation, name);
+            }
+
+            List<ProtosObjectValue> captured =
+                    activation.capturedLexicalContexts();
+            int ownerIndex = lexicalDepth - 1;
+            if (ownerIndex >= captured.size()) {
+                return lookupCapturedFallback(activation, name);
+            }
+
+            for (int index = 0; index < ownerIndex; index++) {
+                if (captured.get(index).hasLocalSlot(name)) {
+                    return lookupCapturedFallback(activation, name);
+                }
+            }
+
+            ProtosObjectValue owner = captured.get(ownerIndex);
+            if (!(owner instanceof ProtosExecutionContextValue executionContext)
+                    || !(executionContext.lexicalBindingAuthorityForRuntime()
+                            instanceof ProtosFrameLexicalBindingAuthority authority)) {
+                return lookupCapturedFallback(activation, name);
+            }
+
+            MaterializedFrame ownerFrame =
+                    authority.retainedMaterializedFrameForCapturedAccess();
+            if (ownerFrame == null
+                    || accessor.isCleared(bytecodeNode, ownerFrame)) {
+                return lookupCapturedFallback(activation, name);
+            }
+
+            return accessor.getObject(bytecodeNode, ownerFrame);
         }
     }
 

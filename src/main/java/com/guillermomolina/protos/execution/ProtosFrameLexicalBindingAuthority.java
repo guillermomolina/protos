@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
+import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -141,6 +142,20 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     @Override
     public void prepareForContextObservation() {
         frame = frame.materialize();
+    }
+
+    /**
+     * PERF013 Slice B1 seam: exposes this authority's own retained frame for a
+     * compile-time-proven {@link com.oracle.truffle.api.bytecode.MaterializedLocalAccessor}
+     * captured read. Returns {@code null}, rather than materializing eagerly,
+     * when this context's frame is not yet materialized: {@link
+     * #prepareForContextObservation} remains the sole materialization point
+     * (triggered by the existing capture/observation boundary), and a caller
+     * observing {@code null} here falls back to the exact generic captured
+     * path instead of inventing a second materialization trigger.
+     */
+    MaterializedFrame retainedMaterializedFrameForCapturedAccess() {
+        return frame instanceof MaterializedFrame materializedFrame ? materializedFrame : null;
     }
 
     @Override

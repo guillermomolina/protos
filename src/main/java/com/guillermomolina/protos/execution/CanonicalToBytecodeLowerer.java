@@ -159,6 +159,28 @@ final class CanonicalToBytecodeLowerer {
     private java.util.Map<String, BytecodeLocal> currentRootFrameLocals =
             java.util.Map.of();
 
+    /**
+     * PERF013 Slice B1 backend-private registry of the frame-backed {@link
+     * BytecodeLocal}s created for every genuine lexical scope this lowerer has
+     * lowered so far, keyed by the exact {@link CanonicalLexicalScope} object
+     * the whole-tree binding analysis assigned it. A captured read whose owner
+     * scope is proven ({@link #capturedOwnerMatchesCurrentRoot}) to be part of
+     * the current shared {@code BytecodeRootNodes} group looks its owner's
+     * stable {@link BytecodeLocal} up here (see {@link
+     * #capturedOwnerBytecodeLocal}) instead of resolving it dynamically from
+     * the runtime frame-lexical-binding authority. Populated by {@link
+     * #emitRootBody} for every genuine execution-context root, before that
+     * root's own body (and therefore any nested Closure/object-body root that
+     * might capture one of its bindings) is lowered, so the owner's current
+     * entry is always fresh by the time a nested captured read needs it —
+     * including on a {@code BytecodeRootNodes} reparse replay, since the owner
+     * root in the group is always replayed before its nested children and
+     * simply overwrites its own entry with the current parse's {@link
+     * BytecodeLocal} objects.
+     */
+    private final java.util.IdentityHashMap<CanonicalLexicalScope, java.util.Map<String, BytecodeLocal>>
+            frameLocalsByScope = new java.util.IdentityHashMap<>();
+
     CanonicalToBytecodeLowerer(ProtosLanguage language, Source source) {
         this(language, source, null);
     }
@@ -624,6 +646,14 @@ final class CanonicalToBytecodeLowerer {
                 frameLocals.put(name, local);
             }
             currentRootFrameLocals = java.util.Map.copyOf(frameLocals);
+            /*
+             * PERF013 Slice B1: register this root's own frame locals under
+             * its own scope identity before its body (and therefore any
+             * nested Closure/object-body root that might capture one of
+             * these bindings) is lowered, so a captured read reached while
+             * lowering this root's own body already sees a fresh entry.
+             */
+            frameLocalsByScope.put(scopeForThisRoot, currentRootFrameLocals);
             if (!frameLocals.isEmpty()) {
                 BytecodeLocal[] frameLocalRange =
                         frameLocals.values().toArray(BytecodeLocal[]::new);
@@ -4831,6 +4861,16 @@ final class CanonicalToBytecodeLowerer {
             if (resolution.isPresent()
                     && resolution.orElseThrow()
                             instanceof CanonicalBindingResolution.CapturedResolved captured) {
+                BytecodeLocal ownerLocal = capturedOwnerBytecodeLocal(captured);
+                if (ownerLocal != null) {
+                    builder.beginReadCapturedMaterializedLocal(ownerLocal);
+                    builder.emitLoadArgument(0);
+                    builder.emitLoadConstant(captured.identity().name());
+                    builder.emitLoadConstant(captured.lexicalDepth());
+                    builder.endReadCapturedMaterializedLocal();
+                    return;
+                }
+
                 builder.beginReadCapturedFrameLocal();
                 builder.emitLoadArgument(0);
                 builder.emitLoadConstant(captured.identity().name());
@@ -4844,6 +4884,33 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadArgument(0);
         builder.emitLoadConstant(lookup.name());
         builder.endLookup();
+    }
+
+    /**
+     * PERF013 Slice B1: the owner {@link BytecodeLocal} for a proven captured
+     * read, when and only when {@code captured}'s owner scope is both
+     * structurally reachable from the exact root currently being lowered
+     * ({@link #capturedOwnerMatchesCurrentRoot}) and already registered in
+     * {@link #frameLocalsByScope} — meaning owner and this Closure share the
+     * same physical {@code BytecodeRootNodes} group. Returns {@code null}
+     * (never partial/best-effort metadata) whenever either condition fails,
+     * so the caller falls back to the exact existing {@code
+     * ReadCapturedFrameLocal} runtime-authority path unchanged. This is
+     * expected, not an error, for an owner root reached through an isolated
+     * Closure rebuild/rematerialization that does not include its lexical
+     * owner in the same lowering group (PERF013 Slice C).
+     */
+    private BytecodeLocal capturedOwnerBytecodeLocal(
+            CanonicalBindingResolution.CapturedResolved captured) {
+        if (!capturedOwnerMatchesCurrentRoot(captured)) {
+            return null;
+        }
+        java.util.Map<String, BytecodeLocal> ownerFrameLocals =
+                frameLocalsByScope.get(captured.identity().owner());
+        if (ownerFrameLocals == null) {
+            return null;
+        }
+        return ownerFrameLocals.get(captured.identity().name());
     }
 
     private java.util.Optional<CanonicalBindingResolution.CapturedResolved>

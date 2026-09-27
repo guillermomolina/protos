@@ -124,14 +124,21 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .map(com.oracle.truffle.api.bytecode.Instruction::getName)
                                 .toList();
 
+                /*
+                 * PERF013 Slice B1: the module root and this Closure are
+                 * lowered into the same shared BytecodeRootNodes group (Slice
+                 * A), so this proven capture now takes the direct
+                 * MaterializedLocalAccessor fast path instead of the runtime
+                 * frame-lexical-binding-authority path.
+                 */
                 assertTrue(
                         instructionNames.stream()
                                 .anyMatch(
                                         name ->
                                                 name.contains(
-                                                        "ReadCapturedFrameLocal")),
+                                                        "ReadCapturedMaterializedLocal")),
                         () ->
-                                "captured read did not lower to ReadCapturedFrameLocal: "
+                                "captured read did not lower to ReadCapturedMaterializedLocal: "
                                         + instructionNames);
 
                 /*
@@ -651,14 +658,20 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .map(com.oracle.truffle.api.bytecode.Instruction::getName)
                                 .toList();
 
+                /*
+                 * PERF013 Slice B1: module root, outer Closure, and inner
+                 * Closure all share one physical BytecodeRootNodes group
+                 * (Slice A), so this depth-two proven capture also takes the
+                 * direct MaterializedLocalAccessor fast path.
+                 */
                 assertTrue(
                         instructionIndexContaining(
                                         instructionNames,
-                                        "ReadCapturedFrameLocal")
+                                        "ReadCapturedMaterializedLocal")
                                 >= 0,
                         () ->
                                 "depth-two capture did not use "
-                                        + "ReadCapturedFrameLocal: "
+                                        + "ReadCapturedMaterializedLocal: "
                                         + instructionNames);
 
                 /*
