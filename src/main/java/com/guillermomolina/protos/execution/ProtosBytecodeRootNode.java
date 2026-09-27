@@ -5664,26 +5664,70 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * Builds the ordinary prepared Closure invocation for an admitted
-     * {@link GuardedDirectClosureCallTarget} hit, using exactly the same
+     * Builds the ordinary prepared Closure invocation for an admitted direct
+     * Closure-call hit (either cache tier below), using exactly the same
      * activation shape and dynamic-control-state handling as the generic
      * {@link #prepareDirectClosureCall}, without repeating structured-protocol
      * classification.
      */
-    private static PreparedClosureCall finishGuardedDirectClosureCall(
-            GuardedDirectClosureCallTarget cachedGuarded,
+    private static PreparedClosureCall finishDirectClosureCall(
+            ProtosClosureValue closure,
+            RootCallTarget target,
             List<?> supplied,
             ProtosActivation caller) {
         ProtosActivation activation =
                 ProtosActivation.forClosureInvocation(
-                        cachedGuarded.closure(),
+                        closure,
                         supplied,
                         caller.prelude().orElse(null),
                         caller.actorModuleState(),
                         caller.currentModuleKey().orElse(null),
                         caller.executionDomain());
         attachTaskOrInheritDynamicControlState(activation, caller);
-        return PreparedClosureCall.ordinary(cachedGuarded.target(), activation);
+        return PreparedClosureCall.ordinary(target, activation);
+    }
+
+    /**
+     * PERF014 second tier: admits a stable direct Closure-call target keyed by
+     * the closure's stable {@link CanonicalClosure} definition identity rather
+     * than by receiver instance identity, mirroring
+     * {@link PrepareSendArguments#fastOrdinarySend}. A distinct
+     * {@code ProtosClosureValue} materialization of the same definition (for
+     * example a fresh closure rebuilt on every loop iteration, or every
+     * recursive call) reuses the same Context-owned target without
+     * re-deriving it, while the authoritative D013 {@code call} selection is
+     * still performed fresh on every hit (not cached), so a local override on
+     * one particular instance is observed exactly as before. This is the
+     * institution the identity-keyed first tier
+     * ({@link #createGuardedDirectClosureCall}) alone omitted, which left
+     * receiver-identity churn paying repeated specialization-establishment
+     * cost instead of converging.
+     */
+    static ProtosClosureValue directClosureCallSelectionOrNull(
+            Object receiver, ProtosActivation caller) {
+        if (!(receiver instanceof ProtosClosureValue targetClosure)) {
+            return null;
+        }
+        java.util.Optional<ProtosSlotLookupResult> selected;
+        try {
+            selected = ProtosValueLookup.lookup(
+                    receiver, "call", caller.preludeOrNullForRuntime());
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            return null;
+        }
+        if (selected.isEmpty() || targetClosure.nativeBody().isPresent()) {
+            return null;
+        }
+        ProtosSlotLookupResult result = selected.orElseThrow();
+        if (!ProtosStandardObjectProtocol.isCanonicalStandardCallSelection(
+                result.value(), result.home())) {
+            return null;
+        }
+        return targetClosure;
+    }
+
+    static CanonicalClosure directClosureCallDefinitionOrNull(ProtosClosureValue closure) {
+        return closure == null ? null : closure.definition();
     }
 
     @Operation
@@ -5706,10 +5750,37 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedDirectClosureCall(receiver, caller, enteredContext)")
                         GuardedDirectClosureCallTarget cachedGuarded) {
-            return finishGuardedDirectClosureCall(cachedGuarded, List.of(), caller);
+            return finishDirectClosureCall(
+                    cachedGuarded.closure(), cachedGuarded.target(), List.of(), caller);
         }
 
-        @Specialization(replaces = "guardedDirect")
+        @Specialization(
+                guards = {
+                    "closure != null",
+                    "enteredContext != null",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastDirect(
+                Object receiver,
+                ProtosActivation caller,
+                @Bind("directClosureCallSelectionOrNull(receiver, caller)")
+                        ProtosClosureValue closure,
+                @Bind("directClosureCallDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext()")
+                        ProtosLanguageContext enteredContext,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+            return finishDirectClosureCall(closure, cachedTarget, List.of(), caller);
+        }
+
+        @Specialization(replaces = {"guardedDirect", "fastDirect"})
         public static PreparedClosureCall perform(Object receiver, ProtosActivation caller) {
             return prepareClosureCall(receiver, List.of(), caller);
         }
@@ -5722,6 +5793,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver, ProtosActivation caller, ProtosLanguageContext enteredContext) {
             return ProtosBytecodeRootNode.createGuardedDirectClosureCall(
                     receiver, caller, enteredContext);
+        }
+
+        static ProtosClosureValue directClosureCallSelectionOrNull(
+                Object receiver, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.directClosureCallSelectionOrNull(receiver, caller);
+        }
+
+        static CanonicalClosure directClosureCallDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosBytecodeRootNode.directClosureCallDefinitionOrNull(closure);
+        }
+
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
+            return PrepareSendArguments.fastOrdinarySendTarget(closure, enteredContext);
         }
     }
 
@@ -5746,10 +5831,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedDirectClosureCall(receiver, caller, enteredContext)")
                         GuardedDirectClosureCallTarget cachedGuarded) {
-            return finishGuardedDirectClosureCall(cachedGuarded, List.of(supplied), caller);
+            return finishDirectClosureCall(
+                    cachedGuarded.closure(), cachedGuarded.target(), List.of(supplied), caller);
         }
 
-        @Specialization(replaces = "guardedDirect")
+        @Specialization(
+                guards = {
+                    "closure != null",
+                    "enteredContext != null",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastDirect(
+                Object receiver,
+                ProtosActivation caller,
+                @Variadic Object[] supplied,
+                @Bind("directClosureCallSelectionOrNull(receiver, caller)")
+                        ProtosClosureValue closure,
+                @Bind("directClosureCallDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext()")
+                        ProtosLanguageContext enteredContext,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+            return finishDirectClosureCall(closure, cachedTarget, List.of(supplied), caller);
+        }
+
+        @Specialization(replaces = {"guardedDirect", "fastDirect"})
         public static PreparedClosureCall perform(
                 Object receiver,
                 ProtosActivation caller,
@@ -5768,6 +5881,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver, ProtosActivation caller, ProtosLanguageContext enteredContext) {
             return ProtosBytecodeRootNode.createGuardedDirectClosureCall(
                     receiver, caller, enteredContext);
+        }
+
+        static ProtosClosureValue directClosureCallSelectionOrNull(
+                Object receiver, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.directClosureCallSelectionOrNull(receiver, caller);
+        }
+
+        static CanonicalClosure directClosureCallDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosBytecodeRootNode.directClosureCallDefinitionOrNull(closure);
+        }
+
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
+            return PrepareSendArguments.fastOrdinarySendTarget(closure, enteredContext);
         }
     }
 
@@ -5872,10 +5999,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("createGuardedDirectClosureCall(receiver, caller, enteredContext)")
                         GuardedDirectClosureCallTarget cachedGuarded) {
-            return finishGuardedDirectClosureCall(cachedGuarded, List.of(supplied), caller);
+            return finishDirectClosureCall(
+                    cachedGuarded.closure(), cachedGuarded.target(), List.of(supplied), caller);
         }
 
-        @Specialization(replaces = "guardedDirect")
+        @Specialization(
+                guards = {
+                    "closure != null",
+                    "enteredContext != null",
+                    "closureDefinition != null",
+                    "closureDefinition == cachedClosureDefinition",
+                    "enteredContext == cachedContext",
+                    "cachedTarget != null"
+                },
+                limit = "3")
+        public static PreparedClosureCall fastDirect(
+                Object receiver,
+                ProtosActivation caller,
+                @Variadic Object[] supplied,
+                @Bind("directClosureCallSelectionOrNull(receiver, caller)")
+                        ProtosClosureValue closure,
+                @Bind("directClosureCallDefinitionOrNull(closure)")
+                        CanonicalClosure closureDefinition,
+                @Bind("currentEnteredContext()")
+                        ProtosLanguageContext enteredContext,
+                @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("fastOrdinarySendTarget(closure, enteredContext)")
+                        RootCallTarget cachedTarget) {
+            return finishDirectClosureCall(closure, cachedTarget, List.of(supplied), caller);
+        }
+
+        @Specialization(replaces = {"guardedDirect", "fastDirect"})
         public static PreparedClosureCall perform(
                 Object receiver,
                 ProtosActivation caller,
@@ -5894,6 +6049,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver, ProtosActivation caller, ProtosLanguageContext enteredContext) {
             return ProtosBytecodeRootNode.createGuardedDirectClosureCall(
                     receiver, caller, enteredContext);
+        }
+
+        static ProtosClosureValue directClosureCallSelectionOrNull(
+                Object receiver, ProtosActivation caller) {
+            return ProtosBytecodeRootNode.directClosureCallSelectionOrNull(receiver, caller);
+        }
+
+        static CanonicalClosure directClosureCallDefinitionOrNull(ProtosClosureValue closure) {
+            return ProtosBytecodeRootNode.directClosureCallDefinitionOrNull(closure);
+        }
+
+        static RootCallTarget fastOrdinarySendTarget(
+                ProtosClosureValue closure, ProtosLanguageContext enteredContext) {
+            return PrepareSendArguments.fastOrdinarySendTarget(closure, enteredContext);
         }
     }
 

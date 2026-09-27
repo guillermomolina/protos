@@ -95,6 +95,63 @@ final class ProtosPerf014DirectClosureCallSpecializationTest {
     }
 
     @Test
+    void freshClosureMaterializationsOfTheSameDefinitionRemainCorrectPastBothCacheLimits()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosActivation module = moduleActivation();
+                ProtosObjectValue marker =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                module.context().createLocalSlot("marker", marker);
+
+                String methodCharacters = "() => { marker }";
+                Source methodSource =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        methodCharacters,
+                                        "perf014-churn-identity.protos")
+                                .build();
+                CanonicalClosure methodDefinition = closureDefinition(methodCharacters);
+                ProtosClosureExecutionPlan sharedTemplate =
+                        ProtosClosureExecutionPlan.bytecode(
+                                methodDefinition, language, methodSource);
+
+                RootCallTarget callTarget =
+                        lower(language, "identity()", "perf014-churn-call.protos");
+
+                // Same D013-selected canonical `call` behavior on every
+                // iteration (admitted by the definition-keyed second tier),
+                // but a fresh ProtosClosureValue materialization of that same
+                // definition every time, exercising more iterations than
+                // either cache tier's limit. This reproduces the
+                // receiver-identity-churn regression observed on the Protos
+                // test suite: without a definition-keyed tier, every distinct
+                // instance re-paid the full specialization-establishment
+                // cost (a fresh guarded lookup and Assumption) instead of
+                // ever converging to a cheap steady state.
+                for (int i = 0; i < 10; i++) {
+                    ProtosClosureValue identity =
+                            semanticClosure(methodDefinition, sharedTemplate, module);
+                    if (i == 0) {
+                        module.context().createLocalSlot("identity", identity);
+                    } else {
+                        module.context().assignLocalSlot("identity", identity);
+                    }
+
+                    assertSame(marker, callTarget.call(module));
+                }
+            } finally {
+                context.leave();
+            }
+        }
+
+        System.out.println("PERF014_FRESH_MATERIALIZATION_IDENTITY_CHURN_STABLE=PASS");
+    }
+
+    @Test
     void argumentBearingDirectClosureCallRemainsCorrectAcrossRepeatedInvocations()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {

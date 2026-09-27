@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.105-SNAPSHOT
+
+- `PERF014` (#725) follow-up: the direct Closure-call guarded specialization
+  gains a second, definition-keyed cache tier on `PrepareClosureCall`,
+  `PrepareClosureCallArguments`, and `PrepareDefaultClosureCallArguments`,
+  mirroring `PrepareSendArguments.fastOrdinarySend`'s existing institution for
+  ordinary sends. The first tier alone keyed admission on exact receiver
+  instance identity (`receiver == cachedReceiver`, `limit = 3`), which paid
+  full specialization-establishment cost (a fresh guarded D013 lookup plus a
+  new `Assumption`) for every distinct `ProtosClosureValue` materialization of
+  the same Closure definition, converging to the generic fallback only after
+  three misses. The new `fastDirect` specialization instead keys the cached
+  Context-owned target on `ProtosClosureValue.definition()` — the immutable
+  `CanonicalClosure` identity shared by every materialization of one Closure
+  literal — while still performing the authoritative D013 `call` selection
+  fresh on every hit via `directClosureCallSelectionOrNull`, so a local
+  override on one particular instance is observed exactly as before. A
+  controlled baseline-vs-worktree `--jobs 8`/`--jobs 16` comparison confirmed
+  receiver-identity churn as the material cause of a Protos test-suite
+  concurrency-adjacent slowdown observed after the first tier alone, and
+  confirmed this second tier resolves it without any observable Protos
+  semantic change.
+
 ## 0.3.104-SNAPSHOT
 
 - `BUG010` (#728): the Test Tool's normal D120 progress is now observable
