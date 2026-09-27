@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.106-SNAPSHOT
+
+- `TOOL009-F-I1`: consolidate the F-I1 slice of the conformance test corpus
+  (`boolean`, `float`, `integer`, `number`, `numeric-conversion`,
+  `numeric-equality`, `equality`, `string`, `object`, `object-structural`,
+  `path`, `call`, `core-surface`, `matching`, `network`, `surface-sugar`) from
+  282 one-Test-per-file suite-native sources down to 58 sources grouped by
+  semantic/behavioral cohesion (shared corpus, `ExecutionRequirement`,
+  namespace, bootstrap, and execution authority), per the ratified
+  `TOOL009` source-granularity policy. Every existing `Test(...)` is preserved
+  verbatim as an independent entry in its consolidated source's `tests`
+  Array: 282 Logical Cases before and after, with exact selector/name and
+  body preservation confirmed by full-corpus reconciliation. `manifest.tsv`
+  is updated to the 58 consolidated paths. `network/network-prototype.protos`
+  is retained unchanged as the sole reused single-case source for its family.
+  Two live-path regression fixtures
+  (`protos/tests/tooling/tool002-d2-manifest-plan.protos`,
+  `protos/tests/tooling/tool002-e1b-package-toml-filesystem.protos`) and
+  `ProtosTestToolManifestPlanTest.java` are updated from the retired
+  `integer/add-small.protos` first-manifest-row identity to the new first row,
+  `integer/arithmetic-and-unary.protos`. The suite-native source-granularity
+  policy (semantic/behavioral cohesion as the grouping unit; one-Test-per-file
+  and minimum file count are not repository conventions) is now documented in
+  `protos/AGENTS.md`.
+
 ## 0.3.105-SNAPSHOT
 
 - `PERF014` (#725) follow-up: the direct Closure-call guarded specialization

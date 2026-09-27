@@ -1,0 +1,111 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("derived inequality evaluates once", () => {
+        tool009LegacyCase: () => {
+            calls: {
+                left: 0
+                right: 0
+                equality: 0
+            }
+
+            source: {
+                equals: (other) => {
+                    calls.equality = calls.equality + 1
+                    false
+                }
+            }
+
+            view: source.alias("equals", "==")
+
+            leftFactory: () => {
+                calls.left = calls.left + 1
+                view {}
+            }
+
+            rightFactory: () => {
+                calls.right = calls.right + 1
+                view {}
+            }
+
+            result: leftFactory() != rightFactory()
+
+            Assertions.require(result)
+            Assertions.require(calls.left == 1)
+            Assertions.require(calls.right == 1)
+            Assertions.require(calls.equality == 1)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("derived inequality ignores custom inequality slot", () => {
+        tool009LegacyCase: () => {
+            source: {
+                equals: (other) => { false }
+                notEquals: (other) => { false }
+            }
+
+            view: source.alias("equals", "==").alias("notEquals", "!=")
+            left: view {}
+            right: view {}
+
+            Assertions.require(left != right)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("invalid custom equality derived inequality error", () => {
+        Assertions.signals(Error, () => {
+            source: {
+                equals: (other) => { 1 }
+            }
+
+            view: source.alias("equals", "==")
+            left: view {}
+            right: view {}
+
+            left != right
+        })
+    }),
+    Test("object match dynamic equality exact once", () => {
+        tool009LegacyCase: () => {
+            calls: {
+                count: 0
+            }
+            marker: {}
+
+            source: {
+                equals: (other) => {
+                    calls.count = calls.count + 1
+                    marker
+                }
+            }
+            view: source.alias("equals", "==")
+            pattern: view {}
+
+            result: pattern.match(pattern)
+
+            (result === marker) && (calls.count == 1)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    })
+]
+tests.freeze()

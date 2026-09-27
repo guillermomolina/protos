@@ -13,21 +13,19 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Manifest: import("self:Manifest")
-plan: Manifest.load(filesystem)
-cases: Manifest.planCases(plan)
-first: cases[0]
-firstPath: Manifest.casePath(first)
-
-sourceFile: filesystem.open(Manifest.pathValue(firstPath)).value()
-sourceReader: TextReader.owning(sourceFile, Encoding.UTF8)
-firstChunk: sourceReader.readText().value()
-sourceReader.close().value()
-
-(cases.size() > 100) &&
-(Manifest.caseId(first) == "integer/arithmetic-and-unary.protos") &&
-(firstPath == Manifest.caseId(first)) &&
-(Manifest.caseExpectation(first) == "suite-native") &&
-(Manifest.caseExpected(first) == "-") &&
-(firstChunk.size() > 0)
+tests: [
+    Test("d049 root object frozen error", () => {
+        Assertions.signals(Error, () => {
+            Object._d049Probe: 1
+        })
+    }),
+    Test("d049 integer prototype frozen error", () => {
+        Assertions.signals(Error, () => {
+            Integer._d049Probe: 1
+        })
+    })
+]
+tests.freeze()

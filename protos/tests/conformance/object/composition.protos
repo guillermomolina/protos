@@ -13,21 +13,44 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Manifest: import("self:Manifest")
-plan: Manifest.load(filesystem)
-cases: Manifest.planCases(plan)
-first: cases[0]
-firstPath: Manifest.casePath(first)
+tests: [
+    Test("composition reservations", () => {
+        tool009LegacyCase: () => {
+            source: {
+                contributed: 7
+                reserved: 99
+            }
 
-sourceFile: filesystem.open(Manifest.pathValue(firstPath)).value()
-sourceReader: TextReader.owning(sourceFile, Encoding.UTF8)
-firstChunk: sourceReader.readText().value()
-sourceReader.close().value()
+            result: {
+                ...source
+                reserved: 5
+            }
 
-(cases.size() > 100) &&
-(Manifest.caseId(first) == "integer/arithmetic-and-unary.protos") &&
-(firstPath == Manifest.caseId(first)) &&
-(Manifest.caseExpectation(first) == "suite-native") &&
-(Manifest.caseExpected(first) == "-") &&
-(firstChunk.size() > 0)
+            (result.contributed * 100) + (result.reserved * 10) + source.reserved
+        }
+        Assertions.require(tool009LegacyCase() == 849)
+    }),
+    Test("composition conflict error", () => {
+        Assertions.signals(Error, () => {
+            first: {
+                existing: 1
+            }
+
+            second: {
+                fresh: 2
+                existing: 3
+            }
+
+            result: {
+                ...first
+                ...second
+            }
+
+            result
+        })
+    })
+]
+tests.freeze()

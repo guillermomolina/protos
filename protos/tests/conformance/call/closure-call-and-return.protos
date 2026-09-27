@@ -13,21 +13,39 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
 
-Manifest: import("self:Manifest")
-plan: Manifest.load(filesystem)
-cases: Manifest.planCases(plan)
-first: cases[0]
-firstPath: Manifest.casePath(first)
+tests: [
+    Test("plain closure call", () => {
+        tool009LegacyCase: () => {
+            identity: (x) => x
+            identity(42)
+        }
+        Assertions.require(tool009LegacyCase() == 42)
+    }),
+    Test("closure local call override", () => {
+        tool009LegacyCase: () => {
+            f: () => 42
+            f.call: (x) => x
+            f(7)
+        }
+        Assertions.require(tool009LegacyCase() == 7)
+    }),
+    Test("non local return crosses nested call", () => {
+        tool009LegacyCase: () => {
+            outer: () => {
+                inner: () => {
+                    ^42
+                }
 
-sourceFile: filesystem.open(Manifest.pathValue(firstPath)).value()
-sourceReader: TextReader.owning(sourceFile, Encoding.UTF8)
-firstChunk: sourceReader.readText().value()
-sourceReader.close().value()
+                inner()
+                0
+            }
 
-(cases.size() > 100) &&
-(Manifest.caseId(first) == "integer/arithmetic-and-unary.protos") &&
-(firstPath == Manifest.caseId(first)) &&
-(Manifest.caseExpectation(first) == "suite-native") &&
-(Manifest.caseExpected(first) == "-") &&
-(firstChunk.size() > 0)
+            outer()
+        }
+        Assertions.require(tool009LegacyCase() == 42)
+    })
+]
+tests.freeze()

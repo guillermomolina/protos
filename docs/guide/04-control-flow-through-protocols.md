@@ -486,14 +486,13 @@ the D050 Boolean completion and the standard loop behavior discussed here.
 
 Representative Boolean cases include:
 
-- [`../../protos/tests/conformance/boolean/not-operator-true.protos`](../../protos/tests/conformance/boolean/not-operator-true.protos)
-  demonstrates `!` through the mandatory `not()` lowering;
-- [`../../protos/tests/conformance/boolean/iftrueiffalse-true-selected.protos`](../../protos/tests/conformance/boolean/iftrueiffalse-true-selected.protos)
-  demonstrates true-branch selection and exact result propagation;
-- [`../../protos/tests/conformance/boolean/iftrueiffalse-unselected-noninvokable.protos`](../../protos/tests/conformance/boolean/iftrueiffalse-unselected-noninvokable.protos)
-  demonstrates that an unselected non-invokable value is tolerated;
-- [`../../protos/tests/conformance/boolean/iftrueiffalse-argument-expressions-eager.protos`](../../protos/tests/conformance/boolean/iftrueiffalse-argument-expressions-eager.protos)
-  demonstrates ordinary eager evaluation of callback-producing argument expressions.
+- [`../../protos/tests/conformance/boolean/negation-and-receiver.protos`](../../protos/tests/conformance/boolean/negation-and-receiver.protos)
+  demonstrates `!` through the mandatory `not()` lowering (`not operator true` case);
+- [`../../protos/tests/conformance/boolean/if-true-if-false.protos`](../../protos/tests/conformance/boolean/if-true-if-false.protos)
+  demonstrates true-branch selection and exact result propagation (`iftrueiffalse true selected`
+  case), tolerance of an unselected non-invokable value (`iftrueiffalse unselected noninvokable`
+  case), and ordinary eager evaluation of callback-producing argument expressions
+  (`iftrueiffalse argument expressions eager` case).
 
 Representative loop cases include:
 

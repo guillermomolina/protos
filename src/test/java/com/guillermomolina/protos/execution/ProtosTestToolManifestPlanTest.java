@@ -574,8 +574,8 @@ fixture.activation());
                 StandardCharsets.UTF_8);
         Files.createDirectories(corpusRoot.resolve("integer"));
         Files.copy(
-                CORPUS_ROOT.resolve("integer/add-small.protos"),
-                corpusRoot.resolve("integer/add-small.protos"));
+                CORPUS_ROOT.resolve("integer/arithmetic-and-unary.protos"),
+                corpusRoot.resolve("integer/arithmetic-and-unary.protos"));
 
         Fixture fixture = fixture();
 

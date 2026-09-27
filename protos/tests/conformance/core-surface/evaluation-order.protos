@@ -1,0 +1,200 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("binary operator evaluation order", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
+
+            left: () => {
+                trace.value = trace.value * 10 + 1
+                40
+            }
+
+            right: () => {
+                trace.value = trace.value * 10 + 2
+                2
+            }
+
+            result: left() + right()
+
+            (trace.value * 100) + result
+        }
+        Assertions.require(tool009LegacyCase() == 1242)
+    }),
+    Test("direct call argument vector order", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
+
+            target: (a, b, c) => {
+                (trace.value * 1000) + (a * 100) + (b * 10) + c
+            }
+
+            selectTarget: () => {
+                trace.value = trace.value * 10 + 1
+                target
+            }
+
+            ordinary: () => {
+                trace.value = trace.value * 10 + 2
+                2
+            }
+
+            spread: () => {
+                trace.value = trace.value * 10 + 3
+                Array(3, 4)
+            }
+
+            selectTarget()(ordinary(), ...spread())
+        }
+        Assertions.require(tool009LegacyCase() == 123234)
+    }),
+    Test("binding slot write exact rhs", () => {
+        tool009LegacyCase: () => {
+            bareCreateRhs: {}
+            bareCreateResult: (bareCreated: bareCreateRhs)
+
+            bareAssigned: null
+            bareAssignRhs: {}
+            bareAssignResult: (bareAssigned = bareAssignRhs)
+
+            holder: {
+                assigned: null
+            }
+            memberCreateRhs: {}
+            memberCreateResult: (holder.created: memberCreateRhs)
+
+            memberAssignRhs: {}
+            memberAssignResult: (holder.assigned = memberAssignRhs)
+
+            (bareCreateResult === bareCreateRhs) &&
+                (bareCreated === bareCreateRhs) &&
+                (bareAssignResult === bareAssignRhs) &&
+                (bareAssigned === bareAssignRhs) &&
+                (memberCreateResult === memberCreateRhs) &&
+                (holder.created === memberCreateRhs) &&
+                (memberAssignResult === memberAssignRhs) &&
+                (holder.assigned === memberAssignRhs)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("member assignment target before rhs", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
+            first: {
+                value: 0
+            }
+            second: {
+                value: 0
+            }
+            target: first
+
+            selectTarget: () => {
+                trace.value = trace.value * 10 + 1
+                target
+            }
+
+            rhs: () => {
+                trace.value = trace.value * 10 + 2
+                target = second
+                7
+            }
+
+            result: (selectTarget().value = rhs())
+
+            (trace.value * 1000) + (first.value * 100) + (second.value * 10) + result
+        }
+        Assertions.require(tool009LegacyCase() == 12707)
+    }),
+    Test("indexed assignment evaluation order", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
+
+            source: {
+                put: (index, value) => {
+                    trace.value = trace.value * 10 + 4
+                    999
+                }
+            }
+            receiver: source.alias("put", "atPut")
+
+            selectReceiver: () => {
+                trace.value = trace.value * 10 + 1
+                receiver
+            }
+
+            selectIndex: () => {
+                trace.value = trace.value * 10 + 2
+                5
+            }
+
+            selectValue: () => {
+                trace.value = trace.value * 10 + 3
+                7
+            }
+
+            result: (selectReceiver()[selectIndex()] = selectValue())
+
+            (trace.value * 10) + result
+        }
+        Assertions.require(tool009LegacyCase() == 12347)
+    }),
+    Test("object parent composition evaluation order", () => {
+        tool009LegacyCase: () => {
+            trace: {
+                value: 0
+            }
+
+            parent: {
+                inherited: 5
+            }
+
+            selectParent: () => {
+                trace.value = trace.value * 10 + 1
+                parent
+            }
+
+            source: {
+                copied: 4
+            }
+
+            selectSource: () => {
+                trace.value = trace.value * 10 + 2
+                source
+            }
+
+            result: (selectParent()) {
+                ...selectSource()
+                trace.value = trace.value * 10 + 3
+                body: copied + inherited
+            }
+
+            (trace.value * 100) + (result.body * 10) + result.copied
+        }
+        Assertions.require(tool009LegacyCase() == 12394)
+    })
+]
+tests.freeze()

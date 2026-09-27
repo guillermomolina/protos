@@ -25,6 +25,38 @@ unresolved design. Do not mechanically rewrite unrelated source only to satisfy
 this preference. See `docs/guide/SOURCE_STYLE.md` for the human-facing policy and
 examples.
 
+## Test source-file granularity
+
+For hand-written Protos test source under `protos/tests/`, semantic/behavioral
+cohesion is the normal grouping unit for a suite-native source file. A source
+file MUST contain Tests that form a semantically coherent behavior contract and
+that share corpus, ExecutionRequirement, namespace, bootstrap, and execution
+authority.
+
+One-Test-per-file is NOT a repository convention, and minimizing the physical
+file count is NOT an objective in itself. Consolidating unrelated or
+differently-scoped Tests into one file merely to reduce file count is not
+permitted.
+
+Keep sources physically separate when:
+
+- corpus, ExecutionRequirement, namespace, bootstrap, or execution authority
+  differ across the candidate Tests;
+- a path is part of a differentiated authority/fixture (for example a
+  parallel-execution or Java-side fixture consumed outside suite-native
+  discovery);
+- consolidation would alter a selector × authority matrix; or
+- an integration, stress, or public-surface Test is materially clearer as an
+  independent source.
+
+This is a physical-organization rule only. It does not change Logical Case
+identity, Test selector/name identity, Test body semantics, assertions,
+discovery semantics, selector rematerialization, or the `--file` contract that
+a source selects every Logical Case discovered from it. Consolidating several
+existing Tests into one suite-native source preserves each `Test(...)` as an
+independent entry in the file's `tests` Array; it does not merge Tests into a
+larger Test.
+
 ## Protos capability and library reuse
 <!-- GITHUB023 IDIOMATIC-PROTOS-CAPABILITY-LIBRARY-REUSE -->
 

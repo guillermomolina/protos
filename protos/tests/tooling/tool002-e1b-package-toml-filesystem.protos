@@ -27,9 +27,9 @@ passed: conformanceCases.size() > 0
 passed = passed && (packageTomlCases.size() > 0)
 
 passed = passed &&
-    (Manifest.caseId(conformanceFirst) == "integer/add-small.protos")
+    (Manifest.caseId(conformanceFirst) == "integer/arithmetic-and-unary.protos")
 passed = passed &&
-    (Manifest.casePath(conformanceFirst) == "integer/add-small.protos")
+    (Manifest.casePath(conformanceFirst) == "integer/arithmetic-and-unary.protos")
 
 passed = passed &&
     (Manifest.caseId(packageTomlFirst) ==
