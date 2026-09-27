@@ -832,11 +832,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static PreparedObjectConstruction perform(
                 ProtosActivation enclosing,
                 Object parent,
-                RootCallTarget bodyTarget) {
+                ProtosObjectBodyTargetCell bodyTargetCell) {
             ProtosObjectValue object = new ProtosObjectValue(parent);
             ProtosActivation construction =
                     ProtosActivation.forObjectConstruction(object, enclosing);
-            return new PreparedObjectConstruction(bodyTarget, construction, object);
+            return new PreparedObjectConstruction(
+                    bodyTargetCell.target(), construction, object);
         }
     }
 

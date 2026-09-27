@@ -7,6 +7,55 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.100-SNAPSHOT
+
+- `PERF013` Slice A3 (#724) closes the last remaining independent
+  `BytecodeRootNodes` group: an object-construction helper root (the body of
+  an object literal, e.g. `{ x: 1 }` or `obj: { method: () => x }`) now
+  lowers into the exact same shared `BytecodeRootNodes<ProtosBytecodeRootNode>`
+  group as the lexical lowering unit that contains the object literal,
+  instead of opening an independent lowerer/`create()` call. A Closure
+  declared inside that object body continues to nest into the same group via
+  the existing Slice A/A2 `bytecodeClosurePlan`/`lowerNestedClosureRoot`
+  mechanism, so owner root, object-construction helper root, and any
+  arbitrarily deep nested Closures inside the object body now all belong to
+  one physical group.
+
+  `CanonicalToBytecodeLowerer`'s `CanonicalObject` validation cases
+  (`validateSupportedDefaultExpression` and `validateSupportedExpression`) no
+  longer eagerly build the object's helper root; they only register
+  `CanonicalCompose` reserved-slot-name metadata and perform a
+  structural-support walk of the object body, mirroring the structural-only
+  treatment already used for `CanonicalClosure`. Real emission
+  (`emitBodyObjectLiteral`/`emitDefaultObjectLiteral`) resolves a new
+  backend-private, freeze-once `ProtosObjectBodyTargetCell` — the
+  object-construction analogue of `ProtosClosureExecutionPlanCell` — before
+  opening `PrepareObjectConstruction`, deferring the helper root's real
+  `RootCallTarget` until the owning group's `create()` call returns. The
+  now-dead independent-construction path (`bytecodeObjectBodyTarget`,
+  `bytecodeObjectBodyTargets`, `lowerObjectBodyRoot`) is removed.
+
+  Sharing this physical root group does not change object-construction
+  semantics: an object-construction body remains lowered with
+  `genuineExecutionContextRoot=false`, so it still never receives a
+  frame-backed lexical-binding authority (`ProtosFrameLexicalLayout`/
+  `ProtosFrameLexicalBindingAuthority`), and it is still not a lexical
+  capture scope. A Closure created during object construction continues to
+  capture only the enclosing genuine lexical execution context(s)
+  (`ProtosActivation.forObjectConstruction`/
+  `lexicalContextsForClosureCapture` are unchanged), never the constructed
+  object itself, while the constructed object remains the Closure's
+  receiver. Object slots (e.g. `x` in `{ x: 1 }`) remain receiver state, not
+  lexical locals. `PrepareObjectConstruction`/`EnterObjectConstruction`/
+  `ResumeObjectConstruction`/`FinishObjectConstruction`'s suspension protocol
+  is unchanged apart from `PrepareObjectConstruction` now consuming a
+  `ProtosObjectBodyTargetCell` instead of a plain constant `RootCallTarget`.
+
+  This slice does not adopt `MaterializedLocalAccessor` (PERF013 Slice B) and
+  does not change the captured-local read/write mechanism
+  (`ReadCapturedFrameLocal`/`AssignCapturedFrameLocal`), which remains
+  exactly as before.
+
 ## 0.3.99-SNAPSHOT
 
 - `PERF013` Slice A2 (#724) closes the one exception Slice A retained: a

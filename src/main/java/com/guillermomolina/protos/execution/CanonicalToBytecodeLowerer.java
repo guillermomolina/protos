@@ -47,7 +47,6 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
 import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CallTarget;
-import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
@@ -117,8 +116,28 @@ final class CanonicalToBytecodeLowerer {
             CanonicalBindingAnalysis bindingAnalysis,
             ProtosBytecodeRootNode root,
             ProtosClosureExecutionPlanCell cell) {}
-    private final java.util.IdentityHashMap<CanonicalObject, RootCallTarget>
-            bytecodeObjectBodyTargets = new java.util.IdentityHashMap<>();
+
+    private final java.util.IdentityHashMap<CanonicalObject, ProtosObjectBodyTargetCell>
+            bytecodeObjectBodyTargetCells = new java.util.IdentityHashMap<>();
+
+    /**
+     * PERF013 Slice A3: object-construction helper roots nested (via
+     * {@link #lowerNestedObjectBodyRoot}) in the group currently being built
+     * by the top-level {@link #lowerRoot} call in progress. Mirrors {@link
+     * #pendingGroupClosures} exactly: a helper root's real {@code
+     * RootCallTarget} cannot be obtained until that group's {@code create()}
+     * call returns, so freezing the corresponding {@link
+     * ProtosObjectBodyTargetCell} is deferred and this list is
+     * drained/frozen right after {@code create()} returns. Saved/restored
+     * around each {@link #lowerRoot} call for the same reentrancy reasons as
+     * {@link #pendingGroupClosures}.
+     */
+    private java.util.List<PendingGroupObjectBody> pendingGroupObjectBodies;
+
+    private record PendingGroupObjectBody(
+            ProtosBytecodeRootNode root,
+            ProtosObjectBodyTargetCell cell) {}
+
     private final java.util.IdentityHashMap<CanonicalCompose, java.util.List<String>>
             bytecodeComposeReservedNames = new java.util.IdentityHashMap<>();
     private final java.util.IdentityHashMap<CanonicalClosure, CanonicalBindingAnalysis>
@@ -265,13 +284,15 @@ final class CanonicalToBytecodeLowerer {
     }
 
 
-    private RootCallTarget bytecodeObjectBodyTarget(
-            CanonicalObject object) {
-        RootCallTarget existing = bytecodeObjectBodyTargets.get(object);
-        if (existing != null) {
-            return existing;
-        }
-
+    /**
+     * PERF013 Slice A3: preparation-time metadata registration only. Every
+     * {@link CanonicalCompose} directly inside {@code object}'s body must
+     * know its enclosing object's reserved local-slot names before {@code
+     * composeReservedNames} is consulted during structural validation of the
+     * compose itself. This registration is idempotent and independent of
+     * when/whether the object's helper root is ever physically built.
+     */
+    private void registerObjectBodyReservedNames(CanonicalObject object) {
         java.util.List<String> reservedNames =
                 java.util.List.copyOf(object.reservedLocalSlotNames());
         for (CanonicalExpression expression : object.body().expressions()) {
@@ -284,10 +305,59 @@ final class CanonicalToBytecodeLowerer {
                 }
             }
         }
+    }
 
-        RootCallTarget target = lowerObjectBodyRoot(object.body()).getCallTarget();
-        bytecodeObjectBodyTargets.put(object, target);
-        return target;
+    /**
+     * PERF013 Slice A3: construction path for an object-construction body
+     * reached while emitting an already-open enclosing root's own body —
+     * mirrors {@link #bytecodeClosurePlan} exactly. Nests the helper root's
+     * {@code beginRoot()}/{@code endRoot()} pair in the same {@code create()}
+     * invocation as the enclosing root (see {@link
+     * #lowerNestedObjectBodyRoot}) instead of opening an independent
+     * lowerer/{@code create()} call, so owner and object-construction helper
+     * end up in one shared {@code BytecodeRootNodes} group. Sharing that
+     * physical group does not make the helper root a genuine lexical
+     * execution context: {@link #lowerNestedObjectBodyRoot} still lowers it
+     * with {@code genuineExecutionContextRoot=false}.
+     *
+     * <p>A cache hit in {@code bytecodeObjectBodyTargetCells} means this
+     * exact group's lambda is being replayed (a {@code BytecodeRootNodes}
+     * reparse): {@code beginRoot()}/{@code endRoot()} must still be replayed
+     * for this object body so every root in the group keeps the same index
+     * it had during the original parse, but the target already frozen then
+     * remains valid and must not be rebuilt.
+     */
+    private ProtosObjectBodyTargetCell bytecodeObjectBodyTargetCell(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalObject object) {
+        ProtosObjectBodyTargetCell existing = bytecodeObjectBodyTargetCells.get(object);
+
+        ProtosBytecodeRootNode nestedRoot =
+                lowerNestedObjectBodyRoot(builder, object);
+
+        if (existing != null) {
+            return existing;
+        }
+
+        ProtosObjectBodyTargetCell cell = ProtosObjectBodyTargetCell.pendingGroup();
+        bytecodeObjectBodyTargetCells.put(object, cell);
+        pendingGroupObjectBodies.add(new PendingGroupObjectBody(nestedRoot, cell));
+        return cell;
+    }
+
+    /**
+     * PERF013 Slice A3 test-only seam: exposes the frozen helper root for an
+     * already-lowered {@code object}, mirroring {@code
+     * ProtosClosureExecutionPlan#bytecodeActivationRootForTesting}. Backend
+     * private; never guest-visible.
+     */
+    ProtosBytecodeRootNode objectBodyHelperRootForTesting(CanonicalObject object) {
+        ProtosObjectBodyTargetCell cell = bytecodeObjectBodyTargetCells.get(object);
+        if (cell == null) {
+            throw new IllegalStateException(
+                    "object body was never lowered by this lowerer instance");
+        }
+        return (ProtosBytecodeRootNode) cell.target().getRootNode();
     }
 
     private java.util.List<String> composeReservedNames(
@@ -313,20 +383,6 @@ final class CanonicalToBytecodeLowerer {
         Objects.requireNonNull(definition, "definition");
         validateSupportedDefaults(definition);
         return lowerRoot(definition.body(), definition, true);
-    }
-
-    /**
-     * PLAT036 Candidate D, Slice 3: an object-construction body is never a
-     * genuine execution context (see {@code EXECUTION_AND_CONTROL.md} "Object
-     * Construction Is Not a Lexical Capture Scope"), so it must never receive
-     * a frame-backed lexical-binding authority even though its own {@link
-     * CanonicalBindingAnalysis} (recomputed here, same as before Slice 3) is
-     * shaped like a {@code ROOT}. The {@code genuineExecutionContextRoot=false}
-     * flag below is the sole gate that keeps this call site off the direct
-     * Bytecode-local path.
-     */
-    private ProtosBytecodeRootNode lowerObjectBodyRoot(CanonicalSequence body) {
-        return lowerRoot(body, null, false);
     }
 
     private ProtosBytecodeRootNode lowerRoot(
@@ -355,6 +411,20 @@ final class CanonicalToBytecodeLowerer {
         java.util.List<PendingGroupClosure> savedPendingGroupClosures =
                 pendingGroupClosures;
         pendingGroupClosures = new java.util.ArrayList<>();
+        /*
+         * PERF013 Slice A3: object-construction helper roots reached while
+         * lowering this root's own body are, since Slice A3, nested in this
+         * exact same create() invocation (see bytecodeObjectBodyTargetCell /
+         * lowerNestedObjectBodyRoot) instead of opening an independent
+         * lowerer/create() call. Their real RootCallTarget is subject to the
+         * exact same getCallTarget()-during-parsing restriction as a nested
+         * Closure's execution plan, so it is deferred/drained the same way,
+         * via pendingGroupObjectBodies. Saved and restored here for the same
+         * reentrancy reason as pendingGroupClosures.
+         */
+        java.util.List<PendingGroupObjectBody> savedPendingGroupObjectBodies =
+                pendingGroupObjectBodies;
+        pendingGroupObjectBodies = new java.util.ArrayList<>();
         try {
             BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                     ProtosBytecodeRootNodeGen.create(
@@ -386,10 +456,14 @@ final class CanonicalToBytecodeLowerer {
                                         pending.bindingAnalysis(),
                                         pending.root()));
             }
+            for (PendingGroupObjectBody pending : pendingGroupObjectBodies) {
+                pending.cell().freeze(pending.root().getCallTarget());
+            }
 
             return roots.getNode(0);
         } finally {
             pendingGroupClosures = savedPendingGroupClosures;
+            pendingGroupObjectBodies = savedPendingGroupObjectBodies;
         }
     }
 
@@ -498,6 +572,26 @@ final class CanonicalToBytecodeLowerer {
                 true,
                 analysisForThisRoot,
                 scopeForThisRoot);
+    }
+
+    /**
+     * PERF013 Slice A3: lowers an object-construction body reached while an
+     * enclosing root's own {@code beginRoot()}/{@code endRoot()} pair is
+     * still open, nesting the helper root in the exact same {@code create()}
+     * invocation (and therefore the same {@code BytecodeRootNodes} group) as
+     * that enclosing root instead of opening an independent lowerer/{@code
+     * create()} call. Mirrors {@link #lowerNestedClosureRoot} except that
+     * {@code genuineExecutionContextRoot=false} is passed through unchanged:
+     * an object-construction body is never a genuine lexical execution
+     * context (see {@code EXECUTION_AND_CONTROL.md} "Object Construction Is
+     * Not a Lexical Capture Scope"), so it never receives a frame-backed
+     * lexical-binding authority regardless of which physical root group
+     * contains it.
+     */
+    private ProtosBytecodeRootNode lowerNestedObjectBodyRoot(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalObject object) {
+        return lowerRootInto(builder, object.body(), null, false);
     }
 
     private ProtosBytecodeRootNode emitRootBody(
@@ -676,8 +770,19 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalObject object) {
+            /*
+             * PERF013 Slice A3: structural-support validation only, mirroring
+             * the CanonicalClosure case above. This must NOT construct the
+             * object's helper root here: real emission
+             * (emitDefaultObjectLiteral/emitBodyObjectLiteral) always happens
+             * later, while the owner root's own builder is already open, so
+             * the helper root is nested in that same shared BytecodeRootNodes
+             * group (bytecodeObjectBodyTargetCell / lowerNestedObjectBodyRoot)
+             * instead of opening an independent create() call.
+             */
             object.parent().ifPresent(this::validateSupportedDefaultExpression);
-            bytecodeObjectBodyTarget(object);
+            registerObjectBodyReservedNames(object);
+            validateSupported(object.body());
             return;
         }
         if (expression instanceof CanonicalMapConstruction map) {
@@ -1757,11 +1862,22 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
         }
 
+        /*
+         * PERF013 Slice A3: resolve/lower the helper root's own root (nesting
+         * its beginRoot()/endRoot() in this same open builder, or reusing the
+         * cell already registered on a BytecodeRootNodes reparse) before
+         * opening the PrepareObjectConstruction operation, rather than
+         * nesting root construction inside that operation's own argument
+         * evaluation. Mirrors the CanonicalClosure/MaterializeClosure case.
+         */
+        ProtosObjectBodyTargetCell bodyTargetCell =
+                bytecodeObjectBodyTargetCell(builder, object);
+
         builder.beginStoreLocal(construction);
         builder.beginPrepareObjectConstruction();
         builder.emitLoadArgument(0);
         builder.emitLoadLocal(parent);
-        builder.emitLoadConstant(bytecodeObjectBodyTarget(object));
+        builder.emitLoadConstant(bodyTargetCell);
         builder.endPrepareObjectConstruction();
         builder.endStoreLocal();
 
@@ -1798,11 +1914,18 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
         }
 
+        /*
+         * PERF013 Slice A3: resolve the helper root's target cell before
+         * opening PrepareObjectConstruction; see emitBodyObjectLiteral.
+         */
+        ProtosObjectBodyTargetCell bodyTargetCell =
+                bytecodeObjectBodyTargetCell(builder, object);
+
         builder.beginStoreLocal(construction);
         builder.beginPrepareObjectConstruction();
         builder.emitLoadArgument(0);
         builder.emitLoadLocal(parent);
-        builder.emitLoadConstant(bytecodeObjectBodyTarget(object));
+        builder.emitLoadConstant(bodyTargetCell);
         builder.endPrepareObjectConstruction();
         builder.endStoreLocal();
 
@@ -4480,8 +4603,19 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalObject object) {
+            /*
+             * PERF013 Slice A3: structural-support validation only, mirroring
+             * the CanonicalClosure case above. This must NOT construct the
+             * object's helper root here: that happens later, at real
+             * emission time (emitBodyObjectLiteral/emitDefaultObjectLiteral),
+             * so the helper root can be nested inside whichever enclosing
+             * root's builder is actually open then (shared BytecodeRootNodes
+             * grouping via bytecodeObjectBodyTargetCell /
+             * lowerNestedObjectBodyRoot).
+             */
             object.parent().ifPresent(this::validateSupportedExpression);
-            bytecodeObjectBodyTarget(object);
+            registerObjectBodyReservedNames(object);
+            validateSupported(object.body());
             return;
         }
         if (expression instanceof CanonicalMapConstruction map) {
