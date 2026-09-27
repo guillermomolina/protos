@@ -24,7 +24,6 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -61,10 +60,14 @@ import java.util.Optional;
  * same retained materialized authority for proven captured access: the child
  * root never owns or copies the outer frame, and no Truffle frame object is
  * stored in the semantic Closure value.
+ *
+ * <p>PERF012: the name/ordinal layout itself is {@link
+ * ProtosFrameLexicalLayout}, precomputed once per root at lowering time and
+ * shared, by reference, across every per-invocation authority instance; only
+ * the runtime frame/dynamic-overflow state below is per-invocation.
  */
 final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAuthority {
-    private final java.util.ArrayList<String> frameBackedNames;
-    private final LinkedHashMap<String, Integer> frameBackedOffsets;
+    private final ProtosFrameLexicalLayout frameBackedLayout;
     private final LocalRangeAccessor frameBackedLocals;
     private final BytecodeNode bytecodeNode;
     private VirtualFrame frame;
@@ -72,76 +75,21 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     private final LinkedHashSet<String> establishmentOrder = new LinkedHashSet<>();
 
     ProtosFrameLexicalBindingAuthority(
-            List<?> frameBackedNames,
+            ProtosFrameLexicalLayout frameBackedLayout,
             LocalRangeAccessor frameBackedLocals,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
-        this(
-                frameBackedNamesArray(frameBackedNames),
-                frameBackedLocals,
-                bytecodeNode,
-                frame);
-    }
-
-    private static String[] frameBackedNamesArray(List<?> frameBackedNames) {
-        Objects.requireNonNull(frameBackedNames, "frameBackedNames");
-        String[] result = new String[frameBackedNames.size()];
-        for (int index = 0; index < result.length; index++) {
-            Object candidate =
-                    Objects.requireNonNull(
-                            frameBackedNames.get(index),
-                            "frameBackedNames[" + index + "]");
-            if (!(candidate instanceof String name)) {
-                throw new IllegalArgumentException(
-                        "frame-backed binding name must be a String at index "
-                                + index
-                                + ": "
-                                + candidate.getClass().getName());
-            }
-            result[index] = name;
-        }
-        return result;
-    }
-
-    ProtosFrameLexicalBindingAuthority(
-            String[] frameBackedNames,
-            LocalRangeAccessor frameBackedLocals,
-            BytecodeNode bytecodeNode,
-            VirtualFrame frame) {
-        Objects.requireNonNull(frameBackedNames, "frameBackedNames");
+        this.frameBackedLayout =
+                Objects.requireNonNull(frameBackedLayout, "frameBackedLayout");
         this.frameBackedLocals =
                 Objects.requireNonNull(frameBackedLocals, "frameBackedLocals");
         this.bytecodeNode = Objects.requireNonNull(bytecodeNode, "bytecodeNode");
         this.frame = Objects.requireNonNull(frame, "frame");
 
-        if (frameBackedNames.length != frameBackedLocals.getLength()) {
+        if (frameBackedLayout.length() != frameBackedLocals.getLength()) {
             throw new IllegalArgumentException(
                     "frame-backed binding-name count must match local range length");
         }
-
-        java.util.ArrayList<String> names =
-                new java.util.ArrayList<>(frameBackedNames.length);
-        LinkedHashMap<String, Integer> offsets = new LinkedHashMap<>();
-        for (int index = 0; index < frameBackedNames.length; index++) {
-            Object candidate =
-                    Objects.requireNonNull(
-                            frameBackedNames[index],
-                            "frameBackedNames[" + index + "]");
-            if (!(candidate instanceof String name)) {
-                throw new IllegalArgumentException(
-                        "frame-backed binding name must be a String at index "
-                                + index
-                                + ": "
-                                + candidate.getClass().getName());
-            }
-            if (offsets.put(name, index) != null) {
-                throw new IllegalArgumentException(
-                        "duplicate frame-backed binding name: " + name);
-            }
-            names.add(name);
-        }
-        this.frameBackedNames = names;
-        this.frameBackedOffsets = offsets;
     }
 
     /**
@@ -152,10 +100,10 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
      */
     boolean hasFrameBackedBindingAt(String expectedName, int ordinal) {
         Objects.requireNonNull(expectedName, "expectedName");
-        if (ordinal < 0 || ordinal >= frameBackedNames.size()) {
+        if (ordinal < 0 || ordinal >= frameBackedLayout.length()) {
             return false;
         }
-        if (!frameBackedNames.get(ordinal).equals(expectedName)) {
+        if (!frameBackedLayout.nameAt(ordinal).equals(expectedName)) {
             return false;
         }
         return !frameBackedLocals.isCleared(
@@ -198,7 +146,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     @Override
     public boolean containsBinding(String name) {
         Objects.requireNonNull(name, "name");
-        Integer offset = frameBackedOffsets.get(name);
+        Integer offset = frameBackedLayout.offsetOf(name);
         if (offset != null) {
             return !frameBackedLocals.isCleared(
                     bytecodeNode, frame, offset);
@@ -209,7 +157,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     @Override
     public Optional<Object> readBinding(String name) {
         Objects.requireNonNull(name, "name");
-        Integer offset = frameBackedOffsets.get(name);
+        Integer offset = frameBackedLayout.offsetOf(name);
         if (offset != null) {
             if (frameBackedLocals.isCleared(
                     bytecodeNode, frame, offset)) {
@@ -228,7 +176,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     public Map<String, Object> bindingsSnapshot() {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         for (String name : establishmentOrder) {
-            Integer offset = frameBackedOffsets.get(name);
+            Integer offset = frameBackedLayout.offsetOf(name);
             if (offset != null) {
                 if (!frameBackedLocals.isCleared(
                         bytecodeNode, frame, offset)) {
@@ -252,7 +200,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         Objects.requireNonNull(values, "values");
 
         for (String name : establishmentOrder) {
-            Integer offset = frameBackedOffsets.get(name);
+            Integer offset = frameBackedLayout.offsetOf(name);
             if (offset != null) {
                 if (!frameBackedLocals.isCleared(
                         bytecodeNode, frame, offset)) {
@@ -274,7 +222,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         Objects.requireNonNull(value, "value");
         establishmentOrder.add(name);
 
-        Integer offset = frameBackedOffsets.get(name);
+        Integer offset = frameBackedLayout.offsetOf(name);
         if (offset != null) {
             frameBackedLocals.setObject(
                     bytecodeNode, frame, offset, value);
@@ -288,7 +236,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     public Object removeBinding(String name) {
         Objects.requireNonNull(name, "name");
 
-        Integer offset = frameBackedOffsets.get(name);
+        Integer offset = frameBackedLayout.offsetOf(name);
         if (offset != null) {
             Object previous =
                     frameBackedLocals.isCleared(

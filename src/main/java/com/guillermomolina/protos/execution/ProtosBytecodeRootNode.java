@@ -268,19 +268,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             type = LocalRangeAccessor.class,
             name = "frameBackedLocals")
     @ConstantOperand(
-            type = String[].class,
-            name = "frameBackedNames")
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
     public static final class InstallFrameLexicalAuthority {
         @Specialization
         public static void perform(
                 LocalRangeAccessor frameBackedLocals,
-                String[] frameBackedNames,
+                ProtosFrameLexicalLayout frameBackedLayout,
                 ProtosActivation activation,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
             activation.installFrameLexicalBindingAuthorityForRuntime(
                     new ProtosFrameLexicalBindingAuthority(
-                            frameBackedNames,
+                            frameBackedLayout,
                             frameBackedLocals,
                             bytecodeNode,
                             frame));

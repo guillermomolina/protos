@@ -7,6 +7,38 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.97-SNAPSHOT
+
+- `PERF012` (#723) removes the JDK `LinkedHashMap`/`ArrayList` construction
+  that previously ran inside `ProtosFrameLexicalBindingAuthority`'s
+  constructor on every installation of a genuine `ROOT`/`CLOSURE` execution
+  context's frame-backed lexical authority. That construction rebuilt an
+  already-static name/ordinal layout — the same declaration-order names
+  `CanonicalToBytecodeLowerer` already carried as a lowering-time constant —
+  from scratch on every invocation of the owning root, and PERF010-B Step 0
+  identified it as the cause of a "too deep inlining" partial-evaluation
+  bailout on Bytecode roots whose frame-backed layout was large enough to
+  expand through JDK `HashMap`/`Class` generic-signature machinery.
+
+  The name/ordinal layout is now `ProtosFrameLexicalLayout`, an immutable,
+  backend-private descriptor built exactly once per root during
+  `CanonicalToBytecodeLowerer` lowering and installed as a Bytecode
+  `ConstantOperand` in place of the previous raw `String[]`. Every
+  per-invocation `ProtosFrameLexicalBindingAuthority` instance now holds a
+  reference to that one shared layout instead of rebuilding its own copy;
+  only the authority's runtime frame/dynamic-overflow state remains
+  per-invocation. The layout carries no binding values or presence state of
+  its own, so this remains a single frame-backed authority per genuine
+  execution context, not a second store.
+
+  `PLAT036` Candidate D's frame-backed-single-authority shape, `D179` C0
+  clear/recreate, `I071` frame-native cleared-presence semantics,
+  `PRESENT(null) != ABSENT`, dynamic overflow, capture-by-reference,
+  establishment/name order, and debugger/reflection projection are
+  unaffected: the same authority object, the same `LocalRangeAccessor`
+  physical storage, and the same presence derivation are used exactly as
+  before. No observable Protos semantics change.
+
 ## 0.3.96-SNAPSHOT
 
 - `I072` Phase E (slice 2) extends structured-control convergence to the

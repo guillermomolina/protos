@@ -404,9 +404,11 @@ final class CanonicalToBytecodeLowerer {
                                             frameLocals.values().toArray(BytecodeLocal[]::new);
                                     String[] frameLocalNames =
                                             frameLocals.keySet().toArray(String[]::new);
+                                    ProtosFrameLexicalLayout frameLocalLayout =
+                                            ProtosFrameLexicalLayout.of(frameLocalNames);
                                     builder.beginInstallFrameLexicalAuthority(
                                             frameLocalRange,
-                                            frameLocalNames);
+                                            frameLocalLayout);
                                     builder.emitLoadArgument(0);
                                     builder.endInstallFrameLexicalAuthority();
                                 }
