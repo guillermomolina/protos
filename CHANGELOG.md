@@ -7,6 +7,38 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.99-SNAPSHOT
+
+- `PERF013` Slice A2 (#724) closes the one exception Slice A retained: a
+  parameter default-value Closure literal (for example `g` in
+  `f: (x, g = () => x) => g`) now lowers into the exact same shared
+  `BytecodeRootNodes<ProtosBytecodeRootNode>` group as its lexical owner and
+  any ordinary body Closure, instead of opening an independent
+  lowerer/`create()` call. `CanonicalToBytecodeLowerer.validateSupportedDefaultExpression`
+  now performs structural-support validation only for a default-value
+  Closure — mirroring the structural-only check `validateSupportedExpression`
+  already used for an ordinary body Closure — rather than eagerly
+  constructing its execution plan/root before the owner root's builder is
+  even open. Real emission (`emitClosureParameterBindings` ->
+  `emitExpression`) already ran, and continues to run, while that builder is
+  open, so it now reaches the same `bytecodeClosurePlan`/
+  `lowerNestedClosureRoot` path an ordinary nested Closure uses, recursively,
+  to arbitrary default-expression nesting depth. The now-unreachable
+  independent-construction machinery
+  (`independentBytecodeClosurePlan`, `ProtosClosureExecutionPlanCell.independent`,
+  `isFromIndependentGroup`) is removed.
+
+  This closes the last known lexical-root grouping exception ahead of PERF013
+  Slice B's `MaterializedLocalAccessor` adoption. No observable Protos
+  semantics change: capture-by-reference, sequential parameter
+  establishment, default-expression evaluation only when the argument is
+  absent, earlier-parameter visibility in later defaults, `D179` C0,
+  `I071`, the object-construction-body boundary, and `RootTag`/tooling
+  architecture are all unaffected. The captured-local read/write mechanism
+  itself (`ReadCapturedFrameLocal`/`AssignCapturedFrameLocal`) remains
+  unchanged and is still PERF013 Slice B's responsibility; this slice does
+  not adopt `MaterializedLocalAccessor`.
+
 ## 0.3.98-SNAPSHOT
 
 - `PERF013` Slice A (#724) restructures `CanonicalToBytecodeLowerer` so a

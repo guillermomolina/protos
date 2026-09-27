@@ -216,48 +216,19 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * PERF013 Slice A: construction path retained exactly as before for a
-     * Closure reached from {@link #validateSupportedDefaultExpression} — a
-     * parameter default value — which is validated (and, as a side effect,
-     * fully lowered) before this closure's own root's {@code create()} call
-     * is even opened, so no shared builder is available to nest it in. This
-     * remains an independent {@code BytecodeRootNodes} group, unchanged.
-     */
-    private ProtosClosureExecutionPlanCell independentBytecodeClosurePlan(
-            CanonicalClosure definition) {
-        ProtosClosureExecutionPlanCell existing = bytecodeClosurePlans.get(definition);
-        if (existing != null) {
-            return existing;
-        }
-        ProtosClosureExecutionPlan plan =
-                ProtosClosureExecutionPlan.bytecode(
-                        definition,
-                        language,
-                        source,
-                        bindingAnalysisForNestedClosure(definition));
-        ProtosClosureExecutionPlanCell cell =
-                ProtosClosureExecutionPlanCell.independent(plan);
-        bytecodeClosurePlans.put(definition, cell);
-        return cell;
-    }
-
-    /**
-     * PERF013 Slice A: construction path for a Closure reached while emitting
-     * an already-open enclosing root's own body. Nests the Closure's root in
-     * the same {@code create()} invocation as that enclosing root (see
-     * {@link #lowerNestedClosureRoot}) instead of opening an independent
-     * lowerer/{@code create()} call, so owner and child end up in one shared
-     * {@code BytecodeRootNodes} group.
+     * PERF013 Slice A/A2: construction path for a Closure reached while
+     * emitting an already-open enclosing root's own body — including a
+     * parameter default-value Closure, which (since Slice A2) is reached the
+     * same way: real emission (via {@code emitClosureParameterBindings})
+     * always happens while the owner root's own builder is already open.
+     * Nests the Closure's root in the same {@code create()} invocation as
+     * that enclosing root (see {@link #lowerNestedClosureRoot}) instead of
+     * opening an independent lowerer/{@code create()} call, so owner and
+     * child end up in one shared {@code BytecodeRootNodes} group.
      *
-     * <p>Consults the same {@code bytecodeClosurePlans} cache the independent
-     * path populates: a Closure that is also used as a parameter default
-     * value is validated (and thus already built, independently) before this
-     * root's own body is ever emitted, so this returns that existing cell
-     * unchanged rather than lowering the same definition a second time.
-     *
-     * <p>A cache hit that is NOT from the independent path means this exact
-     * group's lambda is being replayed (a {@code BytecodeRootNodes} reparse,
-     * e.g. to materialize source/tag information): {@code beginRoot()}/{@code
+     * <p>A cache hit in {@code bytecodeClosurePlans} means this exact group's
+     * lambda is being replayed (a {@code BytecodeRootNodes} reparse, e.g. to
+     * materialize source/tag information): {@code beginRoot()}/{@code
      * endRoot()} must still be replayed for this Closure so every root in the
      * group keeps the same index it had during the original parse, but the
      * plan already frozen then remains valid (the Bytecode DSL patches the
@@ -267,9 +238,6 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition) {
         ProtosClosureExecutionPlanCell existing = bytecodeClosurePlans.get(definition);
-        if (existing != null && existing.isFromIndependentGroup()) {
-            return existing;
-        }
 
         ProtosBytecodeRootNode nestedRoot =
                 lowerNestedClosureRoot(builder, definition);
@@ -499,17 +467,21 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * PERF013 Slice A: lowers a Closure lexically reached while an enclosing
-     * root's own {@code beginRoot()}/{@code endRoot()} pair is still open,
-     * nesting this Closure's root in the exact same {@code create()}
-     * invocation (and therefore the same {@code BytecodeRootNodes} group) as
-     * that enclosing root, instead of opening an independent lowerer/create()
-     * call the way an out-of-line default-parameter Closure still does.
+     * PERF013 Slice A/A2: lowers a Closure lexically reached while an
+     * enclosing root's own {@code beginRoot()}/{@code endRoot()} pair is
+     * still open, nesting this Closure's root in the exact same {@code
+     * create()} invocation (and therefore the same {@code BytecodeRootNodes}
+     * group) as that enclosing root instead of opening an independent
+     * lowerer/{@code create()} call. Since Slice A2 this also covers a
+     * parameter default-value Closure: real emission
+     * ({@code emitClosureParameterBindings} -> {@code emitExpression} ->
+     * {@link #bytecodeClosurePlan}) always reaches this method while the
+     * owner root's own builder is already open.
      *
-     * <p>Resolves binding analysis exactly as the pre-Slice-A independent path
-     * did ({@link #bindingAnalysisForNestedClosure}): the enclosing root's own
-     * whole-tree analysis takes priority so captured owner/depth metadata is
-     * not lost by re-analyzing this Closure in isolation.
+     * <p>Resolves binding analysis via {@link #bindingAnalysisForNestedClosure}:
+     * the enclosing root's own whole-tree analysis takes priority so captured
+     * owner/depth metadata is not lost by re-analyzing this Closure in
+     * isolation.
      */
     private ProtosBytecodeRootNode lowerNestedClosureRoot(
             ProtosBytecodeRootNodeGen.Builder builder,
@@ -687,7 +659,20 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalClosure closure) {
-            independentBytecodeClosurePlan(closure);
+            /*
+             * PERF013 Slice A2: structural-support validation only, mirroring
+             * validateSupportedExpression's CanonicalClosure case. This must
+             * NOT construct the Closure's execution plan/root here: real
+             * emission (emitClosureParameterBindings -> emitExpression) always
+             * happens later, while the owner root's own builder is already
+             * open, so the default-value Closure's root is nested in that
+             * same shared BytecodeRootNodes group (bytecodeClosurePlan /
+             * lowerNestedClosureRoot) instead of opening an independent
+             * create() call.
+             */
+            validateSupportedDefaults(closure);
+            validateSpan(closure.body().span());
+            validateSupported(closure.body());
             return;
         }
         if (expression instanceof CanonicalObject object) {
@@ -4617,11 +4602,12 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalClosure closure) {
             /*
-             * PERF013 Slice A: resolve/lower the Closure's own root (nesting
-             * its beginRoot()/endRoot() in this same open builder when not
-             * already built independently) before opening the
-             * MaterializeClosure operation, rather than nesting root
-             * construction inside that operation's own argument evaluation.
+             * PERF013 Slice A/A2: resolve/lower the Closure's own root
+             * (nesting its beginRoot()/endRoot() in this same open builder,
+             * or reusing the cell already registered on a BytecodeRootNodes
+             * reparse) before opening the MaterializeClosure operation,
+             * rather than nesting root construction inside that operation's
+             * own argument evaluation.
              */
             ProtosClosureExecutionPlanCell cell = bytecodeClosurePlan(builder, closure);
             builder.beginMaterializeClosure();

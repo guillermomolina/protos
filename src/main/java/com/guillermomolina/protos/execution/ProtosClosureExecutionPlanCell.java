@@ -41,39 +41,17 @@ import java.util.Objects;
  * lowerRoot}). The cell is a backend-private lowering artifact — it is never
  * guest-visible and is always frozen before any guest code belonging to this
  * lowering unit can execute, so it never behaves as a second, mutable
- * execution-plan authority. A Closure built through the independent (e.g.
- * default-parameter-value) construction path is frozen immediately, since its
- * own {@code create()} call has already fully returned by then.
+ * execution-plan authority.
+ *
+ * <p>PERF013 Slice A2: every Closure literal reached by the lowerer —
+ * including a parameter default-value Closure — is nested this way; there is
+ * no longer an independent, out-of-line construction path.
  */
 final class ProtosClosureExecutionPlanCell {
     @CompilationFinal private ProtosClosureExecutionPlan plan;
-    private final boolean fromIndependentGroup;
-
-    private ProtosClosureExecutionPlanCell(boolean fromIndependentGroup) {
-        this.fromIndependentGroup = fromIndependentGroup;
-    }
 
     static ProtosClosureExecutionPlanCell pendingGroup() {
-        return new ProtosClosureExecutionPlanCell(false);
-    }
-
-    static ProtosClosureExecutionPlanCell independent(
-            ProtosClosureExecutionPlan plan) {
-        ProtosClosureExecutionPlanCell cell =
-                new ProtosClosureExecutionPlanCell(true);
-        cell.freeze(plan);
-        return cell;
-    }
-
-    /**
-     * True when this Closure was built through the independent (not
-     * group-nested) construction path: its root already belongs to its own,
-     * separate {@code BytecodeRootNodes} group, so a reparse of some other
-     * enclosing group's lambda must never replay {@code beginRoot()}/{@code
-     * endRoot()} for it.
-     */
-    boolean isFromIndependentGroup() {
-        return fromIndependentGroup;
+        return new ProtosClosureExecutionPlanCell();
     }
 
     void freeze(ProtosClosureExecutionPlan plan) {
