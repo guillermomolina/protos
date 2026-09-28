@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.107-SNAPSHOT
+
+- `PERF017` (#729): add Test Tool-private JFR instrumentation for the
+  completion-to-replacement admission path without changing scheduling,
+  concurrency, result ordering, lifecycle, cancellation, Process/Context
+  ownership, or public Test Tool output. The internal
+  `protos.TestToolPerf017Admission` event timestamps host Case completion,
+  caller-domain completion-task entry, Future terminalization, lifecycle
+  terminal/start observation, submission entry/return, and replacement-carrier
+  entry. Stable diagnostic `operationId` values correlate one host operation,
+  while weakly held `laneId` values correlate the existing pull-lane Task
+  across lifecycle and execution seams. The ordinary logical-Case facility
+  and Process-snapshot facility emit the same schema. This slice is
+  diagnostic-only: it establishes measurement points for quantitative
+  attribution of lost `--jobs` scaling and does not claim a scheduling cause
+  or implement a performance fix.
+
 ## 0.3.106-SNAPSHOT
 
 - `TOOL009-F-I1`: consolidate the F-I1 slice of the conformance test corpus

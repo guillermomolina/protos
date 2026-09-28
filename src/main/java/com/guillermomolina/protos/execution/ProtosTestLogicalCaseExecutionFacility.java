@@ -271,12 +271,18 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
-        return start(caller, request);
+        return start(
+                caller,
+                request,
+                corpusId.value(),
+                sourcePath.value());
     }
 
     private ProtosFutureValue start(
             ProtosActivation caller,
-            ProtosTestLogicalCaseAttemptBridge.Request request) {
+            ProtosTestLogicalCaseAttemptBridge.Request request,
+            String diagnosticCorpusId,
+            String diagnosticSourcePath) {
         ProtosPrelude callerPrelude =
                 caller
                         .prelude()
@@ -295,7 +301,9 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                         caller,
                         callerPrelude,
                         future,
-                        request);
+                        request,
+                        diagnosticCorpusId,
+                        diagnosticSourcePath);
 
         registerOutstanding(operation);
         future.attachCancellationProducer(operation::requestCancellation);
@@ -390,6 +398,9 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
         private final ProtosPrelude callerPrelude;
         private final ProtosFutureValue future;
         private final ProtosTestLogicalCaseAttemptBridge.Request request;
+        private final String diagnosticCorpusId;
+        private final String diagnosticSourcePath;
+        private final ProtosTestToolPerf017Admission.OperationCorrelation diagnosticCorrelation;
 
         private ProtosAsyncExactExecutionFacility.Submitted submitted;
         private boolean cancellationRequested;
@@ -400,7 +411,9 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                 ProtosActivation caller,
                 ProtosPrelude callerPrelude,
                 ProtosFutureValue future,
-                ProtosTestLogicalCaseAttemptBridge.Request request) {
+                ProtosTestLogicalCaseAttemptBridge.Request request,
+                String diagnosticCorpusId,
+                String diagnosticSourcePath) {
             this.caller =
                     Objects.requireNonNull(
                             caller,
@@ -417,6 +430,31 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                     Objects.requireNonNull(
                             request,
                             "request");
+            this.diagnosticCorpusId =
+                    Objects.requireNonNull(
+                            diagnosticCorpusId,
+                            "diagnosticCorpusId");
+            this.diagnosticSourcePath =
+                    Objects.requireNonNull(
+                            diagnosticSourcePath,
+                            "diagnosticSourcePath");
+            this.diagnosticCorrelation =
+                    ProtosTestToolPerf017Admission.operationCorrelation(caller);
+        }
+
+        private void emitAdmission(String phase) {
+            ProtosTestToolPerf017Admission.emitOperation(
+                    diagnosticCorrelation,
+                    phase,
+                    diagnosticCorpusId,
+                    diagnosticSourcePath,
+                    request.selector());
+        }
+
+        private void emitFutureTerminal(boolean transitioned) {
+            if (transitioned) {
+                emitAdmission(ProtosTestToolPerf017Admission.FUTURE_TERMINAL);
+            }
         }
 
         private void submit() {
@@ -427,10 +465,12 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                 }
             }
 
+            emitAdmission(ProtosTestToolPerf017Admission.SUBMIT_ENTER);
             ProtosAsyncExactExecutionFacility.Submitted accepted =
                     Objects.requireNonNull(
                             submission.submit(this::runHost),
                             "submission returned null handle");
+            emitAdmission(ProtosTestToolPerf017Admission.SUBMIT_RETURN);
 
             boolean cancelAccepted;
             synchronized (this) {
@@ -451,6 +491,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
         }
 
         private void runHost() {
+            emitAdmission(ProtosTestToolPerf017Admission.CARRIER_RUN_BEGIN);
             boolean cancelledBeforeStart;
 
             synchronized (this) {
@@ -480,6 +521,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                 hostFailure = failure;
             }
 
+            emitAdmission(ProtosTestToolPerf017Admission.HOST_CASE_DONE);
             enqueueCallerCompletion(
                     result,
                     hostFailure);
@@ -498,35 +540,41 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                                 task ->
                                         task.executeHostActionForRuntime(
                                                 () -> {
+                                                    emitAdmission(
+                                                            ProtosTestToolPerf017Admission
+                                                                    .COMPLETION_TASK_BEGIN);
                                                     if (!future.isPending()) {
                                                         return ProtosNullValue.INSTANCE;
                                                     }
 
                                                     if (hostFailure != null) {
-                                                        future.fail(
-                                                                ProtosCoreErrors.newError(
-                                                                        caller));
+                                                        emitFutureTerminal(
+                                                                future.fail(
+                                                                        ProtosCoreErrors.newError(
+                                                                                caller)));
                                                         return ProtosNullValue.INSTANCE;
                                                     }
 
                                                     try {
-                                                        future.resolve(
-                                                                rematerialize(
-                                                                        Objects.requireNonNull(
-                                                                                result,
-                                                                                "logical Case completion"),
-                                                                        caller,
-                                                                        callerPrelude),
-                                                                caller);
+                                                        emitFutureTerminal(
+                                                                future.resolve(
+                                                                        rematerialize(
+                                                                                Objects.requireNonNull(
+                                                                                        result,
+                                                                                        "logical Case completion"),
+                                                                                caller,
+                                                                                callerPrelude),
+                                                                        caller));
                                                     } catch (ProtosSignalException signal) {
-                                                        future.fail(
-                                                                signal.error());
+                                                        emitFutureTerminal(
+                                                                future.fail(
+                                                                        signal.error()));
                                                     }
 
                                                     return ProtosNullValue.INSTANCE;
                                                 }));
             } catch (IllegalStateException callerTerminated) {
-                future.cancelTerminal();
+                emitFutureTerminal(future.cancelTerminal());
             }
         }
 
@@ -547,7 +595,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
                                 && accepted != null;
             }
 
-            future.cancelTerminal();
+            emitFutureTerminal(future.cancelTerminal());
 
             if (mayWithdraw
                     && cancelBeforeStart(accepted)) {
@@ -565,7 +613,7 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
         }
 
         private void submissionFailed() {
-            future.cancelTerminal();
+            emitFutureTerminal(future.cancelTerminal());
             finishHostWithoutStarting();
         }
 

@@ -139,14 +139,22 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
             expectedSignature.add(name.value());
         }
 
-        return start(caller, source, expectedSignature, selector.value());
+        return start(
+                caller,
+                source,
+                expectedSignature,
+                selector.value(),
+                corpusId.value(),
+                sourcePath.value());
     }
 
     private ProtosFutureValue start(
             ProtosActivation caller,
             ProtosStringValue source,
             List<String> expectedSignature,
-            String selector) {
+            String selector,
+            String diagnosticCorpusId,
+            String diagnosticSourcePath) {
         ProtosPrelude callerPrelude =
                 caller.prelude()
                         .orElseThrow(
@@ -159,7 +167,15 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                 new ProtosFutureValue(callerPrelude.futurePrototype(), caller.executionDomain());
 
         Operation operation =
-                new Operation(caller, callerPrelude, future, source, expectedSignature, selector);
+                new Operation(
+                        caller,
+                        callerPrelude,
+                        future,
+                        source,
+                        expectedSignature,
+                        selector,
+                        diagnosticCorpusId,
+                        diagnosticSourcePath);
 
         registerOutstanding(operation);
         future.attachCancellationProducer(operation::requestCancellation);
@@ -244,6 +260,9 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
         private final ProtosStringValue source;
         private final List<String> expectedSignature;
         private final String selector;
+        private final String diagnosticCorpusId;
+        private final String diagnosticSourcePath;
+        private final ProtosTestToolPerf017Admission.OperationCorrelation diagnosticCorrelation;
 
         private ProtosAsyncExactExecutionFacility.Submitted submitted;
         private boolean cancellationRequested;
@@ -256,7 +275,9 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                 ProtosFutureValue future,
                 ProtosStringValue source,
                 List<String> expectedSignature,
-                String selector) {
+                String selector,
+                String diagnosticCorpusId,
+                String diagnosticSourcePath) {
             this.caller = Objects.requireNonNull(caller, "caller");
             this.callerPrelude = Objects.requireNonNull(callerPrelude, "callerPrelude");
             this.future = Objects.requireNonNull(future, "future");
@@ -264,6 +285,27 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
             this.expectedSignature =
                     List.copyOf(Objects.requireNonNull(expectedSignature, "expectedSignature"));
             this.selector = Objects.requireNonNull(selector, "selector");
+            this.diagnosticCorpusId =
+                    Objects.requireNonNull(diagnosticCorpusId, "diagnosticCorpusId");
+            this.diagnosticSourcePath =
+                    Objects.requireNonNull(diagnosticSourcePath, "diagnosticSourcePath");
+            this.diagnosticCorrelation =
+                    ProtosTestToolPerf017Admission.operationCorrelation(caller);
+        }
+
+        private void emitAdmission(String phase) {
+            ProtosTestToolPerf017Admission.emitOperation(
+                    diagnosticCorrelation,
+                    phase,
+                    diagnosticCorpusId,
+                    diagnosticSourcePath,
+                    selector);
+        }
+
+        private void emitFutureTerminal(boolean transitioned) {
+            if (transitioned) {
+                emitAdmission(ProtosTestToolPerf017Admission.FUTURE_TERMINAL);
+            }
         }
 
         private void submit() {
@@ -274,10 +316,12 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                 }
             }
 
+            emitAdmission(ProtosTestToolPerf017Admission.SUBMIT_ENTER);
             ProtosAsyncExactExecutionFacility.Submitted accepted =
                     Objects.requireNonNull(
                             submission.submit(this::runHost),
                             "submission returned null handle");
+            emitAdmission(ProtosTestToolPerf017Admission.SUBMIT_RETURN);
 
             boolean cancelAccepted;
             synchronized (this) {
@@ -294,6 +338,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
         }
 
         private void runHost() {
+            emitAdmission(ProtosTestToolPerf017Admission.CARRIER_RUN_BEGIN);
             boolean cancelledBeforeStart;
 
             synchronized (this) {
@@ -322,6 +367,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                 hostFailure = failure;
             }
 
+            emitAdmission(ProtosTestToolPerf017Admission.HOST_CASE_DONE);
             enqueueCallerCompletion(result, hostFailure);
             finishHostAfterRun();
         }
@@ -336,37 +382,43 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                                 task ->
                                         task.executeHostActionForRuntime(
                                                 () -> {
+                                                    emitAdmission(
+                                                            ProtosTestToolPerf017Admission
+                                                                    .COMPLETION_TASK_BEGIN);
                                                     if (!future.isPending()) {
                                                         return ProtosNullValue.INSTANCE;
                                                     }
 
                                                     if (hostFailure != null) {
-                                                        future.fail(
-                                                                ProtosCoreErrors.newError(
-                                                                        caller));
+                                                        emitFutureTerminal(
+                                                                future.fail(
+                                                                        ProtosCoreErrors.newError(
+                                                                                caller)));
                                                         return ProtosNullValue.INSTANCE;
                                                     }
 
                                                     try {
-                                                        future.resolve(
-                                                                rematerialize(
-                                                                        Objects.requireNonNull(
-                                                                                result,
-                                                                                "process-snapshot"
-                                                                                    + " logical"
-                                                                                    + " Case"
-                                                                                    + " completion"),
-                                                                        caller,
-                                                                        callerPrelude),
-                                                                caller);
+                                                        emitFutureTerminal(
+                                                                future.resolve(
+                                                                        rematerialize(
+                                                                                Objects.requireNonNull(
+                                                                                        result,
+                                                                                        "process-snapshot"
+                                                                                            + " logical"
+                                                                                            + " Case"
+                                                                                            + " completion"),
+                                                                                caller,
+                                                                                callerPrelude),
+                                                                        caller));
                                                     } catch (ProtosSignalException signal) {
-                                                        future.fail(signal.error());
+                                                        emitFutureTerminal(
+                                                                future.fail(signal.error()));
                                                     }
 
                                                     return ProtosNullValue.INSTANCE;
                                                 }));
             } catch (IllegalStateException callerTerminated) {
-                future.cancelTerminal();
+                emitFutureTerminal(future.cancelTerminal());
             }
         }
 
@@ -383,7 +435,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                 mayWithdraw = !running && !hostTerminal && accepted != null;
             }
 
-            future.cancelTerminal();
+            emitFutureTerminal(future.cancelTerminal());
 
             if (mayWithdraw && cancelBeforeStart(accepted)) {
                 finishHostWithoutStarting();
@@ -399,7 +451,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
         }
 
         private void submissionFailed() {
-            future.cancelTerminal();
+            emitFutureTerminal(future.cancelTerminal());
             finishHostWithoutStarting();
         }
 

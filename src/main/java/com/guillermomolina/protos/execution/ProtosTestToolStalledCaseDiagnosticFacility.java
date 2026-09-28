@@ -155,12 +155,17 @@ public final class ProtosTestToolStalledCaseDiagnosticFacility implements AutoCl
         long token = token(caller, supplied.get(1));
 
         boolean accepted;
+        String diagnosticPhase;
+        String diagnosticDisplayReference = null;
         if (STARTED.equals(kind.value())) {
             if (!(supplied.get(2) instanceof ProtosStringValue displayReference)) {
                 throw toolError(caller);
             }
-            accepted = reporter.caseStarted(token, displayReference.value());
+            diagnosticPhase = ProtosTestToolPerf017Admission.LIFECYCLE_STARTED;
+            diagnosticDisplayReference = displayReference.value();
+            accepted = reporter.caseStarted(token, diagnosticDisplayReference);
         } else if (TERMINAL.equals(kind.value())) {
+            diagnosticPhase = ProtosTestToolPerf017Admission.LIFECYCLE_TERMINAL;
             accepted = reporter.caseTerminal(token);
         } else {
             throw toolError(caller);
@@ -169,6 +174,8 @@ public final class ProtosTestToolStalledCaseDiagnosticFacility implements AutoCl
         if (!accepted) {
             throw toolError(caller);
         }
+        ProtosTestToolPerf017Admission.emitLifecycle(
+                caller, diagnosticPhase, token, diagnosticDisplayReference);
         return ProtosNullValue.INSTANCE;
     }
 
