@@ -1,0 +1,125 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("qstring-canonical-roundtrip", () => {
+        Syntax: import("self:LockSyntax")
+        valueBytes: Encoding.UTF8.encode("A")
+        valueBytes.add(10)
+        valueBytes.add(34)
+        valueBytes.add(92)
+        valueBytes.add(127)
+        value: Encoding.UTF8.decode(valueBytes)
+
+        expectedBytes: Encoding.UTF8.encode("")
+        expectedBytes.add(34)
+        expectedBytes.add(65)
+        expectedBytes.add(92)
+        expectedBytes.add(117)
+        expectedBytes.add(48)
+        expectedBytes.add(48)
+        expectedBytes.add(48)
+        expectedBytes.add(97)
+        expectedBytes.add(92)
+        expectedBytes.add(34)
+        expectedBytes.add(92)
+        expectedBytes.add(92)
+        expectedBytes.add(92)
+        expectedBytes.add(117)
+        expectedBytes.add(48)
+        expectedBytes.add(48)
+        expectedBytes.add(55)
+        expectedBytes.add(102)
+        expectedBytes.add(34)
+        expected: Encoding.UTF8.decode(expectedBytes)
+
+        rendered: Syntax.renderQstring(value)
+        ok: rendered == expected
+        (Syntax.parseQstring(rendered) == value).ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    }),
+    Test("line-tokenization", () => {
+        Syntax: import("self:LockSyntax")
+        tokens: Syntax.lineTokens("dependency workspace \"root package\" alias \"json api\" target git \"pkg\" \"abc123\"")
+        ok: tokens.size() == 9
+        (tokens[0].text == "dependency").ifFalse(() => { ok = false })
+        tokens[0].quoted.ifTrue(() => { ok = false })
+        tokens[2].quoted.ifFalse(() => { ok = false })
+        (tokens[2].text == "root package").ifFalse(() => { ok = false })
+        (tokens[4].text == "json api").ifFalse(() => { ok = false })
+        (tokens[8].text == "abc123").ifFalse(() => { ok = false })
+        Assertions.require(ok)
+    }),
+    Test("qstring-noncanonical-short-escape-error", () => {
+        Syntax: import("self:LockSyntax")
+        bytes: Encoding.UTF8.encode("")
+        bytes.add(34)
+        bytes.add(92)
+        bytes.add(110)
+        bytes.add(34)
+        Assertions.signals(Error, () => {
+            Syntax.parseQstring(Encoding.UTF8.decode(bytes))
+        })
+    }),
+    Test("qstring-unnecessary-unicode-error", () => {
+        Syntax: import("self:LockSyntax")
+        bytes: Encoding.UTF8.encode("")
+        bytes.add(34)
+        bytes.add(92)
+        bytes.add(117)
+        bytes.add(48)
+        bytes.add(48)
+        bytes.add(52)
+        bytes.add(49)
+        bytes.add(34)
+        Assertions.signals(Error, () => {
+            Syntax.parseQstring(Encoding.UTF8.decode(bytes))
+        })
+    }),
+    Test("qstring-uppercase-hex-error", () => {
+        Syntax: import("self:LockSyntax")
+        bytes: Encoding.UTF8.encode("")
+        bytes.add(34)
+        bytes.add(92)
+        bytes.add(117)
+        bytes.add(48)
+        bytes.add(48)
+        bytes.add(55)
+        bytes.add(70)
+        bytes.add(34)
+        Assertions.signals(Error, () => {
+            Syntax.parseQstring(Encoding.UTF8.decode(bytes))
+        })
+    }),
+    Test("line-double-space-error", () => {
+        Syntax: import("self:LockSyntax")
+        Assertions.signals(Error, () => {
+            Syntax.lineTokens("root  workspace")
+        })
+    }),
+    Test("line-tab-error", () => {
+        Syntax: import("self:LockSyntax")
+        bytes: Encoding.UTF8.encode("root")
+        bytes.add(9)
+        bytes.add(119)
+        Assertions.signals(Error, () => {
+            Syntax.lineTokens(Encoding.UTF8.decode(bytes))
+        })
+    })
+]
+tests.freeze()

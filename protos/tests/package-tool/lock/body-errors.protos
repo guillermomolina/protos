@@ -1,0 +1,207 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("body-missing-root-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-duplicate-root-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "root workspace \"other\"\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-duplicate-member-declaration-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "workspace-member \"libs/a\" workspace \"a\"\n" +
+            "workspace-member \"libs/a\" workspace \"b\"\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-duplicate-member-ref-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "workspace-member \"libs/a\" workspace \"same\"\n" +
+            "workspace-member \"libs/b\" workspace \"same\"\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-root-repeated-as-member-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "workspace-member \".\" workspace \"root\"\n" +
+            "root workspace \"root\"\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-duplicate-registry-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"renamed/pkg\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-duplicate-git-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "git-node git \"pkg\" \"abc\" fetch \"https://one.invalid/repo\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "git-node git \"pkg\" \"abc\" fetch \"https://two.invalid/repo\" content protos-package-tree-v1 sha256:bbbb\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-duplicate-dependency-alias-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "registry-node registry \"a\" \"1.0.0\" locator \"a\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "registry-node registry \"b\" \"1.0.0\" locator \"b\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n" +
+            "dependency workspace \"root\" alias \"dep\" target registry \"a\" \"1.0.0\"\n" +
+            "dependency workspace \"root\" alias \"dep\" target registry \"b\" \"1.0.0\"\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-dangling-declaring-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "dependency workspace \"missing\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-dangling-target-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "dependency workspace \"root\" alias \"dep\" target git \"missing\" \"abc\"\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-blank-line-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-unknown-record-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "artifact \"x\"\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-registry-wrong-field-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" location \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-git-missing-content-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "git-node git \"pkg\" \"abc\" fetch \"https://example.invalid/repo\"\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    }),
+    Test("body-content-uppercase-digest-error", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:abCD\n"
+        Assertions.signals(Error, () => {
+            Lock.parse(text)
+        })
+    })
+]
+tests.freeze()

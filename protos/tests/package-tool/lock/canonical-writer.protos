@@ -1,0 +1,149 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("canonical-root-roundtrip", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n"
+        model: Lock.parse(text)
+        Assertions.require(Lock.write(model) == text)
+    }),
+    Test("canonical-complete-roundtrip", () => {
+        Lock: import("self:LockDocument")
+        text:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "workspace-member \"libs/a\" workspace \"wa\"\n" +
+            "workspace-member \"libs/b\" workspace \"wb\"\n" +
+            "registry-node registry \"pkg\" \"1.2.0\" locator \"pkg/one\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "registry-node registry \"pkg\" \"1.10.0\" locator \"pkg/two\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n" +
+            "git-node git \"git-a\" \"aaa\" fetch \"https://example.invalid/a.git\" content protos-package-tree-v1 sha256:cccc\n" +
+            "git-node git \"git-b\" \"bbb\" fetch \"https://example.invalid/b.git\" content protos-package-tree-v1 sha256:dddd\n" +
+            "dependency workspace \"root\" alias \"a\" target registry \"pkg\" \"1.2.0\"\n" +
+            "dependency workspace \"root\" alias \"b\" target registry \"pkg\" \"1.10.0\"\n" +
+            "dependency registry \"pkg\" \"1.2.0\" alias \"g\" target git \"git-a\" \"aaa\"\n"
+        model: Lock.parse(text)
+        Assertions.require(Lock.write(model) == text)
+    }),
+    Test("writer-normalizes-class-order", () => {
+        Lock: import("self:LockDocument")
+        source:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "workspace-member \"libs/a\" workspace \"wa\"\n" +
+            "root workspace \"root\"\n"
+        expected:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "workspace-member \"libs/a\" workspace \"wa\"\n" +
+            "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n"
+        model: Lock.parseStructural(source)
+        Assertions.require(Lock.write(model) == expected)
+    }),
+    Test("writer-registry-semver-order", () => {
+        Lock: import("self:LockDocument")
+        source:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "registry-node registry \"pkg\" \"1.10.0\" locator \"ten\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n" +
+            "registry-node registry \"pkg\" \"1.2.0\" locator \"two\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n"
+        expected:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "registry-node registry \"pkg\" \"1.2.0\" locator \"two\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "registry-node registry \"pkg\" \"1.10.0\" locator \"ten\" authority \"public\" content protos-package-tree-v1 sha256:bbbb\n"
+        Assertions.require(Lock.write(Lock.parseStructural(source)) == expected)
+    }),
+    Test("writer-workspace-order", () => {
+        Lock: import("self:LockDocument")
+        source:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "workspace-member \"z\" workspace \"wz\"\n" +
+            "workspace-member \"a\" workspace \"wa\"\n"
+        expected:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "workspace-member \"a\" workspace \"wa\"\n" +
+            "workspace-member \"z\" workspace \"wz\"\n"
+        Assertions.require(Lock.write(Lock.parseStructural(source)) == expected)
+    }),
+    Test("writer-git-order", () => {
+        Lock: import("self:LockDocument")
+        source:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "git-node git \"pkg\" \"bbb\" fetch \"https://example.invalid/b\" content protos-package-tree-v1 sha256:bbbb\n" +
+            "git-node git \"pkg\" \"aaa\" fetch \"https://example.invalid/a\" content protos-package-tree-v1 sha256:aaaa\n"
+        expected:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "git-node git \"pkg\" \"aaa\" fetch \"https://example.invalid/a\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "git-node git \"pkg\" \"bbb\" fetch \"https://example.invalid/b\" content protos-package-tree-v1 sha256:bbbb\n"
+        Assertions.require(Lock.write(Lock.parseStructural(source)) == expected)
+    }),
+    Test("writer-dependency-total-order", () => {
+        Lock: import("self:LockDocument")
+        source:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "registry-node registry \"r\" \"1.0.0\" locator \"r\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "git-node git \"g\" \"abc\" fetch \"https://example.invalid/g\" content protos-package-tree-v1 sha256:bbbb\n" +
+            "dependency registry \"r\" \"1.0.0\" alias \"z\" target git \"g\" \"abc\"\n" +
+            "dependency workspace \"root\" alias \"z\" target git \"g\" \"abc\"\n" +
+            "dependency workspace \"root\" alias \"a\" target registry \"r\" \"1.0.0\"\n"
+        expected:
+            "lock-format 1\n" +
+            "resolver-version 1\n" +
+            "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+            "root workspace \"root\"\n" +
+            "registry-node registry \"r\" \"1.0.0\" locator \"r\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
+            "git-node git \"g\" \"abc\" fetch \"https://example.invalid/g\" content protos-package-tree-v1 sha256:bbbb\n" +
+            "dependency workspace \"root\" alias \"a\" target registry \"r\" \"1.0.0\"\n" +
+            "dependency workspace \"root\" alias \"z\" target git \"g\" \"abc\"\n" +
+            "dependency registry \"r\" \"1.0.0\" alias \"z\" target git \"g\" \"abc\"\n"
+        Assertions.require(Lock.write(Lock.parseStructural(source)) == expected)
+    })
+]
+tests.freeze()
