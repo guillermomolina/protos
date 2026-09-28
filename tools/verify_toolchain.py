@@ -33,6 +33,7 @@ DEVELOPMENT_BINDINGS = {
     "pom.bytecode",
     "devcontainer.image",
     "devcontainer.maven",
+    "devcontainer.java_path",
     "ci.tests.devcontainer",
 }
 
@@ -321,6 +322,13 @@ def audit_bindings(root, contract):
         else "missing"
     )
     rows.append(("devcontainer.maven", "os-package", docker_maven_provisioning))
+
+    docker_java_path = (
+        "JAVA_HOME-first"
+        if 'ENV PATH="${JAVA_HOME}/bin:${PATH}"' in docker
+        else "missing"
+    )
+    rows.append(("devcontainer.java_path", "JAVA_HOME-first", docker_java_path))
 
     ci_workflow = root / ".github" / "workflows" / "tests.yml"
     expected_ci_devcontainer = (

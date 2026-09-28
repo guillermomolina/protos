@@ -27,13 +27,13 @@ TOOLCHAIN = {
     "java": {"bytecode_release": 21},
     "graalvm": {
         "distribution": "graalvm-community",
-        "release": "25.3.4.1",
+        "release": "25.4.4.1.1",
         "jdk_feature": 25,
-        "jdk_version": "25.0.4.1",
-        "container_channel": "25i3",
-        "container_image": "ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol10-20260825",
+        "jdk_version": "25.0.4.1.1",
+        "container_channel": "25i4",
+        "container_image": "ghcr.io/graalvm/graalvm-community:25i4-25.0.4.1.1-ol10@sha256:a7b4810d7c755e9627feaa1459eb5a93338643b16d745d4f3fc86db71e5da7f5",
     },
-    "graal_components": {"version": "25.3.4.1"},
+    "graal_components": {"version": "25.4.4.1.1"},
     "maven": {"version": "3.9.9"},
     "policy": {
         "primary_runtime_alignment": "development-ci-distribution",
@@ -53,7 +53,7 @@ def ci_job(name, image, feature, version, maven):
     aligned = (
         image == selected
         and feature == "25"
-        and version == "25.0.4.1"
+        and version == "25.0.4.1.1"
         and maven == "3.9.9"
     )
     action = "devcontainers/ci@v0.3" if aligned else "devcontainers/ci@v0.2"
@@ -92,7 +92,7 @@ def make_fixture(
     selected_image = TOOLCHAIN["graalvm"]["container_image"]
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
 
-    components = "24.0.0" if old_c_state else "25.3.4.1"
+    components = "24.0.0" if old_c_state else "25.4.4.1.1"
     graal_dependencies = """<dependencies>
 <dependency><groupId>org.graalvm.sdk</groupId><artifactId>graal-sdk</artifactId><version>${graalvm.version}</version></dependency>
 <dependency><groupId>org.graalvm.polyglot</groupId><artifactId>polyglot</artifactId><version>${graalvm.version}</version></dependency>
@@ -146,12 +146,13 @@ def make_fixture(
             "        findutils \\\n"
             "        maven \\\n"
             "        procps \\\n"
-            "    && microdnf clean all\n" % selected_image,
+            "    && microdnf clean all\n"
+            'ENV PATH="${JAVA_HOME}/bin:${PATH}"\n' % selected_image,
         )
 
     test_image = "ghcr.io/graalvm/graalvm-community:25-ol10" if development_drift else selected_image
     test_feature = "21" if development_drift else "25"
-    test_version = "21" if development_drift else "25.0.4.1"
+    test_version = "21" if development_drift else "25.0.4.1.1"
     test_maven = "3.9.8" if development_drift else "3.9.9"
 
     if old_c_state:
@@ -161,12 +162,12 @@ def make_fixture(
         graal_release = "24.0.0"
         launcher = "expected_feature=$(sed -n 's/^java_feature=//p' \"$RUNTIME_META\")\n"
     else:
-        dist_components = "25.3.4.1"
+        dist_components = "25.4.4.1.1"
         feature = "25"
-        java_version = "25.0.4.1"
-        graal_release = "25.3.4.1"
+        java_version = "25.0.4.1.1"
+        graal_release = "25.4.4.1.1"
         launcher = """expected_version=$(sed -n 's/^java_version=//p' "$RUNTIME_META")
-actual_version=25.0.4.1
+actual_version=25.0.4.1.1
 [ "$actual_version" = "$expected_version" ] || supported=0
 """
 
@@ -247,6 +248,7 @@ def main():
         require(result.returncode == 1, "development drift did not fail closed", result)
         for binding in (
             "devcontainer.maven",
+            "devcontainer.java_path",
             "ci.tests.devcontainer",
         ):
             require(

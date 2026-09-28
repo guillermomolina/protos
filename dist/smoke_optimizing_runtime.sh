@@ -22,8 +22,8 @@ fail() {
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 EXPECTED_FEATURE=25
-EXPECTED_JAVA_VERSION=25.0.4.1
-EXPECTED_TRUFFLE_VERSION=25.3.4.1
+EXPECTED_JAVA_VERSION=25.0.4.1.1
+EXPECTED_TRUFFLE_VERSION=25.4.4.1.1
 EXPECTED_RUNTIME_CLASS=com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime
 
 archive=${1:-}
