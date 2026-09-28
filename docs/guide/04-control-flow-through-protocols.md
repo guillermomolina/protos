@@ -496,17 +496,15 @@ Representative Boolean cases include:
 
 Representative loop cases include:
 
-- [`../../protos/tests/conformance/control/while-multiple-iterations.protos`](../../protos/tests/conformance/control/while-multiple-iterations.protos)
-  demonstrates repeated pre-test iteration;
-- [`../../protos/tests/conformance/control/while-zero-iterations-null.protos`](../../protos/tests/conformance/control/while-zero-iterations-null.protos)
-  demonstrates zero iterations and canonical `null` completion;
-- [`../../protos/tests/conformance/control/while-body-result-ignored.protos`](../../protos/tests/conformance/control/while-body-result-ignored.protos)
+- [`../../protos/tests/conformance/control/while-basic-and-validation.protos`](../../protos/tests/conformance/control/while-basic-and-validation.protos)
+  demonstrates repeated pre-test iteration, zero iterations and canonical
+  `null` completion, and that a Future condition result is not implicitly
+  awaited;
+- [`../../protos/tests/conformance/control/while-future-ownership.protos`](../../protos/tests/conformance/control/while-future-ownership.protos)
   demonstrates that normal body values are ignored;
-- [`../../protos/tests/conformance/control/while-invalid-condition-future.protos`](../../protos/tests/conformance/control/while-invalid-condition-future.protos)
-  demonstrates that a Future condition result is not implicitly awaited;
-- [`../../protos/tests/conformance/control/while-body-nonlocal-return-propagates.protos`](../../protos/tests/conformance/control/while-body-nonlocal-return-propagates.protos)
+- [`../../protos/tests/conformance/control/while-binding-and-transfer.protos`](../../protos/tests/conformance/control/while-binding-and-transfer.protos)
   demonstrates non-local return across a reached body;
-- [`../../protos/tests/conformance/control/while-condition-body-repeated-suspension-exact-once.protos`](../../protos/tests/conformance/control/while-condition-body-repeated-suspension-exact-once.protos)
+- [`../../protos/tests/conformance/control/while-suspension-and-cancellation.protos`](../../protos/tests/conformance/control/while-suspension-and-cancellation.protos)
   demonstrates repeated condition/body suspension without duplicated completed
   effects.
 

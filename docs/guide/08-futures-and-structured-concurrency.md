@@ -817,13 +817,9 @@ The repository contains a focused Future tutorial:
 
 The retained Future conformance suite includes focused cases such as:
 
-- [`../../protos/tests/conformance/future/fresh-future-identity.protos`](../../protos/tests/conformance/future/fresh-future-identity.protos);
-- [`../../protos/tests/conformance/future/failed-value-original-error-identity.protos`](../../protos/tests/conformance/future/failed-value-original-error-identity.protos);
-- [`../../protos/tests/conformance/future/failed-value-repeated-error-identity.protos`](../../protos/tests/conformance/future/failed-value-repeated-error-identity.protos);
-- [`../../protos/tests/conformance/future/cancelled-value-fresh-error.protos`](../../protos/tests/conformance/future/cancelled-value-fresh-error.protos);
-- [`../../protos/tests/conformance/future/cancel-before-start.protos`](../../protos/tests/conformance/future/cancel-before-start.protos);
-- [`../../protos/tests/conformance/future/all-preserves-input-order.protos`](../../protos/tests/conformance/future/all-preserves-input-order.protos);
-- [`../../protos/tests/conformance/future/all-empty.protos`](../../protos/tests/conformance/future/all-empty.protos).
+- [`../../protos/tests/conformance/future/construction-and-identity.protos`](../../protos/tests/conformance/future/construction-and-identity.protos);
+- [`../../protos/tests/conformance/future/cancellation-and-terminal-errors.protos`](../../protos/tests/conformance/future/cancellation-and-terminal-errors.protos);
+- [`../../protos/tests/conformance/future/all.protos`](../../protos/tests/conformance/future/all.protos).
 
 These are executable evidence for current implementation behavior. The
 specification remains authoritative.

@@ -795,11 +795,11 @@ behavior:
   demonstrates that signaling does not resume the body;
 - [`../../protos/tests/conformance/error/handle-selected-inactive.protos`](../../protos/tests/conformance/error/handle-selected-inactive.protos)
   covers selected-handler deactivation;
-- [`../../protos/tests/conformance/control/ensure-normal-result.protos`](../../protos/tests/conformance/control/ensure-normal-result.protos)
+- [`../../protos/tests/conformance/control/ensure-normal-and-validation.protos`](../../protos/tests/conformance/control/ensure-normal-and-validation.protos)
   covers body-result preservation;
-- [`../../protos/tests/conformance/control/ensure-nested-lifo.protos`](../../protos/tests/conformance/control/ensure-nested-lifo.protos)
+- [`../../protos/tests/conformance/control/ensure-control-transfer.protos`](../../protos/tests/conformance/control/ensure-control-transfer.protos)
   covers nested LIFO cleanup;
-- [`../../protos/tests/conformance/control/ensure-cancellation-nested-lifo.protos`](../../protos/tests/conformance/control/ensure-cancellation-nested-lifo.protos)
+- [`../../protos/tests/conformance/control/ensure-cancellation-structure.protos`](../../protos/tests/conformance/control/ensure-cancellation-structure.protos)
   covers cleanup during cancellation unwind.
 
 Executable tests demonstrate current behavior. The specification remains the
