@@ -622,8 +622,7 @@ The corresponding introductory executable tutorial material is:
 The current conformance corpus also contains focused executable examples for
 receiver-preserving `super` behavior:
 
-- [`../../protos/tests/conformance/regression/super-send-preserves-dynamic-receiver.protos`](../../protos/tests/conformance/regression/super-send-preserves-dynamic-receiver.protos)
-- [`../../protos/tests/conformance/regression/nested-closure-super-retains-method-home.protos`](../../protos/tests/conformance/regression/nested-closure-super-retains-method-home.protos)
+- [`../../protos/tests/conformance/regression/super-dispatch.protos`](../../protos/tests/conformance/regression/super-dispatch.protos)
 
 The tutorials remain intentionally small; this guide supplies the broader mental
 model around them.

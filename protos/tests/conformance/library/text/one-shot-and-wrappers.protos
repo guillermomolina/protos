@@ -1,0 +1,157 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("portable one shot text conversion", () => {
+        UTF8: import("std:text/UTF8")
+        UTF16LE: import("std:text/UTF16LE")
+        UTF16BE: import("std:text/UTF16BE")
+        Latin1: import("std:text/Latin1")
+
+        utf8First: UTF8.encode("A\u{1f600}")
+        utf8Second: UTF8.encode("A\u{1f600}")
+        utf16leFirst: UTF16LE.encode("A")
+        utf16leSecond: UTF16LE.encode("A")
+        utf16beFirst: UTF16BE.encode("A")
+        utf16beSecond: UTF16BE.encode("A")
+        latin1First: Latin1.encode("A\u{e9}")
+        latin1Second: Latin1.encode("A\u{e9}")
+
+        ok: true
+        (utf8First !== utf8Second).ifFalse(() => { ok = false })
+        (utf16leFirst !== utf16leSecond).ifFalse(() => { ok = false })
+        (utf16beFirst !== utf16beSecond).ifFalse(() => { ok = false })
+        (latin1First !== latin1Second).ifFalse(() => { ok = false })
+
+        (utf8Second.size() == 5).ifFalse(() => { ok = false })
+        (utf8Second[0] == 65).ifFalse(() => { ok = false })
+        (utf8Second[1] == 240).ifFalse(() => { ok = false })
+        (utf8Second[2] == 159).ifFalse(() => { ok = false })
+        (utf8Second[3] == 152).ifFalse(() => { ok = false })
+        (utf8Second[4] == 128).ifFalse(() => { ok = false })
+
+        (utf16leSecond.size() == 2).ifFalse(() => { ok = false })
+        (utf16leSecond[0] == 65).ifFalse(() => { ok = false })
+        (utf16leSecond[1] == 0).ifFalse(() => { ok = false })
+        (utf16beSecond.size() == 2).ifFalse(() => { ok = false })
+        (utf16beSecond[0] == 0).ifFalse(() => { ok = false })
+        (utf16beSecond[1] == 65).ifFalse(() => { ok = false })
+        (latin1Second.size() == 2).ifFalse(() => { ok = false })
+        (latin1Second[0] == 65).ifFalse(() => { ok = false })
+        (latin1Second[1] == 233).ifFalse(() => { ok = false })
+
+        (UTF8.decode(utf8Second) == "A\u{1f600}").ifFalse(() => { ok = false })
+        (UTF16LE.decode(utf16leSecond) == "A").ifFalse(() => { ok = false })
+        (UTF16BE.decode(utf16beSecond) == "A").ifFalse(() => { ok = false })
+        (Latin1.decode(latin1Second) == "A\u{e9}").ifFalse(() => { ok = false })
+
+        utf8First.add(0)
+        utf16leFirst.add(0)
+        utf16beFirst.add(0)
+        latin1First.add(0)
+
+        (utf8First.size() == 6).ifFalse(() => { ok = false })
+        (utf16leFirst.size() == 3).ifFalse(() => { ok = false })
+        (utf16beFirst.size() == 3).ifFalse(() => { ok = false })
+        (latin1First.size() == 3).ifFalse(() => { ok = false })
+
+        Assertions.require(ok)
+    }),
+    Test("text wrapper construction", () => {
+        UTF8: import("std:text/UTF8")
+        UTF16LE: import("std:text/UTF16LE")
+        UTF16BE: import("std:text/UTF16BE")
+        Latin1: import("std:text/Latin1")
+
+        source: {
+            read: (maxBytes) => null
+            close: () => null
+        }
+
+        target: {
+            write: (bytes) => null
+            close: () => null
+        }
+
+        r8: UTF8.reader(source)
+        r16le: UTF16LE.reader(source)
+        r16be: UTF16BE.reader(source)
+        r1: Latin1.reader(source)
+        or8: UTF8.owningReader(source)
+        or16le: UTF16LE.owningReader(source)
+        or16be: UTF16BE.owningReader(source)
+        or1: Latin1.owningReader(source)
+
+        w8: UTF8.writer(target)
+        w16le: UTF16LE.writer(target)
+        w16be: UTF16BE.writer(target)
+        w1: Latin1.writer(target)
+        ow8: UTF8.owningWriter(target)
+        ow16le: UTF16LE.owningWriter(target)
+        ow16be: UTF16BE.owningWriter(target)
+        ow1: Latin1.owningWriter(target)
+
+        ok: true
+        (r8 === r16le).ifTrue(() => { ok = false })
+        (r16le === r16be).ifTrue(() => { ok = false })
+        (r16be === r1).ifTrue(() => { ok = false })
+        (or8 === r8).ifTrue(() => { ok = false })
+        (or16le === r16le).ifTrue(() => { ok = false })
+        (or16be === r16be).ifTrue(() => { ok = false })
+        (or1 === r1).ifTrue(() => { ok = false })
+        (w8 === w16le).ifTrue(() => { ok = false })
+        (w16le === w16be).ifTrue(() => { ok = false })
+        (w16be === w1).ifTrue(() => { ok = false })
+        (ow8 === w8).ifTrue(() => { ok = false })
+        (ow16le === w16le).ifTrue(() => { ok = false })
+        (ow16be === w16be).ifTrue(() => { ok = false })
+        (ow1 === w1).ifTrue(() => { ok = false })
+
+        Assertions.require(ok)
+    }),
+    Test("helper module is not Encoding", () => {
+        UTF8: import("std:text/UTF8")
+        source: {
+            read: (maxBytes) => null
+        }
+
+        Assertions.signals(Error, () => {
+            TextReader(source, UTF8)
+        })
+    }),
+    Test("text modules use import cache", () => {
+        utf8First: import("std:text/UTF8")
+        utf8Second: import("std:text/UTF8")
+        utf16leFirst: import("std:text/UTF16LE")
+        utf16leSecond: import("std:text/UTF16LE")
+        utf16beFirst: import("std:text/UTF16BE")
+        utf16beSecond: import("std:text/UTF16BE")
+        latin1First: import("std:text/Latin1")
+        latin1Second: import("std:text/Latin1")
+
+        Assertions.require(
+            (utf8First === utf8Second) &&
+            (utf16leFirst === utf16leSecond) &&
+            (utf16beFirst === utf16beSecond) &&
+            (latin1First === latin1Second)
+        )
+    })
+)
+tests.freeze()

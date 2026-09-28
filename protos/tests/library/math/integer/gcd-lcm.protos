@@ -48,6 +48,104 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("arity rejection", () => {
+        tool009LegacyCase: () => {
+            IntegerMath: import("std:math/Integer")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            require(reject(() => { IntegerMath.gcd() }))
+            require(reject(() => { IntegerMath.gcd(1) }))
+            require(reject(() => { IntegerMath.gcd(1, 2, 3) }))
+
+            require(reject(() => { IntegerMath.lcm() }))
+            require(reject(() => { IntegerMath.lcm(1) }))
+            require(reject(() => { IntegerMath.lcm(1, 2, 3) }))
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("domain rejection", () => {
+        tool009LegacyCase: () => {
+            IntegerMath: import("std:math/Integer")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            delegatedIntegerLookalike: (1) {}
+
+            require(reject(() => { IntegerMath.gcd(6.0, 9) }))
+            require(reject(() => { IntegerMath.gcd("6", 9) }))
+            require(reject(() => { IntegerMath.gcd(delegatedIntegerLookalike, 9) }))
+
+            require(reject(() => { IntegerMath.lcm(6.0, 9) }))
+            require(reject(() => { IntegerMath.lcm(6, null) }))
+            require(reject(() => { IntegerMath.lcm(delegatedIntegerLookalike, 9) }))
+
+            // Both arguments remain part of the domain even when one mathematical value is zero.
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("large values", () => {
+        tool009LegacyCase: () => {
+            IntegerMath: import("std:math/Integer")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            // 2^80, well beyond every signed/unsigned 64-bit range.
+            unit: 1208925819614629174706176
+            fifteenUnits: 18133887294219437620592640
+            twentyOneUnits: 25387442211907212668829696
+            threeUnits: 3626777458843887524118528
+            oneHundredFiveUnits: 126937211059536063344148480
+
+            require(IntegerMath.gcd(fifteenUnits, twentyOneUnits) == threeUnits)
+            require(IntegerMath.gcd(0 - fifteenUnits, twentyOneUnits) == threeUnits)
+            require(IntegerMath.lcm(fifteenUnits, twentyOneUnits) == oneHundredFiveUnits)
+            require(IntegerMath.lcm(0 - fifteenUnits, twentyOneUnits) == oneHundredFiveUnits)
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
 ]
 tests.freeze()

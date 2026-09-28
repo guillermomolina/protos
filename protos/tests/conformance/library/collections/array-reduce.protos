@@ -1,0 +1,166 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE: https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: Array(
+    Test("array reduce bad reducer arity error", () => {
+        Assertions.signals(Error, () => {
+            Arrays: import("std:collections/Array")
+            Arrays.reduce(Array(1, 2), (accumulator) => { accumulator })
+        })
+    }),
+    Test("array reduce fold start boundaries", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+
+            unseededCalls: 0
+            unseeded: Arrays.reduce(Array(10, 3), (accumulator, element) => {
+                unseededCalls = unseededCalls + 1
+                accumulator - element
+            })
+
+            seededCalls: 0
+            seeded: Arrays.reduce(Array(3), (accumulator, element) => {
+                seededCalls = seededCalls + 1
+                accumulator - element
+            }, 20)
+
+            singletonCalls: 0
+            marker: Array(7)
+            singleton: Arrays.reduce(Array(marker), (accumulator, element) => {
+                singletonCalls = singletonCalls + 1
+                null
+            })
+
+            seededEmptyCalls: 0
+            seededEmpty: Arrays.reduce(Array(), (accumulator, element) => {
+                seededEmptyCalls = seededEmptyCalls + 1
+                null
+            }, marker)
+
+            (unseeded == 7) &&
+            (unseededCalls == 1) &&
+            (seeded == 17) &&
+            (seededCalls == 1) &&
+            (singleton === marker) &&
+            (singletonCalls == 0) &&
+            (seededEmpty === marker) &&
+            (seededEmptyCalls == 0)
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("array reduce left fold snapshot", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            source: Array(10, 3, 2, 1)
+            calls: 0
+            reduced: Arrays.reduce(source, (accumulator, element) => {
+                (calls == 0).ifTrue(() => {
+                    source[2] = 99
+                })
+                calls = calls + 1
+                accumulator - element
+            })
+
+            withInitialCalls: 0
+            withInitial: Arrays.reduce(
+                Array(10, 3, 2, 1),
+                (accumulator, element) => {
+                    withInitialCalls = withInitialCalls + 1
+                    accumulator - element
+                },
+                20
+            )
+
+            ok: true
+            (reduced == 4).ifFalse(() => { ok = false })
+            (calls == 3).ifFalse(() => { ok = false })
+            (source[2] == 99).ifFalse(() => { ok = false })
+            (withInitial == 4).ifFalse(() => { ok = false })
+            (withInitialCalls == 4).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("array reduce repeated large left fold", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            source: Array(
+                1, 2, 3, 4, 5, 6, 7, 8,
+                9, 10, 11, 12, 13, 14, 15, 16,
+                17, 18, 19, 20, 21, 22, 23, 24,
+                25, 26, 27, 28, 29, 30, 31, 32
+            )
+
+            calls: 0
+            reducer: (accumulator, element) => {
+                calls = calls + 1
+                accumulator + element
+            }
+
+            first: Arrays.reduce(source, reducer, 0)
+            second: Arrays.reduce(source, reducer, 10)
+
+            (first == 528) && (second == 538) && (calls == 64)
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("array reduce sort balanced traversal", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            source: Array(8, 7, 6, 5, 4, 3, 2, 1)
+
+            reduceCalls: 0
+            sum: Arrays.reduce(source, (accumulator, element) => {
+                reduceCalls = reduceCalls + 1
+                accumulator + element
+            }, 0)
+
+            sortCalls: 0
+            sorted: Arrays.sort(source, (left, right) => {
+                sortCalls = sortCalls + 1
+                left < right
+            })
+
+            ok: true
+            (sum == 36).ifFalse(() => { ok = false })
+            (reduceCalls == 8).ifFalse(() => { ok = false })
+            (sorted[0] == 1).ifFalse(() => { ok = false })
+            (sorted[1] == 2).ifFalse(() => { ok = false })
+            (sorted[2] == 3).ifFalse(() => { ok = false })
+            (sorted[3] == 4).ifFalse(() => { ok = false })
+            (sorted[4] == 5).ifFalse(() => { ok = false })
+            (sorted[5] == 6).ifFalse(() => { ok = false })
+            (sorted[6] == 7).ifFalse(() => { ok = false })
+            (sorted[7] == 8).ifFalse(() => { ok = false })
+            (sortCalls > 0).ifFalse(() => { ok = false })
+            (source[0] == 8).ifFalse(() => { ok = false })
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("array reduce too many initial values error", () => {
+        Assertions.signals(Error, () => {
+            Arrays: import("std:collections/Array")
+            Arrays.reduce(Array(), (accumulator, element) => { accumulator }, 1, 2)
+        })
+    }),
+    Test("array reduce trivial inputs do not inspect reducer", () => {
+        tool009LegacyCase: () => {
+            Arrays: import("std:collections/Array")
+            marker: Array(7)
+            empty: Arrays.reduce(Array(), 42)
+            singleton: Arrays.reduce(Array(marker), 42)
+            seededEmpty: Arrays.reduce(Array(), 42, marker)
+            ((empty === null) && (singleton === marker)) &&
+                (seededEmpty === marker)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+)
+tests.freeze()

@@ -35,37 +35,40 @@ final class ProtosTestToolFileSelectionPublicIntegrationTest {
                     "tests",
                     "library",
                     "uri",
-                    "parse-components.protos");
+                    "parse.protos");
 
     private static final String EXPECTED_STDOUT =
             "Protos test tool bootstrap\n"
                     + "test\n";
 
     private static final String EXPECTED_URI_PROGRESS =
-            "[uri] 0/1\n"
-                    + "[uri] 1/1 passed\n"
-                    + "1 passed, 0 failed\n";
+            "[uri] 0/4\n"
+                    + "[uri] 1/4\n"
+                    + "[uri] 2/4\n"
+                    + "[uri] 3/4\n"
+                    + "[uri] 4/4 passed\n"
+                    + "4 passed, 0 failed\n";
 
     @Test
-    void relativeExactFileRunsOnlyItsAuthoritativeCase() {
+    void relativeExactFileRunsOnlyItsAuthoritativeCases() {
         R result =
                 run(
                         "test",
                         "--file",
                         URI_CASE.toString());
 
-        assertSuccessfulSingleUriCase(result);
+        assertSuccessfulUriCases(result);
     }
 
     @Test
-    void absoluteExactFileRunsTheSameAuthoritativeCase() {
+    void absoluteExactFileRunsTheSameAuthoritativeCases() {
         R result =
                 run(
                         "test",
                         "--file",
                         URI_CASE.toAbsolutePath().normalize().toString());
 
-        assertSuccessfulSingleUriCase(result);
+        assertSuccessfulUriCases(result);
     }
 
     @Test
@@ -108,7 +111,7 @@ final class ProtosTestToolFileSelectionPublicIntegrationTest {
         }
     }
 
-    private static void assertSuccessfulSingleUriCase(R result) {
+    private static void assertSuccessfulUriCases(R result) {
         assertEquals(0, result.code());
         assertEquals(EXPECTED_STDOUT, result.out());
         assertEquals(EXPECTED_URI_PROGRESS, result.err());

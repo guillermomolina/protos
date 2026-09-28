@@ -21,30 +21,28 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
 
     @Test
     void ordinaryLibraryPlansHaveExactExplicitMembership() throws Exception {
-        assertPlan("protos/corpus/library/uri", 11, "uri/parse-components.protos", "uri/resolve-invalid.protos");
-        assertPlan("protos/corpus/library/csv", 17, "csv/parse-basic.protos", "csv/streaming-scale.protos");
-        assertPlan("protos/corpus/library/cli", 19, "cli/specification-valid.protos", "cli/closure-isolation-concurrency.protos");
-        assertPlan("protos/corpus/library/math/integer", 11, "math/integer/gcd-lcm.protos", "math/integer/integrated-closure.protos");
-        assertPlan("protos/corpus/library/crypto/sha256", 10, "crypto/sha256/empty.protos", "crypto/sha256/invalid-non-bytes.protos");
-        assertPlan("protos/corpus/library/network/ip-addresses", 8, "network/ip-addresses/surface-ipv4.protos", "network/ip-addresses/ipv6-invalid.protos");
-        assertPlan("protos/corpus/library/network/ip-endpoints", 2, "network/ip-endpoints/parse-format.protos", "network/ip-endpoints/invalid.protos");
+        assertPlan("protos/corpus/library/uri", 3, "uri/parse.protos", "uri/resolve.protos");
+        assertPlan("protos/corpus/library/csv", 5, "csv/parse.protos", "csv/integration-and-scale.protos");
+        assertPlan("protos/corpus/library/cli", 5, "cli/specification-and-result.protos", "cli/closure.protos");
+        assertPlan("protos/corpus/library/math/integer", 4, "math/integer/gcd-lcm.protos", "math/integer/integrated-closure.protos");
+        assertPlan("protos/corpus/library/crypto/sha256", 2, "crypto/sha256/vectors-and-boundaries.protos", "crypto/sha256/ownership-and-domain.protos");
+        assertPlan("protos/corpus/library/network/ip-addresses", 3, "network/ip-addresses/surface.protos", "network/ip-addresses/validation.protos");
+        assertPlan("protos/corpus/library/network/ip-endpoints", 1, "network/ip-endpoints/parse-format-and-validation.protos", "network/ip-endpoints/parse-format-and-validation.protos");
     }
 
     @Test
-    void csvFutureAndShaCasesRemainOrderedAndAreSuiteNative() throws Exception {
-        assertEquals("csv/text-adapter-reader.protos", path("protos/corpus/library/csv", 11));
-        assertEquals("csv/text-adapter-writer.protos", path("protos/corpus/library/csv", 12));
-        assertEquals("csv/text-adapter-overlap.protos", path("protos/corpus/library/csv", 13));
-        assertEquals("csv/integrated-closure.protos", path("protos/corpus/library/csv", 15));
+    void csvAndShaCasesRemainOrderedAndAreSuiteNative() throws Exception {
+        assertEquals("csv/row-parser.protos", path("protos/corpus/library/csv", 2));
+        assertEquals("csv/text-adapter.protos", path("protos/corpus/library/csv", 3));
+        assertEquals("csv/integration-and-scale.protos", path("protos/corpus/library/csv", 4));
         assertEquals(
-                "crypto/sha256/invalid-non-bytes.protos",
-                path("protos/corpus/library/crypto/sha256", 9));
+                "crypto/sha256/ownership-and-domain.protos",
+                path("protos/corpus/library/crypto/sha256", 1));
 
-        assertEquals("suite-native", expectation("protos/corpus/library/csv", 11));
-        assertEquals("suite-native", expectation("protos/corpus/library/csv", 12));
-        assertEquals("suite-native", expectation("protos/corpus/library/csv", 13));
-        assertEquals("suite-native", expectation("protos/corpus/library/csv", 15));
-        assertEquals("suite-native", expectation("protos/corpus/library/crypto/sha256", 9));
+        assertEquals("suite-native", expectation("protos/corpus/library/csv", 2));
+        assertEquals("suite-native", expectation("protos/corpus/library/csv", 3));
+        assertEquals("suite-native", expectation("protos/corpus/library/csv", 4));
+        assertEquals("suite-native", expectation("protos/corpus/library/crypto/sha256", 1));
     }
 
     @Test

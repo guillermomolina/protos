@@ -47,6 +47,85 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("power domain rejection", () => {
+        tool009LegacyCase: () => {
+            IntegerMath: import("std:math/Integer")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            delegatedIntegerLookalike: (2) {}
+
+            require(reject(() => { IntegerMath.pow(2.0, 3) }))
+            require(reject(() => { IntegerMath.pow(2, 3.0) }))
+            require(reject(() => { IntegerMath.pow(delegatedIntegerLookalike, 3) }))
+            require(reject(() => { IntegerMath.pow(2, delegatedIntegerLookalike) }))
+            require(reject(() => { IntegerMath.pow(2, -1) }))
+
+            require(reject(() => { IntegerMath.powMod(2.0, 3, 5) }))
+            require(reject(() => { IntegerMath.powMod(2, 3.0, 5) }))
+            require(reject(() => { IntegerMath.powMod(2, 3, 5.0) }))
+            require(reject(() => { IntegerMath.powMod(delegatedIntegerLookalike, 3, 5) }))
+            require(reject(() => { IntegerMath.powMod(2, delegatedIntegerLookalike, 5) }))
+            require(reject(() => { IntegerMath.powMod(2, 3, delegatedIntegerLookalike) }))
+            require(reject(() => { IntegerMath.powMod(2, -1, 5) }))
+            require(reject(() => { IntegerMath.powMod(2, 3, 0) }))
+            require(reject(() => { IntegerMath.powMod(2, 3, -5) }))
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("power arity rejection", () => {
+        tool009LegacyCase: () => {
+            IntegerMath: import("std:math/Integer")
+
+            require: (condition) => {
+                condition.ifFalse(() => {
+                    Error().signal()
+                })
+            }
+
+            reject: (body) => {
+                Error.handle(
+                    () => {
+                        body()
+                        false
+                    },
+                    (error) => {
+                        true
+                    }
+                )
+            }
+
+            require(reject(() => { IntegerMath.pow() }))
+            require(reject(() => { IntegerMath.pow(2) }))
+            require(reject(() => { IntegerMath.pow(2, 3, 4) }))
+
+            require(reject(() => { IntegerMath.powMod() }))
+            require(reject(() => { IntegerMath.powMod(2) }))
+            require(reject(() => { IntegerMath.powMod(2, 3) }))
+            require(reject(() => { IntegerMath.powMod(2, 3, 5, 7) }))
+
+            true
+        }
+        Assertions.require(tool009LegacyCase())
     })
 ]
 tests.freeze()

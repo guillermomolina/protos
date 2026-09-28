@@ -789,12 +789,9 @@ These are implementation/library examples, not new Error semantics.
 The retained conformance suite includes focused evidence for handler and cleanup
 behavior:
 
-- [`../../protos/tests/conformance/error/handle-normal-result.protos`](../../protos/tests/conformance/error/handle-normal-result.protos)
-  covers normal protected completion;
-- [`../../protos/tests/conformance/error/handle-nonresumable-body.protos`](../../protos/tests/conformance/error/handle-nonresumable-body.protos)
-  demonstrates that signaling does not resume the body;
-- [`../../protos/tests/conformance/error/handle-selected-inactive.protos`](../../protos/tests/conformance/error/handle-selected-inactive.protos)
-  covers selected-handler deactivation;
+- [`../../protos/tests/conformance/error/handle.protos`](../../protos/tests/conformance/error/handle.protos)
+  covers normal protected completion, demonstrates that signaling does not
+  resume the body, and covers selected-handler deactivation;
 - [`../../protos/tests/conformance/control/ensure-normal-and-validation.protos`](../../protos/tests/conformance/control/ensure-normal-and-validation.protos)
   covers body-result preservation;
 - [`../../protos/tests/conformance/control/ensure-control-transfer.protos`](../../protos/tests/conformance/control/ensure-control-transfer.protos)
