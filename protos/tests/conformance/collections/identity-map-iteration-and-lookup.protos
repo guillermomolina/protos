@@ -66,7 +66,7 @@ tests: [
             )
         }
         Assertions.require(tool009LegacyCase() === null)
-    })
+    }),
     Test("identity map each association snapshot mutation", () => {
         tool009LegacyCase: () => {
             aKey: {}
@@ -122,14 +122,14 @@ tests: [
                 (m[dKey] === lateValue)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("identity map each noninvokable error", () => {
         Assertions.signals(Error, () => {
             m: IdentityMap()
             m["a"] = 1
             m.each(1)
         })
-    })
+    }),
     Test("identity map each order return", () => {
         tool009LegacyCase: () => {
             a: {}
@@ -149,13 +149,13 @@ tests: [
             (seen == 123) && (returned === m)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("identity map each wrong arity error", () => {
         Assertions.signals(Error, () => {
             m: IdentityMap()
             m.each()
         })
-    })
+    }),
     Test("identity map lookup update contains remove", () => {
         tool009LegacyCase: () => {
             m: IdentityMap()
@@ -176,7 +176,7 @@ tests: [
                 (m.size() == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("identity map missing key error", () => {
         Assertions.signals(Error, () => {
             IdentityMap().at({})

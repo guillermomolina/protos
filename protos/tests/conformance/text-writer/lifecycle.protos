@@ -37,7 +37,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("owning close exactly once and fresh future", () => {
         tool009LegacyFutureCase: () => {
             state: { closes: 0 }
@@ -64,7 +64,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("flush forwards only to flushable target", () => {
         tool009LegacyFutureCase: () => {
             flushableState: { flushes: 0 }

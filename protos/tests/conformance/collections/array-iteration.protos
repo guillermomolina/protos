@@ -25,13 +25,13 @@ tests: [
             }
             ordinary.each((value) => { null })
         })
-    })
+    }),
     Test("array each delegated receiver error", () => {
         Assertions.signals(Error, () => {
             Fake: Array {}
             Fake.each((value) => { null })
         })
-    })
+    }),
     Test("array each empty noninvokable error", () => {
         Assertions.signals(Error, () => {
             bad: {
@@ -39,7 +39,7 @@ tests: [
             }
             Array().each(bad)
         })
-    })
+    }),
     Test("array each noninvokable error", () => {
         Assertions.signals(Error, () => {
             bad: {
@@ -47,7 +47,7 @@ tests: [
             }
             Array(1).each(bad)
         })
-    })
+    }),
     Test("array each order and return receiver", () => {
         tool009LegacyCase: () => {
             xs: Array(1, 2, 3)
@@ -62,7 +62,7 @@ tests: [
                 (seen == 123)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("array each polymorphic callable", () => {
         tool009LegacyCase: () => {
             xs: Array(4, 5)
@@ -82,7 +82,7 @@ tests: [
                 (seen == 45)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("array each shallow snapshot", () => {
         tool009LegacyCase: () => {
             xs: Array(1, 2)
@@ -103,7 +103,7 @@ tests: [
                 (xs[1] == 99)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("array each wrong arity error", () => {
         Assertions.signals(Error, () => {
             Array(1).each()

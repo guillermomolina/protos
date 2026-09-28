@@ -40,7 +40,7 @@ tests: [
             work.future()
         }
         Assertions.require(tool009LegacyCase().value() == 42)
-    })
+    }),
     Test("root activation preserves return home across suspension", () => {
         Assertions.require(work.future().value() == 42)
     })

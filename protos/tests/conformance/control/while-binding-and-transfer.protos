@@ -43,7 +43,7 @@ tests: [
                 (bodyCalls == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while body error transfer preserves identity", () => {
         tool009LegacyCase: () => {
             conditionCalls: 0
@@ -72,7 +72,7 @@ tests: [
                 (afterLoop == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while body nonlocal return propagates", () => {
         tool009LegacyCase: () => {
             conditionCalls: 0
@@ -99,7 +99,7 @@ tests: [
                 (afterLoop == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while condition binding failure not preflighted", () => {
         tool009LegacyCase: () => {
             bodyCalls: 0
@@ -121,7 +121,7 @@ tests: [
                 (bodyCalls == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while condition error transfer preserves identity", () => {
         tool009LegacyCase: () => {
             conditionCalls: 0
@@ -149,7 +149,7 @@ tests: [
                 (afterLoop == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while condition nonlocal return propagates", () => {
         tool009LegacyCase: () => {
             conditionCalls: 0
@@ -175,7 +175,7 @@ tests: [
                 (afterLoop == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while unreachable body binding failure not preflighted", () => {
         tool009LegacyCase: () => {
             bodyCalls: 0

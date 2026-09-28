@@ -23,13 +23,13 @@ tests: [
             work.future()
         }
         Assertions.require(tool009LegacyCase().value() == 42)
-    })
+    }),
     Test("closure future null", () => {
         tool009LegacyCase: () => {
             (() => { null }).future()
         }
         Assertions.require(tool009LegacyCase().value() === null)
-    })
+    }),
     Test("fresh future identity", () => {
         tool009LegacyCase: () => {
             work: () => { 1 }

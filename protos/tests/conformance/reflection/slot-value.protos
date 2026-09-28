@@ -26,7 +26,7 @@ tests: [
 
             child.slotValue("inherited")
         })
-    })
+    }),
     Test("slot value exact local identity", () => {
         tool009LegacyCase: () => {
             stored: {}
@@ -37,7 +37,7 @@ tests: [
             holder.slotValue("value") === stored
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("slot value invalid name", () => {
         Assertions.signals(Error, () => {
             holder: {
@@ -46,7 +46,7 @@ tests: [
 
             holder.slotValue(1)
         })
-    })
+    }),
     Test("slot value represented absent", () => {
         Assertions.signals(Error, () => {
             "hello".slotValue("anything")

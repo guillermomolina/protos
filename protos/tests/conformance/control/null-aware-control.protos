@@ -105,7 +105,7 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("null aware object protocol", () => {
         tool009LegacyCase: () => {
             Assertions: import("std:test/Assertions")

@@ -54,7 +54,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 1111)
-    })
+    }),
     Test("ensure body suspension exact once", () => {
         tool009LegacyCase: () => {
             work: () => {
@@ -77,7 +77,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 111)
-    })
+    }),
     Test("ensure cleanup suspension exact once", () => {
         tool009LegacyCase: () => {
             work: () => {
@@ -100,7 +100,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 111)
-    })
+    }),
     Test("ensure cleanup suspension exact result identity", () => {
         tool009LegacyCase: () => {
             work: () => {
@@ -118,7 +118,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === true)
-    })
+    }),
     Test("ensure error cleanup suspension exact error identity", () => {
         tool009LegacyCase: () => {
             work: () => {
@@ -136,7 +136,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === true)
-    })
+    }),
     Test("ensure nested cleanup suspension lifo", () => {
         tool009LegacyCase: () => {
             work: () => {
@@ -162,7 +162,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 1234)
-    })
+    }),
     Test("ensure return cleanup suspension preserves return", () => {
         count: 0
 

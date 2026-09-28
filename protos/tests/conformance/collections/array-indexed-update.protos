@@ -22,7 +22,7 @@ tests: [
             Fake: Array {}
             Fake[0] = 1
         })
-    })
+    }),
     Test("array indexed assignment exact rhs", () => {
         tool009LegacyCase: () => {
             marker: {}
@@ -34,7 +34,7 @@ tests: [
                 (xs.size() == 2)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("array indexed assignment ignores atput return", () => {
         tool009LegacyCase: () => {
             receiver: {
@@ -43,7 +43,7 @@ tests: [
             receiver[0] = 7
         }
         Assertions.require(tool009LegacyCase() == 7)
-    })
+    }),
     Test("array replacement keeps size", () => {
         tool009LegacyCase: () => {
             values: Array(1, 2)
@@ -53,19 +53,19 @@ tests: [
                 (values.at(1) == 9)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("array write float index error", () => {
         Assertions.signals(Error, () => {
             xs: Array(1)
             xs[0.0] = 2
         })
-    })
+    }),
     Test("array write negative index error", () => {
         Assertions.signals(Error, () => {
             xs: Array(1)
             xs[-1] = 2
         })
-    })
+    }),
     Test("array write out of range error", () => {
         Assertions.signals(Error, () => {
             xs: Array(1)

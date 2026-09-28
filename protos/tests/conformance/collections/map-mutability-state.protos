@@ -75,7 +75,7 @@ tests: [
                 (m.size() == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map frozen state boundaries", () => {
         tool009LegacyCase: () => {
             state: {

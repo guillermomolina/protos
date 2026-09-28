@@ -23,7 +23,7 @@ tests: [
 
         caught: Assertions.signals(Cancelled, () => { future.value() })
         Assertions.require(caught.parent() === Cancelled)
-    })
+    }),
     Test("cancelled value fresh error", () => {
         future: (() => { 42 }).future()
         future.cancel()
@@ -33,7 +33,7 @@ tests: [
         Assertions.require(first.parent() === Cancelled)
         Assertions.require(second.parent() === Cancelled)
         Assertions.require(first !== second)
-    })
+    }),
     Test("failed value original error identity", () => {
         tool009LegacyCase: () => {
             (() => {
@@ -65,7 +65,7 @@ tests: [
             }).future()
         }
         Assertions.require(tool009LegacyCase().value() === true)
-    })
+    }),
     Test("failed value repeated error identity", () => {
         tool009LegacyCase: () => {
             (() => {
@@ -110,7 +110,7 @@ tests: [
             }).future()
         }
         Assertions.require(tool009LegacyCase().value() === true)
-    })
+    }),
     Test("failed value resignals recorded error", () => {
         error: Error()
         future: (() => {

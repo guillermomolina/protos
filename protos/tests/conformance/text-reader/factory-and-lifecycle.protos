@@ -71,7 +71,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("closed reader read error", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -125,7 +125,7 @@ tests: [
         Assertions.signals(Error, () => {
             candidate.value()
         })
-    })
+    }),
     Test("factory fake encoding error", () => {
         Assertions.signals(Error, () => {
             makeBytes: (...octets) => {
@@ -173,7 +173,7 @@ tests: [
             fakeEncoding: Encoding.UTF8 {}
             TextReader(fixture.source, fakeEncoding)
         })
-    })
+    }),
     Test("factory fresh", () => {
         tool009LegacyCase: () => {
             makeBytes: (...octets) => {
@@ -223,7 +223,7 @@ tests: [
             first !== second
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("factory owning requires close error", () => {
         Assertions.signals(Error, () => {
             makeBytes: (...octets) => {
@@ -274,7 +274,7 @@ tests: [
             }
             TextReader.owning(source, Encoding.UTF8)
         })
-    })
+    }),
     Test("owning close exactly once and fresh future", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {

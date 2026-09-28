@@ -29,7 +29,7 @@ tests: [
                 (Encoding.Latin1.decode(bytes) == text)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("latin1 unrepresentable error", () => {
         Assertions.signals(EncodingError, () => {
             Encoding.Latin1.encode("\u{20ac}")

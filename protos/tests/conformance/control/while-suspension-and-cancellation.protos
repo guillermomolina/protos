@@ -59,7 +59,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 322223)
-    })
+    }),
     Test("while cancellation no loop poll ensure once", () => {
         tool009LegacyCase: () => {
             conditionRuns: 0
@@ -112,7 +112,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 22110)
-    })
+    }),
     Test("while condition body repeated suspension exact once", () => {
         tool009LegacyCase: () => {
             work: () => {
@@ -162,7 +162,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 443343016)
-    })
+    }),
     Test("while condition every iteration suspends exact once", () => {
         tool009LegacyCase: () => {
             work: () => {
@@ -202,7 +202,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 33236)
-    })
+    }),
     Test("while condition suspension exact once", () => {
         tool009LegacyCase: () => {
             work: () => {

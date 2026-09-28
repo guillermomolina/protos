@@ -21,7 +21,7 @@ tests: [
         Assertions.signals(Error, () => {
             ({}).parent(1)
         })
-    })
+    }),
     Test("parent error taxonomy", () => {
         tool009LegacyCase: () => {
             (Error.parent() === Object) &&
@@ -47,7 +47,7 @@ tests: [
                 (LineTooLong.parent() === IOError)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("parent number string", () => {
         tool009LegacyCase: () => {
             ((1).parent() === Integer) &&
@@ -55,7 +55,7 @@ tests: [
                 (("x").parent() === String)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("parent ordinary", () => {
         tool009LegacyCase: () => {
             base: {}
@@ -66,7 +66,7 @@ tests: [
                 (child.parent() === base)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("parent singletons", () => {
         tool009LegacyCase: () => {
             ((true).parent() === Object) &&
@@ -74,7 +74,7 @@ tests: [
                 ((null).parent() === Object)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("root parent", () => {
         Assertions.signals(Error, () => {
             Object.parent()

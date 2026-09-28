@@ -28,13 +28,13 @@ tests: [
                 (m.at(1.0) == 20)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("identity map delegated receiver error", () => {
         Assertions.signals(Error, () => {
             Fake: IdentityMap {}
             Fake.size()
         })
-    })
+    }),
     Test("identity map distinct objects", () => {
         tool009LegacyCase: () => {
             a: { value: 1 }
@@ -45,7 +45,7 @@ tests: [
             m.size()
         }
         Assertions.require(tool009LegacyCase() == 2)
-    })
+    }),
     Test("identity map equal path keys remain distinct", () => {
         tool009LegacyCase: () => {
             a: Path.relative().child("same")
@@ -58,7 +58,7 @@ tests: [
                 (m.at(b) == 20)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("identity map equal strings collapse", () => {
         tool009LegacyCase: () => {
             m: IdentityMap()
@@ -67,7 +67,7 @@ tests: [
             m.size()
         }
         Assertions.require(tool009LegacyCase() == 1)
-    })
+    }),
     Test("identity map factory fresh open", () => {
         tool009LegacyCase: () => {
             a: IdentityMap()
@@ -80,12 +80,12 @@ tests: [
                 (b.size() == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("identity map factory wrong arity error", () => {
         Assertions.signals(Error, () => {
             IdentityMap(1)
         })
-    })
+    }),
     Test("identity map no key callbacks", () => {
         tool009LegacyCase: () => {
             calls: {

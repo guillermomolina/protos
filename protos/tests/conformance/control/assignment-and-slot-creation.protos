@@ -32,7 +32,7 @@ tests: [
             }, (caught) => probe.touched)
         }
         Assertions.require(tool009LegacyCase() === false)
-    })
+    }),
     Test("bare assignment target fixed before rhs", () => {
         tool009LegacyCase: () => {
             outer: () => {
@@ -55,7 +55,7 @@ tests: [
             outer()
         }
         Assertions.require(tool009LegacyCase() == 95)
-    })
+    }),
     Test("multiple slot creation", () => {
         tool009LegacyCase: () => {
             Assertions: import("std:test/Assertions")

@@ -21,13 +21,13 @@ tests: [
         Assertions.signals(Error, () => {
             Encoding.UTF8.decode("not Bytes")
         })
-    })
+    }),
     Test("delegated receiver error", () => {
         Assertions.signals(Error, () => {
             Fake: Encoding.UTF8 {}
             Fake.encode("x")
         })
-    })
+    }),
     Test("empty encode fresh open no bom", () => {
         tool009LegacyCase: () => {
             first: Encoding.UTF8.encode("")
@@ -41,7 +41,7 @@ tests: [
                 (second.size() == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("encode nonstring error", () => {
         Assertions.signals(Error, () => {
             Encoding.UTF8.encode(1)

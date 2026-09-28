@@ -49,7 +49,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 7)
-    })
+    }),
     Test("ensure cancellation cleanup created child drained", () => {
         tool009LegacyCase: () => {
             child: null
@@ -87,7 +87,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 0)
-    })
+    }),
     Test("ensure cancellation nested lifo", () => {
         tool009LegacyCase: () => {
             order: 0
@@ -120,7 +120,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 12)
-    })
+    }),
     Test("ensure cancellation preexisting child does not block cleanup", () => {
         tool009LegacyCase: () => {
             preexisting: null
@@ -160,7 +160,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 10)
-    })
+    }),
     Test("ensure cancellation sync cleanup runs", () => {
         tool009LegacyCase: () => {
             cleaned: 0
@@ -189,7 +189,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 1)
-    })
+    }),
     Test("ensure cancellation suspended cleanup shields request", () => {
         tool009LegacyCase: () => {
             cleaned: 0

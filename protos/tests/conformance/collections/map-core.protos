@@ -29,17 +29,17 @@ tests: [
                 (b.size() == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map factory wrong arity error", () => {
         Assertions.signals(Error, () => {
             Map(1)
         })
-    })
+    }),
     Test("map missing key error", () => {
         Assertions.signals(Error, () => {
             Map().at(1)
         })
-    })
+    }),
     Test("map remove and reinsert", () => {
         tool009LegacyCase: () => {
             m: Map()
@@ -50,7 +50,7 @@ tests: [
             m["a"]
         }
         Assertions.require(tool009LegacyCase() == 3)
-    })
+    }),
     Test("map remove returns old value", () => {
         tool009LegacyCase: () => {
             m: Map()
@@ -65,7 +65,7 @@ tests: [
                 (m["a"] == 3)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map replacement keeps size", () => {
         tool009LegacyCase: () => {
             m: Map()
@@ -75,12 +75,12 @@ tests: [
             m.size()
         }
         Assertions.require(tool009LegacyCase() == 2)
-    })
+    }),
     Test("map wrong receiver error", () => {
         Assertions.signals(Error, () => {
             Map.at(1)
         })
-    })
+    }),
     Test("keyed map default identity equality", () => {
         tool009LegacyCase: () => {
             m1: Map()
@@ -96,7 +96,7 @@ tests: [
                 (i1.hash() == i1.hash())
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("keyed map prototype topology", () => {
         tool009LegacyCase: () => {
             m: Map()

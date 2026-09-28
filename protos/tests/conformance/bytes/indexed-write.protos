@@ -23,28 +23,28 @@ tests: [
             bytes.add(1)
             bytes.atPut(0, 7.0)
         })
-    })
+    }),
     Test("at put negative octet error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(1)
             bytes.atPut(0, -1)
         })
-    })
+    }),
     Test("at put out of range error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(1)
             bytes.atPut(1, 9)
         })
-    })
+    }),
     Test("at put overflow octet error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(1)
             bytes.atPut(0, 256)
         })
-    })
+    }),
     Test("at put replaces and returns", () => {
         tool009LegacyCase: () => {
             bytes: Encoding.UTF8.encode("")
@@ -59,14 +59,14 @@ tests: [
                 (bytes.size() == 2)
         }
         Assertions.require(tool009LegacyCase())
-    })
+    }),
     Test("at put string octet error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(1)
             bytes.atPut(0, "7")
         })
-    })
+    }),
     Test("bracket assignment returns and updates", () => {
         tool009LegacyCase: () => {
             bytes: Encoding.UTF8.encode("")

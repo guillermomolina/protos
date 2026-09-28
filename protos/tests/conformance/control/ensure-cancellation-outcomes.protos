@@ -80,7 +80,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 142)
-    })
+    }),
     Test("ensure cancellation cleanup error handler recovers", () => {
         tool009LegacyCase: () => {
             cleanupError: Error()
@@ -106,7 +106,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 42)
-    })
+    }),
     Test("ensure cancellation cleanup error supersedes", () => {
         tool009LegacyCase: () => {
             cleanupError: Error()
@@ -148,7 +148,7 @@ tests: [
         )
 
         Assertions.require(same)
-    })
+    }),
     Test("ensure cancellation cleanup return child structured completion", () => {
         childRan: 0
 
@@ -169,7 +169,7 @@ tests: [
 
         futureValue: observer.value()
         Assertions.require(futureValue === 142)
-    })
+    }),
     Test("ensure cancellation cleanup return supersedes", () => {
         future: (() => {
             dependency: Future.all().then((values) => 7)
@@ -178,7 +178,7 @@ tests: [
 
         futureValue: future.value()
         Assertions.require(futureValue === 42)
-    })
+    }),
     Test("ensure cancellation suspended cleanup error supersedes", () => {
         tool009LegacyCase: () => {
             cleanupError: Error()
@@ -222,7 +222,7 @@ tests: [
         )
 
         Assertions.require(same)
-    })
+    }),
     Test("ensure selected error cleanup cancellation supersedes handler", () => {
         tool009LegacyCase: () => {
             selectedError: Error()
@@ -260,7 +260,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 0)
-    })
+    }),
     Test("ensure selected handler inactive across cleanup suspension", () => {
         tool009LegacyCase: () => {
             work: () => {
@@ -280,7 +280,7 @@ tests: [
         }
         futureValue: tool009LegacyCase().value()
         Assertions.require(futureValue === 2)
-    })
+    }),
     Test("ensure selected handler inactive during cleanup", () => {
         tool009LegacyCase: () => {
             Error.handle(() => {

@@ -24,7 +24,7 @@ tests: [
             }
             value.freeze(1)
         })
-    })
+    }),
     Test("freeze array indexed replacement rejected", () => {
         tool009LegacyCase: () => {
             value: Array(1)
@@ -40,7 +40,7 @@ tests: [
             same && failed && (value[0] == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("freeze exact receiver idempotent", () => {
         tool009LegacyCase: () => {
             value: {
@@ -51,7 +51,7 @@ tests: [
             (first === value) && (second === value) && (first === second)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("freeze from closed rejects existing assignment", () => {
         tool009LegacyCase: () => {
             value: {
@@ -70,7 +70,7 @@ tests: [
             same && failed && (value.existing == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("freeze frozen root idempotent", () => {
         tool009LegacyCase: () => {
             same: Object.freeze() === Object
@@ -86,7 +86,7 @@ tests: [
             same && before && failed && Object.hasSlot("slotNames")
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("freeze is shallow", () => {
         tool009LegacyCase: () => {
             inner: {
@@ -101,7 +101,7 @@ tests: [
             same && (outer.child === inner) && (inner.existing == 2) && (inner.added == 3)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("freeze map keyed replacement rejected", () => {
         tool009LegacyCase: () => {
             value: Map()
@@ -118,7 +118,7 @@ tests: [
             same && failed && (value["a"] == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("freeze rejects existing assignment", () => {
         tool009LegacyCase: () => {
             value: {
@@ -136,7 +136,7 @@ tests: [
             failed && (value.existing == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("freeze rejects remove preserves local", () => {
         tool009LegacyCase: () => {
             value: {
@@ -154,7 +154,7 @@ tests: [
             failed && value.hasSlot("existing") && (value.existing == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("freeze rejects slot creation", () => {
         tool009LegacyCase: () => {
             value: {

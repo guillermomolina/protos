@@ -32,7 +32,7 @@ tests: [
             cleaned * 10 + result
         }
         Assertions.require(tool009LegacyCase() == 112)
-    })
+    }),
     Test("ensure cleanup error supersedes normal", () => {
         tool009LegacyCase: () => {
             cleanupError: Error()
@@ -41,7 +41,7 @@ tests: [
             }, (caught) => caught === cleanupError)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("ensure cleanup nonlocal return supersedes normal", () => {
         tool009LegacyCase: () => {
             outer: () => {
@@ -53,7 +53,7 @@ tests: [
             outer()
         }
         Assertions.require(tool009LegacyCase() == 43)
-    })
+    }),
     Test("ensure cleanup nonlocal return supersedes pending return", () => {
         tool009LegacyCase: () => {
             outer: () => {
@@ -67,7 +67,7 @@ tests: [
             outer()
         }
         Assertions.require(tool009LegacyCase() == 43)
-    })
+    }),
     Test("ensure error cleanup preserves original", () => {
         tool009LegacyCase: () => {
             original: Error()
@@ -81,7 +81,7 @@ tests: [
             })
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("ensure nested lifo", () => {
         tool009LegacyCase: () => {
             order: 0

@@ -72,7 +72,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("readline cr completes before following lf", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -124,7 +124,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("readline framing lf crlf cr eof", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -185,7 +185,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("readline maxbytes utf16le excludes bom and crlf", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -234,7 +234,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("readline maxbytes utf8 excludes bom and terminator", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {

@@ -21,12 +21,12 @@ tests: [
         Assertions.signals(Error, () => {
             (() => false).while()
         })
-    })
+    }),
     Test("while invalid receiver", () => {
         Assertions.signals(Error, () => {
             true.while(() => { null })
         })
-    })
+    }),
     Test("while invalid condition future", () => {
         tool009LegacyCase: () => {
             future: (() => false).future()
@@ -48,7 +48,7 @@ tests: [
                 (bodyCalls == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while invalid condition integer", () => {
         tool009LegacyCase: () => {
             bodyCalls: 0
@@ -69,7 +69,7 @@ tests: [
                 (bodyCalls == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while invalid condition null", () => {
         tool009LegacyCase: () => {
             bodyCalls: 0
@@ -97,7 +97,7 @@ tests: [
                 (bodyCalls == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while invalid condition object", () => {
         tool009LegacyCase: () => {
             bodyCalls: 0
@@ -118,7 +118,7 @@ tests: [
                 (bodyCalls == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while multiple iterations", () => {
         tool009LegacyCase: () => {
             i: 0
@@ -129,14 +129,14 @@ tests: [
             i
         }
         Assertions.require(tool009LegacyCase() == 4)
-    })
+    }),
     Test("while zero iterations null", () => {
         tool009LegacyCase: () => {
             condition: () => { false }
             condition.while() { 42 }
         }
         Assertions.require(tool009LegacyCase() === null)
-    })
+    }),
     Test("while default parameter zero arg activation", () => {
         tool009LegacyCase: () => {
             conditionCalls: 0
@@ -160,7 +160,7 @@ tests: [
                 (bodyCalls == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while eager body validation", () => {
         Assertions.signals(Error, () => {
             (() => false).while(42)

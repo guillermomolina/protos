@@ -35,7 +35,7 @@ tests: [
         Assertions.signals(EncodingError, () => {
             candidate.value()
         })
-    })
+    }),
     Test("encoding failure atomic and reusable", () => {
         tool009LegacyFutureCase: () => {
             state: {
@@ -65,7 +65,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("write order text then line", () => {
         tool009LegacyFutureCase: () => {
             state: {

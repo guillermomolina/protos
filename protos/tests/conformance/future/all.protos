@@ -22,7 +22,7 @@ tests: [
             Future.all().then((values) => { values.size() })
         }
         Assertions.require(tool009LegacyCase().value() == 0)
-    })
+    }),
     Test("all preserves input order", () => {
         tool009LegacyCase: () => {
             first: (() => { 4 }).future()

@@ -25,7 +25,7 @@ tests: [
             })
         }
         Assertions.require(tool009LegacyCase().value() == 42)
-    })
+    }),
     Test("then never inline", () => {
         tool009LegacyCase: () => {
             called: 0
@@ -43,14 +43,14 @@ tests: [
             })
         }
         Assertions.require(tool009LegacyCase().value() == 52)
-    })
+    }),
     Test("then rejects noninvokable", () => {
         Assertions.signals(Error, () => {
             future: (() => { 1 }).future()
             notInvokable: { call: 1 }
             future.then(notInvokable)
         })
-    })
+    }),
     Test("then transforms", () => {
         tool009LegacyCase: () => {
             source: (() => { 20 }).future()

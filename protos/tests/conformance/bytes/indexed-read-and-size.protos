@@ -21,35 +21,35 @@ tests: [
         Assertions.signals(Error, () => {
             Encoding.UTF8.encode("").at(0)
         })
-    })
+    }),
     Test("at float error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(1)
             bytes.at(0.0)
         })
-    })
+    }),
     Test("at negative error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(1)
             bytes.at(-1)
         })
-    })
+    }),
     Test("at out of range error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(1)
             bytes.at(1)
         })
-    })
+    }),
     Test("at string error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(1)
             bytes.at("0")
         })
-    })
+    }),
     Test("size at bracket", () => {
         tool009LegacyCase: () => {
             bytes: Encoding.UTF8.encode("")
@@ -67,7 +67,7 @@ tests: [
             ok
         }
         Assertions.require(tool009LegacyCase())
-    })
+    }),
     Test("delegated at receiver error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
@@ -75,7 +75,7 @@ tests: [
             delegated: bytes {}
             delegated.at(0)
         })
-    })
+    }),
     Test("delegated size receiver error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")

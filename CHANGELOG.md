@@ -32,6 +32,25 @@ Historical implementation changelogs:
   and minimum file count are not repository conventions) is now documented in
   `protos/AGENTS.md`.
 
+- Fix a syntax defect introduced by the automated `TOOL009-F-I1`/`TOOL009-F-I2`
+  conformance-corpus consolidation: consecutive `Test(...)` entries inside a
+  consolidated source's `tests: [ ... ]` Array were separated only by a
+  logical `NEWLINE`, with no comma. Per `spec/PROTOS_GRAMMAR.md` §12.3/§17, an
+  Array construction expression desugars to an ordinary call
+  (`[a, b] -> Array(a, b)`), and a `NEWLINE` is never an argument separator; a
+  comma is required between every two elements. Every affected source failed
+  to parse (`bin/protos <file>` raised `Syntax error: Expected ']' but found
+  IDENTIFIER`), and under the Test Tool the same parse failure surfaced only
+  as an opaque `Test tool error: Object {}`, because Discovery detaches a
+  failed declaration execution into a generic `Error` with no local slots.
+  Insert the missing comma after every `Test(...)` entry's closing `})` that
+  is immediately followed by another `Test(...)` entry, across the 53
+  affected sources under `protos/tests/conformance/{bytes,collections,
+  control,encoding,future,reflection,text-reader,text-writer}/` (229 sites);
+  no test body, selector/name, or `tests` Array element count changes. No
+  production or Standard Library source is affected, so no implementation
+  version increment applies to this change.
+
 ## 0.3.105-SNAPSHOT
 
 - `PERF014` (#725) follow-up: the direct Closure-call guarded specialization

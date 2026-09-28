@@ -46,7 +46,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("writeline wrong arity error", () => {
         tool009LegacyFutureCase: () => {
             state: { writes: 0 }
@@ -65,7 +65,7 @@ tests: [
         Assertions.signals(InvalidIOArgument, () => {
             candidate.value()
         })
-    })
+    }),
     Test("writetext wrong type error", () => {
         tool009LegacyFutureCase: () => {
             state: { writes: 0 }

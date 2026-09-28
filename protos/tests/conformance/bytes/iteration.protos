@@ -23,7 +23,7 @@ tests: [
             bytes.add(1)
             bytes.each(1)
         })
-    })
+    }),
     Test("each snapshot polymorphic callable", () => {
         tool009LegacyCase: () => {
             bytes: Encoding.UTF8.encode("")

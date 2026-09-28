@@ -22,7 +22,7 @@ tests: [
             (() => 41).ensure(() => 99)
         }
         Assertions.require(tool009LegacyCase() == 41)
-    })
+    }),
     Test("ensure exact result identity", () => {
         tool009LegacyCase: () => {
             object: {}
@@ -30,7 +30,7 @@ tests: [
             result === object
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("ensure cleanup runs normal", () => {
         tool009LegacyCase: () => {
             cleaned: false
@@ -40,13 +40,13 @@ tests: [
             cleaned
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("ensure cleanup result ignored", () => {
         tool009LegacyCase: () => {
             (() => 41).ensure(() => 99)
         }
         Assertions.require(tool009LegacyCase() == 41)
-    })
+    }),
     Test("ensure invalid cleanup before body", () => {
         tool009LegacyCase: () => {
             ran: false
@@ -58,12 +58,12 @@ tests: [
             }, (caught) => ran)
         }
         Assertions.require(tool009LegacyCase() === false)
-    })
+    }),
     Test("ensure nonclosure receiver", () => {
         Assertions.signals(Error, () => {
             0.ensure(() => null)
         })
-    })
+    }),
     Test("ensure cleanup invokable not closure", () => {
         Assertions.signals(Error, () => {
             ordinary: {
@@ -71,12 +71,12 @@ tests: [
             }
             (() => 1).ensure(ordinary)
         })
-    })
+    }),
     Test("ensure wrong arity two", () => {
         Assertions.signals(Error, () => {
             (() => 1).ensure(() => null, () => null)
         })
-    })
+    }),
     Test("ensure wrong arity zero", () => {
         Assertions.signals(Error, () => {
             (() => 1).ensure()

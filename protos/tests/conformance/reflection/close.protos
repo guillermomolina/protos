@@ -27,7 +27,7 @@ tests: [
             value.existing == 2
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("close arity", () => {
         Assertions.signals(Error, () => {
             value: {
@@ -35,7 +35,7 @@ tests: [
             }
             value.close(1)
         })
-    })
+    }),
     Test("close array indexed replacement remains allowed", () => {
         tool009LegacyCase: () => {
             value: Array(1)
@@ -44,7 +44,7 @@ tests: [
             same && (value[0] == 2)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("close exact receiver idempotent", () => {
         tool009LegacyCase: () => {
             value: {
@@ -55,7 +55,7 @@ tests: [
             (first === value) && (second === value) && (first === second)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("close frozen root idempotent", () => {
         tool009LegacyCase: () => {
             same: Object.close() === Object
@@ -73,7 +73,7 @@ tests: [
             same && before && failed && Object.hasSlot("slotNames")
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("close is shallow", () => {
         tool009LegacyCase: () => {
             inner: {
@@ -87,7 +87,7 @@ tests: [
             (outer.child === inner) && (inner.existing == 1) && (inner.added == 2)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("close rejects remove preserves local", () => {
         tool009LegacyCase: () => {
             payload: {
@@ -110,7 +110,7 @@ tests: [
             failed && value.hasSlot("existing") && (value.slotValue("existing") === payload)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("close rejects slot creation", () => {
         tool009LegacyCase: () => {
             value: {

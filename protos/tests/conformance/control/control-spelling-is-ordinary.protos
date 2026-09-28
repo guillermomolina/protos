@@ -23,7 +23,7 @@ tests: [
             else
         }
         Assertions.require(tool009LegacyCase() == 43)
-    })
+    }),
     Test("if spelling remains ordinary call", () => {
         tool009LegacyCase: () => {
             if: (condition, branch) => {

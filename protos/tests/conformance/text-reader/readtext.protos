@@ -74,7 +74,7 @@ tests: [
         Assertions.signals(Error, () => {
             candidate.value()
         })
-    })
+    }),
     Test("readtext incomplete eof error", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -128,7 +128,7 @@ tests: [
         Assertions.signals(Error, () => {
             candidate.value()
         })
-    })
+    }),
     Test("readtext latin1", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -184,7 +184,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("readtext utf16be", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -240,7 +240,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("readtext utf16le state", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -301,7 +301,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("readtext utf8 progress and bom", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -365,7 +365,7 @@ tests: [
         candidate: tool009LegacyFutureCase()
         Assertions.require(candidate.parent() === Future)
         Assertions.require(candidate.value() === true)
-    })
+    }),
     Test("readtext wrong arity error", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {

@@ -37,7 +37,7 @@ tests: [
                 (child.untouched == 9)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("remove slot frozen root preserves local", () => {
         tool009LegacyCase: () => {
             failed: false
@@ -54,7 +54,7 @@ tests: [
             before && failed && Object.hasSlot("slotNames")
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("remove slot invalid name preserves local", () => {
         tool009LegacyCase: () => {
             value: {
@@ -73,7 +73,7 @@ tests: [
             failed && value.hasSlot("kept") && (value.kept == 7)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("remove slot missing local does not delegate", () => {
         Assertions.signals(Error, () => {
             base: {
@@ -82,12 +82,12 @@ tests: [
             child: base {}
             child.removeSlot("inherited")
         })
-    })
+    }),
     Test("remove slot represented receiver error", () => {
         Assertions.signals(Error, () => {
             (42).removeSlot("missing")
         })
-    })
+    }),
     Test("remove slot two arity error", () => {
         Assertions.signals(Error, () => {
             value: {
@@ -95,7 +95,7 @@ tests: [
             }
             value.removeSlot("kept", "extra")
         })
-    })
+    }),
     Test("remove slot zero arity error", () => {
         Assertions.signals(Error, () => {
             value: {

@@ -36,7 +36,7 @@ tests: [
             ok
         }
         Assertions.require(tool009LegacyCase())
-    })
+    }),
     Test("identity equality hash", () => {
         tool009LegacyCase: () => {
             a: Encoding.UTF8.encode("")

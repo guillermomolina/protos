@@ -55,7 +55,7 @@ tests: [
             )
         }
         Assertions.require(tool009LegacyCase() === null)
-    })
+    }),
     Test("map at if absent present lazy exact", () => {
         tool009LegacyCase: () => {
             Assertions: import("std:test/Assertions")
@@ -111,7 +111,7 @@ tests: [
             )
         }
         Assertions.require(tool009LegacyCase() === null)
-    })
+    }),
     Test("at if absent state and callability", () => {
         tool009LegacyCase: () => {
             Assertions: import("std:test/Assertions")

@@ -25,7 +25,7 @@ tests: [
             }
             ordinary(1)
         })
-    })
+    }),
     Test("array factory fresh single and shallow", () => {
         tool009LegacyCase: () => {
             marker: {}
@@ -41,7 +41,7 @@ tests: [
                 (singleton[0] == 3)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("array inherited factory parent observable", () => {
         tool009LegacyCase: () => {
             MyArray: Array {
@@ -55,7 +55,7 @@ tests: [
                 (xs.label == 9)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("array ordinary identity and equality", () => {
         tool009LegacyCase: () => {
             a: Array(1)

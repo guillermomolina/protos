@@ -31,7 +31,7 @@ tests: [
                 (first[4] == 128)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("utf8 initial bom consumed", () => {
         tool009LegacyCase: () => {
             bytes: Encoding.UTF8.encode("")
@@ -43,7 +43,7 @@ tests: [
             Encoding.UTF8.decode(bytes) == "A"
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("utf8 late bom preserved", () => {
         tool009LegacyCase: () => {
             bytes: Encoding.UTF8.encode("")
@@ -56,7 +56,7 @@ tests: [
             Encoding.UTF8.decode(bytes) == "A\u{feff}B"
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("utf8 malformed error", () => {
         Assertions.signals(EncodingError, () => {
             bytes: Encoding.UTF8.encode("")

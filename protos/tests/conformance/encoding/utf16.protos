@@ -38,7 +38,7 @@ tests: [
                 (be[5] == 0)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("utf16 incomplete error", () => {
         Assertions.signals(EncodingError, () => {
             bytes: Encoding.UTF8.encode("")
@@ -46,7 +46,7 @@ tests: [
 
             Encoding.UTF16LE.decode(bytes)
         })
-    })
+    }),
     Test("utf16 matching bom consumed", () => {
         tool009LegacyCase: () => {
             le: Encoding.UTF8.encode("")

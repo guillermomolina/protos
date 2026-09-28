@@ -23,7 +23,7 @@ tests: [
             xs[1]
         }
         Assertions.require(tool009LegacyCase() == 20)
-    })
+    }),
     Test("array construction and indexing", () => {
         tool009LegacyCase: () => {
             values: Array(10, 20, 30)
@@ -32,28 +32,28 @@ tests: [
                 (values.at(2) == 30)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("array delegated at receiver error", () => {
         Assertions.signals(Error, () => {
             Fake: Array {}
             Fake[0]
         })
-    })
+    }),
     Test("array read float index error", () => {
         Assertions.signals(Error, () => {
             Array(1)[1.0]
         })
-    })
+    }),
     Test("array read negative index error", () => {
         Assertions.signals(Error, () => {
             Array(1)[-1]
         })
-    })
+    }),
     Test("array read out of range error", () => {
         Assertions.signals(Error, () => {
             Array(1)[1]
         })
-    })
+    }),
     Test("array size copied receiver error", () => {
         Assertions.signals(Error, () => {
             copiedSize: Array.slotValue("size")
@@ -62,13 +62,13 @@ tests: [
             }
             ordinary.size()
         })
-    })
+    }),
     Test("array size delegated receiver error", () => {
         Assertions.signals(Error, () => {
             Fake: Array {}
             Fake.size()
         })
-    })
+    }),
     Test("array size wrong arity error", () => {
         Assertions.signals(Error, () => {
             Array(1).size(1)

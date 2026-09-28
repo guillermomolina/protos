@@ -22,19 +22,19 @@ tests: [
             bytes: Encoding.UTF8.encode("")
             bytes.add(1.0)
         })
-    })
+    }),
     Test("add negative error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(-1)
         })
-    })
+    }),
     Test("add overflow error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(256)
         })
-    })
+    }),
     Test("add remove extremes", () => {
         tool009LegacyCase: () => {
             bytes: Encoding.UTF8.encode("")
@@ -58,14 +58,14 @@ tests: [
             ok
         }
         Assertions.require(tool009LegacyCase())
-    })
+    }),
     Test("remove negative error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")
             bytes.add(1)
             bytes.removeAt(-1)
         })
-    })
+    }),
     Test("remove out of range error", () => {
         Assertions.signals(Error, () => {
             bytes: Encoding.UTF8.encode("")

@@ -22,7 +22,7 @@ tests: [
             value: {}
             value.slotNames(1)
         })
-    })
+    }),
     Test("slot names empty fresh standard array", () => {
         tool009LegacyCase: () => {
             value: {}
@@ -36,7 +36,7 @@ tests: [
                 (second.parent() === Array)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("slot names fresh independent snapshot", () => {
         tool009LegacyCase: () => {
             value: {
@@ -58,7 +58,7 @@ tests: [
                 (third[1] == "beta")
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("slot names local order", () => {
         tool009LegacyCase: () => {
             base: {
@@ -77,7 +77,7 @@ tests: [
                 (names[2] == "beta")
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("slot names represented values", () => {
         tool009LegacyCase: () => {
             first: (42).slotNames()
@@ -93,7 +93,7 @@ tests: [
                 (text.parent() === Array)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("slot names unicode scalar order", () => {
         tool009LegacyCase: () => {
             value: {

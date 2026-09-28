@@ -46,7 +46,7 @@ tests: [
                 (holder.make()["answer"] == 42)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map construction syntax bypasses atput", () => {
         tool009LegacyCase: () => {
             DerivedMap: Map {
@@ -73,7 +73,7 @@ tests: [
             run()
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map construction syntax duplicate error", () => {
         Assertions.signals(Error, () => {
             %{
@@ -81,7 +81,7 @@ tests: [
                 "key": 2
             }
         })
-    })
+    }),
     Test("map construction syntax factory first", () => {
         Assertions.signals(Error, () => {
             touched: 0
@@ -105,7 +105,7 @@ tests: [
 
             (run() == 7) && (touched == 0)
         })
-    })
+    }),
     Test("map construction syntax order", () => {
         tool009LegacyCase: () => {
             trace: Array(null, null, null, null)

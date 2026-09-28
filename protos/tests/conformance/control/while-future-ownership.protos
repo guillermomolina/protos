@@ -33,7 +33,7 @@ tests: [
             iterations == 2
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while body future not cancelled", () => {
         tool009LegacyCase: () => {
             iterations: 0
@@ -49,7 +49,7 @@ tests: [
                 (iterations == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while body future task scoped ownership", () => {
         tool009LegacyCase: () => {
             order: 0
@@ -78,7 +78,7 @@ tests: [
                 (iterations == 1)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("while body result ignored", () => {
         tool009LegacyCase: () => {
             i: 0

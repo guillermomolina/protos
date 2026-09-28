@@ -28,7 +28,7 @@ tests: [
                 (m.at(a) == 20)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map invalid equality result error", () => {
         Assertions.signals(Error, () => {
             stored: {
@@ -46,7 +46,7 @@ tests: [
             m[stored] = 1
             m.containsKey(query)
         })
-    })
+    }),
     Test("map invalid hash result error", () => {
         Assertions.signals(Error, () => {
             key: {
@@ -56,7 +56,7 @@ tests: [
             m: Map()
             m.containsKey(key)
         })
-    })
+    }),
     Test("map lookup update contains size identity", () => {
         tool009LegacyCase: () => {
             m: Map()
@@ -72,7 +72,7 @@ tests: [
                 (m !== other)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map query equality direction representative", () => {
         tool009LegacyCase: () => {
             storedSource: {
@@ -107,7 +107,7 @@ tests: [
                 (representative === stored)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map recorded hash no identity shortcut", () => {
         tool009LegacyCase: () => {
             source: {
@@ -130,7 +130,7 @@ tests: [
             !m.containsKey(key)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map reentrant mutation from hash error", () => {
         Assertions.signals(Error, () => {
             m: Map()
@@ -144,7 +144,7 @@ tests: [
 
             m[key] = 42
         })
-    })
+    }),
     Test("map single hash absent insertion", () => {
         tool009LegacyCase: () => {
             state: {

@@ -34,7 +34,7 @@ tests: [
         Assertions.signals(InvalidIOArgument, () => {
             candidate.value()
         })
-    })
+    }),
     Test("readline bound wrong type error", () => {
         tool009LegacyFutureCase: () => {
             source: {
@@ -52,7 +52,7 @@ tests: [
         Assertions.signals(InvalidIOArgument, () => {
             candidate.value()
         })
-    })
+    }),
     Test("readline bound zero error", () => {
         tool009LegacyFutureCase: () => {
             source: {
@@ -70,7 +70,7 @@ tests: [
         Assertions.signals(InvalidIOArgument, () => {
             candidate.value()
         })
-    })
+    }),
     Test("readline line too long precedes malformed", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -118,7 +118,7 @@ tests: [
         Assertions.signals(LineTooLong, () => {
             candidate.value()
         })
-    })
+    }),
     Test("readline malformed before limit error", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -166,7 +166,7 @@ tests: [
         Assertions.signals(EncodingError, () => {
             candidate.value()
         })
-    })
+    }),
     Test("readline maxbytes too long error", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -214,7 +214,7 @@ tests: [
         Assertions.signals(LineTooLong, () => {
             candidate.value()
         })
-    })
+    }),
     Test("readline partial line io failure", () => {
         tool009LegacyFutureCase: () => {
             makeBytes: (...octets) => {
@@ -251,7 +251,7 @@ tests: [
         Assertions.signals(IOError, () => {
             candidate.value()
         })
-    })
+    }),
     Test("readline wrong arity error", () => {
         tool009LegacyFutureCase: () => {
             source: {

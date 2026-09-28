@@ -67,7 +67,7 @@ tests: [
                 (m["d"] === lateValue)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map each nested independent snapshot", () => {
         tool009LegacyCase: () => {
             m: Map()
@@ -97,14 +97,14 @@ tests: [
                 (m.size() == 3)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map each noninvokable error", () => {
         Assertions.signals(Error, () => {
             m: Map()
             m["a"] = 1
             m.each(1)
         })
-    })
+    }),
     Test("map each order return", () => {
         tool009LegacyCase: () => {
             m: Map()
@@ -120,7 +120,7 @@ tests: [
             (seen == 123) && (returned === m)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("map each wrong arity error", () => {
         Assertions.signals(Error, () => {
             m: Map()

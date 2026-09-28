@@ -28,7 +28,7 @@ tests: [
                 (nested[1] == 8)
         }
         Assertions.require(tool009LegacyCase() === true)
-    })
+    }),
     Test("array construction syntax shadowing", () => {
         tool009LegacyCase: () => {
             Array: (first, second) => first * 100 + second
@@ -36,7 +36,7 @@ tests: [
             [4, 2]
         }
         Assertions.require(tool009LegacyCase() == 402)
-    })
+    }),
     Test("array construction syntax spread order", () => {
         tool009LegacyCase: () => {
             counter: 0
