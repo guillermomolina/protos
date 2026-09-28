@@ -1,0 +1,109 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("event parser chunk boundaries", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
+
+            events: Map()
+            count: 0
+            parser: JSON.eventParser((event) => {
+                events[count] = event
+                count = count + 1
+            })
+
+            parser.feed("{\"a\":[tr")
+            parser.feed("ue,\"A\\uD83")
+            parser.feed("D\\uDE00\",-12.")
+            parser.feed("30e-")
+            parser.feed("2]}")
+            parser.finish()
+
+            ok: true
+            check: (condition) => {
+                condition.ifFalse(() => { ok = false })
+            }
+
+            check(count == 8)
+            check(events[0].kind == "objectStart")
+            check(events[0].value === null)
+            check(events[1].kind == "name")
+            check(events[1].value == "a")
+            check(events[2].kind == "arrayStart")
+            check(events[3].kind == "boolean")
+            check(events[3].value === true)
+            check(events[4].kind == "string")
+            check(events[4].value == "A\u{1F600}")
+            check(events[5].kind == "number")
+            check(events[5].value.coefficient == -1230)
+            check(events[5].value.exponent == -4)
+            check(events[6].kind == "arrayEnd")
+            check(events[7].kind == "objectEnd")
+
+            ok
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("event parser empty feed", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
+
+            seen: null
+            parser: JSON.eventParser((event) => {
+                seen = event
+            })
+
+            parser.feed("")
+            parser.feed("false")
+            parser.feed("")
+            parser.finish()
+
+            (seen.kind == "boolean") &&
+                (seen.value === false)
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("event parser top level number finish", () => {
+        tool009LegacyCase: () => {
+            JSON: import("std:json/JSON")
+
+            events: Map()
+            count: 0
+            parser: JSON.eventParser((event) => {
+                events[count] = event
+                count = count + 1
+            })
+
+            parser.feed("-1")
+            parser.feed("2.5e")
+            parser.feed("+3")
+            parser.finish()
+
+            event: events[0]
+            (count == 1) &&
+                (event.kind == "number") &&
+                (event.value.coefficient == -125) &&
+                (event.value.exponent == 2)
+        }
+        Assertions.require(tool009LegacyCase())
+    })
+]
+tests.freeze()
