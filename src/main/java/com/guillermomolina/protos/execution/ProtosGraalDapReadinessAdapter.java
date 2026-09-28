@@ -24,7 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 
 /**
- * Version-bounded adapter from GraalVM 25.3.4.1 DAP startup output to a stable Protos endpoint.
+ * Version-bounded adapter from GraalVM 25.4.4.1.1 DAP startup output to a stable Protos endpoint.
  *
  * <p>PLAT018 deliberately keeps Graal-specific readiness discovery behind this boundary. The
  * public D060 readiness record is produced later by the CLI and must never parse this text itself.
