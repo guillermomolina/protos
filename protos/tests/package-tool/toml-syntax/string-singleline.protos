@@ -17,25 +17,36 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("string-multiline-literal", () => {
+    Test("string-basic-escapes", () => {
         Toml: import("self:TomlSyntax")
-        parsed: Toml.value("'''\nalpha\nbeta'''")
+        parsed: Toml.value("\"A\\tB\\u00E9\\U0001F600\"")
         ok: parsed.kind == "string"
-        (parsed.value == "alpha\nbeta").ifFalse(() => { ok = false })
+        (parsed.value == "A\tBé😀").ifFalse(() => { ok = false })
         Assertions.require(ok)
     }),
-    Test("string-multiline-literal-quotes", () => {
+    Test("string-literal", () => {
         Toml: import("self:TomlSyntax")
-        a: Toml.value("'''one ' two'''")
-        b: Toml.value("'''one '' two'''")
-        ok: a.value == "one ' two"
-        (b.value == "one '' two").ifFalse(() => { ok = false })
+        parsed: Toml.value("'C:\\Users\\nodejs\\templates'")
+        ok: parsed.kind == "string"
+        (parsed.value == "C:\\Users\\nodejs\\templates").ifFalse(() => { ok = false })
         Assertions.require(ok)
     }),
-    Test("string-multiline-literal-too-many-closing-quotes-error", () => {
+    Test("invalid-string-escape-error", () => {
         Toml: import("self:TomlSyntax")
         Assertions.signals(Error, () => {
-            Toml.value("'''x''''''")
+            Toml.value("\"\\x41\"")
+        })
+    }),
+    Test("invalid-unicode-scalar-error", () => {
+        Toml: import("self:TomlSyntax")
+        Assertions.signals(Error, () => {
+            Toml.value("\"\\uD800\"")
+        })
+    }),
+    Test("string-singleline-newline-error", () => {
+        Toml: import("self:TomlSyntax")
+        Assertions.signals(Error, () => {
+            Toml.value("\"alpha\nbeta\"")
         })
     })
 ]

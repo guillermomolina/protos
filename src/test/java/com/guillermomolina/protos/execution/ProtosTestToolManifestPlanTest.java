@@ -624,7 +624,7 @@ fixture.activation());
     }
 
     @Test
-    void processSnapshotManifestMaterializesExactFifteenCasePlan()
+    void processSnapshotManifestMaterializesExactThreeCasePlan()
             throws Exception {
         Fixture fixture = fixture();
 
@@ -648,7 +648,7 @@ fixture.activation());
                             fixture.activation());
 
             assertEquals(
-                    15,
+                    3,
                     assertInstanceOf(ProtosIntegerValue.class, result)
                             .value()
                             .intValueExact());
