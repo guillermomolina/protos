@@ -1,5 +1,4 @@
 # case	fixture	expected
-root-only	build-current.protos	suite-native
-root-only	canonical-document-order.protos	suite-native
+root-only	root-only.protos	suite-native
 member-bytes	metadata-members.protos	suite-native
 stale	stale-semantic-error.protos	suite-native

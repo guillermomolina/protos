@@ -6,11 +6,8 @@ member-mismatch	member-mismatch-error.protos	suite-native
 external-node	external-node-error.protos	suite-native
 missing-edge	missing-edge-error.protos	suite-native
 registry-dependency	registry-dependency-error.protos	suite-native
-registry-leaf-v2	registry-leaf-v2.protos	suite-native
-registry-leaf-v2	registry-leaf-v2-content-mismatch-error.protos	suite-native
-f2e3b-transitive	f2e3b-transitive-v2.protos	suite-native
-f2e3b-transitive	f2e3b-missing-descriptor-error.protos	suite-native
-f2e3b-transitive	f2e3b-nonlocked-descriptor-error.protos	suite-native
+registry-leaf-v2	registry-leaf-v2-cases.protos	suite-native
+f2e3b-transitive	f2e3b-transitive-cases.protos	suite-native
 f2e3b-id-mismatch	f2e3b-build-v2-error.protos	suite-native
 f2e3b-version-mismatch	f2e3b-build-v2-error.protos	suite-native
 f2e3b-path	f2e3b-build-v2-error.protos	suite-native

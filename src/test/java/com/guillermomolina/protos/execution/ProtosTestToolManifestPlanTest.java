@@ -968,7 +968,7 @@ fixture.activation());
             "protos/package-tool/execution-plan",
             "protos/package-tool/project-projection"
         };
-        int[] expectedCounts = {8, 28, 4};
+        int[] expectedCounts = {8, 25, 3};
 
         for (int index = 0; index < roots.length; index++) {
             Fixture fixture = fixture();

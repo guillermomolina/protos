@@ -129,6 +129,110 @@ tests: [
         gitEdge.ifFalse(() => { ok = false })
 
         Assertions.require(ok)
+    }),
+    Test("f2e3b-missing-descriptor-error", () => {
+        Assertions.signals(Error, () => {
+            Plan: import("self:ExecutionPlan")
+            LockFile: import("self:LockFile")
+            Identity: import("self:ContentIdentity")
+
+            lock: LockFile.load(projectTreeFilesystem)
+            verified: Array()
+
+            lock.registryNodes.each((node) => {
+                captured:
+                    projectTreeFilesystem
+                        .captureTree(
+                            Path.relative()
+                                .child("external")
+                                .child(node.ref.packageId)
+                        )
+                        .value()
+
+                verifiedFilesystem:
+                    Identity.verify(
+                        captured,
+                        node.content
+                    )
+
+                verified =
+                    Array(
+                        ...verified,
+                        {
+                            ref: node.ref
+                            content: node.content
+                            filesystem: verifiedFilesystem
+                        }
+                    )
+            })
+
+            Plan.buildV2FromVerifiedCaptures(
+                projectTreeFilesystem,
+                verified
+            )
+        })
+    }),
+    Test("f2e3b-nonlocked-descriptor-error", () => {
+        Assertions.signals(Error, () => {
+            Plan: import("self:ExecutionPlan")
+            LockFile: import("self:LockFile")
+            Identity: import("self:ContentIdentity")
+
+            lock: LockFile.load(projectTreeFilesystem)
+            verified: Array()
+            first: null
+
+            append: (node) => {
+                captured:
+                    projectTreeFilesystem
+                        .captureTree(
+                            Path.relative()
+                                .child("external")
+                                .child(node.ref.packageId)
+                        )
+                        .value()
+
+                verifiedFilesystem:
+                    Identity.verify(
+                        captured,
+                        node.content
+                    )
+
+                descriptor: {
+                    ref: node.ref
+                    content: node.content
+                    filesystem: verifiedFilesystem
+                }
+
+                (first === null).ifTrue(() => {
+                    first = descriptor
+                })
+
+                verified = Array(...verified, descriptor)
+            }
+
+            lock.registryNodes.each((node) => { append(node) })
+            lock.gitNodes.each((node) => { append(node) })
+
+            verified =
+                Array(
+                    ...verified,
+                    {
+                        ref: {
+                            kind: "git"
+                            packageId: "not-locked"
+                            revision: "deadbeef"
+                        }
+                        content: first.content
+                        filesystem: first.filesystem
+                    }
+                )
+
+            Plan.buildV2FromVerifiedCaptures(
+                projectTreeFilesystem,
+                verified
+            )
+        })
     })
 ]
 tests.freeze()

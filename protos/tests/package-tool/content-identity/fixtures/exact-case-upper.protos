@@ -17,7 +17,7 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("digest-binary", () => {
+    Test("digest-exact-case-upper", () => {
         Identity: import("self:ContentIdentity")
 
         captured: projectTreeFilesystem.captureTree(Path.relative()).value()
@@ -30,10 +30,22 @@ tests: [
         (actual.algorithm == "sha256").ifFalse(() => {
             ok = false
         })
-        (actual.hex == "2de3f9f78fb1355348861e08cb549919d10e4b50f8965f3fc933eac72fff8870").ifFalse(() => {
+        (actual.hex == "9afaaf7e2a250fd11b83d12e63cf7e18527c95820d03bff6895e57a51600e450").ifFalse(() => {
             ok = false
         })
         Assertions.require(ok)
+    }),
+    Test("verify-exact-case-upper", () => {
+        Identity: import("self:ContentIdentity")
+
+        captured: projectTreeFilesystem.captureTree(Path.relative()).value()
+        expected: {
+            method: "protos-package-tree-v1"
+            algorithm: "sha256"
+            hex: "9afaaf7e2a250fd11b83d12e63cf7e18527c95820d03bff6895e57a51600e450"
+        }
+
+        Assertions.require(Identity.verify(captured, expected) === captured)
     })
 ]
 tests.freeze()

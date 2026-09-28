@@ -76,6 +76,31 @@ tests: [
         (edge.target.version.text == "1.0.0").ifFalse(() => { ok = false })
 
         Assertions.require(ok)
+    }),
+    Test("registry-leaf-v2-content-mismatch-error", () => {
+        Assertions.signals(Error, () => {
+            Plan: import("self:ExecutionPlan")
+            Version: import("self:ReleaseVersion")
+
+            Plan.buildV2FromVerifiedLeaves(
+                projectTreeFilesystem,
+                Array(
+                    {
+                        ref: {
+                            kind: "registry"
+                            packageId: "external-id"
+                            version: Version.parse("1.0.0")
+                        }
+                        content: {
+                            method: "protos-package-tree-v1"
+                            algorithm: "sha256"
+                            hex: "2222222222222222222222222222222222222222222222222222222222222222"
+                        }
+                        exports: Map()
+                    }
+                )
+            )
+        })
     })
 ]
 tests.freeze()

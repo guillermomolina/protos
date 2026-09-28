@@ -17,7 +17,7 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("digest-ordering", () => {
+    Test("digest-exact-case-lower", () => {
         Identity: import("self:ContentIdentity")
 
         captured: projectTreeFilesystem.captureTree(Path.relative()).value()
@@ -30,10 +30,22 @@ tests: [
         (actual.algorithm == "sha256").ifFalse(() => {
             ok = false
         })
-        (actual.hex == "a4e71028b12d648a10729e5dedf947d8bfbff1e6c8e1b95bb04ac170f5682e67").ifFalse(() => {
+        (actual.hex == "ff22975888d65d4dd9563bd09ca67190c02473bdead0c536faf101cd66f72ec2").ifFalse(() => {
             ok = false
         })
         Assertions.require(ok)
+    }),
+    Test("verify-exact-case-lower", () => {
+        Identity: import("self:ContentIdentity")
+
+        captured: projectTreeFilesystem.captureTree(Path.relative()).value()
+        expected: {
+            method: "protos-package-tree-v1"
+            algorithm: "sha256"
+            hex: "ff22975888d65d4dd9563bd09ca67190c02473bdead0c536faf101cd66f72ec2"
+        }
+
+        Assertions.require(Identity.verify(captured, expected) === captured)
     })
 ]
 tests.freeze()
