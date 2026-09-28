@@ -13,6 +13,26 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
+    Test("environment accessor wrong arity error", () => {
+        Assertions.signals(Error, () => {
+            process.environment(null)
+        })
+    }),
+    Test("environment descendant receiver error", () => {
+        Assertions.signals(Error, () => {
+            environment: process.environment()
+            Fake: environment {}
+            Fake.get("A")
+        })
+    }),
+    Test("environment each noninvokable error", () => {
+        Assertions.signals(Error, () => {
+            bad: {
+                call: 1
+            }
+            process.environment().each(bad)
+        })
+    }),
     Test("environment each order", () => {
         tool009LegacyCase: () => {
             environment: process.environment()
@@ -33,6 +53,17 @@ tests: [
                 (seen[0] == "A") &&
                 (seen[1] == "\u{e000}") &&
                 (seen[2] == "\u{10000}")
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("environment get contains", () => {
+        tool009LegacyCase: () => {
+            environment: process.environment()
+
+            environment.contains("A") &&
+                (environment.get("A") == "first") &&
+                (environment.contains("MISSING") == false) &&
+                (environment.get("MISSING") === null)
         }
         Assertions.require(tool009LegacyCase() === true)
     })

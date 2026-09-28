@@ -1,11 +1,4 @@
 # source	expectation	expected
-acquisition-requires-member.protos	suite-native	-
-acquisition-rejects-non-actorref.protos	suite-native	-
-same-ref-alias-stable.protos	suite-native	-
-separate-acquisitions-distinct.protos	suite-native	-
-request-before-members-ready.protos	suite-native	-
-request-selects-one-eligible-member.protos	suite-native	-
-request-snapshots-argument.protos	suite-native	-
-groupref-transfer-preserves-identity.protos	suite-native	-
-stopped-member-not-routed.protos	suite-native	-
-groupref-has-no-stop.protos	suite-native	-
+acquisition-identity-and-transfer.protos	suite-native	-
+request-routing.protos	suite-native	-
+stopped-and-surface.protos	suite-native	-

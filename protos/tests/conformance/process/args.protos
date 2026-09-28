@@ -13,6 +13,41 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
+    Test("args accessor wrong arity error", () => {
+        Assertions.signals(Error, () => {
+            process.args(null)
+        })
+    }),
+    Test("args at negative error", () => {
+        Assertions.signals(Error, () => {
+            process.args().at(-1)
+        })
+    }),
+    Test("args at noninteger error", () => {
+        Assertions.signals(Error, () => {
+            process.args().at("1")
+        })
+    }),
+    Test("args at out of range error", () => {
+        Assertions.signals(Error, () => {
+            process.args().at(3)
+        })
+    }),
+    Test("args descendant receiver error", () => {
+        Assertions.signals(Error, () => {
+            snapshot: process.args()
+            Fake: snapshot {}
+            Fake.size()
+        })
+    }),
+    Test("args each noninvokable error", () => {
+        Assertions.signals(Error, () => {
+            bad: {
+                call: 1
+            }
+            process.args().each(bad)
+        })
+    }),
     Test("args sequential", () => {
         tool009LegacyCase: () => {
             snapshot: process.args()

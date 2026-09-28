@@ -13,6 +13,24 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
+    Test("request snapshots argument", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "echo")
+            box: { value: 1 }
+            reply: worker.request("readValue", box)
+            box.value = 2
+            reply
+        }
+        Assertions.require(tool009LegacyCase().value() == 1)
+    }),
+    Test("send before request fifo", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "mailbox")
+            worker.send("set", 7)
+            worker.request("get")
+        }
+        Assertions.require(tool009LegacyCase().value() == 7)
+    }),
     Test("state persists between requests", () => {
         tool009LegacyCase: () => {
             worker: Actor.spawn("workers", "counter", 0)

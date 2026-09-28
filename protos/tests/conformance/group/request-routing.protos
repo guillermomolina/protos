@@ -13,6 +13,24 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
+    Test("request before members ready", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "tagged", 7)
+            group: Actor.group(worker)
+            group.request("tag")
+        }
+        Assertions.require(tool009LegacyCase().value() == 7)
+    }),
+    Test("request selects one eligible member", () => {
+        tool009LegacyCase: () => {
+            first: Actor.spawn("workers", "tagged", 1)
+            second: Actor.spawn("workers", "tagged", 2)
+            group: Actor.group(first, second)
+            group.request("tag")
+        }
+        value: tool009LegacyCase().value()
+        Assertions.require((value == 1) || (value == 2))
+    }),
     Test("request snapshots argument", () => {
         tool009LegacyCase: () => {
             worker: Actor.spawn("workers", "tagged", 0)

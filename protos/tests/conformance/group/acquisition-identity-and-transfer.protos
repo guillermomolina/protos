@@ -13,6 +13,35 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
+    Test("acquisition requires member", () => {
+        Assertions.signals(Error, () => {
+            Actor.group()
+        })
+    }),
+    Test("acquisition rejects non actorref", () => {
+        Assertions.signals(Error, () => {
+            worker: Actor.spawn("workers", "tagged", 1)
+            Actor.group(worker, 7)
+        })
+    }),
+    Test("same ref alias stable", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "tagged", 1)
+            group: Actor.group(worker)
+            alias: group
+            alias === group
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("separate acquisitions distinct", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "tagged", 1)
+            first: Actor.group(worker)
+            second: Actor.group(worker)
+            first === second
+        }
+        Assertions.require(tool009LegacyCase() === false)
+    }),
     Test("groupref transfer preserves identity", () => {
         tool009LegacyCase: () => {
             member: Actor.spawn("workers", "tagged", 1)

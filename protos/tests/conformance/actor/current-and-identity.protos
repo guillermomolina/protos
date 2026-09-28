@@ -13,12 +13,24 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("stop termination same ref", () => {
+    Test("current stable", () => {
+        tool009LegacyCase: () => {
+            Actor.current() === Actor.current()
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("child current distinct", () => {
+        tool009LegacyCase: () => {
+            me: Actor.current()
+            worker: Actor.spawn("workers", "echo")
+            worker.request("current").then((child) => { child !== me })
+        }
+        Assertions.require(tool009LegacyCase().value() === true)
+    }),
+    Test("child current stable", () => {
         tool009LegacyCase: () => {
             worker: Actor.spawn("workers", "echo")
-            terminated: worker.termination()
-            worker.stop()
-            terminated.then((observed) => { observed === worker })
+            worker.request("currentStable")
         }
         Assertions.require(tool009LegacyCase().value() === true)
     })

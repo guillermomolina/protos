@@ -1,12 +1,5 @@
 # path	expectation	expected
-current-stable.protos	suite-native	-
-spawn-request-echo.protos	suite-native	-
-request-snapshots-argument.protos	suite-native	-
-child-current-distinct.protos	suite-native	-
-child-current-stable.protos	suite-native	-
-send-before-request-fifo.protos	suite-native	-
-state-persists-between-requests.protos	suite-native	-
-stop-termination-same-ref.protos	suite-native	-
-invalid-spawn-specifier.protos	suite-native	-
-spawn-rejects-nontransferable.protos	suite-native	-
-ip-data-transfer.protos	suite-native	-
+current-and-identity.protos	suite-native	-
+spawn.protos	suite-native	-
+request-order-and-state.protos	suite-native	-
+lifecycle-and-transfer.protos	suite-native	-

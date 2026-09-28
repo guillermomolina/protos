@@ -13,9 +13,21 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
-    Test("args at noninteger error", () => {
+    Test("spawn request echo", () => {
+        tool009LegacyCase: () => {
+            worker: Actor.spawn("workers", "echo")
+            worker.request("echo", 42)
+        }
+        Assertions.require(tool009LegacyCase().value() == 42)
+    }),
+    Test("invalid spawn specifier", () => {
         Assertions.signals(Error, () => {
-            process.args().at("1")
+            Actor.spawn(7, "echo")
+        })
+    }),
+    Test("spawn rejects nontransferable", () => {
+        Assertions.signals(Error, () => {
+            Actor.spawn("workers", "echo", () => { 1 })
         })
     })
 ]

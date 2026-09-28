@@ -13,6 +13,34 @@ Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
 
 tests: [
+    Test("empty snapshots each", () => {
+        tool009LegacyCase: () => {
+            argumentSnapshot: emptyProcess.args()
+            environment: emptyProcess.environment()
+            calls: 0
+
+            argsResult: argumentSnapshot.each((value) => {
+                calls = calls + 1
+                null
+            })
+
+            environmentResult: environment.each((name, value) => {
+                calls = calls + 1
+                null
+            })
+
+            (argsResult === argumentSnapshot) &&
+                (environmentResult === environment) &&
+                (calls == 0)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("process descendant receiver error", () => {
+        Assertions.signals(Error, () => {
+            Fake: process {}
+            Fake.args()
+        })
+    }),
     Test("snapshot identity", () => {
         tool009LegacyCase: () => {
             args1: process.args()
