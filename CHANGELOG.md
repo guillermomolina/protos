@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.113-SNAPSHOT
+
+- `DIST005-D4` (#549): add fail-closed clean-candidate machinery for the
+  owner-approved Native public artifact under the selected Oracle Linux 10 /
+  Linux x86_64 / glibc 2.39 / `-march=compatibility` policy. Native
+  public-prerelease builds now reuse the existing DIST001 release identity and
+  baseline lineage model while retaining the distinct development-only Native
+  path. The Native archive records empirical ELF evidence derived from the exact
+  executable bytes, including GLIBC symbol versions and observed maximum,
+  interpreter, `DT_NEEDED`, resolved dynamic-library closure, build-host
+  provenance, configured Native Image `-march`, and post-link GNU ISA evidence.
+  Archive admission independently re-inspects the extracted Native executable
+  and requires the recorded evidence to match. The multi-asset
+  `JVM_PLUS_NATIVE` envelope now fails closed on missing, malformed, excessive,
+  or internally inconsistent GLIBC evidence, unresolved library closure,
+  incompatible build ISA policy, or mixed candidate identity. The observed
+  post-link ISA evidence is retained as evidence rather than being rewritten as
+  the build policy. Final D4 closure still requires the exact clean detached
+  `0.3.113` candidate, complete Native admission, portable JVM fallback built
+  from the same candidate identity, and real multi-asset envelope verification;
+  this changelog entry does not authorize release publication.
+
 ## 0.3.112-SNAPSHOT
 
 - `DIST005-D3` (#549): apply the selected public Native platform, CPU ISA, and

@@ -88,6 +88,7 @@ def write_asset(
     linkage: str = "dynamic",
     omit_native_key: str | None = None,
     distribution_format: str | None = None,
+    native_runtime_overrides: dict[str, str] | None = None,
 ) -> Path:
     if kind == PORTABLE_KIND:
         root = f"protos-{VERSION}"
@@ -116,8 +117,34 @@ def write_asset(
             "linkage": linkage,
             "libc_family": libc_family,
             "libc_abi_min": libc_abi_min,
+            "libc_abi_observed_max": "2.34",
+            (
+                "glibc_symbol_versions"
+            ): "2.2.5,2.3,2.17,2.32,2.34",
+            "elf_interpreter": "/lib64/ld-linux-x86-64.so.2",
+            "dt_needed": "libc.so.6,libm.so.6,libz.so.1",
+            (
+                "shared_library_closure"
+            ): "libc.so.6,libm.so.6,libz.so.1",
             "cpu_isa_assumption": cpu_isa,
+            "native_build_march": "-march=compatibility",
+            (
+                "post_link_cpu_isa_evidence"
+            ): "x86-64-baseline, x86-64-v2, x86-64-v3",
+            (
+                "native_build_container"
+            ): (
+                "ghcr.io/graalvm/native-image-community:"
+                "25i4-25.0.4.1.1-ol10"
+            ),
+            "native_build_container_role": "canonical-authority",
+            "native_build_authority": "build/native/Dockerfile",
+            "native_build_host_os_id": "ol",
+            "native_build_host_os_version": "10.2",
+            "native_build_host_glibc": "2.39",
         }
+        if native_runtime_overrides is not None:
+            runtime.update(native_runtime_overrides)
         if omit_native_key is not None:
             runtime.pop(omit_native_key)
         runtime_values = [f"{key}={value}" for key, value in runtime.items()]
@@ -238,7 +265,28 @@ class MultiAssetReleaseEnvelopeTest(unittest.TestCase):
                 "asset.1.kind=portable-jvm",
                 "asset.1.role=compatibility-fallback",
                 "asset.0.libc_abi_min=2.39",
+                "asset.0.libc_abi_observed_max=2.34",
+                (
+                    "asset.0.glibc_symbol_versions="
+                    "2.2.5,2.3,2.17,2.32,2.34"
+                ),
+                (
+                    "asset.0.elf_interpreter="
+                    "/lib64/ld-linux-x86-64.so.2"
+                ),
+                "asset.0.dt_needed=libc.so.6,libm.so.6,libz.so.1",
+                (
+                    "asset.0.shared_library_closure="
+                    "libc.so.6,libm.so.6,libz.so.1"
+                ),
                 "asset.0.cpu_isa_assumption=compatibility",
+                "asset.0.native_build_march=-march=compatibility",
+                (
+                    "asset.0.post_link_cpu_isa_evidence="
+                    "x86-64-baseline, x86-64-v2, x86-64-v3"
+                ),
+                "asset.0.native_build_host_os=ol-10.2",
+                "asset.0.native_build_host_glibc=2.39",
                 "asset.0.external_java_required=false",
                 "asset.1.external_java_required=true",
                 "license_sha256=",
@@ -249,7 +297,21 @@ class MultiAssetReleaseEnvelopeTest(unittest.TestCase):
             for needle in [
                 "- libc family: `glibc`",
                 "- libc ABI minimum: `2.39`",
+                "- Observed maximum GLIBC requirement: `2.34`",
+                "- ELF interpreter: `/lib64/ld-linux-x86-64.so.2`",
+                "- DT_NEEDED: `libc.so.6,libm.so.6,libz.so.1`",
+                (
+                    "- Dynamic-library closure: "
+                    "`libc.so.6,libm.so.6,libz.so.1`"
+                ),
                 "- CPU ISA assumption: `compatibility`",
+                "- Native Image build argument: `-march=compatibility`",
+                (
+                    "- Post-link CPU ISA evidence: "
+                    "`x86-64-baseline, x86-64-v2, x86-64-v3`"
+                ),
+                "- Native build host: `ol-10.2`",
+                "- Native build host glibc: `2.39`",
             ]:
                 self.assertIn(needle, notes)
 
@@ -335,6 +397,163 @@ class MultiAssetReleaseEnvelopeTest(unittest.TestCase):
                 kind=NATIVE_KIND,
                 omit_native_key="libc_abi_min",
             )
+            with self.assertRaises(SystemExit):
+                prepare_multi(
+                    Args(
+                        archives=[jvm, native],
+                        output_dir=root / "out",
+                        roles=model_roles(),
+                    )
+                )
+
+    def test_rejects_missing_native_observed_abi(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="protos-dist005-observed-abi-missing-"
+        ) as td:
+            root = Path(td)
+            jvm = write_asset(root, kind=PORTABLE_KIND)
+            native_dir = root / "native"
+            native_dir.mkdir()
+            native = write_asset(
+                native_dir,
+                kind=NATIVE_KIND,
+                omit_native_key="libc_abi_observed_max",
+            )
+
+            with self.assertRaises(SystemExit):
+                prepare_multi(
+                    Args(
+                        archives=[jvm, native],
+                        output_dir=root / "out",
+                        roles=model_roles(),
+                    )
+                )
+
+    def test_rejects_malformed_native_glibc_observation(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="protos-dist005-observed-abi-malformed-"
+        ) as td:
+            root = Path(td)
+            jvm = write_asset(root, kind=PORTABLE_KIND)
+            native_dir = root / "native"
+            native_dir.mkdir()
+            native = write_asset(
+                native_dir,
+                kind=NATIVE_KIND,
+                native_runtime_overrides={
+                    "glibc_symbol_versions": "2.2.5,2.bad",
+                    "libc_abi_observed_max": "2.bad",
+                },
+            )
+
+            with self.assertRaises(SystemExit):
+                prepare_multi(
+                    Args(
+                        archives=[jvm, native],
+                        output_dir=root / "out",
+                        roles=model_roles(),
+                    )
+                )
+
+    def test_rejects_native_observed_abi_above_policy(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="protos-dist005-observed-abi-high-"
+        ) as td:
+            root = Path(td)
+            jvm = write_asset(root, kind=PORTABLE_KIND)
+            native_dir = root / "native"
+            native_dir.mkdir()
+            native = write_asset(
+                native_dir,
+                kind=NATIVE_KIND,
+                native_runtime_overrides={
+                    (
+                        "glibc_symbol_versions"
+                    ): "2.2.5,2.34,2.40",
+                    "libc_abi_observed_max": "2.40",
+                },
+            )
+
+            with self.assertRaises(SystemExit):
+                prepare_multi(
+                    Args(
+                        archives=[jvm, native],
+                        output_dir=root / "out",
+                        roles=model_roles(),
+                    )
+                )
+
+    def test_rejects_native_observed_max_mismatch(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="protos-dist005-observed-abi-max-mismatch-"
+        ) as td:
+            root = Path(td)
+            jvm = write_asset(root, kind=PORTABLE_KIND)
+            native_dir = root / "native"
+            native_dir.mkdir()
+            native = write_asset(
+                native_dir,
+                kind=NATIVE_KIND,
+                native_runtime_overrides={
+                    (
+                        "glibc_symbol_versions"
+                    ): "2.2.5,2.17,2.34",
+                    "libc_abi_observed_max": "2.17",
+                },
+            )
+
+            with self.assertRaises(SystemExit):
+                prepare_multi(
+                    Args(
+                        archives=[jvm, native],
+                        output_dir=root / "out",
+                        roles=model_roles(),
+                    )
+                )
+
+    def test_rejects_unresolved_native_dynamic_closure(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="protos-dist005-native-closure-"
+        ) as td:
+            root = Path(td)
+            jvm = write_asset(root, kind=PORTABLE_KIND)
+            native_dir = root / "native"
+            native_dir.mkdir()
+            native = write_asset(
+                native_dir,
+                kind=NATIVE_KIND,
+                native_runtime_overrides={
+                    (
+                        "shared_library_closure"
+                    ): "libc.so.6,libm.so.6,libz.so.1 not found",
+                },
+            )
+
+            with self.assertRaises(SystemExit):
+                prepare_multi(
+                    Args(
+                        archives=[jvm, native],
+                        output_dir=root / "out",
+                        roles=model_roles(),
+                    )
+                )
+
+    def test_rejects_wrong_native_build_march(self) -> None:
+        with tempfile.TemporaryDirectory(
+            prefix="protos-dist005-native-march-"
+        ) as td:
+            root = Path(td)
+            jvm = write_asset(root, kind=PORTABLE_KIND)
+            native_dir = root / "native"
+            native_dir.mkdir()
+            native = write_asset(
+                native_dir,
+                kind=NATIVE_KIND,
+                native_runtime_overrides={
+                    "native_build_march": "-march=native",
+                },
+            )
+
             with self.assertRaises(SystemExit):
                 prepare_multi(
                     Args(

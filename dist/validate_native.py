@@ -36,6 +36,16 @@ import termios
 import time
 import zipfile
 
+from native_elf import NativeElfError, inspect_native_elf
+
+
+PUBLIC_NATIVE_TARGET_OS = "linux"
+PUBLIC_NATIVE_TARGET_ARCH = "x86_64"
+PUBLIC_NATIVE_LINKAGE = "dynamic"
+PUBLIC_NATIVE_LIBC_FAMILY = "glibc"
+PUBLIC_NATIVE_LIBC_ABI_MIN = "2.39"
+PUBLIC_NATIVE_CPU_ISA_ASSUMPTION = "compatibility"
+PUBLIC_NATIVE_BUILD_MARCH = "-march=compatibility"
 
 OUTER_SUM_RE = re.compile(r"^([0-9a-f]{64})  ([^\r\n]+)\n?$")
 
@@ -108,6 +118,155 @@ def require_executable(path: Path, label: str) -> None:
         fail(label + " is missing: " + str(path))
     if not os.access(path, os.X_OK):
         fail(label + " is not executable after extraction: " + str(path))
+
+
+def read_key_values(path: Path, label: str) -> dict[str, str]:
+    if not path.is_file():
+        fail(label + " is missing: " + str(path))
+
+    values: dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        if not raw:
+            continue
+        key, separator, value = raw.partition("=")
+        if not separator or not key or not value:
+            fail(label + " contains malformed key/value line: " + repr(raw))
+        if key in values:
+            fail(label + " contains duplicate key: " + key)
+        values[key] = value
+
+    return values
+
+
+def validate_native_elf_metadata(
+    native: Path,
+    runtime: dict[str, str],
+) -> dict[str, str]:
+    declared = {
+        "target_os": PUBLIC_NATIVE_TARGET_OS,
+        "target_arch": PUBLIC_NATIVE_TARGET_ARCH,
+        "linkage": PUBLIC_NATIVE_LINKAGE,
+        "libc_family": PUBLIC_NATIVE_LIBC_FAMILY,
+        "libc_abi_min": PUBLIC_NATIVE_LIBC_ABI_MIN,
+        "cpu_isa_assumption": PUBLIC_NATIVE_CPU_ISA_ASSUMPTION,
+        "native_build_march": PUBLIC_NATIVE_BUILD_MARCH,
+    }
+
+    for key, expected in declared.items():
+        actual = runtime.get(key)
+        if actual != expected:
+            fail(
+                "Native RUNTIME.txt declared policy mismatch for "
+                + key
+                + ": "
+                + repr(actual)
+                + " != "
+                + repr(expected)
+            )
+
+    build_os_id = runtime.get("native_build_host_os_id")
+    build_os_version = runtime.get("native_build_host_os_version")
+    build_host_glibc = runtime.get("native_build_host_glibc")
+    build_container_role = runtime.get("native_build_container_role")
+
+    if build_os_id != "ol":
+        fail(
+            "Native build provenance does not identify Oracle Linux: "
+            + repr(build_os_id)
+        )
+    if not (
+        build_os_version == "10"
+        or (
+            build_os_version is not None
+            and build_os_version.startswith("10.")
+        )
+    ):
+        fail(
+            "Native build provenance does not identify Oracle Linux 10: "
+            + repr(build_os_version)
+        )
+    if (
+        build_host_glibc is None
+        or re.fullmatch(
+            r"[0-9]+(?:\.[0-9]+)+",
+            build_host_glibc,
+        )
+        is None
+    ):
+        fail(
+            "Native build provenance has malformed glibc identity: "
+            + repr(build_host_glibc)
+        )
+    if build_container_role != "canonical-authority":
+        fail(
+            "Native build container provenance role changed: "
+            + repr(build_container_role)
+        )
+
+    observed_fields = (
+        "libc_abi_observed_max",
+        "glibc_symbol_versions",
+        "elf_interpreter",
+        "dt_needed",
+        "shared_library_closure",
+        "post_link_cpu_isa_evidence",
+        "binary_file_description",
+    )
+
+    missing = [
+        key
+        for key in observed_fields
+        if not runtime.get(key)
+    ]
+    if missing:
+        fail(
+            "Native RUNTIME.txt is missing empirical ELF evidence: "
+            + ",".join(missing)
+        )
+
+    try:
+        observation = inspect_native_elf(
+            native,
+            policy_glibc_max=PUBLIC_NATIVE_LIBC_ABI_MIN,
+        )
+    except NativeElfError as exc:
+        fail(str(exc))
+
+    for key in observed_fields:
+        actual = observation[key]
+        recorded = runtime[key]
+        if recorded != actual:
+            fail(
+                "Native empirical ELF evidence mismatch for "
+                + key
+                + ": "
+                + repr(recorded)
+                + " != "
+                + repr(actual)
+            )
+
+    print("NATIVE_DIST_ELF_OS=" + observation["target_os"])
+    print("NATIVE_DIST_ELF_ARCH=" + observation["target_arch"])
+    print("NATIVE_DIST_ELF_INTERPRETER=" + observation["elf_interpreter"])
+    print("NATIVE_DIST_DT_NEEDED=" + observation["dt_needed"])
+    print(
+        "NATIVE_DIST_GLIBC_SYMBOL_VERSIONS="
+        + observation["glibc_symbol_versions"]
+    )
+    print(
+        "NATIVE_DIST_GLIBC_OBSERVED_MAX="
+        + observation["libc_abi_observed_max"]
+    )
+    print(
+        "NATIVE_DIST_POST_LINK_CPU_ISA_EVIDENCE="
+        + observation["post_link_cpu_isa_evidence"]
+    )
+    print("NATIVE_DIST_BUILD_CPU_POLICY_PROVEN=YES")
+    print("NATIVE_DIST_GLIBC_ABI_FLOOR_PROOF: PASS")
+    print("NATIVE_DIST_DYNAMIC_LIBRARY_CLOSURE_CHECK: PASS")
+    print("NATIVE_DIST_EMPIRICAL_ELF_ADMISSION: PASS")
+
+    return observation
 
 
 def isolated_path(root: Path) -> str:
@@ -1424,6 +1583,12 @@ def validate(archive: Path) -> None:
 
         require_executable(launcher, "Native distribution launcher")
         require_executable(native, "Native executable payload")
+
+        runtime = read_key_values(
+            dist / "RUNTIME.txt",
+            "Native RUNTIME.txt",
+        )
+        validate_native_elf_metadata(native, runtime)
 
         if dist.resolve() == checkout.resolve():
             fail("extracted distribution root equals repository checkout")

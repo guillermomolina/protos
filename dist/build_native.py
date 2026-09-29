@@ -13,7 +13,7 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 
-"""Build the development-only DIST005 Native Image distribution proof."""
+"""Build DIST005 Native Image development and public-prerelease distributions."""
 
 from __future__ import annotations
 
@@ -21,7 +21,6 @@ import argparse
 import datetime as dt
 import hashlib
 import json
-import platform
 from pathlib import Path, PurePosixPath
 import re
 import shutil
@@ -30,7 +29,8 @@ import subprocess
 import xml.etree.ElementTree as ET
 import zipfile
 
-from release_identity import require_snapshot_version
+from native_elf import NativeElfError, inspect_native_elf
+from release_identity import build_source_metadata, require_snapshot_version
 
 
 DIST_FORMAT = "protos-native-image-posix-v1"
@@ -46,6 +46,8 @@ PUBLIC_NATIVE_LINKAGE = "dynamic"
 PUBLIC_NATIVE_LIBC_FAMILY = "glibc"
 PUBLIC_NATIVE_LIBC_ABI_MIN = "2.39"
 PUBLIC_NATIVE_CPU_ISA_ASSUMPTION = "compatibility"
+PUBLIC_NATIVE_BUILD_OS_ID = "ol"
+PUBLIC_NATIVE_BUILD_OS_MAJOR = "10"
 
 
 def fail(message: str) -> "NoReturn":
@@ -103,10 +105,42 @@ def project_version(root: Path) -> str:
     version = tree.findtext("m:version", namespaces=ns)
     if not version:
         fail("pom.xml project version is missing")
-    try:
-        return require_snapshot_version(version)
-    except ValueError as exc:
-        fail(str(exc))
+    return version
+
+
+def native_source_metadata(
+    root: Path,
+    *,
+    version: str,
+    source_revision: str,
+    source_dirty: bool,
+    public_prerelease: bool,
+    release_baseline: str | None,
+) -> dict[str, str]:
+    if public_prerelease:
+        return build_source_metadata(
+            root,
+            version=version,
+            source_revision=source_revision,
+            source_dirty=source_dirty,
+            public_prerelease=True,
+            release_baseline=release_baseline,
+        )
+
+    require_snapshot_version(version)
+    if release_baseline is not None:
+        raise ValueError(
+            "--release-baseline is valid only with --public-prerelease"
+        )
+    return {
+        "artifact_kind": ARTIFACT_KIND,
+        "public_release": "false",
+        "implementation_version": version,
+        "source_revision": source_revision,
+        "source_dirty": "true" if source_dirty else "false",
+        "source_repository": "https://github.com/guillermomolina/protos",
+        "source_path": "/tree/" + source_revision,
+    }
 
 
 def toolchain(root: Path) -> dict[str, object]:
@@ -128,6 +162,95 @@ def toolchain(root: Path) -> dict[str, object]:
     return data
 
 
+def parse_os_release(text: str) -> dict[str, str]:
+    values: dict[str, str] = {}
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        key, separator, value = line.partition("=")
+        if not separator or not key:
+            raise ValueError(
+                "malformed /etc/os-release line: " + repr(raw)
+            )
+
+        value = value.strip()
+        if (
+            len(value) >= 2
+            and value[0] == value[-1]
+            and value[0] in ("'", '"')
+        ):
+            value = value[1:-1]
+
+        values[key] = value
+
+    return values
+
+
+def require_native_build_os(
+    os_id: str,
+    version_id: str,
+) -> None:
+    if os_id != PUBLIC_NATIVE_BUILD_OS_ID:
+        raise ValueError(
+            "Native build host is not Oracle Linux: "
+            + repr(os_id)
+        )
+
+    if not (
+        version_id == PUBLIC_NATIVE_BUILD_OS_MAJOR
+        or version_id.startswith(PUBLIC_NATIVE_BUILD_OS_MAJOR + ".")
+    ):
+        raise ValueError(
+            "Native build host is not Oracle Linux 10: "
+            + repr(version_id)
+        )
+
+
+def native_build_environment(root: Path) -> dict[str, str]:
+    try:
+        values = parse_os_release(
+            Path("/etc/os-release").read_text(encoding="utf-8")
+        )
+    except OSError as exc:
+        fail("cannot inspect Native build host OS: " + str(exc))
+
+    os_id = values.get("ID", "")
+    version_id = values.get("VERSION_ID", "")
+
+    try:
+        require_native_build_os(os_id, version_id)
+    except ValueError as exc:
+        fail(str(exc))
+
+    glibc_result = run(
+        ["getconf", "GNU_LIBC_VERSION"],
+        cwd=root,
+        check=False,
+    )
+    if glibc_result.returncode != 0:
+        fail(
+            "cannot inspect Native build host glibc: "
+            + glibc_result.stderr.strip()
+        )
+
+    glibc_text = glibc_result.stdout.strip()
+    match = re.fullmatch(r"glibc ([0-9]+(?:\.[0-9]+)+)", glibc_text)
+    if match is None:
+        fail(
+            "unexpected Native build host glibc identity: "
+            + repr(glibc_text)
+        )
+
+    return {
+        "os_id": os_id,
+        "os_version_id": version_id,
+        "glibc_version": match.group(1),
+    }
+
+
 def native_build_container(root: Path) -> str:
     dockerfile = (root / "build/native/Dockerfile").read_text(encoding="utf-8")
     match = re.search(r"^FROM[ \t]+([^ \t\r\n]+)", dockerfile, flags=re.MULTILINE)
@@ -136,54 +259,36 @@ def native_build_container(root: Path) -> str:
     return match.group(1)
 
 
-def normalized_arch() -> str:
-    machine = platform.machine().lower()
-    aliases = {
-        "amd64": "x86_64",
-        "x64": "x86_64",
-        "arm64": "aarch64",
-    }
-    return aliases.get(machine, machine)
+def native_build_march(root: Path) -> str:
+    try:
+        tree = ET.parse(root / "pom.xml")
+    except ET.ParseError as exc:
+        fail("pom.xml is not valid XML: " + str(exc))
 
+    matches: list[str] = []
+    for element in tree.iter():
+        if element.tag.rsplit("}", 1)[-1] != "buildArg":
+            continue
+        value = (element.text or "").strip()
+        if value.startswith("-march="):
+            matches.append(value)
 
-def binary_observation(root: Path, binary: Path) -> dict[str, str]:
-    file_result = run(["file", "-b", str(binary)], cwd=root, check=False)
-    if file_result.returncode != 0:
-        fail("cannot inspect Native executable with file: " + file_result.stderr.strip())
-
-    description = " ".join(file_result.stdout.strip().split())
-    if "ELF" not in description:
-        fail("Native executable is not an ELF binary: " + description)
-    if "dynamically linked" not in description:
+    if len(matches) != 1:
         fail(
-            "DIST005 proof preserves the current dynamically-linked Native "
-            "artifact; observed: " + description
+            "expected exactly one Native Image -march build argument; found "
+            + repr(matches)
         )
 
-    ldd_result = run(["ldd", str(binary)], cwd=root, check=False)
-    if ldd_result.returncode != 0:
-        fail("cannot inspect Native shared-library closure: " + ldd_result.stderr.strip())
-
-    libraries: set[str] = set()
-    for raw in ldd_result.stdout.splitlines():
-        line = raw.strip()
-        if not line:
-            continue
-        if "=>" in line:
-            name = line.split("=>", 1)[0].strip()
-        else:
-            token = line.split(None, 1)[0]
-            name = Path(token).name if token.startswith("/") else token
-        if name and not name.startswith("linux-vdso"):
-            libraries.add(name)
-
-    libc_family = "glibc" if "libc.so.6" in libraries else "unresolved"
-    return {
-        "binary_file_description": description,
-        "linkage": "dynamic",
-        "libc_family": libc_family,
-        "shared_libraries": ",".join(sorted(libraries)),
-    }
+    value = matches[0]
+    expected = "-march=" + PUBLIC_NATIVE_CPU_ISA_ASSUMPTION
+    if value != expected:
+        fail(
+            "Native Image CPU build policy does not match selected policy: "
+            + repr(value)
+            + " != "
+            + repr(expected)
+        )
+    return value
 
 
 def write_checksums(bundle: Path) -> None:
@@ -262,7 +367,14 @@ def parse_checksums(text: str) -> dict[str, str]:
     return result
 
 
-def verify_archive(archive_path: Path, root_name: str) -> None:
+def verify_archive(
+    archive_path: Path,
+    root_name: str,
+    *,
+    source_metadata: dict[str, str],
+    observation: dict[str, str],
+    build_march: str,
+) -> None:
     prefix = root_name + "/"
     required = {
         prefix + "bin/protos",
@@ -317,10 +429,16 @@ def verify_archive(archive_path: Path, root_name: str) -> None:
         if not (native_mode & 0o111):
             fail("libexec/protos-native is not executable in archive metadata")
 
+        source = archive.read(prefix + "SOURCE.txt").decode("utf-8")
+        for key, value in source_metadata.items():
+            needle = f"{key}={value}"
+            if needle not in source:
+                fail("SOURCE.txt is missing " + repr(needle))
+
         runtime = archive.read(prefix + "RUNTIME.txt").decode("utf-8")
         required_runtime = (
             f"distribution_format={DIST_FORMAT}",
-            f"artifact_kind={ARTIFACT_KIND}",
+            f"artifact_kind={source_metadata['artifact_kind']}",
             f"native_runtime_kind={NATIVE_RUNTIME_KIND}",
             "external_java_required=false",
             f"target_os={PUBLIC_NATIVE_TARGET_OS}",
@@ -328,7 +446,26 @@ def verify_archive(archive_path: Path, root_name: str) -> None:
             f"linkage={PUBLIC_NATIVE_LINKAGE}",
             f"libc_family={PUBLIC_NATIVE_LIBC_FAMILY}",
             f"libc_abi_min={PUBLIC_NATIVE_LIBC_ABI_MIN}",
+            (
+                "libc_abi_observed_max="
+                + observation["libc_abi_observed_max"]
+            ),
+            (
+                "glibc_symbol_versions="
+                + observation["glibc_symbol_versions"]
+            ),
+            f"elf_interpreter={observation['elf_interpreter']}",
+            f"dt_needed={observation['dt_needed']}",
+            (
+                "shared_library_closure="
+                + observation["shared_library_closure"]
+            ),
             f"cpu_isa_assumption={PUBLIC_NATIVE_CPU_ISA_ASSUMPTION}",
+            f"native_build_march={build_march}",
+            (
+                "post_link_cpu_isa_evidence="
+                + observation["post_link_cpu_isa_evidence"]
+            ),
         )
         for needle in required_runtime:
             if needle not in runtime:
@@ -361,7 +498,7 @@ def verify_archive(archive_path: Path, root_name: str) -> None:
 
 def build(args: argparse.Namespace) -> Path:
     root = Path(__file__).resolve().parents[1]
-    if not (root / ".git").is_dir():
+    if not (root / ".git").exists():
         fail("dist/build_native.py must run from a Git checkout")
 
     version = project_version(root)
@@ -375,6 +512,18 @@ def build(args: argparse.Namespace) -> Path:
             "development-proof validation"
         )
 
+    try:
+        source_metadata = native_source_metadata(
+            root,
+            version=version,
+            source_revision=source_revision,
+            source_dirty=source_dirty,
+            public_prerelease=args.public_prerelease,
+            release_baseline=args.release_baseline,
+        )
+    except ValueError as exc:
+        fail(str(exc))
+
     native_binary = root / "target/native/protos"
     if not native_binary.is_file():
         fail(
@@ -386,8 +535,17 @@ def build(args: argparse.Namespace) -> Path:
 
     contract = toolchain(root)
     graal = contract["graalvm"]
-    observation = binary_observation(root, native_binary)
 
+    try:
+        observation = inspect_native_elf(
+            native_binary,
+            policy_glibc_max=PUBLIC_NATIVE_LIBC_ABI_MIN,
+        )
+    except NativeElfError as exc:
+        fail(str(exc))
+
+    build_march = native_build_march(root)
+    build_environment = native_build_environment(root)
     build_container = native_build_container(root)
     if build_container != PUBLIC_NATIVE_BUILD_CONTAINER:
         fail(
@@ -395,8 +553,8 @@ def build(args: argparse.Namespace) -> Path:
             + build_container
         )
 
-    target_os = platform.system().lower()
-    target_arch = normalized_arch()
+    target_os = observation["target_os"]
+    target_arch = observation["target_arch"]
 
     if target_os != PUBLIC_NATIVE_TARGET_OS:
         fail(
@@ -445,35 +603,51 @@ def build(args: argparse.Namespace) -> Path:
         copy_tree(root / "protos/tutorials", bundle / "protos/tutorials")
 
     source_lines = [
-        f"artifact_kind={ARTIFACT_KIND}",
-        "public_release=false",
-        f"implementation_version={version}",
-        f"source_revision={source_revision}",
-        f"source_dirty={'true' if source_dirty else 'false'}",
-        "source_repository=https://github.com/guillermomolina/protos",
-        f"source_path=/tree/{source_revision}",
+        f"{key}={value}" for key, value in source_metadata.items()
     ]
     write_text(bundle / "SOURCE.txt", "\n".join(source_lines))
 
     runtime_lines = [
         f"distribution_format={DIST_FORMAT}",
-        f"artifact_kind={ARTIFACT_KIND}",
+        f"artifact_kind={source_metadata['artifact_kind']}",
         f"native_runtime_kind={NATIVE_RUNTIME_KIND}",
         "external_java_required=false",
         f"graalvm_release={graal['release']}",
         f"native_image_version={graal['release']}",
         f"jdk_version={graal['jdk_version']}",
         f"native_build_container={build_container}",
+        "native_build_container_role=canonical-authority",
         "native_build_authority=build/native/Dockerfile",
+        (
+            "native_build_host_os_id="
+            + build_environment["os_id"]
+        ),
+        (
+            "native_build_host_os_version="
+            + build_environment["os_version_id"]
+        ),
+        (
+            "native_build_host_glibc="
+            + build_environment["glibc_version"]
+        ),
         "toolchain_authority=toolchain.json",
         f"target_os={target_os}",
         f"target_arch={target_arch}",
         f"linkage={observation['linkage']}",
         f"libc_family={observation['libc_family']}",
         f"libc_abi_min={PUBLIC_NATIVE_LIBC_ABI_MIN}",
-        f"shared_libraries={observation['shared_libraries']}",
+        f"libc_abi_observed_max={observation['libc_abi_observed_max']}",
+        f"glibc_symbol_versions={observation['glibc_symbol_versions']}",
+        f"elf_interpreter={observation['elf_interpreter']}",
+        f"dt_needed={observation['dt_needed']}",
+        f"shared_library_closure={observation['shared_library_closure']}",
         f"binary_file_description={observation['binary_file_description']}",
         f"cpu_isa_assumption={PUBLIC_NATIVE_CPU_ISA_ASSUMPTION}",
+        f"native_build_march={build_march}",
+        (
+            "post_link_cpu_isa_evidence="
+            + observation["post_link_cpu_isa_evidence"]
+        ),
     ]
     write_text(bundle / "RUNTIME.txt", "\n".join(runtime_lines))
 
@@ -483,13 +657,25 @@ def build(args: argparse.Namespace) -> Path:
         "Java, GraalVM, and Maven are not runtime dependencies of bin/protos.",
         "The external Protos source/resource tree remains under protos/.",
         (
-            "Observed dynamic shared libraries: "
-            + observation["shared_libraries"]
+            "Observed ELF DT_NEEDED libraries: "
+            + observation["dt_needed"]
+        ),
+        (
+            "Observed resolved dynamic-library closure: "
+            + observation["shared_library_closure"]
+        ),
+        (
+            "Observed GLIBC symbol versions: "
+            + observation["glibc_symbol_versions"]
+        ),
+        (
+            "Observed maximum GLIBC symbol requirement: "
+            + observation["libc_abi_observed_max"]
         ),
         (
             "Third-party notices embedded into the Native Image remain subject "
-            "to final public-release compliance review; this artifact is a "
-            "development proof only."
+            "to final public-release compliance review; this artifact does not "
+            "itself authorize public release."
         ),
     ]
     write_text(bundle / "DEPENDENCIES.txt", "\n".join(dependency_lines))
@@ -504,16 +690,40 @@ def build(args: argparse.Namespace) -> Path:
 
     write_checksums(bundle)
     create_archive(root, bundle, archive_path)
-    verify_archive(archive_path, root_name)
+    verify_archive(
+        archive_path,
+        root_name,
+        source_metadata=source_metadata,
+        observation=observation,
+        build_march=build_march,
+    )
 
     outer_digest = sha256(archive_path)
     outer_path = archive_path.with_suffix(archive_path.suffix + ".sha256")
     write_text(outer_path, f"{outer_digest}  {archive_path.name}")
 
     print("NATIVE_DIST_SOURCE_REVISION: " + source_revision)
+    print("NATIVE_DIST_ARTIFACT_KIND: " + source_metadata["artifact_kind"])
+    print("NATIVE_DIST_PUBLIC_RELEASE: " + source_metadata["public_release"])
+    if "release_tag" in source_metadata:
+        print("NATIVE_DIST_RELEASE_TAG: " + source_metadata["release_tag"])
     print(
         "NATIVE_DIST_SOURCE_DIRTY: "
         + ("true" if source_dirty else "false")
+    )
+    print(
+        "NATIVE_DIST_BUILD_HOST_OS: "
+        + build_environment["os_id"]
+        + "-"
+        + build_environment["os_version_id"]
+    )
+    print(
+        "NATIVE_DIST_BUILD_HOST_GLIBC: "
+        + build_environment["glibc_version"]
+    )
+    print(
+        "NATIVE_DIST_CANONICAL_BUILD_CONTAINER: "
+        + build_container
     )
     print("NATIVE_DIST_TARGET_OS: " + target_os)
     print("NATIVE_DIST_TARGET_ARCH: " + target_arch)
@@ -521,8 +731,30 @@ def build(args: argparse.Namespace) -> Path:
     print("NATIVE_DIST_LIBC_FAMILY: " + observation["libc_family"])
     print("NATIVE_DIST_LIBC_ABI_MIN: " + PUBLIC_NATIVE_LIBC_ABI_MIN)
     print(
+        "NATIVE_DIST_GLIBC_SYMBOL_VERSIONS: "
+        + observation["glibc_symbol_versions"]
+    )
+    print(
+        "NATIVE_DIST_GLIBC_OBSERVED_MAX: "
+        + observation["libc_abi_observed_max"]
+    )
+    print(
+        "NATIVE_DIST_ELF_INTERPRETER: "
+        + observation["elf_interpreter"]
+    )
+    print("NATIVE_DIST_DT_NEEDED: " + observation["dt_needed"])
+    print(
+        "NATIVE_DIST_DYNAMIC_LIBRARY_CLOSURE: "
+        + observation["shared_library_closure"]
+    )
+    print(
         "NATIVE_DIST_CPU_ISA_ASSUMPTION: "
         + PUBLIC_NATIVE_CPU_ISA_ASSUMPTION
+    )
+    print("NATIVE_DIST_BUILD_MARCH: " + build_march)
+    print(
+        "NATIVE_DIST_POST_LINK_CPU_ISA_EVIDENCE: "
+        + observation["post_link_cpu_isa_evidence"]
     )
     print("NATIVE_DIST_ARCHIVE: " + str(archive_path))
     print("NATIVE_DIST_OUTER_SHA256: " + outer_digest)
@@ -532,14 +764,27 @@ def build(args: argparse.Namespace) -> Path:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description=(
-            "Build the development-only DIST005 Native Image distribution proof."
-        )
+        description="Build the DIST005 Native Image distribution."
     )
     parser.add_argument(
         "--allow-dirty",
         action="store_true",
         help="allow dirty source only for pre-commit proof validation",
+    )
+    parser.add_argument(
+        "--public-prerelease",
+        action="store_true",
+        help=(
+            "build explicit public-prerelease metadata; requires a clean "
+            "non-SNAPSHOT project version and --release-baseline"
+        ),
+    )
+    parser.add_argument(
+        "--release-baseline",
+        help=(
+            "exact 40-hex main baseline SHA whose project version is the "
+            "candidate public version plus -SNAPSHOT"
+        ),
     )
     args = parser.parse_args()
     build(args)

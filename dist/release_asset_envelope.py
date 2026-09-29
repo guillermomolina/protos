@@ -25,6 +25,11 @@ from typing import NoReturn
 import zipfile
 
 import prepare_release_metadata as legacy
+from native_elf import (
+    NativeElfError,
+    compare_numeric_versions,
+    numeric_version,
+)
 
 
 MULTI_RELEASE_FORMAT = "protos-public-prerelease-envelope-v2"
@@ -150,6 +155,155 @@ def _read_archive_members(
     return source, runtime, root_name, license_bytes, notice_bytes
 
 
+def _runtime_csv(
+    value: str,
+    *,
+    label: str,
+) -> tuple[str, ...]:
+    parts = tuple(part.strip() for part in value.split(","))
+
+    if not parts or any(not part for part in parts):
+        fail(label + " contains an empty value")
+
+    return parts
+
+
+def _require_native_empirical_runtime(
+    runtime: dict[str, str],
+) -> None:
+    try:
+        versions = _runtime_csv(
+            runtime["glibc_symbol_versions"],
+            label="Native glibc_symbol_versions",
+        )
+
+        for version in versions:
+            numeric_version(version)
+
+        normalized_versions = tuple(
+            sorted(
+                set(versions),
+                key=numeric_version,
+            )
+        )
+
+        if versions != normalized_versions:
+            fail(
+                "Native glibc_symbol_versions is not deterministic "
+                "numeric order without duplicates"
+            )
+
+        observed_max = runtime["libc_abi_observed_max"]
+        numeric_version(observed_max)
+
+        actual_max = max(
+            versions,
+            key=numeric_version,
+        )
+
+        if observed_max != actual_max:
+            fail(
+                "Native libc_abi_observed_max does not match "
+                "glibc_symbol_versions maximum: "
+                + repr(observed_max)
+                + " != "
+                + repr(actual_max)
+            )
+
+        if (
+            compare_numeric_versions(
+                observed_max,
+                runtime["libc_abi_min"],
+            )
+            > 0
+        ):
+            fail(
+                "Native observed GLIBC requirement exceeds public ABI "
+                "policy: "
+                + observed_max
+                + " > "
+                + runtime["libc_abi_min"]
+            )
+
+    except NativeElfError as exc:
+        fail("Native GLIBC empirical evidence is malformed: " + str(exc))
+
+    interpreter = runtime["elf_interpreter"]
+    if not interpreter.startswith("/"):
+        fail(
+            "Native ELF interpreter is not absolute: "
+            + repr(interpreter)
+        )
+
+    needed = _runtime_csv(
+        runtime["dt_needed"],
+        label="Native dt_needed",
+    )
+    closure = _runtime_csv(
+        runtime["shared_library_closure"],
+        label="Native shared_library_closure",
+    )
+
+    if needed != tuple(sorted(set(needed))):
+        fail("Native dt_needed is not deterministic")
+
+    if closure != tuple(sorted(set(closure))):
+        fail("Native shared_library_closure is not deterministic")
+
+    if any(
+        "not found" in library.lower()
+        for library in closure
+    ):
+        fail("Native dynamic-library closure contains an unresolved library")
+
+    if closure != needed:
+        fail(
+            "Native dynamic-library closure does not exactly resolve "
+            "DT_NEEDED"
+        )
+
+    if "libc.so.6" not in needed:
+        fail("Native DT_NEEDED does not contain glibc libc.so.6")
+
+    if runtime["native_build_march"] != "-march=compatibility":
+        fail(
+            "Native build -march does not match selected compatibility "
+            "policy: "
+            + repr(runtime["native_build_march"])
+        )
+
+    if runtime["native_build_container_role"] != "canonical-authority":
+        fail(
+            "Native build-container role does not identify canonical "
+            "authority"
+        )
+
+    if runtime["native_build_host_os_id"] != "ol":
+        fail(
+            "Native build host does not identify Oracle Linux"
+        )
+
+    build_os_version = runtime["native_build_host_os_version"]
+    if not (
+        build_os_version == "10"
+        or build_os_version.startswith("10.")
+    ):
+        fail(
+            "Native build host does not identify Oracle Linux 10: "
+            + repr(build_os_version)
+        )
+
+    if runtime["native_build_host_glibc"] != "2.39":
+        fail(
+            "Native build host glibc does not match selected OL10 "
+            "build baseline: "
+            + repr(runtime["native_build_host_glibc"])
+        )
+
+    if not runtime["post_link_cpu_isa_evidence"].strip():
+        fail("Native post-link CPU ISA evidence is empty")
+
+
 def _require_native_runtime(runtime: dict[str, str]) -> None:
     required = [
         "distribution_format",
@@ -163,7 +317,20 @@ def _require_native_runtime(runtime: dict[str, str]) -> None:
         "linkage",
         "libc_family",
         "libc_abi_min",
+        "libc_abi_observed_max",
+        "glibc_symbol_versions",
+        "elf_interpreter",
+        "dt_needed",
+        "shared_library_closure",
         "cpu_isa_assumption",
+        "native_build_march",
+        "post_link_cpu_isa_evidence",
+        "native_build_container",
+        "native_build_container_role",
+        "native_build_authority",
+        "native_build_host_os_id",
+        "native_build_host_os_version",
+        "native_build_host_glibc",
     ]
     missing = [key for key in required if not runtime.get(key)]
     if missing:
@@ -191,6 +358,8 @@ def _require_native_runtime(runtime: dict[str, str]) -> None:
         "cpu_isa_assumption",
     ]:
         _token(runtime[key], label="Native " + key)
+
+    _require_native_empirical_runtime(runtime)
 
 
 def read_release_asset(archive_path: Path) -> ReleaseAsset:
@@ -411,8 +580,43 @@ def _asset_rows(
                 (prefix + "target_arch", asset.runtime["target_arch"]),
                 (prefix + "libc_family", asset.runtime["libc_family"]),
                 (prefix + "libc_abi_min", asset.runtime["libc_abi_min"]),
+                (
+                    prefix + "libc_abi_observed_max",
+                    asset.runtime["libc_abi_observed_max"],
+                ),
+                (
+                    prefix + "glibc_symbol_versions",
+                    asset.runtime["glibc_symbol_versions"],
+                ),
+                (
+                    prefix + "elf_interpreter",
+                    asset.runtime["elf_interpreter"],
+                ),
+                (prefix + "dt_needed", asset.runtime["dt_needed"]),
+                (
+                    prefix + "shared_library_closure",
+                    asset.runtime["shared_library_closure"],
+                ),
                 (prefix + "linkage", asset.runtime["linkage"]),
                 (prefix + "cpu_isa_assumption", asset.runtime["cpu_isa_assumption"]),
+                (
+                    prefix + "native_build_march",
+                    asset.runtime["native_build_march"],
+                ),
+                (
+                    prefix + "post_link_cpu_isa_evidence",
+                    asset.runtime["post_link_cpu_isa_evidence"],
+                ),
+                (
+                    prefix + "native_build_host_os",
+                    asset.runtime["native_build_host_os_id"]
+                    + "-"
+                    + asset.runtime["native_build_host_os_version"],
+                ),
+                (
+                    prefix + "native_build_host_glibc",
+                    asset.runtime["native_build_host_glibc"],
+                ),
             ]
         )
     else:
@@ -504,8 +708,42 @@ def render_notes(
                     f"- Target architecture: `{asset.runtime['target_arch']}`",
                     f"- libc family: `{asset.runtime['libc_family']}`",
                     f"- libc ABI minimum: `{asset.runtime['libc_abi_min']}`",
+                    (
+                        "- Observed maximum GLIBC requirement: "
+                        f"`{asset.runtime['libc_abi_observed_max']}`"
+                    ),
+                    (
+                        "- Observed GLIBC symbol versions: "
+                        f"`{asset.runtime['glibc_symbol_versions']}`"
+                    ),
+                    (
+                        "- ELF interpreter: "
+                        f"`{asset.runtime['elf_interpreter']}`"
+                    ),
+                    f"- DT_NEEDED: `{asset.runtime['dt_needed']}`",
+                    (
+                        "- Dynamic-library closure: "
+                        f"`{asset.runtime['shared_library_closure']}`"
+                    ),
                     f"- Linkage: `{asset.runtime['linkage']}`",
                     f"- CPU ISA assumption: `{asset.runtime['cpu_isa_assumption']}`",
+                    (
+                        "- Native Image build argument: "
+                        f"`{asset.runtime['native_build_march']}`"
+                    ),
+                    (
+                        "- Post-link CPU ISA evidence: "
+                        f"`{asset.runtime['post_link_cpu_isa_evidence']}`"
+                    ),
+                    (
+                        "- Native build host: "
+                        f"`{asset.runtime['native_build_host_os_id']}-"
+                        f"{asset.runtime['native_build_host_os_version']}`"
+                    ),
+                    (
+                        "- Native build host glibc: "
+                        f"`{asset.runtime['native_build_host_glibc']}`"
+                    ),
                 ]
             )
         artifact_sections.append("\n".join(lines))
