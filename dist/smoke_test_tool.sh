@@ -106,10 +106,21 @@ else
     runtime_mode=fallback-isolated
 fi
 
+jobs=${PROTOS_TEST_JOBS:-8}
+
+case "$jobs" in
+    ''|*[!0-9]*)
+        fail "PROTOS_TEST_JOBS must be a positive integer"
+        ;;
+esac
+
+[ "$jobs" -gt 0 ] ||
+    fail "PROTOS_TEST_JOBS must be a positive integer"
+
 stdout_file=$project/test.stdout
 stderr_file=$project/test.stderr
 
-if (cd "$project" && "$launcher" test) >"$stdout_file" 2>"$stderr_file"; then
+if (cd "$project" && "$launcher" test --jobs "$jobs") >"$stdout_file" 2>"$stderr_file"; then
     :
 else
     rc=$?
@@ -165,6 +176,7 @@ fi
 echo "DIST_B4A_OUTSIDE_CHECKOUT_CHECK: PASS"
 echo "DIST_B4A_RUNTIME_ISOLATION_CHECK: PASS mode=$runtime_mode"
 echo "DIST_BUNDLED_TEST_TOOL_CHECK: PASS"
+echo "DIST_B4A_TEST_TOOL_JOBS=$jobs"
 echo "TEST001_H_PORTABLE_REPOSITORY_SUITE_CHECK: PASS passed=$passed_count failed=0"
 echo "DISTRIBUTION_TEST_TOOL_VALIDATED: YES"
 echo "DIST001_B4A_SMOKE: PASS"

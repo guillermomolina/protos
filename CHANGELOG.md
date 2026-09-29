@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.114-SNAPSHOT
+
+- `DIST005-D5` (#549): compose the already-proven DIST001/DIST005 release
+  primitives into one deterministic, fail-closed `dist/prepare_release.py`
+  candidate-preparation entry point. After an explicit selection record exists,
+  the orchestrator materializes or safely resumes one detached release-only
+  candidate, builds and completely admits the selected Linux x86_64 Native
+  artifact, builds and completely admits the portable JVM compatibility
+  fallback, then prepares and independently verifies their common
+  `JVM_PLUS_NATIVE` release envelope. Preparation remains strictly separate
+  from publication: it creates no Git tag, GitHub Release, or public asset.
+  Candidate materialization retains the historical `origin/main` lineage guard
+  by default while allowing this orchestrated pre-publication proof to use an
+  explicitly selected commit already on local `main`, so implementation can be
+  proven before it is pushed. Portable distribution Test Tool admission now
+  uses bounded `--jobs` parallelism, aligned with the repository
+  `PROTOS_TEST_JOBS=8` default and overridable by that environment variable,
+  instead of silently falling back to the Test Tool's serial default. Generated
+  release-envelope state is safely replaceable only under the candidate
+  `target/` tree, making preparation retryable without weakening candidate
+  identity or publication guards.
+
 ## 0.3.113-SNAPSHOT
 
 - `DIST005-D4` (#549): add fail-closed clean-candidate machinery for the

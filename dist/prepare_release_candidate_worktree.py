@@ -143,17 +143,45 @@ def pom_project_version(text: str) -> str:
     return version
 
 
-def require_selected_baseline(root: Path, selection: dict[str, str]) -> None:
+def require_selected_baseline(
+    root: Path,
+    selection: dict[str, str],
+    *,
+    baseline_ref: str = "origin/main",
+) -> None:
     baseline = selection["release_baseline_revision"]
+
+    if baseline_ref not in {"origin/main", "main"}:
+        fail("unsupported baseline authority ref: " + repr(baseline_ref))
 
     exists = run(root, "cat-file", "-e", baseline + "^{commit}", check=False)
     if exists.returncode != 0:
         fail("selected baseline commit is unavailable")
 
-    origin_main = run(root, "rev-parse", "origin/main").stdout.strip()
-    ancestry = run(root, "merge-base", "--is-ancestor", baseline, origin_main, check=False)
+    authority = run(
+        root,
+        "rev-parse",
+        baseline_ref,
+        check=False,
+    )
+    if authority.returncode != 0:
+        fail("cannot resolve baseline authority ref: " + baseline_ref)
+
+    authority_revision = authority.stdout.strip()
+
+    ancestry = run(
+        root,
+        "merge-base",
+        "--is-ancestor",
+        baseline,
+        authority_revision,
+        check=False,
+    )
     if ancestry.returncode == 1:
-        fail("selected baseline is not an ancestor of origin/main")
+        fail(
+            "selected baseline is not an ancestor of "
+            + baseline_ref
+        )
     if ancestry.returncode != 0:
         fail("cannot verify selected baseline ancestry")
 
@@ -229,11 +257,20 @@ def verify_created_worktree(
         fail("detached worktree creation changed local branch refs")
 
 
-def prepare_worktree(*, selection_path: Path, destination: Path) -> Path:
+def prepare_worktree(
+    *,
+    selection_path: Path,
+    destination: Path,
+    baseline_ref: str = "origin/main",
+) -> Path:
     root = repository_root().resolve()
     selection = parse_selection(selection_path.resolve())
     require_selection(selection)
-    require_selected_baseline(root, selection)
+    require_selected_baseline(
+        root,
+        selection,
+        baseline_ref=baseline_ref,
+    )
 
     destination = normalized(destination)
     git_dir = normalized(root / ".git")

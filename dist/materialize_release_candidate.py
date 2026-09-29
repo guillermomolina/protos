@@ -157,6 +157,7 @@ def resume_or_materialize(
     *,
     selection_path: Path,
     candidate: Path,
+    baseline_ref: str = "origin/main",
 ) -> str:
     root = repository_root().resolve()
     selection = parse_selection(selection_path.resolve())
@@ -171,6 +172,7 @@ def resume_or_materialize(
             prepare_worktree(
                 selection_path=selection_path,
                 destination=candidate,
+                baseline_ref=baseline_ref,
             )
             created_here = True
         else:
@@ -275,11 +277,17 @@ def main() -> int:
         required=True,
     )
     parser.add_argument("--candidate", required=True)
+    parser.add_argument(
+        "--baseline-ref",
+        choices=("origin/main", "main"),
+        default="origin/main",
+    )
     args = parser.parse_args()
 
     resume_or_materialize(
         selection_path=Path(args.selection),
         candidate=Path(args.candidate),
+        baseline_ref=args.baseline_ref,
     )
     return 0
 
