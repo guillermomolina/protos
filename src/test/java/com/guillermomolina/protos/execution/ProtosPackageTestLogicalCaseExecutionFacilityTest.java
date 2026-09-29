@@ -376,7 +376,6 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                                     execution,
                                     List.of(
                                             sourceAssociation,
-                                            new ProtosStringValue(source),
                                             signatureValue,
                                             new ProtosStringValue("fresh")),
                                     activation));
@@ -986,7 +985,6 @@ final class ProtosPackageTestLogicalCaseExecutionFacilityTest {
                         execution,
                         List.of(
                                 sourceAssociation,
-                                new ProtosStringValue(source),
                                 signatureValue,
                                 new ProtosStringValue(selector)),
                         activation));

@@ -96,7 +96,6 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                     bridge.execute(
                             new ProtosTestLogicalCaseAttemptBridge.Request(
                                     suite,
-                                    source,
                                     List.of("first", "second"),
                                     "second"));
 
@@ -162,7 +161,6 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                     bridge.execute(
                             new ProtosTestLogicalCaseAttemptBridge.Request(
                                     suite,
-                                    source,
                                     List.of("first", "second"),
                                     "second"));
 
@@ -215,7 +213,6 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                     bridge.execute(
                             new ProtosTestLogicalCaseAttemptBridge.Request(
                                     suite,
-                                    source,
                                     List.of("first"),
                                     "missing"));
 
@@ -237,7 +234,8 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
     // project-tree provisioning is active, independent of any real fixture's
     // own module dependencies.
     @Test
-    void minimalInlineSuiteSeesProjectTreeFilesystem() throws Exception {
+    void minimalInlineSuiteSeesProjectTreeFilesystem(
+            @TempDir Path root) throws Exception {
         Path casesRoot =
                 RESOLUTION_INPUT_LOCK_CORPUS.resolve("cases");
         Path authorityRoot = casesRoot.resolve("fresh");
@@ -250,9 +248,7 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
         }
 
         Path fixture =
-                RESOLUTION_INPUT_LOCK_CORPUS
-                        .resolve("fixtures")
-                        .resolve("fresh.protos");
+                root.resolve("inline.protos");
 
         String source =
                 """
@@ -266,6 +262,11 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                 ]
                 tests.freeze()
                 """;
+
+        Files.writeString(
+                fixture,
+                source,
+                StandardCharsets.UTF_8);
 
         ProtosModuleResolver fallback = packageFallbackResolver();
 
@@ -281,7 +282,6 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                     bridge.execute(
                             new ProtosTestLogicalCaseAttemptBridge.Request(
                                     fixture,
-                                    source,
                                     List.of("fresh"),
                                     "fresh",
                                     casesRoot,
@@ -359,7 +359,6 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                     bridge.execute(
                             new ProtosTestLogicalCaseAttemptBridge.Request(
                                     fixture,
-                                    source,
                                     List.of("fresh"),
                                     "fresh",
                                     casesRoot,

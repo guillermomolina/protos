@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.115-SNAPSHOT
+
+- `PERF019` (#736): remove the two independent caller-Actor serialization
+  sources that limited Test Tool replacement admission under bounded parallel
+  execution. Future completion now supports an exact runtime-only targeted
+  continuation handoff: when terminalization wakes the one waiting lane Task,
+  that exact queued Task can continue immediately while unrelated Actor-local
+  work retains its existing FIFO order and cancellation still defeats the
+  handoff. Logical Case execution no longer carries source text through the
+  caller Actor; after the source association has been authorized, each host
+  execution carrier performs the required fresh UTF-8 read immediately before
+  D153 fresh-Process declaration rematerialization, preserving per-Case source
+  freshness without reusing discovery source. The Process-snapshot route uses
+  the same host-carrier source model. A scheduling regression fixture now waits
+  for its host wrapper's physical completion before asserting physical
+  completion order, avoiding a race exposed by the faster Future handoff
+  without weakening its `[1, 0, 2]` ordering requirement. The canonical
+  `--jobs 16` Test Tool run completes all 1263 logical Cases with 16 lanes and
+  complete 1247/1247 replacement-pair coverage in 70.84 s at 1096% process CPU;
+  mean completion-to-replacement delay falls to 104.643 ms and the selected
+  caller-serialization intervals to 60.792 ms. The full repository validation
+  passes.
+
 ## 0.3.114-SNAPSHOT
 
 - `DIST005-D5` (#549): compose the already-proven DIST001/DIST005 release

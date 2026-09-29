@@ -412,7 +412,6 @@ final class ProtosGroupTestLogicalCaseExecutionFacilityTest {
                         execution,
                         List.of(
                                 sourceAssociation,
-                                new ProtosStringValue(source),
                                 signatureValue,
                                 new ProtosStringValue(selector)),
                         activation));

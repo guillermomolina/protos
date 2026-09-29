@@ -71,23 +71,15 @@ final class ProtosTestToolLogicalCaseRunnerTest {
         Map<String, ProtosFutureValue> pending =
                 new LinkedHashMap<>();
 
-        ProtosClosureValue sourceLoader =
-                ProtosClosureValue.nativeClosure(
-                        (caller, arguments) -> {
-                            assertEquals(1, arguments.size());
-                            return new ProtosStringValue(
-                                    "unused-source");
-                        });
-
         ProtosClosureValue executorAsync =
                 ProtosClosureValue.nativeClosure(
                         (caller, arguments) -> {
-                            assertEquals(4, arguments.size());
+                            assertEquals(3, arguments.size());
 
                             ProtosStringValue selector =
                                     assertInstanceOf(
                                             ProtosStringValue.class,
-                                            arguments.get(3));
+                                            arguments.get(2));
 
                             admissions.add(selector.value());
 
@@ -107,11 +99,6 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                             return future;
                         });
 
-        activation
-                .context()
-                .createLocalSlot(
-                        "sourceLoader",
-                        sourceLoader);
         activation
                 .context()
                 .createLocalSlot(
@@ -141,7 +128,6 @@ final class ProtosTestToolLogicalCaseRunnerTest {
 
                 Runner.run(
                     Array(projection),
-                    sourceLoader,
                     executorAsync,
                     2
                 )
@@ -274,23 +260,15 @@ final class ProtosTestToolLogicalCaseRunnerTest {
         ArrayList<Object> lifecycleResults =
                 new ArrayList<>();
 
-        ProtosClosureValue sourceLoader =
-                ProtosClosureValue.nativeClosure(
-                        (caller, arguments) -> {
-                            assertEquals(1, arguments.size());
-                            return new ProtosStringValue(
-                                    "unused-source");
-                        });
-
         ProtosClosureValue executorAsync =
                 ProtosClosureValue.nativeClosure(
                         (caller, arguments) -> {
-                            assertEquals(4, arguments.size());
+                            assertEquals(3, arguments.size());
 
                             ProtosStringValue selector =
                                     assertInstanceOf(
                                             ProtosStringValue.class,
-                                            arguments.get(3));
+                                            arguments.get(2));
 
                             ProtosFutureValue future =
                                     new ProtosFutureValue(
@@ -328,11 +306,6 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                             return ProtosNullValue.INSTANCE;
                         });
 
-        activation
-                .context()
-                .createLocalSlot(
-                        "sourceLoader",
-                        sourceLoader);
 
         activation
                 .context()
@@ -366,7 +339,6 @@ final class ProtosTestToolLogicalCaseRunnerTest {
 
                 Runner.run(
                     Array(projection),
-                    sourceLoader,
                     executorAsync,
                     1,
                     lifecycleObserver
@@ -458,18 +430,10 @@ final class ProtosTestToolLogicalCaseRunnerTest {
         Map<String, ProtosFutureValue> pending =
                 new LinkedHashMap<>();
 
-        ProtosClosureValue sourceLoader =
-                ProtosClosureValue.nativeClosure(
-                        (caller, arguments) -> {
-                            assertEquals(1, arguments.size());
-                            return new ProtosStringValue(
-                                    "unused-source");
-                        });
-
         ProtosClosureValue executorAsync =
                 ProtosClosureValue.nativeClosure(
                         (caller, arguments) -> {
-                            assertEquals(4, arguments.size());
+                            assertEquals(3, arguments.size());
 
                             ProtosStringValue sourceAssociation =
                                     assertInstanceOf(
@@ -479,7 +443,7 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                             ProtosStringValue selector =
                                     assertInstanceOf(
                                             ProtosStringValue.class,
-                                            arguments.get(3));
+                                            arguments.get(2));
 
                             String key =
                                     sourceAssociation.value()
@@ -504,11 +468,6 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                             return future;
                         });
 
-        activation
-                .context()
-                .createLocalSlot(
-                        "sourceLoader",
-                        sourceLoader);
 
         activation
                 .context()
@@ -553,7 +512,6 @@ final class ProtosTestToolLogicalCaseRunnerTest {
                         projectionA,
                         projectionB
                     ),
-                    sourceLoader,
                     executorAsync,
                     2
                 )

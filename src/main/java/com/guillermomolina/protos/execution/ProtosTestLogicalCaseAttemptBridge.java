@@ -29,6 +29,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -64,7 +66,6 @@ final class ProtosTestLogicalCaseAttemptBridge {
 
     record Request(
             Path sourcePath,
-            String source,
             List<String> expectedSignature,
             String selector,
             Path projectTreeCasesRoot,
@@ -75,7 +76,6 @@ final class ProtosTestLogicalCaseAttemptBridge {
                     Objects.requireNonNull(sourcePath, "sourcePath")
                             .toAbsolutePath()
                             .normalize();
-            source = Objects.requireNonNull(source, "source");
             expectedSignature =
                     List.copyOf(
                             Objects.requireNonNull(
@@ -113,10 +113,9 @@ final class ProtosTestLogicalCaseAttemptBridge {
 
         Request(
                 Path sourcePath,
-                String source,
                 List<String> expectedSignature,
                 String selector) {
-            this(sourcePath, source, expectedSignature, selector, null, null);
+            this(sourcePath, expectedSignature, selector, null, null);
         }
     }
 
@@ -169,10 +168,15 @@ final class ProtosTestLogicalCaseAttemptBridge {
     Result execute(Request request) throws Exception {
         Objects.requireNonNull(request, "request");
 
+        String source =
+                Files.readString(
+                        request.sourcePath(),
+                        StandardCharsets.UTF_8);
+
         try (ProtosDirectFileModuleResolver resolver =
                 new ProtosDirectFileModuleResolver(
                         request.sourcePath(),
-                        request.source(),
+                        source,
                         fallbackResolver)) {
 
             ProtosPrelude prelude =

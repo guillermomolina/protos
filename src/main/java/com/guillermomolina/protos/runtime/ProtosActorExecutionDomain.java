@@ -19,22 +19,40 @@ package com.guillermomolina.protos.runtime;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 import java.util.ArrayDeque;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.BooleanSupplier;
 
 /**
  * Actor-local cooperative scheduling domain.
  *
- * <p>The queue is FIFO for this implementation. FIFO is an implementation policy, not a new
- * language-level total ordering guarantee; it also satisfies weak fairness for continuously
- * runnable tasks when dispatch continues.
+ * <p>The ordinary runnable queue is FIFO for this implementation. FIFO is an implementation
+ * policy, not a new language-level total ordering guarantee; it also satisfies weak fairness for
+ * continuously runnable tasks when dispatch continues. Targeted runtime-completion controls are
+ * Actor-private machinery and never change the relative FIFO order of unrelated ordinary runnable
+ * work.
  */
 public final class ProtosActorExecutionDomain {
     private static final Runnable NOOP_WAKEUP = () -> {};
 
+    private static final class TargetedRuntimeCompletion {
+        private final ProtosFutureValue future;
+        private final BooleanSupplier completion;
+
+        private TargetedRuntimeCompletion(
+                ProtosFutureValue future,
+                BooleanSupplier completion) {
+            this.future = Objects.requireNonNull(future, "future");
+            this.completion = Objects.requireNonNull(completion, "completion");
+        }
+    }
+
     private final ArrayDeque<Object> runnable = new ArrayDeque<>();
+    private final ArrayDeque<TargetedRuntimeCompletion> targetedRuntimeCompletions =
+            new ArrayDeque<>();
     private final Set<ProtosTask> liveTasks = new LinkedHashSet<>();
     private final Set<ProtosIoOperation> actorIoOperations = new LinkedHashSet<>();
     private final Set<ProtosIoReleaseExecution> actorIoReleases = new LinkedHashSet<>();
@@ -42,6 +60,7 @@ public final class ProtosActorExecutionDomain {
     private final Set<ProtosFutureValue> actorNonTaskFutures = new LinkedHashSet<>();
     private ProtosActor ownerActor;
     private Runnable schedulerWakeup = NOOP_WAKEUP;
+    private int activeTargetedRuntimeCompletions;
 
     public ProtosTask createTask(
             ProtosTask parent, Object associatedFuture, ProtosTask.Continuation continuation) {
@@ -90,6 +109,40 @@ public final class ProtosActorExecutionDomain {
         }
     }
 
+    /**
+     * PERF019 runtime-only publication for one caller-domain logical-Case completion.
+     *
+     * <p>This is not a guest scheduling API. The completion runs only after this Actor obtains
+     * execution ownership. It may nominate only the exact Future waiter made runnable by its own
+     * winning terminal transition.
+     */
+    public void enqueueTargetedFutureCompletionForRuntime(
+            ProtosFutureValue future,
+            BooleanSupplier completion) {
+        Objects.requireNonNull(future, "future");
+        Objects.requireNonNull(completion, "completion");
+        if (future.domain() != this) {
+            throw new IllegalArgumentException(
+                    "targeted Future completion belongs to another Actor domain");
+        }
+
+        Runnable wakeup;
+        synchronized (this) {
+            if (ownerActor != null
+                    && (ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING
+                            || ownerActor.lifecycleState()
+                                    == ProtosActor.LifecycleState.TERMINATED)) {
+                throw new IllegalStateException(
+                        "terminating Actor cannot accept targeted runtime completion");
+            }
+            targetedRuntimeCompletions.addLast(
+                    new TargetedRuntimeCompletion(future, completion));
+            notifyAll();
+            wakeup = schedulerWakeup;
+        }
+        runSchedulerWakeup(wakeup);
+    }
+
     /** PLAT029 readiness publication for one already-registered Actor-local I/O operation. */
     void enqueueActorIoOperationForRuntime(ProtosIoOperation operation) {
         Objects.requireNonNull(operation, "operation");
@@ -120,8 +173,31 @@ public final class ProtosActorExecutionDomain {
         if (wakeup != null) runSchedulerWakeup(wakeup);
     }
 
-    /** Dispatches at most one cooperative Task, PLAT029 operation, or PLAT030 release segment. */
+    /**
+     * Dispatches one Actor-owned scheduling unit.
+     *
+     * <p>A PERF019 runtime completion may directly hand off to the one exact suspended Task made
+     * runnable by its own Future terminal transition. The runtime action itself is not guest
+     * execution, and the handoff Task remains a distinct later Actor-local guest segment.
+     */
     public boolean dispatchOne() {
+        TargetedRuntimeCompletion runtimeCompletion;
+        synchronized (this) {
+            runtimeCompletion = targetedRuntimeCompletions.pollFirst();
+            if (runtimeCompletion != null) {
+                activeTargetedRuntimeCompletions++;
+            }
+        }
+
+        if (runtimeCompletion != null) {
+            try {
+                dispatchTargetedRuntimeCompletion(runtimeCompletion);
+            } finally {
+                finishTargetedRuntimeCompletion();
+            }
+            return true;
+        }
+
         Object scheduled;
         while (true) {
             synchronized (this) {
@@ -147,9 +223,66 @@ public final class ProtosActorExecutionDomain {
         }
 
         if (scheduled instanceof ProtosTask task) task.runContinuation();
-        else if (scheduled instanceof ProtosIoOperation operation) operation.runDeferredCPrimeSegmentForRuntime();
+        else if (scheduled instanceof ProtosIoOperation operation)
+            operation.runDeferredCPrimeSegmentForRuntime();
         else ((ProtosIoReleaseExecution) scheduled).runDeferredCPrimeSegmentForRuntime();
         return true;
+    }
+
+    private void dispatchTargetedRuntimeCompletion(
+            TargetedRuntimeCompletion runtimeCompletion) {
+        ProtosFutureValue.RuntimeHandoffCandidate candidate =
+                runtimeCompletion.future.targetedHandoffCandidateForRuntime();
+
+        boolean transitioned = runtimeCompletion.completion.getAsBoolean();
+        if (!transitioned || candidate == null || !candidate.readyForHandoff()) {
+            return;
+        }
+
+        ProtosTask handoff = claimTargetedContinuation(candidate);
+        if (handoff != null) {
+            handoff.runContinuation();
+        }
+    }
+
+    private ProtosTask claimTargetedContinuation(
+            ProtosFutureValue.RuntimeHandoffCandidate candidate) {
+        ProtosTask target = candidate.task();
+        if (target.owner() != this) {
+            return null;
+        }
+
+        synchronized (this) {
+            Iterator<Object> iterator = runnable.iterator();
+            while (iterator.hasNext()) {
+                Object queued = iterator.next();
+                if (queued != target) {
+                    continue;
+                }
+                if (!target.beginTargetedRuntimeHandoff(candidate.dependency())) {
+                    return null;
+                }
+                iterator.remove();
+                return target;
+            }
+        }
+        return null;
+    }
+
+    private void finishTargetedRuntimeCompletion() {
+        ProtosActor actor;
+        synchronized (this) {
+            if (activeTargetedRuntimeCompletions <= 0) {
+                throw new IllegalStateException(
+                        "targeted runtime completion accounting underflow");
+            }
+            activeTargetedRuntimeCompletions--;
+            notifyAll();
+            actor = ownerActor;
+        }
+        if (actor != null) {
+            actor.tryCompleteTerminationForRuntime();
+        }
     }
 
     /** Starts one already-accepted mailbox message as the current Actor segment. */
@@ -174,15 +307,15 @@ public final class ProtosActorExecutionDomain {
 
     public void dispatchUntilTerminal(ProtosTask root,java.util.function.BooleanSupplier helper) {
         Objects.requireNonNull(root);Objects.requireNonNull(helper);
-        while(true){ProtosTask.State s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(dispatchOne()||helper.getAsBoolean())continue;synchronized(this){s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(!runnable.isEmpty())continue;try{wait();}catch(InterruptedException e){Thread.currentThread().interrupt();root.requestCancellation();}}}
+        while(true){ProtosTask.State s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(dispatchOne()||helper.getAsBoolean())continue;synchronized(this){s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(!runnable.isEmpty()||!targetedRuntimeCompletions.isEmpty())continue;try{wait();}catch(InterruptedException e){Thread.currentThread().interrupt();root.requestCancellation();}}}
     }
 
     public synchronized int runnableCount() {
-        return runnable.size();
+        return runnable.size() + targetedRuntimeCompletions.size();
     }
 
     synchronized boolean hasRunnableForRuntime() {
-        return !runnable.isEmpty();
+        return !runnable.isEmpty() || !targetedRuntimeCompletions.isEmpty();
     }
 
     public synchronized int liveTaskCount() {
@@ -252,6 +385,8 @@ public final class ProtosActorExecutionDomain {
         Set<ProtosIoOperation> io;
         Set<ProtosFutureValue> nonTask;
         synchronized (this) {
+            targetedRuntimeCompletions.clear();
+            notifyAll();
             tasks = Set.copyOf(liveTasks);
             io = Set.copyOf(actorIoOperations);
             nonTask = Set.copyOf(actorNonTaskFutures);
@@ -291,7 +426,9 @@ public final class ProtosActorExecutionDomain {
 
     synchronized boolean hasLiveTasksForRuntime() { return !liveTasks.isEmpty(); }
     synchronized boolean hasTerminationCleanupForRuntime() {
-        return !actorIoLifecycleCleanup.isEmpty() || !actorIoReleases.isEmpty();
+        return activeTargetedRuntimeCompletions != 0
+                || !actorIoLifecycleCleanup.isEmpty()
+                || !actorIoReleases.isEmpty();
     }
     synchronized int actorNonTaskFutureCountForTesting() { return actorNonTaskFutures.size(); }
     synchronized int actorIoOperationCountForTesting() { return actorIoOperations.size(); }

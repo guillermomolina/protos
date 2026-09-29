@@ -193,9 +193,20 @@ final class ProtosTestToolPerf017AdmissionTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver());
         ProtosActivation activation = prelude.newModuleActivation();
 
+        Files.writeString(
+                root.resolve("snapshot.protos"),
+                source,
+                StandardCharsets.UTF_8);
+
         try (ProtosProcessSnapshotLogicalCaseExecutionFacility facility =
                 ProtosProcessSnapshotLogicalCaseExecutionFacility.install(
-                        activation, prelude, submission)) {
+                        activation,
+                        prelude,
+                        List.of(
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "test-corpus",
+                                        root)),
+                        submission)) {
             List<RecordedEvent> events =
                     record(
                             root.resolve("snapshot.jfr"),
@@ -337,7 +348,6 @@ final class ProtosTestToolPerf017AdmissionTest {
                         execution,
                         List.of(
                                 sourceAssociation,
-                                new ProtosStringValue(source),
                                 signatureValue,
                                 new ProtosStringValue(selector)),
                         activation));

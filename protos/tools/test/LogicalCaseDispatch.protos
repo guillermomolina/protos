@@ -80,7 +80,7 @@ logicalCaseExecutorAsync: (
     corpusExecutionRequirements,
     testExecutionRequirementBindings
 ) => {
-    (sourceAssociation, source, signature, selector) => {
+    (sourceAssociation, signature, selector) => {
         // A third element, when present, is the D133 project-tree CaseAuthority
         // descriptor. This dispatcher does not decode it; it forwards
         // sourceAssociation intact to the bound execution requirement's
@@ -113,7 +113,6 @@ logicalCaseExecutorAsync: (
 
         binding.logicalCaseExecutionAsync(
             sourceAssociation,
-            source,
             signature,
             selector
         )

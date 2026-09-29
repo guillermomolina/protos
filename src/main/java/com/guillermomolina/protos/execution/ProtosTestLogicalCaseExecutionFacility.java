@@ -18,12 +18,9 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -39,8 +36,8 @@ import java.util.Set;
  *
  * <p>The physical source path is an execution locator only and is not logical Case identity.
  * Callers supply the authoritative discovery signature and one local selector. Host execution
- * retains only the bridge completion until a caller-domain completion task rematerializes the
- * ordinary observation.
+ * retains only the bridge completion until a caller-domain runtime completion action
+ * rematerializes the ordinary observation.
  *
  * <p>This facility owns no scheduling topology, Test pass/fail interpretation, exit policy,
  * retry, fixture lifecycle, CaseId encoding or Case environment policy.
@@ -184,14 +181,12 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
     private Object execute(
             ProtosActivation caller,
             List<?> arguments) {
-        if (arguments.size() != 4
+        if (arguments.size() != 3
                 || !(arguments.get(0)
                         instanceof ProtosArrayValue sourceAssociation)
                 || !(arguments.get(1)
-                        instanceof ProtosStringValue source)
-                || !(arguments.get(2)
                         instanceof ProtosArrayValue signature)
-                || !(arguments.get(3)
+                || !(arguments.get(2)
                         instanceof ProtosStringValue selector)) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
@@ -262,7 +257,6 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
             request =
                     new ProtosTestLogicalCaseAttemptBridge.Request(
                             physicalPath,
-                            source.value(),
                             expectedSignature,
                             selector.value(),
                             projectTreeCasesRoot,
@@ -531,51 +525,22 @@ public final class ProtosTestLogicalCaseExecutionFacility implements AutoCloseab
         private void enqueueCallerCompletion(
                 ProtosTestLogicalCaseAttemptBridge.Result result,
                 Exception hostFailure) {
-            try {
-                caller
-                        .executionDomain()
-                        .createTask(
-                                null,
-                                null,
-                                task ->
-                                        task.executeHostActionForRuntime(
-                                                () -> {
-                                                    emitAdmission(
-                                                            ProtosTestToolPerf017Admission
-                                                                    .COMPLETION_TASK_BEGIN);
-                                                    if (!future.isPending()) {
-                                                        return ProtosNullValue.INSTANCE;
-                                                    }
-
-                                                    if (hostFailure != null) {
-                                                        emitFutureTerminal(
-                                                                future.fail(
-                                                                        ProtosCoreErrors.newError(
-                                                                                caller)));
-                                                        return ProtosNullValue.INSTANCE;
-                                                    }
-
-                                                    try {
-                                                        emitFutureTerminal(
-                                                                future.resolve(
-                                                                        rematerialize(
-                                                                                Objects.requireNonNull(
-                                                                                        result,
-                                                                                        "logical Case completion"),
-                                                                                caller,
-                                                                                callerPrelude),
-                                                                        caller));
-                                                    } catch (ProtosSignalException signal) {
-                                                        emitFutureTerminal(
-                                                                future.fail(
-                                                                        signal.error()));
-                                                    }
-
-                                                    return ProtosNullValue.INSTANCE;
-                                                }));
-            } catch (IllegalStateException callerTerminated) {
-                emitFutureTerminal(future.cancelTerminal());
-            }
+            ProtosLogicalCaseCallerCompletion.enqueue(
+                    caller,
+                    future,
+                    hostFailure,
+                    () ->
+                            rematerialize(
+                                    Objects.requireNonNull(
+                                            result,
+                                            "logical Case completion"),
+                                    caller,
+                                    callerPrelude),
+                    () ->
+                            emitAdmission(
+                                    ProtosTestToolPerf017Admission
+                                            .COMPLETION_TASK_BEGIN),
+                    this::emitFutureTerminal);
         }
 
         private void requestCancellation() {

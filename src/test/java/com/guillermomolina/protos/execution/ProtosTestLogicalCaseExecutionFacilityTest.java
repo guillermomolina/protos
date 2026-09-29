@@ -269,6 +269,147 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
         }
     }
 
+    @Test
+    void readsFreshSourceOnHostCarrierAfterAdmission(
+            @TempDir Path root) throws Exception {
+        Path suite =
+                root.resolve("suite.protos");
+
+        String admittedSource =
+                """
+                TestValue: import("std:test/Test")
+
+                tests: Array(
+                    TestValue("only", () => {
+                        1
+                    })
+                )
+                """;
+
+        String freshExecutionSource =
+                """
+                TestValue: import("std:test/Test")
+
+                tests: Array(
+                    TestValue("only", () => {
+                        2
+                    })
+                )
+                """;
+
+        Files.writeString(
+                suite,
+                admittedSource,
+                StandardCharsets.UTF_8);
+
+        ManualSubmission submission =
+                new ManualSubmission();
+
+        ProtosBundledToolModuleResolver resolver =
+                resolver();
+
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(CORE, resolver);
+
+        ProtosActivation activation =
+                prelude.newModuleActivation();
+
+        try (ProtosPolyglotRuntimeHost runtimeHost =
+                        ProtosPolyglotRuntimeHost.open();
+                ProtosTestLogicalCaseExecutionFacility facility =
+                        ProtosTestLogicalCaseExecutionFacility.install(
+                                activation,
+                                CORE,
+                                resolver,
+                                List.of(
+                                        new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                                "test-corpus",
+                                                root)),
+                                runtimeHost,
+                                submission)) {
+
+            ProtosFutureValue future =
+                    invoke(
+                            prelude,
+                            activation,
+                            admittedSource,
+                            List.of("only"),
+                            "only");
+
+            assertEquals(
+                    ProtosFutureValue.State.PENDING,
+                    future.state());
+
+            assertEquals(
+                    1,
+                    submission.queuedCount());
+
+            // D153 requires execution-time rematerialization from fresh
+            // source. The Case is already logically admitted here, but its
+            // physical host carrier has not started yet.
+            Files.writeString(
+                    suite,
+                    freshExecutionSource,
+                    StandardCharsets.UTF_8);
+
+            assertTrue(
+                    submission.runNext());
+
+            assertTrue(
+                    activation.executionDomain().dispatchOne());
+
+            assertEquals(
+                    ProtosFutureValue.State.RESOLVED,
+                    future.state());
+
+            ProtosObjectValue completion =
+                    assertInstanceOf(
+                            ProtosObjectValue.class,
+                            future.resolvedValue().orElseThrow());
+
+            ProtosStringValue phase =
+                    assertInstanceOf(
+                            ProtosStringValue.class,
+                            completion
+                                    .readLocalSlot("phase")
+                                    .orElseThrow());
+
+            assertEquals(
+                    "case-execution",
+                    phase.value());
+
+            ProtosObjectValue observation =
+                    assertInstanceOf(
+                            ProtosObjectValue.class,
+                            completion
+                                    .readLocalSlot("observation")
+                                    .orElseThrow());
+
+            ProtosStringValue state =
+                    assertInstanceOf(
+                            ProtosStringValue.class,
+                            observation
+                                    .readLocalSlot("state")
+                                    .orElseThrow());
+
+            assertEquals(
+                    "completed",
+                    state.value());
+
+            ProtosIntegerValue value =
+                    assertInstanceOf(
+                            ProtosIntegerValue.class,
+                            observation
+                                    .readLocalSlot("value")
+                                    .orElseThrow());
+
+            assertEquals(
+                    BigInteger.valueOf(2),
+                    value.value());
+        }
+    }
+
     private static ProtosFutureValue invoke(
             ProtosPrelude prelude,
             ProtosActivation activation,
@@ -303,7 +444,6 @@ final class ProtosTestLogicalCaseExecutionFacilityTest {
                         execution,
                         List.of(
                                 sourceAssociation,
-                                new ProtosStringValue(source),
                                 signatureValue,
                                 new ProtosStringValue(selector)),
                         activation));

@@ -52,13 +52,12 @@ Assertions.require(
 recordedOrdinaryCalls: Array()
 
 fakeOrdinaryLogicalCaseExecutionAsync:
-    (sourceAssociation, source, signature, selector) => {
+    (sourceAssociation, signature, selector) => {
         recordedOrdinaryCalls =
             Array(
                 ...recordedOrdinaryCalls,
                 Array(
                     sourceAssociation,
-                    source,
                     signature,
                     selector
                 )
@@ -97,7 +96,6 @@ associationA.freeze()
 dispatchResult:
     dispatcher(
         associationA,
-        "source-a",
         Array("selector-a"),
         "selector-a"
     )
@@ -112,10 +110,10 @@ Assertions.require(
     recordedOrdinaryCalls[0][0] === associationA
 )
 Assertions.require(
-    recordedOrdinaryCalls[0][1] == "source-a"
+    recordedOrdinaryCalls[0][1][0] == "selector-a"
 )
 Assertions.require(
-    recordedOrdinaryCalls[0][3] == "selector-a"
+    recordedOrdinaryCalls[0][2] == "selector-a"
 )
 
 // A corpus bound to a requirement whose binding has no suite-native
@@ -129,7 +127,6 @@ Assertions.signals(
     () => {
         dispatcher(
             associationB,
-            "source-b",
             Array(),
             "case-b"
         )
@@ -145,7 +142,6 @@ Assertions.signals(
     () => {
         dispatcher(
             associationUnknown,
-            "source-c",
             Array(),
             "case-c"
         )

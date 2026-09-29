@@ -18,13 +18,15 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
-import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -56,32 +58,51 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
     public static final String BOOTSTRAP_SLOT = "processSnapshotLogicalCaseExecutionAsync";
 
     private final ProtosPrelude executionPrelude;
+    private final List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+            sourceRoots;
     private final ProtosAsyncExactExecutionFacility.Submission submission;
     private final Set<Operation> outstanding = new LinkedHashSet<>();
     private boolean closed;
 
     private ProtosProcessSnapshotLogicalCaseExecutionFacility(
             ProtosPrelude executionPrelude,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots,
             ProtosAsyncExactExecutionFacility.Submission submission) {
         this.executionPrelude = Objects.requireNonNull(executionPrelude, "executionPrelude");
+        this.sourceRoots =
+                List.copyOf(
+                        Objects.requireNonNull(
+                                sourceRoots,
+                                "sourceRoots"));
         this.submission = Objects.requireNonNull(submission, "submission");
     }
 
     public static ProtosProcessSnapshotLogicalCaseExecutionFacility install(
             ProtosActivation activation,
             ProtosPrelude executionPrelude,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots,
             ProtosAsyncExactExecutionFacility.Submission submission) {
-        return install(activation, BOOTSTRAP_SLOT, executionPrelude, submission);
+        return install(
+                activation,
+                BOOTSTRAP_SLOT,
+                executionPrelude,
+                sourceRoots,
+                submission);
     }
 
     public static ProtosProcessSnapshotLogicalCaseExecutionFacility install(
             ProtosActivation activation,
             String slotName,
             ProtosPrelude executionPrelude,
+            List<ProtosTestToolFileSelectionFacility.CorpusSourceRoot>
+                    sourceRoots,
             ProtosAsyncExactExecutionFacility.Submission submission) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(slotName, "slotName");
         Objects.requireNonNull(executionPrelude, "executionPrelude");
+        Objects.requireNonNull(sourceRoots, "sourceRoots");
         Objects.requireNonNull(submission, "submission");
 
         if (slotName.isEmpty()) {
@@ -97,7 +118,9 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
 
         ProtosProcessSnapshotLogicalCaseExecutionFacility facility =
                 new ProtosProcessSnapshotLogicalCaseExecutionFacility(
-                        executionPrelude, submission);
+                        executionPrelude,
+                        sourceRoots,
+                        submission);
 
         activation
                 .context()
@@ -110,11 +133,10 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
     }
 
     private Object execute(ProtosActivation caller, List<?> arguments) {
-        if (arguments.size() != 4
+        if (arguments.size() != 3
                 || !(arguments.get(0) instanceof ProtosArrayValue sourceAssociation)
-                || !(arguments.get(1) instanceof ProtosStringValue source)
-                || !(arguments.get(2) instanceof ProtosArrayValue signature)
-                || !(arguments.get(3) instanceof ProtosStringValue selector)) {
+                || !(arguments.get(1) instanceof ProtosArrayValue signature)
+                || !(arguments.get(2) instanceof ProtosStringValue selector)) {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
@@ -131,6 +153,18 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
+        final Path physicalSourcePath;
+        try {
+            physicalSourcePath =
+                    ProtosTestToolFileSelectionFacility
+                            .resolveAuthorizedSource(
+                                    sourceRoots,
+                                    corpusId.value(),
+                                    sourcePath.value());
+        } catch (IOException failure) {
+            throw ProtosExactExecutionFacility.ordinaryError(caller);
+        }
+
         ArrayList<String> expectedSignature = new ArrayList<>();
         for (Object value : signature.indexedSnapshot()) {
             if (!(value instanceof ProtosStringValue name) || name.value().isEmpty()) {
@@ -141,7 +175,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
 
         return start(
                 caller,
-                source,
+                physicalSourcePath,
                 expectedSignature,
                 selector.value(),
                 corpusId.value(),
@@ -150,7 +184,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
 
     private ProtosFutureValue start(
             ProtosActivation caller,
-            ProtosStringValue source,
+            Path physicalSourcePath,
             List<String> expectedSignature,
             String selector,
             String diagnosticCorpusId,
@@ -171,7 +205,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                         caller,
                         callerPrelude,
                         future,
-                        source,
+                        physicalSourcePath,
                         expectedSignature,
                         selector,
                         diagnosticCorpusId,
@@ -257,7 +291,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
         private final ProtosActivation caller;
         private final ProtosPrelude callerPrelude;
         private final ProtosFutureValue future;
-        private final ProtosStringValue source;
+        private final Path physicalSourcePath;
         private final List<String> expectedSignature;
         private final String selector;
         private final String diagnosticCorpusId;
@@ -273,7 +307,7 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
                 ProtosActivation caller,
                 ProtosPrelude callerPrelude,
                 ProtosFutureValue future,
-                ProtosStringValue source,
+                Path physicalSourcePath,
                 List<String> expectedSignature,
                 String selector,
                 String diagnosticCorpusId,
@@ -281,7 +315,10 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
             this.caller = Objects.requireNonNull(caller, "caller");
             this.callerPrelude = Objects.requireNonNull(callerPrelude, "callerPrelude");
             this.future = Objects.requireNonNull(future, "future");
-            this.source = Objects.requireNonNull(source, "source");
+            this.physicalSourcePath =
+                    Objects.requireNonNull(
+                            physicalSourcePath,
+                            "physicalSourcePath");
             this.expectedSignature =
                     List.copyOf(Objects.requireNonNull(expectedSignature, "expectedSignature"));
             this.selector = Objects.requireNonNull(selector, "selector");
@@ -360,9 +397,21 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
             RuntimeException hostFailure = null;
 
             try {
+                String source =
+                        Files.readString(
+                                physicalSourcePath,
+                                StandardCharsets.UTF_8);
+
                 result =
                         ProtosProcessSnapshotExecution.executeCase(
-                                source.value(), executionPrelude, expectedSignature, selector);
+                                source,
+                                executionPrelude,
+                                expectedSignature,
+                                selector);
+            } catch (IOException failure) {
+                hostFailure =
+                        new UncheckedIOException(
+                                failure);
             } catch (RuntimeException failure) {
                 hostFailure = failure;
             }
@@ -373,53 +422,24 @@ public final class ProtosProcessSnapshotLogicalCaseExecutionFacility implements 
         }
 
         private void enqueueCallerCompletion(
-                ProtosProcessSnapshotExecution.CaseResult result, RuntimeException hostFailure) {
-            try {
-                caller.executionDomain()
-                        .createTask(
-                                null,
-                                null,
-                                task ->
-                                        task.executeHostActionForRuntime(
-                                                () -> {
-                                                    emitAdmission(
-                                                            ProtosTestToolPerf017Admission
-                                                                    .COMPLETION_TASK_BEGIN);
-                                                    if (!future.isPending()) {
-                                                        return ProtosNullValue.INSTANCE;
-                                                    }
-
-                                                    if (hostFailure != null) {
-                                                        emitFutureTerminal(
-                                                                future.fail(
-                                                                        ProtosCoreErrors.newError(
-                                                                                caller)));
-                                                        return ProtosNullValue.INSTANCE;
-                                                    }
-
-                                                    try {
-                                                        emitFutureTerminal(
-                                                                future.resolve(
-                                                                        rematerialize(
-                                                                                Objects.requireNonNull(
-                                                                                        result,
-                                                                                        "process-snapshot"
-                                                                                            + " logical"
-                                                                                            + " Case"
-                                                                                            + " completion"),
-                                                                                caller,
-                                                                                callerPrelude),
-                                                                        caller));
-                                                    } catch (ProtosSignalException signal) {
-                                                        emitFutureTerminal(
-                                                                future.fail(signal.error()));
-                                                    }
-
-                                                    return ProtosNullValue.INSTANCE;
-                                                }));
-            } catch (IllegalStateException callerTerminated) {
-                emitFutureTerminal(future.cancelTerminal());
-            }
+                ProtosProcessSnapshotExecution.CaseResult result,
+                RuntimeException hostFailure) {
+            ProtosLogicalCaseCallerCompletion.enqueue(
+                    caller,
+                    future,
+                    hostFailure,
+                    () ->
+                            rematerialize(
+                                    Objects.requireNonNull(
+                                            result,
+                                            "process-snapshot logical Case completion"),
+                                    caller,
+                                    callerPrelude),
+                    () ->
+                            emitAdmission(
+                                    ProtosTestToolPerf017Admission
+                                            .COMPLETION_TASK_BEGIN),
+                    this::emitFutureTerminal);
         }
 
         private void requestCancellation() {

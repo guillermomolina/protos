@@ -85,6 +85,13 @@ activation);
                                         + guestErrorParentName(outcome, prelude));
                 assertSame(ProtosBooleanValue.TRUE, outcome.value());
                 assertEquals(3, submission.submittedCount());
+
+                assertEquals(
+                        true,
+                        submission.awaitAllFinished(),
+                        "all submitted host executions must physically finish before "
+                                + "physical completion order is inspected");
+
                 assertEquals(
                         2,
                         submission.maxActive(),
@@ -119,6 +126,7 @@ activation);
         private final AtomicInteger maxActive = new AtomicInteger();
         private final CountDownLatch firstPairStarted = new CountDownLatch(2);
         private final CountDownLatch secondFinished = new CountDownLatch(1);
+        private final CountDownLatch allFinished = new CountDownLatch(3);
         private final CopyOnWriteArrayList<Integer> completionOrder =
                 new CopyOnWriteArrayList<>();
 
@@ -140,6 +148,10 @@ activation);
 
         List<Integer> completionOrder() {
             return List.copyOf(completionOrder);
+        }
+
+        boolean awaitAllFinished() throws InterruptedException {
+            return allFinished.await(30, TimeUnit.SECONDS);
         }
 
         @Override
@@ -200,6 +212,7 @@ activation);
                     }
                     active.decrementAndGet();
                     state.compareAndSet(RUNNING, DONE);
+                    allFinished.countDown();
                 }
             }
 

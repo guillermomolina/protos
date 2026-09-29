@@ -36,6 +36,26 @@ public final class ProtosFutureValue extends ProtosObjectValue {
     @FunctionalInterface
     public interface CancellationProducer { void cancellationRequested(); }
 
+    static final class RuntimeHandoffCandidate {
+        private final Waiter waiter;
+
+        private RuntimeHandoffCandidate(Waiter waiter) {
+            this.waiter = Objects.requireNonNull(waiter, "waiter");
+        }
+
+        ProtosTask task() {
+            return waiter.task;
+        }
+
+        ProtosTask.WaitDependency dependency() {
+            return waiter;
+        }
+
+        boolean readyForHandoff() {
+            return waiter.soleTerminalWaiter && waiter.resumeAccepted;
+        }
+    }
+
     private final ProtosActorExecutionDomain domain;
     private State state = State.PENDING;
     private Object value;
@@ -102,7 +122,7 @@ public final class ProtosFutureValue extends ProtosObjectValue {
         if(result instanceof ProtosFutureValue)throw new IllegalArgumentException("commit result cannot adopt");
         List<Waiter>wake;List<Observer>notify;
         synchronized(this){if(state!=State.PENDING)return false;commit.run();state=State.RESOLVED;value=result;error=null;wake=List.copyOf(waiters);waiters.clear();notify=List.copyOf(observers);observers.clear();}
-        for(Waiter w:wake)w.ready();for(Observer o:notify)o.terminal(this);return true;
+        boolean soleWaiter=wake.size()==1;for(Waiter w:wake)w.ready(soleWaiter);for(Observer o:notify)o.terminal(this);return true;
     }
 
     public boolean fail(ProtosObjectValue failure) {
@@ -371,6 +391,13 @@ public final class ProtosFutureValue extends ProtosObjectValue {
         }
     }
 
+    synchronized RuntimeHandoffCandidate targetedHandoffCandidateForRuntime() {
+        if (state != State.PENDING || waiters.size() != 1) {
+            return null;
+        }
+        return new RuntimeHandoffCandidate(waiters.get(0));
+    }
+
     private boolean transition(State terminal, Object resolved, ProtosObjectValue failed) {
         List<Waiter> wake;
         List<Observer> notify;
@@ -391,7 +418,8 @@ public final class ProtosFutureValue extends ProtosObjectValue {
             observers.clear();
         }
         if (adoptionSource != null && adoptionObserver != null) adoptionSource.removeObserver(adoptionObserver);
-        for (Waiter waiter : wake) waiter.ready();
+        boolean soleWaiter = wake.size() == 1;
+        for (Waiter waiter : wake) waiter.ready(soleWaiter);
         for (Observer observer : notify) observer.terminal(this);
         return true;
     }
@@ -400,11 +428,30 @@ public final class ProtosFutureValue extends ProtosObjectValue {
         private final ProtosFutureValue future;
         private final ProtosTask task;
         private volatile boolean ready;
-        private Waiter(ProtosFutureValue future, ProtosTask task) { this.future=future; this.task=task; }
-        @Override public boolean isReady() { return ready; }
-        void ready() { ready=true; task.resume(this); }
-        @Override public void waitingTaskCancelled(ProtosTask cancelled) {
-            synchronized (future) { future.waiters.remove(this); }
+        private volatile boolean soleTerminalWaiter;
+        private volatile boolean resumeAccepted;
+
+        private Waiter(ProtosFutureValue future, ProtosTask task) {
+            this.future = future;
+            this.task = task;
+        }
+
+        @Override
+        public boolean isReady() {
+            return ready;
+        }
+
+        void ready(boolean soleTerminalWaiter) {
+            ready = true;
+            this.soleTerminalWaiter = soleTerminalWaiter;
+            resumeAccepted = task.resume(this);
+        }
+
+        @Override
+        public void waitingTaskCancelled(ProtosTask cancelled) {
+            synchronized (future) {
+                future.waiters.remove(this);
+            }
         }
     }
 }

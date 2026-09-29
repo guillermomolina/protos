@@ -267,6 +267,23 @@ public final class ProtosTask {
         return true;
     }
 
+    /**
+     * Claims one queued continuation only when it is still the exact dependency-resumption
+     * nominated by a targeted runtime completion.
+     */
+    synchronized boolean beginTargetedRuntimeHandoff(WaitDependency dependency) {
+        Objects.requireNonNull(dependency, "dependency");
+        if (state != State.RUNNABLE
+                || !queued
+                || resumedDependency != dependency
+                || cancellationPhase == CancellationPhase.REQUESTED) {
+            return false;
+        }
+        queued = false;
+        state = State.RUNNING;
+        return true;
+    }
+
     void runContinuation() {
         Object deferredFailure;
         Object deferredCompletion;

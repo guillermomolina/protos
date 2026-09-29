@@ -329,7 +329,10 @@ final class ProtosTestToolAsyncExecutionScope implements AutoCloseable {
                                                             + " prelude"));
             scope.processSnapshotLogicalCaseExecutionFacility =
                     ProtosProcessSnapshotLogicalCaseExecutionFacility.install(
-                            activation, primaryPrelude, scope.submission);
+                            activation,
+                            primaryPrelude,
+                            logicalCaseSourceRoots,
+                            scope.submission);
 
             return scope;
         } catch (RuntimeException | Error failure) {

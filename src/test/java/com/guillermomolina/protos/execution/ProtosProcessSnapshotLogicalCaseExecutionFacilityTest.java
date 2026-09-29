@@ -30,6 +30,8 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;
@@ -197,15 +199,27 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
     }
 
     @Test
-    void independentLogicalCasesRematerializeIndependentProcesses() throws Exception {
+    void independentLogicalCasesRematerializeIndependentProcesses(
+            @org.junit.jupiter.api.io.TempDir Path root) throws Exception {
         ManualSubmission submission = new ManualSubmission();
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, fallbackResolver());
         ProtosActivation activation = prelude.newModuleActivation();
         String source = identitySource();
 
+        Files.writeString(
+                root.resolve("snapshot-identity.protos"),
+                source,
+                StandardCharsets.UTF_8);
+
         try (ProtosProcessSnapshotLogicalCaseExecutionFacility facility =
                 ProtosProcessSnapshotLogicalCaseExecutionFacility.install(
-                        activation, prelude, submission)) {
+                        activation,
+                        prelude,
+                        List.of(
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "test-corpus",
+                                        root)),
+                        submission)) {
             ProtosFutureValue first =
                     invoke(prelude, activation, source, List.of("identity"), "identity");
             ProtosFutureValue second =
@@ -278,9 +292,24 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, fallbackResolver());
         ProtosActivation activation = prelude.newModuleActivation();
 
+        Path root =
+                Files.createTempDirectory(
+                        "protos-process-snapshot-logical-case-");
+
+        Files.writeString(
+                root.resolve("snapshot-identity.protos"),
+                source,
+                StandardCharsets.UTF_8);
+
         try (ProtosProcessSnapshotLogicalCaseExecutionFacility facility =
                 ProtosProcessSnapshotLogicalCaseExecutionFacility.install(
-                        activation, prelude, submission)) {
+                        activation,
+                        prelude,
+                        List.of(
+                                new ProtosTestToolFileSelectionFacility.CorpusSourceRoot(
+                                        "test-corpus",
+                                        root)),
+                        submission)) {
             ProtosFutureValue future = invoke(prelude, activation, source, signature, selector);
 
             assertEquals(ProtosFutureValue.State.PENDING, future.state());
@@ -339,7 +368,6 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
                         execution,
                         List.of(
                                 sourceAssociation,
-                                new ProtosStringValue(source),
                                 signatureValue,
                                 new ProtosStringValue(selector)),
                         activation));

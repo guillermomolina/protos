@@ -28,7 +28,6 @@ CasePlan: import("self:LogicalCasePlan")
 // each completion is stored at.
 run: (
     projections,
-    sourceLoader,
     executorAsync,
     maxInFlight,
     lifecycleObserver = null,
@@ -84,7 +83,6 @@ run: (
             item: workItems[index]
             signature: item[0]
             entry: item[1]
-            source: sourceLoader(entry)
 
             (lifecycleObserver === null).ifFalse(() => {
                 lifecycleObserver(
@@ -97,7 +95,6 @@ run: (
             completion:
                 executorAsync(
                     CasePlan.sourceAssociation(entry),
-                    source,
                     signature,
                     CasePlan.selector(entry)
                 ).value()

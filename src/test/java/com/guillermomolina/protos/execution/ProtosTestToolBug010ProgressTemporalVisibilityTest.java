@@ -87,20 +87,13 @@ final class ProtosTestToolBug010ProgressTemporalVisibilityTest {
                             return ProtosNullValue.INSTANCE;
                         });
 
-        ProtosClosureValue sourceLoader =
-                ProtosClosureValue.nativeClosure(
-                        (caller, arguments) -> {
-                            assertEquals(1, arguments.size());
-                            return new ProtosStringValue("unused-source");
-                        });
-
         ProtosClosureValue executorAsync =
                 ProtosClosureValue.nativeClosure(
                         (caller, arguments) -> {
-                            assertEquals(4, arguments.size());
+                            assertEquals(3, arguments.size());
 
                             ProtosStringValue selector =
-                                    assertInstanceOf(ProtosStringValue.class, arguments.get(3));
+                                    assertInstanceOf(ProtosStringValue.class, arguments.get(2));
 
                             ProtosFutureValue future =
                                     new ProtosFutureValue(
@@ -113,7 +106,6 @@ final class ProtosTestToolBug010ProgressTemporalVisibilityTest {
                         });
 
         activation.context().createLocalSlot("emitLine", emitLine);
-        activation.context().createLocalSlot("sourceLoader", sourceLoader);
         activation.context().createLocalSlot("executorAsync", executorAsync);
 
         String source =
@@ -150,7 +142,6 @@ final class ProtosTestToolBug010ProgressTemporalVisibilityTest {
 
                 Runner.run(
                     Array(projection),
-                    sourceLoader,
                     executorAsync,
                     1,
                     null,
