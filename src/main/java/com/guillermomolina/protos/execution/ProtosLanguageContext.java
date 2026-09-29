@@ -41,6 +41,7 @@ final class ProtosLanguageContext {
      */
     private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
             sharedBytecodeExecutionPlans = new ConcurrentHashMap<>();
+    private volatile ProtosModuleResolver boundModuleResolver;
     private volatile ProtosTaskCPrimeEntryExecution.Plan taskCPrimeEntryPlan;
     private volatile ProtosTextWriterCPrimeExecution.Plan textWriterCPrimePlan;
     private volatile ProtosTextReaderCPrimeExecution.Plan textReaderCPrimePlan;
@@ -64,6 +65,24 @@ final class ProtosLanguageContext {
             return null;
         }
         return REFERENCE.get(null);
+    }
+
+    /**
+     * Binds the module resolver private to the Process hosted by this Context; see {@link
+     * ProtosContextBoundModuleResolver}. A Context is bound at most once.
+     */
+    void bindModuleResolverForRuntime(ProtosModuleResolver resolver) {
+        Objects.requireNonNull(resolver, "resolver");
+        synchronized (this) {
+            if (boundModuleResolver != null) {
+                throw new IllegalStateException("Process module resolver is already bound");
+            }
+            boundModuleResolver = resolver;
+        }
+    }
+
+    ProtosModuleResolver boundModuleResolverForRuntime() {
+        return boundModuleResolver;
     }
 
     ProtosTaskCPrimeEntryExecution.Plan taskCPrimeEntryPlanForRuntime() {

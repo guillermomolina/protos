@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
@@ -393,6 +394,81 @@ final class ProtosTestLogicalCaseAttemptBridgeTest {
                     result.outcome().state(),
                     diagnostic);
         }
+    }
+
+    /**
+     * PERF018: one bridge bootstraps Core once and serves every Case attempt from that Prelude,
+     * while each attempt still gets a fresh Process/Context with its own module resolver. Two
+     * suites share the same entry and local-import file names but different contents, so any
+     * cross-Case resolver or module-cache sharing would surface as a wrong value.
+     */
+    @Test
+    void reusesOneCorePreludeWhileEachCaseKeepsItsOwnLocalModuleResolver(
+            @TempDir Path root) throws Exception {
+        Path suiteA = writeSuiteWithHelper(root.resolve("a"), 11);
+        Path suiteB = writeSuiteWithHelper(root.resolve("b"), 22);
+
+        try (ProtosPolyglotRuntimeHost runtimeHost =
+                ProtosPolyglotRuntimeHost.open()) {
+            ProtosTestLogicalCaseAttemptBridge bridge =
+                    new ProtosTestLogicalCaseAttemptBridge(
+                            CORE,
+                            fallbackResolver(),
+                            runtimeHost);
+
+            ProtosTestLogicalCaseAttemptBridge.Result first =
+                    bridge.execute(
+                            new ProtosTestLogicalCaseAttemptBridge.Request(
+                                    suiteA, List.of("only"), "only"));
+            ProtosTestLogicalCaseAttemptBridge.Result second =
+                    bridge.execute(
+                            new ProtosTestLogicalCaseAttemptBridge.Request(
+                                    suiteB, List.of("only"), "only"));
+            ProtosTestLogicalCaseAttemptBridge.Result firstAgain =
+                    bridge.execute(
+                            new ProtosTestLogicalCaseAttemptBridge.Request(
+                                    suiteA, List.of("only"), "only"));
+
+            assertEquals(
+                    BigInteger.valueOf(11),
+                    ((ProtosIntegerValue) first.outcome().value()).value());
+            assertEquals(
+                    BigInteger.valueOf(22),
+                    ((ProtosIntegerValue) second.outcome().value()).value());
+            assertEquals(
+                    BigInteger.valueOf(11),
+                    ((ProtosIntegerValue) firstAgain.outcome().value()).value());
+
+            assertSame(first.sourcePrelude(), second.sourcePrelude());
+            assertSame(first.sourcePrelude(), firstAgain.sourcePrelude());
+            assertEquals(
+                    0,
+                    runtimeHost.activeProcessContextCountForTesting());
+        }
+    }
+
+    private static Path writeSuiteWithHelper(Path directory, int value)
+            throws Exception {
+        Files.createDirectories(directory);
+        Files.writeString(
+                directory.resolve("helper.protos"),
+                "answer: " + value + "\n",
+                StandardCharsets.UTF_8);
+        Path suite = directory.resolve("suite.protos");
+        Files.writeString(
+                suite,
+                """
+                TestValue: import("std:test/Test")
+                Helper: import("./helper.protos")
+
+                tests: Array(
+                    TestValue("only", () => {
+                        Helper.answer
+                    })
+                )
+                """,
+                StandardCharsets.UTF_8);
+        return suite;
     }
 
     private static ProtosBundledToolModuleResolver fallbackResolver() {

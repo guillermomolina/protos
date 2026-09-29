@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.117-SNAPSHOT
+
+- `PERF018` (#731): remove the per-logical-Case Core bootstrap and its
+  temporary Polyglot Engine/Context from suite-native Test Tool execution.
+  `ProtosTestLogicalCaseAttemptBridge` now bootstraps one Core Prelude lazily
+  and reuses it for every Case attempt; the per-Case direct-file module
+  resolver is bound to each fresh Process's own Polyglot Context and reached
+  through the new internal `ProtosContextBoundModuleResolver`. Every attempt
+  still creates a fresh semantic Process and Process Context, rematerializes the
+  suite declaration, revalidates the discovery signature, resolves the selected
+  Test inside that Process, and keeps private stdout/stderr. No observable
+  Protos, Standard Library, or Test Tool behavior changes. A regression test
+  proves one shared Prelude across Cases whose same-named local modules differ.
+
 ## 0.3.116-SNAPSHOT
 
 - `DIST005-D6` (#549): add an explicit, fail-closed publication primitive for

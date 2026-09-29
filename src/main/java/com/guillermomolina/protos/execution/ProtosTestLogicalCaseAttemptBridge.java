@@ -146,6 +146,7 @@ final class ProtosTestLogicalCaseAttemptBridge {
     private final Path core;
     private final ProtosModuleResolver fallbackResolver;
     private final ProtosPolyglotRuntimeHost runtimeHost;
+    private ProtosPrelude sharedPrelude;
 
     ProtosTestLogicalCaseAttemptBridge(
             Path core,
@@ -165,6 +166,28 @@ final class ProtosTestLogicalCaseAttemptBridge {
                         "runtimeHost");
     }
 
+    /**
+     * Returns the Core Prelude shared by every Case attempt of this bridge, bootstrapping it on
+     * first use.
+     *
+     * <p>Core bootstrap is independent of the Case: the per-Case source tree is supplied to each
+     * Process through {@link ProtosPolyglotProcessContext#bindModuleResolver} and reached via
+     * {@link ProtosContextBoundModuleResolver}. The Prelude's shared standard graph is frozen and
+     * is already shared across concurrent Processes by the exact-execution facilities; genuinely
+     * per-Case state (Process, Actor module state, Contexts, suite declaration) is still created
+     * fresh for every attempt.
+     */
+    private synchronized ProtosPrelude sharedPrelude() throws IOException {
+        if (sharedPrelude == null) {
+            sharedPrelude =
+                    new ProtosCoreBootstrap()
+                            .bootstrap(
+                                    core,
+                                    new ProtosContextBoundModuleResolver(fallbackResolver));
+        }
+        return sharedPrelude;
+    }
+
     Result execute(Request request) throws Exception {
         Objects.requireNonNull(request, "request");
 
@@ -179,8 +202,7 @@ final class ProtosTestLogicalCaseAttemptBridge {
                         source,
                         fallbackResolver)) {
 
-            ProtosPrelude prelude =
-                    new ProtosCoreBootstrap().bootstrap(core, resolver);
+            ProtosPrelude prelude = sharedPrelude();
 
             ProtosProcessRuntime process =
                     new ProtosProcessRuntime(
@@ -248,6 +270,8 @@ final class ProtosTestLogicalCaseAttemptBridge {
                         stderr);
 
         try {
+            processContext.bindModuleResolver(resolver);
+
             ProtosExecutionOutcome declaration =
                     ProtosCanonicalInitialModuleExecution.execute(
                             prelude,

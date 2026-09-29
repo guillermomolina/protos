@@ -79,6 +79,19 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
         return context.evaluatePersistent(source, activation);
     }
 
+    /**
+     * Binds the module resolver private to this Process; consumed by {@link
+     * ProtosContextBoundModuleResolver}. Must precede any guest execution that resolves modules.
+     */
+    void bindModuleResolver(ProtosModuleResolver resolver) {
+        Objects.requireNonNull(resolver, "resolver");
+        callForRuntime(
+                () -> {
+                    ProtosLanguageContext.current().bindModuleResolverForRuntime(resolver);
+                    return null;
+                });
+    }
+
     private void requireActivationProcess(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
         ProtosProcessRuntime activationProcess =
