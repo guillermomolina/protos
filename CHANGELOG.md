@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.119-SNAPSHOT
+
+- `PERF016` (#727): admit the semantic Integer representation family to a
+  guarded selection path. `ProtosValueLookup.lookupGuardedInteger` runs the
+  same lookup loop as `lookupGuarded`, exempting only the Integer receiver's
+  own represented step (its delegation parent is the prelude's Integer
+  prototype, taken from the frozen prelude bindings); every other represented
+  value remains on generic lookup. `PrepareSendArguments.guardedIntegerSend`
+  caches the selected native Closure, its exact method home (Integer prototype
+  for `-`, Number prototype for `>`) and the stability Assumption, keyed by
+  selector, entered Context and prelude rather than receiver identity, so
+  fresh Integer values hit. The actual receiver and arguments still flow into
+  the unchanged `prepareImmediateMethodCall` invocation path; no Integer
+  operation is implemented at the send site. Non-native selections and any
+  failed guard fall back to the existing exact paths. No observable Protos,
+  Standard Library, or public behavior changes; no timing claim is made.
+
 ## 0.3.118-SNAPSHOT
 
 - `PERF015` (#726): admit canonical `true`/`false` to the guarded structured

@@ -6154,6 +6154,96 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardMapProtocol.StructuredReadLookupKind mapReadLookupKind,
                 Assumption stability) {}
 
+        /**
+         * PERF016: a guarded D013 selection for the semantic Integer
+         * representation family. Unlike {@link #guardedOrdinarySend} the key is
+         * the family, not one receiver object: {@code count - 1} yields a fresh
+         * {@code ProtosIntegerValue} on every iteration and must still hit.
+         * Only selection is cached; the actual current receiver and arguments
+         * flow into the unchanged {@code prepareImmediateMethodCall} path, so
+         * the selected native Closure executes exactly as on the generic path.
+         * The prelude is part of the key because the represented parent is that
+         * prelude's Integer prototype; the entered Context is retained for the
+         * same isolation rule as the other guarded sends.
+         */
+        public record GuardedIntegerSend(
+                ProtosClosureValue closure,
+                ProtosObjectValue methodHome,
+                Assumption stability) {}
+
+        @Specialization(
+                guards = {
+                    "isIntegerReceiver(receiver)",
+                    "selector.equals(cachedSelector)",
+                    "enteredContext != null",
+                    "enteredContext == cachedContext",
+                    "prelude == cachedPrelude",
+                    "cachedInteger != null"
+                },
+                assumptions = "cachedInteger.stability()",
+                limit = "3")
+        public static PreparedClosureCall guardedIntegerSend(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                @Variadic Object[] supplied,
+                @Bind("currentEnteredContext()")
+                        ProtosLanguageContext enteredContext,
+                @Bind("callerPrelude(caller)") ProtosPrelude prelude,
+                @Cached("selector") String cachedSelector,
+                @Cached("enteredContext") ProtosLanguageContext cachedContext,
+                @Cached("prelude") ProtosPrelude cachedPrelude,
+                @Cached("createGuardedIntegerSend(receiver, selector, prelude)")
+                        GuardedIntegerSend cachedInteger) {
+            return prepareImmediateMethodCall(
+                    cachedInteger.closure(),
+                    receiver,
+                    cachedInteger.methodHome(),
+                    List.of(supplied),
+                    caller);
+        }
+
+        /**
+         * Resolves only while establishing a specialization. Admits a selected
+         * native Closure only; a source-backed selection (for example a user
+         * override) stays on the existing ordinary/generic paths.
+         */
+        static GuardedIntegerSend createGuardedIntegerSend(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude) {
+            if (currentEnteredContext() == null) {
+                return null;
+            }
+            ProtosValueLookup.GuardedLookup lookup;
+            try {
+                lookup = ProtosValueLookup.lookupGuardedInteger(
+                        receiver, selector, prelude);
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return null;
+            }
+            if (lookup == null) {
+                return null;
+            }
+            ProtosSlotLookupResult selected = lookup.selected();
+            if (!(selected.value() instanceof ProtosClosureValue closure)
+                    || closure.nativeBody().isEmpty()
+                    || !lookup.stability().isValid()) {
+                lookup.stability().invalidate();
+                return null;
+            }
+            return new GuardedIntegerSend(
+                    closure, selected.home(), lookup.stability());
+        }
+
+        static boolean isIntegerReceiver(Object receiver) {
+            return ProtosValueLookup.isInteger(receiver);
+        }
+
+        static ProtosPrelude callerPrelude(ProtosActivation caller) {
+            return caller.preludeOrNullForRuntime();
+        }
+
         @Specialization(
                 guards = {
                     "receiver == cachedReceiver",
@@ -6466,6 +6556,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Specialization(
                 replaces = {
+                    "guardedIntegerSend",
                     "guardedOrdinarySend",
                     "fastOrdinarySend",
                     "guardedStructuredSend"

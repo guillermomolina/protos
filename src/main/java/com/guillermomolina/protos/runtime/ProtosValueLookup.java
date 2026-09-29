@@ -110,6 +110,54 @@ public final class ProtosValueLookup {
         return new GuardedLookup(selected.orElseThrow(), stability);
     }
 
+    /**
+     * Returns whether {@code receiver} belongs to the semantic Integer
+     * representation family, the only represented values admitted by
+     * {@link #lookupGuardedInteger}. Membership is by representation, not by
+     * value or identity: every {@link ProtosIntegerValue} is an immutable
+     * carrier with no local slots whose delegation parent is fixed by its
+     * representation contract to the owning prelude's Integer prototype.
+     */
+    public static boolean isInteger(Object receiver) {
+        return receiver instanceof ProtosIntegerValue;
+    }
+
+    /**
+     * Guarded D013 selection for a semantic Integer receiver. The Integer
+     * prototype comes from the prelude's frozen bindings, so for one prelude
+     * the represented step is the same for every Integer value; the remaining
+     * selection dependencies are the ordinary objects visited from that
+     * prototype (Integer, Number, root Object). This runs the same lookup loop
+     * as {@link #lookupGuarded}; only the receiver's own represented step is
+     * exempt from invalidation. The result is valid for any Integer receiver
+     * evaluated against the same prelude, not only for {@code receiver}. Any
+     * other receiver, including any other represented value, is unsupported
+     * here and generic lookup remains authoritative.
+     *
+     * @return a protected selection, or null when absent or unsupported
+     */
+    public static GuardedLookup lookupGuardedInteger(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (!isInteger(receiver)
+                || prelude == null
+                || delegationParent(receiver, prelude).orElse(null)
+                        != prelude.integerPrototype()) {
+            return null;
+        }
+        Assumption stability =
+                Truffle.getRuntime().createAssumption("Protos selected Integer slot");
+        Optional<ProtosSlotLookupResult> selected =
+                lookup(receiver, name, prelude, stability, true);
+        if (selected.isEmpty() || !stability.isValid()) {
+            stability.invalidate();
+            return null;
+        }
+        return new GuardedLookup(selected.orElseThrow(), stability);
+    }
+
     public static Optional<ProtosSlotLookupResult> lookup(
             Object receiver,
             String name,
@@ -130,7 +178,9 @@ public final class ProtosValueLookup {
             String name,
             ProtosPrelude prelude,
             Assumption stability,
-            boolean admitCanonicalBooleanReceiver) {
+            // Set only by a family-specific guarded entry point that has already
+            // proven the receiver's own represented step is fixed.
+            boolean admitRepresentedReceiverStep) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(name, "name");
 
@@ -146,7 +196,7 @@ public final class ProtosValueLookup {
                     return Optional.of(new ProtosSlotLookupResult(local.orElseThrow(), ordinary));
                 }
             } else if (stability != null
-                    && !(admitCanonicalBooleanReceiver && current == receiver)) {
+                    && !(admitRepresentedReceiverStep && current == receiver)) {
                 stability.invalidate();
             }
 

@@ -25,6 +25,10 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
+import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.nio.file.Path;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -245,6 +249,100 @@ final class ProtosGuardedLookupTest {
         assertFalse(ProtosValueLookup.isCanonicalBoolean(represented));
         assertTrue(ProtosValueLookup.isCanonicalBoolean(ProtosBooleanValue.TRUE));
         assertTrue(ProtosValueLookup.isCanonicalBoolean(ProtosBooleanValue.FALSE));
+    }
+
+    private static ProtosPrelude corePrelude() throws IOException {
+        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+    }
+
+    private static ProtosIntegerValue integer(long value) {
+        return new ProtosIntegerValue(BigInteger.valueOf(value));
+    }
+
+    /** PERF016: admission is by representation family, never by value or identity. */
+    @Test
+    void integerFamilyAdmissionIsByRepresentationNotIdentity() throws IOException {
+        var prelude = corePrelude();
+        var first = integer(3);
+        var second = integer(3);
+        var huge = new ProtosIntegerValue(BigInteger.TWO.pow(200));
+        for (Object receiver : new Object[] {first, second, huge}) {
+            assertTrue(ProtosValueLookup.isInteger(receiver));
+            assertNotNull(ProtosValueLookup.lookupGuardedInteger(receiver, "-", prelude));
+        }
+        assertFalse(ProtosValueLookup.isInteger(ProtosBooleanValue.TRUE));
+        assertFalse(ProtosValueLookup.isInteger(new ProtosFloatValue(1.5d)));
+        assertFalse(ProtosValueLookup.isInteger(
+                new MutableRepresentedValue(prelude.integerPrototype())));
+        assertFalse(ProtosValueLookup.isInteger(object()));
+    }
+
+    @Test
+    void integerMinusSelectsIntegerPrototypeAndMatchesGenericLookup() throws IOException {
+        var prelude = corePrelude();
+        var guarded = ProtosValueLookup.lookupGuardedInteger(integer(10), "-", prelude);
+        assertNotNull(guarded);
+        assertTrue(guarded.stability().isValid());
+        assertSame(prelude.integerPrototype(), guarded.selected().home());
+        assertTrue(guarded.selected().value() instanceof ProtosClosureValue closure
+                && closure.nativeBody().isPresent());
+
+        // The selection made from one Integer is exactly the generic selection
+        // for every other Integer, so it is reusable across fresh receivers.
+        for (long value : new long[] {10, 9, 0, -7}) {
+            var generic = ProtosValueLookup.lookup(integer(value), "-", prelude).orElseThrow();
+            assertSame(generic.value(), guarded.selected().value());
+            assertSame(generic.home(), guarded.selected().home());
+        }
+        assertTrue(guarded.stability().isValid());
+    }
+
+    @Test
+    void integerGreaterSelectsNumberPrototypeAndMatchesGenericLookup() throws IOException {
+        var prelude = corePrelude();
+        var guarded = ProtosValueLookup.lookupGuardedInteger(integer(10), ">", prelude);
+        assertNotNull(guarded);
+        assertTrue(guarded.stability().isValid());
+        assertSame(prelude.numberPrototype(), guarded.selected().home());
+        assertTrue(guarded.selected().value() instanceof ProtosClosureValue closure
+                && closure.nativeBody().isPresent());
+
+        for (long value : new long[] {10, 9, 0, -7}) {
+            var generic = ProtosValueLookup.lookup(integer(value), ">", prelude).orElseThrow();
+            assertSame(generic.value(), guarded.selected().value());
+            assertSame(generic.home(), guarded.selected().home());
+        }
+    }
+
+    /**
+     * The published standard graph is frozen by Core bootstrap, so selection
+     * dependencies on Integer/Number/root Object cannot be mutated here; the
+     * ordinary-chain invalidation contract itself is covered by the
+     * lookupGuarded tests above, which share the same lookup loop.
+     */
+    @Test
+    void integerGuardedSelectionDependsOnFrozenStandardGraph() throws IOException {
+        var prelude = corePrelude();
+        assertTrue(prelude.integerPrototype().isFrozen());
+        assertTrue(prelude.numberPrototype().isFrozen());
+        assertThrows(IllegalStateException.class,
+                () -> prelude.numberPrototype().createLocalSlot(">", new Object()));
+    }
+
+    @Test
+    void integerGuardedSelectionFallsBackForUnsupportedReceiversAndSelectors()
+            throws IOException {
+        var prelude = corePrelude();
+        assertNull(ProtosValueLookup.lookupGuardedInteger(integer(1), "perf016Absent", prelude));
+        assertNull(ProtosValueLookup.lookupGuardedInteger(integer(1), "-", null));
+        assertNull(ProtosValueLookup.lookupGuardedInteger(new ProtosFloatValue(1.5d), "-", prelude));
+        assertNull(ProtosValueLookup.lookupGuardedInteger(ProtosBooleanValue.TRUE, "-", prelude));
+        assertNull(ProtosValueLookup.lookupGuardedInteger(object(), "-", prelude));
+        assertNull(ProtosValueLookup.lookupGuardedInteger(
+                new MutableRepresentedValue(prelude.integerPrototype()), "-", prelude));
+        // The ordinary entry point and the Boolean entry point stay generic for Integer.
+        assertNull(ProtosValueLookup.lookupGuarded(integer(1), "-", prelude));
+        assertNull(ProtosValueLookup.lookupGuardedCanonicalBoolean(integer(1), "-", prelude));
     }
 
     private static final class MutableRepresentedValue implements ProtosRepresentedValue {
