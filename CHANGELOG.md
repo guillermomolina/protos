@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.110-SNAPSHOT
+
+- `DIST005-B` (#549): implement and prove a development Native Image
+  self-contained distribution for the current Linux x86_64/glibc target. The
+  extracted archive carries the Native Protos executable plus the required
+  Protos library, tool, test, license, runtime/dependency identity, provenance,
+  and checksum material, and the launcher selects the bundled Native payload
+  without probing for Java while preserving the existing JVM execution paths
+  when no Native payload is present. Native Image construction now uses a
+  recreated thin application JAR rather than feeding a previously shaded JAR
+  back into the Native classpath, making repeated Native builds compositionally
+  stable. Closed-world reachability retains the LSP4J protocol surface
+  structurally, while the Native build keeps Truffle runtime compilation
+  enabled. Distribution admission exercises version/help/eval, unrelated-CWD
+  source execution, workspace run, Package Tool, focal and complete Test Tool
+  execution, real PTY REPL, real LSP stdio, real DAP TCP, archive integrity,
+  absence of external Java/Maven, and forced guest compilation of both generated
+  Bytecode roots to Truffle Tier 2. No Protos language, specification, Standard
+  Library, or public tool semantics change.
 ## 0.3.109-SNAPSHOT
 
 - `BUG011` (#738): make Test Tool PERF017 JFR admission instrumentation

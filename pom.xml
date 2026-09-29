@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.109-SNAPSHOT</version>
+    <version>0.3.110-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -25,6 +25,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <graalvm.version>25.4.4.1.1</graalvm.version>
         <lsp4j.version>1.0.0</lsp4j.version>
+        <protos.shade.skip>false</protos.shade.skip>
     </properties>
 
     <dependencies>
@@ -145,7 +146,26 @@
                     </execution>
                 </executions>
             </plugin>
-            <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version><configuration><archive><manifest><mainClass>com.guillermomolina.protos.cli.ProtosCli</mainClass><addDefaultImplementationEntries>true</addDefaultImplementationEntries></manifest></archive></configuration></plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <!--
+                        Shade post-processes the main JAR in ordinary JVM builds.
+                        Always recreate the thin JAR first so repeated package
+                        invocations cannot feed a previously shaded JAR back
+                        into Shade or Native Image.
+                    -->
+                    <forceCreation>true</forceCreation>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.guillermomolina.protos.cli.ProtosCli</mainClass>
+                            <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
             <!-- PERF006-C2 / PLAT033: target/runtime is a generated projection of the
                  Graal/Truffle/Polyglot roots already declared by this root POM. -->
             <plugin>
@@ -221,6 +241,7 @@
                         <phase>package</phase>
                         <goals><goal>shade</goal></goals>
                         <configuration>
+                            <skip>${protos.shade.skip}</skip>
                             <createDependencyReducedPom>false</createDependencyReducedPom>
                             <artifactSet>
                                 <excludes>
@@ -258,6 +279,14 @@
     <profiles>
         <profile>
             <id>native</id>
+            <properties>
+                <!--
+                    Native Image consumes the thin application JAR plus the
+                    resolved runtime dependency graph directly. Do not feed it
+                    an uber-JAR containing those dependencies a second time.
+                -->
+                <protos.shade.skip>true</protos.shade.skip>
+            </properties>
             <build>
                 <plugins>
                     <plugin>

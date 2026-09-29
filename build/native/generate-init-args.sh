@@ -130,7 +130,13 @@ main() {
     mkdir -p "$(dirname "${output}")"
 
     joined="$(IFS=,; printf '%s' "${classes[*]}")"
-    printf '%s\n' "--initialize-at-build-time=${joined}" > "${output}"
+    {
+        printf '%s\n' "--initialize-at-build-time=${joined}"
+        printf '%s\n' "-H:+UnlockExperimentalVMOptions"
+        printf '%s\n' "-H:Preserve=package=org.eclipse.lsp4j.*"
+        printf '%s\n' "-H:-UnlockExperimentalVMOptions"
+        printf '%s\n' "--enable-native-access=org.graalvm.truffle"
+    } > "${output}"
 
     printf 'native-image build-time generated classes: %d\n' "${#classes[@]}"
 }

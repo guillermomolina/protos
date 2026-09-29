@@ -3,6 +3,13 @@ set -eu
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
+NATIVE_BIN=$ROOT/libexec/protos-native
+if [ -x "$NATIVE_BIN" ]; then
+    PROTOS_HOME=$ROOT
+    export PROTOS_HOME
+    exec "$NATIVE_BIN" "$@"
+fi
+
 if [ -n "${PROTOS_JAVA:-}" ]; then
     JAVA_BIN=$PROTOS_JAVA
 elif [ -n "${JAVA_HOME:-}" ] && [ -x "$JAVA_HOME/bin/java" ]; then
