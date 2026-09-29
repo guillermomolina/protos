@@ -665,6 +665,72 @@ before closure (`false`) and after closure (`true`). It never regenerates the
 archive and performs no tag, GitHub Release, envelope, audit, or asset
 publication.
 
+
+## Explicit authorized prerelease publication
+
+`DIST005-D6` adds the publication step as a separate action after
+`dist/prepare_release.py` has produced and independently verified one complete
+`JVM_PLUS_NATIVE` candidate and release envelope. Preparation still does not
+authorize or perform publication.
+
+Publication requires a separate exact authorization record:
+
+```text
+publication_authorization_format=protos-dist005-publication-authorization-v1
+release_publication_authorized=true
+authorization_basis=explicit-user-decision
+candidate_source_revision=<exact-40-hex-candidate-sha>
+release_version=V
+release_tag=vV
+release_manifest_sha256=<sha256-of-exact-RELEASE_MANIFEST.txt>
+github_release_prerelease=true
+github_release_draft=false
+```
+
+The publisher is invoked only against the already-prepared candidate and
+envelope:
+
+```sh
+python3 dist/publish_release.py     --authorization /path/to/publication-authorization.txt     --candidate /path/to/detached-candidate-worktree     --envelope-dir /path/to/release-envelope
+```
+
+Before any public mutation, the publisher fails closed unless the authorization,
+candidate HEAD, detached/clean state, release-only lineage, canonical `origin`,
+manifest identity, release notes, two release archives, external checksums, and
+the independent multi-asset metadata verifier all agree exactly. It also checks
+local/remote `vV` state and any existing GitHub Release before mutation.
+
+For the current `JVM_PLUS_NATIVE` model, the public GitHub Release is exactly:
+
+```text
+tag: vV
+title: Protos V
+prerelease: true
+draft: false
+body: exact RELEASE_NOTES.md bytes
+
+downloadable assets:
+- Native ZIP
+- Native ZIP .sha256
+- portable JVM ZIP
+- portable JVM ZIP .sha256
+- RELEASE_MANIFEST.txt
+```
+
+`RELEASE_NOTES.md` is the Release body and is not uploaded as a sixth asset.
+
+Publication is deliberately resumable but not destructive. An exact existing
+lightweight tag, exact Release metadata/body, and exact already-published asset
+bytes may be reused. A partial exact Release may upload only missing expected
+assets. Conflicting tags, Release metadata/body, asset bytes, or unexpected
+assets fail closed. The publisher never force-moves a tag, clobbers or replaces
+an asset, deletes release state, or performs automatic rollback.
+
+After mutation it re-verifies the public tag, Release metadata, exact five-asset
+set, downloaded asset digests, and authorized release-manifest digest before
+emitting `DIST005_RELEASE_PUBLICATION: PASS`.
+
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

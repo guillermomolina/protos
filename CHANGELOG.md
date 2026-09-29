@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.116-SNAPSHOT
+
+- `DIST005-D6` (#549): add an explicit, fail-closed publication primitive for
+  an already-prepared and already-verified `JVM_PLUS_NATIVE` prerelease.
+  `dist/publish_release.py` consumes a separate exact publication authorization
+  bound to candidate SHA, public version/tag, release-manifest SHA-256, and
+  prerelease/non-draft GitHub Release mode. Before any public mutation it
+  revalidates detached clean candidate identity and release-only lineage,
+  canonical repository identity, release manifest, notes, archive/checksum
+  bytes, the independent multi-asset metadata verifier, local and remote tag
+  state, and any existing GitHub Release/assets. Publication creates or safely
+  reuses only the exact lightweight `vV` tag, exact `Protos V` prerelease body,
+  and the five current downloadable assets: Native ZIP/checksum, portable JVM
+  ZIP/checksum, and `RELEASE_MANIFEST.txt`; release notes remain the body rather
+  than an asset. Exact partial publication is resumable without tag force,
+  asset clobber, deletion, replacement, or automatic rollback, while conflicting
+  tags, metadata, bodies, digests, or unexpected assets fail closed. Post-
+  publication verification re-reads the remote tag, GitHub Release metadata,
+  complete asset set, downloaded asset digests, and authorized manifest identity
+  before reporting success. The publication path remains separate from
+  `dist/prepare_release.py`; implementation tests use fixtures and local Git
+  only and perform no real release publication.
+
 ## 0.3.115-SNAPSHOT
 
 - `PERF019` (#736): remove the two independent caller-Actor serialization
