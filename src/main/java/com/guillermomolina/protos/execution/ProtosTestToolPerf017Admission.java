@@ -24,6 +24,7 @@ import java.util.WeakHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import jdk.jfr.Event;
 import jdk.jfr.EventType;
+import jdk.jfr.FlightRecorder;
 import jdk.jfr.Label;
 import jdk.jfr.Name;
 import jdk.jfr.StackTrace;
@@ -48,8 +49,6 @@ final class ProtosTestToolPerf017Admission {
     static final String SUBMIT_RETURN = "SUBMIT_RETURN";
     static final String CARRIER_RUN_BEGIN = "CARRIER_RUN_BEGIN";
 
-    private static final EventType EVENT_TYPE =
-            EventType.getEventType(ProtosTestToolPerf017AdmissionEvent.class);
     private static final AtomicLong NEXT_OPERATION_ID = new AtomicLong();
     private static final AtomicLong NEXT_LANE_ID = new AtomicLong();
     private static final Map<ProtosTask, Long> LANE_IDS = new WeakHashMap<>();
@@ -57,7 +56,16 @@ final class ProtosTestToolPerf017Admission {
     private ProtosTestToolPerf017Admission() {}
 
     static boolean enabled() {
-        return EVENT_TYPE.isEnabled();
+        try {
+            if (!FlightRecorder.isAvailable()) {
+                return false;
+            }
+            return EventType.getEventType(
+                            ProtosTestToolPerf017AdmissionEvent.class)
+                    .isEnabled();
+        } catch (InternalError unavailable) {
+            return false;
+        }
     }
 
     static OperationCorrelation operationCorrelation(ProtosActivation caller) {

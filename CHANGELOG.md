@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.109-SNAPSHOT
+
+- `BUG011` (#738): make Test Tool PERF017 JFR admission instrumentation
+  capability-optional so the Test Tool runs correctly in GraalVM Native Image,
+  where Flight Recorder is not available. PERF017 previously initialized its
+  JFR `EventType` eagerly; Native Image therefore raised
+  `InternalError: Flight Recorder is not supported on this VM` as soon as the
+  Test Tool reported its first lifecycle event. The subsequent Session teardown
+  then attempted to close the RuntimeHost while Process Contexts from the
+  interrupted execution were still active, masking the primary failure with
+  `Polyglot runtime host cannot close while Process Contexts are active`.
+  PERF017 now reports disabled when JFR is unavailable while retaining the
+  existing JFR event behavior on supported JVMs; the RuntimeHost close
+  invariant remains unchanged. The Native Image regression gate now includes
+  the canonical `uri/parse.protos` Test Tool smoke and requires its 4/4 result,
+  zero exit status, and absence of the Process-Context teardown diagnostic.
+
 ## 0.3.108-SNAPSHOT
 
 - `DIST006-C1`: restore Native Image compatibility on the canonical GraalVM /

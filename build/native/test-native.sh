@@ -14,6 +14,7 @@ trap 'rm -rf "${tmp_dir}"' EXIT
 version_log="${tmp_dir}/version.log"
 help_log="${tmp_dir}/help.log"
 smoke_log="${tmp_dir}/smoke.log"
+test_tool_log="${tmp_dir}/test-tool.log"
 jit_log="${tmp_dir}/forced-jit.log"
 
 PROTOS_HOME="${root}" \
@@ -33,6 +34,33 @@ PROTOS_HOME="${root}" \
     -e '1' \
     >"${smoke_log}" 2>&1
 smoke_status=$?
+
+PROTOS_HOME="${root}" \
+    "${native_bin}" \
+    test --file "${root}/protos/tests/library/uri/parse.protos" \
+    >"${test_tool_log}" 2>&1
+test_tool_status=$?
+
+test_tool_output_ok=1
+for expected_line in \
+    "[uri] 0/4" \
+    "[uri] 1/4" \
+    "[uri] 2/4" \
+    "[uri] 3/4" \
+    "[uri] 4/4 passed" \
+    "4 passed, 0 failed"
+do
+    if ! grep -Fqx -- "${expected_line}" "${test_tool_log}"; then
+        test_tool_output_ok=0
+    fi
+done
+
+test_tool_context_teardown_failures="$(
+    grep -Fic \
+        'Polyglot runtime host cannot close while Process Contexts are active' \
+        "${test_tool_log}" \
+        || true
+)"
 
 PROTOS_HOME="${root}" \
     "${native_bin}" \
@@ -90,6 +118,9 @@ opt_done="$(
 echo "NATIVE_VERSION_STATUS=${version_status}"
 echo "NATIVE_HELP_STATUS=${help_status}"
 echo "NATIVE_GUEST_SMOKE_STATUS=${smoke_status}"
+echo "NATIVE_TEST_TOOL_STATUS=${test_tool_status}"
+echo "NATIVE_TEST_TOOL_OUTPUT_OK=${test_tool_output_ok}"
+echo "NATIVE_TEST_TOOL_CONTEXT_TEARDOWN_FAILURES=${test_tool_context_teardown_failures}"
 echo "NATIVE_FORCED_JIT_STATUS=${jit_status}"
 echo "OPT_DONE=${opt_done}"
 echo "OPT_FAILED=${opt_failed}"
@@ -113,6 +144,24 @@ fi
 if [[ "${smoke_status}" -ne 0 ]]; then
     cat "${smoke_log}" >&2
     echo "NATIVE_GUEST_SMOKE=FAIL" >&2
+    exit 1
+fi
+
+if [[ "${test_tool_status}" -ne 0 ]]; then
+    cat "${test_tool_log}" >&2
+    echo "NATIVE_TEST_TOOL_SMOKE=FAIL_STATUS" >&2
+    exit 1
+fi
+
+if [[ "${test_tool_output_ok}" -ne 1 ]]; then
+    cat "${test_tool_log}" >&2
+    echo "NATIVE_TEST_TOOL_SMOKE=FAIL_OUTPUT" >&2
+    exit 1
+fi
+
+if [[ "${test_tool_context_teardown_failures}" -ne 0 ]]; then
+    cat "${test_tool_log}" >&2
+    echo "NATIVE_TEST_TOOL_SMOKE=FAIL_CONTEXT_TEARDOWN" >&2
     exit 1
 fi
 
@@ -155,6 +204,7 @@ fi
 echo "NATIVE_VERSION_SMOKE=PASS"
 echo "NATIVE_HELP_SMOKE=PASS"
 echo "NATIVE_GUEST_SMOKE=PASS"
+echo "NATIVE_TEST_TOOL_SMOKE=PASS"
 echo "NATIVE_FORCED_GUEST_JIT=PASS"
 echo "HELPER_BYTECODE_ROOT_TIER2=PASS"
 echo "SEMANTIC_BYTECODE_ROOT_TIER2=PASS"
