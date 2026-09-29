@@ -18,14 +18,20 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
@@ -33,6 +39,7 @@ import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -268,6 +275,97 @@ final class ProtosI072PhaseEStructuredSendConvergenceTest {
         }
 
         System.out.println("I072_PHASE_E_WARMED_MAP_ATPUT_HIT_INVALIDATES_ON_OVERRIDE=PASS");
+    }
+
+    /**
+     * PERF015: canonical represented Booleans are admitted to the guarded
+     * structured selection for exactly the five Boolean callbacks, with the
+     * canonical behavior/home provenance of the generic D013 selection.
+     */
+    @Test
+    void canonicalBooleanReceiversAreAdmittedToGuardedStructuredSelection() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
+            String[] selectors = {"ifTrue", "ifFalse", "ifTrueIfFalse", "and", "or"};
+            ProtosStandardBooleanProtocol.StructuredCallbackKind[] kinds = {
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_FALSE,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE_IF_FALSE,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.AND,
+                ProtosStandardBooleanProtocol.StructuredCallbackKind.OR
+            };
+            for (ProtosBooleanValue receiver :
+                    new ProtosBooleanValue[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {
+                for (int i = 0; i < selectors.length; i++) {
+                    var send = ProtosBytecodeRootNode.PrepareSendArguments
+                            .createGuardedStructuredSend(receiver, selectors[i], module);
+                    assertNotNull(send, selectors[i]);
+                    var generic = ProtosValueLookup.lookup(
+                            receiver, selectors[i], prelude).orElseThrow();
+                    assertSame(generic.value(), send.closure());
+                    assertSame(generic.home(), send.methodHome());
+                    assertSame(ProtosObjectValue.rootObject(), send.methodHome());
+                    assertEquals(
+                            ProtosBytecodeRootNode.PrepareSendArguments
+                                    .GuardedStructuredKind.BOOLEAN,
+                            send.kind());
+                    assertEquals(kinds[i], send.booleanKind());
+                    assertTrue(send.stability().isValid());
+                }
+                // Not a Boolean callback: no guarded admission, generic path remains.
+                assertNull(ProtosBytecodeRootNode.PrepareSendArguments
+                        .createGuardedStructuredSend(receiver, "not", module));
+                assertNull(ProtosBytecodeRootNode.PrepareSendArguments
+                        .createGuardedStructuredSend(receiver, "ensure", module));
+            }
+        }
+        System.out.println("PERF015_CANONICAL_BOOLEAN_REPRESENTED_GUARD=PASS");
+    }
+
+    /**
+     * Core bootstrap freezes the standard graph including root Object, so the
+     * canonical Boolean selection is immutable in a bootstrapped Context: the
+     * warmed guard must stay valid and keep hitting, and the frozen root
+     * rejects the mutation that would otherwise invalidate it.
+     */
+    @Test
+    void warmedCanonicalBooleanHitStaysValidOnFrozenStandardSelection() throws Exception {
+        try (LanguageScope scope = languageScope()) {
+            ProtosPrelude prelude = core();
+            ProtosActivation module = activation(prelude, new ProtosActorExecutionDomain());
+            ProtosObjectValue root = ProtosObjectValue.rootObject();
+            AtomicInteger callbackCalls = new AtomicInteger();
+
+            module.context().createLocalSlot("flag", ProtosBooleanValue.TRUE);
+            module.context().createLocalSlot(
+                    "callback",
+                    nativeClosure(
+                            (activation, supplied) -> {
+                                callbackCalls.incrementAndGet();
+                                return ProtosBooleanValue.TRUE;
+                            }));
+            ProtosBytecodeRootNode site =
+                    lowerRoot(scope.language(), "flag.ifTrue(callback)",
+                            "perf015-boolean-warm.protos");
+
+            for (int i = 0; i < 4; i++) {
+                assertSame(ProtosBooleanValue.TRUE, site.getCallTarget().call(module));
+            }
+            assertEquals(4, callbackCalls.get());
+
+            var warmed = ProtosBytecodeRootNode.PrepareSendArguments
+                    .createGuardedStructuredSend(ProtosBooleanValue.TRUE, "ifTrue", module);
+            assertNotNull(warmed);
+            assertTrue(root.isFrozen());
+            assertThrows(
+                    IllegalStateException.class,
+                    () -> root.assignLocalSlot("ifTrue", warmed.closure()));
+            assertTrue(warmed.stability().isValid());
+            assertSame(ProtosBooleanValue.TRUE, site.getCallTarget().call(module));
+            assertEquals(5, callbackCalls.get());
+        }
+        System.out.println("PERF015_BOOLEAN_FROZEN_SELECTION_STABLE=PASS");
     }
 
     private static ProtosClosureValue nativeClosure(

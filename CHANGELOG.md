@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.118-SNAPSHOT
+
+- `PERF015` (#726): admit canonical `true`/`false` to the guarded structured
+  selection path. `ProtosValueLookup.lookupGuardedCanonicalBoolean` runs the
+  same lookup loop as `lookupGuarded`, exempting only the canonical Boolean
+  receiver's own represented step (its delegation parent is fixed by
+  representation to the root Object); `lookupGuarded` and every other
+  represented value remain on generic lookup. `createGuardedStructuredSend`
+  uses it for canonical Boolean receivers and admits only selections classified
+  by the existing exact canonical Boolean behavior/home helper (`ifTrue`,
+  `ifFalse`, `ifTrueIfFalse`, `and`, `or`), reusing the I072 Phase E structured
+  Boolean machinery, so a valid hit no longer repeats generic represented-value
+  selection. Any other selection falls back to the exact generic path. No
+  observable Protos, Standard Library, or public behavior changes; no timing
+  claim is made.
+
 ## 0.3.117-SNAPSHOT
 
 - `PERF018` (#731): remove the per-logical-Case Core bootstrap and its

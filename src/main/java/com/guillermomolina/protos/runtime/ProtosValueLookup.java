@@ -67,6 +67,49 @@ public final class ProtosValueLookup {
         return new GuardedLookup(selected.orElseThrow(), stability);
     }
 
+    /**
+     * Returns whether {@code receiver} is one of the two canonical Boolean
+     * identities, the only represented values admitted by
+     * {@link #lookupGuardedCanonicalBoolean}.
+     */
+    public static boolean isCanonicalBoolean(Object receiver) {
+        return receiver == ProtosBooleanValue.TRUE || receiver == ProtosBooleanValue.FALSE;
+    }
+
+    /**
+     * Guarded D013 selection for a canonical {@code true}/{@code false}
+     * receiver. Canonical Booleans are represented values with no local slots
+     * whose delegation parent is fixed by their representation to the root
+     * Object, so the only mutable selection dependencies are the ordinary
+     * objects visited from that parent. This runs the same lookup loop as
+     * {@link #lookupGuarded}; only the receiver's own represented step is
+     * exempt from invalidation. Any other receiver, including any other
+     * represented value, is unsupported here and generic lookup remains
+     * authoritative.
+     *
+     * @return a protected selection, or null when absent or unsupported
+     */
+    public static GuardedLookup lookupGuardedCanonicalBoolean(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude) {
+        CompilerAsserts.neverPartOfCompilation();
+        if (!isCanonicalBoolean(receiver)
+                || delegationParent(receiver, prelude).orElse(null)
+                        != ProtosObjectValue.rootObject()) {
+            return null;
+        }
+        Assumption stability =
+                Truffle.getRuntime().createAssumption("Protos selected Boolean slot");
+        Optional<ProtosSlotLookupResult> selected =
+                lookup(receiver, name, prelude, stability, true);
+        if (selected.isEmpty() || !stability.isValid()) {
+            stability.invalidate();
+            return null;
+        }
+        return new GuardedLookup(selected.orElseThrow(), stability);
+    }
+
     public static Optional<ProtosSlotLookupResult> lookup(
             Object receiver,
             String name,
@@ -79,6 +122,15 @@ public final class ProtosValueLookup {
             String name,
             ProtosPrelude prelude,
             Assumption stability) {
+        return lookup(receiver, name, prelude, stability, false);
+    }
+
+    private static Optional<ProtosSlotLookupResult> lookup(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude,
+            Assumption stability,
+            boolean admitCanonicalBooleanReceiver) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(name, "name");
 
@@ -93,7 +145,8 @@ public final class ProtosValueLookup {
                 if (local.isPresent()) {
                     return Optional.of(new ProtosSlotLookupResult(local.orElseThrow(), ordinary));
                 }
-            } else if (stability != null) {
+            } else if (stability != null
+                    && !(admitCanonicalBooleanReceiver && current == receiver)) {
                 stability.invalidate();
             }
 

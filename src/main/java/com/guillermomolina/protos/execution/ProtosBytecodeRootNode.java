@@ -6358,10 +6358,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 String selector,
                 ProtosActivation caller) {
+            boolean canonicalBoolean = ProtosValueLookup.isCanonicalBoolean(receiver);
             ProtosValueLookup.GuardedLookup lookup;
             try {
-                lookup = ProtosValueLookup.lookupGuarded(
-                        receiver, selector, caller.preludeOrNullForRuntime());
+                lookup = canonicalBoolean
+                        ? ProtosValueLookup.lookupGuardedCanonicalBoolean(
+                                receiver, selector, caller.preludeOrNullForRuntime())
+                        : ProtosValueLookup.lookupGuarded(
+                                receiver, selector, caller.preludeOrNullForRuntime());
             } catch (UnsupportedOperationException unsupportedRepresentation) {
                 return null;
             }
@@ -6375,6 +6379,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return null;
             }
             ProtosObjectValue home = selected.home();
+            if (canonicalBoolean) {
+                // PERF015: a represented Boolean is admitted only for the
+                // canonical Boolean callbacks; every other selection stays generic.
+                ProtosStandardBooleanProtocol.StructuredCallbackKind canonicalKind =
+                        ProtosStandardBooleanProtocol
+                                .structuredCallbackKindForCanonicalSelection(closure, home);
+                if (canonicalKind == null || !lookup.stability().isValid()) {
+                    lookup.stability().invalidate();
+                    return null;
+                }
+                return new GuardedStructuredSend(
+                        closure, home, GuardedStructuredKind.BOOLEAN, canonicalKind,
+                        null, lookup.stability());
+            }
             GuardedStructuredKind kind;
             ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind = null;
             ProtosStandardMapProtocol.StructuredReadLookupKind mapReadLookupKind = null;

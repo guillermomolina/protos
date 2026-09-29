@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeFalse;
 
 import java.util.Set;
 import org.junit.jupiter.api.Test;
@@ -183,6 +184,67 @@ final class ProtosGuardedLookupTest {
         assertNull(ProtosValueLookup.lookupGuarded(receiver, "pick", null));
         assertSame(second,
                 ProtosValueLookup.lookup(receiver, "pick", null).orElseThrow().home());
+    }
+
+    @Test
+    void canonicalBooleanGuardedSelectionMatchesGenericLookup() {
+        var root = ProtosObjectValue.rootObject();
+        for (Object receiver : new Object[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {
+            assertNull(ProtosValueLookup.lookupGuardedCanonicalBoolean(
+                    receiver, "perf015Absent", null));
+            // The ordinary guarded entry point stays generic for represented values.
+            assertNull(ProtosValueLookup.lookupGuarded(receiver, "ifTrue", null));
+
+            // Present only once Core bootstrap has installed the standard protocol.
+            if (root.hasLocalSlot("ifTrue")) {
+                var guarded = ProtosValueLookup.lookupGuardedCanonicalBoolean(
+                        receiver, "ifTrue", null);
+                assertNotNull(guarded);
+                assertTrue(guarded.stability().isValid());
+                var generic = ProtosValueLookup.lookup(receiver, "ifTrue", null).orElseThrow();
+                assertSame(generic.value(), guarded.selected().value());
+                assertSame(generic.home(), guarded.selected().home());
+                assertSame(root, guarded.selected().home());
+            }
+        }
+    }
+
+    /**
+     * Root Object is frozen by Core bootstrap, so this mutation evidence is
+     * only reachable while it is still open (JVM-order dependent).
+     */
+    @Test
+    void canonicalBooleanGuardedSelectionInvalidatesOnRootObjectMutation() {
+        var root = ProtosObjectValue.rootObject();
+        assumeFalse(root.isFrozen(), "root Object already frozen by Core bootstrap");
+        for (Object receiver : new Object[] {ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE}) {
+            Object first = new Object();
+            Object second = new Object();
+            root.createLocalSlot("perf015Probe", first);
+            try {
+                var guarded = ProtosValueLookup.lookupGuardedCanonicalBoolean(
+                        receiver, "perf015Probe", null);
+                assertNotNull(guarded);
+                assertTrue(guarded.stability().isValid());
+                assertSame(first, guarded.selected().value());
+                root.assignLocalSlot("perf015Probe", second);
+                assertFalse(guarded.stability().isValid());
+            } finally {
+                root.removeLocalSlot("perf015Probe");
+            }
+        }
+    }
+
+    @Test
+    void canonicalBooleanGuardedSelectionRejectsOtherReceivers() {
+        var represented = new MutableRepresentedValue(ProtosObjectValue.rootObject());
+        assertNull(ProtosValueLookup.lookupGuardedCanonicalBoolean(
+                represented, "perf015Probe", null));
+        assertNull(ProtosValueLookup.lookupGuardedCanonicalBoolean(
+                object(), "perf015Probe", null));
+        assertFalse(ProtosValueLookup.isCanonicalBoolean(represented));
+        assertTrue(ProtosValueLookup.isCanonicalBoolean(ProtosBooleanValue.TRUE));
+        assertTrue(ProtosValueLookup.isCanonicalBoolean(ProtosBooleanValue.FALSE));
     }
 
     private static final class MutableRepresentedValue implements ProtosRepresentedValue {
