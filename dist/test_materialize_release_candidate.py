@@ -124,16 +124,25 @@ class ReleaseCandidateMaterializationTest(unittest.TestCase):
             encoding="utf-8",
         )
 
-    def invoke(self, *, check: bool = True) -> subprocess.CompletedProcess[str]:
+    def invoke(
+        self,
+        *,
+        check: bool = True,
+        baseline_ref: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        command = [
+            sys.executable,
+            "dist/materialize_release_candidate.py",
+            "--selection",
+            str(self.selection),
+            "--candidate",
+            str(self.candidate),
+        ]
+        if baseline_ref is not None:
+            command.extend(["--baseline-ref", baseline_ref])
+
         return run(
-            [
-                sys.executable,
-                "dist/materialize_release_candidate.py",
-                "--selection",
-                str(self.selection),
-                "--candidate",
-                str(self.candidate),
-            ],
+            command,
             cwd=self.repo,
             check=check,
         )
@@ -194,6 +203,56 @@ class ReleaseCandidateMaterializationTest(unittest.TestCase):
         self.assertIn("E4B3B1_RECOVERY_REUSE_CHECK: PASS", second.stdout)
         self.assertIn("sha=" + head, first.stdout)
         self.assertIn("sha=" + head, second.stdout)
+
+    def test_materializes_unpublished_local_main_baseline(self) -> None:
+        (self.repo / "local-only.txt").write_text(
+            "local unpublished main baseline\n",
+            encoding="utf-8",
+        )
+        git(self.repo, "add", "local-only.txt")
+        git(
+            self.repo,
+            "commit",
+            "-q",
+            "-m",
+            "local unpublished baseline",
+        )
+        local_baseline = git(
+            self.repo,
+            "rev-parse",
+            "HEAD",
+        )
+
+        self.write_selection(
+            release_baseline_revision=local_baseline,
+        )
+
+        rejected = self.invoke(check=False)
+        self.assertNotEqual(rejected.returncode, 0)
+        self.assertIn(
+            "not an ancestor of origin/main",
+            rejected.stderr,
+        )
+
+        accepted = self.invoke(
+            baseline_ref="main",
+        )
+
+        candidate = git(
+            self.candidate,
+            "rev-parse",
+            "HEAD",
+        )
+
+        self.assertIn(
+            "DIST001_E4B3B1_MATERIALIZATION: PASS sha="
+            + candidate,
+            accepted.stdout,
+        )
+        self.assertEqual(
+            git(self.candidate, "rev-parse", "HEAD^"),
+            local_baseline,
+        )
 
     def test_rejects_existing_non_worktree_path(self) -> None:
         self.candidate.mkdir()

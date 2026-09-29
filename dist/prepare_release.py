@@ -165,6 +165,7 @@ def prepare(
     revision = resume_or_materialize(
         selection_path=selection_path,
         candidate=candidate,
+        baseline_ref="main",
     )
 
     target = candidate / "target" / "distributions"
