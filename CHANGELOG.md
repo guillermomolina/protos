@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.111-SNAPSHOT
+
+- `DIST005-D1` (#549): add the multi-asset release-envelope foundation for the
+  approved `JVM_PLUS_NATIVE` distribution model. A single exact release
+  candidate can now describe and independently verify a recommended Native
+  artifact together with the portable JVM compatibility/fallback artifact,
+  while preserving the existing single-JVM release-envelope workflow.
+  Per-artifact identity covers stable artifact key, kind, role, platform,
+  runtime, source/candidate identity, archive checksum, and license/notice
+  identity. Multi-asset verification fails closed on mixed candidates,
+  duplicate identities, ambiguous recommended roles, missing platform/runtime
+  metadata, unknown artifact kinds, checksum mismatches, and incomplete
+  license/notice identity, with deterministic artifact ordering. This slice
+  does not select a public Native CPU ISA or platform support matrix, build a
+  public Native release artifact, or change Protos language semantics.
+
 ## 0.3.110-SNAPSHOT
 
 - `DIST005-B` (#549): implement and prove a development Native Image

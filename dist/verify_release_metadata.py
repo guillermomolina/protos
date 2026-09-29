@@ -218,10 +218,24 @@ def main() -> int:
             "DIST001 public-prerelease candidate archive."
         )
     )
-    parser.add_argument("--archive", required=True)
+    parser.add_argument(
+        "--archive",
+        action="append",
+        required=True,
+        help="candidate archive; repeat to verify a multi-asset release envelope",
+    )
     parser.add_argument("--envelope-dir", required=True)
     args = parser.parse_args()
-    verify_envelope(Path(args.archive), Path(args.envelope_dir))
+
+    if len(args.archive) == 1:
+        verify_envelope(Path(args.archive[0]), Path(args.envelope_dir))
+    else:
+        from release_asset_envelope import verify_multi
+
+        verify_multi(
+            [Path(value) for value in args.archive],
+            Path(args.envelope_dir),
+        )
     return 0
 
 

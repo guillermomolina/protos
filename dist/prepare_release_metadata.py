@@ -331,13 +331,35 @@ def main() -> int:
             "an already-built DIST001 public-prerelease candidate archive."
         )
     )
-    parser.add_argument("--archive", required=True)
+    parser.add_argument(
+        "--archive",
+        action="append",
+        required=True,
+        help="candidate archive; repeat for a multi-asset release envelope",
+    )
+    parser.add_argument(
+        "--asset-role",
+        action="append",
+        default=[],
+        metavar="ARTIFACT_KEY=ROLE",
+        help=(
+            "explicit per-artifact role for multi-asset envelopes; "
+            "not used by the legacy single portable-JVM path"
+        ),
+    )
     parser.add_argument("--spec-revision", required=True)
     parser.add_argument("--capability", action="append", default=[])
     parser.add_argument("--limitation", action="append", default=[])
     parser.add_argument("--output-dir", required=True)
     args = parser.parse_args()
-    prepare(args)
+
+    if len(args.archive) == 1 and not args.asset_role:
+        args.archive = args.archive[0]
+        prepare(args)
+    else:
+        from release_asset_envelope import prepare_multi
+
+        prepare_multi(args)
     return 0
 
 
