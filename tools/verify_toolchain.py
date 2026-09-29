@@ -18,7 +18,9 @@ from __future__ import print_function
 
 import argparse
 import json
+import os
 import re
+import subprocess
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -32,10 +34,14 @@ class ToolchainError(Exception):
 DEVELOPMENT_BINDINGS = {
     "pom.bytecode",
     "devcontainer.image",
-    "devcontainer.maven",
+    "devcontainer.maven_provisioning",
+    "devcontainer.maven_repository_scope",
     "devcontainer.java_path",
     "ci.tests.devcontainer",
 }
+
+MAVEN_PROVISIONING_MODEL = "ol10-rpm:maven+maven-unbound"
+MAVEN_REPOSITORY_SCOPE = "ol10_codeready_builder:maven-only"
 
 
 def read_text(path):
@@ -43,6 +49,196 @@ def read_text(path):
     if not path.is_file():
         raise ToolchainError("required file is missing: %s" % path)
     return path.read_text(encoding="utf-8")
+
+
+def stable_maven_version_tuple(value, label="Maven version"):
+    # type: (str, str) -> Tuple[int, int, int]
+    match = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)", str(value))
+    if not match:
+        raise ToolchainError("%s must be a stable x.y.z coordinate" % label)
+    return tuple(int(part) for part in match.groups())
+
+
+def maven_version_supported(version, contract):
+    # type: (str, Dict[str, object]) -> bool
+    try:
+        actual = stable_maven_version_tuple(version)
+        maven = contract["maven"]
+        minimum = stable_maven_version_tuple(
+            str(maven["minimum_version"]),
+            "Maven minimum_version",
+        )
+        supported_major = int(maven["supported_major"])
+    except (KeyError, TypeError, ValueError, ToolchainError):
+        return False
+    return actual[0] == supported_major and actual >= minimum
+
+
+def parse_maven_runtime(output):
+    # type: (str) -> Tuple[str, str, str, str]
+    header = re.search(
+        r"^Apache Maven[ \t]+([^ \t\r\n]+)(?:[ \t].*)?$",
+        output,
+        flags=re.MULTILINE,
+    )
+    java = re.search(
+        r"^Java version:[ \t]*([^,\r\n]+),"
+        r"[ \t]*vendor:[ \t]*([^,\r\n]+),"
+        r"[ \t]*runtime:[ \t]*(.+?)[ \t]*$",
+        output,
+        flags=re.MULTILINE,
+    )
+    if not header:
+        raise ToolchainError("mvn -version did not report an Apache Maven version")
+    if not java:
+        raise ToolchainError("mvn -version did not report Java version/vendor/runtime")
+    return (
+        header.group(1).strip(),
+        java.group(1).strip(),
+        java.group(2).strip(),
+        java.group(3).strip(),
+    )
+
+
+def evaluate_maven_runtime(contract, mvn_output, java_home, rpm_packages):
+    # type: (Dict[str, object], str, str, List[str]) -> List[Tuple[str, str, str]]
+    if not java_home:
+        raise ToolchainError("JAVA_HOME is required for Maven runtime validation")
+
+    maven_version, java_version, java_vendor, java_runtime = parse_maven_runtime(
+        mvn_output
+    )
+    maven = contract["maven"]
+    minimum = str(maven["minimum_version"])
+    supported_major = int(maven["supported_major"])
+    version_contract = "stable-%d.x>=%s" % (supported_major, minimum)
+
+    java_home_real = os.path.realpath(java_home)
+    java_runtime_real = os.path.realpath(java_runtime)
+    openjdk_packages = sorted(
+        package.strip()
+        for package in rpm_packages
+        if package.strip() and "openjdk" in package.lower()
+    )
+
+    return [
+        (
+            "runtime.maven.version",
+            version_contract,
+            version_contract
+            if maven_version_supported(maven_version, contract)
+            else maven_version,
+        ),
+        (
+            "runtime.maven.java_version",
+            str(contract["graalvm"]["jdk_version"]),
+            java_version,
+        ),
+        (
+            "runtime.maven.java_vendor",
+            "GraalVM Community",
+            java_vendor,
+        ),
+        (
+            "runtime.maven.java_runtime",
+            "JAVA_HOME",
+            "JAVA_HOME" if java_runtime_real == java_home_real else java_runtime,
+        ),
+        (
+            "runtime.redundant_openjdk_rpm",
+            "absent",
+            "absent" if not openjdk_packages else ",".join(openjdk_packages),
+        ),
+    ]
+
+
+def command_output(command, label):
+    # type: (List[str], str) -> str
+    try:
+        result = subprocess.run(
+            command,
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+    except OSError as exc:
+        raise ToolchainError("%s could not execute: %s" % (label, exc))
+    if result.returncode != 0:
+        raise ToolchainError(
+            "%s failed with exit %d: %s"
+            % (label, result.returncode, result.stdout.strip())
+        )
+    return result.stdout
+
+
+def audit_runtime_environment(contract):
+    # type: (Dict[str, object]) -> List[Tuple[str, str, str]]
+    mvn_output = command_output(["mvn", "-version"], "mvn -version")
+    rpm_output = command_output(["rpm", "-qa"], "rpm -qa")
+    return evaluate_maven_runtime(
+        contract,
+        mvn_output,
+        os.environ.get("JAVA_HOME", ""),
+        rpm_output.splitlines(),
+    )
+
+
+def microdnf_install_transactions(text):
+    # type: (str) -> List[List[str]]
+    pattern = re.compile(
+        r"^RUN[ \t]+microdnf install[ \t]+-y[ \t]*\\\n"
+        r"(?P<body>.*?)"
+        r"^[ \t]*&&[ \t]+microdnf clean all[ \t]*$",
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    transactions = []
+    for match in pattern.finditer(text):
+        items = []
+        for line in match.group("body").splitlines():
+            item = line.strip()
+            if item.endswith("\\"):
+                item = item[:-1].rstrip()
+            if item and not item.startswith("#"):
+                items.append(item)
+        transactions.append(items)
+    return transactions
+
+
+def docker_maven_bindings(text):
+    # type: (str) -> Tuple[str, str]
+    transactions = microdnf_install_transactions(text)
+    maven_transactions = [
+        items
+        for items in transactions
+        if "maven" in items or "maven-unbound" in items
+    ]
+    expected_items = {
+        "--enablerepo=ol10_codeready_builder",
+        "maven",
+        "maven-unbound",
+    }
+    if len(maven_transactions) != 1:
+        return "missing", "drift"
+
+    maven_items = set(maven_transactions[0])
+    provisioning = (
+        MAVEN_PROVISIONING_MODEL
+        if maven_items == expected_items
+        else "drift"
+    )
+
+    repository_transactions = [
+        set(items)
+        for items in transactions
+        if "--enablerepo=ol10_codeready_builder" in items
+    ]
+    repository_scope = (
+        MAVEN_REPOSITORY_SCOPE
+        if len(repository_transactions) == 1
+        and repository_transactions[0] == expected_items
+        else "drift"
+    )
+    return provisioning, repository_scope
 
 
 def load_contract(root):
@@ -53,7 +249,7 @@ def load_contract(root):
     except ValueError as exc:
         raise ToolchainError("invalid toolchain.json: %s" % exc)
 
-    if data.get("schema") != "protos-toolchain-v1":
+    if data.get("schema") != "protos-toolchain-v2":
         raise ToolchainError("unsupported toolchain schema")
 
     try:
@@ -65,7 +261,9 @@ def load_contract(root):
         channel = str(graal["container_channel"])
         image = str(graal["container_image"])
         components = str(data["graal_components"]["version"])
-        maven = str(data["maven"]["version"])
+        maven_contract = data["maven"]
+        maven_minimum = str(maven_contract["minimum_version"])
+        maven_supported_major = int(maven_contract["supported_major"])
         policy = data["policy"]
     except (KeyError, TypeError, ValueError) as exc:
         raise ToolchainError("incomplete toolchain contract: %s" % exc)
@@ -80,8 +278,16 @@ def load_contract(root):
         raise ToolchainError("GraalVM release and Graal/Truffle component version must match")
     if channel not in image or jdk_version not in image:
         raise ToolchainError("container image does not encode selected GraalVM channel/JDK")
-    if not re.match(r"^[0-9]+\.[0-9]+\.[0-9]+$", maven):
-        raise ToolchainError("Maven version must be an exact x.y.z coordinate")
+    if "version" in maven_contract:
+        raise ToolchainError("legacy exact Maven version field is not supported")
+    maven_minimum_tuple = stable_maven_version_tuple(
+        maven_minimum,
+        "Maven minimum_version",
+    )
+    if maven_supported_major != maven_minimum_tuple[0]:
+        raise ToolchainError("Maven minimum_version must use supported_major")
+    if maven_supported_major != 3:
+        raise ToolchainError("current Protos Maven contract supports major 3 only")
     if policy.get("primary_runtime_alignment") != "development-ci-distribution":
         raise ToolchainError("unexpected primary runtime alignment policy")
     if policy.get("upgrade_mode") != "explicit-validated-change":
@@ -278,7 +484,6 @@ def audit_bindings(root, contract, include_native=True):
     graal = contract["graalvm"]
     bytecode = str(contract["java"]["bytecode_release"])
     components = str(contract["graal_components"]["version"])
-    maven = str(contract["maven"]["version"])
     feature = str(graal["jdk_feature"])
     jdk_version = str(graal["jdk_version"])
 
@@ -317,20 +522,19 @@ def audit_bindings(root, contract, include_native=True):
         str(graal["container_image"]),
         first_match(docker, r"^FROM[ \t]+([^ \t\n]+)", "FROM"),
     ))
-    # DIST004-B: the devcontainer now provisions Maven as the image-pinned OS
-    # package instead of a manual exact-version bootstrap. The exact version
-    # coordinate remains the contract value above and is anchored by the exact
-    # pinned image tag; this binding verifies the provisioning model statically.
-    docker_maven_provisioning = (
-        "os-package"
-        if re.search(
-            r"^RUN[ \t]+microdnf install.*?\bmaven\b.*?&&",
-            docker,
-            flags=re.MULTILINE | re.DOTALL,
-        )
-        else "missing"
+    docker_maven_provisioning, docker_maven_repository_scope = docker_maven_bindings(
+        docker
     )
-    rows.append(("devcontainer.maven", "os-package", docker_maven_provisioning))
+    rows.append((
+        "devcontainer.maven_provisioning",
+        MAVEN_PROVISIONING_MODEL,
+        docker_maven_provisioning,
+    ))
+    rows.append((
+        "devcontainer.maven_repository_scope",
+        MAVEN_REPOSITORY_SCOPE,
+        docker_maven_repository_scope,
+    ))
 
     docker_java_path = (
         "JAVA_HOME-first"
@@ -346,6 +550,25 @@ def audit_bindings(root, contract, include_native=True):
             native_image_container(contract),
             first_match(native_docker, r"^FROM[ \t]+([^ \t\n]+)", "FROM"),
         ))
+        native_maven_provisioning, native_maven_repository_scope = docker_maven_bindings(
+            native_docker
+        )
+        rows.append((
+            "native.maven_provisioning",
+            MAVEN_PROVISIONING_MODEL,
+            native_maven_provisioning,
+        ))
+        rows.append((
+            "native.maven_repository_scope",
+            MAVEN_REPOSITORY_SCOPE,
+            native_maven_repository_scope,
+        ))
+        native_java_path = (
+            "JAVA_HOME-first"
+            if 'ENV PATH="${JAVA_HOME}/bin:${PATH}"' in native_docker
+            else "missing"
+        )
+        rows.append(("native.java_path", "JAVA_HOME-first", native_java_path))
 
     ci_workflow = root / ".github" / "workflows" / "tests.yml"
     expected_ci_devcontainer = (
@@ -433,14 +656,21 @@ def print_contract(contract):
     print("PRIMARY_JDK_VERSION: %s" % graal["jdk_version"])
     print("NATIVE_IMAGE_CONTAINER: %s" % native_image_container(contract))
     print("GRAAL_COMPONENTS_VERSION: %s" % contract["graal_components"]["version"])
-    print("MAVEN_VERSION: %s" % contract["maven"]["version"])
+    print("MAVEN_MINIMUM_VERSION: %s" % contract["maven"]["minimum_version"])
+    print("MAVEN_SUPPORTED_MAJOR: %s" % contract["maven"]["supported_major"])
+    print("MAVEN_EXACT_VERSION_REQUIRED: NO")
+    print("MAVEN_RUNTIME_VALIDATION_MODE: runtime")
     print("TOOLCHAIN_CONTRACT: PASS")
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Verify the repository-owned Protos toolchain contract and static bindings.")
     parser.add_argument("--root", default=None, help="repository root; defaults to parent of tools/")
-    parser.add_argument("--mode", choices=("contract", "report", "check"), default="check")
+    parser.add_argument(
+        "--mode",
+        choices=("contract", "report", "check", "runtime"),
+        default="check",
+    )
     parser.add_argument("--scope", choices=("all", "development"), default="all")
     args = parser.parse_args(argv)
 
@@ -451,13 +681,16 @@ def main(argv=None):
         if args.mode == "contract":
             return 0
 
-        rows = audit_bindings(
-            root,
-            contract,
-            include_native=args.scope == "all",
-        )
-        if args.scope == "development":
-            rows = [row for row in rows if row[0] in DEVELOPMENT_BINDINGS]
+        if args.mode == "runtime":
+            rows = audit_runtime_environment(contract)
+        else:
+            rows = audit_bindings(
+                root,
+                contract,
+                include_native=args.scope == "all",
+            )
+            if args.scope == "development":
+                rows = [row for row in rows if row[0] in DEVELOPMENT_BINDINGS]
     except (ToolchainError, ET.ParseError, OSError) as exc:
         print("TOOLCHAIN_ERROR: %s" % exc, file=sys.stderr)
         return 2
@@ -477,6 +710,8 @@ def main(argv=None):
     else:
         print("TOOLCHAIN_DRIFT_COUNT: 0")
         print("TOOLCHAIN_BINDINGS: PASS")
+        if args.mode == "runtime":
+            print("MAVEN_RUNTIME_VALIDATION: PASS")
     return 0
 
 

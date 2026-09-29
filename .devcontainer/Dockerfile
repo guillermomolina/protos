@@ -11,10 +11,15 @@ RUN microdnf install -y \
         tar \
         unzip \
         xz \
-        maven \
         procps \
         time \
         sudo \
+    && microdnf clean all
+
+RUN microdnf install -y \
+        --enablerepo=ol10_codeready_builder \
+        maven \
+        maven-unbound \
     && microdnf clean all
 
 ENV PATH="${JAVA_HOME}/bin:${PATH}"

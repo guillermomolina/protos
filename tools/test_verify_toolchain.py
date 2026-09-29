@@ -17,13 +17,14 @@
 from __future__ import print_function
 
 import json
+import runpy
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 TOOLCHAIN = {
-    "schema": "protos-toolchain-v1",
+    "schema": "protos-toolchain-v2",
     "java": {"bytecode_release": 21},
     "graalvm": {
         "distribution": "graalvm-community",
@@ -34,7 +35,7 @@ TOOLCHAIN = {
         "container_image": "ghcr.io/graalvm/graalvm-community:25i4-25.0.4.1.1-ol10@sha256:a7b4810d7c755e9627feaa1459eb5a93338643b16d745d4f3fc86db71e5da7f5",
     },
     "graal_components": {"version": "25.4.4.1.1"},
-    "maven": {"version": "3.9.9"},
+    "maven": {"minimum_version": "3.9.9", "supported_major": 3},
     "policy": {
         "primary_runtime_alignment": "development-ci-distribution",
         "upgrade_mode": "explicit-validated-change",
@@ -57,13 +58,12 @@ def write(path, text):
     path.write_text(text, encoding="utf-8")
 
 
-def ci_job(name, image, feature, version, maven):
+def ci_job(name, image, feature, version):
     selected = TOOLCHAIN["graalvm"]["container_image"]
     aligned = (
         image == selected
         and feature == "25"
         and version == "25.0.4.1.1"
-        and maven == "3.9.9"
     )
     action = "devcontainers/ci@v0.3" if aligned else "devcontainers/ci@v0.2"
 
@@ -81,14 +81,12 @@ def ci_workflow(
     test_image,
     test_feature,
     test_version,
-    test_maven,
 ):
     return "jobs:\n" + ci_job(
         "test",
         test_image,
         test_feature,
         test_version,
-        test_maven,
     )
 
 
@@ -103,9 +101,22 @@ def make_fixture(
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
 
     native_image = STALE_NATIVE_IMAGE if native_drift else NATIVE_IMAGE
+    native_maven = (
+        "RUN microdnf install -y \\\n"
+        "        maven \\\n"
+        "    && microdnf clean all\n"
+        if native_drift
+        else
+        "RUN microdnf install -y \\\n"
+        "        --enablerepo=ol10_codeready_builder \\\n"
+        "        maven \\\n"
+        "        maven-unbound \\\n"
+        "    && microdnf clean all\n"
+    )
     write(
         root / "build" / "native" / "Dockerfile",
-        "FROM %s\n" % native_image,
+        "FROM %s\n%s"
+        'ENV PATH="${JAVA_HOME}/bin:${PATH}"\n' % (native_image, native_maven),
     )
 
     components = "24.0.0" if old_c_state else "25.4.4.1.1"
@@ -151,17 +162,25 @@ def make_fixture(
 """ % (components, graal_dependencies, shade_externalization, graph_projection)
     write(root / "pom.xml", pom)
     if development_drift:
-        # Historical manual-pin model: the verifier expects the OS-package
-        # provisioning model, so the ARG-pinned Dockerfile must drift.
-        write(root / ".devcontainer" / "Dockerfile", "FROM %s\nARG MAVEN_VERSION=3.9.9\n" % selected_image)
+        write(
+            root / ".devcontainer" / "Dockerfile",
+            "FROM %s\n"
+            "RUN microdnf install -y \\\n"
+            "        maven \\\n"
+            "    && microdnf clean all\n" % selected_image,
+        )
     else:
         write(
             root / ".devcontainer" / "Dockerfile",
             "FROM %s\n"
             "RUN microdnf install -y \\\n"
             "        findutils \\\n"
-            "        maven \\\n"
             "        procps \\\n"
+            "    && microdnf clean all\n"
+            "RUN microdnf install -y \\\n"
+            "        --enablerepo=ol10_codeready_builder \\\n"
+            "        maven \\\n"
+            "        maven-unbound \\\n"
             "    && microdnf clean all\n"
             'ENV PATH="${JAVA_HOME}/bin:${PATH}"\n' % selected_image,
         )
@@ -169,8 +188,6 @@ def make_fixture(
     test_image = "ghcr.io/graalvm/graalvm-community:25-ol10" if development_drift else selected_image
     test_feature = "21" if development_drift else "25"
     test_version = "21" if development_drift else "25.0.4.1.1"
-    test_maven = "3.9.8" if development_drift else "3.9.9"
-
     if old_c_state:
         dist_components = "24.0.0"
         feature = "22"
@@ -193,7 +210,6 @@ actual_version=25.0.4.1.1
             test_image,
             test_feature,
             test_version,
-            test_maven,
         ),
     )
 
@@ -245,6 +261,95 @@ def require(condition, message, result=None):
 
 def main():
     verifier = Path(__file__).resolve().with_name("verify_toolchain.py")
+    verifier_api = runpy.run_path(str(verifier))
+    maven_version_supported = verifier_api["maven_version_supported"]
+    evaluate_maven_runtime = verifier_api["evaluate_maven_runtime"]
+
+    for version in ("3.9.9", "3.9.10", "3.10.0", "3.99.1"):
+        require(
+            maven_version_supported(version, TOOLCHAIN),
+            "supported Maven version was rejected: %s" % version,
+        )
+    for version in ("3.9.8", "4.0.0", "3.9.9-rc-1", "3.9", "garbage"):
+        require(
+            not maven_version_supported(version, TOOLCHAIN),
+            "unsupported Maven version was accepted: %s" % version,
+        )
+
+    good_maven_output = """Apache Maven 3.9.10 (Red Hat 3.9.10-1)
+Maven home: /usr/share/maven
+Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-community-java25i4
+"""
+    runtime_rows = evaluate_maven_runtime(
+        TOOLCHAIN,
+        good_maven_output,
+        "/opt/graalvm-community-java25i4",
+        ["maven-3.9.10-1.el10.noarch", "maven-unbound-3.9.10-1.el10.noarch"],
+    )
+    require(
+        all(expected == actual for _, expected, actual in runtime_rows),
+        "aligned Maven runtime evidence unexpectedly drifted",
+    )
+
+    below_floor_rows = evaluate_maven_runtime(
+        TOOLCHAIN,
+        good_maven_output.replace("Apache Maven 3.9.10", "Apache Maven 3.9.8"),
+        "/opt/graalvm-community-java25i4",
+        [],
+    )
+    require(
+        any(
+            name == "runtime.maven.version" and expected != actual
+            for name, expected, actual in below_floor_rows
+        ),
+        "below-floor Maven runtime was accepted",
+    )
+
+    wrong_java_rows = evaluate_maven_runtime(
+        TOOLCHAIN,
+        good_maven_output.replace("vendor: GraalVM Community", "vendor: Oracle"),
+        "/opt/graalvm-community-java25i4",
+        [],
+    )
+    require(
+        any(
+            name == "runtime.maven.java_vendor" and expected != actual
+            for name, expected, actual in wrong_java_rows
+        ),
+        "non-GraalVM Maven Java vendor was accepted",
+    )
+
+    wrong_runtime_rows = evaluate_maven_runtime(
+        TOOLCHAIN,
+        good_maven_output.replace(
+            "runtime: /opt/graalvm-community-java25i4",
+            "runtime: /usr/lib/jvm/java-25-openjdk",
+        ),
+        "/opt/graalvm-community-java25i4",
+        [],
+    )
+    require(
+        any(
+            name == "runtime.maven.java_runtime" and expected != actual
+            for name, expected, actual in wrong_runtime_rows
+        ),
+        "Maven runtime outside JAVA_HOME was accepted",
+    )
+
+    redundant_jdk_rows = evaluate_maven_runtime(
+        TOOLCHAIN,
+        good_maven_output,
+        "/opt/graalvm-community-java25i4",
+        ["java-25-openjdk-headless-25.0.1.0.8-1.el10.x86_64"],
+    )
+    require(
+        any(
+            name == "runtime.redundant_openjdk_rpm" and expected != actual
+            for name, expected, actual in redundant_jdk_rows
+        ),
+        "redundant OpenJDK RPM was accepted",
+    )
+
     with tempfile.TemporaryDirectory(prefix="protos-toolchain-test-") as tmp:
         tmp = Path(tmp)
 
@@ -263,7 +368,8 @@ def main():
         result = run(verifier, root, "check", "development")
         require(result.returncode == 1, "development drift did not fail closed", result)
         for binding in (
-            "devcontainer.maven",
+            "devcontainer.maven_provisioning",
+            "devcontainer.maven_repository_scope",
             "devcontainer.java_path",
             "ci.tests.devcontainer",
         ):
@@ -289,11 +395,16 @@ def main():
             "native-only drift did not fail the all-surface check",
             result,
         )
-        require(
-            "native.image" in result.stdout,
-            "native-only drift did not identify the Native Image binding",
-            result,
-        )
+        for binding in (
+            "native.image",
+            "native.maven_provisioning",
+            "native.maven_repository_scope",
+        ):
+            require(
+                binding in result.stdout,
+                "native-only drift did not identify %s" % binding,
+                result,
+            )
 
         root = tmp / "pre-c"
         make_fixture(root, old_c_state=True)
@@ -327,6 +438,27 @@ def main():
                 "pre-C drift did not identify %s" % binding,
                 result,
             )
+
+        old_exact_schema = json.loads(json.dumps(TOOLCHAIN))
+        old_exact_schema["schema"] = "protos-toolchain-v1"
+        old_exact_schema["maven"] = {"version": "3.9.9"}
+        write(root / "toolchain.json", json.dumps(old_exact_schema, indent=2) + "\n")
+        result = run(verifier, root, "contract")
+        require(
+            result.returncode == 2,
+            "legacy exact-Maven schema did not fail closed",
+            result,
+        )
+
+        malformed_maven = json.loads(json.dumps(TOOLCHAIN))
+        malformed_maven["maven"]["minimum_version"] = "3.9"
+        write(root / "toolchain.json", json.dumps(malformed_maven, indent=2) + "\n")
+        result = run(verifier, root, "contract")
+        require(
+            result.returncode == 2,
+            "malformed Maven minimum did not fail closed",
+            result,
+        )
 
         malformed = json.loads(json.dumps(TOOLCHAIN))
         malformed["graal_components"]["version"] = "25.3.4"
