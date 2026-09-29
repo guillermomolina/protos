@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.interop.TruffleObject;
 import com.oracle.truffle.api.interop.UnknownIdentifierException;
@@ -70,11 +71,13 @@ final class ProtosDebuggerScope implements TruffleObject {
     }
 
     @ExportMessage
+    @TruffleBoundary
     Object getMembers(@SuppressWarnings("unused") boolean includeInternal) {
         return new ProtosDebuggerScopeMemberNames(visibleNamesSnapshot());
     }
 
     @ExportMessage
+    @TruffleBoundary
     boolean isMemberReadable(String member) {
         Objects.requireNonNull(member, "member");
         Optional<Object> raw = rawVisibleValue(member);
@@ -82,6 +85,7 @@ final class ProtosDebuggerScope implements TruffleObject {
     }
 
     @ExportMessage
+    @TruffleBoundary
     Object readMember(String member) throws UnknownIdentifierException {
         Objects.requireNonNull(member, "member");
         final Optional<Object> value;

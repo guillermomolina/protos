@@ -18,6 +18,8 @@
 package com.guillermomolina.protos.execution;
 
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.interop.NodeLibrary;
@@ -56,6 +58,12 @@ final class ProtosBytecodeTagTreeNodeExports {
         if (!hasScope(node, frame)) {
             throw UnsupportedMessageException.create();
         }
-        return new ProtosDebuggerScope(ProtosFrameArguments.activation(frame));
+        return debuggerScope(ProtosFrameArguments.activation(frame));
+    }
+
+    @TruffleBoundary
+    private static ProtosDebuggerScope debuggerScope(
+            ProtosActivation activation) {
+        return new ProtosDebuggerScope(activation);
     }
 }

@@ -30,6 +30,19 @@ main() {
         classes+=("${class}")
     done
 
+    external_receiver_exports=(
+        'com.guillermomolina.protos.execution.ProtosBytecodeTagTreeNodeExports'
+    )
+
+    for class in "${external_receiver_exports[@]}"; do
+        path="${classes_dir}/${class//./\/}.class"
+        if [[ ! -f "${path}" ]]; then
+            echo "missing external-receiver Truffle export class: ${path}" >&2
+            return 1
+        fi
+        classes+=("${class}")
+    done
+
     inline_support_generated=(
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$EnterClosureCall_Node'
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$EnterObjectConstruction_Node'

@@ -42,6 +42,15 @@ TOOLCHAIN = {
     },
 }
 
+NATIVE_IMAGE = (
+    "ghcr.io/graalvm/native-image-community:"
+    "25i4-25.0.4.1.1-ol10"
+)
+STALE_NATIVE_IMAGE = (
+    "ghcr.io/graalvm/native-image-community:"
+    "25i3-25.0.4.1-ol10-20260825"
+)
+
 
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -87,10 +96,17 @@ def make_fixture(
     root,
     *,
     development_drift=False,
+    native_drift=False,
     old_c_state=False,
 ):
     selected_image = TOOLCHAIN["graalvm"]["container_image"]
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
+
+    native_image = STALE_NATIVE_IMAGE if native_drift else NATIVE_IMAGE
+    write(
+        root / "build" / "native" / "Dockerfile",
+        "FROM %s\n" % native_image,
+    )
 
     components = "24.0.0" if old_c_state else "25.4.4.1.1"
     graal_dependencies = """<dependencies>
@@ -256,6 +272,28 @@ def main():
                 "development drift did not identify %s" % binding,
                 result,
             )
+
+        root = tmp / "native-drift"
+        make_fixture(root, native_drift=True)
+
+        result = run(verifier, root, "check", "development")
+        require(
+            result.returncode == 0,
+            "native-only drift should not affect development scope",
+            result,
+        )
+
+        result = run(verifier, root, "check")
+        require(
+            result.returncode == 1,
+            "native-only drift did not fail the all-surface check",
+            result,
+        )
+        require(
+            "native.image" in result.stdout,
+            "native-only drift did not identify the Native Image binding",
+            result,
+        )
 
         root = tmp / "pre-c"
         make_fixture(root, old_c_state=True)

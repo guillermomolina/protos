@@ -264,8 +264,17 @@ def workflow_job_devcontainer_contract(path, job_id):
     return "<missing:%s.devcontainer>" % job_id
 
 
-def audit_bindings(root, contract):
-    # type: (Path, Dict[str, object]) -> List[Tuple[str, str, str]]
+def native_image_container(contract):
+    # type: (Dict[str, object]) -> str
+    graal = contract["graalvm"]
+    return "ghcr.io/graalvm/native-image-community:%s-%s-ol10" % (
+        graal["container_channel"],
+        graal["jdk_version"],
+    )
+
+
+def audit_bindings(root, contract, include_native=True):
+    # type: (Path, Dict[str, object], bool) -> List[Tuple[str, str, str]]
     graal = contract["graalvm"]
     bytecode = str(contract["java"]["bytecode_release"])
     components = str(contract["graal_components"]["version"])
@@ -329,6 +338,14 @@ def audit_bindings(root, contract):
         else "missing"
     )
     rows.append(("devcontainer.java_path", "JAVA_HOME-first", docker_java_path))
+
+    if include_native:
+        native_docker = read_text(root / "build" / "native" / "Dockerfile")
+        rows.append((
+            "native.image",
+            native_image_container(contract),
+            first_match(native_docker, r"^FROM[ \t]+([^ \t\n]+)", "FROM"),
+        ))
 
     ci_workflow = root / ".github" / "workflows" / "tests.yml"
     expected_ci_devcontainer = (
@@ -414,6 +431,7 @@ def print_contract(contract):
     print("PRIMARY_GRAALVM_RELEASE: %s" % graal["release"])
     print("PRIMARY_JDK_FEATURE: %s" % graal["jdk_feature"])
     print("PRIMARY_JDK_VERSION: %s" % graal["jdk_version"])
+    print("NATIVE_IMAGE_CONTAINER: %s" % native_image_container(contract))
     print("GRAAL_COMPONENTS_VERSION: %s" % contract["graal_components"]["version"])
     print("MAVEN_VERSION: %s" % contract["maven"]["version"])
     print("TOOLCHAIN_CONTRACT: PASS")
@@ -433,7 +451,11 @@ def main(argv=None):
         if args.mode == "contract":
             return 0
 
-        rows = audit_bindings(root, contract)
+        rows = audit_bindings(
+            root,
+            contract,
+            include_native=args.scope == "all",
+        )
         if args.scope == "development":
             rows = [row for row in rows if row[0] in DEVELOPMENT_BINDINGS]
     except (ToolchainError, ET.ParseError, OSError) as exc:

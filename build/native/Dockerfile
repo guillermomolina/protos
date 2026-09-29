@@ -1,4 +1,4 @@
-FROM ghcr.io/graalvm/native-image-community:25i3-25.0.4.1-ol10-20260825
+FROM ghcr.io/graalvm/native-image-community:25i4-25.0.4.1.1-ol10
 
 USER root
 
