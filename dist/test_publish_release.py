@@ -875,6 +875,23 @@ class PublishReleaseTest(unittest.TestCase):
 
         emit.assert_not_called()
 
+    def test_missing_real_local_tag_is_absent(self) -> None:
+        prepared = self.make_prepared()
+
+        run(["git", "init", "-q"], cwd=self.candidate)
+        run(
+            ["git", "config", "user.email", "fixture@example.invalid"],
+            cwd=self.candidate,
+        )
+        run(
+            ["git", "config", "user.name", "Fixture"],
+            cwd=self.candidate,
+        )
+        run(["git", "add", "target"], cwd=self.candidate)
+        run(["git", "commit", "-q", "-m", "candidate"], cwd=self.candidate)
+
+        self.assertFalse(publish_release.local_tag_exists_exact(prepared))
+
     def test_real_lightweight_local_tag_is_reused_exactly(self) -> None:
         prepared = self.make_prepared()
 

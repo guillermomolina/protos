@@ -576,15 +576,20 @@ def require_local_identity(prepared: PreparedRelease) -> None:
 
 def local_tag_exists_exact(prepared: PreparedRelease) -> bool:
     ref = "refs/tags/" + prepared.authorization.release_tag
+    probe = run_text(
+        prepared.candidate,
+        ["git", "show-ref", "--verify", "--quiet", ref],
+        check=False,
+    )
+    if probe.returncode == 1:
+        return False
+    if probe.returncode != 0:
+        fail("cannot inspect local release tag")
+
     result = run_text(
         prepared.candidate,
         ["git", "show-ref", "--verify", "--hash", ref],
-        check=False,
     )
-    if result.returncode == 1:
-        return False
-    if result.returncode != 0:
-        fail("cannot inspect local release tag")
 
     object_type = run_text(
         prepared.candidate,
