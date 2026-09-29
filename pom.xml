@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.111-SNAPSHOT</version>
+    <version>0.3.112-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -330,6 +330,7 @@
                             <imageName>protos</imageName>
                             <outputDirectory>${project.build.directory}/native</outputDirectory>
                             <buildArgs>
+                                <buildArg>-march=compatibility</buildArg>
                                 <buildArg>@${project.build.directory}/native-image-init.args</buildArg>
                             </buildArgs>
                         </configuration>

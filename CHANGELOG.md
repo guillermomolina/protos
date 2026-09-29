@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.112-SNAPSHOT
+
+- `DIST005-D3` (#549): apply the selected public Native platform, CPU ISA, and
+  libc ABI metadata policy to the approved `JVM_PLUS_NATIVE` release model.
+  The public Native artifact is Linux x86_64, dynamically linked against glibc,
+  built on the existing Oracle Linux 10 Native Image toolchain generation, and
+  declares `libc_abi_min=2.39`. Native Image compilation now explicitly uses
+  `-march=compatibility` so the public artifact does not inherit the platform's
+  stronger default x86-64 ISA assumption. Native `RUNTIME.txt`, artifact keys,
+  platform identity, release manifests, and release notes expose the selected
+  ABI and CPU policy, while the multi-asset envelope fails closed on missing or
+  mismatched OS, architecture, libc family, libc ABI floor, linkage, or CPU ISA
+  identity. The portable JVM compatibility/fallback artifact and the existing
+  release identity model remain unchanged. This slice records and enforces the
+  selected policy; clean-candidate proof of the produced binary's actual ABI
+  and platform properties remains for the subsequent DIST005-D4 validation
+  slice.
+
 ## 0.3.111-SNAPSHOT
 
 - `DIST005-D1` (#549): add the multi-asset release-envelope foundation for the

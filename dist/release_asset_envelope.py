@@ -40,6 +40,15 @@ ALLOWED_ROLES = {RECOMMENDED_ROLE, FALLBACK_ROLE}
 PORTABLE_FORMAT = "protos-portable-posix-jvm-v1"
 NATIVE_FORMAT = "protos-native-image-posix-v1"
 
+PUBLIC_NATIVE_RUNTIME_IDENTITY = {
+    "target_os": "linux",
+    "target_arch": "x86_64",
+    "libc_family": "glibc",
+    "libc_abi_min": "2.39",
+    "linkage": "dynamic",
+    "cpu_isa_assumption": "compatibility",
+}
+
 MANIFEST_NAME = "RELEASE_MANIFEST.txt"
 NOTES_NAME = "RELEASE_NOTES.md"
 
@@ -153,6 +162,7 @@ def _require_native_runtime(runtime: dict[str, str]) -> None:
         "target_arch",
         "linkage",
         "libc_family",
+        "libc_abi_min",
         "cpu_isa_assumption",
     ]
     missing = [key for key in required if not runtime.get(key)]
@@ -163,17 +173,21 @@ def _require_native_runtime(runtime: dict[str, str]) -> None:
         fail("Native public artifact must declare external_java_required=false")
     if runtime["native_runtime_kind"] != "graalvm-native-image-truffle":
         fail("Native runtime kind is not the ratified GraalVM Native Image/Truffle kind")
-    if runtime["cpu_isa_assumption"] == "unresolved":
-        fail(
-            "Native public artifact CPU ISA policy is unresolved; "
-            "DIST005-D1 must fail closed rather than select one implicitly"
-        )
+
+    for key, expected in PUBLIC_NATIVE_RUNTIME_IDENTITY.items():
+        actual = runtime[key]
+        if actual != expected:
+            fail(
+                f"Native public artifact {key} does not match the selected "
+                f"public platform identity: {actual!r} != {expected!r}"
+            )
 
     for key in [
         "target_os",
         "target_arch",
         "linkage",
         "libc_family",
+        "libc_abi_min",
         "cpu_isa_assumption",
     ]:
         _token(runtime[key], label="Native " + key)
@@ -228,6 +242,7 @@ def read_release_asset(archive_path: Path) -> ReleaseAsset:
                 runtime["target_os"],
                 runtime["target_arch"],
                 runtime["libc_family"],
+                runtime["libc_abi_min"],
                 runtime["linkage"],
                 runtime["cpu_isa_assumption"],
             ]
@@ -237,6 +252,7 @@ def read_release_asset(archive_path: Path) -> ReleaseAsset:
                 runtime["target_os"],
                 runtime["target_arch"],
                 runtime["libc_family"],
+                runtime["libc_abi_min"],
                 runtime["linkage"],
                 runtime["cpu_isa_assumption"],
             ]
@@ -394,6 +410,7 @@ def _asset_rows(
                 (prefix + "target_os", asset.runtime["target_os"]),
                 (prefix + "target_arch", asset.runtime["target_arch"]),
                 (prefix + "libc_family", asset.runtime["libc_family"]),
+                (prefix + "libc_abi_min", asset.runtime["libc_abi_min"]),
                 (prefix + "linkage", asset.runtime["linkage"]),
                 (prefix + "cpu_isa_assumption", asset.runtime["cpu_isa_assumption"]),
             ]
@@ -485,7 +502,8 @@ def render_notes(
                     f"- JDK version: `{asset.runtime['jdk_version']}`",
                     f"- Target OS: `{asset.runtime['target_os']}`",
                     f"- Target architecture: `{asset.runtime['target_arch']}`",
-                    f"- libc/ABI family: `{asset.runtime['libc_family']}`",
+                    f"- libc family: `{asset.runtime['libc_family']}`",
+                    f"- libc ABI minimum: `{asset.runtime['libc_abi_min']}`",
                     f"- Linkage: `{asset.runtime['linkage']}`",
                     f"- CPU ISA assumption: `{asset.runtime['cpu_isa_assumption']}`",
                 ]

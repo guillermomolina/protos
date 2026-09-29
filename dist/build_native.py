@@ -37,6 +37,16 @@ DIST_FORMAT = "protos-native-image-posix-v1"
 ARTIFACT_KIND = "development-native-distribution"
 NATIVE_RUNTIME_KIND = "graalvm-native-image-truffle"
 
+PUBLIC_NATIVE_BUILD_CONTAINER = (
+    "ghcr.io/graalvm/native-image-community:25i4-25.0.4.1.1-ol10"
+)
+PUBLIC_NATIVE_TARGET_OS = "linux"
+PUBLIC_NATIVE_TARGET_ARCH = "x86_64"
+PUBLIC_NATIVE_LINKAGE = "dynamic"
+PUBLIC_NATIVE_LIBC_FAMILY = "glibc"
+PUBLIC_NATIVE_LIBC_ABI_MIN = "2.39"
+PUBLIC_NATIVE_CPU_ISA_ASSUMPTION = "compatibility"
+
 
 def fail(message: str) -> "NoReturn":
     raise SystemExit("native distribution build failed: " + message)
@@ -313,8 +323,12 @@ def verify_archive(archive_path: Path, root_name: str) -> None:
             f"artifact_kind={ARTIFACT_KIND}",
             f"native_runtime_kind={NATIVE_RUNTIME_KIND}",
             "external_java_required=false",
-            "linkage=dynamic",
-            "cpu_isa_assumption=unresolved",
+            f"target_os={PUBLIC_NATIVE_TARGET_OS}",
+            f"target_arch={PUBLIC_NATIVE_TARGET_ARCH}",
+            f"linkage={PUBLIC_NATIVE_LINKAGE}",
+            f"libc_family={PUBLIC_NATIVE_LIBC_FAMILY}",
+            f"libc_abi_min={PUBLIC_NATIVE_LIBC_ABI_MIN}",
+            f"cpu_isa_assumption={PUBLIC_NATIVE_CPU_ISA_ASSUMPTION}",
         )
         for needle in required_runtime:
             if needle not in runtime:
@@ -374,12 +388,35 @@ def build(args: argparse.Namespace) -> Path:
     graal = contract["graalvm"]
     observation = binary_observation(root, native_binary)
 
+    build_container = native_build_container(root)
+    if build_container != PUBLIC_NATIVE_BUILD_CONTAINER:
+        fail(
+            "Native builder does not match the selected public build base: "
+            + build_container
+        )
+
     target_os = platform.system().lower()
     target_arch = normalized_arch()
-    if target_os != "linux":
+
+    if target_os != PUBLIC_NATIVE_TARGET_OS:
         fail(
-            "current DIST005 proof expects the canonical Linux Native Image; "
-            "observed target host OS: " + target_os
+            "Native target OS does not match the selected public platform: "
+            + target_os
+        )
+    if target_arch != PUBLIC_NATIVE_TARGET_ARCH:
+        fail(
+            "Native target architecture does not match the selected public "
+            "platform: " + target_arch
+        )
+    if observation["linkage"] != PUBLIC_NATIVE_LINKAGE:
+        fail(
+            "Native linkage does not match the selected public platform: "
+            + observation["linkage"]
+        )
+    if observation["libc_family"] != PUBLIC_NATIVE_LIBC_FAMILY:
+        fail(
+            "Native libc family does not match the selected public platform: "
+            + observation["libc_family"]
         )
 
     root_name = f"protos-{version}-native-{target_os}-{target_arch}"
@@ -426,16 +463,17 @@ def build(args: argparse.Namespace) -> Path:
         f"graalvm_release={graal['release']}",
         f"native_image_version={graal['release']}",
         f"jdk_version={graal['jdk_version']}",
-        f"native_build_container={native_build_container(root)}",
+        f"native_build_container={build_container}",
         "native_build_authority=build/native/Dockerfile",
         "toolchain_authority=toolchain.json",
         f"target_os={target_os}",
         f"target_arch={target_arch}",
         f"linkage={observation['linkage']}",
         f"libc_family={observation['libc_family']}",
+        f"libc_abi_min={PUBLIC_NATIVE_LIBC_ABI_MIN}",
         f"shared_libraries={observation['shared_libraries']}",
         f"binary_file_description={observation['binary_file_description']}",
-        "cpu_isa_assumption=unresolved",
+        f"cpu_isa_assumption={PUBLIC_NATIVE_CPU_ISA_ASSUMPTION}",
     ]
     write_text(bundle / "RUNTIME.txt", "\n".join(runtime_lines))
 
@@ -481,6 +519,11 @@ def build(args: argparse.Namespace) -> Path:
     print("NATIVE_DIST_TARGET_ARCH: " + target_arch)
     print("NATIVE_DIST_LINKAGE: " + observation["linkage"])
     print("NATIVE_DIST_LIBC_FAMILY: " + observation["libc_family"])
+    print("NATIVE_DIST_LIBC_ABI_MIN: " + PUBLIC_NATIVE_LIBC_ABI_MIN)
+    print(
+        "NATIVE_DIST_CPU_ISA_ASSUMPTION: "
+        + PUBLIC_NATIVE_CPU_ISA_ASSUMPTION
+    )
     print("NATIVE_DIST_ARCHIVE: " + str(archive_path))
     print("NATIVE_DIST_OUTER_SHA256: " + outer_digest)
     print("NATIVE_DIST_BUILD: PASS")

@@ -80,7 +80,12 @@ def write_asset(
     *,
     kind: str,
     candidate: str = CANDIDATE,
-    cpu_isa: str = "synthetic-test-isa",
+    cpu_isa: str = "compatibility",
+    libc_abi_min: str = "2.39",
+    target_os: str = "linux",
+    target_arch: str = "x86_64",
+    libc_family: str = "glibc",
+    linkage: str = "dynamic",
     omit_native_key: str | None = None,
     distribution_format: str | None = None,
 ) -> Path:
@@ -96,7 +101,7 @@ def write_asset(
             "optimizing_runtime=HotSpotTruffleRuntime",
         ]
     else:
-        root = f"protos-{VERSION}-native-linux-x86_64"
+        root = f"protos-{VERSION}-native-{target_os}-{target_arch}"
         archive = directory / (root + ".zip")
         runtime = {
             "distribution_format": distribution_format
@@ -106,10 +111,11 @@ def write_asset(
             "graalvm_release": "25.4.4.1.1",
             "native_image_version": "25.4.4.1.1",
             "jdk_version": "25.0.4.1.1",
-            "target_os": "linux",
-            "target_arch": "x86_64",
-            "linkage": "dynamic",
-            "libc_family": "glibc",
+            "target_os": target_os,
+            "target_arch": target_arch,
+            "linkage": linkage,
+            "libc_family": libc_family,
+            "libc_abi_min": libc_abi_min,
             "cpu_isa_assumption": cpu_isa,
         }
         if omit_native_key is not None:
@@ -133,14 +139,51 @@ def write_asset(
     return archive
 
 
-def native_key(cpu_isa: str = "synthetic-test-isa") -> str:
-    return f"native-linux-x86_64-glibc-dynamic-{cpu_isa}"
+def native_key(
+    cpu_isa: str = "compatibility",
+    libc_abi_min: str = "2.39",
+    *,
+    target_os: str = "linux",
+    target_arch: str = "x86_64",
+    libc_family: str = "glibc",
+    linkage: str = "dynamic",
+) -> str:
+    return "-".join(
+        [
+            NATIVE_KIND,
+            target_os,
+            target_arch,
+            libc_family,
+            libc_abi_min,
+            linkage,
+            cpu_isa,
+        ]
+    )
 
 
-def model_roles(cpu_isa: str = "synthetic-test-isa") -> list[str]:
+def model_roles(
+    cpu_isa: str = "compatibility",
+    libc_abi_min: str = "2.39",
+    *,
+    target_os: str = "linux",
+    target_arch: str = "x86_64",
+    libc_family: str = "glibc",
+    linkage: str = "dynamic",
+) -> list[str]:
     return [
         f"{PORTABLE_KIND}={FALLBACK_ROLE}",
-        f"{native_key(cpu_isa)}={RECOMMENDED_ROLE}",
+        (
+            native_key(
+                cpu_isa,
+                libc_abi_min,
+                target_os=target_os,
+                target_arch=target_arch,
+                libc_family=libc_family,
+                linkage=linkage,
+            )
+            + "="
+            + RECOMMENDED_ROLE
+        ),
     ]
 
 
@@ -177,21 +220,38 @@ class MultiAssetReleaseEnvelopeTest(unittest.TestCase):
             verify_multi([jvm, native], out1)
 
             manifest = (out1 / "RELEASE_MANIFEST.txt").read_text(encoding="utf-8")
+            notes = (out1 / "RELEASE_NOTES.md").read_text(encoding="utf-8")
             for needle in [
                 "release_envelope_format=protos-public-prerelease-envelope-v2",
                 "distribution_model=JVM_PLUS_NATIVE",
                 "asset_count=2",
                 "asset.0.kind=native",
                 "asset.0.role=recommended-first-run",
+                (
+                    "asset.0.key="
+                    "native-linux-x86_64-glibc-2.39-dynamic-compatibility"
+                ),
+                (
+                    "asset.0.platform_identity="
+                    "linux/x86_64/glibc/2.39/dynamic/compatibility"
+                ),
                 "asset.1.kind=portable-jvm",
                 "asset.1.role=compatibility-fallback",
-                "asset.0.cpu_isa_assumption=synthetic-test-isa",
+                "asset.0.libc_abi_min=2.39",
+                "asset.0.cpu_isa_assumption=compatibility",
                 "asset.0.external_java_required=false",
                 "asset.1.external_java_required=true",
                 "license_sha256=",
                 "notice_sha256=",
             ]:
                 self.assertIn(needle, manifest)
+
+            for needle in [
+                "- libc family: `glibc`",
+                "- libc ABI minimum: `2.39`",
+                "- CPU ISA assumption: `compatibility`",
+            ]:
+                self.assertIn(needle, notes)
 
     def test_rejects_mixed_candidate_identity(self) -> None:
         with tempfile.TemporaryDirectory(prefix="protos-dist005-mixed-") as td:
@@ -263,6 +323,110 @@ class MultiAssetReleaseEnvelopeTest(unittest.TestCase):
                         roles=model_roles("unresolved"),
                     )
                 )
+
+    def test_rejects_missing_native_libc_abi_min(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="protos-dist005-abi-missing-") as td:
+            root = Path(td)
+            jvm = write_asset(root, kind=PORTABLE_KIND)
+            native_dir = root / "native"
+            native_dir.mkdir()
+            native = write_asset(
+                native_dir,
+                kind=NATIVE_KIND,
+                omit_native_key="libc_abi_min",
+            )
+            with self.assertRaises(SystemExit):
+                prepare_multi(
+                    Args(
+                        archives=[jvm, native],
+                        output_dir=root / "out",
+                        roles=model_roles(),
+                    )
+                )
+
+    def test_rejects_wrong_native_libc_abi_min(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="protos-dist005-abi-wrong-") as td:
+            root = Path(td)
+            jvm = write_asset(root, kind=PORTABLE_KIND)
+            native_dir = root / "native"
+            native_dir.mkdir()
+            native = write_asset(
+                native_dir,
+                kind=NATIVE_KIND,
+                libc_abi_min="2.34",
+            )
+            with self.assertRaises(SystemExit):
+                prepare_multi(
+                    Args(
+                        archives=[jvm, native],
+                        output_dir=root / "out",
+                        roles=model_roles(libc_abi_min="2.34"),
+                    )
+                )
+
+    def test_rejects_noncompatibility_public_native_isa(self) -> None:
+        for cpu_isa in ("x86-64-v3", "native"):
+            with self.subTest(cpu_isa=cpu_isa):
+                with tempfile.TemporaryDirectory(
+                    prefix="protos-dist005-isa-policy-"
+                ) as td:
+                    root = Path(td)
+                    jvm = write_asset(root, kind=PORTABLE_KIND)
+                    native_dir = root / "native"
+                    native_dir.mkdir()
+                    native = write_asset(
+                        native_dir,
+                        kind=NATIVE_KIND,
+                        cpu_isa=cpu_isa,
+                    )
+                    with self.assertRaises(SystemExit):
+                        prepare_multi(
+                            Args(
+                                archives=[jvm, native],
+                                output_dir=root / "out",
+                                roles=model_roles(cpu_isa),
+                            )
+                        )
+
+    def test_rejects_wrong_public_native_platform_identity(self) -> None:
+        cases = [
+            ("target_os", "freebsd"),
+            ("target_arch", "aarch64"),
+            ("libc_family", "musl"),
+            ("linkage", "static"),
+        ]
+
+        for field, value in cases:
+            with self.subTest(field=field, value=value):
+                with tempfile.TemporaryDirectory(
+                    prefix="protos-dist005-platform-policy-"
+                ) as td:
+                    root = Path(td)
+                    jvm = write_asset(root, kind=PORTABLE_KIND)
+                    native_dir = root / "native"
+                    native_dir.mkdir()
+
+                    identity = {
+                        "target_os": "linux",
+                        "target_arch": "x86_64",
+                        "libc_family": "glibc",
+                        "linkage": "dynamic",
+                    }
+                    identity[field] = value
+
+                    native = write_asset(
+                        native_dir,
+                        kind=NATIVE_KIND,
+                        **identity,
+                    )
+                    with self.assertRaises(SystemExit):
+                        prepare_multi(
+                            Args(
+                                archives=[jvm, native],
+                                output_dir=root / "out",
+                                roles=model_roles(**identity),
+                            )
+                        )
 
     def test_rejects_ambiguous_recommended_first_run(self) -> None:
         with tempfile.TemporaryDirectory(prefix="protos-dist005-role-") as td:
