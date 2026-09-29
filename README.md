@@ -8,14 +8,17 @@
   </a>
 </p>
 
-> ### 🚀 Latest milestone — PERF006 complete
+> ### 🚀 Latest milestone — Protos 0.3.116
 >
-> Protos now runs ordinary intended JVM execution on the optimizing
-> Graal/Truffle runtime. Controlled exact-source measurements show
-> **1.06x–1.73x faster steady-state execution across all five retained
-> workloads**, while the historical replay bottleneck has disappeared.
+> Protos now ships an official **self-contained Native prerelease** for the
+> declared Linux x86_64 / glibc 2.39+ target. Download, verify, extract, and run:
+> no external Java/GraalVM runtime, Maven, or Protos source checkout is required
+> after extraction. The portable JVM artifact remains available as the
+> compatibility fallback for external-runtime users.
 >
-> **[Read the PERF006 milestone story →](docs/news/2026-09-13-perf006-complete.md)**
+> **[Try Protos →](docs/guide/00-try-protos.md)** ·
+> **[Download 0.3.116 →](https://github.com/guillermomolina/protos/releases/tag/v0.3.116)** ·
+> **[Read the milestone story →](docs/news/2026-09-29-protos-0-3-116-download-extract-run.md)**
 
 # Protos
 
@@ -43,6 +46,25 @@ and [GitHub Issues](https://github.com/guillermomolina/protos/issues) for live
 project coordination, and
 [`docs/project/registries/IMPLEMENTATION_STATUS.md`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md)
 for durable implementation/closure history.
+
+## Try Protos
+
+On the supported Native target — **Linux x86_64 with dynamic glibc 2.39 or
+newer** — the recommended first-run artifact is the self-contained
+[Protos 0.3.116 Native prerelease](https://github.com/guillermomolina/protos/releases/tag/v0.3.116).
+It requires no external Java/GraalVM runtime or Maven after extraction.
+
+```sh
+curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.116/protos-0.3.116-native-linux-x86_64.zip
+curl -LO https://github.com/guillermomolina/protos/releases/download/v0.3.116/protos-0.3.116-native-linux-x86_64.zip.sha256
+sha256sum -c protos-0.3.116-native-linux-x86_64.zip.sha256
+unzip protos-0.3.116-native-linux-x86_64.zip
+./protos-0.3.116-native-linux-x86_64/bin/protos --version
+./protos-0.3.116-native-linux-x86_64/bin/protos -e 'print("Hello, Protos!")'
+```
+
+For the Dev Container path, the portable JVM fallback, platform limitations,
+and next steps, see the [Try Protos guide](docs/guide/00-try-protos.md).
 
 ## Why Protos?
 
@@ -440,30 +462,26 @@ Some familiar syntax may eventually exist as syntactic sugar, but it
 should lower to the smaller semantic core rather than introduce parallel
 mechanisms.
 
-## Getting started
+## Developing Protos from source
 
-The quickest way to try Protos is the
-[Try Protos guide](docs/guide/00-try-protos.md). It covers both the recommended
-ready-to-use Dev Container and a manual installation from an official Protos
-release distribution.
+The published Native artifact above is the recommended first-run path on its
+supported target. If you are developing the Protos implementation itself,
+build the current checkout with:
 
-If you are developing the Protos implementation itself, build the current
-reference implementation with:
-
-``` sh
+```sh
 mvn package
 ```
 
 Then run the canonical hello-world example:
 
-``` sh
+```sh
 bin/protos protos/examples/hello-world.protos
 ```
 
 With no arguments, `bin/protos` starts the REPL. Source can also be evaluated
 directly:
 
-``` sh
+```sh
 bin/protos -e 'print("Hello, Protos!")'
 ```
 
@@ -471,7 +489,7 @@ A workspace whose current directory contains the selected `protos.toml` and
 canonical non-stale `protos.lock` can execute an explicit root-package logical
 module through the package-backed resolver:
 
-``` sh
+```sh
 bin/protos run Main arg1 arg2
 ```
 
@@ -517,8 +535,9 @@ regressions such as `FrameWithoutBoxing` materialization failures.
 
 ## Learn Protos
 
--   [Try Protos](docs/guide/00-try-protos.md) — get a runnable Protos environment
-    with the Dev Container or the official release distribution.
+-   [Try Protos](docs/guide/00-try-protos.md) — start with the self-contained
+    Native release on its supported target, the Dev Container, or the portable
+    JVM compatibility fallback.
 -   [Programming guide](docs/guide/README.md) — conceptual explanations and the
     mental model behind Protos.
 -   [Executable tutorials](protos/tutorials/README.md) — small progressive

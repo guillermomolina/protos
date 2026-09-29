@@ -18,9 +18,9 @@ the specification wins.
 ## Start here
 
 If you want to run Protos before reading the language guide, start with
-[Try Protos](00-try-protos.md). It covers the recommended Protos Dev Container
-path and the supported manual-installation path using an official Protos
-distribution.
+[Try Protos](00-try-protos.md). It covers the recommended self-contained Native
+release on its supported target, the Protos Dev Container, and the portable JVM
+compatibility fallback.
 
 ## How to use the learning material
 

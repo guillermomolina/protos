@@ -19,6 +19,11 @@ permanent news entry.
 
 ## 2026
 
+- **2026-09-29 — [Protos 0.3.116: download, extract, run](2026-09-29-protos-0-3-116-download-extract-run.md)**
+  Protos publishes a self-contained Native prerelease for the declared Linux
+  x86_64 / glibc 2.39+ target, with the portable JVM artifact retained as the
+  compatibility fallback.
+
 - **2026-09-26 — [Protos Native Image: a native executable with Truffle guest compilation](2026-09-26-native-image.md)**
   Build a native Protos executable with the Truffle optimizing runtime and
   regression coverage for guest compilation, alongside the existing JVM path.
