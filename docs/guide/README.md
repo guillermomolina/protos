@@ -133,15 +133,21 @@ ActorRef incarnation identity, explicit snapshot/capability transfer,
 send/request/backpressure and acceptance boundaries, lifecycle monitoring,
 Actor Group identity, GroupRef routing, and Group/Process lifetime separation.
 
-`DOC001-L` is now CLOSED with
+`DOC001-L` is CLOSED with
 [chapter 11](11-process-io-filesystems-and-authority.md), which explains
 bootstrap-local Process authority, args/environment snapshots, independently
 optional byte streams and explicit Encoding, TextReader/TextWriter ownership,
 I/O Future/commitment/lifecycle rules, structural Path values, confined
 Filesystem/File capabilities, namespace mutation, and the current D046/I024
-specified-versus-runnable boundary. No independently READY Programming Guide
-slice remains: `DOC001-M` is blocked until TOOL001 and TOOL002 close, and
-`DOC001-N` remains the final consistency closure.
+specified-versus-runnable boundary.
+
+The language-focused DOC001 guide sequence is complete through DOC001-L. The
+former DOC001-M broad toolchain gate has been reconciled out of DOC001: bundled
+Tools and detailed Test Tool documentation are owned by DOC005, while
+comprehensive Package Tool documentation should be tracked independently when
+TOOL001 is stable. DOC001-N therefore owns only the final navigation and
+consistency closure for the completed Programming Guide. Closing DOC001 does not
+claim that TOOL001 or DOC005 are complete.
 
 `DOC004` remains CLOSED with
 [chapter 12](12-matching-expressions.md), now reconciled by I041-E to the D131
@@ -151,15 +157,17 @@ protocol-first model: ordinary `pattern.match(subject)` authority, standard
 superseded I038 dedicated pattern-language surface is no longer part of Core
 v0.1.
 
-## Planned progression
+## Related ongoing documentation
 
-DOC005-A documents the common Bundled Tools model under
-[Toolchain guides](tools/README.md), and DOC005-B now adds the maintained
-[Test Tool fundamentals](tools/test-tool.md): current corpus routing,
-expectations, isolated execution, deterministic reporting and `--jobs`.
-Resource-aware Test Tool execution, final diagnostics/exit-status recipes and
-the Package Tool surface remain later documentation work under their owning
-published contracts.
+DOC005 owns the maintained bundled-Tool and Test Tool documentation under
+[Toolchain guides](tools/README.md) and the
+[Test Tool guide](tools/test-tool.md). Its remaining work may continue as the
+published Test Tool surface evolves without reopening or blocking DOC001.
 
-These headings organize explanatory work only. They do not define planned
-language behavior or override current implementation status.
+Comprehensive Package Tool user documentation is likewise outside DOC001's final
+Programming Guide closure. It should be tracked as independently meaningful
+documentation work when TOOL001 has a stable published surface to describe.
+
+These documentation tracks explain published behavior only. They do not define
+planned language or Tool behavior, and their independent lifecycle does not
+change the completed DOC001 language-guide scope.
