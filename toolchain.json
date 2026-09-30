@@ -18,6 +18,9 @@
     "minimum_version": "3.9.9",
     "supported_major": 3
   },
+  "ci": {
+    "image": "ghcr.io/guillermomolina/protos-ci@sha256:94c01739a95d6bbcb197180b86ef3aaa8c429483686d29d2b12d50ae35028fc1"
+  },
   "policy": {
     "primary_runtime_alignment": "development-ci-distribution",
     "upgrade_mode": "explicit-validated-change",

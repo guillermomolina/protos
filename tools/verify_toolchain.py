@@ -37,7 +37,8 @@ DEVELOPMENT_BINDINGS = {
     "devcontainer.maven_provisioning",
     "devcontainer.maven_repository_scope",
     "devcontainer.java_path",
-    "ci.tests.devcontainer",
+    "ci.tests.container",
+    "ci.tests.command",
 }
 
 MAVEN_PROVISIONING_MODEL = "ol10-rpm:maven+maven-unbound"
@@ -264,6 +265,8 @@ def load_contract(root):
         maven_contract = data["maven"]
         maven_minimum = str(maven_contract["minimum_version"])
         maven_supported_major = int(maven_contract["supported_major"])
+        ci_contract = data["ci"]
+        ci_image = str(ci_contract["image"])
         policy = data["policy"]
     except (KeyError, TypeError, ValueError) as exc:
         raise ToolchainError("incomplete toolchain contract: %s" % exc)
@@ -288,6 +291,11 @@ def load_contract(root):
         raise ToolchainError("Maven minimum_version must use supported_major")
     if maven_supported_major != 3:
         raise ToolchainError("current Protos Maven contract supports major 3 only")
+    if not re.fullmatch(
+        r"ghcr\.io/guillermomolina/protos-ci@sha256:[0-9a-f]{64}",
+        ci_image,
+    ):
+        raise ToolchainError("CI image must be an exact protos-ci digest")
     if policy.get("primary_runtime_alignment") != "development-ci-distribution":
         raise ToolchainError("unexpected primary runtime alignment policy")
     if policy.get("upgrade_mode") != "explicit-validated-change":
@@ -447,28 +455,22 @@ def workflow_job_container_image(path, job_id):
     )
 
 
-def workflow_job_devcontainer_contract(path, job_id):
+def workflow_job_test_command(path, job_id):
     # type: (Path, str) -> str
     text = workflow_job_text(path, job_id)
-    action = "devcontainers/ci@v0.3"
-    config = ".devcontainer/devcontainer.json"
-
-    action_present = re.search(
-        r"^[ \\t]*(?:-[ \\t]*)?uses:[ \\t]*%s[ \\t]*$" % re.escape(action),
+    exact_commands = re.findall(
+        r"^[ \\t]*make test[ \\t]*$",
         text,
         flags=re.MULTILINE,
     )
-    config_present = re.search(
-        r"^[ \\t]*configFile:[ \\t]*%s[ \\t]*$" % re.escape(config),
-        text,
-        flags=re.MULTILINE,
-    )
-
-    if action_present and config_present:
-        return "%s %s" % (action, config)
-
-    return "<missing:%s.devcontainer>" % job_id
-
+    if (
+        len(exact_commands) == 1
+        and "JAVA_TEST_JOBS" not in text
+        and "PROTOS_TEST_JOBS" not in text
+        and "devcontainers/ci@" not in text
+    ):
+        return "make test"
+    return "<drift:%s.command>" % job_id
 
 def native_image_container(contract):
     # type: (Dict[str, object]) -> str
@@ -571,13 +573,15 @@ def audit_bindings(root, contract, include_native=True):
         rows.append(("native.java_path", "JAVA_HOME-first", native_java_path))
 
     ci_workflow = root / ".github" / "workflows" / "tests.yml"
-    expected_ci_devcontainer = (
-        "devcontainers/ci@v0.3 .devcontainer/devcontainer.json"
-    )
     rows.append((
-        "ci.tests.devcontainer",
-        expected_ci_devcontainer,
-        workflow_job_devcontainer_contract(ci_workflow, "test"),
+        "ci.tests.container",
+        str(contract["ci"]["image"]),
+        workflow_job_container_image(ci_workflow, "test"),
+    ))
+    rows.append((
+        "ci.tests.command",
+        "make test",
+        workflow_job_test_command(ci_workflow, "test"),
     ))
     rows.append((
         "dist.runtime_pom_absent",
@@ -660,6 +664,7 @@ def print_contract(contract):
     print("MAVEN_SUPPORTED_MAJOR: %s" % contract["maven"]["supported_major"])
     print("MAVEN_EXACT_VERSION_REQUIRED: NO")
     print("MAVEN_RUNTIME_VALIDATION_MODE: runtime")
+    print("CI_IMAGE: %s" % contract["ci"]["image"])
     print("TOOLCHAIN_CONTRACT: PASS")
 
 

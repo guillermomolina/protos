@@ -36,6 +36,9 @@ TOOLCHAIN = {
     },
     "graal_components": {"version": "25.4.4.1.1"},
     "maven": {"minimum_version": "3.9.9", "supported_major": 3},
+    "ci": {
+        "image": "ghcr.io/guillermomolina/protos-ci@sha256:94c01739a95d6bbcb197180b86ef3aaa8c429483686d29d2b12d50ae35028fc1",
+    },
     "policy": {
         "primary_runtime_alignment": "development-ci-distribution",
         "upgrade_mode": "explicit-validated-change",
@@ -52,43 +55,35 @@ STALE_NATIVE_IMAGE = (
     "25i3-25.0.4.1-ol10-20260825"
 )
 
+CI_IMAGE = TOOLCHAIN["ci"]["image"]
+STALE_CI_IMAGE = (
+    "ghcr.io/guillermomolina/protos-ci@sha256:"
+    + ("0" * 64)
+)
+
 
 def write(path, text):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
 
 
-def ci_job(name, image, feature, version):
-    selected = TOOLCHAIN["graalvm"]["container_image"]
-    aligned = (
-        image == selected
-        and feature == "25"
-        and version == "25.0.4.1.1"
-    )
-    action = "devcontainers/ci@v0.3" if aligned else "devcontainers/ci@v0.2"
-
+def ci_job(name, image, command):
     return """  %s:
+    container:
+      image: %s
     steps:
-      - name: Run in development container
-        uses: %s
-        with:
-          configFile: .devcontainer/devcontainer.json
-          push: never
-""" % (name, action)
+      - name: Run repository tests
+        run: |
+          %s
+""" % (name, image, command)
 
 
-def ci_workflow(
-    test_image,
-    test_feature,
-    test_version,
-):
+def ci_workflow(test_image, test_command):
     return "jobs:\n" + ci_job(
         "test",
         test_image,
-        test_feature,
-        test_version,
+        test_command,
     )
-
 
 def make_fixture(
     root,
@@ -96,6 +91,7 @@ def make_fixture(
     development_drift=False,
     native_drift=False,
     old_c_state=False,
+    ci_command_drift=False,
 ):
     selected_image = TOOLCHAIN["graalvm"]["container_image"]
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
@@ -185,9 +181,12 @@ def make_fixture(
             'ENV PATH="${JAVA_HOME}/bin:${PATH}"\n' % selected_image,
         )
 
-    test_image = "ghcr.io/graalvm/graalvm-community:25-ol10" if development_drift else selected_image
-    test_feature = "21" if development_drift else "25"
-    test_version = "21" if development_drift else "25.0.4.1.1"
+    test_ci_image = STALE_CI_IMAGE if development_drift else CI_IMAGE
+    test_command = (
+        "make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4"
+        if ci_command_drift
+        else "make test"
+    )
     if old_c_state:
         dist_components = "24.0.0"
         feature = "22"
@@ -207,9 +206,8 @@ actual_version=25.0.4.1.1
     write(
         root / ".github" / "workflows" / "tests.yml",
         ci_workflow(
-            test_image,
-            test_feature,
-            test_version,
+            test_ci_image,
+            test_command,
         ),
     )
 
@@ -371,13 +369,27 @@ Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-commu
             "devcontainer.maven_provisioning",
             "devcontainer.maven_repository_scope",
             "devcontainer.java_path",
-            "ci.tests.devcontainer",
+            "ci.tests.container",
         ):
             require(
                 binding in result.stdout,
                 "development drift did not identify %s" % binding,
                 result,
             )
+
+        root = tmp / "ci-command-drift"
+        make_fixture(root, ci_command_drift=True)
+        result = run(verifier, root, "check", "development")
+        require(
+            result.returncode == 1,
+            "CI command drift did not fail closed",
+            result,
+        )
+        require(
+            "ci.tests.command" in result.stdout,
+            "CI command drift did not identify ci.tests.command",
+            result,
+        )
 
         root = tmp / "native-drift"
         make_fixture(root, native_drift=True)
