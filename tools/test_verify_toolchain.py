@@ -36,9 +36,6 @@ TOOLCHAIN = {
     },
     "graal_components": {"version": "25.4.4.1.1"},
     "maven": {"minimum_version": "3.9.9", "supported_major": 3},
-    "ci": {
-        "image": "ghcr.io/guillermomolina/protos-ci@sha256:94c01739a95d6bbcb197180b86ef3aaa8c429483686d29d2b12d50ae35028fc1",
-    },
     "policy": {
         "primary_runtime_alignment": "development-ci-distribution",
         "upgrade_mode": "explicit-validated-change",
@@ -55,7 +52,12 @@ STALE_NATIVE_IMAGE = (
     "25i3-25.0.4.1-ol10-20260825"
 )
 
-CI_IMAGE = TOOLCHAIN["ci"]["image"]
+CI_IMAGE_LOCK = {
+    "schema": "protos-ci-image-lock-v1",
+    "image": "ghcr.io/guillermomolina/protos-ci@sha256:94c01739a95d6bbcb197180b86ef3aaa8c429483686d29d2b12d50ae35028fc1",
+}
+
+CI_IMAGE = CI_IMAGE_LOCK["image"]
 STALE_CI_IMAGE = (
     "ghcr.io/guillermomolina/protos-ci@sha256:"
     + ("0" * 64)
@@ -108,6 +110,10 @@ def make_fixture(
 ):
     selected_image = TOOLCHAIN["graalvm"]["container_image"]
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
+    write(
+        root / ".github" / "ci-image-lock.json",
+        json.dumps(CI_IMAGE_LOCK, indent=2) + "\n",
+    )
 
     native_image = STALE_NATIVE_IMAGE if native_drift else NATIVE_IMAGE
     native_maven = (
@@ -512,6 +518,22 @@ Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-commu
         require(
             result.returncode == 2,
             "malformed contract did not fail closed",
+            result,
+        )
+
+        write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
+        malformed_ci_lock = {
+            "schema": "protos-ci-image-lock-v1",
+            "image": "ghcr.io/guillermomolina/protos-ci:ci",
+        }
+        write(
+            root / ".github" / "ci-image-lock.json",
+            json.dumps(malformed_ci_lock, indent=2) + "\n",
+        )
+        result = run(verifier, root, "contract")
+        require(
+            result.returncode == 2,
+            "floating CI image lock did not fail closed",
             result,
         )
 

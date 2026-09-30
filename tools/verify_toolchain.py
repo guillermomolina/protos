@@ -266,11 +266,23 @@ def load_contract(root):
         maven_contract = data["maven"]
         maven_minimum = str(maven_contract["minimum_version"])
         maven_supported_major = int(maven_contract["supported_major"])
-        ci_contract = data["ci"]
-        ci_image = str(ci_contract["image"])
         policy = data["policy"]
     except (KeyError, TypeError, ValueError) as exc:
         raise ToolchainError("incomplete toolchain contract: %s" % exc)
+
+    ci_path = root / ".github" / "ci-image-lock.json"
+    try:
+        ci_data = json.loads(read_text(ci_path))
+    except ValueError as exc:
+        raise ToolchainError("invalid CI image lock: %s" % exc)
+
+    if ci_data.get("schema") != "protos-ci-image-lock-v1":
+        raise ToolchainError("unsupported CI image lock schema")
+
+    try:
+        ci_image = str(ci_data["image"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ToolchainError("incomplete CI image lock: %s" % exc)
 
     if graal.get("distribution") != "graalvm-community":
         raise ToolchainError("primary runtime distribution must be graalvm-community")
@@ -304,6 +316,7 @@ def load_contract(root):
     if policy.get("floating_primary_runtime") is not False:
         raise ToolchainError("primary runtime must not float")
 
+    data["ci"] = ci_data
     return data
 
 

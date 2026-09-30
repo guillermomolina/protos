@@ -1,0 +1,4 @@
+{
+  "schema": "protos-ci-image-lock-v1",
+  "image": "ghcr.io/guillermomolina/protos-ci@sha256:94c01739a95d6bbcb197180b86ef3aaa8c429483686d29d2b12d50ae35028fc1"
+}

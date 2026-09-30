@@ -8,6 +8,7 @@ on:
       - .devcontainer/Dockerfile
       - .devcontainer/devcontainer.json
       - .devcontainer/devcontainer-lock.json
+      - toolchain.json
       - .github/workflows/ci-image.yml
   workflow_dispatch:
 
