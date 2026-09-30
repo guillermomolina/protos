@@ -7,6 +7,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.123-SNAPSHOT
+
+- `I073` (#744): enable Bytecode DSL bytecode-handler tail-call compilation by
+  setting `enableTailCallHandlers = true` on `ProtosBytecodeRootNode`. This is
+  internal interpreter machinery only: it introduces no guest tail-call
+  semantics, changes no observable Protos semantics, and makes no performance
+  improvement claim. Publication metadata for commit `f206eddf`, which omitted
+  the version bump and this entry.
+
 ## 0.3.122-SNAPSHOT
 
 - `I062` (#665, D169): simplify Core `Path` to relative/downward components.
