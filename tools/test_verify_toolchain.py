@@ -75,7 +75,7 @@ def ci_job(name, image, command, cache_action="actions/cache@v6"):
       - name: Restore Maven dependency cache
         uses: %s
         with:
-          path: ~/.m2/repository
+          path: /root/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-

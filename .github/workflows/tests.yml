@@ -39,7 +39,7 @@ jobs:
       - name: Restore Maven dependency cache
         uses: actions/cache@v6
         with:
-          path: ~/.m2/repository
+          path: /root/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: |
             ${{ runner.os }}-maven-

@@ -483,7 +483,7 @@ def workflow_job_maven_cache_contract(path, job_id):
         flags=re.MULTILINE,
     )
     path_present = re.search(
-        r"^[ \\t]*path:[ \\t]*~/.m2/repository[ \\t]*$",
+        r"^[ \\t]*path:[ \\t]*/root/.m2/repository[ \\t]*$",
         text,
         flags=re.MULTILINE,
     )
@@ -495,7 +495,7 @@ def workflow_job_maven_cache_contract(path, job_id):
     )
 
     if action_present and path_present and key_present and restore_present:
-        return "actions/cache@v6 ~/.m2/repository pom-hash"
+        return "actions/cache@v6 /root/.m2/repository pom-hash"
     return "<drift:%s.maven_cache>" % job_id
 
 
@@ -612,7 +612,7 @@ def audit_bindings(root, contract, include_native=True):
     ))
     rows.append((
         "ci.tests.maven_cache",
-        "actions/cache@v6 ~/.m2/repository pom-hash",
+        "actions/cache@v6 /root/.m2/repository pom-hash",
         workflow_job_maven_cache_contract(ci_workflow, "test"),
     ))
     rows.append((
