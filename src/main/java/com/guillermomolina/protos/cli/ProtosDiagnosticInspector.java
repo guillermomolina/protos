@@ -35,7 +35,6 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
-import com.guillermomolina.protos.runtime.ProtosProcessArgumentsValue;
 import com.guillermomolina.protos.runtime.ProtosProcessCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
@@ -85,7 +84,6 @@ final class ProtosDiagnosticInspector {
     private static boolean isStructuredValue(Object value) {
         return value instanceof ProtosBytesValue
                 || value instanceof ProtosByteRegionValue
-                || value instanceof ProtosProcessArgumentsValue
                 || value instanceof ProtosArrayValue
                 || value instanceof ProtosMapValue
                 || value instanceof ProtosIdentityMapValue
@@ -207,16 +205,6 @@ final class ProtosDiagnosticInspector {
             }
             if (value instanceof ProtosByteRegionValue bytes) {
                 appendNamedSequence("ByteRegion", bytes.indexedSnapshot(), state, path, depth, layout);
-                return;
-            }
-            if (value instanceof ProtosProcessArgumentsValue arguments) {
-                appendNamedSequence(
-                        "ProcessArguments",
-                        arguments.valuesForRuntime(),
-                        state,
-                        path,
-                        depth,
-                        layout);
                 return;
             }
             if (value instanceof ProtosArrayValue array) {

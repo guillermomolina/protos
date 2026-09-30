@@ -407,10 +407,6 @@ public final class ProtosParallelRuntime {
             if(v instanceof ProtosEncodingValue x){
                 memo.put(v,x);return x.transferForParallelRuntime();
             }
-            if(v instanceof ProtosProcessArgumentsValue x){
-                if(memo.containsKey(v))return memo.get(v);
-                ProtosProcessArgumentsValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
-            }
             if(v instanceof ProtosEnvironmentValue x){
                 if(memo.containsKey(v))return memo.get(v);
                 ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;

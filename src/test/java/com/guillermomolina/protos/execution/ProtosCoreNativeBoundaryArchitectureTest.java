@@ -61,7 +61,6 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardTcpConnectionProtocol.java", 7),
                     Map.entry("execution/ProtosStandardTcpListenerProtocol.java", 3),
                     Map.entry("execution/ProtosStandardArrayProtocol.java", 7),
-                    Map.entry("execution/ProtosStandardProcessArgumentsProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEnvironmentProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEncodingProtocol.java", 2),
                     Map.entry("execution/ProtosStandardTextReaderProtocol.java", 2),
@@ -126,8 +125,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(35, actualCore.size());
-        assertEquals(146, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(34, actualCore.size());
+        assertEquals(143, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -319,13 +318,6 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
     @Test
     void internalAndHelperBackedStandardSurfacesStayExplicit() throws Exception {
-        ProtosObjectValue processArgumentsPrototype =
-                ProtosStandardProcessArgumentsProtocol.createPrototype();
-        assertNativeSelectors(
-                "ProcessArguments",
-                processArgumentsPrototype,
-                Set.of("size", "at", "each"));
-
         ProtosObjectValue environmentPrototype =
                 ProtosStandardEnvironmentProtocol.createPrototype();
         assertNativeSelectors(

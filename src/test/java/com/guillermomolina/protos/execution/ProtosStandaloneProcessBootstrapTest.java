@@ -81,7 +81,6 @@ final class ProtosStandaloneProcessBootstrapTest {
                 List.of("alpha", "beta"),
                 process.argumentsSnapshotForRuntime()
                         .orElseThrow()
-                        .valuesForRuntime()
                         .stream()
                         .map(value -> value.value())
                         .toList());

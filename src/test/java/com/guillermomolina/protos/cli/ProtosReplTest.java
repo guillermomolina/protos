@@ -242,10 +242,10 @@ final class ProtosReplTest {
         assertTrue(r.o.contains("protos> <object>\nnull\nprotos> "), r.o);
         assertTrue(r.e.isBlank(), r.e);
     }    @Test
-    void processArgumentsUseBoundedContentDiagnosticProjection() {
+    void processArgumentsRenderAsOrdinaryArray() {
         R r = repl("process.args()\n:quit\n");
         assertEquals(0, r.c);
-        assertTrue(r.o.contains("protos> ProcessArguments[]\nprotos> "), r.o);
+        assertTrue(r.o.contains("protos> []\nprotos> "), r.o);
         assertTrue(r.e.isBlank(), r.e);
     }
 

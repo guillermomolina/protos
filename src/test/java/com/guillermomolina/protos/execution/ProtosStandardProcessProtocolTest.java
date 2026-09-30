@@ -26,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
@@ -36,6 +37,8 @@ import com.guillermomolina.protos.runtime.ProtosProcessCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -67,8 +70,54 @@ final class ProtosStandardProcessProtocolTest {
         assertFalse(process.hasLocalSlot("filesystem"));
     }
 
-    // args/environment stable identity and normal access are executable Protos
-    // conformance. Keep only the resource-backed standard stream surface here.
+    // args/environment content and normal access are executable Protos conformance.
+    // Keep the resource-backed standard stream surface and the args representation here.
+    @Test
+    void argsAccessorExposesStableContentAsFrozenOrdinaryArray() throws Exception {
+        Fixture fixture = fixture(true, true, true);
+
+        ProtosArrayValue first =
+                assertInstanceOf(ProtosArrayValue.class, fixture.invoke("args"));
+        ProtosArrayValue second =
+                assertInstanceOf(ProtosArrayValue.class, fixture.invoke("args"));
+
+        // D168: only content is portable; no identity relation between acquisitions is asserted.
+        assertSame(fixture.prelude.arrayPrototype(), first.parent().orElseThrow());
+        assertTrue(first.isFrozen());
+        assertTrue(second.isFrozen());
+        assertEquals(List.of("one", "two"), strings(first));
+        assertEquals(List.of("one", "two"), strings(second));
+        assertThrows(
+                IllegalStateException.class,
+                () -> first.indexedPut(BigInteger.ZERO, new ProtosStringValue("changed")));
+        assertEquals(List.of("one", "two"), strings(first));
+    }
+
+    @Test
+    void delegatedProcessCapabilityReacquiresArgumentContent() throws Exception {
+        Fixture fixture = fixture(true, true, true);
+        ProtosProcessCapabilityValue delegated =
+                assertInstanceOf(
+                        ProtosProcessCapabilityValue.class,
+                        com.guillermomolina.protos.runtime.ProtosActorValueTransfer
+                                .snapshotValue(fixture.capability, fixture.activation));
+
+        ProtosArrayValue arguments =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        ProtosInvocation.invokeMessage(
+                                delegated, "args", List.of(), fixture.activation));
+
+        assertTrue(arguments.isFrozen());
+        assertEquals(List.of("one", "two"), strings(arguments));
+    }
+
+    private static List<String> strings(ProtosArrayValue array) {
+        return array.indexedSnapshot().stream()
+                .map(element -> ((ProtosStringValue) element).value())
+                .toList();
+    }
+
     @Test
     void successfulStreamAndEncodingAccessorsExposeEstablishedBootstrapState()
             throws Exception {
@@ -251,9 +300,7 @@ final class ProtosStandardProcessProtocolTest {
 
     private static void establishSnapshots(
             ProtosPrelude prelude, ProtosProcessRuntime process) {
-        process.establishArgumentsForRuntime(
-                ProtosStandardProcessArgumentsProtocol.createPrototype(),
-                List.of("one", "two"));
+        process.establishArgumentsForRuntime(List.of("one", "two"));
         process.establishEnvironmentForRuntime(
                 ProtosStandardEnvironmentProtocol.createPrototype(),
                 exactEnvironmentDomain(),

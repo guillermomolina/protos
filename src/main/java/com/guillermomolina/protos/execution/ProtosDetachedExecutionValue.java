@@ -289,7 +289,6 @@ public final class ProtosDetachedExecutionValue {
                     || value instanceof ProtosFileValue
                     || value instanceof ProtosFilesystemValue
                     || value instanceof ProtosProcessCapabilityValue
-                    || value instanceof ProtosProcessArgumentsValue
                     || value instanceof ProtosEnvironmentValue
                     || value instanceof ProtosProcessStandardStreamValue
                     || value instanceof ProtosActorRefValue

@@ -41,7 +41,6 @@ import com.guillermomolina.protos.runtime.ProtosIoOperation;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosProcessArgumentsValue;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
@@ -1174,7 +1173,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         final ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind;
         final boolean arrayEach;
         final boolean bytesEach;
-        final boolean processArgumentsEach;
         final boolean environmentEach;
         final boolean identityMapEach;
         final boolean mapEach;
@@ -1192,7 +1190,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
                 boolean arrayEach,
                 boolean bytesEach,
-                boolean processArgumentsEach,
                 boolean environmentEach,
                 boolean identityMapEach,
                 boolean mapEach,
@@ -1208,7 +1205,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.booleanKind = booleanKind;
             this.arrayEach = arrayEach;
             this.bytesEach = bytesEach;
-            this.processArgumentsEach = processArgumentsEach;
             this.environmentEach = environmentEach;
             this.identityMapEach = identityMapEach;
             this.mapEach = mapEach;
@@ -1225,7 +1221,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             + (booleanKind != null ? 1 : 0)
                             + (arrayEach ? 1 : 0)
                             + (bytesEach ? 1 : 0)
-                            + (processArgumentsEach ? 1 : 0)
                             + (environmentEach ? 1 : 0)
                             + (identityMapEach ? 1 : 0)
                             + (mapEach ? 1 : 0)
@@ -1249,7 +1244,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardBooleanProtocol.StructuredCallbackKind booleanKind,
                 boolean arrayEach,
                 boolean bytesEach,
-                boolean processArgumentsEach,
                 boolean environmentEach,
                 boolean identityMapEach,
                 boolean mapEach,
@@ -1266,7 +1260,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             || booleanKind != null
                             || arrayEach
                             || bytesEach
-                            || processArgumentsEach
                             || environmentEach
                             || identityMapEach
                             || mapEach
@@ -1286,7 +1279,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     booleanKind,
                     arrayEach,
                     bytesEach,
-                    processArgumentsEach,
                     environmentEach,
                     identityMapEach,
                     mapEach,
@@ -1347,7 +1339,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         default boolean isStructuredArrayEach() { return false; }
         default boolean isStructuredArrayMatch() { return false; }
         default boolean isStructuredBytesEach() { return false; }
-        default boolean isStructuredProcessArgumentsEach() { return false; }
         default boolean isStructuredEnvironmentEach() { return false; }
         default boolean isStructuredIdentityMapAtIfAbsent() { return false; }
         default boolean isStructuredIdentityMapEach() { return false; }
@@ -1409,11 +1400,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         default PreparedBytesEachCall prepareStructuredBytesEach() {
             throw new IllegalStateException(
                     "prepared Closure call has no structured Bytes.each capability");
-        }
-
-        default PreparedProcessArgumentsEachCall prepareStructuredProcessArgumentsEach() {
-            throw new IllegalStateException(
-                    "prepared Closure call has no structured ProcessArguments.each capability");
         }
 
         default PreparedEnvironmentEachCall prepareStructuredEnvironmentEach() {
@@ -1480,7 +1466,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean,
                 boolean structuredArrayEach,
                 boolean structuredBytesEach,
-                boolean structuredProcessArgumentsEach,
                 boolean structuredEnvironmentEach,
                 boolean structuredIdentityMapEach,
                 boolean structuredMapEach,
@@ -1501,7 +1486,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             structuredBoolean,
                             structuredArrayEach,
                             structuredBytesEach,
-                            structuredProcessArgumentsEach,
                             structuredEnvironmentEach,
                             structuredIdentityMapEach,
                             structuredMapEach,
@@ -1725,11 +1709,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public boolean isStructuredBytesEach() { return structured != null && structured.bytesEach; }
 
         @Override
-        public boolean isStructuredProcessArgumentsEach() {
-            return structured != null && structured.processArgumentsEach;
-        }
-
-        @Override
         public boolean isStructuredEnvironmentEach() {
             return structured != null && structured.environmentEach;
         }
@@ -1769,7 +1748,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             || structured.booleanKind != null
                             || structured.arrayEach
                             || structured.bytesEach
-                            || structured.processArgumentsEach
                             || structured.environmentEach
                             || structured.identityMapEach
                             || structured.mapEach
@@ -1964,18 +1942,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         "prepared Closure call has no structured Bytes.each capability");
             }
             return new PreparedBytesEachCall(
-                    activation.receiver(),
-                    supplied,
-                    activation);
-        }
-
-        @Override
-        public PreparedProcessArgumentsEachCall prepareStructuredProcessArgumentsEach() {
-            if (structured == null || !structured.processArgumentsEach) {
-                throw new IllegalStateException(
-                        "prepared Closure call has no structured ProcessArguments.each capability");
-            }
-            return new PreparedProcessArgumentsEachCall(
                     activation.receiver(),
                     supplied,
                     activation);
@@ -3109,112 +3075,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class FinishStructuredBytesEach {
         @Specialization
         public static Object perform(PreparedBytesEachCall prepared) {
-            return prepared.finish();
-        }
-    }
-
-    static final class PreparedProcessArgumentsEachCall {
-        private final ProtosProcessArgumentsValue arguments;
-        private final List<?> snapshot;
-        private final Object block;
-        private final ProtosActivation activation;
-        private int index;
-
-        PreparedProcessArgumentsEachCall(
-                Object receiver,
-                List<?> supplied,
-                ProtosActivation activation) {
-            this.activation = java.util.Objects.requireNonNull(activation, "activation");
-            if (!(receiver instanceof ProtosProcessArgumentsValue value)
-                    || supplied.size() != 1) {
-                throw ProtosCoreErrors.signal(
-                        activation,
-                        ProtosCoreErrors.newError(activation));
-            }
-            this.arguments = value;
-            this.block = supplied.get(0);
-            ProtosStandardProcessArgumentsProtocol.requireInvokableForStructured(
-                    block,
-                    activation);
-            this.snapshot = List.copyOf(value.valuesForRuntime());
-        }
-
-        boolean hasNext() {
-            return index < snapshot.size();
-        }
-
-        PreparedClosureCall prepareCurrent() {
-            if (!hasNext()) {
-                throw new IllegalStateException(
-                        "ProcessArguments.each callback requested after snapshot exhaustion");
-            }
-            return prepareClosureCall(
-                    block,
-                    List.of(snapshot.get(index)),
-                    activation);
-        }
-
-        void advance() {
-            if (!hasNext()) {
-                throw new IllegalStateException(
-                        "ProcessArguments.each cursor advanced after snapshot exhaustion");
-            }
-            index++;
-        }
-
-        Object finish() {
-            if (hasNext()) {
-                throw new IllegalStateException(
-                        "ProcessArguments.each finished before snapshot exhaustion");
-            }
-            return arguments;
-        }
-    }
-
-    @Operation
-    public static final class IsStructuredProcessArgumentsEachCall {
-        @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
-            return prepared.isStructuredProcessArgumentsEach();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredProcessArgumentsEachCall {
-        @Specialization
-        public static PreparedProcessArgumentsEachCall perform(PreparedClosureCall prepared) {
-            return prepared.prepareStructuredProcessArgumentsEach();
-        }
-    }
-
-    @Operation
-    public static final class StructuredProcessArgumentsEachHasNext {
-        @Specialization
-        public static boolean perform(PreparedProcessArgumentsEachCall prepared) {
-            return prepared.hasNext();
-        }
-    }
-
-    @Operation
-    public static final class PrepareStructuredProcessArgumentsEachElementCall {
-        @Specialization
-        public static PreparedClosureCall perform(PreparedProcessArgumentsEachCall prepared) {
-            return prepared.prepareCurrent();
-        }
-    }
-
-    @Operation
-    public static final class AdvanceStructuredProcessArgumentsEach {
-        @Specialization
-        public static void perform(PreparedProcessArgumentsEachCall prepared) {
-            prepared.advance();
-        }
-    }
-
-    @Operation
-    public static final class FinishStructuredProcessArgumentsEach {
-        @Specialization
-        public static Object perform(PreparedProcessArgumentsEachCall prepared) {
             return prepared.finish();
         }
     }
@@ -6133,7 +5993,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             BOOLEAN,
             ARRAY_EACH,
             BYTES_EACH,
-            PROCESS_ARGUMENTS_EACH,
             ENVIRONMENT_EACH,
             IDENTITY_MAP_EACH,
             MAP_EACH,
@@ -6422,7 +6281,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     cachedStructured.booleanKind(),
                     cachedStructured.kind() == GuardedStructuredKind.ARRAY_EACH,
                     cachedStructured.kind() == GuardedStructuredKind.BYTES_EACH,
-                    cachedStructured.kind() == GuardedStructuredKind.PROCESS_ARGUMENTS_EACH,
                     cachedStructured.kind() == GuardedStructuredKind.ENVIRONMENT_EACH,
                     cachedStructured.kind() == GuardedStructuredKind.IDENTITY_MAP_EACH,
                     cachedStructured.kind() == GuardedStructuredKind.MAP_EACH,
@@ -6507,9 +6365,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             } else if (ProtosStandardBytesProtocol.isCanonicalStandardEachSelection(
                     closure, home, caller)) {
                 kind = GuardedStructuredKind.BYTES_EACH;
-            } else if (ProtosStandardProcessArgumentsProtocol.isCanonicalStandardEachSelection(
-                    closure, receiver, home)) {
-                kind = GuardedStructuredKind.PROCESS_ARGUMENTS_EACH;
             } else if (ProtosStandardEnvironmentProtocol.isCanonicalStandardEachSelection(
                     closure, receiver, home)) {
                 kind = GuardedStructuredKind.ENVIRONMENT_EACH;
@@ -7419,7 +7274,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
                 ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
                 ProtosStandardBytesProtocol.isStandardEachImplementation(closure),
-                ProtosStandardProcessArgumentsProtocol.isStandardEachImplementation(closure),
                 ProtosStandardEnvironmentProtocol.isStandardEachImplementation(closure),
                 ProtosStandardIdentityMapProtocol.isStandardEachImplementation(closure),
                 ProtosStandardMapProtocol.isStandardEachImplementation(closure),
@@ -7441,7 +7295,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosStandardBooleanProtocol.StructuredCallbackKind structuredBoolean,
             boolean structuredArrayEach,
             boolean structuredBytesEach,
-            boolean structuredProcessArgumentsEach,
             boolean structuredEnvironmentEach,
             boolean structuredIdentityMapEach,
             boolean structuredMapEach,
@@ -7471,7 +7324,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     structuredBoolean,
                     structuredArrayEach,
                     structuredBytesEach,
-                    structuredProcessArgumentsEach,
                     structuredEnvironmentEach,
                     structuredIdentityMapEach,
                     structuredMapEach,
@@ -7488,7 +7340,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 || structuredBoolean != null
                 || structuredArrayEach
                 || structuredBytesEach
-                || structuredProcessArgumentsEach
                 || structuredEnvironmentEach
                 || structuredIdentityMapEach
                 || structuredMapEach

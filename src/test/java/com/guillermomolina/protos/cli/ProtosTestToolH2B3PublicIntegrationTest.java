@@ -217,7 +217,7 @@ final class ProtosTestToolH2B3PublicIntegrationTest {
                             List.of(
                                     new ProtosStringValue(
                                             "(process.args().size() == 3) && "
-                                                    + "(process.args() !== otherProcess.args())")));
+                                                    + "(process.args()[0] == otherProcess.args()[0])")));
 
             ProtosStringValue processSnapshotState =
                     assertInstanceOf(

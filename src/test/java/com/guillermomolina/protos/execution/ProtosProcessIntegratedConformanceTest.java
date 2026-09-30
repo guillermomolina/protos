@@ -50,7 +50,7 @@ final class ProtosProcessIntegratedConformanceTest {
                     "stderrEncoding");
 
     @Test
-    void delegatedProcessReacquiresCanonicalSnapshotsButTransferredSnapshotIsOrdinaryCopy()
+    void delegatedProcessReacquiresSnapshotContentAndTransferredArgsAreOrdinaryArrayCopy()
             throws Exception {
         Fixture fixture = fixture(new ProtosFilesystemValue());
 
@@ -64,17 +64,36 @@ final class ProtosProcessIntegratedConformanceTest {
         assertFalse(ProtosIdentity.identical(fixture.processCapability, delegated));
         assertSame(fixture.process, delegated.processForRuntime());
 
-        Object argsFromRoot = invoke(fixture.processCapability, "args", fixture.activation);
-        Object argsFromDelegated = invoke(delegated, "args", fixture.activation);
-        assertSame(argsFromRoot, argsFromDelegated);
-        assertTrue(ProtosIdentity.identical(argsFromRoot, argsFromDelegated));
+        // D168: reacquisition through a delegated proxy preserves content; no identity relation
+        // between separately acquired containers is asserted.
+        ProtosArrayValue argsFromRoot =
+                assertInstanceOf(
+                        ProtosArrayValue.class,
+                        invoke(fixture.processCapability, "args", fixture.activation));
+        ProtosArrayValue argsFromDelegated =
+                assertInstanceOf(
+                        ProtosArrayValue.class, invoke(delegated, "args", fixture.activation));
+        assertTrue(argsFromRoot.isFrozen());
+        assertTrue(argsFromDelegated.isFrozen());
+        assertEquals(argumentStrings(argsFromRoot), argumentStrings(argsFromDelegated));
+        assertEquals(List.of("alpha", "beta"), argumentStrings(argsFromDelegated));
 
         Object environmentFromRoot =
                 invoke(fixture.processCapability, "environment", fixture.activation);
         Object environmentFromDelegated =
                 invoke(delegated, "environment", fixture.activation);
-        assertSame(environmentFromRoot, environmentFromDelegated);
-        assertTrue(ProtosIdentity.identical(environmentFromRoot, environmentFromDelegated));
+        for (Object environment : List.of(environmentFromRoot, environmentFromDelegated)) {
+            assertEquals(
+                    "one",
+                    assertInstanceOf(
+                                    ProtosStringValue.class,
+                                    ProtosInvocation.invokeMessage(
+                                            environment,
+                                            "get",
+                                            List.of(new ProtosStringValue("A")),
+                                            fixture.activation))
+                            .value());
+        }
 
         Object copiedArgs =
                 ProtosActorValueTransfer.snapshotValue(argsFromRoot, fixture.activation);
@@ -97,10 +116,7 @@ final class ProtosProcessIntegratedConformanceTest {
                                         fixture.activation))
                         .value());
 
-        // Reacquisition through the delegated Process proxy remains the Process-canonical object,
-        // not the ordinary copied snapshot.
-        assertSame(argsFromRoot, invoke(delegated, "args", fixture.activation));
-        assertNotSame(copiedArgs, invoke(delegated, "args", fixture.activation));
+        assertEquals(List.of("alpha", "beta"), argumentStrings(copiedArgs));
     }
 
     @Test
@@ -506,6 +522,12 @@ activation);
                 return captured.equals(query);
             }
         };
+    }
+
+    private static List<String> argumentStrings(Object array) {
+        return assertInstanceOf(ProtosArrayValue.class, array).indexedSnapshot().stream()
+                .map(element -> ((ProtosStringValue) element).value())
+                .toList();
     }
 
     private static Object invoke(

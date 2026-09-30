@@ -167,7 +167,7 @@ other non-transferable live resource can cross an Actor boundary.
 `Process` has no Core P-transfer contract and cannot be captured or supplied into
 isolated P execution.
 
-## `process.args()` is a stable canonical snapshot
+## `process.args()` is a frozen ordinary Array
 
 The Process argument interface is:
 
@@ -175,37 +175,37 @@ The Process argument interface is:
 args: process.args()
 ```
 
-The result is an immutable sequential bootstrap snapshot with:
+The result is an ordinary Core `Array` of the application-argument Strings, in
+the order supplied, frozen before it is exposed. It has no Process-specific type
+or protocol: `size()`, `at(index)`, indexing, and `each(block)` are the ordinary
+Array operations, and mutation such as `atPut` fails because the Array is frozen.
 
-```text
-size()
-at(index)
-each(block)
+```protos
+args.size()
+args.at(0)
+args.atPut(0, "x")   // fails: the Array is frozen
 ```
 
-Every element is a valid Protos `String`.
+Every element is a valid Protos `String`. With no application arguments the
+result is an empty frozen Array.
 
 The launcher/executable identity analogous to POSIX `argv[0]` is not part of
 this application-argument sequence.
 
-The snapshot is established as one logical Process-bootstrap value.
-
-Repeated successful acquisitions through Process proxies for the same logical
-Process denote the same canonical semantic snapshot identity:
+The portable contract is the stable content, not the identity of the container.
+Two calls observe the same count, order, and Strings, but whether they return the
+same Array object is unspecified:
 
 ```protos
 a: process.args()
 b: process.args()
 
-a === b
+a === b    // not portable: may be true or false
 ```
 
-is true for that same logical Process.
-
-This does not require one permanent physical wrapper. It is a semantic identity
-guarantee.
-
-The snapshot is immutable, but it is not specified to be an `Array`.
+Portable code compares or uses the contents and never relies on either outcome.
+Because the Array is frozen and its elements are Strings, it can be passed to
+another Actor under the ordinary Array transfer rules.
 
 ## Argument capture is stable against host mutation
 
@@ -250,8 +250,9 @@ each(block)
 
 It is not specified as a standard `Map`.
 
-Like the argument sequence, a successfully established Environment has one
-canonical semantic snapshot identity per logical Process.
+Like the argument sequence, a successfully established Environment has stable
+content for the logical Process. Whether separate calls to `process.environment()`
+return the same object is unspecified and not portable.
 
 `get(name)` distinguishes:
 
@@ -1404,10 +1405,10 @@ same.
    merely because the launcher can read source.
 5. Process capability delegation to another Actor is explicit; Process has no
    Core P-transfer contract.
-6. `process.args()` is one immutable canonical semantic snapshot per logical
-   Process, not a fresh Array on every call.
-7. `process.environment()` is one read-only canonical Environment snapshot and is
-   not specified as Map.
+6. `process.args()` returns a frozen ordinary Array with stable content; the
+   identity of separate results is not portable.
+7. `process.environment()` returns a read-only Environment with stable content,
+   not specified as Map; the identity of separate results is not portable.
 8. stdin/stdout/stderr are independently optional byte capabilities.
 9. Standard-stream Encoding associations are explicit; byte streams are never
    implicitly text.

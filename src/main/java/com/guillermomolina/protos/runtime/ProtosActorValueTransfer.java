@@ -129,9 +129,6 @@ public final class ProtosActorValueTransfer {
             if (value instanceof ProtosProcessCapabilityValue processCapability) {
                 return remember(value, processCapability.rematerializeForActorTransfer());
             }
-            if (value instanceof ProtosProcessArgumentsValue arguments) {
-                return remember(value, arguments.rematerializeForActorTransfer());
-            }
             if (value instanceof ProtosEnvironmentValue environment) {
                 return remember(value, environment.rematerializeForActorTransfer());
             }

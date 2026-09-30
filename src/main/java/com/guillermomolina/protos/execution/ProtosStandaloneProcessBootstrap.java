@@ -162,9 +162,7 @@ public final class ProtosStandaloneProcessBootstrap {
                         defaultNetwork,
                         rootResources);
 
-        process.establishArgumentsForRuntime(
-                ProtosStandardProcessArgumentsProtocol.createPrototype(),
-                List.copyOf(applicationArguments));
+        process.establishArgumentsForRuntime(List.copyOf(applicationArguments));
         process.establishEnvironmentForRuntime(
                 ProtosStandardEnvironmentProtocol.createPrototype(),
                 environmentNameDomain,

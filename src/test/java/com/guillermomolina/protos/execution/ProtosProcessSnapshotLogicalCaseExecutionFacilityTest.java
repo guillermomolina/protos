@@ -186,7 +186,7 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
 
     @Test
     void selectedTestBodyObservesTheD135ProcessSnapshotEnvironment() throws Exception {
-        // identitySource() asserts both process.args() and process.environment() identity in the
+        // identitySource() asserts both process.args() and process.environment() content in the
         // same selected Test body, so this focuses the same fixture on the environment half of
         // the D135 contract.
         String source = identitySource();
@@ -243,8 +243,8 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
                                 ProtosObjectValue.class,
                                 completion.readLocalSlot("observation").orElseThrow());
 
-                // Each Logical Case independently satisfies the same-Process/different-Process
-                // assertions in identitySource(), so neither invocation observed the other's
+                // Each Logical Case independently satisfies the Process-content assertions
+                // in identitySource(), so neither invocation observed the other's
                 // rematerialized Process.
                 assertEquals("completed", stringSlot(observation, "state"));
                 assertSame(
@@ -267,10 +267,13 @@ final class ProtosProcessSnapshotLogicalCaseExecutionFacilityTest {
                             environment2: process.environment()
                             otherEnvironment: otherProcess.environment()
 
-                            (args1 === args2) &&
-                                (args1 !== otherArgs) &&
-                                (environment1 === environment2) &&
-                                (environment1 !== otherEnvironment)
+                            (args1.size() == 3) &&
+                                (args2.size() == 3) &&
+                                (otherArgs.size() == 3) &&
+                                (args1[0] == args2[0]) &&
+                                (args1[0] == otherArgs[0]) &&
+                                (environment1.get("A") == environment2.get("A")) &&
+                                (environment1.get("A") == otherEnvironment.get("A"))
                         }
                     }
                 )

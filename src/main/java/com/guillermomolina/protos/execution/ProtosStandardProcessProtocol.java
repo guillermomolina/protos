@@ -24,6 +24,8 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosProcessCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -89,8 +91,10 @@ public final class ProtosStandardProcessProtocol {
                         try {
                             return switch (accessor) {
                                 case ARGS ->
-                                        requireAvailable(
-                                                process.argumentsSnapshotForRuntime(),
+                                        newFrozenArguments(
+                                                requireAvailable(
+                                                        process.argumentsSnapshotForRuntime(),
+                                                        activation),
                                                 activation);
                                 case ENVIRONMENT ->
                                         requireAvailable(
@@ -139,9 +143,19 @@ public final class ProtosStandardProcessProtocol {
         return capability.processForRuntime();
     }
 
-    private static Object requireAvailable(
-            Optional<?> value, ProtosActivation activation) {
+    private static <T> T requireAvailable(
+            Optional<T> value, ProtosActivation activation) {
         return value.orElseThrow(() -> error(activation));
+    }
+
+    /**
+     * Materializes the stable argument Strings as an ordinary Array owned by the calling Actor's
+     * prelude and freezes it before exposure. All portable elements are Strings, so shallow
+     * freezing is sufficient. No identity relation is promised between separate acquisitions.
+     */
+    private static Object newFrozenArguments(
+            List<ProtosStringValue> arguments, ProtosActivation activation) {
+        return activation.prelude().orElseThrow(() -> error(activation)).newFrozenArray(arguments);
     }
 
     private static Object requireAvailableEncoding(

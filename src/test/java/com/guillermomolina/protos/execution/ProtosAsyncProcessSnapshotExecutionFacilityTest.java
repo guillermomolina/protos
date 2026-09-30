@@ -32,11 +32,11 @@ final class ProtosAsyncProcessSnapshotExecutionFacilityTest {
             Path.of("protos", "lib", "core");
 
     // Legacy-route source fixture kept as an inline literal rather than read from
-    // protos/tests/conformance/process/snapshot-identity.protos: TOOL009-C migrated that
+    // protos/tests/conformance/process/snapshot-and-process-surface.protos: TOOL009-C migrated that
     // file to a suite-native Test Tool corpus member whose raw module completion is no
     // longer a boolean, so this whole-source legacy execution route needs its own copy of
     // the original behavior it exercises.
-    private static final String SNAPSHOT_IDENTITY_SOURCE =
+    private static final String SNAPSHOT_CONTENT_SOURCE =
             "args1: process.args()\n"
                     + "args2: process.args()\n"
                     + "otherArgs: otherProcess.args()\n"
@@ -45,10 +45,13 @@ final class ProtosAsyncProcessSnapshotExecutionFacilityTest {
                     + "environment2: process.environment()\n"
                     + "otherEnvironment: otherProcess.environment()\n"
                     + "\n"
-                    + "(args1 === args2) &&\n"
-                    + "    (args1 !== otherArgs) &&\n"
-                    + "    (environment1 === environment2) &&\n"
-                    + "    (environment1 !== otherEnvironment)";
+                    + "(args1.size() == 3) &&\n"
+                    + "    (args2.size() == 3) &&\n"
+                    + "    (otherArgs.size() == 3) &&\n"
+                    + "    (args1[0] == args2[0]) &&\n"
+                    + "    (args1[0] == otherArgs[0]) &&\n"
+                    + "    (environment1.get(\"A\") == environment2.get(\"A\")) &&\n"
+                    + "    (environment1.get(\"A\") == otherEnvironment.get(\"A\"))";
 
     @Test
     void completionReturnsThroughCallerDomainWithD135Bootstrap() throws Exception {
@@ -80,7 +83,7 @@ final class ProtosAsyncProcessSnapshotExecutionFacilityTest {
                             ProtosFutureValue.class,
                             ProtosInvocation.invoke(
                                     execution,
-                                    List.of(new ProtosStringValue(SNAPSHOT_IDENTITY_SOURCE)),
+                                    List.of(new ProtosStringValue(SNAPSHOT_CONTENT_SOURCE)),
                                     activation));
 
             assertEquals(

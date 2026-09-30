@@ -110,8 +110,6 @@ public final class ProtosProcessSnapshotExecution {
     }
 
     private static ProtosActivation newSnapshotActivation(ProtosPrelude prelude) {
-        ProtosObjectValue argumentsPrototype =
-                ProtosStandardProcessArgumentsProtocol.createPrototype();
         ProtosObjectValue environmentPrototype =
                 ProtosStandardEnvironmentProtocol.createPrototype();
 
@@ -120,21 +118,18 @@ public final class ProtosProcessSnapshotExecution {
         ProtosProcessRuntime primary =
                 process(
                         prelude,
-                        argumentsPrototype,
                         environmentPrototype,
                         ARGUMENTS,
                         environment);
         ProtosProcessRuntime other =
                 process(
                         prelude,
-                        argumentsPrototype,
                         environmentPrototype,
                         ARGUMENTS,
                         environment);
         ProtosProcessRuntime empty =
                 process(
                         prelude,
-                        argumentsPrototype,
                         environmentPrototype,
                         List.of(),
                         List.of());
@@ -220,14 +215,13 @@ public final class ProtosProcessSnapshotExecution {
 
     private static ProtosProcessRuntime process(
             ProtosPrelude prelude,
-            ProtosObjectValue argumentsPrototype,
             ProtosObjectValue environmentPrototype,
             List<String> arguments,
             List<ProtosEnvironmentValue.NativeEntry> environment) {
         ProtosProcessRuntime process =
                 new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime());
 
-        if (process.establishArgumentsForRuntime(argumentsPrototype, arguments)
+        if (process.establishArgumentsForRuntime(arguments)
                 != ProtosProcessRuntime.ArgumentsSnapshotState.AVAILABLE) {
             throw new IllegalStateException(
                     "Process snapshot fixture arguments were not representable");

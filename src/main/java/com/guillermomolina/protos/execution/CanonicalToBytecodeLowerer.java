@@ -2985,10 +2985,6 @@ final class CanonicalToBytecodeLowerer {
                 builder.createLocal("structuredBytesEachCall", null);
         BytecodeLocal structuredBytesEachChild =
                 builder.createLocal("structuredBytesEachChildCall", null);
-        BytecodeLocal structuredProcessArgumentsEach =
-                builder.createLocal("structuredProcessArgumentsEachCall", null);
-        BytecodeLocal structuredProcessArgumentsEachChild =
-                builder.createLocal("structuredProcessArgumentsEachChildCall", null);
         BytecodeLocal structuredEnvironmentEach =
                 builder.createLocal("structuredEnvironmentEachCall", null);
         BytecodeLocal structuredEnvironmentEachChild =
@@ -3820,62 +3816,6 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
         builder.beginIfThenElse();
 
-        builder.beginIsStructuredProcessArgumentsEachCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.endIsStructuredProcessArgumentsEachCall();
-
-        builder.beginBlock();
-        builder.beginTryFinally(
-                () -> {
-                    builder.beginCompleteClosureCall();
-                    builder.emitLoadLocal(preparedCall);
-                    builder.endCompleteClosureCall();
-                });
-        builder.beginBlock();
-
-        builder.beginStoreLocal(structuredProcessArgumentsEach);
-        builder.beginPrepareStructuredProcessArgumentsEachCall();
-        builder.emitLoadLocal(preparedCall);
-        builder.endPrepareStructuredProcessArgumentsEachCall();
-        builder.endStoreLocal();
-
-        builder.beginWhile();
-        builder.beginStructuredProcessArgumentsEachHasNext();
-        builder.emitLoadLocal(structuredProcessArgumentsEach);
-        builder.endStructuredProcessArgumentsEachHasNext();
-
-        builder.beginBlock();
-        builder.beginStoreLocal(structuredProcessArgumentsEachChild);
-        builder.beginPrepareStructuredProcessArgumentsEachElementCall();
-        builder.emitLoadLocal(structuredProcessArgumentsEach);
-        builder.endPrepareStructuredProcessArgumentsEachElementCall();
-        builder.endStoreLocal();
-        emitScopedPreparedInvocation(
-                builder,
-                childResult,
-                structuredProcessArgumentsEachChild,
-                childResult,
-                resumeValue);
-        builder.beginAdvanceStructuredProcessArgumentsEach();
-        builder.emitLoadLocal(structuredProcessArgumentsEach);
-        builder.endAdvanceStructuredProcessArgumentsEach();
-        builder.endBlock();
-
-        builder.endWhile();
-
-        builder.beginStoreLocal(result);
-        builder.beginFinishStructuredProcessArgumentsEach();
-        builder.emitLoadLocal(structuredProcessArgumentsEach);
-        builder.endFinishStructuredProcessArgumentsEach();
-        builder.endStoreLocal();
-
-        builder.endBlock();
-        builder.endTryFinally();
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginIfThenElse();
-
         builder.beginIsStructuredEnvironmentEachCall();
         builder.emitLoadLocal(preparedCall);
         builder.endIsStructuredEnvironmentEachCall();
@@ -4451,9 +4391,6 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
-        builder.endBlock();
-
-        builder.endIfThenElse();
         builder.endBlock();
 
         builder.endIfThenElse();

@@ -23,6 +23,32 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.435] - 2026-09-30
+
+### D168 — Replace ProcessArguments with frozen Array bootstrap snapshots
+- `spec/io/PROCESS_IO.md` §23: `process.args()` returns an ordinary Core
+  `Array` of the application-argument Strings, frozen before exposure. The
+  Process-specific immutable sequence protocol (`size`, `at`, `each` with its own
+  receiver-return rules) is removed; Array semantics apply unchanged.
+- `spec/io/PROCESS_IO.md` §22: the canonical bootstrap-snapshot identity rule is
+  replaced. Stable content (count, order, values, and for Environment the native
+  name semantics and representability) remains the portable contract; the
+  identity of containers returned by separate `process.args()` or
+  `process.environment()` acquisitions has no portable relation in either
+  direction (`===`, `!==`, `identityHashOf`, default equality/hash, `IdentityMap`).
+- `spec/io/PROCESS_IO.md` §24: the `Environment` family, native-name identity,
+  representability, `contains`/`get`/`each`, and stability rules are retained;
+  only the canonical accessor-result identity reference is removed.
+- Supersedes the parts of D018 that required canonical Process-argument snapshot
+  object identity, a special ProcessArguments representation, and canonical
+  repeated Environment accessor-result identity. Retains all other D018 Process
+  I/O authority and lifecycle rules.
+
+### Compatibility and implementation state
+- Portable code must not rely on `process.args() === process.args()` or
+  `process.environment() === process.environment()` being true or false.
+- Implementation is owned by I061.
+
 ## [0.1.434] - 2026-09-25
 
 ### D179 — Restore Candidate C0 execution-context structural removal

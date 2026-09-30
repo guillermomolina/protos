@@ -112,58 +112,13 @@ final class ProtosAdditionalIndexedInteropTest {
     }
 
     @Test
-    void processArgumentsProjectsItsImmutableIndexedSnapshotDirectly()
-            throws Exception {
-        ProtosObjectValue prototype =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosProcessArgumentsValue arguments =
-                ProtosProcessArgumentsValue.captureForRuntime(
-                        prototype, List.of("one", "two"));
-
-        assertTrue(interop.hasArrayElements(arguments));
-        assertEquals(2L, interop.getArraySize(arguments));
-        assertTrue(interop.isArrayElementReadable(arguments, 0));
-        assertTrue(interop.isArrayElementReadable(arguments, 1));
-        assertFalse(interop.isArrayElementReadable(arguments, -1));
-        assertFalse(interop.isArrayElementReadable(arguments, 2));
-
-        Object first = interop.readArrayElement(arguments, 0);
-        Object second = interop.readArrayElement(arguments, 1);
-        assertSame(arguments.indexedAtForRuntime(BigInteger.ZERO), first);
-        assertSame(arguments.indexedAtForRuntime(BigInteger.ONE), second);
-        assertEquals("one", interop.asString(first));
-        assertEquals("two", interop.asString(second));
-
-        assertThrows(
-                InvalidArrayIndexException.class,
-                () -> interop.readArrayElement(arguments, 2));
-        assertFalse(interop.isArrayElementWritable(arguments, 0));
-        assertThrows(
-                UnsupportedMessageException.class,
-                () -> interop.writeArrayElement(
-                        arguments, 0, new ProtosStringValue("replacement")));
-        assertFalse(interop.hasIterator(arguments));
-        assertThrows(
-                UnsupportedMessageException.class,
-                () -> interop.getIterator(arguments));
-        assertFalse(interop.hasMembers(arguments));
-        assertEquals(
-                "ProcessArguments",
-                interop.toDisplayString(arguments, false));
-    }
-
-    @Test
     void indexedFacetsDoNotAcquireOtherInteropCapabilities() {
         ProtosBytesValue bytes =
                 new ProtosBytesValue(ProtosObjectValue.rootObject());
         ProtosByteRegionValue region =
                 new ProtosByteRegionValue(List.of(octet(1)));
-        ProtosProcessArgumentsValue arguments =
-                ProtosProcessArgumentsValue.captureForRuntime(
-                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
-                        List.of("x"));
 
-        for (Object value : List.of(bytes, region, arguments)) {
+        for (Object value : List.of(bytes, region)) {
             assertFalse(interop.isExecutable(value));
             assertFalse(interop.isString(value));
             assertFalse(interop.isBoolean(value));

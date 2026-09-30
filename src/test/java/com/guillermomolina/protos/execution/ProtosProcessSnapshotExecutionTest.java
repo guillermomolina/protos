@@ -11,7 +11,6 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -24,11 +23,11 @@ final class ProtosProcessSnapshotExecutionTest {
             Path.of("protos", "lib", "core");
 
     // Legacy-route source fixture kept as an inline literal rather than read from
-    // protos/tests/conformance/process/snapshot-identity.protos: TOOL009-C migrated that
+    // protos/tests/conformance/process/snapshot-and-process-surface.protos: TOOL009-C migrated that
     // file to a suite-native Test Tool corpus member whose raw module completion is no
     // longer a boolean, so this whole-source legacy execution route needs its own copy of
     // the original behavior it exercises.
-    private static final String SNAPSHOT_IDENTITY_SOURCE =
+    private static final String SNAPSHOT_CONTENT_SOURCE =
             "args1: process.args()\n"
                     + "args2: process.args()\n"
                     + "otherArgs: otherProcess.args()\n"
@@ -37,10 +36,13 @@ final class ProtosProcessSnapshotExecutionTest {
                     + "environment2: process.environment()\n"
                     + "otherEnvironment: otherProcess.environment()\n"
                     + "\n"
-                    + "(args1 === args2) &&\n"
-                    + "    (args1 !== otherArgs) &&\n"
-                    + "    (environment1 === environment2) &&\n"
-                    + "    (environment1 !== otherEnvironment)";
+                    + "(args1.size() == 3) &&\n"
+                    + "    (args2.size() == 3) &&\n"
+                    + "    (otherArgs.size() == 3) &&\n"
+                    + "    (args1[0] == args2[0]) &&\n"
+                    + "    (args1[0] == otherArgs[0]) &&\n"
+                    + "    (environment1.get(\"A\") == environment2.get(\"A\")) &&\n"
+                    + "    (environment1.get(\"A\") == otherEnvironment.get(\"A\"))";
 
     @Test
     void createsFreshEquivalentBootstrapForEveryExecution() throws Exception {
@@ -61,16 +63,15 @@ final class ProtosProcessSnapshotExecutionTest {
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
                 secondArguments.state());
-        assertNotSame(firstArguments.value(), secondArguments.value());
 
-        ProtosExecutionOutcome identity =
+        ProtosExecutionOutcome content =
                 ProtosProcessSnapshotExecution.execute(
-                        SNAPSHOT_IDENTITY_SOURCE,
+                        SNAPSHOT_CONTENT_SOURCE,
                         prelude);
 
         assertEquals(
                 ProtosExecutionOutcome.State.COMPLETED,
-                identity.state());
-        assertSame(ProtosBooleanValue.TRUE, identity.value());
+                content.state());
+        assertSame(ProtosBooleanValue.TRUE, content.value());
     }
 }

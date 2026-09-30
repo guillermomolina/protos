@@ -75,7 +75,7 @@ public final class ProtosProcessRuntime {
     private Object rootFailureCause;
     private ArgumentsSnapshotState argumentsSnapshotState =
             ArgumentsSnapshotState.UNESTABLISHED;
-    private ProtosProcessArgumentsValue argumentsSnapshot;
+    private List<ProtosStringValue> argumentsSnapshot;
     private EnvironmentSnapshotState environmentSnapshotState =
             EnvironmentSnapshotState.UNESTABLISHED;
     private ProtosEnvironmentValue environmentSnapshot;
@@ -242,10 +242,13 @@ public final class ProtosProcessRuntime {
      * sequence. The complete detached host list is validated before any portable snapshot becomes
      * available. An unrepresentable element records one stable UNREPRESENTABLE bootstrap outcome;
      * later host mutation or a second establishment attempt cannot change that result.
+     *
+     * <p>The retained snapshot is only stable content: an immutable list of Strings with no Protos
+     * container identity. Each successful accessor call materializes an ordinary frozen Array for
+     * the calling Actor from this content.
      */
     public synchronized ArgumentsSnapshotState establishArgumentsForRuntime(
-            ProtosObjectValue argumentsPrototype, List<String> hostArguments) {
-        Objects.requireNonNull(argumentsPrototype, "argumentsPrototype");
+            List<String> hostArguments) {
         Objects.requireNonNull(hostArguments, "hostArguments");
         if (lifecycle != LifecycleState.RUNNING) {
             throw new IllegalStateException(
@@ -256,15 +259,26 @@ public final class ProtosProcessRuntime {
                     "Process arguments bootstrap snapshot is already established");
         }
 
+        // Form one detached host snapshot and validate the complete sequence before any Protos
+        // String is retained.
+        List<String> captured;
         try {
-            argumentsSnapshot =
-                    ProtosProcessArgumentsValue.captureForRuntime(
-                            argumentsPrototype, hostArguments);
-            argumentsSnapshotState = ArgumentsSnapshotState.AVAILABLE;
-        } catch (IllegalArgumentException | NullPointerException unrepresentable) {
+            captured = List.copyOf(hostArguments);
+        } catch (NullPointerException nullElement) {
             argumentsSnapshot = null;
             argumentsSnapshotState = ArgumentsSnapshotState.UNREPRESENTABLE;
+            return argumentsSnapshotState;
         }
+        if (!captured.stream().allMatch(ProtosProcessRuntime::isUnicodeScalarString)) {
+            argumentsSnapshot = null;
+            argumentsSnapshotState = ArgumentsSnapshotState.UNREPRESENTABLE;
+            return argumentsSnapshotState;
+        }
+        argumentsSnapshot =
+                captured.stream()
+                        .<ProtosStringValue>map(ProtosStringValue::new)
+                        .toList();
+        argumentsSnapshotState = ArgumentsSnapshotState.AVAILABLE;
         return argumentsSnapshotState;
     }
 
@@ -273,18 +287,35 @@ public final class ProtosProcessRuntime {
     }
 
     /**
-     * Returns the canonical Process argument snapshot when bootstrap conversion succeeded.
+     * Returns the stable ordered argument Strings when bootstrap conversion succeeded.
      *
      * <p>UNESTABLISHED is a launcher/integration error. UNREPRESENTABLE intentionally returns empty
      * so the later Process accessor can create a fresh ordinary Error occurrence per failed call.
+     * The returned list is immutable content, not a Protos value; callers wrap it in an ordinary
+     * frozen Array.
      */
-    public synchronized Optional<ProtosProcessArgumentsValue>
-            argumentsSnapshotForRuntime() {
+    public synchronized Optional<List<ProtosStringValue>> argumentsSnapshotForRuntime() {
         if (argumentsSnapshotState == ArgumentsSnapshotState.UNESTABLISHED) {
             throw new IllegalStateException(
                     "Process arguments bootstrap snapshot is not established");
         }
         return Optional.ofNullable(argumentsSnapshot);
+    }
+
+    private static boolean isUnicodeScalarString(String value) {
+        for (int index = 0; index < value.length(); index++) {
+            char current = value.charAt(index);
+            if (Character.isHighSurrogate(current)) {
+                if (index + 1 >= value.length()
+                        || !Character.isLowSurrogate(value.charAt(index + 1))) {
+                    return false;
+                }
+                index++;
+            } else if (Character.isLowSurrogate(current)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public synchronized EnvironmentSnapshotState establishEnvironmentForRuntime(

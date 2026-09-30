@@ -41,7 +41,7 @@ tests: [
             Fake.args()
         })
     }),
-    Test("snapshot identity", () => {
+    Test("snapshot content is stable across acquisitions", () => {
         tool009LegacyCase: () => {
             args1: process.args()
             args2: process.args()
@@ -51,10 +51,17 @@ tests: [
             environment2: process.environment()
             otherEnvironment: otherProcess.environment()
 
-            (args1 === args2) &&
-                (args1 !== otherArgs) &&
-                (environment1 === environment2) &&
-                (environment1 !== otherEnvironment)
+            (args1.size() == 3) &&
+                (args2.size() == 3) &&
+                (otherArgs.size() == 3) &&
+                (args1[0] == "alpha") &&
+                (args2[0] == "alpha") &&
+                (otherArgs[0] == "alpha") &&
+                (args1[2] == args2[2]) &&
+                (args1[2] == otherArgs[2]) &&
+                (environment1.get("A") == "first") &&
+                (environment2.get("A") == "first") &&
+                (otherEnvironment.get("A") == "first")
         }
         Assertions.require(tool009LegacyCase() === true)
     })

@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.120-SNAPSHOT
+
+- `I061` (#664, D168): replace `ProcessArguments` with frozen ordinary Array
+  bootstrap snapshots. `process.args()` now returns an ordinary Core `Array` of
+  the stable bootstrap argument Strings, frozen before exposure and built from
+  the calling Actor's own `Array` prototype on each acquisition; the Process
+  runtime retains only the immutable ordered String content. Removed
+  `ProtosProcessArgumentsValue`, `ProtosStandardProcessArgumentsProtocol`, and
+  every ProcessArguments-specific Actor transfer, P transfer, detached-execution,
+  diagnostic, interop, and Bytecode/C-prime path (the structured
+  `ProcessArguments.each` operations, capability flag, guarded kind, and
+  lowering block). Argument content, order, String-only elements, representability
+  failure, and host-mutation isolation are unchanged. Canonical container identity
+  across `process.args()` and `process.environment()` acquisitions is no longer
+  a guarantee and no test asserts it; the Environment family and its native-name,
+  representability, `contains`, and `get` behavior are unchanged. Tests, the
+  native-boundary architecture audit, and the process guide were reconciled.
+
 ## 0.3.119-SNAPSHOT
 
 - `PERF016` (#727): admit the semantic Integer representation family to a

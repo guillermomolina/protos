@@ -22,7 +22,6 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
-import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosProcessCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
@@ -44,7 +43,7 @@ final class ProtosFreshProcessExecutorTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     @Test
-    void eachExecutionCreatesASeparateSemanticProcess() throws Exception {
+    void eachExecutionExposesFrozenOrdinaryArrayArguments() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
                 ProtosExecutionOutcome first =
                 ProtosFreshProcessExecutor.execute(
@@ -55,11 +54,12 @@ final class ProtosFreshProcessExecutorTest {
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, first.state());
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, second.state());
-        assertNotNull(first.value());
-        assertNotNull(second.value());
-        assertFalse(
-                ProtosIdentity.identical(first.value(), second.value()),
-                "distinct fresh Processes must not share one canonical args snapshot identity");
+        // D168: only content is portable; no identity relation between acquisitions is asserted.
+        ProtosArrayValue firstArguments = assertInstanceOf(ProtosArrayValue.class, first.value());
+        ProtosArrayValue secondArguments = assertInstanceOf(ProtosArrayValue.class, second.value());
+        assertTrue(firstArguments.isFrozen());
+        assertTrue(secondArguments.isFrozen());
+        assertEquals(strings(firstArguments), strings(secondArguments));
     }
 
     @Test
@@ -361,5 +361,11 @@ final class ProtosFreshProcessExecutorTest {
                 return captured.equals(query);
             }
         };
+    }
+
+    private static List<String> strings(ProtosArrayValue array) {
+        return array.indexedSnapshot().stream()
+                .map(element -> ((com.guillermomolina.protos.runtime.ProtosStringValue) element).value())
+                .toList();
     }
 }

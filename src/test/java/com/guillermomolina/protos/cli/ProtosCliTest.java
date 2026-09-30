@@ -92,7 +92,7 @@ final class ProtosCliTest {
     void standaloneProcessEnvironmentActorAndEncodingAreBootstrapped() {
         assertEquals(
                 "true\n",
-                run("-e", "print(process.environment() === process.environment())").o);
+                run("-e", "print(process.environment().contains(\"PROTOS_NO_SUCH_VARIABLE\") == false)").o);
         assertEquals(
                 "true\n",
                 run("-e", "print(process.stdinEncoding() === Encoding.UTF8)").o);
