@@ -87,6 +87,7 @@ import java.util.List;
         enableRootBodyTagging = false,
         enableMaterializedLocalAccesses = true,
         enableTailCallHandlers = true,
+        enableUncachedInterpreter = true,
         tagTreeNodeLibrary = ProtosBytecodeTagTreeNodeExports.class)
 abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNode {
 

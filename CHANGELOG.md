@@ -7,6 +7,16 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.124-SNAPSHOT
+
+- `I074` (#745): enable the Truffle Bytecode DSL uncached interpreter by
+  setting `enableUncachedInterpreter = true` on `ProtosBytecodeRootNode`, so
+  cold roots start in the uncached tier and transition to the cached
+  interpreter when they warm up. The annotation processor accepted every
+  existing operation unchanged: no operation was adapted and no `forceCached`
+  is used. This is internal interpreter machinery only: it changes no
+  observable Protos semantics, and no performance claim is made.
+
 ## 0.3.123-SNAPSHOT
 
 - `I073` (#744): enable Bytecode DSL bytecode-handler tail-call compilation by
