@@ -87,8 +87,14 @@ final class ProtosTestToolJClosureReconciliationTest {
                 repositoryTests >= 0,
                 "active CI must expose the repository test stage explicitly");
         assertTrue(
-                workflow.contains("make test JAVA_TEST_JOBS=4 PROTOS_TEST_JOBS=4"),
+                workflow.contains("\n          make test\n"),
                 "active CI must execute the canonical complete repository command");
+        assertFalse(
+                workflow.contains("JAVA_TEST_JOBS="),
+                "active CI must not override repository Java test parallelism");
+        assertFalse(
+                workflow.contains("PROTOS_TEST_JOBS="),
+                "active CI must not override repository Protos test parallelism");
         assertFalse(
                 workflow.contains("make test-budget"),
                 "active CI must not impose a fixed wall-clock budget");
