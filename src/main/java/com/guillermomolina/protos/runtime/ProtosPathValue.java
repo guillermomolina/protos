@@ -4,25 +4,53 @@ package com.guillermomolina.protos.runtime;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Immutable, authority-free Core Path value (D169): one ordered sequence of normal component
+ * Strings. The empty sequence is the interpreting Filesystem's configured base.
+ *
+ * <p>Structural equality and hash depend only on that sequence; the delegation prototype and any
+ * Filesystem are not part of it. Components are opaque Strings and never acquire host separator,
+ * drive, or UNC structure.
+ */
 @ExportLibrary(InteropLibrary.class)
 public final class ProtosPathValue implements ProtosRepresentedValue {
- public sealed interface Component permits Normal,Parent {}
- public record Normal(String name) implements Component { public Normal{Objects.requireNonNull(name,"name");} }
- public enum Parent implements Component { INSTANCE }
- private final ProtosObjectValue prototype; private final boolean rooted; private final List<Component> components;
- public ProtosPathValue(ProtosObjectValue p,boolean rooted,List<Component> c){this.prototype=Objects.requireNonNull(p);this.rooted=rooted;this.components=List.copyOf(c);}
- public boolean rooted(){return rooted;} public List<Component> components(){return components;}
- public ProtosPathValue child(String n){var x=new ArrayList<Component>(components);x.add(new Normal(n));return new ProtosPathValue(prototype,rooted,x);}
- public ProtosPathValue parentComponent(){var x=new ArrayList<Component>(components);x.add(Parent.INSTANCE);return new ProtosPathValue(prototype,rooted,x);}
- public boolean structurallyEquals(ProtosPathValue o){return o!=null&&rooted==o.rooted&&components.equals(o.components);}
- public int structuralHash(){return 31*Boolean.hashCode(rooted)+components.hashCode();}
- @Override public Object representedDelegationParent(ProtosPrelude p){return prototype;}
+    private final ProtosObjectValue prototype;
+    private final List<String> components;
 
+    public ProtosPathValue(ProtosObjectValue prototype, List<String> components) {
+        this.prototype = Objects.requireNonNull(prototype);
+        this.components = List.copyOf(components);
+    }
+
+    public List<String> components() {
+        return components;
+    }
+
+    public ProtosPathValue child(String name) {
+        ArrayList<String> extended = new ArrayList<>(components);
+        extended.add(Objects.requireNonNull(name, "name"));
+        return new ProtosPathValue(prototype, extended);
+    }
+
+    public boolean structurallyEquals(ProtosPathValue other) {
+        return other != null && components.equals(other.components);
+    }
+
+    public int structuralHash() {
+        return components.hashCode();
+    }
+
+    @Override
+    public Object representedDelegationParent(ProtosPrelude p) {
+        return prototype;
+    }
 
     @ExportMessage
     String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
         return "Object";
     }
-
 }

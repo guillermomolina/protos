@@ -149,12 +149,7 @@ activation);
         }
 
         private static boolean isCasePath(ProtosPathValue path) {
-            if (path.rooted() || path.components().size() != 1) {
-                return false;
-            }
-            ProtosPathValue.Component component = path.components().get(0);
-            return component instanceof ProtosPathValue.Normal normal
-                    && normal.name().equals("case.bin");
+            return path.components().equals(java.util.List.of("case.bin"));
         }
     }
 

@@ -127,9 +127,7 @@ final class ProtosDiagnosticInspectorTest {
                 "<path>",
                 inspector.render(
                         new ProtosPathValue(
-                                ProtosObjectValue.rootObject(),
-                                false,
-                                List.of(new ProtosPathValue.Normal("component")))));
+                                ProtosObjectValue.rootObject(), List.of("component"))));
     }
 
     @Test

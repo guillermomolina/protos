@@ -138,11 +138,7 @@ final class ProtosFilesystemMaturityConformanceTest {
         }
 
         private static String directChild(ProtosPathValue path) {
-            if (path.rooted() || path.components().size() != 1) {
-                return null;
-            }
-            ProtosPathValue.Component component = path.components().get(0);
-            return component instanceof ProtosPathValue.Normal normal ? normal.name() : null;
+            return path.components().size() == 1 ? path.components().get(0) : null;
         }
     }
 

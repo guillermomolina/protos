@@ -802,16 +802,20 @@ Future identity and resource-lifecycle identity remain different concepts.
 It is not Filesystem authority and it does not consult a host filesystem when
 constructed.
 
-The minimum portable construction protocol is:
+A Path is an ordered sequence of normal component Strings. The empty Path
+denotes the interpreting Filesystem's configured base, and every Path is
+interpreted downward from that base. There is no rooted Path and no parent
+component.
+
+The portable construction protocol is:
 
 ```protos
 Path.relative()
-Path.rooted()
 path.child(name)
-path.parentComponent()
 ```
 
-`child(name)` appends exactly one normal component.
+`child(name)` appends exactly one normal component; the empty String, `"."` and
+`".."` are rejected.
 
 The String supplied to `child` is not parsed as a mini host path.
 
@@ -828,34 +832,13 @@ syntax, or UNC structure.
 
 There is no implicit String-to-Path coercion.
 
-## `parentComponent()` is not reflection `parent()`
-
-The path operation:
-
-```protos
-path.parentComponent()
-```
-
-appends one parent-traversal component to the structural Path value.
-
-It is intentionally distinct from:
-
-```protos
-path.parent()
-```
-
-which remains ordinary object/delegation reflection.
-
-Protos does not overload the object-model meaning of `parent()` merely because
-filesystems also use the word "parent".
-
 Runnable companion:
 
 - [`../../protos/tutorials/06-path-values/01-structure-and-identity.protos`](../../protos/tutorials/06-path-values/01-structure-and-identity.protos)
 
 ## Path equality is structural; Path identity is ordinary identity
 
-Two Path values can compare equal because their rootedness and ordered component
+Two Path values can compare equal because their ordered component String
 sequences are equal.
 
 That does not make them the same semantic object identity.
@@ -1440,10 +1423,10 @@ same.
     does not reopen the resource.
 24. Repeated idempotent lifecycle calls produce fresh Futures that may observe one
     shared lifecycle outcome.
-25. `Path` is immutable authority-free structure with `relative`, `rooted`,
-    `child`, and `parentComponent`.
+25. `Path` is an immutable authority-free ordered sequence of normal component
+    Strings, built with `relative` and `child`.
 26. `child(name)` appends one component and does not parse host path syntax.
-27. `parentComponent()` is a Path constructor operation; reflection `parent()`
+27. Path has no rooted form and no parent component; reflection `parent()`
     keeps its object-model meaning.
 28. Path equality is structural while semantic object identity remains distinct.
 29. Filesystem carries namespace authority; Path does not.

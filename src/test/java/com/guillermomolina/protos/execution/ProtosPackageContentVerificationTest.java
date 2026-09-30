@@ -265,10 +265,6 @@ final class ProtosPackageContentVerificationTest {
     }
 
     private static ProtosPathValue path(ProtosPrelude prelude, String... names) {
-        ArrayList<ProtosPathValue.Component> components = new ArrayList<>();
-        for (String name : names) {
-            components.add(new ProtosPathValue.Normal(name));
-        }
-        return new ProtosPathValue(prelude.pathPrototype(), false, components);
+        return new ProtosPathValue(prelude.pathPrototype(), List.of(names));
     }
 }

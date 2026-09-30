@@ -258,9 +258,7 @@ final class ProtosNioConfinedFilesystemBackendTest {
 
     private static ProtosPathValue path(String name) {
         return new ProtosPathValue(
-                ProtosObjectValue.rootObject(),
-                false,
-                List.of(new ProtosPathValue.Normal(name)));
+                ProtosObjectValue.rootObject(), List.of(name));
     }
 
     private static final class Completion

@@ -437,12 +437,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
 
     private static ProtosPathValue relative(String... names) {
         return new ProtosPathValue(
-                ProtosObjectValue.rootObject(),
-                false,
-                java.util.Arrays.stream(names)
-                        .map(ProtosPathValue.Normal::new)
-                        .map(ProtosPathValue.Component.class::cast)
-                        .toList());
+                ProtosObjectValue.rootObject(), java.util.List.of(names));
     }
 
     private record CaptureResult(

@@ -221,9 +221,7 @@ class ProtosFilesystemOpenFlowTest {
 
     private static ProtosPathValue path(ProtosPrelude prelude) {
         return new ProtosPathValue(
-                prelude.pathPrototype(),
-                false,
-                List.of(new ProtosPathValue.Normal("file.bin")));
+                prelude.pathPrototype(), List.of("file.bin"));
     }
 
     private static Fixture fixture() throws Exception {

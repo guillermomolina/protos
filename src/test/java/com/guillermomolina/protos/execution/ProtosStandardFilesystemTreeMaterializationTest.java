@@ -222,7 +222,7 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
 
     private static ProtosPathValue path(ProtosPrelude prelude, String name) {
         return new ProtosPathValue(
-                prelude.pathPrototype(), false, List.of(new ProtosPathValue.Normal(name)));
+                prelude.pathPrototype(), List.of(name));
     }
 
     private record Fixture(

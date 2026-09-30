@@ -23,6 +23,29 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.436] - 2026-09-30
+
+### D169 — Simplify Core Path to relative downward components
+- `spec/io/FILESYSTEM.md` §§18–21: a Core `Path` is one immutable authority-free
+  ordered sequence of normal component Strings. `Path.relative()` creates the
+  empty Path (the interpreting Filesystem's configured base) and
+  `path.child(name)` appends exactly one validated normal component. There is no
+  rootedness dimension, no parent component, and no `Path.rooted()` or
+  `path.parentComponent()`; `path.parent()` remains ordinary reflection.
+- Structural, Filesystem-independent Path equality and hash now depend only on
+  the ordered component String sequence. D169 supersedes D037 only for the
+  removed rootedness and Parent-component dimensions; all other D037 semantics
+  are retained.
+- `spec/io/FILESYSTEM.md` §21: the Core file-URL to Path conversion contract
+  (including the conceptual `filesystem.pathFromURL(url)`) is removed. Path and
+  URL/URI data remain inert and grant no Filesystem or network authority.
+  Future file-URI behavior is deferred.
+- `spec/io/IO_CORE.md`: Path equality summary and scope list reconciled.
+
+### Compatibility and implementation state
+- Portable code must not use `Path.rooted()` or `path.parentComponent()`.
+- Implementation is owned by I062.
+
 ## [0.1.435] - 2026-09-30
 
 ### D168 — Replace ProcessArguments with frozen Array bootstrap snapshots

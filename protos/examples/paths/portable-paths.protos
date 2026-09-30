@@ -11,8 +11,8 @@
 
 relative: Path.relative().child("src").child("main")
 other: Path.relative().child("src").child("main")
-rooted: Path.rooted().child("src").child("main")
+slashed: Path.relative().child("src/main")
 
 print(relative == other)
 print(relative === other)
-print(relative == rooted)
+print(relative == slashed)

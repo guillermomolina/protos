@@ -166,14 +166,12 @@ final class ProtosCapturedFilesystemCustodyTest {
     }
 
     private static ProtosPathValue rootPath(ProtosPrelude prelude) {
-        return new ProtosPathValue(prelude.pathPrototype(), false, List.of());
+        return new ProtosPathValue(prelude.pathPrototype(), List.of());
     }
 
     private static ProtosPathValue path(ProtosPrelude prelude, String name) {
         return new ProtosPathValue(
-                prelude.pathPrototype(),
-                false,
-                List.of(new ProtosPathValue.Normal(name)));
+                prelude.pathPrototype(), List.of(name));
     }
 
     private static final class RecordingCapturedBackend

@@ -20,60 +20,55 @@ class ProtosStandardPathProtocolTest {
     }
 
     // Deliberately Java-side: this verifies the represented Path component model
-    // behind otherwise source-visible construction semantics.
+    // (ordered normal component Strings, D169) behind source-visible construction.
     @Test
-    void constructionPreservesPortableRepresentation() throws Exception {
+    void constructionPreservesOrderedNormalStringComponents() throws Exception {
         var prelude = core();
         var represented =
                 (ProtosPathValue)
                         ProtosTestExecutionSupport.evaluate(
-                                "Path.relative().child(\"a/b\").parentComponent().child(\"c\")",
+                                "Path.relative().child(\"a/b\").child(\"c\\\\d\").child(\"e:f\")",
                                 prelude.newModuleActivation());
 
-        assertFalse(represented.rooted());
-        assertEquals(
-                List.of(
-                        new ProtosPathValue.Normal("a/b"),
-                        ProtosPathValue.Parent.INSTANCE,
-                        new ProtosPathValue.Normal("c")),
-                represented.components());
+        assertEquals(List.of("a/b", "c\\d", "e:f"), represented.components());
 
-        var rooted =
+        var empty =
                 (ProtosPathValue)
                         ProtosTestExecutionSupport.evaluate(
-                                "Path.rooted()",
+                                "Path.relative()",
                                 prelude.newModuleActivation());
-        assertTrue(rooted.rooted());
-        assertTrue(rooted.components().isEmpty());
+        assertTrue(empty.components().isEmpty());
     }
 
-    // Deliberately Java-side: lookup-home identity and the internal Parent
-    // component representation are implementation/representation invariants.
+    // Deliberately Java-side: lookup-home identity is an implementation/representation
+    // invariant of the represented Path value.
     @Test
-    void representedLookupAndParentComponentAreDistinct() throws Exception {
+    void representedLookupHomeIsPathPrototype() throws Exception {
         var prelude = core();
         var value =
                 (ProtosPathValue)
                         ProtosTestExecutionSupport.evaluate(
-                                "Path.relative()",
+                                "Path.relative().child(\"a\")",
                                 prelude.newModuleActivation());
 
         assertSame(
                 prelude.pathPrototype(),
                 ProtosValueLookup.lookup(value, "child", prelude).orElseThrow().home());
+    }
 
-        var activation = prelude.newModuleActivation();
-        activation.context().createLocalSlot("value", value);
-        var withParent =
-                (ProtosPathValue)
-                        ProtosTestExecutionSupport.evaluate(
-                                "value.parentComponent()",
-                                activation);
+    // Deliberately Java-side: structural equality/hash are defined only by the ordered
+    // component sequence and do not consult the delegation prototype.
+    @Test
+    void structuralEqualityAndHashDependOnlyOnOrderedComponents() throws Exception {
+        var prelude = core();
+        var ab = new ProtosPathValue(prelude.pathPrototype(), List.of("a", "b"));
+        var abOther = new ProtosPathValue(ProtosObjectValue.rootObject(), List.of("a", "b"));
+        var ba = new ProtosPathValue(prelude.pathPrototype(), List.of("b", "a"));
 
-        assertSame(
-                prelude.pathPrototype(),
-                ProtosValueLookup.lookup(withParent, "child", prelude).orElseThrow().home());
-        assertEquals(List.of(ProtosPathValue.Parent.INSTANCE), withParent.components());
+        assertTrue(ab.structurallyEquals(abOther));
+        assertEquals(ab.structuralHash(), abOther.structuralHash());
+        assertFalse(ab.structurallyEquals(ba));
+        assertFalse(ab.structurallyEquals(null));
     }
 
     // Deliberately Java-side: this checks bootstrap object identity/frozen state,

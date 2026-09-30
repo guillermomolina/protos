@@ -39,16 +39,25 @@ tests: [
         tool009LegacyCase: () => {
             a: Path.relative().child("x")
             (a != Path.relative().child("y")) &&
-                (a != Path.relative().parentComponent()) &&
+                (a != Path.relative()) &&
                 (a != 1)
         }
         Assertions.require(tool009LegacyCase())
     }),
-    Test("rootedness affects equality", () => {
+    Test("component order affects equality", () => {
         tool009LegacyCase: () => {
-            a: Path.relative().child("x")
-            b: Path.rooted().child("x")
-            a != b
+            ab: Path.relative().child("a").child("b")
+            ba: Path.relative().child("b").child("a")
+            ab != ba
+        }
+        Assertions.require(tool009LegacyCase())
+    }),
+    Test("equal component sequences are equal regardless of derivation", () => {
+        tool009LegacyCase: () => {
+            derived: Path.relative().child("a").child("b")
+            other: Path.relative().child("a").child("b")
+            (derived == other) &&
+                (derived.hash() == other.hash())
         }
         Assertions.require(tool009LegacyCase())
     }),
@@ -60,13 +69,22 @@ tests: [
         }
         Assertions.require(tool009LegacyCase())
     }),
-    Test("parent component is not collapsed", () => {
+    Test("host separators drives and colons stay one component", () => {
         tool009LegacyCase: () => {
-            withParent: Path.relative().child("a").child("b").parentComponent().child("c")
-            collapsed: Path.relative().child("a").child("c")
-            withParent != collapsed
+            backslash: Path.relative().child("a\\b")
+            drive: Path.relative().child("C:")
+            (backslash != Path.relative().child("a").child("b")) &&
+                (drive != Path.relative().child("C").child(":"))
         }
         Assertions.require(tool009LegacyCase())
+    }),
+    Test("removed rooted and parent selectors are absent", () => {
+        Assertions.signals(Error, () => {
+            Path.rooted()
+        })
+        Assertions.signals(Error, () => {
+            Path.relative().parentComponent()
+        })
     })
 ]
 tests.freeze()

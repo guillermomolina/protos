@@ -27,11 +27,6 @@ tests: [
         Assertions.signals(Error, () => {
             Path.child("x")
         })
-    }),
-    Test("factory parent component receiver error", () => {
-        Assertions.signals(Error, () => {
-            Path.parentComponent()
-        })
     })
 ]
 tests.freeze()

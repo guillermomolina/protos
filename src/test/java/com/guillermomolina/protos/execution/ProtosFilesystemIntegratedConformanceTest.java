@@ -169,12 +169,7 @@ class ProtosFilesystemIntegratedConformanceTest {
 
         ProtosPathValue escaping =
                 new ProtosPathValue(
-                        prelude.pathPrototype(),
-                        false,
-                        List.of(
-                                new ProtosPathValue.Normal("inside"),
-                                ProtosPathValue.Parent.INSTANCE,
-                                new ProtosPathValue.Normal("outside")));
+                        prelude.pathPrototype(), List.of("inside", "outside"));
 
         ProtosFutureValue future =
                 (ProtosFutureValue)
@@ -240,9 +235,7 @@ class ProtosFilesystemIntegratedConformanceTest {
 
     private static ProtosPathValue path(ProtosPrelude prelude, String name) {
         return new ProtosPathValue(
-                prelude.pathPrototype(),
-                false,
-                List.of(new ProtosPathValue.Normal(name)));
+                prelude.pathPrototype(), List.of(name));
     }
 
     private record Fixture(
@@ -348,9 +341,7 @@ class ProtosFilesystemIntegratedConformanceTest {
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             attempts.incrementAndGet();
-            boolean escapes =
-                    path.components().stream()
-                            .anyMatch(component -> component == ProtosPathValue.Parent.INSTANCE);
+            boolean escapes = path.components().contains("outside");
             if (escapes) {
                 completion.failed();
             } else {

@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.122-SNAPSHOT
+
+- `I062` (#665, D169): simplify Core `Path` to relative/downward components.
+  `ProtosPathValue` is now one immutable ordered `List<String>` of normal
+  components plus its delegation prototype; the rooted flag, the `Parent`
+  component kind, and `Component`/`Normal` wrappers are removed. Core `Path`
+  installs only `relative`, `child`, `==`, and `hash`; `Path.rooted()` and
+  `path.parentComponent()` no longer exist. Structural equality and hash depend
+  only on the ordered component Strings. Actor and P transfer copy the
+  components with the destination Path prototype. The read-only, confined,
+  read-only-tree, and captured-tree Filesystem backends drop their obsolete
+  rooted/Parent branches while keeping every confinement, direct-child,
+  empty-Path, portable-name, and no-follow rule unchanged. No file-URL to Path
+  bridge is implemented. Maintained Protos examples, conformance tests, Java
+  tests, the architecture audit counts, and guide 11 are reconciled.
+
 ## 0.3.121-SNAPSHOT
 
 - `BUG012` (#742): repair Native Image DAP stack-frame materialization by

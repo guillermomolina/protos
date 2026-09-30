@@ -1171,23 +1171,10 @@ fixture.activation());
 
         private static String portableName(
                 com.guillermomolina.protos.runtime.ProtosPathValue path) {
-            if (path.rooted() || path.components().isEmpty()) {
+            if (path.components().isEmpty()) {
                 return null;
             }
-
-            StringBuilder name = new StringBuilder();
-            for (com.guillermomolina.protos.runtime.ProtosPathValue.Component component
-                    : path.components()) {
-                if (!(component
-                        instanceof com.guillermomolina.protos.runtime.ProtosPathValue.Normal normal)) {
-                    return null;
-                }
-                if (!name.isEmpty()) {
-                    name.append('/');
-                }
-                name.append(normal.name());
-            }
-            return name.toString();
+            return String.join("/", path.components());
         }
 
         @Override

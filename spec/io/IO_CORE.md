@@ -20,7 +20,7 @@ This document defines:
 - wrapper ownership and lifecycle rules;
 - text readers/writers and character encodings;
 - line reading;
-- files, filesystem authority, paths, and file URLs;
+- files, filesystem authority, and paths;
 - Process-local arguments, environment, and standard-I/O facilities relevant to I/O bootstrap;
 - the relationship between I/O capabilities and Actors.
 
@@ -613,7 +613,7 @@ ByteReadable cancellation/failure preservation follows that same established inp
 ByteSeekable seek operations are failure-atomic with respect to logical position; failed or successfully cancelled seeks leave that position unchanged.
 
 Path is a value, not filesystem authority.
-Path equality is structural and filesystem-independent: it compares rootedness plus the ordered component sequence, as owned by `FILESYSTEM.md`.
+Path equality is structural and filesystem-independent: it compares only the ordered normal-component String sequence, as owned by `FILESYSTEM.md`.
 Path semantic identity is ordinary individual object identity under `../semantics/VALUES_AND_COLLECTIONS.md`; structural equality does not make Path a Core value-identity family. Filesystem lookup identity, host syntax, and resource identity remain separate.
 URL is a value, not resource-access authority.
 Filesystem carries filesystem authority.

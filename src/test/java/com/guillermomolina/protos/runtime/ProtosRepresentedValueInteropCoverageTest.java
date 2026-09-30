@@ -73,7 +73,7 @@ final class ProtosRepresentedValueInteropCoverageTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze();
 
         ProtosPathValue path =
-                new ProtosPathValue(prototype, false, List.of());
+                new ProtosPathValue(prototype, List.of());
 
         ProtosEncodingValue encoding =
                 ProtosEncodingValue.portableForRuntime(

@@ -54,7 +54,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardHashSupport.java", 3),
                     Map.entry("execution/ProtosStandardFileProtocol.java", 10),
                     Map.entry("execution/ProtosStandardFilesystemProtocol.java", 1),
-                    Map.entry("execution/ProtosStandardPathProtocol.java", 6),
+                    Map.entry("execution/ProtosStandardPathProtocol.java", 4),
                     Map.entry("execution/ProtosStandardIpAddressProtocol.java", 4),
                     Map.entry("execution/ProtosStandardIpEndpointProtocol.java", 4),
                     Map.entry("execution/ProtosStandardNetworkProtocol.java", 2),
@@ -126,7 +126,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(34, actualCore.size());
-        assertEquals(143, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(141, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -247,7 +247,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Path",
                 prelude.pathPrototype(),
-                Set.of("relative", "rooted", "child", "parentComponent", "==", "hash"));
+                Set.of("relative", "child", "==", "hash"));
         ProtosObjectValue ipAddressPrototype = ordinaryBinding(prelude, "IpAddress");
         assertTrue(ipAddressPrototype.isFrozen(), "standard IpAddress prototype must be frozen");
         assertTrue(

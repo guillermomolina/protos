@@ -251,14 +251,11 @@ public final class ProtosNioConfinedFilesystemBackend
     }
 
     private static String permittedDirectChild(ProtosPathValue path, Set<String> allowedNames) {
-        if (path.rooted() || path.components().size() != 1) {
+        if (path.components().size() != 1) {
             return null;
         }
-        ProtosPathValue.Component component = path.components().get(0);
-        if (!(component instanceof ProtosPathValue.Normal normal)) {
-            return null;
-        }
-        return allowedNames.contains(normal.name()) ? normal.name() : null;
+        String name = path.components().get(0);
+        return allowedNames.contains(name) ? name : null;
     }
 
     private static boolean writeOnlyCreateNew(ProtosFilesystemOpenOptions options) {

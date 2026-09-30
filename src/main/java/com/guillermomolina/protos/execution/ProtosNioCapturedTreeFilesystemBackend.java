@@ -429,15 +429,11 @@ final class ProtosNioCapturedTreeFilesystemBackend
 
     private static List<String> normalRelativeComponents(
             ProtosPathValue path, boolean allowEmpty) {
-        if (path.rooted() || (!allowEmpty && path.components().isEmpty())) {
+        if (!allowEmpty && path.components().isEmpty()) {
             return null;
         }
         ArrayList<String> names = new ArrayList<>(path.components().size());
-        for (ProtosPathValue.Component component : path.components()) {
-            if (!(component instanceof ProtosPathValue.Normal normal)) {
-                return null;
-            }
-            String name = normal.name();
+        for (String name : path.components()) {
             if (name.isEmpty() || name.equals(".") || name.equals("..")) {
                 return null;
             }

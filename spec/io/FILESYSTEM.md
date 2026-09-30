@@ -4,7 +4,7 @@ Language version: 0.1
 Status: Draft
 Last updated: 2026-09-08
 
-This document is the primary normative owner of File opening, filesystem authority, Path, and URL/filesystem conversion semantics.
+This document is the primary normative owner of File opening, filesystem authority, and Path semantics.
 
 The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, and `PROCESS_IO.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
 
@@ -331,26 +331,21 @@ Possessing a `File` grants access only through the capabilities exposed by that 
 
 `Path` is a standardized path value rather than merely an alias for `String`. Core v0.1 defines no special path literal syntax. `Path` is a standard frozen-prelude factory/prototype binding because it carries no filesystem authority.
 
-The minimum portable construction protocol is `Path.relative()` for the empty relative Path, `Path.rooted()` for the empty rooted Path, `path.child(name)` to append one normal component, and `path.parentComponent()` to append one parent component. `child(name)` requires a String other than `""`, `"."`, or `".."`; it appends exactly that String as one component. Slash, backslash, colon, drive/UNC syntax, normalization, and host separators inside `name` acquire no structural meaning. No implicit String-to-Path coercion exists. All these operations are synchronous, immutable value construction and access no Filesystem.
+The portable construction protocol is `Path.relative()` for the empty Path and `path.child(name)` to append one normal component. `child(name)` requires a String other than `""`, `"."`, or `".."`; it appends exactly that String as one component. Slash, backslash, colon, drive/UNC syntax, normalization, and host separators inside `name` acquire no structural meaning. No implicit String-to-Path coercion exists. All these operations are synchronous, immutable value construction and access no Filesystem.
 
-`parentComponent()` is deliberately distinct from the Core reflection selector `parent()` defined by `semantics/OBJECT_MODEL.md`. A Path does not specialize or overload `parent()` to mean filesystem traversal. Consequently `path.parent()` remains the ordinary structural reflection operation and reports the receiver's immutable delegation parent, while `path.parentComponent()` constructs the Path value whose component sequence has one additional parent-traversal component. Core v0.1 defines no standard compatibility alias in which `Path.parent()` appends a path component.
-
+Core defines no rooted Path, no parent (upward) component, and no `parentComponent()` selector. `path.parent()` remains the ordinary structural reflection operation defined by `semantics/OBJECT_MODEL.md` and reports the receiver's immutable delegation parent; a Path does not specialize or overload it to mean filesystem traversal.
 
 Every Filesystem defines the namespace/root/base used to interpret paths supplied to it.
 
-Protos does not require mutable Process-global current-working-directory state. Relative path interpretation belongs to the Filesystem capability. Derived Filesystem capabilities may use different bases without mutating other Actors' path interpretation.
-
-An "absolute" Path is absolute within the namespace of the Filesystem interpreting it; it does not necessarily denote an operating-system root.
+Protos does not require mutable Process-global current-working-directory state. Path interpretation belongs to the Filesystem capability: every Path is interpreted relative to the interpreting Filesystem's explicitly provisioned authority/base. Derived Filesystem capabilities may use different bases without mutating other Actors' path interpretation.
 
 ### 20.1 Filesystem authority confinement
 
 A `Filesystem` operation must resolve every supplied `Path` entirely within the authority represented by that `Filesystem` capability.
 
-Path syntax or backend name-resolution behavior cannot enlarge that authority. In particular, parent traversal, absolute-path forms, symbolic links, reparse points, aliases, mount/redirection mechanisms, or other backend indirections must not cause an operation to access a resource outside the capability's authorized namespace.
+Path syntax or backend name-resolution behavior cannot enlarge that authority. In particular, symbolic links, reparse points, aliases, mount/redirection mechanisms, or other backend indirections must not cause an operation to access a resource outside the capability's authorized namespace.
 
-A relative path is resolved from the Filesystem's configured base, but successful resolution may move only within that same authorized namespace. An absolute Path is resolved from the Filesystem's namespace root, not from any ambient host root.
-
-If resolving a path would cross the Filesystem authority boundary, the operation fails. Protos does not silently reinterpret an escaping path as ambient host access, does not fall back to a Process-global current directory, and does not obtain broader authority merely because the host API used internally would permit it.
+A relative path is resolved from the Filesystem's configured base, but successful resolution may move only within that same authorized namespace. If resolving a path would cross the Filesystem authority boundary, the operation fails. Protos does not silently reinterpret an escaping path as ambient host access, does not fall back to a Process-global current directory, and does not obtain broader authority merely because the host API used internally would permit it.
 
 Confinement applies to the complete resolution operation, not only to lexical preprocessing of `.` or `..`. An implementation must remain confined in the presence of backend indirections and concurrent namespace changes. If it cannot establish that the requested resolution stays within authority because of a race or backend limitation, the operation fails rather than proceeding with uncertain authority.
 
@@ -362,22 +357,19 @@ Path normalization, component/equality rules, and host-native path conversion re
 
 The portable semantic content of a `Path` is filesystem-independent. A Path consists of:
 
-- a rooted/relative flag; and
-- an ordered sequence of path components.
+- one ordered sequence of normal path components.
 
-A normal path component contains one valid Protos `String` name. The empty String, `"."`, and `".."` are not normal component names in the portable component model. Parent traversal is represented as a distinct parent component rather than by pretending that `".."` is an ordinary child name. A current-directory component is semantically redundant and is not retained in the portable value.
+A normal path component contains one valid Protos `String` name. The empty String, `"."`, and `".."` are not normal component names. There is no rootedness dimension and no parent component: every Path is downward from the interpreting Filesystem's base. A current-directory component is semantically redundant and is not retained in the portable value.
 
-A relative Path with no components denotes the interpreting Filesystem's configured base. A rooted Path with no components denotes that Filesystem's namespace root.
+The empty Path (`Path.relative()`) denotes the interpreting Filesystem's configured base.
 
-The component sequence is not lexically collapsed across parent components. In particular, a path conceptually containing `a / b / parent / c` is not the same Path value as `a / c`. Filesystem resolution may observe backend indirection at `b`, so eliminating the parent component before resolution could change the target and weaken authority reasoning.
-
-Path value equality is structural and filesystem-independent: two Paths are equal exactly when they have the same rooted/relative flag and the same ordered component kinds and normal-component String values. Equality does not access a Filesystem and does not use host case folding, Unicode normalization, drive-letter rules, inode/file identity, symlink resolution, or backend aliases.
+Path value equality and hash are structural and filesystem-independent: two Paths are equal exactly when they have the same ordered sequence of normal-component String values, and equal Paths have equal hashes. (D169 narrows the structure that participates in equality under D037 to this sequence.) Equality does not access a Filesystem and does not use host case folding, Unicode normalization, drive-letter rules, inode/file identity, symlink resolution, or backend aliases.
 
 Therefore unequal Path values may resolve to the same resource in a particular Filesystem, and an equal Path value may resolve differently at different times if the authorized namespace itself changes. Resource identity and Path value equality are distinct concepts.
 
 A Path is immutable and carries no authority. It may cross Actor boundaries according to the ordinary rules for immutable values without transferring a Filesystem capability.
 
-Beyond `Path.relative()`, `Path.rooted()`, `child(name)`, and `parentComponent()`, display syntax, convenience parsers, and native-path conversion APIs remain outside Core v0.1. Any standardized constructor/parser that produces a portable Path must produce the semantic value described above rather than embedding the host platform's separator, drive, UNC, device-prefix, case-folding, or current-directory rules into Path identity.
+Beyond `Path.relative()` and `child(name)`, display syntax, convenience parsers, and native-path conversion APIs remain outside Core v0.1. Any standardized constructor/parser that produces a portable Path must produce the semantic value described above rather than embedding the host platform's separator, drive, UNC, device-prefix, case-folding, or current-directory rules into Path identity.
 
 When a Filesystem maps a normal component to a concrete backend, that component is one logical child name. A backend that cannot represent that name may reject the operation, but it must not reinterpret one component as multiple components, a root/prefix change, a drive/device selector, or another authority-changing native syntax. Host-native path values that require such semantics belong behind an explicitly host-specific/native boundary.
 
@@ -718,8 +710,8 @@ use an unsupported opaque entry fail through ordinary I/O failure.
 Relative-path interpretation of the fresh Filesystem is based at the captured
 directory root. The zero-component `Path.relative()` therefore selects that root
 for `entries`/`captureTree`; its direct children are addressed by appending their
-exact returned `name` components through the standard Path protocol. The normal
-rooted/relative and authority rules of section 20 continue to apply.
+exact returned `name` components through the standard Path protocol. The
+authority rules of section 20 continue to apply.
 
 Because the captured Filesystem is immutable, repeated successful `entries`
 observations and regular-file reads against it observe the same namespace,
@@ -757,29 +749,7 @@ network access.
 
 A URL contains URL semantics such as scheme, authority, URL path, query, and fragment. A URL path component is not a filesystem `Path` merely because both use slash-like notation on some platforms.
 
-A `file:` URL is a bridge between URL identity and filesystem naming, not an inheritance relationship.
-
-Converting a file URL to a Path is Filesystem-dependent because platform namespace rules, UNC forms, and percent encoding may matter. Conceptually a Filesystem may provide an operation equivalent to:
-
-```text
-filesystem.pathFromURL(url)
-```
-
-The exact public spelling remains open. A non-file URL is invalid for such a conversion.
-
-Standard file-URL conversion preserves URL structure before converting it to Path structure. Scheme, authority, URL path hierarchy, and URL path-segment boundaries are determined under URL semantics before percent-encoded data inside a segment is decoded for filesystem naming. An implementation must not percent-decode a raw URL/path string first and then reinterpret decoded characters as URL delimiters.
-
-Consequently, a percent-encoded slash or other decoded hierarchy-looking character that was data inside one URL path segment cannot create an additional Path component, change rootedness, introduce a Filesystem prefix/root/device selector, or otherwise acquire separator semantics during conversion. The decoded value belongs to that one candidate filesystem component. If the interpreting Filesystem cannot represent it as one logical child name, conversion or the later filesystem operation fails rather than splitting or reinterpreting it.
-
-URL dot-segment semantics are likewise resolved in the URL domain before portable Path components are constructed. A segment that was not a URL `.` or `..` hierarchy segment does not become current/parent traversal merely because percent-decoding its data yields the String `"."` or `".."`. Because those Strings are not valid normal portable Path component names, a standard conversion that would otherwise produce such a normal component fails rather than silently changing its structural meaning.
-
-Percent decoding and conversion to Protos `String` must be lossless for every produced normal component. Malformed percent encoding, a byte/text sequence that the Filesystem's file-URL mapping cannot represent as valid Protos text, or a conversion requiring replacement, truncation, normalization, delimiter reinterpretation, or another lossy transformation makes the conversion fail. The exact native filename encoding remains a Filesystem/host boundary; lossiness is not a portable fallback.
-
-A file URL authority is data to be interpreted only through the receiving Filesystem capability's explicitly supported namespace mapping. A non-empty or non-local-looking authority does not grant ambient network, DNS, UNC, host-root, or sibling-filesystem authority merely because the host platform has APIs that could interpret it that way. If the Filesystem cannot map that authority wholly inside its authorized namespace without obtaining additional authority, the conversion fails.
-
-`pathFromURL` does not itself perform ambient DNS/name resolution or network acquisition to decide whether a file authority is local or reachable. Such facilities are outside this I/O model. A managed Filesystem may have an already-provisioned mapping for authorities or UNC-like forms, but using that mapping must preserve the same confinement and one-component rules as every other Path conversion and resolution.
-
-File-URL conversion parses URL hierarchy before percent decoding, never lets decoded segment data become Path separators/parent traversal, performs only lossless component conversion, and cannot turn URL authority into ambient filesystem/network authority.
+Core defines no conversion between URLs and Paths. `file:` URL to Path conversion, including any Filesystem-provided `pathFromURL` operation, is not part of Core Path semantics and is deferred.
 
 Neither a Path nor a URL grants resource-access authority.
 

@@ -37,9 +37,7 @@ final class ProtosActorValueTransferTest {
         ProtosStringValue string = new ProtosStringValue("snapshot");
         ProtosPathValue path =
                 new ProtosPathValue(
-                        prelude.pathPrototype(),
-                        false,
-                        List.of(new ProtosPathValue.Normal("a"), ProtosPathValue.Parent.INSTANCE));
+                        prelude.pathPrototype(), List.of("a", "b"));
 
         List<Object> result =
                 ProtosActorValueTransfer.snapshotArguments(

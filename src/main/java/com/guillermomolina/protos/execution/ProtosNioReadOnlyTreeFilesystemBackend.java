@@ -378,15 +378,8 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
     }
 
     private List<String> permittedDirectoryComponents(ProtosPathValue path) {
-        if (path.rooted()) {
-            return null;
-        }
         ArrayList<String> result = new ArrayList<>(path.components().size());
-        for (ProtosPathValue.Component component : path.components()) {
-            if (!(component instanceof ProtosPathValue.Normal normal)) {
-                return null;
-            }
-            String name = normal.name();
+        for (String name : path.components()) {
             if (!portableNativeComponent(name)) {
                 return null;
             }
@@ -437,15 +430,11 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
     }
 
     private List<String> permittedRelativeComponents(ProtosPathValue path) {
-        if (path.rooted() || path.components().isEmpty()) {
+        if (path.components().isEmpty()) {
             return null;
         }
         ArrayList<String> result = new ArrayList<>(path.components().size());
-        for (ProtosPathValue.Component component : path.components()) {
-            if (!(component instanceof ProtosPathValue.Normal normal)) {
-                return null;
-            }
-            String name = normal.name();
+        for (String name : path.components()) {
             if (!portableNativeComponent(name)) {
                 return null;
             }
