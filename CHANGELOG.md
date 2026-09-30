@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.127-SNAPSHOT
+
+- `I076`: expose reusable standalone hosted execution for JVM embedding. The
+  new `ProtosStandaloneHostedExecution.executeFile(coreRoot, sourceFile, ...)`
+  executes one standalone source file through the same Core bootstrap,
+  standalone Process bootstrap, Process-scoped Polyglot Context binding and
+  canonical initial-module execution as the CLI, on a dedicated guest carrier
+  thread with the BUG008 stack budget, and returns the terminal
+  `ProtosExecutionOutcome` (the terminal expression's guest value when
+  completed). Every Process, Context and runtime-host resource it opens is
+  released before it returns. The CLI now consumes the same shared bootstrap,
+  binding, host Environment/stream provisioning and direct-file execution
+  instead of private copies. Embedded execution installs no CLI conveniences
+  such as `print`. No observable Protos semantics, raw `Context.eval`
+  behavior or CLI behavior change. Adds embedding tests for recursive
+  Fibonacci and factorial terminal values and updates the CLI Polyglot routing
+  architecture test to follow the moved code.
+
 ## 0.3.126-SNAPSHOT
 
 - `BUG013` (#749, DIST009 #743): repair the Truffle frame lifetime used by the

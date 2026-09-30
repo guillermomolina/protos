@@ -25,7 +25,6 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -47,23 +46,13 @@ public final class ProtosCli {
     private final ProtosDiagnosticInspector diagnosticInspector = new ProtosDiagnosticInspector();
 
     /**
-     * BUG008: a Protos-level Closure call composes through two nested Bytecode
-     * CallTargets (the PLAT026 truthful semantic-root shell wrapping the untagged
-     * execution helper), so host stack consumption per guest recursion level is
-     * higher than a single-CallTarget interpreter would need. Whatever stack size
-     * happens to be available on whichever thread calls {@link #run} (the JVM
-     * main thread's platform-dependent default, a test runner's worker thread,
-     * an embedder's calling thread, ...) is host configuration, not a Protos
-     * language guarantee, so guest command dispatch always runs on a dedicated
-     * carrier thread with an explicit, generous stack budget instead of depending
-     * on that ambient default. The exact value is fixed rather than tunable so it
-     * remains a stable, recorded part of this reference runtime's execution
-     * identity; see {@code protos/benchmarks/README.md}. Every other host thread
-     * that can independently drive guest Protos execution, such as this package's
-     * {@link ProtosTestToolAsyncExecutionScope} per-Case carriers, reuses this
-     * same budget rather than depending on an unpatched default.
+     * Stack budget of the dedicated guest carrier thread (BUG008); the value and its rationale
+     * are owned by {@link ProtosStandaloneHostedExecution#GUEST_CALL_STACK_SIZE_BYTES}, shared
+     * with JVM embedders, and reused by every other host thread in this package that drives guest
+     * execution, such as {@link ProtosTestToolAsyncExecutionScope} per-Case carriers.
      */
-    static final long GUEST_CALL_STACK_SIZE_BYTES = 64L * 1024 * 1024;
+    static final long GUEST_CALL_STACK_SIZE_BYTES =
+            ProtosStandaloneHostedExecution.GUEST_CALL_STACK_SIZE_BYTES;
 
     public static void main(String[] args) {
         int code = new ProtosCli().run(args, System.in, System.out, System.err);
@@ -257,11 +246,11 @@ public final class ProtosCli {
                                     new ProtosStandardLibraryModuleResolver(core.getParent()),
                                     entryLogicalModule,
                                     applicationArguments,
-                                    HOST_ENVIRONMENT_NAME_DOMAIN,
-                                    hostEnvironmentEntries(),
-                                    readableBackend(in),
-                                    writableBackend(out),
-                                    writableBackend(err),
+                                    ProtosStandaloneHostedExecution.HOST_ENVIRONMENT_NAME_DOMAIN,
+                                    ProtosStandaloneHostedExecution.hostEnvironmentEntries(),
+                                    ProtosStandaloneHostedExecution.readableBackend(in),
+                                    ProtosStandaloneHostedExecution.writableBackend(out),
+                                    ProtosStandaloneHostedExecution.writableBackend(err),
                                     "UTF8",
                                     "UTF8",
                                     "UTF8"));
@@ -1253,13 +1242,13 @@ public final class ProtosCli {
             PrintStream err)
             throws IOException {
         ProtosStandaloneProcessBootstrap.Result bootstrap =
-                bootstrapStandaloneProcess(
+                ProtosStandaloneHostedExecution.bootstrapProcess(
                         core,
                         moduleResolver,
                         applicationArguments,
-                        readableBackend(in),
-                        writableBackend(out),
-                        writableBackend(err));
+                        ProtosStandaloneHostedExecution.readableBackend(in),
+                        ProtosStandaloneHostedExecution.writableBackend(out),
+                        ProtosStandaloneHostedExecution.writableBackend(err));
         return bindStandaloneProcess(
                 bootstrap,
                 ProtosPolyglotRuntimeHost.open(),
@@ -1277,11 +1266,11 @@ public final class ProtosCli {
             PrintStream diagnostics)
             throws IOException {
         ProtosStandaloneProcessBootstrap.Result bootstrap =
-                bootstrapStandaloneProcess(
+                ProtosStandaloneHostedExecution.bootstrapProcess(
                         core,
                         moduleResolver,
                         applicationArguments,
-                        readableBackend(in),
+                        ProtosStandaloneHostedExecution.readableBackend(in),
                         ProtosPolyglotStandardStreamRouting.stdoutBackend(),
                         ProtosPolyglotStandardStreamRouting.stderrBackend());
 
@@ -1305,54 +1294,18 @@ public final class ProtosCli {
         }
     }
 
-    private static ProtosStandaloneProcessBootstrap.Result
-            bootstrapStandaloneProcess(
-                    Path core,
-                    ProtosModuleResolver moduleResolver,
-                    List<String> applicationArguments,
-                    ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
-                    ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
-                    ProtosProcessStandardStreamBinding.WritableBackend stderrBackend)
-                    throws IOException {
-        ProtosPrelude prelude =
-                new ProtosCoreBootstrap().bootstrap(core, moduleResolver);
-        ProtosEncodingValue utf8 = utf8(prelude);
-        return ProtosStandaloneProcessBootstrap.create(
-                prelude,
-                applicationArguments,
-                HOST_ENVIRONMENT_NAME_DOMAIN,
-                hostEnvironmentEntries(),
-                stdinBackend,
-                stdoutBackend,
-                stderrBackend,
-                utf8,
-                utf8,
-                utf8,
-                null);
-    }
-
     private static Session bindStandaloneProcess(
             ProtosStandaloneProcessBootstrap.Result bootstrap,
             ProtosPolyglotRuntimeHost runtimeHost,
             InputStream in,
             OutputStream out,
             OutputStream err) {
-        boolean bound = false;
-        try {
-            ProtosPolyglotProcessContext processContext =
-                    runtimeHost.hostProcess(bootstrap.process(), in, out, err);
-            bound = true;
-            return new Session(
-                    bootstrap.activation(),
-                    bootstrap.process(),
-                    runtimeHost,
-                    processContext);
-        } finally {
-            if (!bound) {
-                bootstrap.process().requestTerminationForRuntime();
-                runtimeHost.close();
-            }
-        }
+        return new Session(
+                bootstrap.activation(),
+                bootstrap.process(),
+                runtimeHost,
+                ProtosStandaloneHostedExecution.bindProcess(
+                        bootstrap, runtimeHost, in, out, err));
     }
 
     private static void publishDebugReadiness(
@@ -1378,159 +1331,6 @@ public final class ProtosCli {
         }
     }
 
-    private static ProtosEncodingValue utf8(ProtosPrelude prelude) {
-        Object value =
-                prelude.encodingPrototype()
-                        .readLocalSlot("UTF8")
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "Core Encoding.UTF8 is missing"));
-        if (!(value instanceof ProtosEncodingValue encoding)) {
-            throw new IllegalStateException(
-                    "Core Encoding.UTF8 is not an Encoding descriptor");
-        }
-        return encoding;
-    }
-
-    private static List<ProtosEnvironmentValue.NativeEntry>
-            hostEnvironmentEntries() {
-        ArrayList<ProtosEnvironmentValue.NativeEntry> entries =
-                new ArrayList<>();
-        for (Map.Entry<String, String> entry : System.getenv().entrySet()) {
-            entries.add(
-                    new ProtosEnvironmentValue.NativeEntry(
-                            entry.getKey(), entry.getValue()));
-        }
-        return List.copyOf(entries);
-    }
-
-    /**
-     * Use the JDK's native ProcessBuilder environment map itself as the probe for native
-     * environment-name representability and name identity. This avoids inventing a POSIX/Windows
-     * Unicode case-folding policy in Core and does not mutate this JVM's real environment.
-     */
-    private static final ProtosEnvironmentValue.NativeNameDomain
-            HOST_ENVIRONMENT_NAME_DOMAIN =
-                    new ProtosEnvironmentValue.NativeNameDomain() {
-                        @Override
-                        public boolean sameCapturedName(
-                                String left, String right) {
-                            return nativeEnvironmentNameMatches(
-                                    left, right);
-                        }
-
-                        @Override
-                        public boolean isQueryRepresentable(String name) {
-                            Map<String, String> probe =
-                                    new ProcessBuilder().environment();
-                            probe.clear();
-                            try {
-                                probe.put(name, "");
-                                return probe.size() == 1
-                                        && probe.containsKey(name);
-                            } catch (IllegalArgumentException
-                                    | NullPointerException invalid) {
-                                return false;
-                            }
-                        }
-
-                        @Override
-                        public boolean matchesQuery(
-                                String captured, String query) {
-                            return nativeEnvironmentNameMatches(
-                                    captured, query);
-                        }
-                    };
-
-    private static boolean nativeEnvironmentNameMatches(
-            String captured, String query) {
-        Map<String, String> probe = new ProcessBuilder().environment();
-        probe.clear();
-        try {
-            probe.put(captured, "");
-            return probe.containsKey(query);
-        } catch (IllegalArgumentException | NullPointerException invalid) {
-            return false;
-        }
-    }
-
-    private static ProtosProcessStandardStreamBinding.ReadableBackend
-            readableBackend(InputStream in) {
-        return (maxBytes, completion) -> {
-            Thread worker =
-                    Thread.ofVirtual()
-                            .name("protos-stdin-read")
-                            .start(
-                                    () -> {
-                                        ByteArrayOutputStream captured =
-                                                new ByteArrayOutputStream(
-                                                        Math.min(
-                                                                maxBytes,
-                                                                8192));
-                                        try {
-                                            int first = in.read();
-                                            if (first < 0) {
-                                                completion.eof();
-                                                return;
-                                            }
-                                            captured.write(first);
-
-                                            while (captured.size() < maxBytes) {
-                                                int available = in.available();
-                                                if (available <= 0) break;
-                                                int wanted =
-                                                        Math.min(
-                                                                maxBytes
-                                                                        - captured
-                                                                                .size(),
-                                                                available);
-                                                byte[] more =
-                                                        in.readNBytes(wanted);
-                                                if (more.length == 0) break;
-                                                captured.write(
-                                                        more,
-                                                        0,
-                                                        more.length);
-                                            }
-                                            completion.data(
-                                                    captured.toByteArray());
-                                        } catch (IOException failure) {
-                                            /*
-                                             * Preserve any already consumed prefix as progress.
-                                             * If cancellation has already won, the Process-stream
-                                             * binding will put that prefix back in its semantic
-                                             * unread buffer instead of committing it.
-                                             */
-                                            if (captured.size() > 0) {
-                                                completion.data(
-                                                        captured.toByteArray());
-                                            } else {
-                                                completion.failed();
-                                            }
-                                        }
-                                    });
-            return worker::interrupt;
-        };
-    }
-
-    private static ProtosProcessStandardStreamBinding.WritableBackend
-            writableBackend(PrintStream stream) {
-        return (bytes, completion) -> {
-            try {
-                /*
-                 * Keep the portable write commitment synchronous with this call. PrintStream
-                 * write(byte[],off,len) does not imply an explicit Protos flush operation.
-                 */
-                stream.write(bytes, 0, bytes.length);
-                completion.succeeded();
-            } catch (RuntimeException failure) {
-                completion.failed(0);
-            }
-            return () -> {};
-        };
-    }
-
     private int eval(Source source, Session s, PrintStream err) {
         try {
             executeStandaloneRootTask(s.execute(source));
@@ -1552,19 +1352,9 @@ public final class ProtosCli {
             Session s,
             PrintStream err) {
         try {
-            ProtosPrelude prelude =
-                    s.activation()
-                            .prelude()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "direct-file entry requires an owning Core prelude"));
             executeStandaloneRootTask(
-                    ProtosCanonicalInitialModuleExecution.execute(
-                            prelude,
-                            resolver,
-                            resolver.entryModule(),
-                            s.activation()));
+                    ProtosStandaloneHostedExecution.executeDirectFile(
+                            resolver, s.activation()));
             return 0;
         } catch (IOException e) {
             Throwable cause = e.getCause();

@@ -40,7 +40,7 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
                                 "ProtosCli.java"));
 
         assertTrue(source.contains("ProtosPolyglotRuntimeHost.open()"));
-        assertTrue(source.contains("runtimeHost.hostProcess("));
+        assertTrue(source.contains("ProtosStandaloneHostedExecution.bindProcess("));
         assertTrue(source.contains("processContext.execute("));
         assertTrue(source.contains("processContext.evaluatePersistent("));
         assertTrue(source.contains("executeStandaloneRootTask(session.executeModuleSource(source))"));
@@ -58,10 +58,24 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertFalse(source.contains("s.compiler.compile(src)"));
         assertTrue(source.contains("Source.newBuilder(ProtosLanguage.ID"));
         assertTrue(source.contains("ProtosDirectFileModuleResolver"));
-        assertTrue(source.contains("ProtosCanonicalInitialModuleExecution.execute("));
+        assertTrue(source.contains("ProtosStandaloneHostedExecution.executeDirectFile("));
         assertFalse(source.contains("processContext.executeFile("));
         assertTrue(source.contains("processContext.executeModuleSource("));
         assertFalse(source.contains("private static Source sourceFromPath("));
         assertFalse(source.contains(".uri(exact.toUri())"));
+
+        String shared =
+                Files.readString(
+                        Path.of(
+                                "src",
+                                "main",
+                                "java",
+                                "com",
+                                "guillermomolina",
+                                "protos",
+                                "execution",
+                                "ProtosStandaloneHostedExecution.java"));
+        assertTrue(shared.contains("runtimeHost.hostProcess("));
+        assertTrue(shared.contains("ProtosCanonicalInitialModuleExecution.execute("));
     }
 }
