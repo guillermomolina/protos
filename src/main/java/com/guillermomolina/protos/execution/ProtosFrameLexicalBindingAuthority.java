@@ -22,7 +22,6 @@ import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.frame.MaterializedFrame;
-import com.oracle.truffle.api.frame.VirtualFrame;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -55,8 +54,8 @@ import java.util.Optional;
  * PRESENT value are always distinguishable, giving {@code PRESENT(null) !=
  * ABSENT}.
  *
- * <p>The frame reference held here is the owning root's own frame, retained
- * (materialized by the installer) so this context's frame-backed bindings
+ * <p>The frame reference held here is the owning root's own frame, materialized
+ * by the installer before this authority retains it, so this context's frame-backed bindings
  * remain observable even after that root's own activation returns, for the
  * case where the execution context itself escapes. I068 Slice 5 reuses this
  * same retained materialized authority for proven captured access: the child
@@ -79,7 +78,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     private final ProtosFrameLexicalLayout frameBackedLayout;
     private final LocalRangeAccessor frameBackedLocals;
     private final BytecodeRootNode declaringRoot;
-    private VirtualFrame frame;
+    private final MaterializedFrame frame;
     private final LinkedHashMap<String, Object> dynamicOverflow = new LinkedHashMap<>();
     private final LinkedHashSet<String> establishmentOrder = new LinkedHashSet<>();
 
@@ -87,7 +86,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
             ProtosFrameLexicalLayout frameBackedLayout,
             LocalRangeAccessor frameBackedLocals,
             BytecodeNode bytecodeNode,
-            VirtualFrame frame) {
+            MaterializedFrame frame) {
         this.frameBackedLayout =
                 Objects.requireNonNull(frameBackedLayout, "frameBackedLayout");
         this.frameBackedLocals =
@@ -164,23 +163,15 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         }
     }
 
-    @Override
-    public void prepareForContextObservation() {
-        frame = frame.materialize();
-    }
-
     /**
-     * PERF013 Slice B1 seam: exposes this authority's own retained frame for a
-     * compile-time-proven {@link com.oracle.truffle.api.bytecode.MaterializedLocalAccessor}
-     * captured read. Returns {@code null}, rather than materializing eagerly,
-     * when this context's frame is not yet materialized: {@link
-     * #prepareForContextObservation} remains the sole materialization point
-     * (triggered by the existing capture/observation boundary), and a caller
-     * observing {@code null} here falls back to the exact generic captured
-     * path instead of inventing a second materialization trigger.
+     * PERF013 Slice B1 seam: exposes this authority's retained materialized
+     * frame for a compile-time-proven {@link
+     * com.oracle.truffle.api.bytecode.MaterializedLocalAccessor} captured
+     * read. The installer materializes the frame before constructing this
+     * authority, so captured access reuses that escape-safe frame directly.
      */
     MaterializedFrame retainedMaterializedFrameForCapturedAccess() {
-        return frame instanceof MaterializedFrame materializedFrame ? materializedFrame : null;
+        return frame;
     }
 
     @Override

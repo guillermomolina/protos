@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.126-SNAPSHOT
+
+- `BUG013` (#749, DIST009 #743): repair the Truffle frame lifetime used by the
+  frame-backed lexical authority. `InstallFrameLexicalAuthority` now
+  materializes its bound `VirtualFrame` at the explicit escape boundary before
+  constructing `ProtosFrameLexicalBindingAuthority`, and that authority retains
+  only a final `MaterializedFrame`. Context observation is no longer the first
+  materialization point, and the captured-materialized-local seam reuses the
+  already escape-safe retained frame directly. The I075-D invariant remains
+  intact: the authority retains the stable declaring `BytecodeRootNode` and
+  resolves the current `BytecodeNode` for local access. The repair preserves
+  boxing elimination, the uncached interpreter, yield/materialized-local
+  support, and observable Protos semantics. A focused regression verifies that
+  the deferred authority already retains a `MaterializedFrame` before
+  `ProtosActivation.context()` makes the guest execution context observable.
+
 ## 0.3.125-SNAPSHOT
 
 - `I075-D` (#746, PERF011 #693): enable Bytecode DSL boxing elimination with

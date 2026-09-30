@@ -260,8 +260,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * current genuine execution context, exactly once, as the first operation
      * of every {@code ROOT}/{@code CLOSURE} Bytecode root that {@code
      * CanonicalToBytecodeLowerer} found at least one eligible current-scope
-     * binding for. The frame is retained (materialized) so a context that
-     * later escapes its own activation keeps observing the same authoritative
+     * binding for. The frame is materialized before authority construction and
+     * retained so a context that later escapes its own activation keeps observing
+     * the same authoritative
      * values through this same authority instance.
      *
      * <p>No-op when {@code activation.context()} is not a genuine execution
@@ -283,12 +284,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
+            MaterializedFrame materializedFrame = frame.materialize();
             activation.installFrameLexicalBindingAuthorityForRuntime(
                     new ProtosFrameLexicalBindingAuthority(
                             frameBackedLayout,
                             frameBackedLocals,
                             bytecodeNode,
-                            frame));
+                            materializedFrame));
         }
     }
 
