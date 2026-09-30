@@ -67,22 +67,34 @@ def write(path, text):
     path.write_text(text, encoding="utf-8")
 
 
-def ci_job(name, image, command):
+def ci_job(name, image, command, cache_action="actions/cache@v6"):
     return """  %s:
     container:
       image: %s
     steps:
+      - name: Restore Maven dependency cache
+        uses: %s
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
       - name: Run repository tests
         run: |
           %s
-""" % (name, image, command)
+""" % (name, image, cache_action, command)
 
 
-def ci_workflow(test_image, test_command):
+def ci_workflow(
+    test_image,
+    test_command,
+    cache_action="actions/cache@v6",
+):
     return "jobs:\n" + ci_job(
         "test",
         test_image,
         test_command,
+        cache_action,
     )
 
 def make_fixture(
@@ -92,6 +104,7 @@ def make_fixture(
     native_drift=False,
     old_c_state=False,
     ci_command_drift=False,
+    ci_cache_drift=False,
 ):
     selected_image = TOOLCHAIN["graalvm"]["container_image"]
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
@@ -187,6 +200,11 @@ def make_fixture(
         if ci_command_drift
         else "make test"
     )
+    test_cache_action = (
+        "actions/cache@v5"
+        if ci_cache_drift
+        else "actions/cache@v6"
+    )
     if old_c_state:
         dist_components = "24.0.0"
         feature = "22"
@@ -208,6 +226,7 @@ actual_version=25.0.4.1.1
         ci_workflow(
             test_ci_image,
             test_command,
+            test_cache_action,
         ),
     )
 
@@ -388,6 +407,20 @@ Java version: 25.0.4.1.1, vendor: GraalVM Community, runtime: /opt/graalvm-commu
         require(
             "ci.tests.command" in result.stdout,
             "CI command drift did not identify ci.tests.command",
+            result,
+        )
+
+        root = tmp / "ci-cache-drift"
+        make_fixture(root, ci_cache_drift=True)
+        result = run(verifier, root, "check", "development")
+        require(
+            result.returncode == 1,
+            "CI Maven cache drift did not fail closed",
+            result,
+        )
+        require(
+            "ci.tests.maven_cache" in result.stdout,
+            "CI Maven cache drift did not identify ci.tests.maven_cache",
             result,
         )
 

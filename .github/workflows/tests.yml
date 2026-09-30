@@ -36,6 +36,14 @@ jobs:
       - name: Verify repository toolchain
         run: python3 tools/verify_toolchain.py --mode check --scope development
 
+      - name: Restore Maven dependency cache
+        uses: actions/cache@v6
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
       - name: Run repository tests
         run: |
           make test

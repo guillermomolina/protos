@@ -39,6 +39,7 @@ DEVELOPMENT_BINDINGS = {
     "devcontainer.java_path",
     "ci.tests.container",
     "ci.tests.command",
+    "ci.tests.maven_cache",
 }
 
 MAVEN_PROVISIONING_MODEL = "ol10-rpm:maven+maven-unbound"
@@ -472,6 +473,32 @@ def workflow_job_test_command(path, job_id):
         return "make test"
     return "<drift:%s.command>" % job_id
 
+def workflow_job_maven_cache_contract(path, job_id):
+    # type: (Path, str) -> str
+    text = workflow_job_text(path, job_id)
+
+    action_present = re.search(
+        r"^[ \\t]*(?:-[ \\t]*)?uses:[ \\t]*actions/cache@v6[ \\t]*$",
+        text,
+        flags=re.MULTILINE,
+    )
+    path_present = re.search(
+        r"^[ \\t]*path:[ \\t]*~/.m2/repository[ \\t]*$",
+        text,
+        flags=re.MULTILINE,
+    )
+    key_present = (
+        "${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}" in text
+    )
+    restore_present = (
+        "${{ runner.os }}-maven-" in text
+    )
+
+    if action_present and path_present and key_present and restore_present:
+        return "actions/cache@v6 ~/.m2/repository pom-hash"
+    return "<drift:%s.maven_cache>" % job_id
+
+
 def native_image_container(contract):
     # type: (Dict[str, object]) -> str
     graal = contract["graalvm"]
@@ -582,6 +609,11 @@ def audit_bindings(root, contract, include_native=True):
         "ci.tests.command",
         "make test",
         workflow_job_test_command(ci_workflow, "test"),
+    ))
+    rows.append((
+        "ci.tests.maven_cache",
+        "actions/cache@v6 ~/.m2/repository pom-hash",
+        workflow_job_maven_cache_contract(ci_workflow, "test"),
     ))
     rows.append((
         "dist.runtime_pom_absent",
