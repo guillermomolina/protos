@@ -32,12 +32,13 @@ main() {
 
     external_receiver_exports=(
         'com.guillermomolina.protos.execution.ProtosBytecodeTagTreeNodeExports'
+        'com.guillermomolina.protos.execution.ProtosBytecodeTagTreeNodeExportsGen'
     )
 
     for class in "${external_receiver_exports[@]}"; do
         path="${classes_dir}/${class//./\/}.class"
         if [[ ! -f "${path}" ]]; then
-            echo "missing external-receiver Truffle export class: ${path}" >&2
+            echo "missing external-receiver Truffle export initialization class: ${path}" >&2
             return 1
         fi
         classes+=("${class}")

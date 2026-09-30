@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.121-SNAPSHOT
+
+- `BUG012` (#742): repair Native Image DAP stack-frame materialization by
+  initializing both the explicit external-receiver `NodeLibrary` export owner
+  and its generated registration owner at image build time. Keeping
+  `ProtosBytecodeTagTreeNodeExports` hosted-initialized preserves the DIST006-C1
+  / I069 guest runtime-compilation parsing requirement, while also initializing
+  `ProtosBytecodeTagTreeNodeExportsGen` prevents its generated
+  `LibraryExport.register(...)` class initializer from registering the same
+  receiver again on the first runtime debugger `stackTrace`. The Native
+  regression gate now exercises a real DAP breakpoint, suspended thread,
+  stack trace, continuation, and clean process termination while retaining the
+  existing forced Tier-2 guest-compilation checks. No Protos language semantics
+  or Standard Library behavior changes.
+
 ## 0.3.120-SNAPSHOT
 
 - `I061` (#664, D168): replace `ProcessArguments` with frozen ordinary Array

@@ -16,6 +16,7 @@ help_log="${tmp_dir}/help.log"
 smoke_log="${tmp_dir}/smoke.log"
 test_tool_log="${tmp_dir}/test-tool.log"
 jit_log="${tmp_dir}/forced-jit.log"
+dap_log="${tmp_dir}/dap.log"
 
 PROTOS_HOME="${root}" \
     "${native_bin}" \
@@ -61,6 +62,11 @@ test_tool_context_teardown_failures="$(
         "${test_tool_log}" \
         || true
 )"
+
+PROTOS_HOME="${root}" \
+    python3 "${root}/build/native/test-dap-stacktrace.py" "${native_bin}" \
+    >"${dap_log}" 2>&1
+dap_status=$?
 
 PROTOS_HOME="${root}" \
     "${native_bin}" \
@@ -121,6 +127,8 @@ echo "NATIVE_GUEST_SMOKE_STATUS=${smoke_status}"
 echo "NATIVE_TEST_TOOL_STATUS=${test_tool_status}"
 echo "NATIVE_TEST_TOOL_OUTPUT_OK=${test_tool_output_ok}"
 echo "NATIVE_TEST_TOOL_CONTEXT_TEARDOWN_FAILURES=${test_tool_context_teardown_failures}"
+cat "${dap_log}"
+echo "NATIVE_DAP_STACKTRACE_STATUS=${dap_status}"
 echo "NATIVE_FORCED_JIT_STATUS=${jit_status}"
 echo "OPT_DONE=${opt_done}"
 echo "OPT_FAILED=${opt_failed}"
@@ -165,6 +173,12 @@ if [[ "${test_tool_context_teardown_failures}" -ne 0 ]]; then
     exit 1
 fi
 
+if [[ "${dap_status}" -ne 0 ]]; then
+    cat "${dap_log}" >&2
+    echo "NATIVE_DAP_STACKTRACE_REGRESSION=FAIL" >&2
+    exit 1
+fi
+
 if [[ "${jit_status}" -ne 0 ]]; then
     cat "${jit_log}" >&2
     echo "NATIVE_FORCED_GUEST_JIT=FAIL" >&2
@@ -205,6 +219,7 @@ echo "NATIVE_VERSION_SMOKE=PASS"
 echo "NATIVE_HELP_SMOKE=PASS"
 echo "NATIVE_GUEST_SMOKE=PASS"
 echo "NATIVE_TEST_TOOL_SMOKE=PASS"
+echo "NATIVE_DAP_STACKTRACE_REGRESSION=PASS"
 echo "NATIVE_FORCED_GUEST_JIT=PASS"
 echo "HELPER_BYTECODE_ROOT_TIER2=PASS"
 echo "SEMANTIC_BYTECODE_ROOT_TIER2=PASS"
