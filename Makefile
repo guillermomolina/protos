@@ -11,8 +11,8 @@ PROTOS_TEST_JOBS ?= 8
 
 # DAP and the real GraalVM LSP tests own Graal tooling state and are not safe
 # in the class-parallel lane.
-JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosI026GLspCapabilityTest,ProtosI026GLspTransportTest
-JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosI026GLspCapabilityTest.java,**/ProtosI026GLspTransportTest.java
+JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosI026GLspCapabilityTest,ProtosI026GLspTransportTest,ProtosTestToolPerf017AdmissionTest
+JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosI026GLspCapabilityTest.java,**/ProtosI026GLspTransportTest.java,**/ProtosTestToolPerf017AdmissionTest.java
 JAVA_PARALLEL_EXCLUDES := $(JAVA_SERIAL_TEST_EXCLUDES)
 JAVA_STRESS_TESTS := ProtosJsonParserStress
 
