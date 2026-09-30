@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.125-SNAPSHOT
+
+- `I075-D` (#746, PERF011 #693): enable Bytecode DSL boxing elimination with
+  `boxingEliminationTypes = {int.class}` on `ProtosBytecodeRootNode`, an
+  implementation-internal `int` carrier only; no guest primitive
+  representation is introduced. Prerequisite repair:
+  `ProtosFrameLexicalBindingAuthority` no longer retains the installation-time
+  `BytecodeNode`. It retains the stable declaring `BytecodeRootNode` and
+  resolves `getBytecodeNode()` for every frame-backed `LocalRangeAccessor`
+  operation, so writes after an uncached-to-cached transition update the
+  current node's local metadata coherently. Adds a regression test that
+  installs the authority while uncached, transitions across a continuation
+  resume, then creates, removes, re-creates and reads the binding. Presence
+  remains frame-clear based (D179 C0) and no observable Protos semantics
+  change.
+
 ## 0.3.124-SNAPSHOT
 
 - `I074` (#745): enable the Truffle Bytecode DSL uncached interpreter by
