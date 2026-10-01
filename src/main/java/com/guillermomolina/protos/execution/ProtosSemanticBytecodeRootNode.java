@@ -23,6 +23,7 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendAr
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedSendTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedStructuredSend;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedArgumentVector;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedBooleanCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedMapInitialDefinition;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexicalWriteTarget;
@@ -68,7 +69,8 @@ import com.oracle.truffle.api.nodes.RootNode;
  * captured accesses use a {@link MaterializedLocalAccessor} of this interpreter
  * only against an owner frame of this interpreter.
  *
- * <p>Structured prepared invocations are not executed here. {@link
+ * <p>Structured prepared invocations other than the PLAT043 standard Boolean
+ * family are not executed here. {@link
  * EnterNestedStructuredDispatch} enters the untagged {@link
  * ProtosBytecodeRootNode} structured/C-prime root once per such invocation and
  * this root composes the returned C-prime continuation (PLAT014).
@@ -1105,6 +1107,70 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         public static boolean perform(PreparedClosureCall prepared) {
             return ProtosBytecodeRootNode.RequiresStructuredDispatch.perform(prepared);
+        }
+    }
+
+    // ---- PLAT043 standard Boolean orchestration ------------------------------------
+    //
+    // The prepared standard Boolean capability (IF_TRUE, IF_FALSE,
+    // IF_TRUE_IF_FALSE, AND, OR) is sequenced locally in this root instead of
+    // entering the untagged structured root. The capability is read from the
+    // already-selected prepared call, never from the selector spelling; the
+    // finite state machine stays owned by ProtosBytecodeRootNode.PreparedBooleanCall.
+
+    @Operation
+    public static final class IsStructuredBooleanCall {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared) {
+            return ProtosBytecodeRootNode.IsStructuredBooleanCall.perform(prepared);
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredBooleanCall {
+        @Specialization
+        public static PreparedBooleanCall perform(PreparedClosureCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredBooleanCall.perform(prepared);
+        }
+    }
+
+    @Operation
+    public static final class StructuredBooleanHasCallback {
+        @Specialization
+        public static boolean perform(PreparedBooleanCall prepared) {
+            return ProtosBytecodeRootNode.StructuredBooleanHasCallback.perform(prepared);
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredBooleanCallbackCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedBooleanCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredBooleanCallbackCall.perform(prepared);
+        }
+    }
+
+    @Operation
+    public static final class StructuredBooleanImmediateResult {
+        @Specialization
+        public static Object perform(PreparedBooleanCall prepared) {
+            return ProtosBytecodeRootNode.StructuredBooleanImmediateResult.perform(prepared);
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredBooleanCallback {
+        @Specialization
+        public static Object perform(PreparedBooleanCall prepared, Object result) {
+            return ProtosBytecodeRootNode.FinishStructuredBooleanCallback.perform(prepared, result);
+        }
+    }
+
+    @Operation
+    public static final class CompleteClosureCall {
+        @Specialization
+        public static void perform(PreparedClosureCall prepared) {
+            ProtosBytecodeRootNode.CompleteClosureCall.perform(prepared);
         }
     }
 

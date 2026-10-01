@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.134-SNAPSHOT
+
+- `PERF025-C2B` implements the PLAT043 (#763) standard Boolean ownership
+  exception to PLAT042, without changing observable Protos semantics or the
+  specification. A prepared standard Boolean call (`ifTrue`, `ifFalse`,
+  `ifTrueIfFalse`, `and`, `or`), classified from the already-selected
+  behavior after ordinary lookup, is now sequenced inside the tagged semantic
+  source root instead of entering the untagged structured/C-prime root, so a
+  reached Boolean callback no longer adds a helper CallTarget per level. The
+  semantic root gains operations that delegate to the existing
+  `PreparedBooleanCall` state machine and prepared-call completion; the outer
+  call is completed exactly once through a Bytecode `TryFinally`. Every other
+  structured family (`while`, `each`, `ensure`, `Error.handle`, matching,
+  Map/collection control, import, I/O C-prime) still enters the untagged
+  helper root. The guest carrier and its fixed stack size are unchanged.
+  Topology evidence and a Boolean callback dispatch/control conformance test
+  are added.
+
 ## 0.3.133-SNAPSHOT
 
 - `PERF025-C` (#758) completes the PLAT042 Candidate B′ semantic/structured

@@ -2849,6 +2849,11 @@ final class CanonicalToBytecodeLowerer {
      * structured root then performs every callback call itself. Any other
      * prepared call is invoked locally, exactly as the final ordinary branch of
      * the structured dispatcher does.
+     *
+     * <p>PLAT043 narrows the structured case: a prepared standard Boolean call
+     * (IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE, AND, OR) is sequenced in this root
+     * (see {@link #emitLocalBooleanInvocation}), so a reached callback is
+     * entered directly from this root without an intermediate helper root.
      */
     private void emitPreparedInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -2864,11 +2869,63 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginIfThenElse();
 
+        builder.beginIsStructuredBooleanCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endIsStructuredBooleanCall();
+
+        emitLocalBooleanInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+
+        builder.beginBlock();
+        emitDispatchedPreparedInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    /**
+     * Invokes a prepared call that is not sequenced in this root: a structured
+     * call enters the untagged structured root (PLAT042), any other call is
+     * invoked locally.
+     */
+    private static void emitDispatchedPreparedInvocation(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginIfThenElse();
+
         builder.beginRequiresStructuredDispatch();
         builder.emitLoadLocal(preparedCall);
         builder.endRequiresStructuredDispatch();
 
         builder.beginBlock();
+        emitNestedStructuredInvocation(builder, result, preparedCall, childResult, resumeValue);
+        builder.endBlock();
+
+        builder.beginBlock();
+        emitOrdinaryPreparedInvocation(builder, result, preparedCall, childResult, resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+    }
+
+    private static void emitNestedStructuredInvocation(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
         builder.beginStoreLocal(childResult);
         builder.beginEnterNestedStructuredDispatch();
         builder.emitLoadLocal(preparedCall);
@@ -2882,9 +2939,14 @@ final class CanonicalToBytecodeLowerer {
         builder.beginStoreLocal(result);
         builder.emitLoadLocal(childResult);
         builder.endStoreLocal();
-        builder.endBlock();
+    }
 
-        builder.beginBlock();
+    private static void emitOrdinaryPreparedInvocation(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
         builder.beginStoreLocal(childResult);
         builder.beginEnterClosureCall();
         builder.emitLoadLocal(preparedCall);
@@ -2901,9 +2963,115 @@ final class CanonicalToBytecodeLowerer {
         builder.emitLoadLocal(childResult);
         builder.endFinishClosureCall();
         builder.endStoreLocal();
+    }
+
+    /**
+     * PLAT043 standard Boolean orchestration in the semantic source root.
+     *
+     * <p>Mirrors the Boolean branch of {@code ProtosStructuredDispatchLowerer}
+     * against the same {@code PreparedBooleanCall} state machine: the outer
+     * prepared call is completed exactly once by the enclosing TryFinally on
+     * normal, Error, control-transfer and cancellation exits, an unselected
+     * callback is neither validated nor invoked, and the selected callback is
+     * prepared through ordinary polymorphic Closure-call preparation. The
+     * callback child keeps the helper's scoped shape: a child that itself
+     * requires structured dispatch enters the untagged root, and any other
+     * child is completed by its own TryFinally. C-prime continuations of the
+     * child are composed through this root (PLAT014); no new continuation
+     * kind, Task, handler or return home is introduced.
+     */
+    private static void emitLocalBooleanInvocation(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginBlock();
+        BytecodeLocal structuredBoolean =
+                builder.createLocal("structuredBoolean", null);
+        BytecodeLocal structuredBooleanChild =
+                builder.createLocal("structuredBooleanChild", null);
+
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredBoolean);
+        builder.beginPrepareStructuredBooleanCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredBooleanCall();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginStructuredBooleanHasCallback();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.endStructuredBooleanHasCallback();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredBooleanChild);
+        builder.beginPrepareStructuredBooleanCallbackCall();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.endPrepareStructuredBooleanCallbackCall();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+        builder.beginRequiresStructuredDispatch();
+        builder.emitLoadLocal(structuredBooleanChild);
+        builder.endRequiresStructuredDispatch();
+
+        builder.beginBlock();
+        emitNestedStructuredInvocation(
+                builder,
+                childResult,
+                structuredBooleanChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(structuredBooleanChild);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+        emitOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredBooleanChild,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endTryFinally();
         builder.endBlock();
 
         builder.endIfThenElse();
+
+        builder.beginStoreLocal(result);
+        builder.beginFinishStructuredBooleanCallback();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.emitLoadLocal(childResult);
+        builder.endFinishStructuredBooleanCallback();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(result);
+        builder.beginStructuredBooleanImmediateResult();
+        builder.emitLoadLocal(structuredBoolean);
+        builder.endStructuredBooleanImmediateResult();
+        builder.endStoreLocal();
+        builder.endBlock();
+
+        builder.endIfThenElse();
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
     }
 
     /**

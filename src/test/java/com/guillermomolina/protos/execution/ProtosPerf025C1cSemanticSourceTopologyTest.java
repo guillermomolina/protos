@@ -47,7 +47,9 @@ import org.junit.jupiter.api.Test;
  * <p>Ordinary source roots are tagged semantic Bytecode roots: an ordinary
  * source Closure call adds exactly one CallTarget to the stack. A structured
  * prepared invocation adds exactly one untagged structured-dispatch CallTarget,
- * and that helper root carries no RootTag.
+ * and that helper root carries no RootTag. PLAT043 (PERF025-C2B) narrows the
+ * structured case: standard Boolean control is sequenced in the source root and
+ * adds no helper CallTarget.
  */
 final class ProtosPerf025C1cSemanticSourceTopologyTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -120,8 +122,69 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
         System.out.println("PERF025_C1C_UNIVERSAL_SEMANTIC_WRAPPER=REMOVED");
     }
 
+    /**
+     * PLAT043 (PERF025-C2B): every prepared standard Boolean kind is sequenced
+     * in the semantic source root, so the reached callback root sits directly
+     * on the source root with no untagged helper root in between.
+     */
     @Test
-    void structuredInvocationEntersOneUntaggedStructuredRoot() throws Exception {
+    void standardBooleanControlEntersNoStructuredRoot() throws Exception {
+        List<String> sources =
+                List.of(
+                        "true.ifTrue(() => { probe() })",
+                        "false.ifFalse(() => { probe() })",
+                        "false.ifTrueIfFalse(() => 1, () => { probe() })",
+                        """
+                        true.and(() => {
+                            probe()
+                            true
+                        })
+                        """,
+                        """
+                        false.or(() => {
+                            probe()
+                            true
+                        })
+                        """);
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                for (String characters : sources) {
+                    List<RootNode> stack = new ArrayList<>();
+                    ProtosActivation module = moduleWithProbe(stack);
+                    ProtosSemanticBytecodeRootNode root = lowerRoot(characters);
+
+                    root.getCallTarget().call(module);
+
+                    assertEquals(2, stack.size(), () -> characters + " stack=" + stack);
+                    for (RootNode frameRoot : stack) {
+                        assertInstanceOf(
+                                ProtosSemanticBytecodeRootNode.class,
+                                frameRoot,
+                                () -> characters + " stack=" + stack);
+                    }
+                    assertSame(root, stack.get(1));
+
+                    ProtosSemanticBytecodeRootNode callback =
+                            (ProtosSemanticBytecodeRootNode) stack.get(0);
+                    callback.getRootNodes().ensureComplete();
+                    assertEquals(1, rootTags(callback.getBytecodeNode()));
+                }
+            } finally {
+                context.leave();
+            }
+        }
+        System.out.println("PERF025_C2B_BOOLEAN_HELPER_CALLTARGET_REMOVED=YES");
+    }
+
+    /**
+     * PLAT042 remains authoritative for every other structured family: a
+     * reached {@code Closure.while} condition runs while exactly one untagged
+     * structured-dispatch root is live between it and the source root.
+     */
+    @Test
+    void nonBooleanStructuredInvocationEntersOneUntaggedStructuredRoot() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -129,7 +192,13 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                 List<RootNode> stack = new ArrayList<>();
                 ProtosActivation module = moduleWithProbe(stack);
                 ProtosSemanticBytecodeRootNode root =
-                        lowerRoot("true.ifTrue(() => { probe() })");
+                        lowerRoot(
+                                """
+                                (() => {
+                                    probe()
+                                    false
+                                }).while(() => 1)
+                                """);
 
                 root.getCallTarget().call(module);
 
