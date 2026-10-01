@@ -15,6 +15,11 @@ JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosI026GLspCapabilityTest,Pro
 JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosI026GLspCapabilityTest.java,**/ProtosI026GLspTransportTest.java,**/ProtosTestToolPerf017AdmissionTest.java
 JAVA_PARALLEL_EXCLUDES := $(JAVA_SERIAL_TEST_EXCLUDES)
 JAVA_STRESS_TESTS := ProtosJsonParserStress
+# TEST008: retained current-run log and slow-test guard for `make test-java`.
+JAVA_TEST_LOG := target/test-java.log
+JAVA_SUREFIRE_REPORTS := target/surefire-reports
+JAVA_SLOW_TEST_GUARD := $(PYTHON) tools/java_slow_test_guard.py
+JAVA_SLOW_TEST_ALLOWLIST := tools/java_slow_tests_allowlist.txt
 
 .PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-java-stress test-protos check verify clean dist dist-validate
 
@@ -47,7 +52,11 @@ build:
 
 test: test-java test-protos
 
-test-java: test-java-parallel test-java-serial
+test-java:
+	$(JAVA_SLOW_TEST_GUARD) reset --reports $(JAVA_SUREFIRE_REPORTS) --log $(JAVA_TEST_LOG)
+	$(JAVA_SLOW_TEST_GUARD) run --log $(JAVA_TEST_LOG) -- $(MAKE) --no-print-directory test-java-parallel
+	$(JAVA_SLOW_TEST_GUARD) run --log $(JAVA_TEST_LOG) -- $(MAKE) --no-print-directory test-java-serial
+	$(JAVA_SLOW_TEST_GUARD) check --reports $(JAVA_SUREFIRE_REPORTS) --allowlist $(JAVA_SLOW_TEST_ALLOWLIST)
 
 test-java-parallel:
 	$(MVN) $(MVN_FLAGS) \
