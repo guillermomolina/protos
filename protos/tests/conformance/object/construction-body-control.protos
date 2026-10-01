@@ -1,0 +1,109 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+tests: [
+    Test("object body suspends and resumes exactly once", () => {
+        work: () => {
+            count: 0
+            entered: 0
+            enter: () => {
+                entered = entered + 1
+            }
+            dependency: (() => 7).future()
+            built: {
+                before: 1
+                entering: enter()
+                waited: dependency.value()
+                after: waited + before
+                bump: () => {
+                    count = count + 1
+                }
+            }
+            built.bump()
+            built.after * 100 + count * 10 + entered
+        }
+        Assertions.require(work.future().value() == 811)
+    }),
+    Test("nested object bodies resolve against their own constructed object", () => {
+        outer: {
+            name: 1
+            inner: {
+                name: 2
+                own: name
+            }
+            own: name
+        }
+        Assertions.require(outer.own == 1)
+        Assertions.require(outer.inner.own == 2)
+    }),
+    Test("method closure in object body captures outer lexical binding", () => {
+        seed: 5
+        holder: {
+            seed: 9
+            read: () => seed
+            write: (value) => {
+                seed = value
+            }
+        }
+        Assertions.require(holder.read() == 5)
+        holder.write(6)
+        Assertions.require(seed == 6)
+        Assertions.require(holder.seed == 9)
+    }),
+    Test("non-local return crosses object body", () => {
+        f: () => {
+            ignored: {
+                x: ^42
+            }
+            0
+        }
+        Assertions.require(f() == 42)
+    }),
+    Test("error signaled in object body reaches enclosing handler", () => {
+        result: Error.handle(() => {
+            ignored: {
+                x: Error().signal()
+            }
+            0
+        }, (caught) => 43)
+        Assertions.require(result == 43)
+    }),
+    Test("handler installed inside object body", () => {
+        built: {
+            x: Error.handle(() => Error().signal(), (caught) => 44)
+        }
+        Assertions.require(built.x == 44)
+    }),
+    Test("ensure runs once when non-local return crosses object body", () => {
+        count: 0
+        f: () => {
+            (() => {
+                ignored: {
+                    x: ^42
+                }
+                0
+            }).ensure(() => {
+                count = count + 1
+            })
+            0
+        }
+        Assertions.require(f() == 42)
+        Assertions.require(count == 1)
+    })
+]
+tests.freeze()

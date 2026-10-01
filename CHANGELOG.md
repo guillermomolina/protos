@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.132-SNAPSHOT
+
+- `PERF025-C1` (#758) partial implementation checkpoint (C1a+C1b), without
+  changing observable Protos semantics or the specification.
+  `CanonicalToBytecodeLowerer` now loads the current `ProtosActivation`
+  through one compile-time lowering seam instead of emitting frame-argument
+  loads directly. An Object construction body is now lowered inline as a
+  resumable region of its enclosing Bytecode root, executing with its
+  construction activation (still created by
+  `ProtosActivation.forObjectConstruction`) held in Bytecode locals; the
+  Object-body helper root and its call/continuation machinery
+  (`ProtosObjectBodyTargetCell` and the Prepare/Enter/Resume/Finish Object
+  construction operations) are removed. Object bodies remain non-lexical
+  execution regions, and Closures declared inside them still share their
+  lexical owner's `BytecodeRootNodes` generation, preserving the PERF013
+  same-generation Closure/owner relationship. Updates the PERF013 grouping
+  tests to the inline topology and adds Object-body suspension, nesting,
+  capture, Error, ensure and non-local-return coverage.
+
 ## 0.3.131-SNAPSHOT
 
 - `PERF025-B` (#758): add a prepared reusable top-level callable to the

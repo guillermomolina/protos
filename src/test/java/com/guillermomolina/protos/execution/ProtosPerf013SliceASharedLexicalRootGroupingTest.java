@@ -245,15 +245,15 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
     }
 
     /**
-     * PERF013 Slice A3 supersedes the topology this test originally proved
-     * (an object-body helper root was its own independent {@code
-     * BytecodeRootNodes} group). Since Slice A3 the helper root shares the
-     * owner's group instead; see {@code
-     * ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest} for the current
-     * focal coverage of object-body helper root topology.
+     * PLAT041 C′ (PERF025-C1b) supersedes the topology this test previously
+     * proved (an object-body helper root sharing the owner's group): an
+     * object body is now an inline region of its owner root and contributes
+     * no root at all. See {@code
+     * ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest} for the focal
+     * coverage of the inline object-body topology.
      */
     @Test
-    void objectBodyHelperRootSharesOwnerGroupSincePerf013SliceA3() throws Exception {
+    void objectBodyContributesNoRootSincePlat041() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -278,7 +278,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                         assertInstanceOf(
                                 ProtosObjectValue.class,
                                 root.getCallTarget().call(module));
-                assertEquals(2, root.getRootNodes().count());
+                assertEquals(1, root.getRootNodes().count());
                 assertTrue(object.hasLocalSlot("x"));
             } finally {
                 context.leave();

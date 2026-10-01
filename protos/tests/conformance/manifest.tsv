@@ -113,6 +113,7 @@ call/polymorphic-call-rejection.protos	suite-native	-
 object/frozen-standard-roots.protos	suite-native	-
 object/local-slot-mutation.protos	suite-native	-
 object/composition.protos	suite-native	-
+object/construction-body-control.protos	suite-native	-
 library/text/one-shot-and-wrappers.protos	suite-native	-
 library/text/encoding-errors.protos	suite-native	-
 library/text/reader-authority.protos	suite-native	-

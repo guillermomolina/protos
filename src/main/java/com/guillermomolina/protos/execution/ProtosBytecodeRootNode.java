@@ -1010,118 +1010,33 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    static final class PreparedObjectConstruction {
-        private final RootCallTarget bodyTarget;
-        private final ProtosActivation activation;
-        private final ProtosObjectValue object;
-
-        PreparedObjectConstruction(
-                RootCallTarget bodyTarget,
-                ProtosActivation activation,
-                ProtosObjectValue object) {
-            this.bodyTarget = java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
-            this.activation = java.util.Objects.requireNonNull(activation, "activation");
-            this.object = java.util.Objects.requireNonNull(object, "object");
-        }
-
-        RootCallTarget bodyTarget() {
-            return bodyTarget;
-        }
-
-        ProtosActivation activation() {
-            return activation;
-        }
-
-        ProtosObjectValue object() {
-            return object;
+    /**
+     * PLAT041 C′: allocates the Object under construction. The Object body is
+     * then lowered inline in the enclosing root as a resumable region (see
+     * {@code CanonicalToBytecodeLowerer#emitInlineObjectConstruction}); it is
+     * not a physical root, nor a lexical execution context.
+     */
+    @Operation
+    public static final class NewConstructedObject {
+        @Specialization
+        public static ProtosObjectValue perform(Object parent) {
+            return new ProtosObjectValue(parent);
         }
     }
 
+    /**
+     * PLAT041 C′: the construction activation the inline Object body executes
+     * with. {@link ProtosActivation#forObjectConstruction} remains the sole
+     * authority for its receiver/context, capture chain, homes, and inherited
+     * Task or dynamic-control identity.
+     */
     @Operation
-    public static final class PrepareObjectConstruction {
+    public static final class NewObjectConstructionActivation {
         @Specialization
-        public static PreparedObjectConstruction perform(
+        public static ProtosActivation perform(
                 ProtosActivation enclosing,
-                Object parent,
-                ProtosObjectBodyTargetCell bodyTargetCell) {
-            ProtosObjectValue object = new ProtosObjectValue(parent);
-            ProtosActivation construction =
-                    ProtosActivation.forObjectConstruction(object, enclosing);
-            return new PreparedObjectConstruction(
-                    bodyTargetCell.target(), construction, object);
-        }
-    }
-
-    @Operation
-    public static final class EnterObjectConstruction {
-        @Specialization(
-                guards = "prepared.bodyTarget() == cachedTarget",
-                limit = "3")
-        public static Object direct(
-                PreparedObjectConstruction prepared,
-                @Cached("prepared.bodyTarget()") RootCallTarget cachedTarget,
-                @Cached("create(cachedTarget)") DirectCallNode node) {
-            try {
-                return node.call(prepared.activation());
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-        }
-
-        @Specialization(replaces = "direct")
-        public static Object indirect(
-                PreparedObjectConstruction prepared,
-                @Cached IndirectCallNode node) {
-            try {
-                return node.call(prepared.bodyTarget(), prepared.activation());
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-        }
-    }
-
-    @Operation
-    public static final class ResumeObjectConstruction {
-        @Specialization(
-                guards = "result.getContinuationRootNode() == cachedRoot",
-                limit = "3")
-        public static Object direct(
-                @SuppressWarnings("unused") PreparedObjectConstruction prepared,
-                ContinuationResult result,
-                Object resumeValue,
-                @Cached("result.getContinuationRootNode()") ContinuationRootNode cachedRoot,
-                @Cached("create(cachedRoot.getCallTarget())") DirectCallNode node) {
-            try {
-                return node.call(result.getFrame(), resumeValue);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-        }
-
-        @Specialization(replaces = "direct")
-        public static Object indirect(
-                @SuppressWarnings("unused") PreparedObjectConstruction prepared,
-                ContinuationResult result,
-                Object resumeValue,
-                @Cached IndirectCallNode node) {
-            try {
-                return node.call(
-                        result.getContinuationCallTarget(),
-                        result.getFrame(),
-                        resumeValue);
-            } catch (ProtosBytecodeControlTransferException bridged) {
-                throw bridged.transfer();
-            }
-        }
-    }
-
-    @Operation
-    public static final class FinishObjectConstruction {
-        @Specialization
-        public static ProtosObjectValue perform(
-                PreparedObjectConstruction prepared,
-                @SuppressWarnings("unused") Object bodyResult) {
-            return prepared.object();
+                ProtosObjectValue object) {
+            return ProtosActivation.forObjectConstruction(object, enclosing);
         }
     }
 

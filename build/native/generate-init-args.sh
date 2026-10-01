@@ -46,10 +46,8 @@ main() {
 
     inline_support_generated=(
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$EnterClosureCall_Node'
-        'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$EnterObjectConstruction_Node'
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$PrepareSendArguments_Node'
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$ResumeContinuation_Node'
-        'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$ResumeObjectConstruction_Node'
     )
 
     for class in "${inline_support_generated[@]}"; do

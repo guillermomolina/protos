@@ -39,19 +39,22 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF013 Slice A3 focal evidence: an object-construction helper root now
- * shares the physical {@code BytecodeRootNodes<ProtosBytecodeRootNode>} group
- * of the lexical lowering unit that contains the object literal, exactly like
- * Slice A/A2 already do for Closures. Sharing that physical group does not
- * make the helper root a genuine lexical execution context: a Closure
- * declared inside an object body must still capture the enclosing genuine
- * lexical context(s), never the constructed object itself (see {@code
- * EXECUTION_AND_CONTROL.md} "Object Construction Is Not a Lexical Capture
- * Scope").
+ * PERF013 Slice A3 focal evidence, updated for PLAT041 C′ (PERF025-C1b): an
+ * object-construction body is an inline resumable region of the lexical
+ * lowering unit that contains the object literal, not a physical root. The
+ * {@code BytecodeRootNodes<ProtosBytecodeRootNode>} group therefore contains
+ * only the lexical owner root and the Closure roots lexically nested in it —
+ * including method Closures declared inside the object body — so the owner
+ * {@code BytecodeLocal}/nested-Closure same-generation invariant the PERF013
+ * {@code MaterializedLocalAccessor} path depends on is preserved.
  *
- * <p>This slice does not adopt {@code MaterializedLocalAccessor} (PERF013
- * Slice B) and does not change the captured-local read/write mechanism.
- * Existing capture semantics remain covered by {@link
+ * <p>An inline object body is still not a lexical execution context: a
+ * Closure declared inside it must capture the enclosing genuine lexical
+ * context(s), never the constructed object itself (see {@code
+ * EXECUTION_AND_CONTROL.md} "Object Construction Is Not a Lexical Capture
+ * Scope"). Captured read/write mechanics remain covered by {@link
+ * ProtosPerf013SliceB1MaterializedCapturedReadTest}, {@link
+ * ProtosPerf013SliceB2MaterializedCapturedWriteTest} and {@link
  * ProtosI068Slice5CapturedMaterializedLexicalLoweringTest}.
  */
 final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
@@ -59,7 +62,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void objectBodyHelperRootSharesGroupWithOwner() throws Exception {
+    void objectBodyIsInlineAndContributesNoRoot() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -75,9 +78,8 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                                         "perf013-slicea3-object-body-shared-group.protos")
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
-                CanonicalObject objectDefinition =
-                        assertInstanceOf(
-                                CanonicalObject.class, sequence.expressions().get(0));
+                assertInstanceOf(
+                        CanonicalObject.class, sequence.expressions().get(0));
 
                 CanonicalToBytecodeLowerer lowerer =
                         new CanonicalToBytecodeLowerer(language, source);
@@ -89,17 +91,10 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                                 root.getCallTarget().call(module));
                 assertTrue(object.hasLocalSlot("x"));
 
-                ProtosBytecodeRootNode helperRoot =
-                        lowerer.objectBodyHelperRootForTesting(objectDefinition);
-
-                assertSame(
-                        root.getRootNodes(),
-                        helperRoot.getRootNodes(),
-                        "object-body helper root must share owner's BytecodeRootNodes group");
                 assertEquals(
-                        2,
+                        1,
                         root.getRootNodes().count(),
-                        "expected exactly owner + object-body helper roots");
+                        "inline object body must not contribute a physical root");
             } finally {
                 context.leave();
             }
@@ -107,7 +102,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
     }
 
     @Test
-    void closureInObjectBodySharesGroupWithOuterOwnerAndCapturesOuterLexicalContext()
+    void closureInInlineObjectBodySharesGroupWithOuterOwnerAndCapturesOuterLexicalContext()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -137,7 +132,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                                         "perf013-slicea3-object-body-closure.protos")
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
-                CanonicalObject objectDefinition = findObjectDefinition(sequence, "obj");
+                findObjectDefinition(sequence, "obj");
 
                 CanonicalToBytecodeLowerer lowerer =
                         new CanonicalToBytecodeLowerer(language, source);
@@ -161,22 +156,15 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                 ProtosBytecodeRootNode methodRoot =
                         methodPlan.bytecodeActivationRootForTesting();
 
-                ProtosBytecodeRootNode helperRoot =
-                        lowerer.objectBodyHelperRootForTesting(objectDefinition);
-
                 BytecodeRootNodes<?> group = root.getRootNodes();
-                assertSame(
-                        group,
-                        helperRoot.getRootNodes(),
-                        "object-body helper root must share owner's BytecodeRootNodes group");
                 assertSame(
                         group,
                         methodRoot.getRootNodes(),
                         "Closure declared in object body must share owner's BytecodeRootNodes group");
                 assertEquals(
-                        3,
+                        2,
                         group.count(),
-                        () -> "expected owner + object-body helper + method Closure roots, got "
+                        () -> "expected owner + method Closure roots only, got "
                                 + group.count());
 
                 ProtosClosureValue bound = method.bindMethod(object, object);
@@ -234,7 +222,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                                         "perf013-slicea3-object-body-multi-depth.protos")
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
-                CanonicalObject objectDefinition = findObjectDefinition(sequence, "obj");
+                findObjectDefinition(sequence, "obj");
 
                 CanonicalToBytecodeLowerer lowerer =
                         new CanonicalToBytecodeLowerer(language, source);
@@ -272,18 +260,14 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                 ProtosBytecodeRootNode innerRoot =
                         innerPlan.bytecodeActivationRootForTesting();
 
-                ProtosBytecodeRootNode helperRoot =
-                        lowerer.objectBodyHelperRootForTesting(objectDefinition);
-
                 BytecodeRootNodes<?> group = root.getRootNodes();
-                assertSame(group, helperRoot.getRootNodes());
                 assertSame(group, methodRoot.getRootNodes());
                 assertSame(group, innerRoot.getRootNodes());
                 assertEquals(
-                        4,
+                        3,
                         group.count(),
-                        () -> "expected owner + object-body helper + method Closure + "
-                                + "inner Closure roots, got " + group.count());
+                        () -> "expected owner + method Closure + inner Closure roots, got "
+                                + group.count());
 
                 ProtosActivation innerInvocation =
                         ProtosActivation.forClosureInvocation(
@@ -297,8 +281,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                         lexical,
                         innerPlan.executeBytecodeActivationForTesting(innerInvocation),
                         "innermost Closure must still resolve the bare name against the "
-                                + "outer genuine lexical context through the object-body "
-                                + "helper root");
+                                + "outer genuine lexical context through the inline object body");
             } finally {
                 context.leave();
             }

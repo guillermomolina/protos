@@ -104,10 +104,8 @@ final class CanonicalToBytecodeLowerer {
      * com.oracle.truffle.api.nodes.RootNode#getCallTarget()} refuses while
      * parsing is still in progress), so construction is deferred and this list
      * is drained/frozen right after {@code create()} returns. Save/restored
-     * around each {@link #lowerRoot} call: an object-body root reached while
-     * lowering this root's own body opens its own independent, reentrant
-     * {@code create()} call and must not see or pollute this group's pending
-     * list.
+     * around each {@link #lowerRoot} call so a reentrant {@link #lowerRoot}
+     * never sees or pollutes this group's pending list.
      */
     private java.util.List<PendingGroupClosure> pendingGroupClosures;
 
@@ -116,27 +114,6 @@ final class CanonicalToBytecodeLowerer {
             CanonicalBindingAnalysis bindingAnalysis,
             ProtosBytecodeRootNode root,
             ProtosClosureExecutionPlanCell cell) {}
-
-    private final java.util.IdentityHashMap<CanonicalObject, ProtosObjectBodyTargetCell>
-            bytecodeObjectBodyTargetCells = new java.util.IdentityHashMap<>();
-
-    /**
-     * PERF013 Slice A3: object-construction helper roots nested (via
-     * {@link #lowerNestedObjectBodyRoot}) in the group currently being built
-     * by the top-level {@link #lowerRoot} call in progress. Mirrors {@link
-     * #pendingGroupClosures} exactly: a helper root's real {@code
-     * RootCallTarget} cannot be obtained until that group's {@code create()}
-     * call returns, so freezing the corresponding {@link
-     * ProtosObjectBodyTargetCell} is deferred and this list is
-     * drained/frozen right after {@code create()} returns. Saved/restored
-     * around each {@link #lowerRoot} call for the same reentrancy reasons as
-     * {@link #pendingGroupClosures}.
-     */
-    private java.util.List<PendingGroupObjectBody> pendingGroupObjectBodies;
-
-    private record PendingGroupObjectBody(
-            ProtosBytecodeRootNode root,
-            ProtosObjectBodyTargetCell cell) {}
 
     private final java.util.IdentityHashMap<CanonicalCompose, java.util.List<String>>
             bytecodeComposeReservedNames = new java.util.IdentityHashMap<>();
@@ -147,17 +124,28 @@ final class CanonicalToBytecodeLowerer {
     /**
      * PLAT036 Candidate D, Slice 3 fast-path context for whichever genuine
      * {@code ROOT}/{@code CLOSURE} Bytecode root is currently being lowered
-     * (null/empty while lowering an object-construction body, which is never
-     * eligible). Saved and restored around each {@link #lowerRootInto} call so
-     * lowering an object body or a nested Closure root inside an enclosing
-     * root's own body (reentrant, and — PERF013 Slice A — now frequently
-     * nested in the same open builder) never corrupts the enclosing root's
-     * context.
+     * (null/empty while lowering an inline object-construction body, which is
+     * never eligible). Saved and restored around each {@link #lowerRootInto}
+     * call and each inline object body ({@link
+     * #emitInlineObjectConstruction}) so lowering either inside an enclosing
+     * root's own body never corrupts the enclosing root's context.
      */
     private CanonicalBindingAnalysis currentRootAnalysis;
     private CanonicalLexicalScope currentRootTopScope;
     private java.util.Map<String, BytecodeLocal> currentRootFrameLocals =
             java.util.Map.of();
+
+    /**
+     * PLAT041 C′ lowering-time source of the current {@link
+     * com.guillermomolina.protos.runtime.ProtosActivation} consumed by {@link
+     * #emitCurrentActivation}: {@code null} selects the root's frame argument
+     * 0; inside an inline object-construction body it is that body's own
+     * construction-activation local. Reset to {@code null} for every new root
+     * ({@link #lowerRootInto}), so an enclosing object body's selection never
+     * leaks into a Closure root nested inside it, and saved/restored around
+     * each inline object body, so nested object bodies select their own.
+     */
+    private BytecodeLocal currentActivationLocal;
 
     /**
      * PERF013 Slice B1 backend-private registry of the frame-backed {@link
@@ -171,8 +159,8 @@ final class CanonicalToBytecodeLowerer {
      * of resolving it dynamically from the runtime frame-lexical-binding
      * authority. Populated by {@link
      * #emitRootBody} for every genuine execution-context root, before that
-     * root's own body (and therefore any nested Closure/object-body root that
-     * might capture one of its bindings) is lowered, so the owner's current
+     * root's own body (and therefore any nested Closure root that might
+     * capture one of its bindings) is lowered, so the owner's current
      * entry is always fresh by the time a nested captured read needs it —
      * including on a {@code BytecodeRootNodes} reparse replay, since the owner
      * root in the group is always replayed before its nested children and
@@ -215,10 +203,10 @@ final class CanonicalToBytecodeLowerer {
         }
 
         /*
-         * Object-body roots reached while lowering a Closure with inherited
-         * whole-tree analysis keep that same analysis available for Closure
-         * literals nested inside the object. The object body itself remains
-         * non-authoritative and never takes the direct-local path.
+         * Inline object bodies reached while lowering a Closure with
+         * inherited whole-tree analysis keep that same analysis available for
+         * Closure literals nested inside the object. The object body itself
+         * remains non-authoritative and never takes the direct-local path.
          */
         if (inheritedBindingAnalysis != null) {
             return inheritedBindingAnalysis;
@@ -308,12 +296,11 @@ final class CanonicalToBytecodeLowerer {
 
 
     /**
-     * PERF013 Slice A3: preparation-time metadata registration only. Every
-     * {@link CanonicalCompose} directly inside {@code object}'s body must
-     * know its enclosing object's reserved local-slot names before {@code
+     * Preparation-time metadata registration only. Every {@link
+     * CanonicalCompose} directly inside {@code object}'s body must know its
+     * enclosing object's reserved local-slot names before {@code
      * composeReservedNames} is consulted during structural validation of the
-     * compose itself. This registration is idempotent and independent of
-     * when/whether the object's helper root is ever physically built.
+     * compose itself. This registration is idempotent.
      */
     private void registerObjectBodyReservedNames(CanonicalObject object) {
         java.util.List<String> reservedNames =
@@ -328,59 +315,6 @@ final class CanonicalToBytecodeLowerer {
                 }
             }
         }
-    }
-
-    /**
-     * PERF013 Slice A3: construction path for an object-construction body
-     * reached while emitting an already-open enclosing root's own body —
-     * mirrors {@link #bytecodeClosurePlan} exactly. Nests the helper root's
-     * {@code beginRoot()}/{@code endRoot()} pair in the same {@code create()}
-     * invocation as the enclosing root (see {@link
-     * #lowerNestedObjectBodyRoot}) instead of opening an independent
-     * lowerer/{@code create()} call, so owner and object-construction helper
-     * end up in one shared {@code BytecodeRootNodes} group. Sharing that
-     * physical group does not make the helper root a genuine lexical
-     * execution context: {@link #lowerNestedObjectBodyRoot} still lowers it
-     * with {@code genuineExecutionContextRoot=false}.
-     *
-     * <p>A cache hit in {@code bytecodeObjectBodyTargetCells} means this
-     * exact group's lambda is being replayed (a {@code BytecodeRootNodes}
-     * reparse): {@code beginRoot()}/{@code endRoot()} must still be replayed
-     * for this object body so every root in the group keeps the same index
-     * it had during the original parse, but the target already frozen then
-     * remains valid and must not be rebuilt.
-     */
-    private ProtosObjectBodyTargetCell bytecodeObjectBodyTargetCell(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalObject object) {
-        ProtosObjectBodyTargetCell existing = bytecodeObjectBodyTargetCells.get(object);
-
-        ProtosBytecodeRootNode nestedRoot =
-                lowerNestedObjectBodyRoot(builder, object);
-
-        if (existing != null) {
-            return existing;
-        }
-
-        ProtosObjectBodyTargetCell cell = ProtosObjectBodyTargetCell.pendingGroup();
-        bytecodeObjectBodyTargetCells.put(object, cell);
-        pendingGroupObjectBodies.add(new PendingGroupObjectBody(nestedRoot, cell));
-        return cell;
-    }
-
-    /**
-     * PERF013 Slice A3 test-only seam: exposes the frozen helper root for an
-     * already-lowered {@code object}, mirroring {@code
-     * ProtosClosureExecutionPlan#bytecodeActivationRootForTesting}. Backend
-     * private; never guest-visible.
-     */
-    ProtosBytecodeRootNode objectBodyHelperRootForTesting(CanonicalObject object) {
-        ProtosObjectBodyTargetCell cell = bytecodeObjectBodyTargetCells.get(object);
-        if (cell == null) {
-            throw new IllegalStateException(
-                    "object body was never lowered by this lowerer instance");
-        }
-        return (ProtosBytecodeRootNode) cell.target().getRootNode();
     }
 
     private java.util.List<String> composeReservedNames(
@@ -398,20 +332,19 @@ final class CanonicalToBytecodeLowerer {
     }
 
     ProtosBytecodeRootNode lowerRoot(CanonicalSequence sequence) {
-        return lowerRoot(sequence, null, true);
+        return lowerRoot(sequence, null);
     }
 
     ProtosBytecodeRootNode lowerClosureActivationRoot(
             CanonicalClosure definition) {
         Objects.requireNonNull(definition, "definition");
         validateSupportedDefaults(definition);
-        return lowerRoot(definition.body(), definition, true);
+        return lowerRoot(definition.body(), definition);
     }
 
     private ProtosBytecodeRootNode lowerRoot(
             CanonicalSequence sequence,
-            CanonicalClosure activationDefinition,
-            boolean genuineExecutionContextRoot) {
+            CanonicalClosure activationDefinition) {
         Objects.requireNonNull(sequence, "sequence");
         /*
          * PERF013 Slice A: this top-level entry owns the one Source wrapper for
@@ -427,27 +360,16 @@ final class CanonicalToBytecodeLowerer {
          * refuses until parsing completes), so construction is deferred via
          * pendingGroupClosures and drained right after create() returns, once
          * every root in the group is real and getCallTarget()-safe. Saved and
-         * restored here for reentrancy: an object body reached while lowering
-         * this root's own body opens its own independent, reentrant lowerRoot/
-         * create() call and must not see or pollute this group's pending list.
+         * restored here so a reentrant lowerRoot/create() call never sees or
+         * pollutes this group's pending list.
+         *
+         * PLAT041 C′: an object-construction body is lowered inline in the
+         * enclosing root (emitInlineObjectConstruction) and contributes no
+         * root to the group.
          */
         java.util.List<PendingGroupClosure> savedPendingGroupClosures =
                 pendingGroupClosures;
         pendingGroupClosures = new java.util.ArrayList<>();
-        /*
-         * PERF013 Slice A3: object-construction helper roots reached while
-         * lowering this root's own body are, since Slice A3, nested in this
-         * exact same create() invocation (see bytecodeObjectBodyTargetCell /
-         * lowerNestedObjectBodyRoot) instead of opening an independent
-         * lowerer/create() call. Their real RootCallTarget is subject to the
-         * exact same getCallTarget()-during-parsing restriction as a nested
-         * Closure's execution plan, so it is deferred/drained the same way,
-         * via pendingGroupObjectBodies. Saved and restored here for the same
-         * reentrancy reason as pendingGroupClosures.
-         */
-        java.util.List<PendingGroupObjectBody> savedPendingGroupObjectBodies =
-                pendingGroupObjectBodies;
-        pendingGroupObjectBodies = new java.util.ArrayList<>();
         try {
             BytecodeRootNodes<ProtosBytecodeRootNode> roots =
                     ProtosBytecodeRootNodeGen.create(
@@ -464,8 +386,7 @@ final class CanonicalToBytecodeLowerer {
                                 lowerRootInto(
                                         builder,
                                         sequence,
-                                        activationDefinition,
-                                        genuineExecutionContextRoot);
+                                        activationDefinition);
                                 builder.endSource();
                             });
 
@@ -479,14 +400,10 @@ final class CanonicalToBytecodeLowerer {
                                         pending.bindingAnalysis(),
                                         pending.root()));
             }
-            for (PendingGroupObjectBody pending : pendingGroupObjectBodies) {
-                pending.cell().freeze(pending.root().getCallTarget());
-            }
 
             return roots.getNode(0);
         } finally {
             pendingGroupClosures = savedPendingGroupClosures;
-            pendingGroupObjectBodies = savedPendingGroupObjectBodies;
         }
     }
 
@@ -504,8 +421,7 @@ final class CanonicalToBytecodeLowerer {
     private ProtosBytecodeRootNode lowerRootInto(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
-            CanonicalClosure activationDefinition,
-            boolean genuineExecutionContextRoot) {
+            CanonicalClosure activationDefinition) {
         CanonicalBindingAnalysis analysisForThisRoot =
                 bindingAnalysisFor(sequence, activationDefinition);
         CanonicalLexicalScope scopeForThisRoot =
@@ -514,7 +430,6 @@ final class CanonicalToBytecodeLowerer {
                 builder,
                 sequence,
                 activationDefinition,
-                genuineExecutionContextRoot,
                 analysisForThisRoot,
                 scopeForThisRoot);
     }
@@ -523,7 +438,6 @@ final class CanonicalToBytecodeLowerer {
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
-            boolean genuineExecutionContextRoot,
             CanonicalBindingAnalysis analysisForThisRoot,
             CanonicalLexicalScope scopeForThisRoot) {
         validateSupported(sequence);
@@ -531,35 +445,36 @@ final class CanonicalToBytecodeLowerer {
 
         /*
          * PLAT036 Slice 3: save/restore around this (possibly reentrant, e.g.
-         * an object body or nested Closure lowered while lowering its
-         * enclosing root's own body) lowering pass's fast-path context. This
-         * both protects same-invocation reentrancy and re-establishes state
-         * correctly on every future BytecodeRootNodes reparse invocation of
-         * the retained parser, since the whole nest replays together.
+         * a nested Closure lowered while lowering its enclosing root's own
+         * body) lowering pass's fast-path context. This both protects
+         * same-invocation reentrancy and re-establishes state correctly on
+         * every future BytecodeRootNodes reparse invocation of the retained
+         * parser, since the whole nest replays together.
+         *
+         * PLAT041 C′: every root starts again from its own frame argument 0
+         * as the current activation, even when nested inside an inline object
+         * body of its enclosing root.
          */
         CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
         CanonicalLexicalScope savedTopScope = currentRootTopScope;
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
+        BytecodeLocal savedActivationLocal = currentActivationLocal;
         try {
-            if (genuineExecutionContextRoot) {
-                currentRootAnalysis = analysisForThisRoot;
-                currentRootTopScope = scopeForThisRoot;
-            } else {
-                currentRootAnalysis = null;
-                currentRootTopScope = null;
-            }
+            currentRootAnalysis = analysisForThisRoot;
+            currentRootTopScope = scopeForThisRoot;
             currentRootFrameLocals = java.util.Map.of();
+            currentActivationLocal = null;
             return emitRootBody(
                     builder,
                     sequence,
                     activationDefinition,
-                    genuineExecutionContextRoot,
                     scopeForThisRoot);
         } finally {
             currentRootAnalysis = savedAnalysis;
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
+            currentActivationLocal = savedActivationLocal;
         }
     }
 
@@ -592,36 +507,14 @@ final class CanonicalToBytecodeLowerer {
                 builder,
                 definition.body(),
                 definition,
-                true,
                 analysisForThisRoot,
                 scopeForThisRoot);
-    }
-
-    /**
-     * PERF013 Slice A3: lowers an object-construction body reached while an
-     * enclosing root's own {@code beginRoot()}/{@code endRoot()} pair is
-     * still open, nesting the helper root in the exact same {@code create()}
-     * invocation (and therefore the same {@code BytecodeRootNodes} group) as
-     * that enclosing root instead of opening an independent lowerer/{@code
-     * create()} call. Mirrors {@link #lowerNestedClosureRoot} except that
-     * {@code genuineExecutionContextRoot=false} is passed through unchanged:
-     * an object-construction body is never a genuine lexical execution
-     * context (see {@code EXECUTION_AND_CONTROL.md} "Object Construction Is
-     * Not a Lexical Capture Scope"), so it never receives a frame-backed
-     * lexical-binding authority regardless of which physical root group
-     * contains it.
-     */
-    private ProtosBytecodeRootNode lowerNestedObjectBodyRoot(
-            ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalObject object) {
-        return lowerRootInto(builder, object.body(), null, false);
     }
 
     private ProtosBytecodeRootNode emitRootBody(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalSequence sequence,
             CanonicalClosure activationDefinition,
-            boolean genuineExecutionContextRoot,
             CanonicalLexicalScope scopeForThisRoot) {
         SourceSpan rootSpan = sequence.span();
 
@@ -639,35 +532,33 @@ final class CanonicalToBytecodeLowerer {
          * existing createLocalSlot binding point writes through the
          * frame-backed authority.
          */
-        if (genuineExecutionContextRoot) {
-            java.util.Map<String, BytecodeLocal> frameLocals =
-                    new java.util.LinkedHashMap<>();
-            for (String name : scopeForThisRoot.declaredNames()) {
-                BytecodeLocal local = builder.createLocal(name, null);
-                frameLocals.put(name, local);
-            }
-            currentRootFrameLocals = java.util.Map.copyOf(frameLocals);
-            /*
-             * PERF013 Slice B1: register this root's own frame locals under
-             * its own scope identity before its body (and therefore any
-             * nested Closure/object-body root that might capture one of
-             * these bindings) is lowered, so a captured read reached while
-             * lowering this root's own body already sees a fresh entry.
-             */
-            frameLocalsByScope.put(scopeForThisRoot, currentRootFrameLocals);
-            if (!frameLocals.isEmpty()) {
-                BytecodeLocal[] frameLocalRange =
-                        frameLocals.values().toArray(BytecodeLocal[]::new);
-                String[] frameLocalNames =
-                        frameLocals.keySet().toArray(String[]::new);
-                ProtosFrameLexicalLayout frameLocalLayout =
-                        ProtosFrameLexicalLayout.of(frameLocalNames);
-                builder.beginInstallFrameLexicalAuthority(
-                        frameLocalRange,
-                        frameLocalLayout);
-                builder.emitLoadArgument(0);
-                builder.endInstallFrameLexicalAuthority();
-            }
+        java.util.Map<String, BytecodeLocal> frameLocals =
+                new java.util.LinkedHashMap<>();
+        for (String name : scopeForThisRoot.declaredNames()) {
+            BytecodeLocal local = builder.createLocal(name, null);
+            frameLocals.put(name, local);
+        }
+        currentRootFrameLocals = java.util.Map.copyOf(frameLocals);
+        /*
+         * PERF013 Slice B1: register this root's own frame locals under its
+         * own scope identity before its body (and therefore any nested
+         * Closure root that might capture one of these bindings) is lowered,
+         * so a captured read reached while lowering this root's own body
+         * already sees a fresh entry.
+         */
+        frameLocalsByScope.put(scopeForThisRoot, currentRootFrameLocals);
+        if (!frameLocals.isEmpty()) {
+            BytecodeLocal[] frameLocalRange =
+                    frameLocals.values().toArray(BytecodeLocal[]::new);
+            String[] frameLocalNames =
+                    frameLocals.keySet().toArray(String[]::new);
+            ProtosFrameLexicalLayout frameLocalLayout =
+                    ProtosFrameLexicalLayout.of(frameLocalNames);
+            builder.beginInstallFrameLexicalAuthority(
+                    frameLocalRange,
+                    frameLocalLayout);
+            emitCurrentActivation(builder);
+            builder.endInstallFrameLexicalAuthority();
         }
 
         BytecodeLocal defaultValue = null;
@@ -699,61 +590,7 @@ final class CanonicalToBytecodeLowerer {
         } else {
             BytecodeLocal result =
                     builder.createLocal("sequenceResult", null);
-            boolean hasComposedInvocation =
-                    sequence.expressions().stream()
-                            .anyMatch(
-                                    CanonicalToBytecodeLowerer::requiresComposedInvocation);
-            BytecodeLocal preparedCall =
-                    hasComposedInvocation
-                            ? builder.createLocal(
-                                    "preparedClosureCall",
-                                    null)
-                            : null;
-            BytecodeLocal childResult =
-                    hasComposedInvocation
-                            ? builder.createLocal(
-                                    "childResult",
-                                    null)
-                            : null;
-            BytecodeLocal resumeValue =
-                    hasComposedInvocation
-                            ? builder.createLocal(
-                                    "resumeValue",
-                                    null)
-                            : null;
-
-            for (CanonicalExpression expression :
-                    sequence.expressions()) {
-                SourceSpan span = expression.span();
-
-                builder.beginSourceSection(
-                        span.startOffset(),
-                        span.length());
-                builder.beginTag(
-                        StandardTags.StatementTag.class,
-                        StandardTags.ExpressionTag.class);
-                builder.beginBlock();
-
-                if (requiresComposedInvocation(expression)) {
-                    emitBodyExpressionToLocal(
-                            builder,
-                            expression,
-                            result,
-                            preparedCall,
-                            childResult,
-                            resumeValue);
-                } else {
-                    builder.beginStoreLocal(result);
-                    emitExpression(builder, expression);
-                    builder.endStoreLocal();
-                }
-
-                builder.endBlock();
-                builder.endTag(
-                        StandardTags.StatementTag.class,
-                        StandardTags.ExpressionTag.class);
-                builder.endSourceSection();
-            }
+            emitStatementsToLocal(builder, sequence, result);
 
             builder.beginReturn();
             builder.emitLoadLocal(result);
@@ -763,6 +600,73 @@ final class CanonicalToBytecodeLowerer {
         ProtosBytecodeRootNode result = builder.endRoot();
         builder.endSourceSection();
         return result;
+    }
+
+    /**
+     * Emits each expression of {@code sequence} as one source statement
+     * (StatementTag + ExpressionTag over its exact span), storing each value
+     * into {@code result}. Shared by root bodies and inline object-construction
+     * bodies so both keep identical statement/expression tag membership.
+     */
+    private void emitStatementsToLocal(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSequence sequence,
+            BytecodeLocal result) {
+        boolean hasComposedInvocation =
+                sequence.expressions().stream()
+                        .anyMatch(
+                                CanonicalToBytecodeLowerer::requiresComposedInvocation);
+        BytecodeLocal preparedCall =
+                hasComposedInvocation
+                        ? builder.createLocal(
+                                "preparedClosureCall",
+                                null)
+                        : null;
+        BytecodeLocal childResult =
+                hasComposedInvocation
+                        ? builder.createLocal(
+                                "childResult",
+                                null)
+                        : null;
+        BytecodeLocal resumeValue =
+                hasComposedInvocation
+                        ? builder.createLocal(
+                                "resumeValue",
+                                null)
+                        : null;
+
+        for (CanonicalExpression expression :
+                sequence.expressions()) {
+            SourceSpan span = expression.span();
+
+            builder.beginSourceSection(
+                    span.startOffset(),
+                    span.length());
+            builder.beginTag(
+                    StandardTags.StatementTag.class,
+                    StandardTags.ExpressionTag.class);
+            builder.beginBlock();
+
+            if (requiresComposedInvocation(expression)) {
+                emitBodyExpressionToLocal(
+                        builder,
+                        expression,
+                        result,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+            } else {
+                builder.beginStoreLocal(result);
+                emitExpression(builder, expression);
+                builder.endStoreLocal();
+            }
+
+            builder.endBlock();
+            builder.endTag(
+                    StandardTags.StatementTag.class,
+                    StandardTags.ExpressionTag.class);
+            builder.endSourceSection();
+        }
     }
 
     private void validateSupportedDefaults(
@@ -802,14 +706,9 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalObject object) {
             /*
-             * PERF013 Slice A3: structural-support validation only, mirroring
-             * the CanonicalClosure case above. This must NOT construct the
-             * object's helper root here: real emission
-             * (emitDefaultObjectLiteral/emitBodyObjectLiteral) always happens
-             * later, while the owner root's own builder is already open, so
-             * the helper root is nested in that same shared BytecodeRootNodes
-             * group (bytecodeObjectBodyTargetCell / lowerNestedObjectBodyRoot)
-             * instead of opening an independent create() call.
+             * Structural-support validation only: the body is emitted inline
+             * later (emitInlineObjectConstruction), while the owner root's
+             * own builder is open.
              */
             object.parent().ifPresent(this::validateSupportedDefaultExpression);
             registerObjectBodyReservedNames(object);
@@ -912,6 +811,25 @@ final class CanonicalToBytecodeLowerer {
                 .anyMatch(CanonicalToBytecodeLowerer::requiresComposedInvocation);
     }
 
+    /**
+     * Sole lowering authority for loading the currently executing
+     * {@link com.guillermomolina.protos.runtime.ProtosActivation}. Every
+     * Protos Bytecode root receives that activation as frame argument 0;
+     * inside an inline object-construction body (PLAT041 C′) the current
+     * activation is instead that body's construction activation, held in
+     * {@link #currentActivationLocal}. Operations that need "the current
+     * activation" must obtain it through this method rather than emitting the
+     * argument load directly. This is a compile-time choice only.
+     */
+    private void emitCurrentActivation(
+            ProtosBytecodeRootNodeGen.Builder builder) {
+        if (currentActivationLocal == null) {
+            builder.emitLoadArgument(0);
+        } else {
+            builder.emitLoadLocal(currentActivationLocal);
+        }
+    }
+
     private void emitClosureParameterBindings(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
@@ -925,7 +843,7 @@ final class CanonicalToBytecodeLowerer {
         for (CanonicalParameter parameter : definition.parameters()) {
             if (parameter.rest()) {
                 builder.beginBindClosureRest();
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadConstant(parameter.name());
                 builder.emitLoadConstant(positionalIndex);
                 builder.endBindClosureRest();
@@ -940,7 +858,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginIfThenElse();
 
                 builder.beginHasClosureArgument();
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadConstant(positionalIndex);
                 builder.endHasClosureArgument();
 
@@ -982,7 +900,7 @@ final class CanonicalToBytecodeLowerer {
                     emitBindDefaultLocal(builder, parameter, defaultValue);
                 } else {
                     builder.beginBindClosureParameter();
-                    builder.emitLoadArgument(0);
+                    emitCurrentActivation(builder);
                     builder.emitLoadConstant(parameter.name());
                     builder.beginSourceSection(
                             defaultExpression.span().startOffset(),
@@ -1006,7 +924,7 @@ final class CanonicalToBytecodeLowerer {
 
         if (!hasRest) {
             builder.beginCheckClosureArgumentUpperBound();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadConstant(positionalIndex);
             builder.endCheckClosureArgumentUpperBound();
         }
@@ -1020,7 +938,7 @@ final class CanonicalToBytecodeLowerer {
             throw new AssertionError("composed default value local was not allocated");
         }
         builder.beginBindClosureParameter();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadConstant(parameter.name());
         builder.emitLoadLocal(defaultValue);
         builder.endBindClosureParameter();
@@ -1111,7 +1029,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginAppendSpreadSuppliedArgument();
                 builder.emitLoadLocal(suppliedVector);
                 builder.emitLoadLocal(value);
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.endAppendSpreadSuppliedArgument();
             } else {
                 builder.beginAppendSuppliedArgument();
@@ -1154,7 +1072,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginAppendSpreadSuppliedArgument();
                 builder.emitLoadLocal(suppliedVector);
                 builder.emitLoadLocal(value);
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.endAppendSpreadSuppliedArgument();
             } else {
                 builder.beginAppendSuppliedArgument();
@@ -1268,7 +1186,7 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
             builder.beginStoreLocal(target);
             builder.beginRaiseNonLocalReturn();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(target);
             builder.endRaiseNonLocalReturn();
             builder.endStoreLocal();
@@ -1280,7 +1198,7 @@ final class CanonicalToBytecodeLowerer {
                     builder, member.receiver(), receiverValue, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(target);
             builder.beginReadMember();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(receiverValue);
             builder.emitLoadConstant(member.name());
             builder.endReadMember();
@@ -1419,7 +1337,7 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
             builder.beginStoreLocal(target);
             builder.beginRaiseNonLocalReturn();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(target);
             builder.endRaiseNonLocalReturn();
             builder.endStoreLocal();
@@ -1431,7 +1349,7 @@ final class CanonicalToBytecodeLowerer {
                     builder, member.receiver(), receiverValue, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(target);
             builder.beginReadMember();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(receiverValue);
             builder.emitLoadConstant(member.name());
             builder.endReadMember();
@@ -1521,7 +1439,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(target);
         builder.beginComplementEqualityResult();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(equalityResult);
         builder.endComplementEqualityResult();
         builder.endStoreLocal();
@@ -1556,7 +1474,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(target);
         builder.beginComplementEqualityResult();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(equalityResult);
         builder.endComplementEqualityResult();
         builder.endStoreLocal();
@@ -1649,12 +1567,12 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(preparedCall);
         builder.beginPrepareMapConstructionFactoryCall();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(factoryValue);
         builder.endPrepareMapConstructionFactoryCall();
         builder.endStoreLocal();
 
-        emitPreparedInvocationForRuntime(
+        emitPreparedInvocation(
                 builder,
                 factoryResult,
                 preparedCall,
@@ -1663,7 +1581,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(mapValue);
         builder.beginFinishMapConstructionFactoryCall();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(factoryResult);
         builder.endFinishMapConstructionFactoryCall();
         builder.endStoreLocal();
@@ -1728,7 +1646,7 @@ final class CanonicalToBytecodeLowerer {
 
             builder.beginStoreLocal(initialDefinition);
             builder.beginPrepareMapInitialDefinition();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(mapValue);
             builder.emitLoadLocal(key);
             builder.emitLoadLocal(value);
@@ -1754,7 +1672,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endPrepareMapInitialDefinitionHashCall();
             builder.endStoreLocal();
 
-            emitPreparedInvocationForRuntime(
+            emitPreparedInvocation(
                     builder,
                     callbackResult,
                     preparedCall,
@@ -1796,7 +1714,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endPrepareMapInitialDefinitionEqualityCall();
             builder.endStoreLocal();
 
-            emitPreparedInvocationForRuntime(
+            emitPreparedInvocation(
                     builder,
                     callbackResult,
                     preparedCall,
@@ -1877,7 +1795,6 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         requireDefaultScratch(result, preparedCall, childResult, resumeValue);
         BytecodeLocal parent = builder.createLocal("objectParent", null);
-        BytecodeLocal construction = builder.createLocal("preparedObjectConstruction", null);
 
         if (object.parent().isPresent()) {
             emitBodyExpressionToLocal(
@@ -1893,31 +1810,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
         }
 
-        /*
-         * PERF013 Slice A3: resolve/lower the helper root's own root (nesting
-         * its beginRoot()/endRoot() in this same open builder, or reusing the
-         * cell already registered on a BytecodeRootNodes reparse) before
-         * opening the PrepareObjectConstruction operation, rather than
-         * nesting root construction inside that operation's own argument
-         * evaluation. Mirrors the CanonicalClosure/MaterializeClosure case.
-         */
-        ProtosObjectBodyTargetCell bodyTargetCell =
-                bytecodeObjectBodyTargetCell(builder, object);
-
-        builder.beginStoreLocal(construction);
-        builder.beginPrepareObjectConstruction();
-        builder.emitLoadArgument(0);
-        builder.emitLoadLocal(parent);
-        builder.emitLoadConstant(bodyTargetCell);
-        builder.endPrepareObjectConstruction();
-        builder.endStoreLocal();
-
-        emitPreparedObjectConstruction(
-                builder,
-                result,
-                construction,
-                childResult,
-                resumeValue);
+        emitInlineObjectConstruction(builder, object, parent, result);
     }
 
     private void emitDefaultObjectLiteral(
@@ -1929,7 +1822,6 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         requireDefaultScratch(result, preparedCall, childResult, resumeValue);
         BytecodeLocal parent = builder.createLocal("defaultObjectParent", null);
-        BytecodeLocal construction = builder.createLocal("defaultPreparedObjectConstruction", null);
 
         if (object.parent().isPresent()) {
             emitDefaultExpressionToLocal(
@@ -1945,27 +1837,7 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
         }
 
-        /*
-         * PERF013 Slice A3: resolve the helper root's target cell before
-         * opening PrepareObjectConstruction; see emitBodyObjectLiteral.
-         */
-        ProtosObjectBodyTargetCell bodyTargetCell =
-                bytecodeObjectBodyTargetCell(builder, object);
-
-        builder.beginStoreLocal(construction);
-        builder.beginPrepareObjectConstruction();
-        builder.emitLoadArgument(0);
-        builder.emitLoadLocal(parent);
-        builder.emitLoadConstant(bodyTargetCell);
-        builder.endPrepareObjectConstruction();
-        builder.endStoreLocal();
-
-        emitPreparedObjectConstruction(
-                builder,
-                result,
-                construction,
-                childResult,
-                resumeValue);
+        emitInlineObjectConstruction(builder, object, parent, result);
     }
 
     private void emitBodyCompose(
@@ -1985,50 +1857,83 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
         builder.beginStoreLocal(result);
         builder.beginComposeLocalSlots();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(sourceValue);
         builder.emitLoadConstant(composeReservedNames(compose));
         builder.endComposeLocalSlots();
         builder.endStoreLocal();
     }
 
-    private void emitPreparedObjectConstruction(
+    /**
+     * PLAT041 C′ inline object construction. The object body is an ordinary
+     * resumable region of the enclosing root, not a physical root: the
+     * constructed object and its construction activation live in Bytecode
+     * locals, so any suspension inside the body is captured by the enclosing
+     * root's own continuation, and Error/ensure/non-local-return transfers
+     * propagate through the enclosing root exactly as from any other
+     * operation (the construction activation inherits the enclosing Task or
+     * dynamic-control authority and homes; see {@link
+     * com.guillermomolina.protos.runtime.ProtosActivation#forObjectConstruction}).
+     *
+     * <p>The body is not a lexical execution context: it receives no frame
+     * lexical authority and never takes the direct-local fast path, and its
+     * binding-analysis selection is exactly that of a non-genuine root, so
+     * Closures nested inside it resolve and capture exactly as before.
+     */
+    private void emitInlineObjectConstruction(
             ProtosBytecodeRootNodeGen.Builder builder,
-            BytecodeLocal result,
-            BytecodeLocal construction,
-            BytecodeLocal childResult,
-            BytecodeLocal resumeValue) {
-        builder.beginStoreLocal(childResult);
-        builder.beginEnterObjectConstruction();
-        builder.emitLoadLocal(construction);
-        builder.endEnterObjectConstruction();
+            CanonicalObject object,
+            BytecodeLocal parent,
+            BytecodeLocal result) {
+        BytecodeLocal constructed = builder.createLocal("constructedObject", null);
+        BytecodeLocal constructionActivation =
+                builder.createLocal("constructionActivation", null);
+
+        builder.beginStoreLocal(constructed);
+        builder.beginNewConstructedObject();
+        builder.emitLoadLocal(parent);
+        builder.endNewConstructedObject();
         builder.endStoreLocal();
 
-        builder.beginWhile();
-        builder.beginIsContinuation();
-        builder.emitLoadLocal(childResult);
-        builder.endIsContinuation();
-        builder.beginBlock();
-        builder.beginStoreLocal(resumeValue);
-        builder.beginYield();
-        builder.emitLoadLocal(childResult);
-        builder.endYield();
+        builder.beginStoreLocal(constructionActivation);
+        builder.beginNewObjectConstructionActivation();
+        emitCurrentActivation(builder);
+        builder.emitLoadLocal(constructed);
+        builder.endNewObjectConstructionActivation();
         builder.endStoreLocal();
-        builder.beginStoreLocal(childResult);
-        builder.beginResumeObjectConstruction();
-        builder.emitLoadLocal(construction);
-        builder.emitLoadLocal(childResult);
-        builder.emitLoadLocal(resumeValue);
-        builder.endResumeObjectConstruction();
-        builder.endStoreLocal();
-        builder.endBlock();
-        builder.endWhile();
+
+        validateSpan(object.body().span());
+        /*
+         * Mirrors exactly the binding-analysis selection the former object
+         * body root performed (it may lazily establish the module analysis
+         * that Closure roots nested in object bodies resolve against).
+         */
+        bindingAnalysisFor(object.body(), null);
+
+        if (!object.body().expressions().isEmpty()) {
+            CanonicalBindingAnalysis savedAnalysis = currentRootAnalysis;
+            CanonicalLexicalScope savedTopScope = currentRootTopScope;
+            java.util.Map<String, BytecodeLocal> savedFrameLocals =
+                    currentRootFrameLocals;
+            BytecodeLocal savedActivationLocal = currentActivationLocal;
+            try {
+                currentRootAnalysis = null;
+                currentRootTopScope = null;
+                currentRootFrameLocals = java.util.Map.of();
+                currentActivationLocal = constructionActivation;
+                BytecodeLocal bodyResult =
+                        builder.createLocal("objectBodyResult", null);
+                emitStatementsToLocal(builder, object.body(), bodyResult);
+            } finally {
+                currentRootAnalysis = savedAnalysis;
+                currentRootTopScope = savedTopScope;
+                currentRootFrameLocals = savedFrameLocals;
+                currentActivationLocal = savedActivationLocal;
+            }
+        }
 
         builder.beginStoreLocal(result);
-        builder.beginFinishObjectConstruction();
-        builder.emitLoadLocal(construction);
-        builder.emitLoadLocal(childResult);
-        builder.endFinishObjectConstruction();
+        builder.emitLoadLocal(constructed);
         builder.endStoreLocal();
     }
 
@@ -2045,7 +1950,7 @@ final class CanonicalToBytecodeLowerer {
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(result);
             builder.beginCreateCurrentLocalSlot();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadConstant(create.name());
             builder.emitLoadLocal(value);
             builder.endCreateCurrentLocalSlot();
@@ -2064,7 +1969,7 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
         builder.beginStoreLocal(mutationTarget);
         builder.beginRequireObjectMutationTarget();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(rawTarget);
         builder.endRequireObjectMutationTarget();
         builder.endStoreLocal();
@@ -2072,7 +1977,7 @@ final class CanonicalToBytecodeLowerer {
                 builder, create.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
         builder.beginCreateLocalSlot();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(mutationTarget);
         builder.emitLoadConstant(create.name());
         builder.emitLoadLocal(value);
@@ -2109,7 +2014,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(result);
         builder.beginMultipleCreateLocalSlots();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadConstant(multipleCreateNamesConstant(create.names()));
         builder.emitLoadLocal(source);
         builder.endMultipleCreateLocalSlots();
@@ -2141,7 +2046,7 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
             builder.beginStoreLocal(mutationTarget);
             builder.beginRequireObjectMutationTarget();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(rawTarget);
             builder.endRequireObjectMutationTarget();
             builder.endStoreLocal();
@@ -2156,13 +2061,13 @@ final class CanonicalToBytecodeLowerer {
             if (capturedOwnerLocal != null) {
                 builder.beginResolveCapturedMaterializedWritableLexicalTarget(
                         capturedOwnerLocal);
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadConstant(captured.lexicalDepth());
                 builder.endResolveCapturedMaterializedWritableLexicalTarget();
             } else {
                 builder.beginResolveCapturedWritableLexicalTarget();
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadConstant(captured.lexicalDepth());
                 builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
@@ -2173,7 +2078,7 @@ final class CanonicalToBytecodeLowerer {
             /* AST authority resolves the writable lexical destination before RHS evaluation. */
             builder.beginStoreLocal(mutationTarget);
             builder.beginResolveWritableLexicalTarget();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadConstant(assign.name());
             builder.endResolveWritableLexicalTarget();
             builder.endStoreLocal();
@@ -2185,14 +2090,14 @@ final class CanonicalToBytecodeLowerer {
         if (capturedResolution.isPresent()) {
             if (capturedOwnerLocal != null) {
                 builder.beginAssignCapturedMaterializedLocal(capturedOwnerLocal);
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadLocal(mutationTarget);
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadLocal(value);
                 builder.endAssignCapturedMaterializedLocal();
             } else {
                 builder.beginAssignCapturedFrameLocal();
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadLocal(mutationTarget);
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadLocal(value);
@@ -2200,14 +2105,14 @@ final class CanonicalToBytecodeLowerer {
             }
         } else if (assign.target().isPresent()) {
             builder.beginAssignLocalSlot();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
             builder.endAssignLocalSlot();
         } else {
             builder.beginAssignResolvedLexicalTarget();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
@@ -2254,12 +2159,12 @@ final class CanonicalToBytecodeLowerer {
         builder.beginPrepareSendArguments();
         builder.emitLoadLocal(receiver);
         builder.emitLoadConstant("atPut");
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(index);
         builder.emitLoadLocal(value);
         builder.endPrepareSendArguments();
         builder.endStoreLocal();
-        emitPreparedInvocationForRuntime(
+        emitPreparedInvocation(
                 builder,
                 dispatchResult,
                 preparedCall,
@@ -2285,7 +2190,7 @@ final class CanonicalToBytecodeLowerer {
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(result);
             builder.beginCreateCurrentLocalSlot();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadConstant(create.name());
             builder.emitLoadLocal(value);
             builder.endCreateCurrentLocalSlot();
@@ -2304,7 +2209,7 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
         builder.beginStoreLocal(mutationTarget);
         builder.beginRequireObjectMutationTarget();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(rawTarget);
         builder.endRequireObjectMutationTarget();
         builder.endStoreLocal();
@@ -2312,7 +2217,7 @@ final class CanonicalToBytecodeLowerer {
                 builder, create.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
         builder.beginCreateLocalSlot();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(mutationTarget);
         builder.emitLoadConstant(create.name());
         builder.emitLoadLocal(value);
@@ -2340,7 +2245,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(result);
         builder.beginMultipleCreateLocalSlots();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadConstant(multipleCreateNamesConstant(create.names()));
         builder.emitLoadLocal(source);
         builder.endMultipleCreateLocalSlots();
@@ -2372,7 +2277,7 @@ final class CanonicalToBytecodeLowerer {
                     resumeValue);
             builder.beginStoreLocal(mutationTarget);
             builder.beginRequireObjectMutationTarget();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(rawTarget);
             builder.endRequireObjectMutationTarget();
             builder.endStoreLocal();
@@ -2383,13 +2288,13 @@ final class CanonicalToBytecodeLowerer {
             if (capturedOwnerLocal != null) {
                 builder.beginResolveCapturedMaterializedWritableLexicalTarget(
                         capturedOwnerLocal);
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadConstant(captured.lexicalDepth());
                 builder.endResolveCapturedMaterializedWritableLexicalTarget();
             } else {
                 builder.beginResolveCapturedWritableLexicalTarget();
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadConstant(captured.lexicalDepth());
                 builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
@@ -2399,7 +2304,7 @@ final class CanonicalToBytecodeLowerer {
         } else {
             builder.beginStoreLocal(mutationTarget);
             builder.beginResolveWritableLexicalTarget();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadConstant(assign.name());
             builder.endResolveWritableLexicalTarget();
             builder.endStoreLocal();
@@ -2411,14 +2316,14 @@ final class CanonicalToBytecodeLowerer {
         if (capturedResolution.isPresent()) {
             if (capturedOwnerLocal != null) {
                 builder.beginAssignCapturedMaterializedLocal(capturedOwnerLocal);
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadLocal(mutationTarget);
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadLocal(value);
                 builder.endAssignCapturedMaterializedLocal();
             } else {
                 builder.beginAssignCapturedFrameLocal();
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadLocal(mutationTarget);
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadLocal(value);
@@ -2426,14 +2331,14 @@ final class CanonicalToBytecodeLowerer {
             }
         } else if (assign.target().isPresent()) {
             builder.beginAssignLocalSlot();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
             builder.endAssignLocalSlot();
         } else {
             builder.beginAssignResolvedLexicalTarget();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(mutationTarget);
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
@@ -2480,12 +2385,12 @@ final class CanonicalToBytecodeLowerer {
         builder.beginPrepareSendArguments();
         builder.emitLoadLocal(receiver);
         builder.emitLoadConstant("atPut");
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadLocal(index);
         builder.emitLoadLocal(value);
         builder.endPrepareSendArguments();
         builder.endStoreLocal();
-        emitPreparedInvocationForRuntime(
+        emitPreparedInvocation(
                 builder,
                 dispatchResult,
                 preparedCall,
@@ -2544,13 +2449,13 @@ final class CanonicalToBytecodeLowerer {
         if (spreadArguments) {
             builder.beginPrepareSuperSendVector();
             builder.emitLoadConstant(send.message());
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(suppliedVector);
             builder.endPrepareSuperSendVector();
         } else {
             builder.beginPrepareSuperSendArguments();
             builder.emitLoadConstant(send.message());
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             if (stageInputs) {
                 for (BytecodeLocal argumentValue : argumentValues) {
                     builder.emitLoadLocal(argumentValue);
@@ -2564,7 +2469,7 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endStoreLocal();
 
-        emitPreparedInvocationForRuntime(
+        emitPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
@@ -2624,13 +2529,13 @@ final class CanonicalToBytecodeLowerer {
         if (spreadArguments) {
             builder.beginPrepareSuperSendVector();
             builder.emitLoadConstant(send.message());
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(suppliedVector);
             builder.endPrepareSuperSendVector();
         } else {
             builder.beginPrepareSuperSendArguments();
             builder.emitLoadConstant(send.message());
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             if (stageInputs) {
                 for (BytecodeLocal argumentValue : argumentValues) {
                     builder.emitLoadLocal(argumentValue);
@@ -2644,7 +2549,7 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endStoreLocal();
 
-        emitPreparedInvocationForRuntime(
+        emitPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
@@ -2745,7 +2650,7 @@ final class CanonicalToBytecodeLowerer {
         if (spreadArguments) {
             builder.beginPrepareClosureCallVector();
             builder.emitLoadLocal(receiverValue);
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(suppliedVector);
             builder.endPrepareClosureCallVector();
         } else {
@@ -2755,7 +2660,7 @@ final class CanonicalToBytecodeLowerer {
             } else {
                 emitExpression(builder, receiver);
             }
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             if (stageInputs) {
                 for (BytecodeLocal argumentValue :
                         argumentValues) {
@@ -2872,7 +2777,7 @@ final class CanonicalToBytecodeLowerer {
             builder.beginPrepareSendVector();
             builder.emitLoadLocal(receiverValue);
             builder.emitLoadConstant(send.message());
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(suppliedVector);
             builder.endPrepareSendVector();
         } else {
@@ -2883,7 +2788,7 @@ final class CanonicalToBytecodeLowerer {
                 emitExpression(builder, receiver);
             }
             builder.emitLoadConstant(send.message());
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             if (stageInputs) {
                 for (BytecodeLocal argumentValue :
                         argumentValues) {
@@ -2915,7 +2820,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
-        emitPreparedInvocationForRuntime(
+        emitPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
@@ -2923,8 +2828,43 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
     }
 
+    /**
+     * Entry point for infrastructure (C-prime) roots, whose current activation
+     * is always frame argument 0.
+     */
     static void emitPreparedInvocationForRuntime(
             ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        emitPreparedInvocation(
+                builder,
+                activationBuilder -> activationBuilder.emitLoadArgument(0),
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+    }
+
+    private void emitPreparedInvocation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        emitPreparedInvocation(
+                builder,
+                this::emitCurrentActivation,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
+    }
+
+    private static void emitPreparedInvocation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            java.util.function.Consumer<ProtosBytecodeRootNodeGen.Builder> emitActivation,
             BytecodeLocal result,
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
@@ -3430,7 +3370,7 @@ final class CanonicalToBytecodeLowerer {
                     builder.beginStoreLocal(
                             structuredEnsureCancellationWasUnwinding);
                     builder.beginIsCancellationUnwindActive();
-                    builder.emitLoadArgument(0);
+                    emitActivation.accept(builder);
                     builder.endIsCancellationUnwindActive();
                     builder.endStoreLocal();
 
@@ -3458,7 +3398,7 @@ final class CanonicalToBytecodeLowerer {
 
                     builder.beginBlock();
                     builder.beginSupersedeCancellationUnwindIfActive();
-                    builder.emitLoadArgument(0);
+                    emitActivation.accept(builder);
                     builder.emitLoadLocal(
                             structuredEnsureCancellationWasUnwinding);
                     builder.endSupersedeCancellationUnwindIfActive();
@@ -4570,10 +4510,10 @@ final class CanonicalToBytecodeLowerer {
             CanonicalParameter parameter,
             int positionalIndex) {
         builder.beginBindClosureParameter();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadConstant(parameter.name());
         builder.beginLoadClosureArgument();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadConstant(positionalIndex);
         builder.endLoadClosureArgument();
         builder.endBindClosureParameter();
@@ -4612,14 +4552,9 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalObject object) {
             /*
-             * PERF013 Slice A3: structural-support validation only, mirroring
-             * the CanonicalClosure case above. This must NOT construct the
-             * object's helper root here: that happens later, at real
-             * emission time (emitBodyObjectLiteral/emitDefaultObjectLiteral),
-             * so the helper root can be nested inside whichever enclosing
-             * root's builder is actually open then (shared BytecodeRootNodes
-             * grouping via bytecodeObjectBodyTargetCell /
-             * lowerNestedObjectBodyRoot).
+             * Structural-support validation only: the body is emitted inline
+             * later (emitInlineObjectConstruction), while the enclosing
+             * root's own builder is open.
              */
             object.parent().ifPresent(this::validateSupportedExpression);
             registerObjectBodyReservedNames(object);
@@ -4753,7 +4688,7 @@ final class CanonicalToBytecodeLowerer {
              */
             ProtosClosureExecutionPlanCell cell = bytecodeClosurePlan(builder, closure);
             builder.beginMaterializeClosure();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadConstant(closure);
             builder.emitLoadConstant(cell);
             builder.endMaterializeClosure();
@@ -4765,14 +4700,14 @@ final class CanonicalToBytecodeLowerer {
         }
         if (expression instanceof CanonicalIntrinsic intrinsic) {
             builder.beginLoadIntrinsic();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadConstant(intrinsic.kind());
             builder.endLoadIntrinsic();
             return;
         }
         if (expression instanceof CanonicalMember member) {
             builder.beginReadMember();
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             emitExpression(builder, member.receiver());
             builder.emitLoadConstant(member.name());
             builder.endReadMember();
@@ -4829,7 +4764,7 @@ final class CanonicalToBytecodeLowerer {
                         currentRootFrameLocals.get(resolved.identity().name());
                 if (local != null) {
                     builder.beginReadFrameLocal(local);
-                    builder.emitLoadArgument(0);
+                    emitCurrentActivation(builder);
                     builder.emitLoadConstant(resolved.identity().name());
                     builder.endReadFrameLocal();
                     return;
@@ -4842,7 +4777,7 @@ final class CanonicalToBytecodeLowerer {
                 BytecodeLocal ownerLocal = capturedOwnerBytecodeLocal(captured);
                 if (ownerLocal != null) {
                     builder.beginReadCapturedMaterializedLocal(ownerLocal);
-                    builder.emitLoadArgument(0);
+                    emitCurrentActivation(builder);
                     builder.emitLoadConstant(captured.identity().name());
                     builder.emitLoadConstant(captured.lexicalDepth());
                     builder.endReadCapturedMaterializedLocal();
@@ -4850,7 +4785,7 @@ final class CanonicalToBytecodeLowerer {
                 }
 
                 builder.beginReadCapturedFrameLocal();
-                builder.emitLoadArgument(0);
+                emitCurrentActivation(builder);
                 builder.emitLoadConstant(captured.identity().name());
                 builder.emitLoadConstant(captured.lexicalDepth());
                 builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
@@ -4859,7 +4794,7 @@ final class CanonicalToBytecodeLowerer {
             }
         }
         builder.beginLookup();
-        builder.emitLoadArgument(0);
+        emitCurrentActivation(builder);
         builder.emitLoadConstant(lookup.name());
         builder.endLookup();
     }
@@ -5029,7 +4964,7 @@ final class CanonicalToBytecodeLowerer {
             builder.beginPrepareSendVector();
             builder.emitLoadLocal(receiverValue);
             builder.emitLoadConstant(send.message());
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(suppliedVector);
             builder.endPrepareSendVector();
         } else {
@@ -5040,7 +4975,7 @@ final class CanonicalToBytecodeLowerer {
                 emitExpression(builder, receiver);
             }
             builder.emitLoadConstant(send.message());
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             if (stageInputs) {
                 for (BytecodeLocal argumentValue :
                         argumentValues) {
@@ -5057,7 +4992,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
 
-        emitPreparedInvocationForRuntime(
+        emitPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
@@ -5155,7 +5090,7 @@ final class CanonicalToBytecodeLowerer {
         if (spreadArguments) {
             builder.beginPrepareClosureCallVector();
             builder.emitLoadLocal(receiverValue);
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.emitLoadLocal(suppliedVector);
             builder.endPrepareClosureCallVector();
         } else if (call.arguments().isEmpty()) {
@@ -5165,7 +5100,7 @@ final class CanonicalToBytecodeLowerer {
             } else {
                 emitExpression(builder, receiver);
             }
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             builder.endPrepareClosureCall();
         } else {
             builder.beginPrepareClosureCallArguments();
@@ -5174,7 +5109,7 @@ final class CanonicalToBytecodeLowerer {
             } else {
                 emitExpression(builder, receiver);
             }
-            builder.emitLoadArgument(0);
+            emitCurrentActivation(builder);
             if (stageInputs) {
                 for (BytecodeLocal argumentValue :
                         argumentValues) {
@@ -5191,7 +5126,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endStoreLocal();
 
 
-        emitPreparedInvocationForRuntime(
+        emitPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
