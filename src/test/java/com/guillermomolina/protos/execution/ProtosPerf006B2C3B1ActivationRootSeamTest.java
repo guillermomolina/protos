@@ -170,7 +170,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                         callCharacters,
                                         "perf006-b2c3b1-composed-call.protos")
                                 .build();
-                ProtosBytecodeRootNode callerRoot =
+                ProtosSemanticBytecodeRootNode callerRoot =
                         new CanonicalToBytecodeLowerer(language, callSource)
                                 .lowerRoot(canonicalize(callCharacters));
 
@@ -222,7 +222,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                         missingCharacters,
                                         "perf006-b2c3b1-missing.protos")
                                 .build();
-                ProtosBytecodeRootNode missingRoot =
+                ProtosSemanticBytecodeRootNode missingRoot =
                         new CanonicalToBytecodeLowerer(language, missingSource)
                                 .lowerRoot(canonicalize(missingCharacters));
                 assertThrows(

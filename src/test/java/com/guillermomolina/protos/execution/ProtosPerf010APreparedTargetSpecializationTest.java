@@ -192,7 +192,7 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
                                 .build();
                 CanonicalClosure methodDefinition =
                         closureDefinition(methodCharacters);
-                ProtosBytecodeRootNode methodRoot =
+                ProtosSemanticBytecodeRootNode methodRoot =
                         yieldingMethodRoot(
                                 language,
                                 methodSource,
@@ -436,13 +436,13 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
                 creator);
     }
 
-    private static ProtosBytecodeRootNode yieldingMethodRoot(
+    private static ProtosSemanticBytecodeRootNode yieldingMethodRoot(
             ProtosLanguage language,
             Source source,
             SourceSpan span,
             Object finalValue) {
-        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
-                ProtosBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
+                ProtosSemanticBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

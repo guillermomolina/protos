@@ -296,7 +296,7 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
     private static ProtosTask execute(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosBytecodeRootNode root) {
+            ProtosSemanticBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -306,7 +306,7 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
                                 activation));
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

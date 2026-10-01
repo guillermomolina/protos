@@ -69,7 +69,7 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                                 .build();
                 CanonicalClosure methodDefinition =
                         closureDefinition(methodCharacters);
-                ProtosBytecodeRootNode methodRoot =
+                ProtosSemanticBytecodeRootNode methodRoot =
                         yieldingMethodRoot(
                                 language,
                                 methodSource,
@@ -218,13 +218,13 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                 "PERF006_B2D1_DEFAULT_SEND_SPREAD_LOWERING=PASS");
     }
 
-    private static ProtosBytecodeRootNode yieldingMethodRoot(
+    private static ProtosSemanticBytecodeRootNode yieldingMethodRoot(
             ProtosLanguage language,
             Source source,
             SourceSpan span,
             Object finalValue) {
-        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
-                ProtosBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
+                ProtosSemanticBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

@@ -47,9 +47,12 @@ import java.util.Map;
  */
 public final class ProtosStandaloneHostedExecution {
     /**
-     * BUG008: a Protos-level Closure call composes through two nested Bytecode CallTargets, so host
-     * stack consumption per guest recursion level is higher than a single-CallTarget interpreter
-     * would need. Guest execution therefore never depends on the ambient stack size of whichever
+     * BUG008: guest recursion consumes substantial host stack per level. Since PERF025-C (PLAT042
+     * B′) an ordinary source Closure call is one Bytecode CallTarget, but a structured protocol
+     * invocation (for example the {@code ifTrue} in each level of the retained recursive benchmark
+     * drivers) still adds the structured-dispatch root and its callback root, so the retained
+     * 10,000-deep drivers still need a large fixed stack. Guest execution therefore never depends
+     * on the ambient stack size of whichever
      * thread happens to call in (a JVM main thread, a test worker, an embedder's thread) and runs
      * on a dedicated carrier thread with this explicit, fixed budget, which remains a stable,
      * recorded part of this reference runtime's execution identity; see

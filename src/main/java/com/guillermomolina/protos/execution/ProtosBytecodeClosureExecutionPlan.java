@@ -59,7 +59,7 @@ final class ProtosBytecodeClosureExecutionPlan {
     private final ProtosLanguage language;
     private final Source source;
     private final CanonicalBindingAnalysis bindingAnalysis;
-    private final ProtosBytecodeRootNode activationRoot;
+    private final ProtosSemanticBytecodeRootNode activationRoot;
     private final RootCallTarget activationTarget;
 
     ProtosBytecodeClosureExecutionPlan(
@@ -98,7 +98,7 @@ final class ProtosBytecodeClosureExecutionPlan {
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,
-            ProtosBytecodeRootNode activationRoot) {
+            ProtosSemanticBytecodeRootNode activationRoot) {
         this(
                 definition,
                 language,
@@ -125,7 +125,7 @@ final class ProtosBytecodeClosureExecutionPlan {
             ProtosLanguage language,
             Source source,
             CanonicalBindingAnalysis bindingAnalysis,
-            ProtosBytecodeRootNode activationRoot) {
+            ProtosSemanticBytecodeRootNode activationRoot) {
         this.definition =
                 Objects.requireNonNull(definition, "definition");
         this.language =
@@ -171,12 +171,12 @@ final class ProtosBytecodeClosureExecutionPlan {
                 Objects.requireNonNull(
                         activationRoot,
                         "activationRoot");
-        this.activationTarget =
-                ProtosSemanticBytecodeRootNode.wrap(
-                        language,
-                        source,
-                        definition.body().span(),
-                        activationRoot.getCallTarget());
+        /*
+         * PLAT042 B′: the activation root is itself the tagged semantic
+         * Closure root, so its CallTarget is entered directly (one CallTarget
+         * per ordinary source Closure call).
+         */
+        this.activationTarget = activationRoot.getCallTarget();
     }
 
     CanonicalClosure definition() {
@@ -212,7 +212,7 @@ final class ProtosBytecodeClosureExecutionPlan {
         return bindingAnalysis;
     }
 
-    ProtosBytecodeRootNode activationRootForTesting() {
+    ProtosSemanticBytecodeRootNode activationRootForTesting() {
         return activationRoot;
     }
 

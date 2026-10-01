@@ -51,7 +51,7 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
                 String childChars = "() => { null }";
                 Source childSource = Source.newBuilder(ProtosLanguage.ID, childChars, "perf006-b2c3b3-child.protos").build();
                 CanonicalClosure childDef = closureDefinition(childChars);
-                ProtosBytecodeRootNode childRoot = yieldingLeafRoot(language, childSource, childDef.body().span(), finalValue);
+                ProtosSemanticBytecodeRootNode childRoot = yieldingLeafRoot(language, childSource, childDef.body().span(), finalValue);
                 ProtosClosureValue child = semanticClosure(childDef, ProtosClosureExecutionPlan.bytecode(childDef, language, childSource, childRoot), module);
                 module.context().createLocalSlot("child", child);
 
@@ -113,8 +113,8 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
         System.out.println("PERF006_B2C3B3_IMMEDIATE_METHOD_RECEIVER_HOME=PASS");
     }
 
-    private static ProtosBytecodeRootNode yieldingLeafRoot(ProtosLanguage language, Source source, SourceSpan span, Object finalValue) {
-        BytecodeRootNodes<ProtosBytecodeRootNode> roots = ProtosBytecodeRootNodeGen.create(language, BytecodeConfig.DEFAULT, builder -> {
+    private static ProtosSemanticBytecodeRootNode yieldingLeafRoot(ProtosLanguage language, Source source, SourceSpan span, Object finalValue) {
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots = ProtosSemanticBytecodeRootNodeGen.create(language, BytecodeConfig.DEFAULT, builder -> {
             builder.beginSource(source);
             builder.beginSourceSection(span.startOffset(), span.length());
             builder.beginRoot();

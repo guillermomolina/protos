@@ -566,7 +566,7 @@ final class ProtosPerf006B4ECancellationUnwindTest {
             ProtosActorExecutionDomain domain,
             ProtosPrelude prelude,
             ProtosActivation activation,
-            ProtosBytecodeRootNode root) {
+            ProtosSemanticBytecodeRootNode root) {
         ProtosFutureValue future = new ProtosFutureValue(prelude.futurePrototype(), domain);
         ProtosTask task =
                 domain.createTask(
@@ -618,7 +618,7 @@ final class ProtosPerf006B4ECancellationUnwindTest {
         return Source.newBuilder(ProtosLanguage.ID, characters, name).build();
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

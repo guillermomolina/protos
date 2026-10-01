@@ -123,7 +123,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                         topCharacters,
                                         "perf006-b2c2-call.protos")
                                 .build();
-                ProtosBytecodeRootNode topRoot =
+                ProtosSemanticBytecodeRootNode topRoot =
                         new CanonicalToBytecodeLowerer(language, topSource)
                                 .lowerRoot(canonicalize(topCharacters));
 
@@ -230,7 +230,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                 characters,
                                 sourceName)
                         .build();
-        ProtosBytecodeRootNode root =
+        ProtosSemanticBytecodeRootNode root =
                 new CanonicalToBytecodeLowerer(language, source)
                         .lowerRoot(canonicalize(characters));
         assertThrows(

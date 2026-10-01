@@ -122,7 +122,7 @@ final class ProtosPlat029FutureValueNonTaskCPrimeTest {
         System.out.println("PLAT029_FUTURE_VALUE_FAILED_ERROR_IDENTITY=PASS");
     }
 
-    private static void install(ProtosIoOperation op, ProtosActivation activation, ProtosBytecodeRootNode root) {
+    private static void install(ProtosIoOperation op, ProtosActivation activation, ProtosSemanticBytecodeRootNode root) {
         ProtosBytecodeIoOperationExecution.installAndSchedule(
                 op, root.getCallTarget(), activation,
                 (current,value)->{assertTrue(current.commit());assertTrue(current.resolve(value));},
@@ -138,7 +138,7 @@ final class ProtosPlat029FutureValueNonTaskCPrimeTest {
         return new Fixture(p,d,m,lifecycle);
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(ProtosLanguage language,String chars,String name) throws Exception {
+    private static ProtosSemanticBytecodeRootNode lowerRoot(ProtosLanguage language,String chars,String name) throws Exception {
         Source source=Source.newBuilder(ProtosLanguage.ID,chars,name).build();
         return new CanonicalToBytecodeLowerer(language,source).lowerRoot(
                 (CanonicalSequence)new Canonicalizer().canonicalize(new ProtosParser(chars).parseProgram()));

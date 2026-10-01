@@ -164,7 +164,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                                         callCharacters,
                                         "perf006-b2c3b2-suppression-call.protos")
                                 .build();
-                ProtosBytecodeRootNode caller =
+                ProtosSemanticBytecodeRootNode caller =
                         new CanonicalToBytecodeLowerer(language, callSource)
                                 .lowerRoot(canonicalize(callCharacters));
 

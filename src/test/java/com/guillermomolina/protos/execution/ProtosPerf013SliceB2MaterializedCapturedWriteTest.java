@@ -86,7 +86,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                 CanonicalAssign capturedWrite =
                         assertInstanceOf(CanonicalAssign.class, definition.body().expressions().get(0));
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -134,7 +134,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 assertSame(replacement, root.getCallTarget().call(module));
@@ -167,7 +167,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 /*
@@ -201,7 +201,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 Object result = root.getCallTarget().call(module);
@@ -250,7 +250,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                 CanonicalAssign capturedWrite =
                         assertInstanceOf(CanonicalAssign.class, definition.body().expressions().get(0));
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -313,7 +313,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                 CanonicalAssign capturedWrite =
                         assertInstanceOf(CanonicalAssign.class, definition.body().expressions().get(0));
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -368,7 +368,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -412,7 +412,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -452,7 +452,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -496,7 +496,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -538,7 +538,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 Object result = root.getCallTarget().call(module);
@@ -580,7 +580,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 /*
@@ -620,7 +620,7 @@ final class ProtosPerf013SliceB2MaterializedCapturedWriteTest {
                                 .build();
 
                 CanonicalSequence original2 = canonicalize(characters);
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(original2);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));

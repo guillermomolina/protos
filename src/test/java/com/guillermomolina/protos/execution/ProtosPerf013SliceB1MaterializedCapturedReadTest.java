@@ -76,7 +76,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 Object result = root.getCallTarget().call(module);
@@ -112,7 +112,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                 CanonicalLookup capturedRead =
                         assertInstanceOf(CanonicalLookup.class, definition.body().expressions().get(0));
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -147,7 +147,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 /*
@@ -182,7 +182,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 Object result = root.getCallTarget().call(module);
@@ -214,7 +214,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                 CanonicalLookup capturedRead =
                         assertInstanceOf(CanonicalLookup.class, definition.body().expressions().get(0));
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -253,7 +253,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                 CanonicalLookup capturedRead =
                         assertInstanceOf(CanonicalLookup.class, definition.body().expressions().get(0));
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -301,7 +301,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                 CanonicalLookup capturedRead =
                         assertInstanceOf(CanonicalLookup.class, definition.body().expressions().get(0));
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -344,7 +344,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                 CanonicalLookup capturedRead =
                         assertInstanceOf(CanonicalLookup.class, definition.body().expressions().get(0));
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));
@@ -385,7 +385,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 Object result = root.getCallTarget().call(module);
@@ -425,7 +425,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(sequence);
 
                 /*
@@ -458,7 +458,7 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                                 .build();
 
                 CanonicalSequence original = canonicalize(characters);
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source).lowerRoot(original);
                 ProtosClosureValue closure =
                         assertInstanceOf(ProtosClosureValue.class, root.getCallTarget().call(module));

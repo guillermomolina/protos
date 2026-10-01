@@ -496,7 +496,7 @@ final class ProtosPerf006B2D5ABodyCallSpreadTest {
                         .build();
         CanonicalClosure definition =
                 closureDefinition(characters);
-        ProtosBytecodeRootNode root =
+        ProtosSemanticBytecodeRootNode root =
                 yieldingRoot(
                         language,
                         source,
@@ -512,13 +512,13 @@ final class ProtosPerf006B2D5ABodyCallSpreadTest {
                 creator);
     }
 
-    private static ProtosBytecodeRootNode yieldingRoot(
+    private static ProtosSemanticBytecodeRootNode yieldingRoot(
             ProtosLanguage language,
             Source source,
             SourceSpan span,
             Object finalValue) {
-        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
-                ProtosBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
+                ProtosSemanticBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

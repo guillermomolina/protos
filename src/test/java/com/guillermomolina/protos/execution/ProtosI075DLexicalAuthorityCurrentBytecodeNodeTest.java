@@ -58,7 +58,7 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosBytecodeRootNode root = installThenTwiceYieldingRoot(LANGUAGE_REF.get(null));
+                ProtosSemanticBytecodeRootNode root = installThenTwiceYieldingRoot(LANGUAGE_REF.get(null));
                 ProtosActivation module = moduleActivation();
                 ProtosObjectValue executionContext = module.context();
 
@@ -119,9 +119,9 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
      * the frame lexical authority, suspends twice without ever writing {@code
      * x}, and finally returns the direct {@code ReadFrameLocal} of {@code x}.
      */
-    private static ProtosBytecodeRootNode installThenTwiceYieldingRoot(ProtosLanguage language) {
-        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
-                ProtosBytecodeRootNodeGen.create(
+    private static ProtosSemanticBytecodeRootNode installThenTwiceYieldingRoot(ProtosLanguage language) {
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
+                ProtosSemanticBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

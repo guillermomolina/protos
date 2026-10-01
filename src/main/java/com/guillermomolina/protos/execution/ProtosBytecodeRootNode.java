@@ -75,9 +75,14 @@ import java.util.List;
 /**
  * Internal Bytecode DSL root substrate selected by PLAT014.
  *
- * <p>This class is deliberately not a second Protos execution model. It is the
- * generated-interpreter root on which the current canonical frontend is migrated
- * incrementally. PERF006-B1 does not route normal source execution through it.</p>
+ * <p>This class is deliberately not a second Protos execution model. Under
+ * PLAT042 Candidate B′ it is the untagged structured-dispatch/C-prime
+ * interpreter: Task C-prime entry, structured prepared invocations (lowered by
+ * {@link ProtosStructuredDispatchLowerer}) and the I/O C-prime roots. Ordinary
+ * source roots are {@link ProtosSemanticBytecodeRootNode}s, whose source-surface
+ * operations delegate to the single operation implementations owned here.
+ * Source-only operations that no untagged root emits any longer may remain
+ * declared here until a later cleanup.</p>
  */
 @GenerateBytecode(
         languageClass = ProtosLanguage.class,
@@ -114,6 +119,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             VirtualFrame frame,
             BytecodeNode bytecodeNode,
             int bytecodeIndex) {
+        return interceptGuestException(exception, frame);
+    }
+
+    /**
+     * Root exception interception shared by both generated Protos interpreters
+     * (PLAT042 B′): the tagged semantic source root and this untagged
+     * structured/C-prime root must select Error handlers identically.
+     */
+    static AbstractTruffleException interceptGuestException(
+            AbstractTruffleException exception,
+            VirtualFrame frame) {
         if (exception instanceof ProtosSignalException transfer) {
             Object[] arguments = frame.getArguments();
             if (arguments.length > 0 && arguments[0] instanceof ProtosActivation activation) {

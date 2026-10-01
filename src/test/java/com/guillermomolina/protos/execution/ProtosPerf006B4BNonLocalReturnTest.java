@@ -215,7 +215,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
                     "entry",
                     semanticClosure(definition, plan, creator));
 
-            ProtosBytecodeRootNode top =
+            ProtosSemanticBytecodeRootNode top =
                     lowerRoot(
                             scope.language(),
                             "entry()",
@@ -356,7 +356,7 @@ final class ProtosPerf006B4BNonLocalReturnTest {
         return Source.newBuilder(ProtosLanguage.ID, characters, name).build();
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

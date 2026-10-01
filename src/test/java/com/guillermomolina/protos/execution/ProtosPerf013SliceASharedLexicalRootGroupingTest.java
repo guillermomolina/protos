@@ -39,7 +39,7 @@ import org.junit.jupiter.api.Test;
 /**
  * PERF013 Slice A focal evidence: a lexical owner root and the Closures it
  * lexically contains are lowered into one shared {@code
- * BytecodeRootNodes<ProtosBytecodeRootNode>} group (nested {@code
+ * BytecodeRootNodes<ProtosSemanticBytecodeRootNode>} group (nested {@code
  * beginRoot()}/{@code endRoot()} in the same open builder) instead of each
  * Closure opening its own independent {@code create()} call.
  *
@@ -71,7 +71,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source)
                                 .lowerRoot(sequence);
 
@@ -81,7 +81,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 root.getCallTarget().call(module));
                 ProtosClosureExecutionPlan plan =
                         closure.executionPlan().orElseThrow();
-                ProtosBytecodeRootNode childRoot =
+                ProtosSemanticBytecodeRootNode childRoot =
                         plan.bytecodeActivationRootForTesting();
 
                 BytecodeRootNodes<?> ownerGroup = root.getRootNodes();
@@ -122,7 +122,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source)
                                 .lowerRoot(sequence);
 
@@ -132,7 +132,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 root.getCallTarget().call(module));
                 ProtosClosureExecutionPlan planA =
                         closureA.executionPlan().orElseThrow();
-                ProtosBytecodeRootNode rootA =
+                ProtosSemanticBytecodeRootNode rootA =
                         planA.bytecodeActivationRootForTesting();
 
                 ProtosActivation invocationA =
@@ -149,7 +149,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 planA.executeBytecodeActivationForTesting(invocationA));
                 ProtosClosureExecutionPlan planB =
                         closureB.executionPlan().orElseThrow();
-                ProtosBytecodeRootNode rootB =
+                ProtosSemanticBytecodeRootNode rootB =
                         planB.bytecodeActivationRootForTesting();
 
                 ProtosActivation invocationB =
@@ -166,7 +166,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 planB.executeBytecodeActivationForTesting(invocationB));
                 ProtosClosureExecutionPlan planC =
                         closureC.executionPlan().orElseThrow();
-                ProtosBytecodeRootNode rootC =
+                ProtosSemanticBytecodeRootNode rootC =
                         planC.bytecodeActivationRootForTesting();
 
                 BytecodeRootNodes<?> group = root.getRootNodes();
@@ -208,7 +208,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source)
                                 .lowerRoot(sequence);
 
@@ -218,7 +218,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 root.getCallTarget().call(module));
                 ProtosClosureExecutionPlan planA =
                         closureA.executionPlan().orElseThrow();
-                ProtosBytecodeRootNode rootA =
+                ProtosSemanticBytecodeRootNode rootA =
                         planA.bytecodeActivationRootForTesting();
 
                 ProtosClosureValue closureB =
@@ -227,7 +227,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 module.context().readLocalSlot("b").orElseThrow());
                 ProtosClosureExecutionPlan planB =
                         closureB.executionPlan().orElseThrow();
-                ProtosBytecodeRootNode rootB =
+                ProtosSemanticBytecodeRootNode rootB =
                         planB.bytecodeActivationRootForTesting();
 
                 assertSame(root.getRootNodes(), rootA.getRootNodes());
@@ -270,7 +270,7 @@ final class ProtosPerf013SliceASharedLexicalRootGroupingTest {
                                 .build();
                 CanonicalSequence sequence = canonicalize(characters);
 
-                ProtosBytecodeRootNode root =
+                ProtosSemanticBytecodeRootNode root =
                         new CanonicalToBytecodeLowerer(language, source)
                                 .lowerRoot(sequence);
 

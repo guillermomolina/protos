@@ -66,7 +66,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                     "perf006-b5b-tags.protos")
                             .build();
             CanonicalSequence sequence = canonicalize(characters);
-            ProtosBytecodeRootNode root =
+            ProtosSemanticBytecodeRootNode root =
                     new CanonicalToBytecodeLowerer(scope.language(), source)
                             .lowerRoot(sequence);
 
@@ -115,7 +115,8 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
             assertEquals("target()", calls.get(0).getSourceSection().getCharacters().toString());
             assertSame(source, calls.get(0).getSourceSection().getSource());
 
-            assertEquals(0, collectTags(tree, StandardTags.RootTag.class).size());
+            // PLAT042 B′: the source root is the tagged semantic root itself.
+            assertEquals(1, collectTags(tree, StandardTags.RootTag.class).size());
             assertEquals(0, collectTags(tree, StandardTags.RootBodyTag.class).size());
             assertEquals(
                     0,
@@ -156,7 +157,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                     "perf006-b5b-child.protos")
                             .build();
             CanonicalClosure childDefinition = closureDefinition(childCharacters);
-            ProtosBytecodeRootNode childRoot =
+            ProtosSemanticBytecodeRootNode childRoot =
                     yieldingRoot(
                             scope.language(),
                             childSource,
@@ -189,7 +190,7 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
                                     parentCharacters,
                                     "perf006-b5b-parent.protos")
                             .build();
-            ProtosBytecodeRootNode parentRoot =
+            ProtosSemanticBytecodeRootNode parentRoot =
                     new CanonicalToBytecodeLowerer(scope.language(), parentSource)
                             .lowerRoot(canonicalize(parentCharacters));
             parentRoot.getRootNodes().ensureComplete();
@@ -272,13 +273,13 @@ final class ProtosPerf006B5BSourceInstrumentationLocationTest {
         System.out.println("PERF006_B5B_COMPLETED_PREFIX_REPLAY=NO");
     }
 
-    private static ProtosBytecodeRootNode yieldingRoot(
+    private static ProtosSemanticBytecodeRootNode yieldingRoot(
             ProtosLanguage language,
             Source source,
             SourceSpan span,
             Object finalValue) {
-        BytecodeRootNodes<ProtosBytecodeRootNode> roots =
-                ProtosBytecodeRootNodeGen.create(
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
+                ProtosSemanticBytecodeRootNodeGen.create(
                         language,
                         BytecodeConfig.DEFAULT,
                         builder -> {

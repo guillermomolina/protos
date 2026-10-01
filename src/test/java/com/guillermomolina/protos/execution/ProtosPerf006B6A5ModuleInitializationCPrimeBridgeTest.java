@@ -364,7 +364,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
     private static ProtosTask executeTask(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosBytecodeRootNode root) {
+            ProtosSemanticBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -402,7 +402,7 @@ final class ProtosPerf006B6A5ModuleInitializationCPrimeBridgeTest {
                         .canonicalize(new ProtosParser(characters).parseProgram());
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

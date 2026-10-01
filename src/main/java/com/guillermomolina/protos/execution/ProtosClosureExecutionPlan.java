@@ -61,7 +61,7 @@ public final class ProtosClosureExecutionPlan {
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,
-            ProtosBytecodeRootNode bodyRoot) {
+            ProtosSemanticBytecodeRootNode bodyRoot) {
         return new ProtosClosureExecutionPlan(
                 new ProtosBytecodeClosureExecutionPlan(
                         definition,
@@ -81,7 +81,7 @@ public final class ProtosClosureExecutionPlan {
             ProtosLanguage language,
             Source source,
             CanonicalBindingAnalysis bindingAnalysis,
-            ProtosBytecodeRootNode bodyRoot) {
+            ProtosSemanticBytecodeRootNode bodyRoot) {
         return new ProtosClosureExecutionPlan(
                 new ProtosBytecodeClosureExecutionPlan(
                         definition,
@@ -100,7 +100,7 @@ public final class ProtosClosureExecutionPlan {
         return bytecodePlan.executeActivation(activation);
     }
 
-    ProtosBytecodeRootNode bytecodeActivationRootForTesting() {
+    ProtosSemanticBytecodeRootNode bytecodeActivationRootForTesting() {
         return bytecodePlan.activationRootForTesting();
     }
 

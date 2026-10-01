@@ -84,7 +84,7 @@ final class ProtosTaskCPrimeEntryExecution {
                             builder.emitLoadArgument(1);
                             builder.endStoreLocal();
 
-                            CanonicalToBytecodeLowerer.emitPreparedInvocationForRuntime(
+                            ProtosStructuredDispatchLowerer.emitPreparedInvocationForRuntime(
                                     builder,
                                     result,
                                     prepared,

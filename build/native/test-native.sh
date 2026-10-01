@@ -19,11 +19,16 @@ jit_log="${tmp_dir}/forced-jit.log"
 jit_source="${tmp_dir}/forced-jit.protos"
 dap_log="${tmp_dir}/dap.log"
 
+# PLAT042 B′: f() runs only in the tagged semantic source interpreter; the
+# structured while invocation in g() enters the untagged structured-dispatch
+# root once per call, so both generated interpreters reach Tier 2.
 {
     echo 'x: 1'
     echo 'f: () => { x }'
+    echo 'g: () => { (() => false).while(() => { null }) }'
     for ((jit_iteration = 0; jit_iteration < 32; jit_iteration++)); do
         echo 'f()'
+        echo 'g()'
     done
 } >"${jit_source}"
 

@@ -112,7 +112,7 @@ final class ProtosPlat029IoOperationCPrimeDriverTest {
                             "() => { leaf() }",
                             "plat029-operation-driver-middle.protos"));
 
-            ProtosBytecodeRootNode root =
+            ProtosSemanticBytecodeRootNode root =
                     lowerRoot(
                             scope.language(),
                             "entry()",
@@ -314,7 +314,7 @@ final class ProtosPlat029IoOperationCPrimeDriverTest {
                 plan);
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

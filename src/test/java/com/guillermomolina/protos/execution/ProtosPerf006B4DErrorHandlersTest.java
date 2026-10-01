@@ -550,7 +550,7 @@ final class ProtosPerf006B4DErrorHandlersTest {
     private static ProtosTask execute(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosBytecodeRootNode root) {
+            ProtosSemanticBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -599,7 +599,7 @@ final class ProtosPerf006B4DErrorHandlersTest {
         return Source.newBuilder(ProtosLanguage.ID, characters, name).build();
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

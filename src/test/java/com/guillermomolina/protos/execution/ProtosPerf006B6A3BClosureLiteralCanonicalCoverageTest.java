@@ -243,7 +243,7 @@ final class ProtosPerf006B6A3BClosureLiteralCanonicalCoverageTest {
     private static ProtosTask executeTask(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosBytecodeRootNode root) {
+            ProtosSemanticBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -298,7 +298,7 @@ final class ProtosPerf006B6A3BClosureLiteralCanonicalCoverageTest {
         return Source.newBuilder(ProtosLanguage.ID, characters, name).build();
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

@@ -417,7 +417,7 @@ final class ProtosI068Slice6DebuggerReflectionProjectionTest {
                                 characters,
                                 "i068-slice6-projection.protos")
                         .build();
-        ProtosBytecodeRootNode root =
+        ProtosSemanticBytecodeRootNode root =
                 new CanonicalToBytecodeLowerer(
                                 language, source)
                         .lowerRoot(

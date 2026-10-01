@@ -115,7 +115,7 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
                                         topCharacters,
                                         "perf006-b3b-top.protos")
                                 .build();
-                ProtosBytecodeRootNode topRoot =
+                ProtosSemanticBytecodeRootNode topRoot =
                         new CanonicalToBytecodeLowerer(language, topSource)
                                 .lowerRoot(canonicalize(topCharacters));
                 AtomicInteger segments = new AtomicInteger();

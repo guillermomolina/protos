@@ -530,7 +530,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
     private static ProtosTask execute(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosBytecodeRootNode root) {
+            ProtosSemanticBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -544,7 +544,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
             ProtosActorExecutionDomain domain,
             ProtosPrelude prelude,
             ProtosActivation activation,
-            ProtosBytecodeRootNode root) {
+            ProtosSemanticBytecodeRootNode root) {
         ProtosFutureValue future = new ProtosFutureValue(prelude.futurePrototype(), domain);
         ProtosTask task =
                 domain.createTask(
@@ -596,7 +596,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
         return Source.newBuilder(ProtosLanguage.ID, characters, name).build();
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

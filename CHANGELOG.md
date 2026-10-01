@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.133-SNAPSHOT
+
+- `PERF025-C` (#758) completes the PLAT042 Candidate B′ semantic/structured
+  interpreter cutover (C1c), without changing observable Protos semantics or
+  the specification. `ProtosSemanticBytecodeRootNode` is now the real tagged
+  semantic source interpreter (automatic RootTag, no RootBodyTag, same tier,
+  yield, materialized-local, tail-call and boxing configuration as the
+  untagged interpreter): `CanonicalToBytecodeLowerer` lowers top-level,
+  module and Closure roots directly into it, so the universal semantic
+  wrapper root is removed and an ordinary source Closure call enters exactly
+  one CallTarget. Its source-surface operations delegate to the single
+  operation implementations in `ProtosBytecodeRootNode`, and root
+  Error-handler selection is shared by both interpreters. Each semantic root
+  first publishes a compact guarded-send activation into frame argument 0,
+  preserving one activation identity per call. `ProtosBytecodeRootNode` is
+  now the untagged structured-dispatch/C-prime interpreter; the structured
+  dispatcher moved unchanged into `ProtosStructuredDispatchLowerer`, and a
+  structured prepared invocation enters it once per invocation through a
+  direct call to the Context's stable Task C-prime entry target (indirect
+  fallback), composing its continuation without replay. Lexically nested
+  Closure roots share the semantic interpreter's `BytecodeRootNodes`
+  generation, preserving the PERF013 materialized-local fast path. Native
+  generated-structure policy and the native forced-JIT workload cover both
+  interpreters. A bounded JVM comparison against `595d547b` measured faster
+  ordinary (-46%), structured-boundary (-36%) and retained closure-call
+  (-43%) workloads. The BUG008 64 MiB dedicated guest carrier is unchanged:
+  stack evidence shows the retained 10,000-deep recursive drivers, which use
+  a structured `ifTrue` at every level, still need a large fixed stack (32
+  MiB in the interpreter), so carrier retirement remains pending.
+
 ## 0.3.132-SNAPSHOT
 
 - `PERF025-C1` (#758) partial implementation checkpoint (C1a+C1b), without

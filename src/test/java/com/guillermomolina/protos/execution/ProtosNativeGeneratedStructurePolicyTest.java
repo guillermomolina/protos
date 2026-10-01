@@ -57,7 +57,13 @@ final class ProtosNativeGeneratedStructurePolicyTest {
                 classes.resolve(
                         "com/guillermomolina/protos/execution");
 
-        assertEquals(
+        /*
+         * PLAT042 B′: the semantic source interpreter and the untagged
+         * structured/C-prime interpreter share the same tier configuration
+         * (uncached interpreter, tail-call handlers, materialized locals), so
+         * both generate the same structural roles.
+         */
+        Set<String> interpreterRoles =
                 Set.of(
                         "AbstractBytecodeNode",
                         "CachedBytecodeNode",
@@ -65,15 +71,14 @@ final class ProtosNativeGeneratedStructurePolicyTest {
                         "TagNode",
                         "UncachedBytecodeNode",
                         "UncachedBytecodeNodeTailCall",
-                        "VirtualState"),
+                        "VirtualState");
+
+        assertEquals(
+                interpreterRoles,
                 sensitiveDirectRoles(execution, RUNTIME_ROOT));
 
         assertEquals(
-                Set.of(
-                        "AbstractBytecodeNode",
-                        "CachedBytecodeNode",
-                        "TagNode",
-                        "UninitializedBytecodeNode"),
+                interpreterRoles,
                 sensitiveDirectRoles(execution, SEMANTIC_ROOT));
 
         Path output = temporary.resolve("native-image-init.args");
@@ -128,7 +133,10 @@ final class ProtosNativeGeneratedStructurePolicyTest {
                         semantic + "$1",
                         semantic + "$Bytecode",
                         semantic + "$AbstractBytecodeNode",
-                        semantic + "$UninitializedBytecodeNode");
+                        semantic + "$UncachedBytecodeNode",
+                        semantic + "$UncachedBytecodeNodeTailCall",
+                        semantic + "$TagNode",
+                        semantic + "$VirtualState");
 
         assertTrue(
                 initialized.containsAll(required),
@@ -143,7 +151,7 @@ final class ProtosNativeGeneratedStructurePolicyTest {
 
         assertFalse(
                 initialized.contains(
-                        semantic + "$UncachedBytecodeNode"));
+                        semantic + "$UninitializedBytecodeNode"));
     }
 
     private static Set<String> sensitiveDirectRoles(

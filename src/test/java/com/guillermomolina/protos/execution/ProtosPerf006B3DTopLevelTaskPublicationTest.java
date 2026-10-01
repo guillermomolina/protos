@@ -121,7 +121,7 @@ final class ProtosPerf006B3DTopLevelTaskPublicationTest {
                                 resumerCalls,
                                 nativeTask);
                 module.context().createLocalSlot("leaf", leaf);
-                ProtosBytecodeRootNode top =
+                ProtosSemanticBytecodeRootNode top =
                         lowerRoot(
                                 language,
                                 "leaf()",
@@ -202,7 +202,7 @@ final class ProtosPerf006B3DTopLevelTaskPublicationTest {
                                         "() => { leaf() }",
                                         "perf006-b3d-middle.protos"));
 
-                ProtosBytecodeRootNode top =
+                ProtosSemanticBytecodeRootNode top =
                         lowerRoot(
                                 language,
                                 "middle()",
@@ -271,7 +271,7 @@ final class ProtosPerf006B3DTopLevelTaskPublicationTest {
                                             });
                                 });
                 module.context().createLocalSlot("leaf", leaf);
-                ProtosBytecodeRootNode top =
+                ProtosSemanticBytecodeRootNode top =
                         lowerRoot(
                                 language,
                                 "leaf()",
@@ -345,7 +345,7 @@ final class ProtosPerf006B3DTopLevelTaskPublicationTest {
                                             });
                                 });
                 module.context().createLocalSlot("leaf", leaf);
-                ProtosBytecodeRootNode top =
+                ProtosSemanticBytecodeRootNode top =
                         lowerRoot(
                                 language,
                                 "leaf()",
@@ -417,7 +417,7 @@ final class ProtosPerf006B3DTopLevelTaskPublicationTest {
                                         nativeCalls,
                                         resumerCalls,
                                         nativeTask));
-                ProtosBytecodeRootNode top =
+                ProtosSemanticBytecodeRootNode top =
                         lowerRoot(
                                 language,
                                 "leaf()",
@@ -482,7 +482,7 @@ final class ProtosPerf006B3DTopLevelTaskPublicationTest {
                 });
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

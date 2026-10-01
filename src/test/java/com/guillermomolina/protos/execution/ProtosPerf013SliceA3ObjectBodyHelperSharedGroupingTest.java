@@ -42,7 +42,7 @@ import org.junit.jupiter.api.Test;
  * PERF013 Slice A3 focal evidence, updated for PLAT041 C′ (PERF025-C1b): an
  * object-construction body is an inline resumable region of the lexical
  * lowering unit that contains the object literal, not a physical root. The
- * {@code BytecodeRootNodes<ProtosBytecodeRootNode>} group therefore contains
+ * {@code BytecodeRootNodes<ProtosSemanticBytecodeRootNode>} group therefore contains
  * only the lexical owner root and the Closure roots lexically nested in it —
  * including method Closures declared inside the object body — so the owner
  * {@code BytecodeLocal}/nested-Closure same-generation invariant the PERF013
@@ -83,7 +83,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
 
                 CanonicalToBytecodeLowerer lowerer =
                         new CanonicalToBytecodeLowerer(language, source);
-                ProtosBytecodeRootNode root = lowerer.lowerRoot(sequence);
+                ProtosSemanticBytecodeRootNode root = lowerer.lowerRoot(sequence);
 
                 ProtosObjectValue object =
                         assertInstanceOf(
@@ -136,7 +136,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
 
                 CanonicalToBytecodeLowerer lowerer =
                         new CanonicalToBytecodeLowerer(language, source);
-                ProtosBytecodeRootNode root = lowerer.lowerRoot(sequence);
+                ProtosSemanticBytecodeRootNode root = lowerer.lowerRoot(sequence);
 
                 ProtosObjectValue object =
                         assertInstanceOf(
@@ -153,7 +153,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                                 object.readLocalSlot("method").orElseThrow());
                 ProtosClosureExecutionPlan methodPlan =
                         method.executionPlan().orElseThrow();
-                ProtosBytecodeRootNode methodRoot =
+                ProtosSemanticBytecodeRootNode methodRoot =
                         methodPlan.bytecodeActivationRootForTesting();
 
                 BytecodeRootNodes<?> group = root.getRootNodes();
@@ -226,7 +226,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
 
                 CanonicalToBytecodeLowerer lowerer =
                         new CanonicalToBytecodeLowerer(language, source);
-                ProtosBytecodeRootNode root = lowerer.lowerRoot(sequence);
+                ProtosSemanticBytecodeRootNode root = lowerer.lowerRoot(sequence);
 
                 ProtosObjectValue object =
                         assertInstanceOf(
@@ -239,7 +239,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                                 object.readLocalSlot("method").orElseThrow());
                 ProtosClosureExecutionPlan methodPlan =
                         method.executionPlan().orElseThrow();
-                ProtosBytecodeRootNode methodRoot =
+                ProtosSemanticBytecodeRootNode methodRoot =
                         methodPlan.bytecodeActivationRootForTesting();
 
                 ProtosActivation methodInvocation =
@@ -257,7 +257,7 @@ final class ProtosPerf013SliceA3ObjectBodyHelperSharedGroupingTest {
                                         methodInvocation));
                 ProtosClosureExecutionPlan innerPlan =
                         innerClosure.executionPlan().orElseThrow();
-                ProtosBytecodeRootNode innerRoot =
+                ProtosSemanticBytecodeRootNode innerRoot =
                         innerPlan.bytecodeActivationRootForTesting();
 
                 BytecodeRootNodes<?> group = root.getRootNodes();

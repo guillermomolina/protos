@@ -48,6 +48,9 @@ main() {
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$EnterClosureCall_Node'
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$PrepareSendArguments_Node'
         'com.guillermomolina.protos.execution.ProtosBytecodeRootNodeGen$ResumeContinuation_Node'
+        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen$EnterClosureCall_Node'
+        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen$PrepareSendArguments_Node'
+        'com.guillermomolina.protos.execution.ProtosSemanticBytecodeRootNodeGen$ResumeContinuation_Node'
     )
 
     for class in "${inline_support_generated[@]}"; do

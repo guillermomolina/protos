@@ -66,7 +66,7 @@ final class ProtosPerf006B3FClosureEvidenceTest {
             ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
             ProtosFutureValue future =
                     new ProtosFutureValue(prelude.futurePrototype(), domain);
-            ProtosBytecodeRootNode root =
+            ProtosSemanticBytecodeRootNode root =
                     lowerRoot(
                             language,
                             "f.value()",
@@ -127,7 +127,7 @@ final class ProtosPerf006B3FClosureEvidenceTest {
             assertTrue(actor.markReady());
 
             ProtosActorExecutionDomain domain = actor.executionDomain();
-            ProtosBytecodeRootNode root =
+            ProtosSemanticBytecodeRootNode root =
                     lowerRoot(
                             language,
                             "f.value()",
@@ -507,14 +507,14 @@ final class ProtosPerf006B3FClosureEvidenceTest {
 
     private static ProtosTask execute(
             Harness harness,
-            ProtosBytecodeRootNode root) {
+            ProtosSemanticBytecodeRootNode root) {
         return execute(harness.domain(), harness.activation(), root);
     }
 
     private static ProtosTask execute(
             ProtosActorExecutionDomain domain,
             ProtosActivation activation,
-            ProtosBytecodeRootNode root) {
+            ProtosSemanticBytecodeRootNode root) {
         return domain.createTask(
                 null,
                 current ->
@@ -524,7 +524,7 @@ final class ProtosPerf006B3FClosureEvidenceTest {
                                 activation));
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language,
             String characters,
             String sourceName)

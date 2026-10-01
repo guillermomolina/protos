@@ -84,7 +84,7 @@ final class ProtosPerf006B4ATransferSubstrateTest {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
-                ProtosBytecodeRootNode root = bytecodeRoot("null");
+                ProtosSemanticBytecodeRootNode root = bytecodeRoot("null");
                 ProtosReturnHome home = new ProtosReturnHome();
                 Object value = ProtosNullValue.INSTANCE;
                 ProtosNonLocalReturnException nonLocalReturn =
@@ -154,7 +154,7 @@ final class ProtosPerf006B4ATransferSubstrateTest {
         System.out.println("PERF006_B4A_GLOBAL_TRANSFER_AUTHORITY=NO");
     }
 
-    private static ProtosBytecodeRootNode bytecodeRoot(String characters) {
+    private static ProtosSemanticBytecodeRootNode bytecodeRoot(String characters) {
         ProtosLanguage language = LANGUAGE_REF.get(null);
         Source source =
                 Source.newBuilder(

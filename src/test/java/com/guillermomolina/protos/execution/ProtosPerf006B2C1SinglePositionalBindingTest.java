@@ -45,7 +45,7 @@ final class ProtosPerf006B2C1SinglePositionalBindingTest {
                 module.context().createLocalSlot("entry", closure);
                 String topChars = "entry(token)";
                 Source topSource = Source.newBuilder(ProtosLanguage.ID, topChars, "perf006-b2c1-top.protos").build();
-                ProtosBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource).lowerRoot(canonicalize(topChars));
+                ProtosSemanticBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource).lowerRoot(canonicalize(topChars));
                 assertSame(token, top.getCallTarget().call(module));
             } finally { context.leave(); }
         }
@@ -65,7 +65,7 @@ final class ProtosPerf006B2C1SinglePositionalBindingTest {
                 module.context().createLocalSlot("entry", semanticClosure(def, ProtosClosureExecutionPlan.bytecode(def, language, closureSource), module));
                 String topChars = "entry()";
                 Source topSource = Source.newBuilder(ProtosLanguage.ID, topChars, "perf006-b2c1-arity-top.protos").build();
-                ProtosBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource).lowerRoot(canonicalize(topChars));
+                ProtosSemanticBytecodeRootNode top = new CanonicalToBytecodeLowerer(language, topSource).lowerRoot(canonicalize(topChars));
                 assertThrows(ProtosSignalException.class, () -> top.getCallTarget().call(module));
             } finally { context.leave(); }
         }

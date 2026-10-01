@@ -88,7 +88,7 @@ final class ProtosPerf012FrameLexicalLayoutTest {
             throws Exception {
         withEnteredLanguage(
                 (language, ignoredModule) -> {
-                    ProtosBytecodeRootNode root = lowerRoot(language, "x: 41\nx");
+                    ProtosSemanticBytecodeRootNode root = lowerRoot(language, "x: 41\nx");
 
                     ProtosActivation firstModule = moduleActivation();
                     ProtosActivation secondModule = moduleActivation();
@@ -214,7 +214,7 @@ final class ProtosPerf012FrameLexicalLayoutTest {
         return lowerRoot(language, characters).getCallTarget().call(module);
     }
 
-    private static ProtosBytecodeRootNode lowerRoot(
+    private static ProtosSemanticBytecodeRootNode lowerRoot(
             ProtosLanguage language, String characters) {
         Source source =
                 Source.newBuilder(ProtosLanguage.ID, characters, "perf012-layout.protos")
