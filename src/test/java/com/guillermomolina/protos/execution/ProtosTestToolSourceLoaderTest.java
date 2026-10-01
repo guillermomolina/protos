@@ -19,18 +19,20 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Arrays;
+import java.util.List;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 final class ProtosTestToolSourceLoaderTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -44,13 +46,18 @@ final class ProtosTestToolSourceLoaderTest {
                     "tool002-d3a1-read-source.protos");
 
     @Test
-    void bundledProtosLoaderReadsCompleteUtf8SourceAcrossReadBatchBoundary(
-            @TempDir Path corpusRoot) throws Exception {
-        String content = "a".repeat(1_100_000) + "\u03c0\ud83d\ude42\n";
-        Files.writeString(
-                corpusRoot.resolve("large.protos"),
-                content,
-                StandardCharsets.UTF_8);
+    void bundledProtosLoaderReadsCompleteUtf8SourceAcrossReadBatchBoundary()
+            throws Exception {
+        /*
+         * Runner.readSource issues 16 reads per batch. A backend is allowed to
+         * return any non-empty prefix up to maxBytes, so 2-byte short reads let
+         * this regression cross the same batch boundary without a 1 MiB test
+         * payload. The 31-byte ASCII prefix also splits the following UTF-8 pi
+         * scalar across two File.read results.
+         */
+        byte[] content =
+                ("a".repeat(31) + "\u03c0\ud83d\ude42\n")
+                        .getBytes(StandardCharsets.UTF_8);
 
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
@@ -62,35 +69,83 @@ final class ProtosTestToolSourceLoaderTest {
                 new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
 
-        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
-                new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {
-            assumeTrue(
-                    backend.secureConfinementAvailable(),
-                    "host provider has no SecureDirectoryStream");
+        ProtosStandardFilesystemProtocol.Backend backend =
+                (path, options, completion) -> {
+                    if (!path.components().equals(List.of("large.protos"))) {
+                        completion.failed();
+                        return () -> {};
+                    }
 
-            ProtosObjectValue rawFilesystem =
-                    ProtosStandardFilesystemProtocol.createCapability(
-                            prelude.bytesPrototypeForRuntime(),
-                            activation,
-                            backend);
-            ProtosFilesystemValue filesystem =
-                    assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
-            activation.context().createLocalSlot("filesystem", filesystem);
+                    ShortReadResource resource =
+                            new ShortReadResource(content);
+                    completion.succeeded(
+                            resource,
+                            new ProtosFileFlow.Capabilities(
+                                    true,
+                                    false,
+                                    false,
+                                    false,
+                                    false,
+                                    false),
+                            () -> {});
+                    return () -> {};
+                };
 
-            ProtosExecutionOutcome outcome =
-                    com.guillermomolina.protos.execution.ProtosTestExecutionSupport.execute(
-Files.readString(
-                                                    FIXTURE,
-                                                    StandardCharsets.UTF_8),
-activation);
+        ProtosObjectValue rawFilesystem =
+                ProtosStandardFilesystemProtocol.createCapability(
+                        prelude.bytesPrototypeForRuntime(),
+                        activation,
+                        backend);
+        ProtosFilesystemValue filesystem =
+                assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
+        activation.context().createLocalSlot("filesystem", filesystem);
 
-            assertEquals(
-                    ProtosExecutionOutcome.State.COMPLETED,
-                    outcome.state(),
-                    () ->
-                            "Protos source-loader fixture failed: "
-                                    + outcome.error());
-            assertSame(ProtosBooleanValue.TRUE, outcome.value());
+        ProtosExecutionOutcome outcome =
+                ProtosTestExecutionSupport.execute(
+                        Files.readString(
+                                FIXTURE,
+                                StandardCharsets.UTF_8),
+                        activation);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.COMPLETED,
+                outcome.state(),
+                () ->
+                        "Protos source-loader fixture failed: "
+                                + outcome.error());
+        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+    }
+
+    private static final class ShortReadResource
+            implements ProtosFileFlow.ReadableResource {
+        private final byte[] content;
+
+        private ShortReadResource(byte[] content) {
+            this.content = content.clone();
+        }
+
+        @Override
+        public ProtosFileFlow.Cancellation readAt(
+                BigInteger position,
+                int maxBytes,
+                ProtosFileFlow.ReadCompletion completion) {
+            int start = position.intValueExact();
+            if (start >= content.length) {
+                completion.eof();
+                return () -> {};
+            }
+
+            int end =
+                    Math.min(
+                            content.length,
+                            start + Math.min(maxBytes, 2));
+            completion.data(Arrays.copyOfRange(content, start, end));
+            return () -> {};
+        }
+
+        @Override
+        public void close(ProtosFileFlow.CloseCompletion completion) {
+            completion.succeeded();
         }
     }
 }

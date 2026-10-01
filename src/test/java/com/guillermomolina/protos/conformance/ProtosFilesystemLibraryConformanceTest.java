@@ -61,6 +61,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -76,6 +77,18 @@ final class ProtosFilesystemLibraryConformanceTest {
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path CASE_ROOT =
             Path.of("protos", "tests", "conformance", "library", "io");
+
+    private static ProtosPrelude prelude;
+
+    @BeforeAll
+    static void bootstrapCore() throws Exception {
+        prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                new ProtosStandardLibraryModuleResolver(
+                                        STANDARD_LIBRARY));
+    }
 
     @TempDir Path authorityRoot;
 
@@ -510,11 +523,6 @@ final class ProtosFilesystemLibraryConformanceTest {
 
 
     private Fixture fixture() throws Exception {
-        ProtosPrelude prelude =
-                new ProtosCoreBootstrap()
-                        .bootstrap(
-                                CORE,
-                                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosNioReadOnlyTreeFilesystemBackend backend =
                 new ProtosNioReadOnlyTreeFilesystemBackend(authorityRoot);
@@ -535,11 +543,6 @@ final class ProtosFilesystemLibraryConformanceTest {
 
 
     private ControlledFixture controlledFixture(ReadMode readMode) throws Exception {
-        ProtosPrelude prelude =
-                new ProtosCoreBootstrap()
-                        .bootstrap(
-                                CORE,
-                                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue control = new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosFutureValue gate =
@@ -561,11 +564,6 @@ final class ProtosFilesystemLibraryConformanceTest {
 
 
     private PendingOpenFixture pendingOpenFixture() throws Exception {
-        ProtosPrelude prelude =
-                new ProtosCoreBootstrap()
-                        .bootstrap(
-                                CORE,
-                                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue control = new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosFutureValue gate =
@@ -610,11 +608,6 @@ final class ProtosFilesystemLibraryConformanceTest {
             int failurePrefix,
             int injectedPayloadSize)
             throws Exception {
-        ProtosPrelude prelude =
-                new ProtosCoreBootstrap()
-                        .bootstrap(
-                                CORE,
-                                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue control = new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosFutureValue gate =

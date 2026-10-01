@@ -28,6 +28,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicReference;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 final class ProtosWorkspacePackagePreflightTest {
@@ -36,6 +38,18 @@ final class ProtosWorkspacePackagePreflightTest {
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "package");
     private static final Path CASES =
             Path.of("protos", "tests", "package-tool", "execution-plan", "cases");
+
+    private static ProtosPolyglotRuntimeHost runtimeHost;
+
+    @BeforeAll
+    static void openRuntimeHost() {
+        runtimeHost = ProtosPolyglotRuntimeHost.open();
+    }
+
+    @AfterAll
+    static void closeRuntimeHost() {
+        runtimeHost.close();
+    }
 
     @Test
     void buildsDetachedPlanInTerminatedToolProcessWithoutMetadataMutation()
@@ -52,7 +66,8 @@ final class ProtosWorkspacePackagePreflightTest {
                         TOOL_ROOT,
                         project,
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY),
-                        observed::set);
+                        observed::set,
+                        runtimeHost);
 
         assertEquals("root", plan.root().packageId());
         assertEquals(2, plan.packages().size());
@@ -81,7 +96,8 @@ final class ProtosWorkspacePackagePreflightTest {
                                 TOOL_ROOT,
                                 project,
                                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY),
-                                observed::set));
+                                observed::set,
+                                runtimeHost));
 
         ProtosProcessRuntime process = observed.get();
         assertNotNull(process);

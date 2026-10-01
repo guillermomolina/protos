@@ -255,23 +255,41 @@ public final class ProtosCli {
                                     "UTF8",
                                     "UTF8"));
 
-            return switch (outcome.state()) {
-                case COMPLETED -> 0;
-                case FAILED -> {
-                    err.println("Error: " + diagnosticInspector.render(outcome.error()));
-                    yield 1;
-                }
-                case CANCELLED -> {
-                    err.println(
-                            "Runtime error: workspace application root task was cancelled "
-                                    + "before entry completion");
-                    yield 1;
-                }
-            };
+            return workspaceOutcomeExitCode(outcome, err);
         } catch (IOException failure) {
-            err.println("protos run: " + failure.getMessage());
-            return 1;
+            return workspaceHostFailureExitCode(failure, err);
         }
+    }
+
+    int workspaceOutcomeExitCode(
+            ProtosExecutionOutcome outcome,
+            PrintStream err) {
+        Objects.requireNonNull(outcome, "outcome");
+        Objects.requireNonNull(err, "err");
+
+        return switch (outcome.state()) {
+            case COMPLETED -> 0;
+            case FAILED -> {
+                err.println("Error: " + diagnosticInspector.render(outcome.error()));
+                yield 1;
+            }
+            case CANCELLED -> {
+                err.println(
+                        "Runtime error: workspace application root task was cancelled "
+                                + "before entry completion");
+                yield 1;
+            }
+        };
+    }
+
+    static int workspaceHostFailureExitCode(
+            IOException failure,
+            PrintStream err) {
+        Objects.requireNonNull(failure, "failure");
+        Objects.requireNonNull(err, "err");
+
+        err.println("protos run: " + failure.getMessage());
+        return 1;
     }
 
     private int runBundledTestTool(

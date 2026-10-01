@@ -21,8 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
 import com.guillermomolina.protos.execution.ProtosNioReadOnlyTreeFilesystemBackend;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -74,21 +77,52 @@ final class ProtosWorkspaceRunCliTest {
     }
 
     @Test
-    void workspaceRunTranslatesSemanticAndHostFailuresWithoutInternalError() throws Exception {
-        Path project = materializeProject();
-        assumeSecureConfinement(project);
+    void workspaceRunOutcomeTranslationDoesNotRequireAnotherWorkspaceExecution() {
+        ProtosCli cli = new ProtosCli();
 
-        Result semantic = runWorkspace(project, "Fail");
-        assertEquals(1, semantic.code());
-        assertTrue(semantic.stdout().isBlank(), semantic.stdout());
-        assertTrue(semantic.stderr().startsWith("Error:"), semantic.stderr());
-        assertFalse(semantic.stderr().contains("Internal error"), semantic.stderr());
+        ByteArrayOutputStream failedBytes = new ByteArrayOutputStream();
+        PrintStream failedErr = new PrintStream(failedBytes);
+        ProtosObjectValue error =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-        Result missing = runWorkspace(project, "Missing");
-        assertEquals(1, missing.code());
-        assertTrue(missing.stdout().isBlank(), missing.stdout());
-        assertTrue(missing.stderr().startsWith("protos run:"), missing.stderr());
-        assertFalse(missing.stderr().contains("Internal error"), missing.stderr());
+        int failedCode =
+                cli.workspaceOutcomeExitCode(
+                        ProtosExecutionOutcome.failed(error),
+                        failedErr);
+
+        String failedText = failedBytes.toString(StandardCharsets.UTF_8);
+        assertEquals(1, failedCode);
+        assertTrue(failedText.startsWith("Error:"), failedText);
+        assertFalse(failedText.contains("Internal error"), failedText);
+
+        ByteArrayOutputStream cancelledBytes = new ByteArrayOutputStream();
+        PrintStream cancelledErr = new PrintStream(cancelledBytes);
+
+        int cancelledCode =
+                cli.workspaceOutcomeExitCode(
+                        ProtosExecutionOutcome.cancelled(),
+                        cancelledErr);
+
+        String cancelledText =
+                cancelledBytes.toString(StandardCharsets.UTF_8);
+        assertEquals(1, cancelledCode);
+        assertTrue(
+                cancelledText.startsWith(
+                        "Runtime error: workspace application root task was cancelled"),
+                cancelledText);
+
+        ByteArrayOutputStream hostBytes = new ByteArrayOutputStream();
+        PrintStream hostErr = new PrintStream(hostBytes);
+
+        int hostCode =
+                ProtosCli.workspaceHostFailureExitCode(
+                        new IOException("missing entry"),
+                        hostErr);
+
+        String hostText = hostBytes.toString(StandardCharsets.UTF_8);
+        assertEquals(1, hostCode);
+        assertTrue(hostText.startsWith("protos run: missing entry"), hostText);
+        assertFalse(hostText.contains("Internal error"), hostText);
     }
 
     private Result runPublic(String... args) {

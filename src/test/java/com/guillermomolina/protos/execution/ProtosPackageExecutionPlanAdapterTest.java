@@ -31,6 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.math.BigInteger;
 import java.nio.file.Path;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 final class ProtosPackageExecutionPlanAdapterTest {
@@ -48,6 +49,20 @@ final class ProtosPackageExecutionPlanAdapterTest {
     private static final String BUILD_PLAN =
             "Plan: import(\"self:ExecutionPlan\")\n"
                     + "Plan.build(projectTreeFilesystem)\n";
+
+    private static ProtosPrelude prelude;
+
+    @BeforeAll
+    static void bootstrapPackageToolPrelude() throws Exception {
+        ProtosBundledToolModuleResolver resolver =
+                new ProtosBundledToolModuleResolver(
+                        "package",
+                        TOOL_ROOT,
+                        TOOL_ROOT.resolveSibling("shared"),
+                        new ProtosStandardLibraryModuleResolver(
+                                STANDARD_LIBRARY));
+        prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+    }
 
     @Test
     void detachesPublishedWorkspacePlanIntoImmutableHostData() throws Exception {
@@ -130,12 +145,6 @@ final class ProtosPackageExecutionPlanAdapterTest {
                 backend.secureConfinementAvailable(),
                 "host provider has no SecureDirectoryStream");
 
-        ProtosBundledToolModuleResolver resolver =
-                new ProtosBundledToolModuleResolver(
-                        "package",
-                        TOOL_ROOT, (TOOL_ROOT).resolveSibling("shared"),
-                        new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosHostedExecutionTestFixture hosted =
                 ProtosHostedExecutionTestFixture.open(prelude);
         try {

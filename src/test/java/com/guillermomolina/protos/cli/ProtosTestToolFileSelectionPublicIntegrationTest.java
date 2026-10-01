@@ -17,14 +17,11 @@
 package com.guillermomolina.protos.cli;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.InputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -60,78 +57,10 @@ final class ProtosTestToolFileSelectionPublicIntegrationTest {
         assertSuccessfulUriCases(result);
     }
 
-    @Test
-    void absoluteExactFileRunsTheSameAuthoritativeCases() {
-        R result =
-                run(
-                        "test",
-                        "--file",
-                        URI_CASE.toAbsolutePath().normalize().toString());
-
-        assertSuccessfulUriCases(result);
-    }
-
-    @Test
-    void existingFileOutsideAuthorizedCorporaFailsBeforeScheduling() {
-        R result =
-                run(
-                        "test",
-                        "--file",
-                        Path.of(
-                                        "protos",
-                                        "examples",
-                                        "hello-world.protos")
-                                .toString());
-
-        assertSelectionErrorBeforeScheduling(result);
-    }
-
-    @Test
-    void authorizedExistingFileWithoutCaseSpecFailsBeforeScheduling()
-            throws Exception {
-        Path libraryRoot =
-                Path.of("protos", "tests", "library");
-
-        Path unplanned =
-                Files.createTempFile(
-                        libraryRoot,
-                        "tool008-unplanned-",
-                        ".protos");
-
-        try {
-            R result =
-                    run(
-                            "test",
-                            "--file",
-                            unplanned.toString());
-
-            assertSelectionErrorBeforeScheduling(result);
-        } finally {
-            Files.deleteIfExists(unplanned);
-        }
-    }
-
     private static void assertSuccessfulUriCases(R result) {
         assertEquals(0, result.code());
         assertEquals(EXPECTED_STDOUT, result.out());
         assertEquals(EXPECTED_URI_PROGRESS, result.err());
-    }
-
-    private static void assertSelectionErrorBeforeScheduling(R result) {
-        assertEquals(1, result.code());
-        assertTrue(
-                result.out().isBlank(),
-                result.out());
-        assertTrue(
-                result.err().startsWith("Test tool error:"),
-                result.err());
-
-        assertFalse(
-                result.err().contains("[uri]"),
-                result.err());
-        assertFalse(
-                result.err().contains(" passed, "),
-                result.err());
     }
 
     private static R run(String... args) {

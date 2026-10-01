@@ -32,6 +32,7 @@ import org.junit.jupiter.api.io.TempDir;
 /** Exercises the JVM embedding entry exactly as an external Java consumer would. */
 final class ProtosStandaloneHostedExecutionEmbeddingTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
+    // PERF021 owns benchmark-scale inputs; this JUnit needs only proportional recursion.
 
     @TempDir Path directory;
 
@@ -49,9 +50,9 @@ final class ProtosStandaloneHostedExecutionEmbeddingTest {
                     result
                 }
 
-                fibonacci(30)
+                fibonacci(10)
                 """,
-                new BigInteger("832040"));
+                new BigInteger("55"));
     }
 
     @Test
@@ -68,9 +69,9 @@ final class ProtosStandaloneHostedExecutionEmbeddingTest {
                     result
                 }
 
-                factorial(20)
+                factorial(8)
                 """,
-                new BigInteger("2432902008176640000"));
+                new BigInteger("40320"));
     }
 
     @Test

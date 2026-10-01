@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.129-SNAPSHOT
+
+- `PERF022` (#752): reduce pathological ordinary Java test-suite runtime
+  without changing observable Protos semantics or weakening required
+  correctness coverage. Benchmark-scale standalone-embedding inputs are
+  replaced by proportional recursion/factorial cases while PERF021 remains
+  the owner of benchmark-scale workloads; the reusable-session regression
+  keeps repeated invocation coverage with a proportional repeat count.
+  Test Tool source loading now crosses its 16-read batch boundary using
+  deterministic short reads and a split UTF-8 scalar instead of a
+  megabyte-scale payload. Redundant full public Test Tool file-selection and
+  workspace-run executions are replaced by existing focal coverage or direct
+  outcome/host-failure translation checks, including explicit cancelled
+  workspace outcome coverage. Filesystem-library, Package execution-plan and
+  workspace-preflight tests amortize immutable Core/RuntimeHost setup while
+  retaining fresh activations, Processes, Filesystems and resources where
+  isolation is part of the contract. Removes the duplicate
+  `ProtosWorkspaceRunDriverTest`; its preflight, Tool/Application isolation,
+  dependency execution, public driver path and metadata non-mutation
+  invariants remain owned by their focused integration tests.
+
 ## 0.3.128-SNAPSHOT
 
 - `I077` (#751, PERF021 #748): expose a reusable standalone JVM embedding

@@ -33,7 +33,8 @@ import org.junit.jupiter.api.io.TempDir;
 /** Exercises the reusable JVM embedding session exactly as an external Java consumer would. */
 final class ProtosStandaloneHostedSessionEmbeddingTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
-    private static final int REPEATS = 5;
+    // PERF021 owns benchmark-scale inputs; this JUnit proves repeated session execution.
+    private static final int REPEATS = 2;
 
     @TempDir Path directory;
 
@@ -52,12 +53,12 @@ final class ProtosStandaloneHostedSessionEmbeddingTest {
                 }
 
                 run: () => {
-                    fibonacci(30)
+                    fibonacci(10)
                 }
 
                 run()
                 """,
-                new BigInteger("832040"));
+                new BigInteger("55"));
     }
 
     @Test
@@ -75,12 +76,12 @@ final class ProtosStandaloneHostedSessionEmbeddingTest {
                 }
 
                 run: () => {
-                    factorial(20)
+                    factorial(8)
                 }
 
                 run()
                 """,
-                new BigInteger("2432902008176640000"));
+                new BigInteger("40320"));
     }
 
     /**
