@@ -117,6 +117,78 @@ final class ProtosStandaloneHostedSessionEmbeddingTest {
         assertThrows(IllegalStateException.class, () -> session.invokeTopLevel("run"));
     }
 
+    @Test
+    void preparedTopLevelIsInvokedRepeatedlyAndSharesLiveModuleState() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("counter: 0\n"
+                + "run: () => {\n    counter = counter + 1\n    counter\n}\n"
+                + "run()\n")) {
+            assertInteger(1, session.initialOutcome());
+            ProtosStandaloneHostedSession.PreparedTopLevel run = session.prepareTopLevel("run");
+            // Preparation does not execute the Closure.
+            assertInteger(2, run.invoke());
+            assertInteger(3, run.invoke());
+            // Dynamic and prepared invocation address the same live entry module.
+            assertInteger(4, session.invokeTopLevel("run"));
+            assertInteger(5, run.invoke());
+        }
+    }
+
+    /**
+     * The prepared handle keeps the Closure selected at preparation; {@code invokeTopLevel} reads
+     * the slot on every call and therefore observes the guest's reassignment.
+     */
+    @Test
+    void preparedTopLevelDoesNotFollowReassignmentButInvokeTopLevelDoes() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("run: () => {\n    1\n}\n"
+                + "swap: () => {\n    run = () => {\n        2\n    }\n    0\n}\n"
+                + "run()\n")) {
+            assertInteger(1, session.initialOutcome());
+            ProtosStandaloneHostedSession.PreparedTopLevel prepared = session.prepareTopLevel("run");
+            assertInteger(1, prepared.invoke());
+
+            assertInteger(0, session.invokeTopLevel("swap"));
+
+            assertInteger(1, prepared.invoke());
+            assertInteger(2, session.invokeTopLevel("run"));
+            assertInteger(1, prepared.invoke());
+            // Preparing again selects the replacement.
+            assertInteger(2, session.prepareTopLevel("run").invoke());
+        }
+    }
+
+    @Test
+    void preparationRejectsAbsentAndNonClosureTopLevelSlots() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("value: 7\nvalue\n")) {
+            assertInteger(7, session.initialOutcome());
+            assertThrows(IllegalArgumentException.class, () -> session.prepareTopLevel("missing"));
+            assertThrows(IllegalArgumentException.class, () -> session.prepareTopLevel("value"));
+        }
+    }
+
+    @Test
+    void preparedTopLevelIsRejectedAfterSessionClose() throws Exception {
+        ProtosStandaloneHostedSession session = open("run: () => {\n    1\n}\nrun()\n");
+        ProtosStandaloneHostedSession.PreparedTopLevel run = session.prepareTopLevel("run");
+        assertInteger(1, run.invoke());
+        session.close();
+        assertThrows(IllegalStateException.class, run::invoke);
+        assertThrows(IllegalStateException.class, () -> session.prepareTopLevel("run"));
+    }
+
+    @Test
+    void preparedTopLevelReportsGuestFailureAsFailedOutcomeAndStaysUsable() throws Exception {
+        try (ProtosStandaloneHostedSession session = open("mode: 0\n"
+                + "run: () => {\n    mode = mode + 1\n    (mode == 2).ifTrue() {\n"
+                + "        1.definitelyMissing()\n    }\n    mode\n}\n"
+                + "run()\n")) {
+            assertInteger(1, session.initialOutcome());
+            ProtosStandaloneHostedSession.PreparedTopLevel run = session.prepareTopLevel("run");
+            ProtosExecutionOutcome failed = run.invoke();
+            assertEquals(ProtosExecutionOutcome.State.FAILED, failed.state());
+            assertInteger(3, run.invoke());
+        }
+    }
+
     private void assertRepeatedRun(String source, BigInteger expected) throws Exception {
         try (ProtosStandaloneHostedSession session = open(source)) {
             assertEquals(ProtosExecutionOutcome.State.COMPLETED, session.initialOutcome().state());

@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.131-SNAPSHOT
+
+- `PERF025-B` (#758): add a prepared reusable top-level callable to the
+  supported JVM embedding session without changing observable Protos
+  semantics. `ProtosStandaloneHostedSession.prepareTopLevel(name)` resolves and
+  validates the entry module's source-backed top-level Closure once on the
+  guest carrier and returns a `PreparedTopLevel` handle whose `invoke()`
+  repeatedly runs exactly that captured Closure in the same live Process,
+  Polyglot Context and carrier, through the existing execution-host boundary
+  and `ProtosRootTaskExecution.executeClosure(...)` (so it inherits the
+  PERF025-A direct first dispatch), with no per-invocation slot lookup, source
+  parsing, or Process/Context creation. `invokeTopLevel(name)` keeps its
+  dynamic per-call slot read and therefore still observes guest reassignment;
+  the prepared handle intentionally does not. Preparation of a missing or
+  non-source-backed slot fails like `invokeTopLevel`, and a prepared handle is
+  rejected once its session is closed. Adds external-consumer embedding tests
+  for repeated prepared calls, shared module state, the reassignment
+  distinction, preparation rejection, post-close rejection and `FAILED`
+  outcome mapping.
+
 ## 0.3.130-SNAPSHOT
 
 - `PERF025-A` (#758): direct-dispatch the first segment of a fresh RootTask

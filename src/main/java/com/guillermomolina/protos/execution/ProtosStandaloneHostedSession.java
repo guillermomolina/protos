@@ -44,10 +44,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>{@link #invokeTopLevel} reads the named slot of the entry module instance and invokes the
  * Closure it holds as a RootActor-local task in that same Process; no source text is parsed per
- * call. Guest operations, including close, run on one dedicated carrier with the explicit {@link
- * ProtosStandaloneHostedExecution#GUEST_CALL_STACK_SIZE_BYTES} stack budget; the calling thread
- * never executes guest code. A session is safe to share between threads only in the sense that
- * calls are serialized on that carrier.
+ * call. {@link #prepareTopLevel} instead resolves that slot once and retains the Closure for
+ * repeated invocation. Guest operations, including close, run on one dedicated carrier with the
+ * explicit {@link ProtosStandaloneHostedExecution#GUEST_CALL_STACK_SIZE_BYTES} stack budget; the
+ * calling thread never executes guest code. A session is safe to share between threads only in the
+ * sense that calls are serialized on that carrier.
  */
 public final class ProtosStandaloneHostedSession implements AutoCloseable {
     private final ProtosGuestCarrier carrier;
@@ -219,33 +220,77 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
      */
     public ProtosExecutionOutcome invokeTopLevel(String name) throws IOException {
         Objects.requireNonNull(name, "name");
-        return carrier.call(
-                () -> {
-                    if (closeStarted.get()) {
-                        throw new IllegalStateException("standalone hosted session is closed");
-                    }
-                    if (entryModule == null) {
-                        throw new IllegalStateException(
-                                "entry source did not complete; no top-level entries exist");
-                    }
-                    Object entry =
-                            entryModule
-                                    .readLocalSlot(name)
-                                    .orElseThrow(
-                                            () ->
-                                                    new IllegalArgumentException(
-                                                            "entry module has no top-level slot "
-                                                                    + name));
-                    if (!(entry instanceof ProtosClosureValue closure)
-                            || closure.nativeBody().isPresent()) {
-                        throw new IllegalArgumentException(
-                                "top-level slot " + name + " is not a source-backed Closure");
-                    }
-                    return process.callInExecutionHostForRuntime(
-                            () ->
-                                    ProtosRootTaskExecution.executeClosure(
-                                            closure, List.of(), entryActivation));
-                });
+        return carrier.call(() -> invokeResolved(resolveTopLevelClosure(name)));
+    }
+
+    /**
+     * Resolves the entry module's top-level slot {@code name} once and returns a reusable handle
+     * that invokes exactly the Closure selected now, without reading the slot again.
+     *
+     * <p>Complementary to {@link #invokeTopLevel}: later guest reassignment of the slot is not
+     * observed by the returned handle. Nothing is executed or parsed by preparation. Throws the same
+     * exceptions as {@link #invokeTopLevel} for an incomplete entry source, a closed session, or an
+     * absent or non-source-backed slot.
+     */
+    public PreparedTopLevel prepareTopLevel(String name) throws IOException {
+        Objects.requireNonNull(name, "name");
+        return carrier.call(() -> new PreparedTopLevel(resolveTopLevelClosure(name)));
+    }
+
+    /**
+     * A no-argument top-level Closure resolved by {@link #prepareTopLevel}. It is tied to its owning
+     * session: it uses that session's carrier, Process, and Polyglot Context, owns no resources of
+     * its own, and cannot be invoked once the session is closed.
+     */
+    public final class PreparedTopLevel {
+        private final ProtosClosureValue closure;
+
+        private PreparedTopLevel(ProtosClosureValue closure) {
+            this.closure = closure;
+        }
+
+        /**
+         * Invokes the captured Closure with no arguments and returns its terminal outcome; guest
+         * failure is a {@code FAILED} outcome. Throws {@link IllegalStateException} when the owning
+         * session is closed.
+         */
+        public ProtosExecutionOutcome invoke() throws IOException {
+            return carrier.call(() -> invokeResolved(closure));
+        }
+    }
+
+    /** Carrier-only: the dynamic slot read and source-backed Closure validation. */
+    private ProtosClosureValue resolveTopLevelClosure(String name) {
+        requireOpen();
+        if (entryModule == null) {
+            throw new IllegalStateException(
+                    "entry source did not complete; no top-level entries exist");
+        }
+        Object entry =
+                entryModule
+                        .readLocalSlot(name)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "entry module has no top-level slot " + name));
+        if (!(entry instanceof ProtosClosureValue closure) || closure.nativeBody().isPresent()) {
+            throw new IllegalArgumentException(
+                    "top-level slot " + name + " is not a source-backed Closure");
+        }
+        return closure;
+    }
+
+    /** Carrier-only: runs a resolved Closure as a fresh RootActor-local task of this Process. */
+    private ProtosExecutionOutcome invokeResolved(ProtosClosureValue closure) {
+        requireOpen();
+        return process.callInExecutionHostForRuntime(
+                () -> ProtosRootTaskExecution.executeClosure(closure, List.of(), entryActivation));
+    }
+
+    private void requireOpen() {
+        if (closeStarted.get()) {
+            throw new IllegalStateException("standalone hosted session is closed");
+        }
     }
 
     /**
