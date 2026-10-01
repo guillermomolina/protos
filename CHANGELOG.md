@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.128-SNAPSHOT
+
+- `I077` (#751, PERF021 #748): expose a reusable standalone JVM embedding
+  session. The new `ProtosStandaloneHostedSession` opens one standalone source
+  file with the I076 standalone direct-file sequence and keeps the semantic
+  Process, its Process-scoped Polyglot Context (and therefore Engine and JIT
+  state) and the runtime host alive, so that `invokeTopLevel(name)` can invoke
+  an already-defined top-level Closure such as `run` repeatedly in that same
+  Process without reparsing source text. All guest operations, including open
+  and close, run on one long-lived dedicated carrier with the BUG008 stack
+  budget. `close()` requests Process termination, awaits terminal Process
+  completion and Context disposition, then closes the runtime host and module
+  resolver, and is idempotent. `ProtosStandaloneHostedExecution.executeFile`
+  is now implemented on the session and remains supported; it additionally
+  awaits terminal Process completion before closing. `ProtosRootTaskExecution`
+  gains `executeClosure` sharing its terminal-state mapping. No observable
+  Protos semantics or CLI behavior change and no benchmark policy is added.
+  Adds session embedding and lifecycle tests.
+
 ## 0.3.127-SNAPSHOT
 
 - `I076`: expose reusable standalone hosted execution for JVM embedding. The

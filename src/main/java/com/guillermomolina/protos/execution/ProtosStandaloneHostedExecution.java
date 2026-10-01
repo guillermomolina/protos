@@ -25,23 +25,21 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * Shared standalone hosted-execution authority for the CLI and JVM embedders.
  *
  * <p>It owns the standalone sequence Core bootstrap, standalone Process bootstrap, Process-scoped
  * Polyglot Context binding and canonical initial-module execution, together with the host
- * Environment/stream/UTF-8 provisioning that sequence needs. The supported embedding contract is
- * {@link #executeFile}. The remaining public members are the building blocks the CLI composes
- * around its own Session (it lives in another package); they are shared support, not an embedding
- * contract, and embedders should not need them.
+ * Environment/stream/UTF-8 provisioning that sequence needs. The supported embedding contracts are
+ * {@link #executeFile} (one-shot) and {@link ProtosStandaloneHostedSession} (reusable session,
+ * which {@code executeFile} itself is built on). The remaining public members are the building
+ * blocks the CLI composes around its own Session (it lives in another package); they are shared
+ * support, not an embedding contract, and embedders should not need them.
  *
  * <p>Embedded execution provisions no CLI conveniences: there is no {@code print} binding.
  * A source communicates its result through its terminal expression, which is carried by the
@@ -67,10 +65,10 @@ public final class ProtosStandaloneHostedExecution {
      *
      * <p>The file is the entry module: explicit {@code ./} and {@code ../} specifiers resolve
      * relative to it inside its directory tree, and Core and {@code std:} modules resolve from
-     * {@code coreRoot}. The call runs the guest on a dedicated carrier thread, blocks until the
-     * Process terminates, and closes the Process, its Polyglot Context and the runtime host before
-     * returning or throwing. Guest failure is reported as a {@code FAILED} outcome; unreadable
-     * sources, unparsable sources and host failures surface as exceptions.
+     * {@code coreRoot}. The call runs the guest on a dedicated carrier thread and closes the
+     * Process, its Polyglot Context and the runtime host before returning or throwing. Guest
+     * failure is reported as a {@code FAILED} outcome; unreadable sources, unparsable sources and
+     * host failures surface as exceptions.
      *
      * @param coreRoot the {@code protos/lib/core} directory of the Protos distribution
      * @param sourceFile the entry source file, read as UTF-8
@@ -87,42 +85,11 @@ public final class ProtosStandaloneHostedExecution {
             OutputStream out,
             OutputStream err)
             throws IOException {
-        Objects.requireNonNull(coreRoot, "coreRoot");
-        Objects.requireNonNull(sourceFile, "sourceFile");
-        Objects.requireNonNull(applicationArguments, "applicationArguments");
-        Objects.requireNonNull(in, "in");
-        Objects.requireNonNull(out, "out");
-        Objects.requireNonNull(err, "err");
-
-        List<String> arguments = List.copyOf(applicationArguments);
-        ProtosExecutionOutcome[] outcome = new ProtosExecutionOutcome[1];
-        Throwable[] failure = new Throwable[1];
-        Thread carrier =
-                new Thread(
-                        null,
-                        () -> {
-                            try {
-                                outcome[0] =
-                                        executeFileOnCurrentThread(
-                                                coreRoot, sourceFile, arguments, in, out, err);
-                            } catch (Throwable thrown) {
-                                failure[0] = thrown;
-                            }
-                        },
-                        "protos-embedded-guest",
-                        GUEST_CALL_STACK_SIZE_BYTES);
-        carrier.start();
-        try {
-            carrier.join();
-        } catch (InterruptedException interrupted) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException(
-                    "embedded Protos execution was interrupted", interrupted);
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(
+                        coreRoot, sourceFile, applicationArguments, in, out, err)) {
+            return session.initialOutcome();
         }
-        if (failure[0] instanceof IOException io) throw io;
-        if (failure[0] instanceof RuntimeException runtime) throw runtime;
-        if (failure[0] instanceof Error error) throw error;
-        return outcome[0];
     }
 
     /** Convenience form: no application arguments, empty stdin, discarded stdout and stderr. */
@@ -135,40 +102,6 @@ public final class ProtosStandaloneHostedExecution {
                 InputStream.nullInputStream(),
                 OutputStream.nullOutputStream(),
                 OutputStream.nullOutputStream());
-    }
-
-    private static ProtosExecutionOutcome executeFileOnCurrentThread(
-            Path coreRoot,
-            Path sourceFile,
-            List<String> applicationArguments,
-            InputStream in,
-            OutputStream out,
-            OutputStream err)
-            throws IOException {
-        Path sourcePath = sourceFile.toAbsolutePath().normalize();
-        String characters = Files.readString(sourcePath, StandardCharsets.UTF_8);
-        try (ProtosDirectFileModuleResolver resolver =
-                new ProtosDirectFileModuleResolver(
-                        sourcePath,
-                        characters,
-                        new ProtosStandardLibraryModuleResolver(coreRoot.getParent()))) {
-            ProtosStandaloneProcessBootstrap.Result bootstrap =
-                    bootstrapProcess(
-                            coreRoot,
-                            resolver,
-                            applicationArguments,
-                            readableBackend(in),
-                            writableBackend(out),
-                            writableBackend(err));
-            ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
-            try {
-                bindProcess(bootstrap, runtimeHost, in, out, err);
-                return executeDirectFile(resolver, bootstrap.activation());
-            } finally {
-                bootstrap.process().requestTerminationForRuntime();
-                runtimeHost.close();
-            }
-        }
     }
 
     /** Bootstraps Core and one standalone Process whose standard streams use UTF-8. */

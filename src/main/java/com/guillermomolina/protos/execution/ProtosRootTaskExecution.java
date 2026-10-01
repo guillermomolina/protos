@@ -18,10 +18,12 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.RootCallTarget;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -44,16 +46,34 @@ public final class ProtosRootTaskExecution {
                     "cooperative RootTask execution requires a semantic Bytecode root");
         }
 
+        return runRootTask(
+                activation,
+                task -> ProtosBytecodeTaskExecution.execute(task, target, activation));
+    }
+
+    /**
+     * Invokes an already-materialized source-backed Closure as a RootActor-local cooperative root
+     * task with the same terminal-state mapping as {@link #execute(CallTarget, ProtosActivation)}.
+     *
+     * <p>The Closure must belong to the Polyglot Context the caller is entered in. {@code creator}
+     * supplies the Prelude, module state and execution domain of the invocation.
+     */
+    public static ProtosExecutionOutcome executeClosure(
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation creator) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(creator, "creator");
+        return runRootTask(
+                creator,
+                task -> ProtosClosureInvoker.executeInTaskForRuntime(closure, supplied, creator, task));
+    }
+
+    private static ProtosExecutionOutcome runRootTask(
+            ProtosActivation activation, ProtosTask.Continuation continuation) {
         ProtosActorExecutionDomain domain = activation.executionDomain();
-        ProtosTask rootTask =
-                domain.createTask(
-                        null,
-                        null,
-                        task ->
-                                ProtosBytecodeTaskExecution.execute(
-                                        task,
-                                        target,
-                                        activation));
+        ProtosTask rootTask = domain.createTask(null, null, continuation);
 
         domain.dispatchUntilTerminal(rootTask, () -> false);
 
