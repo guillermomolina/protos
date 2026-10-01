@@ -73,7 +73,8 @@ public final class ProtosRootTaskExecution {
     private static ProtosExecutionOutcome runRootTask(
             ProtosActivation activation, ProtosTask.Continuation continuation) {
         ProtosActorExecutionDomain domain = activation.executionDomain();
-        ProtosTask rootTask = domain.createTask(null, null, continuation);
+        // The first segment runs directly; only later runnable re-entries use the Actor queue.
+        ProtosTask rootTask = domain.runFreshRootTaskDirectly(continuation);
 
         domain.dispatchUntilTerminal(rootTask, () -> false);
 

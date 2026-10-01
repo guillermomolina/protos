@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.130-SNAPSHOT
+
+- `PERF025-A` (#758): direct-dispatch the first segment of a fresh RootTask
+  without changing observable Protos semantics. `ProtosRootTaskExecution` now
+  starts its root Task through the new
+  `ProtosActorExecutionDomain.runFreshRootTaskDirectly(...)`, which registers
+  the Task exactly as `createTask(...)` does and runs its first segment via
+  `beginDirectDispatch()` instead of an initial runnable-queue
+  enqueue/dequeue and scheduler wakeup. A Task created on an already
+  TERMINATING Actor still records cancellation before the first segment, so
+  it is cancelled at the first-execution boundary without running ordinary
+  code. Suspension, resumption and re-runnable re-entry continue through the
+  ordinary Actor queue, and terminal mapping is unchanged. Adds focused domain
+  regressions for direct start, cancellation, suspend/resume, TERMINATING and
+  TERMINATED Actors.
+
 ## 0.3.129-SNAPSHOT
 
 - `PERF022` (#752): reduce pathological ordinary Java test-suite runtime

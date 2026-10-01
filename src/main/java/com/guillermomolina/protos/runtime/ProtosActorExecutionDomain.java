@@ -66,7 +66,42 @@ public final class ProtosActorExecutionDomain {
             ProtosTask parent, Object associatedFuture, ProtosTask.Continuation continuation) {
         Objects.requireNonNull(continuation, "continuation");
         ProtosTask task = new ProtosTask(this, parent, associatedFuture, continuation);
-        boolean cancelOnStart;
+        boolean cancelOnStart = registerNewTask(task, parent);
+        enqueue(task);
+        if (cancelOnStart) {
+            task.requestCancellation();
+        }
+        return task;
+    }
+
+    /**
+     * Registers a fresh parentless Task and runs its first segment directly on the calling
+     * (Actor-owning) execution path, without the runnable-queue round-trip of
+     * {@link #createTask(ProtosTask, Object, ProtosTask.Continuation)}.
+     *
+     * <p>Registration, ownership and TERMINATED rejection are identical to {@code createTask}. When
+     * the Actor is already TERMINATING, cancellation is recorded before the first segment starts, so
+     * {@link ProtosTask#runContinuation()} observes it at the first-execution boundary instead of
+     * running the ordinary continuation. If the segment suspends or becomes runnable again, the
+     * Task re-enters the ordinary queue exactly as a queue-dispatched Task would. The caller
+     * continues with {@link #dispatchUntilTerminal} for any remaining work.
+     */
+    public ProtosTask runFreshRootTaskDirectly(ProtosTask.Continuation continuation) {
+        Objects.requireNonNull(continuation, "continuation");
+        ProtosTask task = new ProtosTask(this, null, null, continuation);
+        boolean cancelOnStart = registerNewTask(task, null);
+        if (cancelOnStart) {
+            task.requestCancellation();
+        }
+        if (!task.beginDirectDispatch()) {
+            throw new IllegalStateException("fresh root task could not begin direct dispatch");
+        }
+        task.runContinuation();
+        return task;
+    }
+
+    /** @return whether the owning Actor is already TERMINATING, so the Task must start cancelled */
+    private boolean registerNewTask(ProtosTask task, ProtosTask parent) {
         synchronized (this) {
             if (parent != null && parent.owner() != this) {
                 throw new IllegalArgumentException("structured parent belongs to another Actor domain");
@@ -79,14 +114,9 @@ public final class ProtosActorExecutionDomain {
                 parent.addChild(task);
             }
             liveTasks.add(task);
-            cancelOnStart = ownerActor != null
+            return ownerActor != null
                     && ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING;
         }
-        enqueue(task);
-        if (cancelOnStart) {
-            task.requestCancellation();
-        }
-        return task;
     }
 
     public ProtosTask createTask(Object associatedFuture, ProtosTask.Continuation continuation) {

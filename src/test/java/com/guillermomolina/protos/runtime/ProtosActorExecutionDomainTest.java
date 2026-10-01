@@ -362,6 +362,114 @@ final class ProtosActorExecutionDomainTest {
         assertEquals(ProtosTask.State.RUNNABLE, task.state());
     }
 
+    @Test
+    void freshRootTaskRunsFirstSegmentDirectlyWithoutQueueRoundTrip() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        AtomicInteger wakeups = new AtomicInteger();
+        domain.bindSchedulerWakeup(wakeups::incrementAndGet);
+        AtomicInteger queuedDuringSegment = new AtomicInteger(-1);
+
+        ProtosTask task = domain.runFreshRootTaskDirectly(current -> {
+            queuedDuringSegment.set(domain.runnableCount());
+            assertEquals(ProtosTask.State.RUNNING, current.state());
+            assertEquals(1, domain.liveTaskCount());
+            current.complete("done");
+        });
+
+        assertEquals(0, queuedDuringSegment.get());
+        assertEquals(0, wakeups.get());
+        assertEquals(0, domain.runnableCount());
+        assertEquals(0, domain.liveTaskCount());
+        assertSame(domain, task.owner());
+        assertEquals(ProtosTask.State.COMPLETED, task.state());
+        assertEquals("done", task.result().orElseThrow());
+    }
+
+    @Test
+    void directRootTaskCancellationReachesTerminalState() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+
+        ProtosTask cancelled = domain.runFreshRootTaskDirectly(current -> {
+            assertTrue(current.requestCancellation());
+            assertTrue(current.observeCancellation());
+        });
+
+        assertEquals(ProtosTask.State.CANCELLED, cancelled.state());
+        assertEquals(0, domain.liveTaskCount());
+        assertEquals(0, domain.runnableCount());
+    }
+
+    @Test
+    void directRootTaskSuspensionResumesThroughOrdinaryQueue() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        Dependency dependency = new Dependency();
+        AtomicInteger segments = new AtomicInteger();
+
+        ProtosTask task = domain.runFreshRootTaskDirectly(current -> {
+            if (segments.getAndIncrement() == 0) {
+                current.suspend(dependency);
+            } else {
+                current.complete("resumed");
+            }
+        });
+
+        assertEquals(ProtosTask.State.SUSPENDED, task.state());
+        assertEquals(1, domain.liveTaskCount());
+        assertEquals(0, domain.runnableCount());
+
+        assertTrue(task.resume(dependency));
+        assertEquals(1, domain.runnableCount());
+
+        domain.dispatchUntilTerminal(task, () -> false);
+        assertEquals(ProtosTask.State.COMPLETED, task.state());
+        assertEquals("resumed", task.result().orElseThrow());
+        assertEquals(2, segments.get());
+    }
+
+    @Test
+    void directRootTaskStartedOnTerminatingActorIsCancelledBeforeFirstInstruction() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        ProtosActor actor =
+                new ProtosActor(
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze(),
+                        domain,
+                        new ProtosActorModuleState(),
+                        1);
+        // A live suspended Task keeps the Actor TERMINATING instead of completing termination.
+        ProtosTask holder = domain.createTask(null, current -> current.suspend(new Dependency()));
+        domain.dispatchOne();
+        assertTrue(actor.beginTermination());
+        AtomicInteger ordinarySegments = new AtomicInteger();
+
+        ProtosTask root =
+                domain.runFreshRootTaskDirectly(current -> ordinarySegments.incrementAndGet());
+
+        assertEquals(0, ordinarySegments.get());
+        assertEquals(ProtosTask.State.CANCELLED, root.state());
+        assertEquals(ProtosTask.CancellationPhase.TERMINAL, root.cancellationPhase());
+        // Only the woken holder is queued; the root Task never entered the runnable queue.
+        assertEquals(1, domain.runnableCount());
+        assertSame(holder, domain.nextRunnableForTesting().orElseThrow());
+    }
+
+    @Test
+    void directRootTaskIsRejectedOnTerminatedActor() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        ProtosActor actor =
+                new ProtosActor(
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze(),
+                        domain,
+                        new ProtosActorModuleState(),
+                        1);
+        actor.requestTerminationForRuntime();
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, actor.lifecycleState());
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> domain.runFreshRootTaskDirectly(current -> current.complete(null)));
+        assertEquals(0, domain.liveTaskCount());
+    }
+
     private static void await(CountDownLatch latch, Runnable action) {
         try {
             latch.await();
