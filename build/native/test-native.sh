@@ -16,7 +16,16 @@ help_log="${tmp_dir}/help.log"
 smoke_log="${tmp_dir}/smoke.log"
 test_tool_log="${tmp_dir}/test-tool.log"
 jit_log="${tmp_dir}/forced-jit.log"
+jit_source="${tmp_dir}/forced-jit.protos"
 dap_log="${tmp_dir}/dap.log"
+
+{
+    echo 'x: 1'
+    echo 'f: () => { x }'
+    for ((jit_iteration = 0; jit_iteration < 32; jit_iteration++)); do
+        echo 'f()'
+    done
+} >"${jit_source}"
 
 PROTOS_HOME="${root}" \
     "${native_bin}" \
@@ -72,10 +81,13 @@ PROTOS_HOME="${root}" \
     "${native_bin}" \
     -Dpolyglot.engine.AllowExperimentalOptions=true \
     -Dpolyglot.engine.BackgroundCompilation=false \
-    -Dpolyglot.engine.CompileImmediately=true \
+    -Dpolyglot.engine.MultiTier=false \
+    -Dpolyglot.engine.DynamicCompilationThresholds=false \
+    -Dpolyglot.engine.SingleTierCompilationThreshold=8 \
+    -Dpolyglot.engine.MinInvokeThreshold=1 \
     -Dpolyglot.engine.TraceCompilation=true \
     -Dpolyglot.engine.CompilationFailureAction=Print \
-    -e '1' \
+    -e "$(cat "${jit_source}")" \
     >"${jit_log}" 2>&1
 jit_status=$?
 
