@@ -8,7 +8,7 @@
 
 # IDE
 .idea/
-.vscode/
+# .vscode/
 *.iml
 
 # Java
