@@ -172,7 +172,7 @@ final class ProtosTomlEncoderModuleTest {
                         """
                         node: TOML.integer(7)
                         remaining: 32
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             node = TOML.array(node)
                             remaining = remaining - 1
                         })
@@ -181,7 +181,7 @@ final class ProtosTomlEncoderModuleTest {
                         decoded: parsed.value["deep"]
 
                         remaining = 32
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             (decoded.kind === "array").ifFalse(() => {
                                 Error().signal()
                             })
@@ -204,7 +204,7 @@ final class ProtosTomlEncoderModuleTest {
                         """
                         node: TOML.integer(9)
                         remaining: 32
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             node = TOML.table("a", node)
                             remaining = remaining - 1
                         })
@@ -213,7 +213,7 @@ final class ProtosTomlEncoderModuleTest {
                         decoded: parsed.value["deep"]
 
                         remaining = 32
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             (decoded.kind === "table").ifFalse(() => {
                                 Error().signal()
                             })

@@ -39,7 +39,7 @@ final class ProtosTomlParserPathRegressionTest {
                         root: TOML.parse(input)
                         node: root
                         remaining: 192
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             (node.kind === "table").ifFalse(() => { Error().signal() })
                             node = node.value["a"]
                             remaining = remaining - 1
@@ -63,7 +63,7 @@ final class ProtosTomlParserPathRegressionTest {
                         root: TOML.parse(input)
                         node: root
                         remaining: 128
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             (node.kind === "table").ifFalse(() => { Error().signal() })
                             node = node.value["a"]
                             remaining = remaining - 1

@@ -18,7 +18,7 @@
 work: () => {
     result: 7
     rounds: 0
-    (() => { rounds < 16 }).while() {
+    (() => { rounds < 16 }).whileTrue() {
         result = (result * 3 + 5).mod(10007)
         rounds = rounds + 1
     }
@@ -28,7 +28,7 @@ work: () => {
 run: () => {
     total: 0
     iteration: 0
-    (() => { iteration < 250 }).while() {
+    (() => { iteration < 250 }).whileTrue() {
         total = total + work.future().value()
         iteration = iteration + 1
     }

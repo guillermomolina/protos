@@ -28,7 +28,7 @@ tests: [
             }
             Error.handle(
                 () => {
-                    condition.while((required) => {
+                    condition.whileTrue((required) => {
                         bodyCalls = bodyCalls + 1
                     })
                     null
@@ -56,7 +56,7 @@ tests: [
                         conditionCalls = conditionCalls + 1
                         true
                     }
-                    condition.while(() => {
+                    condition.whileTrue(() => {
                         bodyCalls = bodyCalls + 1
                         expected.signal()
                         null
@@ -84,7 +84,7 @@ tests: [
                     conditionCalls = conditionCalls + 1
                     true
                 }
-                condition.while(() => {
+                condition.whileTrue(() => {
                     bodyCalls = bodyCalls + 1
                     ^marker
                     null
@@ -107,7 +107,7 @@ tests: [
             condition: (required) => false
             Error.handle(
                 () => {
-                    condition.while(() => {
+                    condition.whileTrue(() => {
                         bodyCalls = bodyCalls + 1
                     })
                     null
@@ -135,7 +135,7 @@ tests: [
                         expected.signal()
                         true
                     }
-                    condition.while(() => {
+                    condition.whileTrue(() => {
                         bodyCalls = bodyCalls + 1
                     })
                     afterLoop = afterLoop + 1
@@ -162,7 +162,7 @@ tests: [
                     ^marker
                     true
                 }
-                condition.while(() => {
+                condition.whileTrue(() => {
                     bodyCalls = bodyCalls + 1
                 })
                 afterLoop = afterLoop + 1
@@ -179,7 +179,7 @@ tests: [
     Test("while unreachable body binding failure not preflighted", () => {
         tool009LegacyCase: () => {
             bodyCalls: 0
-            result: (() => false).while((required) => {
+            result: (() => false).whileTrue((required) => {
                 bodyCalls = bodyCalls + 1
             })
             (result === null) &&

@@ -44,7 +44,7 @@ varuint: (value) => {
     result: emptyBytes()
     remaining: value
 
-    (() => remaining >= 128).while() {
+    (() => remaining >= 128).whileTrue() {
         result.add(128 + remaining.mod(128))
         remaining = remaining.div(128)
     }
@@ -230,7 +230,7 @@ collectRecords: (capturedFilesystem) => {
     recordCount: 0
     rootManifest: false
 
-    (() => cursor < pendingCount).while() {
+    (() => cursor < pendingCount).whileTrue() {
         frame: pending[cursor]
         cursor = cursor + 1
 

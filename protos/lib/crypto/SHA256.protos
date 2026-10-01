@@ -94,7 +94,7 @@ digest: (bytes) => {
         result: 0
         remaining: 16
 
-        (() => remaining > 0).while() {
+        (() => remaining > 0).whileTrue() {
             aPair: a.mod(4)
             bPair: b.mod(4)
             cPair: c.mod(4)

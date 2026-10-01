@@ -48,7 +48,7 @@ validateNamespacedId: (value) => {
 
     segmentStart: true
     index: 0
-    (() => index < size).while() {
+    (() => index < size).whileTrue() {
         octet: source[index]
 
         (octet == 47).ifTrue(() => {
@@ -233,7 +233,7 @@ flatten: (root, leafProjection) => {
 
         (kindValue == "suite").ifTrue(() => {
             index: 0
-            (() => index < childrenValue.size()).while() {
+            (() => index < childrenValue.size()).whileTrue() {
                 visit(childrenValue[index])
                 index = index + 1
             }

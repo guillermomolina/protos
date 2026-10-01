@@ -165,12 +165,12 @@ does not introduce special `ifTrue` grammar.
 It is ordinary message/call syntax with a trailing Closure argument. Likewise:
 
 ```protos
-condition.while() {
+condition.whileTrue() {
     work()
 }
 ```
 
-is an ordinary `while` message send whose body argument is the trailing
+is an ordinary `whileTrue` message send whose body argument is the trailing
 Closure.
 
 That distinction matters because the normal language rules still apply:
@@ -184,7 +184,7 @@ That distinction matters because the normal language rules still apply:
 The selector spelling describes a standard protocol. It is not syntax-level
 authority that bypasses lookup.
 
-## `while` is a protocol on a condition Closure
+## `whileTrue` is a protocol on a condition Closure
 
 A loop is written by making the changing condition itself a Closure:
 
@@ -193,7 +193,7 @@ i: 0
 
 condition: () => i < 4
 
-condition.while() {
+condition.whileTrue() {
     i = i + 1
 }
 
@@ -203,7 +203,7 @@ i
 The condition captures `i` by reference, so every activation observes its
 current value.
 
-For the standard inherited `Object.while` behavior, the observable cycle is:
+For the standard inherited `Object.whileTrue` behavior, the observable cycle is:
 
 ```text
 validate condition Closure and body Closure
@@ -225,7 +225,7 @@ This is a **pre-test** loop: the condition runs before the first possible body
 activation and before every later iteration.
 
 If the first condition result is `false`, the body runs zero times and the
-whole `while` operation returns canonical `null`.
+whole `whileTrue` operation returns canonical `null`.
 
 ## Why the receiver is a Closure
 
@@ -237,7 +237,7 @@ keepGoing: () => {
     index < items.size()
 }
 
-keepGoing.while() {
+keepGoing.whileTrue() {
     consume(items[index])
     index = index + 1
 }
@@ -250,15 +250,15 @@ That choice connects loops directly to the Closure model from chapter 3:
 - each activation gets ordinary Closure call semantics;
 - no hidden mutable loop-condition object is required.
 
-Thinking of `while` as "repeatedly invoke this condition Closure" is much closer
+Thinking of `whileTrue` as "repeatedly invoke this condition Closure" is much closer
 to Protos semantics than thinking of it as a keyword that owns an embedded
 expression.
 
-## Standard `while` has a strict contract
+## Standard `whileTrue` has a strict contract
 
 The standard behavior is Closure-specific.
 
-Before iteration begins, the selected standard `while` behavior requires:
+Before iteration begins, the selected standard `whileTrue` behavior requires:
 
 1. the original receiver to be a semantic Closure;
 2. exactly one argument;
@@ -311,7 +311,7 @@ The normal value returned by each reached body activation is ignored:
 ```protos
 i: 0
 
-result: (() => i < 1).while() {
+result: (() => i < 1).whileTrue() {
     i = i + 1
     99
 }
@@ -321,27 +321,27 @@ result === null
 
 The body can still produce effects, update captured state, call other code, or
 signal control transfer. Its **normal value**, however, is not accumulated and
-is not the result of `while`.
+is not the result of `whileTrue`.
 
 Normal loop completion always yields canonical `null`.
 
 ## Ordinary lookup still matters
 
-`while`, `ifTrue`, `ifFalse`, `and`, and `or` are protocol selectors reached
+`whileTrue`, `ifTrue`, `ifFalse`, `and`, and `or` are protocol selectors reached
 through ordinary lookup. Their names are not reserved control-flow syntax that
 automatically wins over object behavior.
 
-For standard `while`, Closure values delegate to `Object`, where the standard
+For standard `whileTrue`, Closure values delegate to `Object`, where the standard
 selector is installed. A nearer slot can shadow an inherited selector according
 to the ordinary lookup rules.
 
 This means two ideas must remain separate:
 
 ```text
-selector name "while"
+selector name "whileTrue"
     ordinary message name
 
-standard Object.while behavior
+standard Object.whileTrue behavior
     the Closure-specific Core protocol described in this chapter
 ```
 
@@ -359,7 +359,7 @@ receiver contract determine what happens.
 The loop does not create a second control-transfer universe.
 
 If a reached condition or body signals an Error, that Error propagates through
-`while` to the surrounding dynamic handling context.
+`whileTrue` to the surrounding dynamic handling context.
 
 Likewise, a valid non-local return from a reached callback continues toward its
 captured return home:
@@ -368,7 +368,7 @@ captured return home:
 findFirst: (limit) => {
     i: 0
 
-    (() => i < limit).while() {
+    (() => i < limit).whileTrue() {
         (i == 3).ifTrue() {
             ^i
         }
@@ -384,7 +384,7 @@ When the `^i` is reached, control does not perform another body activation or
 another condition check first. The non-local return keeps its ordinary meaning
 from the Closure model.
 
-Effects completed before the transfer remain completed; `while` does not roll
+Effects completed before the transfer remain completed; `whileTrue` does not roll
 them back.
 
 ## Suspension composes without replaying completed effects
@@ -396,7 +396,7 @@ same semantic phase. Already completed callback effects are not supposed to be
 duplicated merely because execution had to resume.
 
 From a programmer's point of view, this means asynchronous suspension does not
-require a different `while` syntax or a second loop API. The same protocol
+require a different loop syntax or a second loop API. The same protocol
 composes with the task runtime.
 
 The exact task and Future ownership rules are covered by the concurrency
@@ -407,14 +407,14 @@ and structured concurrency.
 
 One subtle boundary is worth knowing before that later chapter.
 
-If a reached body normally returns a Future, `while` does **not** turn that
+If a reached body normally returns a Future, `whileTrue` does **not** turn that
 normal return into an implicit `await`:
 
 ```text
 body() normally returns Future
         |
         v
-while ignores that body value
+whileTrue ignores that body value
         |
         v
 next condition activation
@@ -441,7 +441,7 @@ Closure before the first condition activation. But code inside that Closure is
 still lazy:
 
 ```protos
-(() => false).while() {
+(() => false).whileTrue() {
     missingBinding
 }
 ```
@@ -468,7 +468,7 @@ created.
 4. Use `not()` or unary `!` for strict canonical-Boolean negation.
 5. Use `and` and `or` for lazy Boolean short-circuiting, and return an actual
    Boolean from a selected callback.
-6. Model a `while` condition as a zero-argument Closure that recomputes a
+6. Model a `whileTrue` condition as a zero-argument Closure that recomputes a
    canonical Boolean every time it is invoked.
 7. Do not rely on truthiness or implicit Future awaiting for loop decisions.
 8. Treat normal body values as discarded; normal loop completion is `null`.
@@ -521,7 +521,7 @@ For exact behavior, consult:
   for canonical Booleans and the standard `not`, `ifTrue`, `ifFalse`,
   `ifTrueIfFalse`, `and`, and `or` protocols;
 - [`../../spec/semantics/CALLABLES.md`](../../spec/semantics/CALLABLES.md) for
-  Closure receiver domains, ordinary `Object.while` placement, lookup,
+  Closure receiver domains, ordinary `Object.whileTrue` placement, lookup,
   extraction, shadowing, and activation;
 - [`../../spec/PROTOS_GRAMMAR.md`](../../spec/PROTOS_GRAMMAR.md) for ordinary
   call/message syntax and trailing Closures;

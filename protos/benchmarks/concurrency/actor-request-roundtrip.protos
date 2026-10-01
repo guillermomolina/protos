@@ -21,7 +21,7 @@ worker.request("size").value()
 run: () => {
     total: 0
     iteration: 0
-    (() => { iteration < 500 }).while() {
+    (() => { iteration < 500 }).whileTrue() {
         total = total + worker.request("size").value()
         iteration = iteration + 1
     }

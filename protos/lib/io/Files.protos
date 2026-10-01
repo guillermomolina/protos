@@ -115,7 +115,7 @@ writeAllBytes: (filesystem, path, bytes) => {
 
             offset: 0
             snapshotSize: snapshot.size()
-            (() => offset < snapshotSize).while(() => {
+            (() => offset < snapshotSize).whileTrue(() => {
                 remaining: snapshotSize - offset
                 chunkSize: 65536
                 (remaining < chunkSize).ifTrue(() => {
@@ -124,7 +124,7 @@ writeAllBytes: (filesystem, path, bytes) => {
 
                 chunk: Encoding.UTF8.encode("")
                 chunkIndex: 0
-                (() => chunkIndex < chunkSize).while(() => {
+                (() => chunkIndex < chunkSize).whileTrue(() => {
                     chunk.add(snapshot[offset + chunkIndex])
                     chunkIndex = chunkIndex + 1
                 })

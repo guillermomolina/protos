@@ -250,7 +250,7 @@ resourceKeyValue: (key) => {
 
     segmentStart: true
     index: 0
-    (() => index < size).while() {
+    (() => index < size).whileTrue() {
         octet: source[index]
 
         (octet == 47).ifTrue(() => {

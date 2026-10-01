@@ -134,7 +134,7 @@ final class ProtosTestToolFileSelectionMainAdoptionTest {
 
         assertTrue(
                 source.contains(
-                        "(() => suiteIndex < executionSuites.size()).while()"));
+                        "(() => suiteIndex < executionSuites.size()).whileTrue()"));
 
         assertTrue(
                 source.contains(

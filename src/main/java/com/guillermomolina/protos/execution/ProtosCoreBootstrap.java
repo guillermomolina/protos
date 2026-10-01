@@ -467,7 +467,7 @@ public final class ProtosCoreBootstrap {
                         "parallel",
                         "parent",
                         "ensure",
-                        "while",
+                        "whileTrue",
                         "caseOf",
                         "init",
                         "==",

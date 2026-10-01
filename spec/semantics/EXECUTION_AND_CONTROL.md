@@ -438,27 +438,32 @@ users.map((user) => {
 })
 ```
 
-### Standard Closure `while` operation
+### Standard Closure `whileTrue` operation
 
 Core v0.1 exposes pre-test looping through the ordinary message:
 
 ```text
-condition.while(body)
+condition.whileTrue(body)
 ```
 
 The standard behavior requires the original receiver `condition` to be a
 semantic Closure, requires exactly one argument, and requires `body` to be a
-semantic Closure. `CALLABLES.md` owns the ordinary `Object.while` slot placement,
+semantic Closure. `CALLABLES.md` owns the ordinary `Object.whileTrue` slot placement,
 Closure-family receiver domain, extraction, shadowing, and invocation-role
 consequences. `../PROTOS_GRAMMAR.md` owns only the ordinary message and
-trailing-Closure syntax; `while` introduces no dedicated grammar production or
+trailing-Closure syntax; `whileTrue` introduces no dedicated grammar production or
 reserved word.
+
+`whileTrue` is the only standard pre-test loop selector. Core v0.1 defines no
+standard `while` selector or alias and no standard inverse `whileFalse`
+selector. Those names remain ordinary member names that programs may define
+under the ordinary slot rules without acquiring the standard loop behavior.
 
 The common trailing-Closure spelling is therefore ordinary syntax for the same
 one-argument message:
 
 ```js
-(() => i < 10).while() {
+(() => i < 10).whileTrue() {
     i = i + 1
 }
 ```
@@ -484,7 +489,7 @@ After successful validation the operation repeats this exact pre-test algorithm:
    positional arguments, using its ordinary Closure activation, capture,
    receiver/`methodHome`, parameter-binding, return-home, Error, and explicit
    suspension semantics. This activation executes the validated Closure itself;
-   the standard `while` operation does not perform a new polymorphic `call` lookup
+   the standard `whileTrue` operation does not perform a new polymorphic `call` lookup
    on the Closure object in place of that Closure activation.
 2. If the condition activation completes normally with exact canonical `false`,
    terminate the loop normally without activating `body` for that test.
@@ -499,31 +504,31 @@ After successful validation the operation repeats this exact pre-test algorithm:
    that test. There is no truthiness, coercion, implicit invocation, Boolean
    delegation test, implicit awaiting, or Future adoption.
 
-The complete `while` invocation returns canonical `null` on normal termination,
+The complete `whileTrue` invocation returns canonical `null` on normal termination,
 including the zero-iteration case and regardless of the normal values produced by
 any completed body activations. Body results are never accumulated, selected, or
 returned by the standard loop.
 
 A normal Future value has no loop-specific meaning. If `condition` normally
 returns a Future, that object is a non-Boolean condition result and the standard
-invalid-result `Error` above is signaled; `while` does not await, adopt, flatten,
+invalid-result `Error` above is signaled; `whileTrue` does not await, adopt, flatten,
 or cancel it. If `body` normally returns a Future, that result is ignored exactly
-like any other body result; `while` does not implicitly observe, adopt, flatten,
+like any other body result; `whileTrue` does not implicitly observe, adopt, flatten,
 or cancel it. Existing structured-ownership rules for work created while either Closure
 activation executes remain owned by `../concurrency/FUTURES_AND_TASKS.md`. Those
 synchronous callback activations do not establish new structured execution scopes
-of their own merely by being invoked by `while`.
+of their own merely by being invoked by `whileTrue`.
 
 ### Control transfer, suspension, and cancellation
 
-`while` introduces no handler, cleanup scope, return home, task, Future,
+`whileTrue` introduces no handler, cleanup scope, return home, task, Future,
 scheduler boundary, cancellation mask, or hidden suspension/checkpoint of its
 own.
 
 If condition or body execution signals an Error, performs a valid non-local
 return, encounters `InvalidReturn`, begins cooperative cancellation unwind, or
 otherwise leaves by a non-normal control transfer, that transfer propagates
-unchanged through the `while` invocation. No later condition/body activation is
+unchanged through the `whileTrue` invocation. No later condition/body activation is
 started by that invocation, and effects already completed are not rolled back.
 
 If condition or body explicitly suspends through an operation whose existing
@@ -537,7 +542,7 @@ implementation machinery occurred.
 Cooperative cancellation is observed only at the ordinary cancellation
 boundaries reached by the executing code. The standard loop adds no polling or
 preemption point simply because another iteration begins. Once cancellation is
-honored, ordinary unwind/`ensure`/structured-child rules apply; `while` neither
+honored, ordinary unwind/`ensure`/structured-child rules apply; `whileTrue` neither
 shields nor re-delivers that cancellation.
 
 These rules define observable loop semantics, not a required implementation
@@ -549,7 +554,7 @@ remain identical.
 
 A future source form such as `while (...) { ... }` would require a separate
 normative grammar decision. It is not Core v0.1 syntax and cannot alter the
-ordinary `condition.while(body)` protocol defined here.
+ordinary `condition.whileTrue(body)` protocol defined here.
 
 ## Resource Cleanup and `ensure`
 

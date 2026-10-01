@@ -38,7 +38,7 @@ final class ProtosTomlParserNestedValueRegressionTest {
                         root: TOML.parse(input)
                         node: root.value["value"]
                         remaining: 192
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             (node.kind === "array").ifFalse(() => { Error().signal() })
                             (node.value.size() == 1).ifFalse(() => { Error().signal() })
                             node = node.value[0]
@@ -65,7 +65,7 @@ final class ProtosTomlParserNestedValueRegressionTest {
                         root: TOML.parse(input)
                         node: root.value["value"]
                         remaining: 96
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             (node.kind === "table").ifFalse(() => { Error().signal() })
                             node = node.value["a"]
                             remaining = remaining - 1

@@ -6156,7 +6156,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         /*
          * I072 Phase E: a stable canonical structured native send (Object.ensure,
-         * Error.handle, Object.while, Boolean callbacks) reuses the exact Phase A
+         * Error.handle, Object.whileTrue, Boolean callbacks) reuses the exact Phase A
          * lookupGuarded/Assumption contract that guardedOrdinarySend already
          * establishes for source-backed Closures. createGuardedStructuredSend
          * runs the authoritative D013 lookup and classifies the selected value
@@ -6286,7 +6286,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             } else if (ProtosStandardErrorProtocol.isCanonicalStandardHandleSelection(
                     closure, home, caller)) {
                 kind = GuardedStructuredKind.ERROR_HANDLE;
-            } else if (ProtosStandardObjectProtocol.isCanonicalStandardWhileSelection(
+            } else if (ProtosStandardObjectProtocol.isCanonicalStandardWhileTrueSelection(
                     closure, home)) {
                 kind = GuardedStructuredKind.WHILE;
             } else if ((booleanKind =
@@ -7206,7 +7206,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 activation,
                 ProtosStandardObjectProtocol.isStandardEnsureImplementation(closure),
                 ProtosStandardErrorProtocol.isStandardHandleImplementation(closure),
-                ProtosStandardObjectProtocol.isStandardWhileImplementation(closure),
+                ProtosStandardObjectProtocol.isStandardWhileTrueImplementation(closure),
                 ProtosStandardBooleanProtocol.structuredCallbackKindForImplementation(closure),
                 ProtosStandardArrayProtocol.isStandardEachImplementation(closure),
                 ProtosStandardBytesProtocol.isStandardEachImplementation(closure),

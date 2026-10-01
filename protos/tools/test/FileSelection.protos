@@ -51,7 +51,7 @@ pathWithinDirectory: (casePath, directoryPath) => {
             (() =>
                 prefixMatches &&
                 (index < directoryPath.size())
-            ).while() {
+            ).whileTrue() {
                 prefixMatches =
                     casePath[index] == directoryPath[index]
                 index = index + 1

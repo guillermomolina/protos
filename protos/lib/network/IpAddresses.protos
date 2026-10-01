@@ -142,7 +142,7 @@ parse: (text) => {
             leadingZero = false
         }
 
-        (() => index < size).while() {
+        (() => index < size).whileTrue() {
             character: source[index]
             isSeparator: character == "."
 
@@ -269,7 +269,7 @@ parse: (text) => {
             tokenIndex: 0
             value: 0
 
-            (() => tokenIndex < tokenSize).while() {
+            (() => tokenIndex < tokenSize).whileTrue() {
                 digit: hexDigitValue(token[tokenIndex])
                 (digit < 0).ifTrue(() => {
                     fail()
@@ -281,7 +281,7 @@ parse: (text) => {
             appendHextet(value)
         }
 
-        (() => index < size).while() {
+        (() => index < size).whileTrue() {
             token: ""
             containsDot: false
 
@@ -291,7 +291,7 @@ parse: (text) => {
                     stillInside = source[index] != ":"
                 })
                 stillInside
-            }).while() {
+            }).whileTrue() {
                 character: source[index]
                 (character == ".").ifTrue(() => {
                     containsDot = true
@@ -360,10 +360,10 @@ parse: (text) => {
             zeroCount: 8 - count
             sourceIndex: 0
 
-            (() => sourceIndex < count).while() {
+            (() => sourceIndex < count).whileTrue() {
                 (sourceIndex == compressionIndex).ifTrue(() => {
                     zerosAdded: 0
-                    (() => zerosAdded < zeroCount).while() {
+                    (() => zerosAdded < zeroCount).whileTrue() {
                         appendExpanded(0)
                         zerosAdded = zerosAdded + 1
                     }
@@ -375,7 +375,7 @@ parse: (text) => {
 
             (compressionIndex == count).ifTrue(() => {
                 zerosAdded: 0
-                (() => zerosAdded < zeroCount).while() {
+                (() => zerosAdded < zeroCount).whileTrue() {
                     appendExpanded(0)
                     zerosAdded = zerosAdded + 1
                 }
@@ -388,7 +388,7 @@ parse: (text) => {
             })
 
             sourceIndex: 0
-            (() => sourceIndex < count).while() {
+            (() => sourceIndex < count).whileTrue() {
                 appendExpanded(hextets[sourceIndex])
                 sourceIndex = sourceIndex + 1
             }
@@ -412,7 +412,7 @@ parse: (text) => {
 
     containsColon: false
     scanIndex: 0
-    (() => scanIndex < totalSize).while() {
+    (() => scanIndex < totalSize).whileTrue() {
         (text[scanIndex] == ":").ifTrue(() => {
             containsColon = true
         })
@@ -571,7 +571,7 @@ format: (address) => {
         remaining: address.bits
         hextetIndex: 7
 
-        (() => hextetIndex >= 0).while() {
+        (() => hextetIndex >= 0).whileTrue() {
             hextets[hextetIndex] = remaining.mod(65536)
             remaining = remaining.div(65536)
             hextetIndex = hextetIndex - 1
@@ -606,7 +606,7 @@ format: (address) => {
             }
 
             scanIndex: 0
-            (() => scanIndex < 8).while() {
+            (() => scanIndex < 8).whileTrue() {
                 (hextets[scanIndex] == 0).ifTrue(() => {
                     (currentLength == 0).ifTrue(() => {
                         currentStart = scanIndex
@@ -628,7 +628,7 @@ format: (address) => {
             needsColon: false
             emitIndex: 0
 
-            (() => emitIndex < 8).while() {
+            (() => emitIndex < 8).whileTrue() {
                 compressed: false
 
                 (emitIndex == bestStart).ifTrue(() => {

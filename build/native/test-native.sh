@@ -25,7 +25,7 @@ dap_log="${tmp_dir}/dap.log"
 {
     echo 'x: 1'
     echo 'f: () => { x }'
-    echo 'g: () => { (() => false).while(() => { null }) }'
+    echo 'g: () => { (() => false).whileTrue(() => { null }) }'
     for ((jit_iteration = 0; jit_iteration < 32; jit_iteration++)); do
         echo 'f()'
         echo 'g()'

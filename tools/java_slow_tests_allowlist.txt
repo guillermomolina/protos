@@ -24,4 +24,9 @@ com.guillermomolina.protos.cli.ProtosWorkspaceRunCliTest 15
 com.guillermomolina.protos.conformance.ProtosFilesystemLibraryConformanceTest 20
 com.guillermomolina.protos.execution.ProtosExternalPackagePlanningPreflightTest 27
 com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapterTest 15
+# Project-owner decision 2026-10-01: observed at 10.558 s (just above the
+# 10 s threshold). It runs the package Tool's workspace preflight in one
+# Process and then executes the resulting two-package plan in a distinct
+# application Process, end to end. Budget = 10.558 s x 1.25, rounded up.
+com.guillermomolina.protos.execution.ProtosWorkspacePackageAuthorityIsolationIntegrationTest 14
 com.guillermomolina.protos.execution.ProtosWorkspacePackagePreflightTest 16

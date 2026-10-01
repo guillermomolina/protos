@@ -31,7 +31,7 @@ source: Array(
 worker: (value) => {
     result: value
     round: 0
-    (() => { round < 2000 }).while() {
+    (() => { round < 2000 }).whileTrue() {
         result = (result * 17 + 31).mod(65521)
         round = round + 1
     }

@@ -35,7 +35,7 @@ gcd: (a, b) => {
         right = 0 - right
     })
 
-    (() => right != 0).while() {
+    (() => right != 0).whileTrue() {
         remainder: left.mod(right)
         left = right
         right = remainder
@@ -118,7 +118,7 @@ pow: (base, exponent) => {
     factor: base
     remaining: exponent
 
-    (() => remaining != 0).while() {
+    (() => remaining != 0).whileTrue() {
         (remaining.mod(2) == 1).ifTrue(() => {
             result = result * factor
         })
@@ -164,7 +164,7 @@ powMod: (base, exponent, modulus) => {
     factor: canonicalMod(base)
     remaining: exponent
 
-    (() => remaining != 0).while() {
+    (() => remaining != 0).whileTrue() {
         (remaining.mod(2) == 1).ifTrue(() => {
             result = canonicalMod(result * factor)
         })

@@ -65,7 +65,7 @@ option: (descriptor) => {
             fail()
         })
         index: 1
-        (() => index < source.size()).while() {
+        (() => index < source.size()).whileTrue() {
             octet: source[index]
             allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
             allowed.ifFalse(() => {
@@ -261,7 +261,7 @@ command: (descriptor) => {
             fail()
         })
         index: 1
-        (() => index < source.size()).while() {
+        (() => index < source.size()).whileTrue() {
             octet: source[index]
             allowed: isAlpha(octet) || isDigit(octet) || (octet == 45)
             allowed.ifFalse(() => {
@@ -477,7 +477,7 @@ parse: (specification, suppliedArguments) => {
     decodeRange: (source, start, end) => {
         buffer: Encoding.UTF8.encode("")
         cursor: start
-        (() => cursor < end).while() {
+        (() => cursor < end).whileTrue() {
             buffer.add(source[cursor])
             cursor = cursor + 1
         }
@@ -540,7 +540,7 @@ parse: (specification, suppliedArguments) => {
             })
 
             consumed: 0
-            (() => consumed < consume).while() {
+            (() => consumed < consume).whileTrue() {
                 raw: rawPositionals[rawIndex]
                 occurrence: {
                     kind: "positionalOccurrence"
@@ -682,7 +682,7 @@ parse: (specification, suppliedArguments) => {
         (() =>
             (scanIndex < arguments.size()) &&
             (selectedChild === null)
-        ).while() {
+        ).whileTrue() {
             token: arguments[scanIndex]
             source: Encoding.UTF8.encode(token)
             advance: 1
@@ -713,7 +713,7 @@ parse: (specification, suppliedArguments) => {
                         longForm.ifTrue(() => {
                             equalsIndex: -1
                             cursor: 2
-                            (() => cursor < source.size()).while() {
+                            (() => cursor < source.size()).whileTrue() {
                                 (
                                     (equalsIndex < 0) &&
                                     (source[cursor] == 61)
@@ -791,7 +791,7 @@ parse: (specification, suppliedArguments) => {
                             memberCount: source.size() - 1
                             cursor: 1
 
-                            (() => cursor < source.size()).while() {
+                            (() => cursor < source.size()).whileTrue() {
                                 octet: source[cursor]
                                 isShortOctet(octet).ifFalse(() => {
                                     fail()
@@ -980,7 +980,7 @@ renderHelp: (rootSpec, commandPath) => {
     appendText: (text) => {
         source: Encoding.UTF8.encode(text)
         index: 0
-        (() => index < source.size()).while() {
+        (() => index < source.size()).whileTrue() {
             output.add(source[index])
             index = index + 1
         }

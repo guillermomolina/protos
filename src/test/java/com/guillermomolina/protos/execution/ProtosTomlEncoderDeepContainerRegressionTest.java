@@ -33,7 +33,7 @@ final class ProtosTomlEncoderDeepContainerRegressionTest {
                         """
                         node: TOML.integer(7)
                         remaining: 139
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             node = TOML.array(node)
                             remaining = remaining - 1
                         })
@@ -53,7 +53,7 @@ final class ProtosTomlEncoderDeepContainerRegressionTest {
                         """
                         node: TOML.integer(9)
                         remaining: 142
-                        (() => remaining > 0).while(() => {
+                        (() => remaining > 0).whileTrue(() => {
                             node = TOML.table("a", node)
                             remaining = remaining - 1
                         })

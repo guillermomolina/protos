@@ -18,7 +18,7 @@
 work: (seed, count) => {
     result: seed
     round: 0
-    (() => { round < count }).while() {
+    (() => { round < count }).whileTrue() {
         result = (result * 7 + 11).mod(1000003)
         round = round + 1
     }
@@ -28,7 +28,7 @@ work: (seed, count) => {
 run: () => {
     total: 0
     iteration: 0
-    (() => { iteration < 100 }).while() {
+    (() => { iteration < 100 }).whileTrue() {
         total = total + work.parallel(17, 64).value()
         iteration = iteration + 1
     }

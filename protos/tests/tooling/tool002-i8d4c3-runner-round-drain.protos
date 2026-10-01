@@ -331,7 +331,7 @@ caseResultsInOrder: (caseResults, expectedIds) => {
     ordered: caseResults.size() == expectedIds.size()
 
     index: 0
-    (() => ordered && (index < expectedIds.size())).while(() => {
+    (() => ordered && (index < expectedIds.size())).whileTrue(() => {
         ordered =
             Manifest.caseId(
                 Runner.caseRunSpec(caseResults[index])
@@ -346,7 +346,7 @@ cutoverInOrder: (cutoverCases, expectedIds) => {
     ordered: cutoverCases.size() == expectedIds.size()
 
     index: 0
-    (() => ordered && (index < expectedIds.size())).while(() => {
+    (() => ordered && (index < expectedIds.size())).whileTrue(() => {
         ordered =
             Manifest.caseId(cutoverCases[index]) === expectedIds[index]
         index = index + 1

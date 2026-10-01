@@ -85,7 +85,7 @@ parse: (text) => {
     sliceText: (start, end) => {
         buffer: Encoding.UTF8.encode("")
         index: start
-        (() => index < end).while() {
+        (() => index < end).whileTrue() {
             buffer.add(source[index])
             index = index + 1
         }
@@ -94,7 +94,7 @@ parse: (text) => {
 
     validateComponent: (start, end, allowSlash, allowQuestion) => {
         index: start
-        (() => index < end).while() {
+        (() => index < end).whileTrue() {
             octet: source[index]
             isPercent: octet == 37
 
@@ -120,7 +120,7 @@ parse: (text) => {
 
     validateUserInfo: (start, end) => {
         index: start
-        (() => index < end).while() {
+        (() => index < end).whileTrue() {
             octet: source[index]
             isPercent: octet == 37
 
@@ -141,7 +141,7 @@ parse: (text) => {
 
     validateRegName: (start, end) => {
         index: start
-        (() => index < end).while() {
+        (() => index < end).whileTrue() {
             octet: source[index]
             isPercent: octet == 37
 
@@ -164,10 +164,10 @@ parse: (text) => {
         index: start
         partCount: 0
 
-        (() => index < end).while() {
+        (() => index < end).whileTrue() {
             tokenStart: index
 
-            (() => (index < end) && isDigit(source[index])).while() {
+            (() => (index < end) && isDigit(source[index])).whileTrue() {
                 index = index + 1
             }
 
@@ -181,7 +181,7 @@ parse: (text) => {
 
             value: 0
             digitIndex: tokenStart
-            (() => digitIndex < index).while() {
+            (() => digitIndex < index).whileTrue() {
                 value = value * 10 + (source[digitIndex] - 48)
                 digitIndex = digitIndex + 1
             }
@@ -211,9 +211,9 @@ parse: (text) => {
         index: start
         groupCount: 0
 
-        (() => index < end).while() {
+        (() => index < end).whileTrue() {
             tokenStart: index
-            (() => (index < end) && (source[index] != 58)).while() {
+            (() => (index < end) && (source[index] != 58)).whileTrue() {
                 index = index + 1
             }
             tokenEnd: index
@@ -224,7 +224,7 @@ parse: (text) => {
 
             containsDot: false
             scan: tokenStart
-            (() => scan < tokenEnd).while() {
+            (() => scan < tokenEnd).whileTrue() {
                 (source[scan] == 46).ifTrue(() => {
                     containsDot = true
                 })
@@ -247,7 +247,7 @@ parse: (text) => {
                     fail()
                 })
                 scan = tokenStart
-                (() => scan < tokenEnd).while() {
+                (() => scan < tokenEnd).whileTrue() {
                     isHexDigit(source[scan]).ifFalse(() => {
                         fail()
                     })
@@ -271,7 +271,7 @@ parse: (text) => {
         doubleColonIndex: -1
         index: start
 
-        (() => (index + 1) < end).while() {
+        (() => (index + 1) < end).whileTrue() {
             ((source[index] == 58) && (source[index + 1] == 58)).ifTrue(() => {
                 (doubleColonIndex >= 0).ifTrue(() => {
                     fail()
@@ -309,7 +309,7 @@ parse: (text) => {
             index: start + 1
             hexStart: index
 
-            (() => (index < end) && isHexDigit(source[index])).while() {
+            (() => (index < end) && isHexDigit(source[index])).whileTrue() {
                 index = index + 1
             }
 
@@ -321,7 +321,7 @@ parse: (text) => {
                 fail()
             })
 
-            (() => index < end).while() {
+            (() => index < end).whileTrue() {
                 octet: source[index]
                 allowed: isUnreserved(octet) || isSubDelimiter(octet) || (octet == 58)
                 allowed.ifFalse(() => {
@@ -340,7 +340,7 @@ parse: (text) => {
         atIndex: -1
         index: start
 
-        (() => index < end).while() {
+        (() => index < end).whileTrue() {
             (source[index] == 64).ifTrue(() => {
                 (atIndex >= 0).ifTrue(() => {
                     fail()
@@ -363,7 +363,7 @@ parse: (text) => {
             closeIndex: -1
             index = hostPortStart + 1
 
-            (() => (index < end) && (closeIndex < 0)).while() {
+            (() => (index < end) && (closeIndex < 0)).whileTrue() {
                 (source[index] == 93).ifTrue(() => {
                     closeIndex = index
                 })
@@ -382,7 +382,7 @@ parse: (text) => {
                 })
 
                 portIndex: closeIndex + 2
-                (() => portIndex < end).while() {
+                (() => portIndex < end).whileTrue() {
                     isDigit(source[portIndex]).ifFalse(() => {
                         fail()
                     })
@@ -396,7 +396,7 @@ parse: (text) => {
             colonIndex: -1
             index = hostPortStart
 
-            (() => index < end).while() {
+            (() => index < end).whileTrue() {
                 (source[index] == 58).ifTrue(() => {
                     (colonIndex >= 0).ifTrue(() => {
                         fail()
@@ -415,7 +415,7 @@ parse: (text) => {
 
             (colonIndex >= 0).ifTrue(() => {
                 portIndex: colonIndex + 1
-                (() => portIndex < end).while() {
+                (() => portIndex < end).whileTrue() {
                     isDigit(source[portIndex]).ifFalse(() => {
                         fail()
                     })
@@ -428,7 +428,7 @@ parse: (text) => {
 
     // The initial profile is RFC 3986 URI syntax, not IRI or WHATWG URL input.
     asciiIndex: 0
-    (() => asciiIndex < size).while() {
+    (() => asciiIndex < size).whileTrue() {
         (source[asciiIndex] > 127).ifTrue(() => {
             fail()
         })
@@ -442,7 +442,7 @@ parse: (text) => {
     firstColon: -1
     scanningSchemeCandidate: true
 
-    (() => (scanIndex < size) && scanningSchemeCandidate).while() {
+    (() => (scanIndex < size) && scanningSchemeCandidate).whileTrue() {
         octet: source[scanIndex]
 
         (octet == 58).ifTrue(() => {
@@ -471,7 +471,7 @@ parse: (text) => {
         })
 
         schemeIndex: 1
-        (() => schemeIndex < firstColon).while() {
+        (() => schemeIndex < firstColon).whileTrue() {
             octet: source[schemeIndex]
             allowed: isAlpha(octet) ||
                 isDigit(octet) ||
@@ -501,7 +501,7 @@ parse: (text) => {
                 (source[authorityEnd] != 47) &&
                 (source[authorityEnd] != 63) &&
                 (source[authorityEnd] != 35)
-        }).while() {
+        }).whileTrue() {
             authorityEnd = authorityEnd + 1
         }
 
@@ -510,7 +510,7 @@ parse: (text) => {
     })
 
     pathStart: index
-    (() => (index < size) && (source[index] != 63) && (source[index] != 35)).while() {
+    (() => (index < size) && (source[index] != 63) && (source[index] != 35)).whileTrue() {
         index = index + 1
     }
     pathEnd: index
@@ -523,7 +523,7 @@ parse: (text) => {
 
     ((!hasScheme) && (!hasAuthority) && (pathStart < pathEnd) && (source[pathStart] != 47)).ifTrue(() => {
         firstSegmentIndex: pathStart
-        (() => (firstSegmentIndex < pathEnd) && (source[firstSegmentIndex] != 47)).while() {
+        (() => (firstSegmentIndex < pathEnd) && (source[firstSegmentIndex] != 47)).whileTrue() {
             (source[firstSegmentIndex] == 58).ifTrue(() => {
                 fail()
             })
@@ -537,7 +537,7 @@ parse: (text) => {
         queryStart: index + 1
         index = queryStart
 
-        (() => (index < size) && (source[index] != 35)).while() {
+        (() => (index < size) && (source[index] != 35)).whileTrue() {
             index = index + 1
         }
 
@@ -588,7 +588,7 @@ format: (reference) => {
         // here and produces fresh Bytes without adding authority.
         encoded: Encoding.UTF8.encode(value)
         index: 0
-        (() => index < encoded.size()).while() {
+        (() => index < encoded.size()).whileTrue() {
             output.add(encoded[index])
             index = index + 1
         }
@@ -704,7 +704,7 @@ resolve: (base, reference) => {
     })
 
     removeLastSegment: (output) => {
-        (() => (output.size() > 0) && (output[output.size() - 1] != 47)).while() {
+        (() => (output.size() > 0) && (output[output.size() - 1] != 47)).whileTrue() {
             output.removeAt(output.size() - 1)
         }
         (output.size() > 0).ifTrue(() => {
@@ -720,7 +720,7 @@ resolve: (base, reference) => {
         size: source.size()
         index: 0
 
-        (() => index < size).while() {
+        (() => index < size).whileTrue() {
             handled: false
 
             // A. "../" or "./"
@@ -807,7 +807,7 @@ resolve: (base, reference) => {
                     index = index + 1
                 })
 
-                (() => (index < size) && (source[index] != 47)).while() {
+                (() => (index < size) && (source[index] != 47)).whileTrue() {
                     output.add(source[index])
                     index = index + 1
                 }
@@ -830,7 +830,7 @@ resolve: (base, reference) => {
         ((baseHasAuthority) && (baseBytes.size() == 0)).ifFalse(() => {
             lastSlash: -1
             scan: 0
-            (() => scan < baseBytes.size()).while() {
+            (() => scan < baseBytes.size()).whileTrue() {
                 (baseBytes[scan] == 47).ifTrue(() => {
                     lastSlash = scan
                 })
@@ -838,14 +838,14 @@ resolve: (base, reference) => {
             }
 
             copy: 0
-            (() => copy <= lastSlash).while() {
+            (() => copy <= lastSlash).whileTrue() {
                 merged.add(baseBytes[copy])
                 copy = copy + 1
             }
         })
 
         copy: 0
-        (() => copy < referenceBytes.size()).while() {
+        (() => copy < referenceBytes.size()).whileTrue() {
             merged.add(referenceBytes[copy])
             copy = copy + 1
         }

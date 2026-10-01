@@ -43,14 +43,14 @@ countText: (value) => {
         divisor: 1
         probe: value
 
-        (() => probe >= 10).while(() => {
+        (() => probe >= 10).whileTrue(() => {
             probe = probe.div(10)
             divisor = divisor * 10
         })
 
         remaining: value
 
-        (() => divisor > 0).while(() => {
+        (() => divisor > 0).whileTrue(() => {
             digit: remaining.div(divisor)
             text = text + digits[digit]
             remaining = remaining.mod(divisor)
@@ -293,7 +293,7 @@ observer: (state) => {
                 countText(total)
             )
 
-            (() => state[5] <= completed).while(() => {
+            (() => state[5] <= completed).whileTrue(() => {
                 state[5] = state[5] + state[4]
             })
         })

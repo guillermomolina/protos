@@ -716,7 +716,7 @@ final class ProtosStructuredDispatchLowerer {
                 });
         builder.beginBlock();
 
-        /* Validate the standard while receiver/body before the first condition activation. */
+        /* Validate the standard whileTrue receiver/body before the first condition activation. */
         builder.beginStoreLocal(structuredWhile);
         builder.beginPrepareStructuredWhileCall();
         builder.emitLoadLocal(preparedCall);

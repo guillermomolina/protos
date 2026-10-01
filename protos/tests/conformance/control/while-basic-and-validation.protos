@@ -19,12 +19,12 @@ Test: import("std:test/Test")
 tests: [
     Test("while arity error", () => {
         Assertions.signals(Error, () => {
-            (() => false).while()
+            (() => false).whileTrue()
         })
     }),
     Test("while invalid receiver", () => {
         Assertions.signals(Error, () => {
-            true.while(() => { null })
+            true.whileTrue(() => { null })
         })
     }),
     Test("while invalid condition future", () => {
@@ -34,7 +34,7 @@ tests: [
             handled: false
             Error.handle(
                 () => {
-                    (() => future).while(() => {
+                    (() => future).whileTrue(() => {
                         bodyCalls = bodyCalls + 1
                     })
                     null
@@ -55,7 +55,7 @@ tests: [
             handled: false
             Error.handle(
                 () => {
-                    (() => 42).while(() => {
+                    (() => 42).whileTrue(() => {
                         bodyCalls = bodyCalls + 1
                     })
                     null
@@ -75,7 +75,7 @@ tests: [
             bodyCalls: 0
             first: Error.handle(
                 () => {
-                    (() => null).while(() => {
+                    (() => null).whileTrue(() => {
                         bodyCalls = bodyCalls + 1
                     })
                     null
@@ -84,7 +84,7 @@ tests: [
             )
             second: Error.handle(
                 () => {
-                    (() => null).while(() => {
+                    (() => null).whileTrue(() => {
                         bodyCalls = bodyCalls + 1
                     })
                     null
@@ -104,7 +104,7 @@ tests: [
             handled: false
             Error.handle(
                 () => {
-                    (() => Object).while(() => {
+                    (() => Object).whileTrue(() => {
                         bodyCalls = bodyCalls + 1
                     })
                     null
@@ -123,7 +123,7 @@ tests: [
         tool009LegacyCase: () => {
             i: 0
             condition: () => { i < 4 }
-            condition.while() {
+            condition.whileTrue() {
                 i = i + 1
             }
             i
@@ -133,7 +133,7 @@ tests: [
     Test("while zero iterations null", () => {
         tool009LegacyCase: () => {
             condition: () => { false }
-            condition.while() { 42 }
+            condition.whileTrue() { 42 }
         }
         Assertions.require(tool009LegacyCase() === null)
     }),
@@ -151,7 +151,7 @@ tests: [
                 99
             }
             condition: (value = nextCondition()) => value
-            result: condition.while((ignored = bodyDefault()) => {
+            result: condition.whileTrue((ignored = bodyDefault()) => {
                 bodyCalls = bodyCalls + 1
             })
             (result === null) &&
@@ -163,8 +163,33 @@ tests: [
     }),
     Test("while eager body validation", () => {
         Assertions.signals(Error, () => {
-            (() => false).while(42)
+            (() => false).whileTrue(42)
         })
+    }),
+    Test("whileTrue is the only standard loop selector", () => {
+        Assertions.require(Object.hasSlot("whileTrue"))
+        Assertions.require(!Object.hasSlot("while"))
+        Assertions.require(!Object.hasSlot("whileFalse"))
+    }),
+    Test("user-defined while remains an ordinary selector", () => {
+        tool009LegacyCase: () => {
+            holder: {}
+            holder.while: (body) => body() + 1
+            holder.while(() => 41)
+        }
+        Assertions.require(tool009LegacyCase() == 42)
+    }),
+    Test("user-defined whileTrue shadows the standard loop", () => {
+        tool009LegacyCase: () => {
+            bodyCalls: 0
+            holder: {}
+            holder.whileTrue: (body) => 7
+            result: holder.whileTrue(() => {
+                bodyCalls = bodyCalls + 1
+            })
+            (result == 7) && (bodyCalls == 0)
+        }
+        Assertions.require(tool009LegacyCase() === true)
     })
 ]
 tests.freeze()

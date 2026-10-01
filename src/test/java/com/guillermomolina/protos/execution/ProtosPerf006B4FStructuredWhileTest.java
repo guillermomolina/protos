@@ -91,7 +91,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                             module,
                             lowerRoot(
                                     scope.language(),
-                                    "condition.while(body)",
+                                    "condition.whileTrue(body)",
                                     "perf006-b4f-fresh-home-top.protos"));
 
             assertTrue(domain.dispatchOne());
@@ -154,7 +154,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                             module,
                             lowerRoot(
                                     scope.language(),
-                                    "condition.while(body)",
+                                    "condition.whileTrue(body)",
                                     "perf006-b4f-suspend-top.protos"));
 
             assertTrue(domain.dispatchOne());
@@ -209,7 +209,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                             module,
                             lowerRoot(
                                     scope.language(),
-                                    "condition.while(body)",
+                                    "condition.whileTrue(body)",
                                     "perf006-b4f-invalid-condition.protos"));
 
             assertTrue(domain.dispatchOne());
@@ -247,7 +247,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     () ->
                             lowerRoot(
                                             scope.language(),
-                                            "condition.while(notBody)",
+                                            "condition.whileTrue(notBody)",
                                             "perf006-b4f-validation.protos")
                                     .getCallTarget()
                                     .call(module));
@@ -289,7 +289,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                             module,
                             lowerRoot(
                                     scope.language(),
-                                    "condition.while(body)",
+                                    "condition.whileTrue(body)",
                                     "perf006-b4f-body-future.protos"));
 
             assertTrue(domain.dispatchOne());
@@ -338,7 +338,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                     sourceClosure(
                             scope.language(),
                             module,
-                            "() => condition.while(body)",
+                            "() => condition.whileTrue(body)",
                             "perf006-b4f-cancel-loop.protos"));
             module.context().createLocalSlot(
                     "cleanup",
@@ -411,7 +411,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                             module,
                             lowerRoot(
                                     scope.language(),
-                                    "condition.while(body)",
+                                    "condition.whileTrue(body)",
                                     "perf006-b4f-error-top.protos"));
 
             assertTrue(domain.dispatchOne());
@@ -443,7 +443,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
             ProtosClosureValue extracted =
                     assertInstanceOf(
                             ProtosClosureValue.class,
-                            ProtosValueLookup.readMember(condition, "while", prelude).orElseThrow());
+                            ProtosValueLookup.readMember(condition, "whileTrue", prelude).orElseThrow());
             module.context().createLocalSlot("whileImpl", extracted);
             module.context().createLocalSlot(
                     "body",
@@ -472,7 +472,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
             AtomicInteger overrideCalls = new AtomicInteger();
             ProtosObjectValue custom = new ProtosObjectValue(ProtosObjectValue.rootObject());
             custom.createLocalSlot(
-                    "while",
+                    "whileTrue",
                     nativeClosure(
                             (activation, supplied) -> {
                                 overrideCalls.incrementAndGet();
@@ -487,7 +487,7 @@ final class ProtosPerf006B4FStructuredWhileTest {
                             module2,
                             lowerRoot(
                                     scope.language(),
-                                    "custom.while(body)",
+                                    "custom.whileTrue(body)",
                                     "perf006-b4f-override.protos"));
             assertTrue(domain.dispatchOne());
             assertEquals(ProtosTask.State.COMPLETED, overrideTask.state());

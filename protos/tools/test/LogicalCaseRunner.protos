@@ -76,7 +76,7 @@ run: (
     nextIndex: 0
 
     runLane: () => {
-        (() => nextIndex < workItems.size()).while(() => {
+        (() => nextIndex < workItems.size()).whileTrue(() => {
             index: nextIndex
             nextIndex = nextIndex + 1
 
@@ -128,7 +128,7 @@ run: (
     lanes: Array()
 
     laneIndex: 0
-    (() => laneIndex < laneCount).while(() => {
+    (() => laneIndex < laneCount).whileTrue(() => {
         lanes = Array(
             ...lanes,
             runLane.future()

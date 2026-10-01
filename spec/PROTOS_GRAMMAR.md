@@ -3134,20 +3134,20 @@ return ...value
 ```
 
 
-## Standard Closure `while` Syntax Note
+## Standard Closure `whileTrue` Syntax Note
 
-Core v0.1 introduces no `while` keyword, statement form, or dedicated loop
-production. `while` remains an ordinary member name and the standard Closure loop
-uses ordinary message syntax:
+Core v0.1 introduces no `while` or `whileTrue` keyword, statement form, or
+dedicated loop production. `while` and `whileTrue` remain ordinary member names
+and the standard Closure loop uses ordinary message syntax:
 
 ```js
-condition.while(body)
+condition.whileTrue(body)
 ```
 
 The common form:
 
 ```js
-condition.while() {
+condition.whileTrue() {
     bodyExpression
 }
 ```
@@ -3156,9 +3156,9 @@ is parsed by the existing ordinary call plus trailing-Closure rules. The
 completed empty argument list is followed on the same logical line by the
 trailing braced Closure, which the existing mandatory desugaring appends as the
 single final positional argument. It is therefore semantically the same ordinary
-one-argument `while` message, with a parameterless Closure value in that argument
+one-argument `whileTrue` message, with a parameterless Closure value in that argument
 position. `semantics/EXECUTION_AND_CONTROL.md` owns the standard loop behavior;
-`semantics/CALLABLES.md` owns the standard `Object.while` placement and Closure
+`semantics/CALLABLES.md` owns the standard `Object.whileTrue` placement and Closure
 receiver domain.
 
 A source form such as:

@@ -166,11 +166,17 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         "parallel",
                         "parent",
                         "ensure",
-                        "while",
+                        "whileTrue",
                         "caseOf"));
         assertTrue(
                 ProtosObjectValue.rootObject().readLocalSlot("identityHash").isEmpty(),
                 "standard Object must not publish identityHash");
+        assertTrue(
+                ProtosObjectValue.rootObject().readLocalSlot("while").isEmpty(),
+                "standard Object must not publish the removed while loop selector");
+        assertTrue(
+                ProtosObjectValue.rootObject().readLocalSlot("whileFalse").isEmpty(),
+                "standard Object must not publish an inverse whileFalse loop selector");
         assertSourceBacked(ProtosObjectValue.rootObject(), "init");
         assertSourceBacked(ProtosObjectValue.rootObject(), "==");
         assertSourceBacked(ProtosObjectValue.rootObject(), "match");

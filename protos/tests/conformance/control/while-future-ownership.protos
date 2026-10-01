@@ -24,7 +24,7 @@ tests: [
             condition: () => {
                 iterations < 2
             }
-            condition.while() {
+            condition.whileTrue() {
                 iterations = iterations + 1
                 (() => {
                     failure.signal()
@@ -41,7 +41,7 @@ tests: [
             condition: () => {
                 iterations < 1
             }
-            condition.while() {
+            condition.whileTrue() {
                 iterations = iterations + 1
                 saved = (() => { 42 }).future()
             }
@@ -60,7 +60,7 @@ tests: [
                     iterations < 1
                 }
 
-                condition.while() {
+                condition.whileTrue() {
                     iterations = iterations + 1
                     (() => {
                         order = order * 10 + 2
@@ -82,7 +82,7 @@ tests: [
     Test("while body result ignored", () => {
         tool009LegacyCase: () => {
             i: 0
-            result: (() => { i < 1 }).while() {
+            result: (() => { i < 1 }).whileTrue() {
                 i = i + 1
                 99
             }

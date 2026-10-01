@@ -45,10 +45,10 @@ public final class ProtosStandardObjectProtocol {
             ProtosStandardObjectProtocol::ensure;
     private static final ProtosClosureValue STANDARD_ENSURE =
             ProtosClosureValue.nativeClosure(STANDARD_ENSURE_BODY);
-    private static final ProtosNativeClosureBody STANDARD_WHILE_BODY =
-            ProtosStandardObjectProtocol::whileLoop;
-    private static final ProtosClosureValue STANDARD_WHILE =
-            ProtosClosureValue.nativeClosure(STANDARD_WHILE_BODY);
+    private static final ProtosNativeClosureBody STANDARD_WHILE_TRUE_BODY =
+            ProtosStandardObjectProtocol::whileTrue;
+    private static final ProtosClosureValue STANDARD_WHILE_TRUE =
+            ProtosClosureValue.nativeClosure(STANDARD_WHILE_TRUE_BODY);
     private static final class StandardCaseOfBody implements ProtosNativeClosureBody {
         @Override
         public Object execute(ProtosActivation activation, List<?> arguments) {
@@ -87,16 +87,16 @@ public final class ProtosStandardObjectProtocol {
         return closure.nativeBody().orElse(null) == STANDARD_ENSURE_BODY;
     }
 
-    static boolean isCanonicalStandardWhileSelection(
+    static boolean isCanonicalStandardWhileTrueSelection(
             Object behavior,
             ProtosObjectValue home) {
-        return behavior == STANDARD_WHILE
+        return behavior == STANDARD_WHILE_TRUE
                 && home.isRootObject();
     }
 
-    static boolean isStandardWhileImplementation(
+    static boolean isStandardWhileTrueImplementation(
             ProtosClosureValue closure) {
-        return closure.nativeBody().orElse(null) == STANDARD_WHILE_BODY;
+        return closure.nativeBody().orElse(null) == STANDARD_WHILE_TRUE_BODY;
     }
 
     static boolean isStandardCaseOfImplementation(
@@ -195,10 +195,10 @@ public final class ProtosStandardObjectProtocol {
                     "ensure",
                     STANDARD_ENSURE);
         }
-        if (!object.hasLocalSlot("while")) {
+        if (!object.hasLocalSlot("whileTrue")) {
             object.createLocalSlot(
-                    "while",
-                    STANDARD_WHILE);
+                    "whileTrue",
+                    STANDARD_WHILE_TRUE);
         }
         if (!object.hasLocalSlot("caseOf")) {
             object.createLocalSlot(
@@ -416,7 +416,7 @@ public final class ProtosStandardObjectProtocol {
         throw invalid(activation);
     }
 
-    private static Object whileLoop(ProtosActivation activation, List<?> supplied) {
+    private static Object whileTrue(ProtosActivation activation, List<?> supplied) {
         Object receiver = activation.receiver();
         if (!(receiver instanceof ProtosClosureValue condition)) {
             throw invalid(activation);

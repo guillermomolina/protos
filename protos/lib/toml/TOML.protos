@@ -140,7 +140,7 @@ localTime: (hour, minute, second, fractionCoefficient, fractionDigits) => {
     (fractionDigits > 0).ifTrue(() => {
         limit: 1
         index: 0
-        (() => index < fractionDigits).while(() => {
+        (() => index < fractionDigits).whileTrue(() => {
             limit = limit * 10
             index = index + 1
         })
@@ -240,7 +240,7 @@ localDateTime: (
     (fractionDigits > 0).ifTrue(() => {
         limit: 1
         index: 0
-        (() => index < fractionDigits).while(() => {
+        (() => index < fractionDigits).whileTrue(() => {
             limit = limit * 10
             index = index + 1
         })
@@ -345,7 +345,7 @@ offsetDateTime: (
     (fractionDigits > 0).ifTrue(() => {
         limit: 1
         index: 0
-        (() => index < fractionDigits).while(() => {
+        (() => index < fractionDigits).whileTrue(() => {
             limit = limit * 10
             index = index + 1
         })
@@ -542,7 +542,7 @@ encode: (rootTable) => {
         (magnitude == 0).ifTrue(() => {
             reversed.add(48)
         })
-        (() => magnitude > 0).while(() => {
+        (() => magnitude > 0).whileTrue(() => {
             reversed.add(48 + magnitude.mod(10))
             magnitude = magnitude.div(10)
         })
@@ -553,7 +553,7 @@ encode: (rootTable) => {
         })
 
         index: reversed.size() - 1
-        (() => index >= 0).while(() => {
+        (() => index >= 0).whileTrue(() => {
             result.add(reversed[index])
             index = index - 1
         })
@@ -564,7 +564,7 @@ encode: (rootTable) => {
     repeatZero: (count) => {
         result: ""
         remaining: count
-        (() => remaining > 0).while(() => {
+        (() => remaining > 0).whileTrue(() => {
             result = result + "0"
             remaining = remaining - 1
         })
@@ -580,7 +580,7 @@ encode: (rootTable) => {
         factor: base
         remaining: exponent
 
-        (() => remaining > 0).while(() => {
+        (() => remaining > 0).whileTrue(() => {
             (remaining.mod(2) == 1).ifTrue(() => {
                 result = result * factor
             })
@@ -620,7 +620,7 @@ encode: (rootTable) => {
             (point > 0).ifTrue(() => {
                 result: ""
                 index: 0
-                (() => index < digitCount).while(() => {
+                (() => index < digitCount).whileTrue(() => {
                     (index == point).ifTrue(() => {
                         result = result + "."
                     })
@@ -637,7 +637,7 @@ encode: (rootTable) => {
         (digitCount > 1).ifTrue(() => {
             scientific = scientific + "."
             index: 1
-            (() => index < digitCount).while(() => {
+            (() => index < digitCount).whileTrue(() => {
                 scientific = scientific + digits[index]
                 index = index + 1
             })
@@ -702,12 +702,12 @@ encode: (rootTable) => {
             normalized: magnitude
             binaryExponent: 0
 
-            (() => normalized >= 2.0).while(() => {
+            (() => normalized >= 2.0).whileTrue(() => {
                 normalized = normalized / 2.0
                 binaryExponent = binaryExponent + 1
             })
 
-            (() => normalized < 1.0).while(() => {
+            (() => normalized < 1.0).whileTrue(() => {
                 normalized = normalized * 2.0
                 binaryExponent = binaryExponent - 1
             })
@@ -730,7 +730,7 @@ encode: (rootTable) => {
 
             (numerator >= denominator).ifTrue(() => {
                 threshold: denominator * 10
-                (() => numerator >= threshold).while(() => {
+                (() => numerator >= threshold).whileTrue(() => {
                     decimalExponent = decimalExponent + 1
                     threshold = threshold * 10
                 })
@@ -739,7 +739,7 @@ encode: (rootTable) => {
             (numerator < denominator).ifTrue(() => {
                 decimalExponent = -1
                 scaledNumerator: numerator * 10
-                (() => scaledNumerator < denominator).while(() => {
+                (() => scaledNumerator < denominator).whileTrue(() => {
                     decimalExponent = decimalExponent - 1
                     scaledNumerator = scaledNumerator * 10
                 })
@@ -749,7 +749,7 @@ encode: (rootTable) => {
             coefficientExponent: 0
             significantDigits: 1
 
-            (() => (coefficient === null) && (significantDigits <= 17)).while(() => {
+            (() => (coefficient === null) && (significantDigits <= 17)).whileTrue(() => {
                 candidateExponent: decimalExponent - significantDigits + 1
                 scaledNumerator: numerator
                 scaledDenominator: denominator
@@ -846,7 +846,7 @@ encode: (rootTable) => {
                 fail()
             })
 
-            (() => coefficient.mod(10) == 0).while(() => {
+            (() => coefficient.mod(10) == 0).whileTrue(() => {
                 coefficient = coefficient.div(10)
                 coefficientExponent = coefficientExponent + 1
             })
@@ -863,7 +863,7 @@ encode: (rootTable) => {
     paddedIntegerText: (value, width) => {
         text: integerText(value)
         result: text
-        (() => result.size() < width).while(() => {
+        (() => result.size() < width).whileTrue(() => {
             result = "0" + result
         })
         result
@@ -883,7 +883,7 @@ encode: (rootTable) => {
         result: ""
         (digits > 0).ifTrue(() => {
             raw: integerText(coefficient)
-            (() => raw.size() < digits).while(() => {
+            (() => raw.size() < digits).whileTrue(() => {
                 raw = "0" + raw
             })
             result = "." + raw
@@ -1129,7 +1129,7 @@ encode: (rootTable) => {
     }
 
     running: true
-    (() => running).while(() => {
+    (() => running).whileTrue(() => {
         frame: topFrame
         frameKind: frame.frameKind
 
@@ -1245,7 +1245,7 @@ parse: (text) => {
 
         skipSpaces: () => {
             scanning: true
-            (() => scanning && (index < length)).while(() => {
+            (() => scanning && (index < length)).whileTrue(() => {
                 octet: source[index]
                 whitespace: octet == 32
                 (octet == 9).ifTrue(() => {
@@ -1354,7 +1354,7 @@ parse: (text) => {
             buffer: Encoding.UTF8.encode("")
             done: false
 
-            (() => done === false).while(() => {
+            (() => done === false).whileTrue(() => {
                 octet: take()
                     (octet == 34).ifTrue(() => {
                         done = true
@@ -1438,7 +1438,7 @@ parse: (text) => {
             buffer: Encoding.UTF8.encode("")
             done: false
 
-            (() => done === false).while(() => {
+            (() => done === false).whileTrue(() => {
                 octet: take()
                     (octet == 39).ifTrue(() => {
                         done = true
@@ -1480,7 +1480,7 @@ parse: (text) => {
             buffer: Encoding.UTF8.encode("")
             scanning: true
 
-            (() => scanning && (index < length)).while(() => {
+            (() => scanning && (index < length)).whileTrue(() => {
                 octet: source[index]
                 validBare: isBareKeyOctet(octet)
                 validBare.ifTrue(() => {
@@ -1529,7 +1529,7 @@ parse: (text) => {
         appendPathPart(parsePart())
         more: true
 
-        (() => more).while(() => {
+        (() => more).whileTrue(() => {
             skipSpaces()
 
             (index < length).ifTrue(() => {
@@ -1614,7 +1614,7 @@ parse: (text) => {
 
         skipSpaces: () => {
             scanning: true
-            (() => scanning && (index < length)).while(() => {
+            (() => scanning && (index < length)).whileTrue(() => {
                 whitespace: isSpace(source[index])
                 whitespace.ifTrue(() => {
                     index = index + 1
@@ -1627,7 +1627,7 @@ parse: (text) => {
 
         skipComment: () => {
             scanning: true
-            (() => scanning && (index < length)).while(() => {
+            (() => scanning && (index < length)).whileTrue(() => {
                 octet: source[index]
                 newline: isNewlineStart(octet)
                 newline.ifTrue(() => {
@@ -1651,7 +1651,7 @@ parse: (text) => {
 
         skipArrayTrivia: () => {
             progressed: true
-            (() => progressed).while(() => {
+            (() => progressed).whileTrue(() => {
                 progressed = false
                 (index < length).ifTrue(() => {
                     octet: source[index]
@@ -1780,7 +1780,7 @@ parse: (text) => {
 
             countQuotes: (initial) => {
                 count: initial
-                (() => peek() == 34).while(() => {
+                (() => peek() == 34).whileTrue(() => {
                     index = index + 1
                     count = count + 1
                 })
@@ -1789,7 +1789,7 @@ parse: (text) => {
 
             skipContinuationWhitespace: () => {
                 scanning: true
-                (() => scanning && (index < length)).while(() => {
+                (() => scanning && (index < length)).whileTrue(() => {
                     octet: source[index]
                     whitespace: isSpace(octet)
                     isNewlineStart(octet).ifTrue(() => {
@@ -1810,7 +1810,7 @@ parse: (text) => {
                 })
             }
 
-            (() => done === false).while(() => {
+            (() => done === false).whileTrue(() => {
                 octet: take()
                 ordinaryOctet: true
 
@@ -1858,7 +1858,7 @@ parse: (text) => {
                                     seeking: true
                                     sawNewline: false
 
-                                    (() => seeking && (look < length)).while(() => {
+                                    (() => seeking && (look < length)).whileTrue(() => {
                                         candidate: source[look]
                                         candidateSpace: isSpace(candidate)
                                         candidateNewline: isNewlineStart(candidate)
@@ -1883,7 +1883,7 @@ parse: (text) => {
                                 })
 
                                 continuation.ifTrue(() => {
-                                    (() => isSpace(peek())).while(() => {
+                                    (() => isSpace(peek())).whileTrue(() => {
                                         index = index + 1
                                     })
                                     isNewlineStart(peek()).ifFalse(() => {
@@ -2002,14 +2002,14 @@ parse: (text) => {
 
             countQuotes: (initial) => {
                 count: initial
-                (() => peek() == 39).while(() => {
+                (() => peek() == 39).whileTrue(() => {
                     index = index + 1
                     count = count + 1
                 })
                 count
             }
 
-            (() => done === false).while(() => {
+            (() => done === false).whileTrue(() => {
                 octet: take()
                 ordinaryOctet: true
 
@@ -2113,7 +2113,7 @@ parse: (text) => {
                     buffer: Encoding.UTF8.encode("")
 
                     gathering: true
-                    (() => gathering && (index < length)).while(() => {
+                    (() => gathering && (index < length)).whileTrue(() => {
                         octet: source[index]
                         bare: isBareKeyOctet(octet)
                         bare.ifTrue(() => {
@@ -2143,7 +2143,7 @@ parse: (text) => {
                 level: 0
                 carrying: true
 
-                (() => carrying).while(() => {
+                (() => carrying).whileTrue(() => {
                     present: chunks.containsKey(level)
                     present.ifTrue(() => {
                         left: chunks[level]
@@ -2164,7 +2164,7 @@ parse: (text) => {
             appendPart(parseKeyPart())
             more: true
 
-            (() => more).while(() => {
+            (() => more).whileTrue(() => {
                 skipSpaces()
                 hasDot: peek() == 46
                 hasDot.ifTrue(() => {
@@ -2178,7 +2178,7 @@ parse: (text) => {
 
             parts: Array()
             level: maxLevel
-            (() => level >= 0).while(() => {
+            (() => level >= 0).whileTrue(() => {
                 chunks.containsKey(level).ifTrue(() => {
                     parts = Array(...parts, ...chunks[level])
                 })
@@ -2191,7 +2191,7 @@ parse: (text) => {
             current: map
             position: 0
 
-            (() => position < parts.size()).while(() => {
+            (() => position < parts.size()).whileTrue(() => {
                 name: parts[position]
                 last: position == parts.size() - 1
 
@@ -2225,7 +2225,7 @@ parse: (text) => {
             chunk: initialChunk
             level: initialLevel
             carrying: true
-            (() => carrying).while(() => {
+            (() => carrying).whileTrue(() => {
                 present: frame.chunks.containsKey(level)
                 present.ifTrue(() => {
                     left: frame.chunks[level]
@@ -2246,7 +2246,7 @@ parse: (text) => {
         collectFrameChunks: (frame, initialLevel, initialResult) => {
             level: initialLevel
             result: initialResult
-            (() => level >= 0).while(() => {
+            (() => level >= 0).whileTrue(() => {
                 frame.chunks.containsKey(level).ifTrue(() => {
                     result = Array(...result, ...frame.chunks[level])
                 })
@@ -2349,7 +2349,7 @@ parse: (text) => {
             leadingZero: false
 
             valid.ifTrue(() => {
-                (() => position < tokenLength).while(() => {
+                (() => position < tokenLength).whileTrue(() => {
                     octet: token[position]
 
                     (octet == 95).ifTrue(() => {
@@ -2421,7 +2421,7 @@ parse: (text) => {
             factor: 10
             remaining: power
 
-            (() => remaining > 0).while(() => {
+            (() => remaining > 0).whileTrue(() => {
                 (remaining.mod(2) == 1).ifTrue(() => {
                     resultValue = resultValue * factor
                 })
@@ -2484,7 +2484,7 @@ parse: (text) => {
 
                 valid.ifTrue(() => {
                     scanningInteger: true
-                    (() => scanningInteger && (position < tokenLength)).while(() => {
+                    (() => scanningInteger && (position < tokenLength)).whileTrue(() => {
                         octet: token[position]
                         digit: decimalDigit(octet)
 
@@ -2549,7 +2549,7 @@ parse: (text) => {
                             previousDigit = false
 
                             scanningFraction: true
-                            (() => scanningFraction && (position < tokenLength)).while(() => {
+                            (() => scanningFraction && (position < tokenLength)).whileTrue(() => {
                                 octet: token[position]
                                 digit: decimalDigit(octet)
 
@@ -2629,7 +2629,7 @@ parse: (text) => {
 
                             previousDigit = false
                             scanningExponent: true
-                            (() => scanningExponent && (position < tokenLength)).while(() => {
+                            (() => scanningExponent && (position < tokenLength)).whileTrue(() => {
                                 octet: token[position]
                                 digit: decimalDigit(octet)
 
@@ -2840,7 +2840,7 @@ parse: (text) => {
                                     fractionStart: position
 
                                     scanningFraction: true
-                                    (() => scanningFraction && (position < tokenLength)).while(() => {
+                                    (() => scanningFraction && (position < tokenLength)).whileTrue(() => {
                                         digit: decimalDigit(token[position])
                                         (digit >= 0).ifTrue(() => {
                                             fractionCoefficient =
@@ -3019,7 +3019,7 @@ parse: (text) => {
             token: Encoding.UTF8.encode("")
 
             gathering: true
-            (() => gathering).while(() => {
+            (() => gathering).whileTrue(() => {
                 octet: peek()
                 terminator: octet < 0
                 isNewlineStart(octet).ifTrue(() => { terminator = true })
@@ -3051,7 +3051,7 @@ parse: (text) => {
 
             right: token.size()
             trimming: true
-            (() => trimming && (right > 0)).while(() => {
+            (() => trimming && (right > 0)).whileTrue(() => {
                 whitespace: isSpace(token[right - 1])
                 whitespace.ifTrue(() => {
                     right = right - 1
@@ -3063,7 +3063,7 @@ parse: (text) => {
 
             trimmed: Encoding.UTF8.encode("")
             copyIndex: 0
-            (() => copyIndex < right).while(() => {
+            (() => copyIndex < right).whileTrue(() => {
                 trimmed.add(token[copyIndex])
                 copyIndex = copyIndex + 1
             })
@@ -3242,7 +3242,7 @@ parse: (text) => {
         }
 
         running: true
-        (() => running).while(() => {
+        (() => running).whileTrue(() => {
             wasTopLevel: depth == 0
 
             wasTopLevel.ifTrue(() => {
@@ -3381,7 +3381,7 @@ parse: (text) => {
             chunk: initialChunk
             level: initialLevel
             carrying: true
-            (() => carrying).while(() => {
+            (() => carrying).whileTrue(() => {
                 present: statementChunks.containsKey(level)
                 present.ifTrue(() => {
                     left: statementChunks[level]
@@ -3402,7 +3402,7 @@ parse: (text) => {
         collectStatementChunks: (initialLevel, initialResult) => {
             level: initialLevel
             result: initialResult
-            (() => level >= 0).while(() => {
+            (() => level >= 0).whileTrue(() => {
                 statementChunks.containsKey(level).ifTrue(() => {
                     result = Array(...result, ...statementChunks[level])
                 })
@@ -3444,7 +3444,7 @@ parse: (text) => {
 
         appendQuotes: (quote, count) => {
             remaining: count
-            (() => remaining > 0).while(() => {
+            (() => remaining > 0).whileTrue(() => {
                 append(quote)
                 remaining = remaining - 1
             })
@@ -3455,7 +3455,7 @@ parse: (text) => {
             count: 0
             scanning: true
 
-            (() => scanning && (look < length)).while(() => {
+            (() => scanning && (look < length)).whileTrue(() => {
                 matches: source[look] == quote
                 matches.ifTrue(() => {
                     count = count + 1
@@ -3754,7 +3754,7 @@ parse: (text) => {
             chunk: Array(element)
             level: 0
             carrying: true
-            (() => carrying).while(() => {
+            (() => carrying).whileTrue(() => {
                 present: builder.chunks.containsKey(level)
                 present.ifTrue(() => {
                     left: builder.chunks[level]
@@ -3776,7 +3776,7 @@ parse: (text) => {
         materializeArrayTableBuilder: (builder) => {
             result: Array()
             level: builder.maxLevel
-            (() => level >= 0).while(() => {
+            (() => level >= 0).whileTrue(() => {
                 builder.chunks.containsKey(level).ifTrue(() => {
                     result = Array(...result, ...builder.chunks[level])
                 })
@@ -3796,7 +3796,7 @@ parse: (text) => {
         decodeRange: (source, start, end) => {
             buffer: Encoding.UTF8.encode("")
             position: start
-            (() => position < end).while(() => {
+            (() => position < end).whileTrue(() => {
                 buffer.add(source[position])
                 position = position + 1
             })
@@ -3808,7 +3808,7 @@ parse: (text) => {
             right: source.size()
 
             trimmingLeft: true
-            (() => trimmingLeft && (left < right)).while(() => {
+            (() => trimmingLeft && (left < right)).whileTrue(() => {
                 whitespace: isSpace(source[left])
                 whitespace.ifTrue(() => {
                     left = left + 1
@@ -3819,7 +3819,7 @@ parse: (text) => {
             })
 
             trimmingRight: true
-            (() => trimmingRight && (right > left)).while(() => {
+            (() => trimmingRight && (right > left)).whileTrue(() => {
                 whitespace: isSpace(source[right - 1])
                 whitespace.ifTrue(() => {
                     right = right - 1
@@ -3845,7 +3845,7 @@ parse: (text) => {
             selected: tableNode
             position: 0
 
-            (() => position < parts.count).while(() => {
+            (() => position < parts.count).whileTrue(() => {
                 name: parts.entries[position]
                 last: position == parts.count - 1
                 entries: selected.value
@@ -3944,7 +3944,7 @@ parse: (text) => {
             selected: root
             position: 0
 
-            (() => position < parts.count).while(() => {
+            (() => position < parts.count).whileTrue(() => {
                 name: parts.entries[position]
                 last: position == parts.count - 1
                 entries: selected.value
@@ -3998,7 +3998,7 @@ parse: (text) => {
             position: 0
             created: null
 
-            (() => position < parts.count).while(() => {
+            (() => position < parts.count).whileTrue(() => {
                 name: parts.entries[position]
                 last: position == parts.count - 1
                 entries: selected.value
@@ -4096,7 +4096,7 @@ parse: (text) => {
             quote: -1
             separator: -1
 
-            (() => (position < length) && (separator < 0)).while(() => {
+            (() => (position < length) && (separator < 0)).whileTrue(() => {
                         octet: source[position]
                         inQuote: quote >= 0
 
@@ -4190,7 +4190,7 @@ parse: (text) => {
         })
 
         builderIndex: 0
-        (() => builderIndex < arrayTableBuilderCount).while(() => {
+        (() => builderIndex < arrayTableBuilderCount).whileTrue(() => {
             builder: arrayTableBuilderEntries[builderIndex]
             builder.arrayNode.value = materializeArrayTableBuilder(builder)
             builderIndex = builderIndex + 1

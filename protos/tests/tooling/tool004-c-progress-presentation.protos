@@ -117,7 +117,7 @@ state: Progress.begin("main", 23, emitLine)
 terminal: Progress.observer(state)
 
 index: 1
-(() => index <= 23).while(() => {
+(() => index <= 23).whileTrue(() => {
     (index == 5).ifTrue(() => {
         terminal(
             failSpec,
@@ -161,7 +161,7 @@ expected: Array(
 passed: lines.size() == expected.size()
 
 checkIndex: 0
-(() => passed && (checkIndex < expected.size())).while(() => {
+(() => passed && (checkIndex < expected.size())).whileTrue(() => {
     passed = lines[checkIndex] === expected[checkIndex]
     checkIndex = checkIndex + 1
 })
@@ -206,7 +206,7 @@ infraExpected: Array(
 infraPassed: infraLines.size() == infraExpected.size()
 
 infraIndex: 0
-(() => infraPassed && (infraIndex < infraExpected.size())).while(() => {
+(() => infraPassed && (infraIndex < infraExpected.size())).whileTrue(() => {
     infraPassed = infraLines[infraIndex] === infraExpected[infraIndex]
     infraIndex = infraIndex + 1
 })

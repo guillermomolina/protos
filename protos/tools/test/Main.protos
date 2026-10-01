@@ -102,7 +102,7 @@ leaves: SuiteGraph.flattenLeaves(RepositorySuite.root)
 // source authority nor host execution route.
 resolvedSuites: Array()
 resolveIndex: 0
-(() => resolveIndex < leaves.size()).while() {
+(() => resolveIndex < leaves.size()).whileTrue() {
     leaf: leaves[resolveIndex]
     corpus: leaf.corpus
     requirement: leaf.executionRequirement
@@ -171,7 +171,7 @@ resolvedSuites.freeze()
 // scheduling begins. Loader/source mechanics never come from ExecutionBinding.
 plannedSuites: Array()
 planIndex: 0
-(() => planIndex < resolvedSuites.size()).while() {
+(() => planIndex < resolvedSuites.size()).whileTrue() {
     resolved: resolvedSuites[planIndex]
     corpusBinding: resolved.corpusBinding
     planLoader: corpusBinding.planLoader
@@ -512,7 +512,7 @@ suiteObservers: Array()
 suiteInfrastructureFailed: Array()
 
 suiteIndex: 0
-(() => suiteIndex < executionSuites.size()).while() {
+(() => suiteIndex < executionSuites.size()).whileTrue() {
     planned: executionSuites[suiteIndex]
     suiteProgress:
         startProgress(
@@ -643,7 +643,7 @@ logicalCompletionObserver: (index, completion) => {
 // incrementally, by logicalCompletionObserver as each logical Case reached
 // its terminal event. Only the per-phase terminal summary remains.
 suiteFinishIndex: 0
-(() => suiteFinishIndex < executionSuites.size()).while() {
+(() => suiteFinishIndex < executionSuites.size()).whileTrue() {
     Progress.finishPhase(
         suiteProgressStates[suiteFinishIndex],
         suiteInfrastructureFailed[suiteFinishIndex]

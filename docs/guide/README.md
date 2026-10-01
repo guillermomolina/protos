@@ -94,7 +94,9 @@ structured ownership for returned task-backed Futures, and
 [`I023 — Standard while protocol`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_STATUS.md#i023--standard-while-protocol)
 has published the reference implementation plus full conformance closure.
 [`B007`](https://github.com/guillermomolina/protos-project-docs/blob/main/docs/project/registries/IMPLEMENTATION_BLOCKERS.md#b007--standard-while-protocol-semantics)
-is CLOSED.
+is CLOSED. D180 later renamed the standard Closure loop selector from `while`
+to `whileTrue` without a compatibility alias; all other D044 loop semantics are
+unchanged.
 
 `DOC001-E` is CLOSED with
 [chapter 04](04-control-flow-through-protocols.md), which explains the published

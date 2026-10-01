@@ -49,7 +49,7 @@ parse: (text) => {
         value: 0
         digitCount: 0
 
-        (() => index < size).while() {
+        (() => index < size).whileTrue() {
             digit: digitValue(text[index])
             (digit < 0).ifTrue(() => {
                 fail()
@@ -94,7 +94,7 @@ parse: (text) => {
                 keepScanning = closed == false
             })
             keepScanning
-        }).while() {
+        }).whileTrue() {
             character: text[index]
 
             (character == "]").ifTrue(() => {
@@ -138,7 +138,7 @@ parse: (text) => {
         index: 0
         addressLength: 0
 
-        (() => index < size).while() {
+        (() => index < size).whileTrue() {
             character: text[index]
             isSeparator: character == ":"
 
@@ -215,7 +215,7 @@ format: (endpoint) => {
     started: false
     divisor: 10000
 
-    (() => divisor > 0).while() {
+    (() => divisor > 0).whileTrue() {
         digit: endpoint.port.div(divisor).mod(10)
 
         emit: started

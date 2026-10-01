@@ -180,7 +180,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
 
     /**
      * PLAT042 remains authoritative for every other structured family: a
-     * reached {@code Closure.while} condition runs while exactly one untagged
+     * reached {@code Closure.whileTrue} condition runs while exactly one untagged
      * structured-dispatch root is live between it and the source root.
      */
     @Test
@@ -197,7 +197,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                                 (() => {
                                     probe()
                                     false
-                                }).while(() => 1)
+                                }).whileTrue(() => 1)
                                 """);
 
                 root.getCallTarget().call(module);
@@ -236,7 +236,7 @@ final class ProtosPerf025C1cSemanticSourceTopologyTest {
                         }
                         sum: 0
                         count: 0
-                        (() => count < 20).while(() => {
+                        (() => count < 20).whileTrue(() => {
                             sum = sum + receiver.identity(2)
                             count = count + 1
                         })
