@@ -264,9 +264,62 @@ public final class ProtosActivation {
             ProtosActorExecutionDomain executionDomain,
             ProtosReturnHome invocationHome) {
         Objects.requireNonNull(closure, "closure");
-        Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(methodHome, "methodHome");
+        return deferredInvocation(
+                closure,
+                supplied,
+                receiver,
+                methodHome,
+                fallbackPrelude,
+                actorModuleState,
+                currentModuleKey,
+                executionDomain,
+                invocationHome);
+    }
+
+    /**
+     * Internal PERF025 frame-ABI materialization seam for a direct source-backed
+     * Closure invocation.
+     *
+     * <p>Exactly the activation {@link #forClosureInvocation} would build (the
+     * Closure's captured receiver, captured method home, captured lexical
+     * contexts and return-home ownership), except that it is created after
+     * target entry with the fresh guest execution context and supplied guest
+     * Array deferred until semantics observe them.
+     */
+    public static ProtosActivation forDirectClosureInvocationWithReturnHomeForRuntime(
+            ProtosClosureValue closure,
+            java.util.List<?> supplied,
+            ProtosPrelude fallbackPrelude,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey,
+            ProtosActorExecutionDomain executionDomain,
+            ProtosReturnHome invocationHome) {
+        Objects.requireNonNull(closure, "closure");
+        return deferredInvocation(
+                closure,
+                supplied,
+                closure.capturedReceiver(),
+                closure.methodHome().orElse(null),
+                fallbackPrelude,
+                actorModuleState,
+                currentModuleKey,
+                executionDomain,
+                invocationHome);
+    }
+
+    private static ProtosActivation deferredInvocation(
+            ProtosClosureValue closure,
+            java.util.List<?> supplied,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            ProtosPrelude fallbackPrelude,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey,
+            ProtosActorExecutionDomain executionDomain,
+            ProtosReturnHome invocationHome) {
+        Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(actorModuleState, "actorModuleState");
         Objects.requireNonNull(invocationHome, "invocationHome");
 

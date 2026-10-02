@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.150-SNAPSHOT
+
+- `PERF025` completes the PLAT040 F′ convergence for direct source-backed
+  Closure invocation. Stable direct Closure-call hits (`finishDirectClosureCall`,
+  under the unchanged PERF014 selection and `DirectCallNode` target) and
+  Task-owned direct source Closure entry (`prepareTaskOwnedDirectClosureIfBytecode`,
+  the path taken by `PreparedTopLevel.invoke()`) no longer build a pre-target
+  `ProtosActivation` through `forClosureInvocation`. They enter the source
+  target through a new compact direct-Closure frame ABI kind in
+  `ProtosFrameArguments` (closure, caller provenance, explicit Task or null,
+  invocation return home, supplied values), and the root prologue materializes
+  the exact activation through the new
+  `ProtosActivation.forDirectClosureInvocationWithReturnHomeForRuntime` with
+  the guest execution Context and supplied guest Array deferred. Captured
+  receiver, `methodHome`, lexical contexts, return-home ownership, Task
+  attachment and dynamic-control inheritance are unchanged. Native,
+  structured-control, generic-fallback and synchronous host Closure paths keep
+  their existing shape. ReturnHome allocation, BUG013 frame materialization
+  and `PublishFrameActivation` are unchanged. New
+  `ProtosPerf025DirectSourceClosureCompactInvocationTest` covers the compact
+  shape, deferred state, rest parameters, Task-owned entry, distinct
+  invocations, capture by reference, `this`, non-local return and InvalidReturn.
+  No observable Protos semantics change; the specification is unchanged.
+
 ## 0.3.149-SNAPSHOT
 
 - `PERF028-A` (#780) specializes bare lexical assignments statically

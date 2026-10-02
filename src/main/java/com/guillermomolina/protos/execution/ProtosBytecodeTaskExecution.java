@@ -70,7 +70,7 @@ final class ProtosBytecodeTaskExecution {
         runPreparedSegment(
                 task,
                 prepared,
-                () -> prepared.bodyTarget().call(prepared.activation()));
+                () -> prepared.bodyTarget().call(prepared.targetArguments()));
     }
 
     static void executePreparedEntry(
@@ -146,7 +146,13 @@ final class ProtosBytecodeTaskExecution {
                  * escape propagate uncaught.
                  */
                 prepared.complete();
-                task.fail(ProtosCoreErrors.newInvalidReturn(prepared.activation()));
+                /*
+                 * PERF025: a compact source call has no pre-target activation;
+                 * the callee's own (published, or materialized here) activation
+                 * supplies the same Prelude the eager shape did.
+                 */
+                task.fail(ProtosCoreErrors.newInvalidReturn(
+                        ProtosFrameArguments.activation(prepared.targetArguments())));
             }
         } catch (ProtosTaskCancellationException cancelled) {
             prepared.complete();

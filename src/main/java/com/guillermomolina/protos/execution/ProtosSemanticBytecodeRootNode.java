@@ -123,8 +123,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     /**
-     * Root prologue of every semantic source root. A guarded ordinary send enters the root with
-     * the compact source-call ABI; this materializes its exact activation once and publishes it
+     * Root prologue of every semantic source root. A guarded ordinary send, a stable direct
+     * Closure call, or a Task-owned direct source Closure entry enters the root with a compact
+     * source-call ABI; this materializes its exact activation once and publishes it
      * into frame argument 0 (see {@link ProtosFrameArguments#activation}), so the body, root
      * exception interception and debugger scopes all observe one activation identity. Frames that
      * already carry an activation, or carry no activation ABI at all, are left unchanged.
