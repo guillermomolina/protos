@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.149-SNAPSHOT
+
+- `PERF028-A` (#780) specializes bare lexical assignments statically
+  `Resolved` in the genuine scope that owns the executing frame. They now
+  lower to `ResolveCurrentFrameLocalWriteTarget`/`AssignCurrentFrameLocal`,
+  which identify the binding through a constant `LocalAccessor` instead of
+  the String-keyed `ResolveWritableLexicalTarget`/`AssignResolvedLexicalTarget`
+  pair, in both body and parameter-default lowering. A PRESENT binding is
+  selected without name search or a fresh destination object; a binding
+  cleared under D179 C0 runs the unchanged generic selection before RHS
+  evaluation, and the selected destination is written without re-resolution
+  (FROZEN rejected, CLOSED writable, RHS removal is a mutation Error). The
+  FROZEN check uses a new non-materializing
+  `ProtosActivation.currentContextIsFrozenForRuntime()`. Candidate, Dynamic,
+  explicit member and captured writes keep their existing paths. New
+  `ProtosPerf028AResolvedCurrentLexicalWriteTest` covers the structural path,
+  fallback selection, no retargeting, remove/recreate, CLOSED/FROZEN,
+  `PRESENT(null)`, control transfer, suspension/resume with the
+  uncached-to-cached transition, and default assignments. No observable
+  Protos semantics change; the specification is unchanged.
+
 ## 0.3.148-SNAPSHOT
 
 - `PERF027-A` (#779) isolates the Integer invocation tax. The PERF016 guarded

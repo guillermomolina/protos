@@ -337,6 +337,38 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    public static final class ResolveCurrentFrameLocalWriteTarget {
+        @Specialization
+        public static ResolvedLexicalWriteTarget perform(
+                LocalAccessor accessor,
+                ProtosActivation activation,
+                String name,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosBytecodeRootNode.ResolveCurrentFrameLocalWriteTarget.perform(
+                    accessor, activation, name, bytecodeNode, frame);
+        }
+    }
+
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    public static final class AssignCurrentFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalAccessor accessor,
+                ProtosActivation activation,
+                ResolvedLexicalWriteTarget destination,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosBytecodeRootNode.AssignCurrentFrameLocal.perform(
+                    accessor, activation, destination, name, value, bytecodeNode, frame);
+        }
+    }
+
     // ---- Slot creation/assignment, members, identity, intrinsics -------------------
 
     @Operation

@@ -750,6 +750,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     public static final class ResolvedLexicalWriteTarget {
+        /**
+         * PERF028-A selection of the statically proven current frame local,
+         * recognized only by identity in {@link AssignCurrentFrameLocal}. It
+         * is stateless because the destination is the assignment site's own
+         * constant {@link LocalAccessor} in the executing frame, so the
+         * ordinary PRESENT path allocates no destination object.
+         */
+        static final ResolvedLexicalWriteTarget STATIC_CURRENT_FRAME_LOCAL =
+                new ResolvedLexicalWriteTarget(true, null);
+
         private final boolean currentContext;
         private final ProtosObjectValue object;
 
@@ -824,6 +834,75 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
             }
+            return value;
+        }
+    }
+
+    /**
+     * PERF028-A destination selection for a bare assignment whose binding is
+     * statically {@code Resolved} in the scope that owns the executing frame.
+     * The assignment site's constant {@link LocalAccessor} identifies the
+     * binding, so a PRESENT binding is selected without a String-keyed search
+     * or a fresh destination object, using exactly the presence condition of
+     * {@link ReadFrameLocal}. Static resolution does not prove presence (D179
+     * C0): a cleared local, or a non-genuine current scope, runs the exact
+     * generic {@link ResolveWritableLexicalTarget} selection now, before RHS
+     * evaluation, and that selection is retained unchanged.
+     */
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    public static final class ResolveCurrentFrameLocalWriteTarget {
+        @Specialization
+        public static ResolvedLexicalWriteTarget perform(
+                LocalAccessor accessor,
+                ProtosActivation activation,
+                String name,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            if (activation.hasGenuineExecutionContextForRuntime()
+                    && !accessor.isCleared(bytecodeNode, frame)) {
+                return ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL;
+            }
+            return ResolveWritableLexicalTarget.perform(activation, name);
+        }
+    }
+
+    /**
+     * PERF028-A counterpart to {@link ResolveCurrentFrameLocalWriteTarget}:
+     * writes exactly the destination selected before RHS evaluation and never
+     * re-resolves it. For the static current local, the mutation checks of
+     * {@link ProtosObjectValue#assignLocalSlot} are applied to the same
+     * current context and the same accessor: FROZEN is rejected (CLOSED stays
+     * writable), and a binding cleared by the RHS is a mutation error rather
+     * than a retarget, while one removed and recreated in the same context is
+     * the same physical local and receives the write. The FROZEN check does
+     * not materialize the guest Context. Execution contexts never track
+     * lookup dependencies, so the direct write needs no invalidation. Any
+     * other retained destination is written through the unchanged {@link
+     * AssignResolvedLexicalTarget} path.
+     */
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    public static final class AssignCurrentFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalAccessor accessor,
+                ProtosActivation activation,
+                ResolvedLexicalWriteTarget destination,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            if (destination != ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL) {
+                return AssignResolvedLexicalTarget.perform(
+                        activation, destination, name, value);
+            }
+            if (activation.currentContextIsFrozenForRuntime()
+                    || accessor.isCleared(bytecodeNode, frame)) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            accessor.setObject(bytecodeNode, frame, value);
             return value;
         }
     }

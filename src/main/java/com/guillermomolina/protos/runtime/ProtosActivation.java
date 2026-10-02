@@ -465,6 +465,15 @@ public final class ProtosActivation {
     }
 
     /**
+     * Reads the current lexical scope's FROZEN state without materializing the
+     * guest Context. Guest code can only freeze a materialized Context, so an
+     * unmaterialized execution context is necessarily not FROZEN.
+     */
+    public boolean currentContextIsFrozenForRuntime() {
+        return context != null && context.isFrozen();
+    }
+
+    /**
      * Reads the current lexical authority without materializing the guest Context.
      */
     public Optional<Object> readCurrentLocalSlotForRuntime(String name) {

@@ -2084,6 +2084,7 @@ final class CanonicalToBytecodeLowerer {
                 capturedResolvedAssignment(assign);
         BytecodeLocal capturedOwnerLocal =
                 capturedResolution.map(this::capturedOwnerBytecodeLocal).orElse(null);
+        BytecodeLocal currentFrameLocal = currentResolvedAssignmentBytecodeLocal(assign);
 
         if (assign.target().isPresent()) {
             BytecodeLocal rawTarget = builder.createLocal("assignRawTarget", null);
@@ -2124,6 +2125,14 @@ final class CanonicalToBytecodeLowerer {
                 builder.endResolveCapturedWritableLexicalTarget();
             }
             builder.endStoreLocal();
+        } else if (currentFrameLocal != null) {
+            /* PERF028-A: select (and retain) the destination before RHS evaluation. */
+            builder.beginStoreLocal(mutationTarget);
+            builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(assign.name());
+            builder.endResolveCurrentFrameLocalWriteTarget();
+            builder.endStoreLocal();
         } else {
             /* AST authority resolves the writable lexical destination before RHS evaluation. */
             builder.beginStoreLocal(mutationTarget);
@@ -2160,6 +2169,13 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
             builder.endAssignLocalSlot();
+        } else if (currentFrameLocal != null) {
+            builder.beginAssignCurrentFrameLocal(currentFrameLocal);
+            emitCurrentActivation(builder);
+            builder.emitLoadLocal(mutationTarget);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadLocal(value);
+            builder.endAssignCurrentFrameLocal();
         } else {
             builder.beginAssignResolvedLexicalTarget();
             emitCurrentActivation(builder);
@@ -2315,6 +2331,7 @@ final class CanonicalToBytecodeLowerer {
                 capturedResolvedAssignment(assign);
         BytecodeLocal capturedOwnerLocal =
                 capturedResolution.map(this::capturedOwnerBytecodeLocal).orElse(null);
+        BytecodeLocal currentFrameLocal = currentResolvedAssignmentBytecodeLocal(assign);
 
         if (assign.target().isPresent()) {
             BytecodeLocal rawTarget = builder.createLocal("defaultAssignRawTarget", null);
@@ -2351,6 +2368,13 @@ final class CanonicalToBytecodeLowerer {
                 builder.endResolveCapturedWritableLexicalTarget();
             }
             builder.endStoreLocal();
+        } else if (currentFrameLocal != null) {
+            builder.beginStoreLocal(mutationTarget);
+            builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(assign.name());
+            builder.endResolveCurrentFrameLocalWriteTarget();
+            builder.endStoreLocal();
         } else {
             builder.beginStoreLocal(mutationTarget);
             builder.beginResolveWritableLexicalTarget();
@@ -2386,6 +2410,13 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(assign.name());
             builder.emitLoadLocal(value);
             builder.endAssignLocalSlot();
+        } else if (currentFrameLocal != null) {
+            builder.beginAssignCurrentFrameLocal(currentFrameLocal);
+            emitCurrentActivation(builder);
+            builder.emitLoadLocal(mutationTarget);
+            builder.emitLoadConstant(assign.name());
+            builder.emitLoadLocal(value);
+            builder.endAssignCurrentFrameLocal();
         } else {
             builder.beginAssignResolvedLexicalTarget();
             emitCurrentActivation(builder);
@@ -4002,6 +4033,27 @@ final class CanonicalToBytecodeLowerer {
             return java.util.Optional.of(captured);
         }
         return java.util.Optional.empty();
+    }
+
+    /**
+     * PERF028-A: the current root's own {@link BytecodeLocal} for a bare
+     * assignment statically {@code Resolved} in the exact genuine scope being
+     * lowered, mirroring the {@code ReadFrameLocal} admission in {@link
+     * #emitLookup}; {@code null} keeps the unchanged generic write path.
+     */
+    private BytecodeLocal currentResolvedAssignmentBytecodeLocal(CanonicalAssign assign) {
+        if (assign.target().isPresent() || currentRootAnalysis == null) {
+            return null;
+        }
+
+        java.util.Optional<CanonicalBindingResolution> resolution =
+                currentRootAnalysis.resolutionOf(assign);
+        if (resolution.isPresent()
+                && resolution.orElseThrow() instanceof CanonicalBindingResolution.Resolved resolved
+                && resolved.identity().owner() == currentRootTopScope) {
+            return currentRootFrameLocals.get(resolved.identity().name());
+        }
+        return null;
     }
 
     private boolean capturedOwnerMatchesCurrentRoot(
