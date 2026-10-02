@@ -68,8 +68,34 @@ final class ProtosBytecodeTagTreeNodeExports {
             throw UnsupportedMessageException.create();
         }
         ProtosActivation inline = inlineCallbackActivation(node, frame);
-        return debuggerScope(
-                inline != null ? inline : ProtosFrameArguments.activation(frame));
+        if (inline != null) {
+            return debuggerScope(inline);
+        }
+        ProtosActivation activation = ProtosFrameArguments.activation(frame);
+        projectFrameNativeBindings(node, frame, activation);
+        return debuggerScope(activation);
+    }
+
+    /**
+     * PERF025 frame-materialization slice: a root lowered without a persistent
+     * frame authority keeps its current bindings only in its live frame while
+     * its execution context is unobserved. Before projecting such an
+     * activation, tooling installs on it, while the queried frame is live, the
+     * same escape-safe materialized-frame authority the root would install on
+     * an observed activation, so the scope reads the exact bindings through the
+     * activation as for every other root.
+     */
+    private static void projectFrameNativeBindings(
+            TagTreeNode node,
+            Frame frame,
+            ProtosActivation activation) {
+        if (node == null || !activation.hasUnobservedFrameNativeExecutionContextForRuntime()) {
+            return;
+        }
+        BytecodeNode bytecode = node.getBytecodeNode();
+        if (bytecode.getBytecodeRootNode() instanceof ProtosSemanticBytecodeRootNode root) {
+            root.installFrameNativeAuthorityForTooling(activation, bytecode, frame);
+        }
     }
 
     /**

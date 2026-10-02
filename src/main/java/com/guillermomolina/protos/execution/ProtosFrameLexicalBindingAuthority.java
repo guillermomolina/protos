@@ -174,6 +174,32 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         return frame;
     }
 
+    /**
+     * PERF025 frame-materialization slice: true when this authority is the
+     * one installed over {@code candidate}, the materialized frame of the
+     * live activation of the root owning {@code bytecodeNode}.
+     */
+    boolean isInstalledFor(BytecodeNode bytecodeNode, MaterializedFrame candidate) {
+        return declaringRoot == bytecodeNode.getBytecodeRootNode() && frame == candidate;
+    }
+
+    /**
+     * PERF025 frame-materialization slice: records every frame-backed binding
+     * already PRESENT in the retained frame as established, in layout
+     * (declaration) order. Used only when this authority is created after its
+     * root has already established bindings directly in its frame locals,
+     * which a root does only while its code is straight-line within one
+     * activation, so declaration order is establishment order.
+     */
+    void adoptPresentFrameBackedBindings() {
+        BytecodeNode bytecodeNode = currentBytecodeNode();
+        for (int ordinal = 0; ordinal < frameBackedLayout.length(); ordinal++) {
+            if (!frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
+                establishmentOrder.add(frameBackedLayout.nameAt(ordinal));
+            }
+        }
+    }
+
     @Override
     public boolean containsBinding(String name) {
         Objects.requireNonNull(name, "name");

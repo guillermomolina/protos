@@ -103,6 +103,43 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         super(language, frameDescriptor);
     }
 
+    /*
+     * PERF025 frame-materialization slice: the frame-binding range and layout
+     * of a Closure root lowered without InstallFrameLexicalAuthority, or null.
+     * Read only by tooling scope projection, which receives the live frame.
+     */
+    private LocalRangeAccessor frameNativeBindingLocals;
+    private ProtosFrameLexicalLayout frameNativeBindingLayout;
+
+    final void recordFrameNativeBindings(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout) {
+        this.frameNativeBindingLocals = frameBackedLocals;
+        this.frameNativeBindingLayout = frameBackedLayout;
+    }
+
+    /**
+     * Installs, for tooling scope projection, the materialized-frame authority
+     * of this root over {@code frame} on {@code activation}, when this root was
+     * lowered without a persistent frame authority. {@code frame} must be the
+     * live frame of an executing activation of this root; only its
+     * materialized form is retained.
+     */
+    final void installFrameNativeAuthorityForTooling(
+            ProtosActivation activation,
+            BytecodeNode bytecodeNode,
+            com.oracle.truffle.api.frame.Frame frame) {
+        if (frameNativeBindingLocals == null) {
+            return;
+        }
+        ProtosBytecodeRootNode.installFrameLexicalAuthorityOnTransition(
+                frameNativeBindingLocals,
+                frameNativeBindingLayout,
+                activation,
+                bytecodeNode,
+                frame.materialize());
+    }
+
     @Override
     public Object interceptControlFlowException(
             ControlFlowException transfer,
@@ -214,6 +251,102 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Bind("$frame") VirtualFrame frame) {
             ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(
                     frameBackedLocals, frameBackedLayout, activation, bytecodeNode, frame);
+        }
+    }
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class BindClosureFrameParameter {
+        @Specialization
+        public static void perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
+                    frameBackedLocals, frameBackedLayout, activation,
+                    ordinal, name, value, bytecodeNode, frame);
+        }
+    }
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class BindClosureFrameRest {
+        @Specialization
+        public static void perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                int positionalParametersBeforeRest,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            ProtosBytecodeRootNode.BindClosureFrameRest.perform(
+                    frameBackedLocals, frameBackedLayout, activation,
+                    ordinal, name, positionalParametersBeforeRest, bytecodeNode, frame);
+        }
+    }
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class CreateCurrentFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosBytecodeRootNode.CreateCurrentFrameLocal.perform(
+                    frameBackedLocals, frameBackedLayout, activation,
+                    ordinal, name, value, bytecodeNode, frame);
+        }
+    }
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class MultipleCreateFrameLocals {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int[] ordinals,
+                String[] names,
+                Object source,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosBytecodeRootNode.MultipleCreateFrameLocals.perform(
+                    frameBackedLocals, frameBackedLayout, activation,
+                    ordinals, names, source, bytecodeNode, frame);
         }
     }
 

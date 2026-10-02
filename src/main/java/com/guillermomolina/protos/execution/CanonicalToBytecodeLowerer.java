@@ -50,6 +50,7 @@ import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
+import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
@@ -177,6 +178,18 @@ final class CanonicalToBytecodeLowerer {
     private CanonicalLexicalScope currentRootTopScope;
     private java.util.Map<String, BytecodeLocal> currentRootFrameLocals =
             java.util.Map.of();
+
+    /**
+     * PERF025 frame-materialization slice: the frame-binding range and layout
+     * of the genuine root currently being lowered when {@link
+     * #requiresPersistentFrameAuthority} proved it needs no persistent frame
+     * authority, else {@code null}. While non-null, that root's own statically
+     * proven current bindings are established through the frame-native
+     * operations instead of the named-slot authority path. Saved and restored
+     * with the other per-root fast-path context.
+     */
+    private BytecodeLocal[] currentRootFrameNativeLocals;
+    private ProtosFrameLexicalLayout currentRootFrameNativeLayout;
 
     /**
      * PLAT041 C′ lowering-time source of the current {@link
@@ -503,11 +516,15 @@ final class CanonicalToBytecodeLowerer {
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
         BytecodeLocal savedActivationLocal = currentActivationLocal;
+        BytecodeLocal[] savedFrameNativeLocals = currentRootFrameNativeLocals;
+        ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
         try {
             currentRootAnalysis = analysisForThisRoot;
             currentRootTopScope = scopeForThisRoot;
             currentRootFrameLocals = java.util.Map.of();
             currentActivationLocal = null;
+            currentRootFrameNativeLocals = null;
+            currentRootFrameNativeLayout = null;
             return emitRootBody(
                     builder,
                     sequence,
@@ -518,6 +535,8 @@ final class CanonicalToBytecodeLowerer {
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
             currentActivationLocal = savedActivationLocal;
+            currentRootFrameNativeLocals = savedFrameNativeLocals;
+            currentRootFrameNativeLayout = savedFrameNativeLayout;
         }
     }
 
@@ -579,8 +598,8 @@ final class CanonicalToBytecodeLowerer {
          * root, including Closure parameters, receives one stable
          * BytecodeLocal. Allocating that physical local does not
          * establish semantic presence: it stays cleared until the
-         * existing createLocalSlot binding point writes through the
-         * frame-backed authority.
+         * binding point (the frame-backed authority, or the PERF025
+         * frame-native establishment operation) writes it.
          */
         java.util.Map<String, BytecodeLocal> frameLocals =
                 new java.util.LinkedHashMap<>();
@@ -597,18 +616,35 @@ final class CanonicalToBytecodeLowerer {
          * already sees a fresh entry.
          */
         frameLocalsByScope.put(scopeForThisRoot, currentRootFrameLocals);
+        BytecodeLocal[] frameLocalRange = null;
+        ProtosFrameLexicalLayout frameLocalLayout = null;
         if (!frameLocals.isEmpty()) {
-            BytecodeLocal[] frameLocalRange =
+            frameLocalRange =
                     frameLocals.values().toArray(BytecodeLocal[]::new);
             String[] frameLocalNames =
                     frameLocals.keySet().toArray(String[]::new);
-            ProtosFrameLexicalLayout frameLocalLayout =
+            frameLocalLayout =
                     ProtosFrameLexicalLayout.of(frameLocalNames);
-            builder.beginInstallFrameLexicalAuthority(
-                    frameLocalRange,
-                    frameLocalLayout);
-            emitCurrentActivation(builder);
-            builder.endInstallFrameLexicalAuthority();
+            /*
+             * PERF025 frame-materialization slice: declaring a binding no
+             * longer implies a persistent materialized frame. Only a root
+             * that may need its bindings outside its live frame installs the
+             * escape-safe (BUG013) materialized-frame authority at entry.
+             */
+            if (requiresPersistentFrameAuthority(
+                    sequence,
+                    activationDefinition,
+                    currentRootAnalysis,
+                    scopeForThisRoot)) {
+                builder.beginInstallFrameLexicalAuthority(
+                        frameLocalRange,
+                        frameLocalLayout);
+                emitCurrentActivation(builder);
+                builder.endInstallFrameLexicalAuthority();
+            } else {
+                currentRootFrameNativeLocals = frameLocalRange;
+                currentRootFrameNativeLayout = frameLocalLayout;
+            }
         }
 
         BytecodeLocal defaultValue = null;
@@ -649,7 +685,200 @@ final class CanonicalToBytecodeLowerer {
 
         ProtosSemanticBytecodeRootNode result = builder.endRoot();
         builder.endSourceSection();
+        if (currentRootFrameNativeLayout != null) {
+            result.recordFrameNativeBindings(
+                    LocalRangeAccessor.constantOf(currentRootFrameNativeLocals),
+                    currentRootFrameNativeLayout);
+        }
         return result;
+    }
+
+    /**
+     * PERF025 frame-materialization slice: conservative lowering decision on
+     * whether this genuine root must install its persistent, escape-safe
+     * materialized-frame authority at entry, or may keep its statically proven
+     * current bindings in its ordinary frame locals for the lifetime of its
+     * live frame.
+     *
+     * <p>Only a Closure root can avoid the authority: a top-level/module root
+     * may share its activation with later roots (REPL/module persistence and
+     * the I072-C authority handoff), so it always installs it. A Closure root
+     * avoids it only when nothing in its own parameters or body can make its
+     * current execution context observable or capturable, or reach a current
+     * binding other than through its static identity:
+     * <ul>
+     *   <li>no nested Closure (including inline literal callbacks and Closure
+     *       defaults), which captures the current context by reference;</li>
+     *   <li>no Object construction, whose construction activation captures it;</li>
+     *   <li>no {@code context} intrinsic and no {@code compose}, which observe
+     *       or populate it as a guest Context;</li>
+     *   <li>every bare read or write of a name this root declares is {@code
+     *       Resolved} to this root's own scope (never {@code Candidate} or
+     *       {@code Dynamic}), and every target-less creation is proven to
+     *       establish a binding of this root's own scope.</li>
+     * </ul>
+     * Any unrecognized form keeps the authority. A root that is admitted but
+     * whose activation is nonetheless observed at run time takes the
+     * in-frame transition of {@link
+     * ProtosBytecodeRootNode#createCurrentFrameBinding}.
+     */
+    private static boolean requiresPersistentFrameAuthority(
+            CanonicalSequence body,
+            CanonicalClosure activationDefinition,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        if (activationDefinition == null || analysis == null || scope == null) {
+            return true;
+        }
+        for (CanonicalParameter parameter : activationDefinition.parameters()) {
+            if (analysis.identityOf(parameter)
+                            .map(identity -> identity.owner() != scope)
+                            .orElse(true)
+                    || (parameter.defaultValue().isPresent()
+                            && demandsPersistentFrame(
+                                    parameter.defaultValue().orElseThrow(), analysis, scope))) {
+                return true;
+            }
+        }
+        return demandsPersistentFrame(body, analysis, scope);
+    }
+
+    private static boolean demandsPersistentFrame(
+            CanonicalExpression expression,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        if (expression instanceof CanonicalLiteral) {
+            return false;
+        }
+        if (expression instanceof CanonicalClosure
+                || expression instanceof CanonicalObject
+                || expression instanceof CanonicalCompose) {
+            return true;
+        }
+        if (expression instanceof CanonicalIntrinsic intrinsic) {
+            return intrinsic.kind() == CanonicalIntrinsic.Kind.CONTEXT;
+        }
+        if (expression instanceof CanonicalLookup lookup) {
+            return scope.declaresName(lookup.name())
+                    && !resolvedInScope(analysis.resolutionOf(lookup), scope);
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            if (assign.target().isPresent()) {
+                return demandsPersistentFrame(assign.target().orElseThrow(), analysis, scope)
+                        || demandsPersistentFrame(assign.value(), analysis, scope);
+            }
+            return (scope.declaresName(assign.name())
+                            && !resolvedInScope(analysis.resolutionOf(assign), scope))
+                    || demandsPersistentFrame(assign.value(), analysis, scope);
+        }
+        if (expression instanceof CanonicalCreate create) {
+            if (create.target().isPresent()) {
+                return demandsPersistentFrame(create.target().orElseThrow(), analysis, scope)
+                        || demandsPersistentFrame(create.value(), analysis, scope);
+            }
+            return analysis.identityOf(create)
+                            .map(identity -> identity.owner() != scope)
+                            .orElse(true)
+                    || demandsPersistentFrame(create.value(), analysis, scope);
+        }
+        if (expression instanceof CanonicalMultipleCreate create) {
+            return analysis.identitiesOf(create)
+                            .map(identities -> identities.size() != create.names().size()
+                                    || identities.stream()
+                                            .anyMatch(identity -> identity.owner() != scope))
+                            .orElse(true)
+                    || demandsPersistentFrame(create.value(), analysis, scope);
+        }
+        if (expression instanceof CanonicalSequence sequence) {
+            return anyDemandsPersistentFrame(sequence.expressions(), analysis, scope);
+        }
+        if (expression instanceof CanonicalCall call) {
+            return demandsPersistentFrame(call.receiver(), analysis, scope)
+                    || anyDemandsPersistentFrame(call.arguments(), analysis, scope);
+        }
+        if (expression instanceof CanonicalSend send) {
+            return demandsPersistentFrame(send.receiver(), analysis, scope)
+                    || anyDemandsPersistentFrame(send.arguments(), analysis, scope);
+        }
+        if (expression instanceof CanonicalSuperSend superSend) {
+            return anyDemandsPersistentFrame(superSend.arguments(), analysis, scope);
+        }
+        if (expression instanceof CanonicalMember member) {
+            return demandsPersistentFrame(member.receiver(), analysis, scope);
+        }
+        if (expression instanceof CanonicalIdentity identity) {
+            return demandsPersistentFrame(identity.left(), analysis, scope)
+                    || demandsPersistentFrame(identity.right(), analysis, scope);
+        }
+        if (expression instanceof CanonicalNotIdentity identity) {
+            return demandsPersistentFrame(identity.left(), analysis, scope)
+                    || demandsPersistentFrame(identity.right(), analysis, scope);
+        }
+        if (expression instanceof CanonicalDerivedInequality inequality) {
+            return demandsPersistentFrame(inequality.left(), analysis, scope)
+                    || demandsPersistentFrame(inequality.right(), analysis, scope);
+        }
+        if (expression instanceof CanonicalIndexedAssign indexed) {
+            return demandsPersistentFrame(indexed.receiver(), analysis, scope)
+                    || demandsPersistentFrame(indexed.index(), analysis, scope)
+                    || demandsPersistentFrame(indexed.value(), analysis, scope);
+        }
+        if (expression instanceof CanonicalMapConstruction map) {
+            if (demandsPersistentFrame(map.factory(), analysis, scope)) {
+                return true;
+            }
+            for (CanonicalMapConstruction.Entry entry : map.entries()) {
+                if (demandsPersistentFrame(entry.key(), analysis, scope)
+                        || demandsPersistentFrame(entry.value(), analysis, scope)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        if (expression instanceof CanonicalReturn returnExpression) {
+            return demandsPersistentFrame(returnExpression.value(), analysis, scope);
+        }
+        if (expression instanceof CanonicalSpread spread) {
+            return demandsPersistentFrame(spread.expression(), analysis, scope);
+        }
+        return true;
+    }
+
+    private static boolean anyDemandsPersistentFrame(
+            java.util.List<CanonicalExpression> expressions,
+            CanonicalBindingAnalysis analysis,
+            CanonicalLexicalScope scope) {
+        for (CanonicalExpression expression : expressions) {
+            if (demandsPersistentFrame(expression, analysis, scope)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean resolvedInScope(
+            java.util.Optional<CanonicalBindingResolution> resolution,
+            CanonicalLexicalScope scope) {
+        return resolution.isPresent()
+                && resolution.orElseThrow() instanceof CanonicalBindingResolution.Resolved resolved
+                && resolved.identity().owner() == scope;
+    }
+
+    /**
+     * The frame-layout ordinal through which a statically proven current
+     * binding named {@code name} is established frame-natively, or {@code -1}
+     * when the current root installs a persistent frame authority, when the
+     * current activation is not the root's own (inline Object body or inline
+     * callback region), or when the name is not one of the root's bindings.
+     */
+    private int frameNativeOrdinal(String name) {
+        if (currentRootFrameNativeLayout == null
+                || currentActivationLocal != null
+                || !currentRootFrameLocals.containsKey(name)) {
+            return -1;
+        }
+        Integer ordinal = currentRootFrameNativeLayout.offsetOf(name);
+        return ordinal == null ? -1 : ordinal;
     }
 
     /**
@@ -892,11 +1121,23 @@ final class CanonicalToBytecodeLowerer {
 
         for (CanonicalParameter parameter : definition.parameters()) {
             if (parameter.rest()) {
-                builder.beginBindClosureRest();
-                emitCurrentActivation(builder);
-                builder.emitLoadConstant(parameter.name());
-                builder.emitLoadConstant(positionalIndex);
-                builder.endBindClosureRest();
+                int restOrdinal = frameNativeOrdinal(parameter.name());
+                if (restOrdinal >= 0) {
+                    builder.beginBindClosureFrameRest(
+                            currentRootFrameNativeLocals,
+                            currentRootFrameNativeLayout);
+                    emitCurrentActivation(builder);
+                    builder.emitLoadConstant(restOrdinal);
+                    builder.emitLoadConstant(parameter.name());
+                    builder.emitLoadConstant(positionalIndex);
+                    builder.endBindClosureFrameRest();
+                } else {
+                    builder.beginBindClosureRest();
+                    emitCurrentActivation(builder);
+                    builder.emitLoadConstant(parameter.name());
+                    builder.emitLoadConstant(positionalIndex);
+                    builder.endBindClosureRest();
+                }
                 hasRest = true;
                 continue;
             }
@@ -949,15 +1190,14 @@ final class CanonicalToBytecodeLowerer {
                             defaultResumeValue);
                     emitBindDefaultLocal(builder, parameter, defaultValue);
                 } else {
-                    builder.beginBindClosureParameter();
-                    emitCurrentActivation(builder);
-                    builder.emitLoadConstant(parameter.name());
+                    boolean frameNative =
+                            beginBindClosureParameter(builder, parameter.name());
                     builder.beginSourceSection(
                             defaultExpression.span().startOffset(),
                             defaultExpression.span().length());
                     emitExpression(builder, defaultExpression);
                     builder.endSourceSection();
-                    builder.endBindClosureParameter();
+                    endBindClosureParameter(builder, frameNative);
                 }
                 builder.endBlock();
 
@@ -987,11 +1227,107 @@ final class CanonicalToBytecodeLowerer {
         if (defaultValue == null) {
             throw new AssertionError("composed default value local was not allocated");
         }
-        builder.beginBindClosureParameter();
-        emitCurrentActivation(builder);
-        builder.emitLoadConstant(parameter.name());
+        boolean frameNative = beginBindClosureParameter(builder, parameter.name());
         builder.emitLoadLocal(defaultValue);
-        builder.endBindClosureParameter();
+        endBindClosureParameter(builder, frameNative);
+    }
+
+    /**
+     * Opens the binding operation of one Closure parameter: the PERF025
+     * frame-native {@code BindClosureFrameParameter} for a parameter of a
+     * root lowered without a persistent frame authority, otherwise the
+     * unchanged {@code BindClosureParameter}. Both then take the value
+     * operand; returns whether the frame-native form was opened.
+     */
+    private boolean beginBindClosureParameter(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            String name) {
+        int ordinal = frameNativeOrdinal(name);
+        if (ordinal >= 0) {
+            builder.beginBindClosureFrameParameter(
+                    currentRootFrameNativeLocals,
+                    currentRootFrameNativeLayout);
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(ordinal);
+        } else {
+            builder.beginBindClosureParameter();
+            emitCurrentActivation(builder);
+        }
+        builder.emitLoadConstant(name);
+        return ordinal >= 0;
+    }
+
+    private static void endBindClosureParameter(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            boolean frameNative) {
+        if (frameNative) {
+            builder.endBindClosureFrameParameter();
+        } else {
+            builder.endBindClosureParameter();
+        }
+    }
+
+    /**
+     * Emits the target-less creation of {@code name} from {@code value}: the
+     * PERF025 frame-native {@code CreateCurrentFrameLocal} for a binding of a
+     * root lowered without a persistent frame authority, otherwise the
+     * unchanged {@code CreateCurrentLocalSlot}.
+     */
+    private void emitCreateCurrentBinding(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            String name,
+            BytecodeLocal value) {
+        int ordinal = frameNativeOrdinal(name);
+        if (ordinal >= 0) {
+            builder.beginCreateCurrentFrameLocal(
+                    currentRootFrameNativeLocals,
+                    currentRootFrameNativeLayout);
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(ordinal);
+            builder.emitLoadConstant(name);
+            builder.emitLoadLocal(value);
+            builder.endCreateCurrentFrameLocal();
+            return;
+        }
+        builder.beginCreateCurrentLocalSlot();
+        emitCurrentActivation(builder);
+        builder.emitLoadConstant(name);
+        builder.emitLoadLocal(value);
+        builder.endCreateCurrentLocalSlot();
+    }
+
+    /**
+     * Emits a multiple creation from {@code source}: the PERF025 frame-native
+     * {@code MultipleCreateFrameLocals} when every name is a binding of a root
+     * lowered without a persistent frame authority, otherwise the unchanged
+     * {@code MultipleCreateLocalSlots}.
+     */
+    private void emitMultipleCreateCurrentBindings(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            java.util.List<String> names,
+            BytecodeLocal source) {
+        int[] ordinals = new int[names.size()];
+        boolean frameNative = true;
+        for (int index = 0; index < ordinals.length && frameNative; index++) {
+            ordinals[index] = frameNativeOrdinal(names.get(index));
+            frameNative = ordinals[index] >= 0;
+        }
+        if (frameNative) {
+            builder.beginMultipleCreateFrameLocals(
+                    currentRootFrameNativeLocals,
+                    currentRootFrameNativeLayout);
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(ordinals);
+            builder.emitLoadConstant(multipleCreateNamesConstant(names));
+            builder.emitLoadLocal(source);
+            builder.endMultipleCreateFrameLocals();
+            return;
+        }
+        builder.beginMultipleCreateLocalSlots();
+        emitCurrentActivation(builder);
+        builder.emitLoadConstant(multipleCreateNamesConstant(names));
+        builder.emitLoadLocal(source);
+        builder.endMultipleCreateLocalSlots();
     }
 
     private static boolean hasComposedArgument(
@@ -1999,11 +2335,7 @@ final class CanonicalToBytecodeLowerer {
             emitBodyExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(result);
-            builder.beginCreateCurrentLocalSlot();
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(create.name());
-            builder.emitLoadLocal(value);
-            builder.endCreateCurrentLocalSlot();
+            emitCreateCurrentBinding(builder, create.name(), value);
             builder.endStoreLocal();
             return;
         }
@@ -2063,11 +2395,7 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(result);
-        builder.beginMultipleCreateLocalSlots();
-        emitCurrentActivation(builder);
-        builder.emitLoadConstant(multipleCreateNamesConstant(create.names()));
-        builder.emitLoadLocal(source);
-        builder.endMultipleCreateLocalSlots();
+        emitMultipleCreateCurrentBindings(builder, create.names(), source);
         builder.endStoreLocal();
     }
 
@@ -2255,11 +2583,7 @@ final class CanonicalToBytecodeLowerer {
             emitDefaultExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(result);
-            builder.beginCreateCurrentLocalSlot();
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(create.name());
-            builder.emitLoadLocal(value);
-            builder.endCreateCurrentLocalSlot();
+            emitCreateCurrentBinding(builder, create.name(), value);
             builder.endStoreLocal();
             return;
         }
@@ -2310,11 +2634,7 @@ final class CanonicalToBytecodeLowerer {
                 resumeValue);
 
         builder.beginStoreLocal(result);
-        builder.beginMultipleCreateLocalSlots();
-        emitCurrentActivation(builder);
-        builder.emitLoadConstant(multipleCreateNamesConstant(create.names()));
-        builder.emitLoadLocal(source);
-        builder.endMultipleCreateLocalSlots();
+        emitMultipleCreateCurrentBindings(builder, create.names(), source);
         builder.endStoreLocal();
     }
 
@@ -3701,14 +4021,12 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter,
             int positionalIndex) {
-        builder.beginBindClosureParameter();
-        emitCurrentActivation(builder);
-        builder.emitLoadConstant(parameter.name());
+        boolean frameNative = beginBindClosureParameter(builder, parameter.name());
         builder.beginLoadClosureArgument();
         emitCurrentActivation(builder);
         builder.emitLoadConstant(positionalIndex);
         builder.endLoadClosureArgument();
-        builder.endBindClosureParameter();
+        endBindClosureParameter(builder, frameNative);
     }
 
     private void validateSupported(CanonicalSequence sequence) {

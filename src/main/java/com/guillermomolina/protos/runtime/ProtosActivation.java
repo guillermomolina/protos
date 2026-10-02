@@ -498,6 +498,28 @@ public final class ProtosActivation {
     }
 
     /**
+     * PERF025 frame-materialization slice: true while this activation's
+     * current genuine execution context has neither been materialized as a
+     * guest Context nor been given a lexical-binding authority. In that state
+     * the executing root's frame locals are the only store its statically
+     * proven current bindings can have, so such a root may establish them
+     * directly in those locals while its frame is live. Any other state takes
+     * the existing authority path.
+     */
+    public boolean hasUnobservedFrameNativeExecutionContextForRuntime() {
+        return context == null && deferredContextAuthority == null;
+    }
+
+    /**
+     * The lexical-binding authority currently installed for this activation's
+     * execution context, or {@code null}. Backend-private; never materializes
+     * the guest Context.
+     */
+    public ProtosLexicalBindingAuthority currentLexicalBindingAuthorityForRuntime() {
+        return deferredContextAuthority;
+    }
+
+    /**
      * True when the current lexical scope is semantically a genuine execution
      * context even if its guest object has not been materialized yet.
      */

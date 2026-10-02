@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.151-SNAPSHOT
+
+- `PERF025` frame-materialization slice: ordinary ROOT/CLOSURE frames are no
+  longer materialized merely because they declare a local or parameter.
+  `CanonicalToBytecodeLowerer` now emits `InstallFrameLexicalAuthority` only
+  when a conservative lowering predicate (`requiresPersistentFrameAuthority`)
+  cannot prove that a Closure root's bindings stay confined to its live frame:
+  top-level/module roots, nested Closures (including inline literal callbacks
+  and Closure defaults), Object construction, the `context` intrinsic,
+  `compose`, any non-`Resolved` (`Candidate`/`Dynamic`) access to a name the
+  root declares, and any unrecognized form keep the persistent authority.
+  In admitted roots, statically proven current bindings (supplied, defaulted
+  and rest parameters, target-less `:` and D143 multiple creation) are
+  established directly in their frame locals by the new
+  `BindClosureFrameParameter`, `BindClosureFrameRest`,
+  `CreateCurrentFrameLocal` and `MultipleCreateFrameLocals` operations, with
+  the exact duplicate-creation error and presence-by-not-cleared rule; reads
+  and PERF028-A writes keep their existing `LocalAccessor` fast paths. If an
+  admitted root's activation is already observed (materialized Context or an
+  installed authority), its first establishment installs, in-frame and while
+  the frame is live, the same materialized-frame authority, adopting the
+  bindings already present. Tooling scope projection of an unobserved
+  admitted root installs that same authority from the live queried frame
+  before projecting, so `ProtosDebuggerScope` is unchanged.
+  Persistent/materialized frame authority is retained for every case that
+  requires general or escaping context semantics; BUG013 lifetime safety is
+  intact (no raw `VirtualFrame` is ever retained). No observable Protos
+  semantic change and no specification change. New
+  `ProtosPerf025FrameMaterializationSliceTest`.
+
 ## 0.3.150-SNAPSHOT
 
 - `PERF025` completes the PLAT040 F′ convergence for direct source-backed

@@ -199,26 +199,32 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 String name,
                 int positionalParametersBeforeRest) {
-            List<?> supplied =
-                    closureArguments(activation);
-            int restStart =
-                    Math.min(
-                            positionalParametersBeforeRest,
-                            supplied.size());
-            ProtosPrelude prelude =
-                    activation.prelude()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "parameter binding requires an owning Core prelude"));
             createClosureParameterSlot(
                     activation,
                     name,
-                    prelude.newFrozenArray(
-                            supplied.subList(
-                                    restStart,
-                                    supplied.size())));
+                    closureRestArray(activation, positionalParametersBeforeRest));
         }
+    }
+
+    private static Object closureRestArray(
+            ProtosActivation activation,
+            int positionalParametersBeforeRest) {
+        List<?> supplied =
+                closureArguments(activation);
+        int restStart =
+                Math.min(
+                        positionalParametersBeforeRest,
+                        supplied.size());
+        ProtosPrelude prelude =
+                activation.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "parameter binding requires an owning Core prelude"));
+        return prelude.newFrozenArray(
+                supplied.subList(
+                        restStart,
+                        supplied.size()));
     }
 
     @Operation
@@ -307,6 +313,209 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             frameBackedLocals,
                             bytecodeNode,
                             materializedFrame));
+        }
+    }
+
+    /**
+     * PERF025 frame-materialization slice: establishes a statically proven
+     * current binding of a root lowered without {@link
+     * InstallFrameLexicalAuthority} (see {@code
+     * CanonicalToBytecodeLowerer#requiresPersistentFrameAuthority}).
+     *
+     * <p>While the activation's execution context is unobserved and has no
+     * authority, the root's frame local is its only possible store: the
+     * binding is created there directly, with the exact OPEN-context creation
+     * rule (a PRESENT, i.e. non-cleared, local is a duplicate creation; an
+     * unobserved context is necessarily OPEN). Allocating the local never made
+     * it PRESENT; only this write does.
+     *
+     * <p>In any other state (a Context already materialized, or an authority
+     * already installed), the root first installs, exactly once and while its
+     * frame is live, the same materialized-frame authority {@link
+     * InstallFrameLexicalAuthority} would have installed at entry, adopting
+     * the bindings already established in its locals, and then uses the
+     * unchanged authority creation path. No VirtualFrame is ever retained.
+     */
+    static void createCurrentFrameBinding(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            ProtosActivation activation,
+            int ordinal,
+            String name,
+            Object value,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        if (activation.hasUnobservedFrameNativeExecutionContextForRuntime()) {
+            if (!frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
+                throw new IllegalStateException("local slot already exists: " + name);
+            }
+            frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
+            return;
+        }
+        if (activation.hasGenuineExecutionContextForRuntime()) {
+            installFrameLexicalAuthorityOnTransition(
+                    frameBackedLocals,
+                    frameBackedLayout,
+                    activation,
+                    bytecodeNode,
+                    frame.materialize());
+        }
+        activation.createCurrentLocalSlotForRuntime(name, value);
+    }
+
+    /**
+     * Installs the materialized-frame authority of a live root lowered
+     * without {@link InstallFrameLexicalAuthority}, unless the authority
+     * already installed is that root's own over this same frame. Callers pass
+     * the frame of an activation that is still executing.
+     */
+    static void installFrameLexicalAuthorityOnTransition(
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            ProtosActivation activation,
+            BytecodeNode bytecodeNode,
+            MaterializedFrame materializedFrame) {
+        if (activation.currentLexicalBindingAuthorityForRuntime()
+                        instanceof ProtosFrameLexicalBindingAuthority installed
+                && installed.isInstalledFor(bytecodeNode, materializedFrame)) {
+            return;
+        }
+        ProtosFrameLexicalBindingAuthority authority =
+                new ProtosFrameLexicalBindingAuthority(
+                        frameBackedLayout,
+                        frameBackedLocals,
+                        bytecodeNode,
+                        materializedFrame);
+        authority.adoptPresentFrameBackedBindings();
+        activation.installFrameLexicalBindingAuthorityForRuntime(authority);
+    }
+
+    /** Frame-native counterpart of {@link BindClosureParameter}. */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class BindClosureFrameParameter {
+        @Specialization
+        public static void perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            try {
+                createCurrentFrameBinding(
+                        frameBackedLocals, frameBackedLayout, activation,
+                        ordinal, name, value, bytecodeNode, frame);
+            } catch (IllegalStateException invalidCreation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+        }
+    }
+
+    /** Frame-native counterpart of {@link BindClosureRest}. */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class BindClosureFrameRest {
+        @Specialization
+        public static void perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                int positionalParametersBeforeRest,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            Object rest = closureRestArray(activation, positionalParametersBeforeRest);
+            try {
+                createCurrentFrameBinding(
+                        frameBackedLocals, frameBackedLayout, activation,
+                        ordinal, name, rest, bytecodeNode, frame);
+            } catch (IllegalStateException invalidCreation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+        }
+    }
+
+    /** Frame-native counterpart of {@link CreateCurrentLocalSlot}. */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class CreateCurrentFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            try {
+                createCurrentFrameBinding(
+                        frameBackedLocals, frameBackedLayout, activation,
+                        ordinal, name, value, bytecodeNode, frame);
+            } catch (IllegalStateException invalidMutation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            return value;
+        }
+    }
+
+    /** Frame-native counterpart of {@link MultipleCreateLocalSlots}. */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class MultipleCreateFrameLocals {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int[] ordinals,
+                String[] names,
+                Object source,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            List<Object> observed =
+                    observeMultipleCreatePrefix(activation, names.length, source);
+            for (int index = 0; index < names.length; index++) {
+                try {
+                    createCurrentFrameBinding(
+                            frameBackedLocals, frameBackedLayout, activation,
+                            ordinals[index], names[index], observed.get(index),
+                            bytecodeNode, frame);
+                } catch (IllegalStateException invalidMutation) {
+                    // Deliberately no rollback, as in MultipleCreateLocalSlots.
+                    throw new ProtosSignalException(
+                            ProtosCoreErrors.newError(activation));
+                }
+            }
+            return source;
         }
     }
 
@@ -961,26 +1170,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 String[] names,
                 Object source) {
-            if (!(source instanceof ProtosArrayValue array)) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
-            }
-
             int required = names.length;
-            if (array.indexedSize().compareTo(BigInteger.valueOf(required)) < 0) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(activation));
-            }
-
-            /*
-             * D143 requires the complete fixed prefix to be shallow-observed
-             * before the first target slot is created. Do not use at,
-             * iteration, indexedSnapshot(), or any guest-visible protocol.
-             */
-            List<Object> observed = new ArrayList<>(required);
-            for (int index = 0; index < required; index++) {
-                observed.add(array.indexedAt(BigInteger.valueOf(index)));
-            }
+            List<Object> observed =
+                    observeMultipleCreatePrefix(activation, required, source);
 
             for (int index = 0; index < required; index++) {
                 try {
@@ -999,6 +1191,32 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
             return source;
         }
+    }
+
+    private static List<Object> observeMultipleCreatePrefix(
+            ProtosActivation activation,
+            int required,
+            Object source) {
+        if (!(source instanceof ProtosArrayValue array)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+
+        if (array.indexedSize().compareTo(BigInteger.valueOf(required)) < 0) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+
+        /*
+         * D143 requires the complete fixed prefix to be shallow-observed
+         * before the first target slot is created. Do not use at,
+         * iteration, indexedSnapshot(), or any guest-visible protocol.
+         */
+        List<Object> observed = new ArrayList<>(required);
+        for (int index = 0; index < required; index++) {
+            observed.add(array.indexedAt(BigInteger.valueOf(index)));
+        }
+        return observed;
     }
 
     @Operation
