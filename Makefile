@@ -21,7 +21,7 @@ JAVA_SUREFIRE_REPORTS := target/surefire-reports
 JAVA_SLOW_TEST_GUARD := $(PYTHON) tools/java_slow_test_guard.py
 JAVA_SLOW_TEST_ALLOWLIST := tools/java_slow_tests_allowlist.txt
 
-.PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-java-stress test-protos check verify clean artifacts artifacts-verify dist dist-validate
+.PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-java-stress test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -39,6 +39,8 @@ help:
 		'  make artifacts      Build the canonical exact-revision artifact set' \
 		'                      (Native + portable JVM + D064 docs + manifest; not a release)' \
 		'  make artifacts-verify  Re-verify target/artifact-set against its manifest' \
+		'  make artifacts-publish-d064  Publish its D064 to GHCR as rev-<sha> (explicit;' \
+		'                      needs GHCR_USERNAME/GHCR_TOKEN; never builds or releases)' \
 		'  make dist           Build only the portable JVM distribution' \
 		'  make dist-validate  Build and validate the portable distribution' \
 		'' \
@@ -104,6 +106,11 @@ artifacts:
 
 artifacts-verify:
 	$(PYTHON) dist/build_artifact_set.py --verify target/artifact-set
+
+# DIST010-B: explicit, demand-driven D064 publication from an already-built
+# set. Never builds, regenerates D064, deletes, tags, or creates a release.
+artifacts-publish-d064:
+	$(PYTHON) dist/publish_d064_oci.py --artifact-set target/artifact-set
 
 dist:
 	$(PYTHON) dist/build_portable.py

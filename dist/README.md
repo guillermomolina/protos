@@ -11,6 +11,7 @@ passes DIST001-B/D/E.
 | Purpose | Command |
 |---|---|
 | Canonical exact-revision artifact set (Native + portable JVM + D064) | `make artifacts` |
+| Publish that set's D064 to GHCR for its exact revision (explicit only) | `make artifacts-publish-d064` |
 | Portable JVM distribution only | `make dist` |
 | Validate the extracted portable distribution | `make dist-validate` |
 | Public release preparation/publication (explicit decision only) | `dist/prepare_release.py`, `dist/publish_release.py` |
@@ -67,7 +68,70 @@ python3 dist/build_artifact_set.py --verify target/artifact-set --expect-revisio
 ```
 
 This set is local construction evidence. Durable exact-revision publication
-of the D064 artifact is a separate later step (`DIST010-B`).
+of the D064 artifact is the separate explicit step below.
+
+## Exact-revision D064 publication (GHCR/OCI)
+
+`DIST010-B` publishes only the D064 member of an already-built, verified
+artifact set as a public OCI artifact. It runs only when invoked; no build,
+CI workflow, or `main` push publishes D064.
+
+```sh
+GHCR_USERNAME=<github-user> GHCR_TOKEN=<token with write:packages> \
+  python3 dist/publish_d064_oci.py --artifact-set target/artifact-set --expect-revision <sha>
+make artifacts-publish-d064   # same, without --expect-revision
+```
+
+| Item | Value |
+|---|---|
+| Package | `ghcr.io/guillermomolina/protos-stdlib-documentation` |
+| Discovery alias | `rev-<X>` (full 40-hex source revision; not authority) |
+| Artifact type | `application/vnd.protos.stdlib-documentation.v1` |
+| D064 layer media type | `application/vnd.protos.stdlib-documentation.v1+json` |
+| Config | OCI empty descriptor (`application/vnd.oci.empty.v1+json`) |
+
+The consumer identity is `X + H + M`: the source revision `X`, `H` the SHA-256
+of the exact raw D064 bytes, and `M` the OCI manifest digest. Consumers
+discover `M` once through `rev-X`, record `X/H/M`, then always pull by `M`,
+check the downloaded D064 SHA-256 equals `H`, and check its
+`provenance.revision` equals `X`.
+
+`dist/publish_d064_oci.py` admits D064 only after `verify_artifact_set`
+accepts the whole envelope, locates it through the manifest's
+`stdlib-documentation` entry, recomputes `H` from the bytes it will push, and
+checks D064 provenance (`repositoryRevision`, `guillermomolina/protos`, `X`).
+It never runs Maven, the D064 extractor, `make artifacts`, Git, or release
+tooling, and never modifies the D064 bytes. It talks to GHCR through the OCI
+distribution API with the Python standard library; no OCI client is
+required. The manifest carries no timestamp, so the same `X/H` always yields
+the same `M`.
+
+Before writing, it resolves `rev-X`. An existing alias whose content is the
+same `X/H` is an idempotent success. Any other content (different `H`, wrong
+provenance, or a non-D064 manifest) fails closed and is never overwritten. If
+the manifest push outcome is uncertain, it resolves and verifies the alias
+instead of pushing again. A local lock serializes concurrent runs against the
+same artifact set. After publishing, it requires `rev-X` to resolve to the
+expected `M`, then downloads by `M` and re-verifies `H` and `X` twice: once
+authenticated, and once as a separate credential-free consumer that never
+sees the publisher token.
+
+The result is printed as `KEY=VALUE` lines (`SOURCE_REVISION`,
+`D064_CONTENT_SHA256`, `OCI_MANIFEST_DIGEST`, `DISCOVERY_ALIAS`,
+`PACKAGE_REFERENCE`, `EXISTING_PUBLICATION`, `IDEMPOTENT_RETRY`,
+`AUTHENTICATED_VERIFICATION`, `ANONYMOUS_VERIFICATION`,
+`D064_PROVENANCE_VERIFICATION`, `PUBLIC_RELEASE_CREATED=NO`,
+`D064_PUBLICATION`). A new GHCR package may start private. In that case the
+command exits `3` with `ANONYMOUS_VERIFICATION=FAIL_PACKAGE_NOT_PUBLIC` and
+`D064_PUBLICATION=AWAITING_PUBLIC_VISIBILITY`. Publication is not complete
+until the owner sets the package's visibility to Public in the GitHub package
+settings (a one-time step) and reruns the same command, which then takes the
+idempotent path.
+
+Retention is indefinite project policy. Nothing here deletes or cleans up
+D064 versions, and the provider does not guarantee permanence. Publishing D064
+is not a release: it creates no tag, GitHub Release, or release asset, and
+does not change the project version.
 
 ## Portable JVM build
 
