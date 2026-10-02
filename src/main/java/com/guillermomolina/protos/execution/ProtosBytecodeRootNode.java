@@ -6319,7 +6319,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("createGuardedIntegerSend(receiver, selector, prelude)")
                         GuardedIntegerSend cachedInteger) {
-            return prepareImmediateMethodCall(
+            return prepareDeferredImmediateNativeMethodCall(
                     cachedInteger.closure(),
                     receiver,
                     cachedInteger.methodHome(),
@@ -7416,6 +7416,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosObjectValue methodHome,
             List<?> supplied,
             ProtosActivation caller) {
+        return prepareImmediateMethodCall(
+                closure, receiver, methodHome, supplied, caller, false);
+    }
+
+    /**
+     * PERF027-A: the guarded Integer native send prepares the same selected
+     * method invocation through the PLAT040 deferred activation. The fresh
+     * invocation return home is established here exactly as the eager factory
+     * would; the guest execution Context and supplied guest Array materialize
+     * only if the native body, an Error path, or another observer requests them.
+     */
+    static PreparedClosureCall prepareDeferredImmediateNativeMethodCall(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            List<?> supplied,
+            ProtosActivation caller) {
+        return prepareImmediateMethodCall(
+                closure, receiver, methodHome, supplied, caller, true);
+    }
+
+    private static PreparedClosureCall prepareImmediateMethodCall(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            List<?> supplied,
+            ProtosActivation caller,
+            boolean deferGuestInvocationState) {
         ProtosModuleRuntime standardImportRuntime =
                 ProtosStandardImportProtocol.selectedRuntimeForBytecodeIntrinsic(
                         receiver,
@@ -7430,9 +7458,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         rejectComposedInvocationProjection(closure);
-        ProtosActivation activation = ProtosActivation.forImmediateMethodInvocation(
-                closure, supplied, receiver, methodHome, caller.prelude().orElse(null),
-                caller.actorModuleState(), caller.currentModuleKey().orElse(null), caller.executionDomain());
+        ProtosActivation activation = deferGuestInvocationState
+                ? ProtosActivation.forImmediateMethodInvocationWithReturnHomeForRuntime(
+                        closure, supplied, receiver, methodHome, caller.prelude().orElse(null),
+                        caller.actorModuleState(), caller.currentModuleKey().orElse(null),
+                        caller.executionDomain(),
+                        closure.returnHome().orElseGet(ProtosReturnHome::new))
+                : ProtosActivation.forImmediateMethodInvocation(
+                        closure, supplied, receiver, methodHome, caller.prelude().orElse(null),
+                        caller.actorModuleState(), caller.currentModuleKey().orElse(null),
+                        caller.executionDomain());
         attachTaskOrInheritDynamicControlState(
                 activation,
                 caller);

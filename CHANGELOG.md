@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.148-SNAPSHOT
+
+- `PERF027-A` (#779) isolates the Integer invocation tax. The PERF016 guarded
+  Integer native send keeps its exact cached selection (native Closure,
+  method home, stability) but now prepares the selected method invocation
+  through the existing PLAT040 deferred activation
+  (`forImmediateMethodInvocationWithReturnHomeForRuntime`) instead of the
+  eager immediate-method factory. The fresh invocation return home is still
+  established before entry; the guest execution Context and supplied guest
+  Array materialize only when observed (for example by an Error path,
+  reflection or a debugger). Every other immediate-method caller keeps the
+  eager path. Integer representation (`ProtosIntegerValue(BigInteger)`) and
+  arithmetic are unchanged. New
+  `ProtosPerf027AGuardedIntegerDeferredActivationTest` covers selection and
+  home identity, deferred state after success, return-home completion,
+  on-demand materialization, exact large and overflow-sensitive results,
+  comparison results, div/mod zero and wrong-domain Errors, and separate
+  Contexts. No observable Protos semantics change; the specification is
+  unchanged.
+
 ## 0.3.147-SNAPSHOT
 
 - `PERF025-G1` (#758) makes Task structured-child bookkeeping pay-only-when-used.
