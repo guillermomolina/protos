@@ -25,8 +25,8 @@ import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosLexicalEnvironment;
 import com.guillermomolina.protos.runtime.ProtosLexicalFallback;
-import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
@@ -588,22 +588,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return lookupCapturedFallback(activation, name);
             }
 
-            List<ProtosObjectValue> captured =
-                    activation.capturedLexicalContexts();
-            int ownerIndex = lexicalDepth - 1;
-            if (ownerIndex >= captured.size()) {
-                return lookupCapturedFallback(activation, name);
-            }
-
-            for (int index = 0; index < ownerIndex; index++) {
-                if (captured.get(index).hasLocalSlot(name)) {
-                    return lookupCapturedFallback(activation, name);
-                }
-            }
-
-            ProtosObjectValue owner = captured.get(ownerIndex);
-            if (owner instanceof ProtosExecutionContextValue executionContext
-                    && executionContext.lexicalBindingAuthorityForRuntime()
+            ProtosLexicalEnvironment owner =
+                    capturedOwnerWithoutNearerBinding(
+                            activation, name, lexicalDepth - 1);
+            if (owner != null
+                    && owner.lexicalBindingAuthorityForRuntime()
                             instanceof ProtosFrameLexicalBindingAuthority authority
                     && authority.hasFrameBackedBindingAt(name, frameOrdinal)) {
                 return authority.readFrameBackedBindingAt(
@@ -651,22 +640,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return lookupCapturedFallback(activation, name);
             }
 
-            List<ProtosObjectValue> captured =
-                    activation.capturedLexicalContexts();
-            int ownerIndex = lexicalDepth - 1;
-            if (ownerIndex >= captured.size()) {
-                return lookupCapturedFallback(activation, name);
-            }
-
-            for (int index = 0; index < ownerIndex; index++) {
-                if (captured.get(index).hasLocalSlot(name)) {
-                    return lookupCapturedFallback(activation, name);
-                }
-            }
-
-            ProtosObjectValue owner = captured.get(ownerIndex);
-            if (!(owner instanceof ProtosExecutionContextValue executionContext)
-                    || !(executionContext.lexicalBindingAuthorityForRuntime()
+            ProtosLexicalEnvironment owner =
+                    capturedOwnerWithoutNearerBinding(
+                            activation, name, lexicalDepth - 1);
+            if (owner == null
+                    || !(owner.lexicalBindingAuthorityForRuntime()
                             instanceof ProtosFrameLexicalBindingAuthority authority)) {
                 return lookupCapturedFallback(activation, name);
             }
@@ -680,6 +658,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
             return accessor.getObject(bytecodeNode, ownerFrame);
         }
+    }
+
+    /**
+     * PERF025: selects the statically proven captured owner {@code ownerIndex}
+     * scopes outward, or {@code null} when the captured chain is shorter or a
+     * semantically nearer captured scope currently has the name PRESENT (D179
+     * C0 late creation/removal retargeting). Membership is read through each
+     * scope's single authority, so no deferred guest context is materialized.
+     */
+    private static ProtosLexicalEnvironment capturedOwnerWithoutNearerBinding(
+            ProtosActivation activation,
+            String name,
+            int ownerIndex) {
+        ProtosLexicalEnvironment scope =
+                activation.capturedLexicalEnvironmentForRuntime();
+        for (int index = 0; scope != null && index < ownerIndex; index++) {
+            if (scope.hasLocalSlotForRuntime(name)) {
+                return null;
+            }
+            scope = scope.outer();
+        }
+        return scope;
     }
 
     private static Object lookupCapturedFallback(
@@ -709,16 +709,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     public static final class CapturedLexicalWriteTarget {
         private final ProtosObjectValue target;
+        private final ProtosLexicalEnvironment frameOwner;
         private final ProtosFrameLexicalBindingAuthority frameAuthority;
         private final int frameOrdinal;
         private final MaterializedFrame materializedOwnerFrame;
 
         private CapturedLexicalWriteTarget(
                 ProtosObjectValue target,
+                ProtosLexicalEnvironment frameOwner,
                 ProtosFrameLexicalBindingAuthority frameAuthority,
                 int frameOrdinal,
                 MaterializedFrame materializedOwnerFrame) {
-            this.target = java.util.Objects.requireNonNull(target, "target");
+            this.target = target;
+            this.frameOwner = frameOwner;
             this.frameAuthority = frameAuthority;
             this.frameOrdinal = frameOrdinal;
             this.materializedOwnerFrame = materializedOwnerFrame;
@@ -727,28 +730,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static CapturedLexicalWriteTarget generic(
                 ProtosObjectValue target) {
             return new CapturedLexicalWriteTarget(
-                    target,
+                    java.util.Objects.requireNonNull(target, "target"),
+                    null,
                     null,
                     -1,
                     null);
         }
 
         static CapturedLexicalWriteTarget frameBacked(
-                ProtosExecutionContextValue target,
+                ProtosLexicalEnvironment owner,
                 ProtosFrameLexicalBindingAuthority authority,
                 int frameOrdinal) {
             return new CapturedLexicalWriteTarget(
-                    target,
+                    null,
+                    java.util.Objects.requireNonNull(owner, "owner"),
                     java.util.Objects.requireNonNull(authority, "authority"),
                     frameOrdinal,
                     null);
         }
 
         static CapturedLexicalWriteTarget materialized(
-                ProtosExecutionContextValue target,
+                ProtosLexicalEnvironment owner,
                 MaterializedFrame ownerFrame) {
             return new CapturedLexicalWriteTarget(
-                    target,
+                    null,
+                    java.util.Objects.requireNonNull(owner, "owner"),
                     null,
                     -1,
                     java.util.Objects.requireNonNull(ownerFrame, "ownerFrame"));
@@ -769,31 +775,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             activation.context());
                 }
 
-                List<ProtosObjectValue> captured =
-                        activation.capturedLexicalContexts();
-                int ownerIndex = lexicalDepth - 1;
-
-                if (ownerIndex < captured.size()) {
-                    for (int index = 0; index < ownerIndex; index++) {
-                        ProtosObjectValue nearer = captured.get(index);
-                        if (nearer.hasLocalSlot(name)) {
-                            return CapturedLexicalWriteTarget.generic(
-                                    nearer);
-                        }
-                    }
-
-                    ProtosObjectValue owner = captured.get(ownerIndex);
-                    if (owner instanceof ProtosExecutionContextValue executionContext
-                            && executionContext.lexicalBindingAuthorityForRuntime()
-                                    instanceof ProtosFrameLexicalBindingAuthority authority
-                            && authority.hasFrameBackedBindingAt(
-                                    name,
-                                    frameOrdinal)) {
-                        return CapturedLexicalWriteTarget.frameBacked(
-                                executionContext,
-                                authority,
-                                frameOrdinal);
-                    }
+                ProtosLexicalEnvironment owner =
+                        capturedOwnerWithoutNearerBinding(
+                                activation, name, lexicalDepth - 1);
+                if (owner != null
+                        && owner.lexicalBindingAuthorityForRuntime()
+                                instanceof ProtosFrameLexicalBindingAuthority authority
+                        && authority.hasFrameBackedBindingAt(
+                                name,
+                                frameOrdinal)) {
+                    return CapturedLexicalWriteTarget.frameBacked(
+                            owner,
+                            authority,
+                            frameOrdinal);
                 }
             }
 
@@ -823,7 +817,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                      * writable, FROZEN does not. Presence/layout are checked
                      * again at the actual mutation point.
                      */
-                    if (destination.target.isFrozen()) {
+                    if (destination.frameOwner.isFrozenForRuntime()) {
                         throw new IllegalStateException("object is frozen");
                     }
                     destination.frameAuthority.assignFrameBackedBindingAt(
@@ -870,31 +864,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             activation.context());
                 }
 
-                List<ProtosObjectValue> captured =
-                        activation.capturedLexicalContexts();
-                int ownerIndex = lexicalDepth - 1;
-
-                if (ownerIndex < captured.size()) {
-                    for (int index = 0; index < ownerIndex; index++) {
-                        ProtosObjectValue nearer = captured.get(index);
-                        if (nearer.hasLocalSlot(name)) {
-                            return CapturedLexicalWriteTarget.generic(
-                                    nearer);
-                        }
-                    }
-
-                    ProtosObjectValue owner = captured.get(ownerIndex);
-                    if (owner instanceof ProtosExecutionContextValue executionContext
-                            && executionContext.lexicalBindingAuthorityForRuntime()
-                                    instanceof ProtosFrameLexicalBindingAuthority authority) {
-                        MaterializedFrame ownerFrame =
-                                authority.retainedMaterializedFrameForCapturedAccess();
-                        if (ownerFrame != null
-                                && !accessor.isCleared(bytecodeNode, ownerFrame)) {
-                            return CapturedLexicalWriteTarget.materialized(
-                                    executionContext,
-                                    ownerFrame);
-                        }
+                ProtosLexicalEnvironment owner =
+                        capturedOwnerWithoutNearerBinding(
+                                activation, name, lexicalDepth - 1);
+                if (owner != null
+                        && owner.lexicalBindingAuthorityForRuntime()
+                                instanceof ProtosFrameLexicalBindingAuthority authority) {
+                    MaterializedFrame ownerFrame =
+                            authority.retainedMaterializedFrameForCapturedAccess();
+                    if (ownerFrame != null
+                            && !accessor.isCleared(bytecodeNode, ownerFrame)) {
+                        return CapturedLexicalWriteTarget.materialized(
+                                owner,
+                                ownerFrame);
                     }
                 }
             }
@@ -938,7 +920,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                      * the actual mutation point, against the exact selected
                      * owner, never a different one.
                      */
-                    if (destination.target.isFrozen()) {
+                    if (destination.frameOwner.isFrozenForRuntime()) {
                         throw new IllegalStateException("object is frozen");
                     }
                     if (accessor.isCleared(bytecodeNode, destination.materializedOwnerFrame)) {
@@ -1001,11 +983,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return ResolvedLexicalWriteTarget.currentContext();
             }
 
-            for (ProtosObjectValue lexicalContext :
-                    activation.capturedLexicalContexts()) {
-                if (lexicalContext.hasLocalSlot(name)) {
+            for (ProtosLexicalEnvironment lexical =
+                            activation.capturedLexicalEnvironmentForRuntime();
+                    lexical != null;
+                    lexical = lexical.outer()) {
+                if (lexical.hasLocalSlotForRuntime(name)) {
                     return ResolvedLexicalWriteTarget.object(
-                            lexicalContext);
+                            lexical.context());
                 }
             }
 
@@ -1314,7 +1298,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosClosureExecutionPlanCell executionPlanCell) {
             return new ProtosClosureValue(
                     definition,
-                    activation.lexicalContextsForClosureCapture(),
+                    activation.lexicalEnvironmentForClosureCapture(),
                     activation.receiver(),
                     activation.methodHome().orElse(null),
                     activation.returnHome().orElse(null),

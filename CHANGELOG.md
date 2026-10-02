@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.152-SNAPSHOT
+
+- `PERF025` makes Closure-literal lexical capture lazy. A materialized
+  Closure no longer captures an eagerly built `List` of guest execution
+  Contexts: `MaterializeClosure` now captures the creating activation's
+  `ProtosLexicalEnvironment` through
+  `ProtosActivation.lexicalEnvironmentForClosureCapture()`, without calling
+  `context()` or copying the outer chain. Each activation creates at most one
+  environment node, shared by reference by every Closure it creates and by
+  the activations derived from them; a deferred node answers membership,
+  reads and frame-backed authority through the owning activation's single
+  lexical store (PLAT036/I068, PERF013 `MaterializedLocalAccessor` paths
+  unchanged) and materializes the guest Context only through the activation's
+  own `context()`, so every observer (the `context` intrinsic, reflection,
+  escape, the debugger, generic writes) sees one identity. Captured
+  read/write operations and `ProtosLexicalFallback` walk the chain without
+  materializing; D179 C0 nearer-presence retargeting, object-body capture
+  boundary, `bindMethod`, parallel projection, receiver/`methodHome`/return
+  home and NLR are unchanged. List-based `capturedLexicalContexts()` /
+  `lexicalContextsForClosureCapture()` remain as cold materializing
+  projections. New `ProtosPerf025LazyLexicalCaptureTest`. No semantic or
+  specification change.
+
 ## 0.3.151-SNAPSHOT
 
 - `PERF025` frame-materialization slice: ordinary ROOT/CLOSURE frames are no

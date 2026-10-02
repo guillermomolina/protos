@@ -26,8 +26,10 @@ import java.util.Optional;
  *
  * <p>This helper owns no lexical values and introduces no additional binding
  * authority. It traverses the semantic activation topology already retained by
- * {@link ProtosActivation}: current context, captured genuine lexical contexts,
- * and finally the receiver according to the applicable read/write rule.
+ * {@link ProtosActivation}: current context, captured genuine lexical contexts
+ * (through {@link ProtosLexicalEnvironment}, without materializing deferred
+ * contexts), and finally the receiver according to the applicable read/write
+ * rule.
  *
  * <p>Statically proven current and captured bindings are expected to bypass
  * this fallback through the Bytecode DSL frame-backed paths established by
@@ -52,10 +54,12 @@ public final class ProtosLexicalFallback {
             return current;
         }
 
-        for (ProtosObjectValue lexicalContext :
-                activation.capturedLexicalContexts()) {
+        for (ProtosLexicalEnvironment lexical =
+                        activation.capturedLexicalEnvironmentForRuntime();
+                lexical != null;
+                lexical = lexical.outer()) {
             Optional<Object> captured =
-                    lexicalContext.readLocalSlot(name);
+                    lexical.readLocalSlotForRuntime(name);
             if (captured.isPresent()) {
                 return captured;
             }
@@ -81,10 +85,13 @@ public final class ProtosLexicalFallback {
             return Optional.of(activation.context());
         }
 
-        for (ProtosObjectValue lexicalContext :
-                activation.capturedLexicalContexts()) {
-            if (lexicalContext.hasLocalSlot(name)) {
-                return Optional.of(lexicalContext);
+        for (ProtosLexicalEnvironment lexical =
+                        activation.capturedLexicalEnvironmentForRuntime();
+                lexical != null;
+                lexical = lexical.outer()) {
+            if (lexical.hasLocalSlotForRuntime(name)) {
+                // The selected write destination is an observed context.
+                return Optional.of(lexical.context());
             }
         }
 

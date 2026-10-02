@@ -37,7 +37,7 @@ import java.util.HashSet;
  * that body: such a Closure's own outward search skips over the intervening
  * {@code OBJECT_BODY} scope(s) and lands on the nearest enclosing genuine
  * execution context, matching {@link
- * com.guillermomolina.protos.runtime.ProtosActivation#lexicalContextsForClosureCapture()}.
+ * com.guillermomolina.protos.runtime.ProtosActivation#lexicalEnvironmentForClosureCapture()}.
  *
  * <p>Binding declarations ({@link #declare(String)}) are order-independent
  * (a scope's complete static name set), while establishment ({@link

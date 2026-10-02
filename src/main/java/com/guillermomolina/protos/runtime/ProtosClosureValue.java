@@ -24,7 +24,7 @@ import java.util.Objects;
 
 public final class ProtosClosureValue extends ProtosObjectValue {
     private final CanonicalClosure definition;
-    private final List<ProtosObjectValue> capturedLexicalContexts;
+    private final ProtosLexicalEnvironment capturedEnvironment;
     private final Object capturedReceiver;
     private final ProtosObjectValue methodHome;
     private final ProtosReturnHome returnHome;
@@ -117,13 +117,48 @@ public final class ProtosClosureValue extends ProtosObjectValue {
             ProtosClosureExecutionPlan executionPlan,
             ProtosNativeClosureBody nativeBody,
             java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer) {
+        this(
+                definition,
+                ProtosLexicalEnvironment.ofContexts(capturedLexicalContexts),
+                capturedReceiver,
+                methodHome,
+                returnHome,
+                prelude,
+                executionPlan,
+                nativeBody,
+                executionPlanRematerializer);
+    }
+
+    /**
+     * PERF025 Closure-literal materialization: captures the creating
+     * activation's lexical environment by reference, without materializing
+     * any guest context or copying the outer chain.
+     */
+    public ProtosClosureValue(
+            CanonicalClosure definition,
+            ProtosLexicalEnvironment capturedEnvironment,
+            Object capturedReceiver,
+            ProtosObjectValue methodHome,
+            ProtosReturnHome returnHome,
+            ProtosPrelude prelude,
+            ProtosClosureExecutionPlan executionPlan) {
+        this(definition, capturedEnvironment, capturedReceiver, methodHome, returnHome,
+                prelude, executionPlan, null, null);
+    }
+
+    private ProtosClosureValue(
+            CanonicalClosure definition,
+            ProtosLexicalEnvironment capturedEnvironment,
+            Object capturedReceiver,
+            ProtosObjectValue methodHome,
+            ProtosReturnHome returnHome,
+            ProtosPrelude prelude,
+            ProtosClosureExecutionPlan executionPlan,
+            ProtosNativeClosureBody nativeBody,
+            java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer) {
         super(ProtosObjectValue.rootObject());
         this.definition = definition;
-        this.capturedLexicalContexts =
-                List.copyOf(
-                        Objects.requireNonNull(
-                                capturedLexicalContexts,
-                                "capturedLexicalContexts"));
+        this.capturedEnvironment = capturedEnvironment;
         this.capturedReceiver =
                 Objects.requireNonNull(capturedReceiver, "capturedReceiver");
         this.methodHome = methodHome;
@@ -187,8 +222,17 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return definition;
     }
 
+    /**
+     * Cold compatibility projection of the captured lexical chain as context
+     * objects; materializes every captured context.
+     */
     public List<ProtosObjectValue> capturedLexicalContexts() {
-        return capturedLexicalContexts;
+        return ProtosLexicalEnvironment.contextsOf(capturedEnvironment);
+    }
+
+    /** Innermost captured lexical scope, or {@code null} when none is captured. */
+    public ProtosLexicalEnvironment capturedLexicalEnvironmentForRuntime() {
+        return capturedEnvironment;
     }
 
     public Object capturedReceiver() {
@@ -281,7 +325,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
             Object receiver,
             ProtosObjectValue home) {
         ProtosClosureValue bound = new ProtosClosureValue(
-                definition, capturedLexicalContexts, Objects.requireNonNull(receiver, "receiver"),
+                definition, capturedEnvironment, Objects.requireNonNull(receiver, "receiver"),
                 Objects.requireNonNull(home, "home"), returnHome, prelude, executionPlan, nativeBody,
                 executionPlanRematerializer);
         if (contextLocalExecutionProjectionRequired) {

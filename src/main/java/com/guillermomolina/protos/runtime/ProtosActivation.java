@@ -24,7 +24,8 @@ import java.util.Optional;
 public final class ProtosActivation {
     private ProtosObjectValue context;
     private ProtosLexicalBindingAuthority deferredContextAuthority;
-    private final List<ProtosObjectValue> capturedLexicalContexts;
+    private final ProtosLexicalEnvironment capturedEnvironment;
+    private ProtosLexicalEnvironment currentEnvironment;
     private final Object receiver;
     private final ProtosPrelude prelude;
     private final ProtosArrayValue arguments;
@@ -192,7 +193,7 @@ public final class ProtosActivation {
 
         return new ProtosActivation(
                 prelude.newExecutionContext(),
-                closure.capturedLexicalContexts(),
+                closure.capturedLexicalEnvironmentForRuntime(),
                 closure.capturedReceiver(),
                 prelude,
                 prelude.newFrozenArray(supplied),
@@ -231,7 +232,7 @@ public final class ProtosActivation {
 
         return new ProtosActivation(
                 prelude.newExecutionContext(),
-                closure.capturedLexicalContexts(),
+                closure.capturedLexicalEnvironmentForRuntime(),
                 receiver,
                 prelude,
                 prelude.newFrozenArray(supplied),
@@ -337,7 +338,7 @@ public final class ProtosActivation {
 
         return new ProtosActivation(
                 null,
-                closure.capturedLexicalContexts(),
+                closure.capturedLexicalEnvironmentForRuntime(),
                 receiver,
                 prelude,
                 null,
@@ -366,7 +367,8 @@ public final class ProtosActivation {
             ProtosActorExecutionDomain executionDomain) {
         this(
                 context,
-                capturedLexicalContexts,
+                ProtosLexicalEnvironment.ofContexts(Objects.requireNonNull(
+                        capturedLexicalContexts, "capturedLexicalContexts")),
                 receiver,
                 prelude,
                 arguments,
@@ -382,7 +384,36 @@ public final class ProtosActivation {
 
     private ProtosActivation(
             ProtosObjectValue context,
-            List<ProtosObjectValue> capturedLexicalContexts,
+            ProtosLexicalEnvironment capturedEnvironment,
+            Object receiver,
+            ProtosPrelude prelude,
+            ProtosArrayValue arguments,
+            ProtosReturnHome returnHome,
+            ProtosObjectValue methodHome,
+            boolean ownsReturnHome,
+            boolean construction,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey,
+            ProtosActorExecutionDomain executionDomain) {
+        this(
+                context,
+                capturedEnvironment,
+                receiver,
+                prelude,
+                arguments,
+                returnHome,
+                methodHome,
+                ownsReturnHome,
+                construction,
+                actorModuleState,
+                currentModuleKey,
+                executionDomain,
+                null);
+    }
+
+    private ProtosActivation(
+            ProtosObjectValue context,
+            ProtosLexicalEnvironment capturedEnvironment,
             Object receiver,
             ProtosPrelude prelude,
             ProtosArrayValue arguments,
@@ -400,9 +431,7 @@ public final class ProtosActivation {
                     "context may be deferred only for a compact invocation");
         }
         this.context = context;
-        this.capturedLexicalContexts =
-                List.copyOf(Objects.requireNonNull(
-                        capturedLexicalContexts, "capturedLexicalContexts"));
+        this.capturedEnvironment = capturedEnvironment;
         this.receiver = Objects.requireNonNull(receiver, "receiver");
         this.prelude = prelude;
         this.arguments = arguments;
@@ -423,7 +452,7 @@ public final class ProtosActivation {
         Objects.requireNonNull(enclosing, "enclosing");
         ProtosActivation construction = new ProtosActivation(
                 object,
-                enclosing.lexicalContextsForClosureCapture(),
+                enclosing.lexicalEnvironmentForClosureCapture(),
                 object,
                 enclosing.prelude,
                 enclosing.arguments,
@@ -612,8 +641,31 @@ public final class ProtosActivation {
         deferredContextAuthority.putBinding(name, value);
     }
 
+    /**
+     * Cold compatibility projection of the captured lexical chain as context
+     * objects; materializes every captured context. Runtime lookup paths use
+     * {@link #capturedLexicalEnvironmentForRuntime()} instead.
+     */
     public List<ProtosObjectValue> capturedLexicalContexts() {
-        return capturedLexicalContexts;
+        return ProtosLexicalEnvironment.contextsOf(capturedEnvironment);
+    }
+
+    /** Innermost captured lexical scope, or {@code null} when none is captured. */
+    public ProtosLexicalEnvironment capturedLexicalEnvironmentForRuntime() {
+        return capturedEnvironment;
+    }
+
+    /**
+     * The current context's authority when the guest context is still
+     * deferred, or the materialized execution context's own authority.
+     */
+    ProtosLexicalBindingAuthority deferredContextAuthorityForRuntime() {
+        if (context != null) {
+            return context instanceof ProtosExecutionContextValue executionContext
+                    ? executionContext.lexicalBindingAuthorityForRuntime()
+                    : null;
+        }
+        return deferredContextAuthority;
     }
 
     public Object receiver() {
@@ -806,19 +858,37 @@ public final class ProtosActivation {
         return ownsReturnHome;
     }
 
-    public List<ProtosObjectValue> lexicalContextsForClosureCapture() {
+    /**
+     * PERF025: the lexical environment a Closure materialized in this
+     * activation captures, by reference and without materializing any guest
+     * context. All Closures created here share the same node, so they observe
+     * one context identity once anything does observe it.
+     *
+     * <p>An object body is not a lexical capture scope
+     * ({@code EXECUTION_AND_CONTROL.md} §4): a construction activation hands
+     * on its enclosing environment unchanged.
+     */
+    public ProtosLexicalEnvironment lexicalEnvironmentForClosureCapture() {
         if (construction) {
-            return capturedLexicalContexts;
+            return capturedEnvironment;
         }
+        ProtosLexicalEnvironment current = currentEnvironment;
+        if (current == null) {
+            current = context != null
+                    ? ProtosLexicalEnvironment.materialized(context, capturedEnvironment)
+                    : ProtosLexicalEnvironment.deferred(this, capturedEnvironment);
+            currentEnvironment = current;
+        }
+        return current;
+    }
 
-        int capturedCount = capturedLexicalContexts.size();
-        java.util.ArrayList<ProtosObjectValue> contexts =
-                new java.util.ArrayList<>(1 + capturedCount);
-        contexts.add(context());
-        for (int index = 0; index < capturedCount; index++) {
-            contexts.add(capturedLexicalContexts.get(index));
-        }
-        return java.util.Collections.unmodifiableList(contexts);
+    /**
+     * Cold compatibility projection of {@link #lexicalEnvironmentForClosureCapture()}
+     * as context objects; materializes the whole chain.
+     */
+    public List<ProtosObjectValue> lexicalContextsForClosureCapture() {
+        return ProtosLexicalEnvironment.contextsOf(
+                lexicalEnvironmentForClosureCapture());
     }
 
 }
