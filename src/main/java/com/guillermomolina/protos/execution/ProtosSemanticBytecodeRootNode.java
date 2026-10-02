@@ -25,6 +25,7 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendAr
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedArgumentVector;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedBooleanCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedIndexedEachCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedMapInitialDefinition;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedWhileCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexicalWriteTarget;
@@ -1259,6 +1260,82 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
             return prepared.admitsInlineLiteralBody(child, literal, literalPlan);
+        }
+    }
+
+    // ---- PLAT044 B′ inline literal Array/Bytes each (PERF026-D1) --------------------
+    //
+    // A selected standard Array.each or Bytes.each whose sole argument is
+    // exactly the send site's staged one-parameter literal is sequenced
+    // locally in this root; every other each keeps the structured-dispatch
+    // root. Validation, the snapshot, the cursor and every per-element
+    // activation stay owned by ProtosBytecodeRootNode.PreparedArrayEachCall
+    // and PreparedBytesEachCall.
+
+    @Operation
+    public static final class AdmitsInlineLiteralIndexedEach {
+        @Specialization
+        public static boolean perform(PreparedClosureCall prepared, Object callback) {
+            return prepared.admitsInlineLiteralIndexedEach(callback);
+        }
+    }
+
+    /**
+     * Reached only after {@link AdmitsInlineLiteralIndexedEach}, so exactly
+     * one of the two standard capabilities was selected; the ordinary
+     * structured preparation of that capability runs unchanged.
+     */
+    @Operation
+    public static final class PrepareStructuredIndexedEachCall {
+        @Specialization
+        public static PreparedIndexedEachCall perform(PreparedClosureCall prepared) {
+            return prepared.isStructuredArrayEach()
+                    ? ProtosBytecodeRootNode.PrepareStructuredArrayEachCall.perform(prepared)
+                    : ProtosBytecodeRootNode.PrepareStructuredBytesEachCall.perform(prepared);
+        }
+    }
+
+    @Operation
+    public static final class StructuredIndexedEachHasNext {
+        @Specialization
+        public static boolean perform(PreparedIndexedEachCall prepared) {
+            return prepared.hasNext();
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredIndexedEachElementCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedIndexedEachCall prepared) {
+            return prepared.prepareCurrent();
+        }
+    }
+
+    @Operation
+    public static final class AdvanceStructuredIndexedEach {
+        @Specialization
+        public static void perform(PreparedIndexedEachCall prepared) {
+            prepared.advance();
+        }
+    }
+
+    @Operation
+    public static final class FinishStructuredIndexedEach {
+        @Specialization
+        public static Object perform(PreparedIndexedEachCall prepared) {
+            return prepared.finish();
+        }
+    }
+
+    @Operation
+    public static final class AdmitsInlineLiteralIndexedEachElement {
+        @Specialization
+        public static boolean perform(
+                PreparedIndexedEachCall prepared,
+                PreparedClosureCall child,
+                Object literal,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return prepared.admitsInlineLiteralElement(child, literal, literalPlan);
         }
     }
 

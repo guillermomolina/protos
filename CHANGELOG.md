@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.140-SNAPSHOT
+
+- `PERF026-D1` (#769) adds the standard `Array.each` and `Bytes.each`
+  consumers of the PLAT044 (#766) Candidate B′ inline literal callback
+  mechanism, without changing observable Protos semantics or the
+  specification. B′ is extended only to the smallest parameterized shape: an
+  immediate Closure literal with exactly one ordinary required positional
+  parameter (no default, not rest) and no nested Closure, staged as the sole
+  argument by a candidate check kept separate from the zero-parameter
+  Boolean/while candidates. After ordinary lookup and selection prepare the
+  canonical standard `Array.each` or `Bytes.each` with exactly that staged
+  literal, and it neither owns its return home nor requires a Context-local
+  projection, the loop is sequenced in the semantic source root instead of the
+  structured-dispatch helper root. Admission prepares nothing: receiver
+  validation, callback callability validation, the single shallow ascending
+  indexed snapshot, the fresh per-element activation carrying the exact
+  snapshot element or semantic Integer octet, advance only after normal
+  callback completion, the ignored callback result and the original receiver
+  result all stay owned by the existing prepared Array/Bytes each calls. Each
+  element child that passes the shared B′ exact-invocation proof runs inline
+  with its own RootTag and projected debugger scope, binding its formal
+  through the ordinary Closure parameter binding from that prepared
+  activation; a child that fails it keeps its exact physical invocation. Every
+  other callback shape and every other `each` keep the existing paths.
+  Focused topology, tooling, fallback and semantic tests are added; no
+  performance claim is made.
+
 ## 0.3.139-SNAPSHOT
 
 - `PERF026-C1` (#768) adds the first standard `whileTrue` consumer of the

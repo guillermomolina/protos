@@ -1291,6 +1291,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return false;
         }
 
+        /**
+         * PLAT044 B′ (PERF026-D1) whole-call admission of a selected standard
+         * Array.each or Bytes.each; see {@link
+         * NativeCall#admitsInlineLiteralIndexedEach}.
+         */
+        default boolean admitsInlineLiteralIndexedEach(Object callback) {
+            return false;
+        }
+
         default PreparedMapMatchCall prepareStructuredMapMatch() {
             throw new IllegalStateException(
                     "prepared Closure call has no structured Map.match capability");
@@ -1656,11 +1665,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     && activation.receiver() == condition
                     && supplied.size() == 1
                     && supplied.get(0) == body
-                    && isInlineLiteralWhileCallback(condition)
-                    && isInlineLiteralWhileCallback(body);
+                    && isInlineLiteralCallbackValue(condition)
+                    && isInlineLiteralCallbackValue(body);
         }
 
-        private static boolean isInlineLiteralWhileCallback(Object value) {
+        /**
+         * PLAT044 B′ (PERF026-D1): true only when ordinary selection prepared
+         * the canonical standard Array.each or Bytes.each capability, its sole
+         * supplied value is exactly the send site's staged one-parameter
+         * {@code callback} literal value, and that literal would not fail the
+         * per-element B′ proof for a reason already known now (as in {@link
+         * #admitsInlineLiteralWhile}). A pure read: the receiver and callback
+         * are not validated here and no snapshot or activation is created, so
+         * {@code PreparedArrayEachCall}/{@code PreparedBytesEachCall} keep sole
+         * authority over validation order, the snapshot and every per-element
+         * activation.
+         */
+        @Override
+        public boolean admitsInlineLiteralIndexedEach(Object callback) {
+            return (isStructuredArrayEach() || isStructuredBytesEach())
+                    && supplied.size() == 1
+                    && supplied.get(0) == callback
+                    && isInlineLiteralCallbackValue(callback);
+        }
+
+        private static boolean isInlineLiteralCallbackValue(Object value) {
             return value instanceof ProtosClosureValue closure
                     && closure.returnHome().isPresent()
                     && !closure.requiresContextLocalExecutionProjectionForRuntime();
@@ -2750,7 +2779,46 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    static final class PreparedArrayEachCall {
+    /**
+     * PLAT044 B′ (PERF026-D1) common view of the standard Array.each and
+     * Bytes.each loops, whose observable shapes coincide: validated receiver
+     * and callback, one shallow ascending indexed snapshot, one fresh
+     * one-argument callback invocation per snapshot position, advance only
+     * after that invocation completes normally, and the original receiver as
+     * result. It lets a send site sequence either loop locally without
+     * duplicating its inline callback region; each implementation keeps its
+     * own validation and snapshot authority.
+     */
+    sealed interface PreparedIndexedEachCall
+            permits PreparedArrayEachCall, PreparedBytesEachCall {
+        boolean hasNext();
+
+        PreparedClosureCall prepareCurrent();
+
+        void advance();
+
+        Object finish();
+
+        /** The validated callback value supplied to this each invocation. */
+        Object callback();
+
+        /**
+         * Inline eligibility of an already prepared per-element {@code
+         * child}: the callback is exactly the staged {@code literal} and
+         * {@code child} is its exact inline-equivalent invocation ({@link
+         * #isInlineLiteralInvocation}), whose activation already carries the
+         * snapshot argument the inline region binds.
+         */
+        default boolean admitsInlineLiteralElement(
+                PreparedClosureCall child,
+                Object literal,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return callback() == literal
+                    && isInlineLiteralInvocation(child, literalPlan);
+        }
+    }
+
+    static final class PreparedArrayEachCall implements PreparedIndexedEachCall {
         private final ProtosArrayValue array;
         private final List<Object> snapshot;
         private final Object block;
@@ -2776,11 +2844,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.snapshot = value.indexedSnapshot();
         }
 
-        boolean hasNext() {
+        @Override
+        public boolean hasNext() {
             return index < snapshot.size();
         }
 
-        PreparedClosureCall prepareCurrent() {
+        @Override
+        public PreparedClosureCall prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Array.each callback requested after snapshot exhaustion");
@@ -2791,7 +2861,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
-        void advance() {
+        @Override
+        public void advance() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Array.each cursor advanced after snapshot exhaustion");
@@ -2799,12 +2870,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             index++;
         }
 
-        Object finish() {
+        @Override
+        public Object finish() {
             if (hasNext()) {
                 throw new IllegalStateException(
                         "Array.each finished before snapshot exhaustion");
             }
             return array;
+        }
+
+        @Override
+        public Object callback() {
+            return block;
         }
     }
 
@@ -3030,7 +3107,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    static final class PreparedBytesEachCall {
+    static final class PreparedBytesEachCall implements PreparedIndexedEachCall {
         private final ProtosBytesValue bytes;
         private final List<Object> snapshot;
         private final Object block;
@@ -3056,11 +3133,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.snapshot = value.indexedSnapshot();
         }
 
-        boolean hasNext() {
+        @Override
+        public boolean hasNext() {
             return index < snapshot.size();
         }
 
-        PreparedClosureCall prepareCurrent() {
+        @Override
+        public PreparedClosureCall prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Bytes.each callback requested after snapshot exhaustion");
@@ -3071,7 +3150,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
-        void advance() {
+        @Override
+        public void advance() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Bytes.each cursor advanced after snapshot exhaustion");
@@ -3079,12 +3159,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             index++;
         }
 
-        Object finish() {
+        @Override
+        public Object finish() {
             if (hasNext()) {
                 throw new IllegalStateException(
                         "Bytes.each finished before snapshot exhaustion");
             }
             return bytes;
+        }
+
+        @Override
+        public Object callback() {
+            return block;
         }
     }
 
