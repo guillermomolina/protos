@@ -21,6 +21,7 @@ import java.util.Objects;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.locks.LockSupport;
 
 /**
  * One long-lived dedicated guest carrier thread with the explicit {@link
@@ -64,45 +65,56 @@ final class ProtosGuestCarrier implements AutoCloseable {
      * exceptions and errors thrown by the operation are rethrown to the caller.
      */
     <T> T call(Callable<T> operation) throws IOException {
-        Objects.requireNonNull(operation, "operation");
-        Object[] result = new Object[1];
-        Throwable[] failure = new Throwable[1];
-        boolean[] done = new boolean[1];
+        CarrierCall<T> call = new CarrierCall<>(Objects.requireNonNull(operation, "operation"));
         synchronized (this) {
             if (closed) {
                 throw new IllegalStateException("guest carrier is closed");
             }
-            operations.add(
-                    () -> {
-                        try {
-                            result[0] = operation.call();
-                        } catch (Throwable thrown) {
-                            failure[0] = thrown;
-                        }
-                        synchronized (done) {
-                            done[0] = true;
-                            done.notifyAll();
-                        }
-                    });
+            operations.add(call);
         }
-        boolean interrupted = false;
-        synchronized (done) {
-            while (!done[0]) {
-                try {
-                    done.wait();
-                } catch (InterruptedException interruption) {
-                    interrupted = true;
-                }
+        return call.await();
+    }
+
+    /**
+     * One submitted operation: queued as the carrier {@link Runnable} itself and completed by
+     * unparking the waiting caller. The volatile {@code done} write publishes the result/failure.
+     */
+    private static final class CarrierCall<T> implements Runnable {
+        private final Callable<T> operation;
+        private final Thread waiter = Thread.currentThread();
+        private T result;
+        private Throwable failure;
+        private volatile boolean done;
+
+        CarrierCall(Callable<T> operation) {
+            this.operation = operation;
+        }
+
+        @Override
+        public void run() {
+            try {
+                result = operation.call();
+            } catch (Throwable thrown) {
+                failure = thrown;
             }
+            done = true;
+            LockSupport.unpark(waiter);
         }
-        if (interrupted) Thread.currentThread().interrupt();
-        if (failure[0] instanceof IOException io) throw io;
-        if (failure[0] instanceof RuntimeException runtime) throw runtime;
-        if (failure[0] instanceof Error error) throw error;
-        if (failure[0] != null) throw new IllegalStateException(failure[0]);
-        @SuppressWarnings("unchecked")
-        T value = (T) result[0];
-        return value;
+
+        T await() throws IOException {
+            boolean interrupted = false;
+            while (!done) {
+                LockSupport.park(this);
+                // A set interrupt status makes park return immediately; remember and clear it.
+                if (Thread.interrupted()) interrupted = true;
+            }
+            if (interrupted) Thread.currentThread().interrupt();
+            if (failure instanceof IOException io) throw io;
+            if (failure instanceof RuntimeException runtime) throw runtime;
+            if (failure instanceof Error error) throw error;
+            if (failure != null) throw new IllegalStateException(failure);
+            return result;
+        }
     }
 
     boolean isCarrierThread() {

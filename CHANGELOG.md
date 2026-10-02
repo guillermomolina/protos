@@ -7,6 +7,19 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.145-SNAPSHOT
+
+- `PERF025-E2` (#758) cleans up the guest-carrier transport.
+  `ProtosGuestCarrier.call()` now queues one private `CarrierCall` request
+  (operation, waiting thread, result, failure, volatile completion) directly
+  as the carrier `Runnable` and completes it with `LockSupport.park`/`unpark`,
+  replacing the per-call one-element state arrays, the wrapping lambda and the
+  per-call monitor `wait()`/`notifyAll()`. The dedicated carrier thread, its
+  16 MiB stack budget, the `LinkedBlockingQueue`, carrier serialization, STOP
+  ordering, close rejection, failure propagation and caller interrupt-status
+  restoration are unchanged. New `ProtosGuestCarrierTest` covers the transport.
+  No observable Protos semantics change; the specification is unchanged.
+
 ## 0.3.144-SNAPSHOT
 
 - `BUG014` restores the ordinary shaded checkout JAR under the `native`
