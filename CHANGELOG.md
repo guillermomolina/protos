@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.146-SNAPSHOT
+
+- `PERF025-F1` (#758) implements PLAT046 Candidate B: direct-caller hosted
+  session execution. `ProtosStandaloneHostedSession` (and therefore
+  `ProtosStandaloneHostedExecution.executeFile`) now runs open,
+  `invokeTopLevel`, `prepareTopLevel`, `PreparedTopLevel.invoke` and close on
+  the calling thread, still through the Process execution host, Process
+  Polyglot Context entry and a fresh RootTask. A session-local
+  `ReentrantLock` gate admits one guest operation at a time; close publishes
+  its cutover before taking the gate, so an already-started operation
+  finishes and every later operation fails with `IllegalStateException`,
+  then performs the unchanged teardown sequence. `ProtosGuestCarrier` and
+  `ProtosGuestCarrierTest` are retired; the shared
+  `GUEST_CALL_STACK_SIZE_BYTES` budget remains for the CLI and Test Tool
+  carriers. New `ProtosStandaloneHostedSessionGateTest` covers caller-thread
+  execution, multi-caller serialization and call-versus-close exclusion. No
+  observable Protos semantics change; the specification is unchanged.
+
 ## 0.3.145-SNAPSHOT
 
 - `PERF025-E2` (#758) cleans up the guest-carrier transport.

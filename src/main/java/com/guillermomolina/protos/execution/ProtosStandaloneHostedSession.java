@@ -31,6 +31,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Supported reusable JVM embedding session: one live standalone Protos Process whose entry source
@@ -45,13 +46,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>{@link #invokeTopLevel} reads the named slot of the entry module instance and invokes the
  * Closure it holds as a RootActor-local task in that same Process; no source text is parsed per
  * call. {@link #prepareTopLevel} instead resolves that slot once and retains the Closure for
- * repeated invocation. Guest operations, including close, run on one dedicated carrier with the
- * explicit {@link ProtosStandaloneHostedExecution#GUEST_CALL_STACK_SIZE_BYTES} stack budget; the
- * calling thread never executes guest code. A session is safe to share between threads only in the
- * sense that calls are serialized on that carrier.
+ * repeated invocation.
+ *
+ * <p>Guest operations run on the thread that calls the session operation (PLAT046 Candidate B),
+ * through the Process execution host and Polyglot Context entry; the session starts no guest
+ * thread of its own. A session may be shared between threads: a session-local gate admits at most
+ * one guest operation at a time. {@link #close()} makes its cutover visible first, so no operation
+ * begins afterwards, then waits at the same gate for an already-started operation to finish before
+ * tearing down.
  */
 public final class ProtosStandaloneHostedSession implements AutoCloseable {
-    private final ProtosGuestCarrier carrier;
+    private final ReentrantLock gate = new ReentrantLock();
     private final ProtosDirectFileModuleResolver resolver;
     private final ProtosProcessRuntime process;
     private final ProtosPolyglotRuntimeHost runtimeHost;
@@ -62,7 +67,6 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
     private final AtomicBoolean closeStarted = new AtomicBoolean();
 
     private ProtosStandaloneHostedSession(
-            ProtosGuestCarrier carrier,
             ProtosDirectFileModuleResolver resolver,
             ProtosProcessRuntime process,
             ProtosPolyglotRuntimeHost runtimeHost,
@@ -70,7 +74,6 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
             ProtosExecutionOutcome initialOutcome,
             ProtosObjectValue entryModule,
             ProtosActivation entryActivation) {
-        this.carrier = carrier;
         this.resolver = resolver;
         this.process = process;
         this.runtimeHost = runtimeHost;
@@ -107,15 +110,7 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
         Objects.requireNonNull(out, "out");
         Objects.requireNonNull(err, "err");
 
-        List<String> arguments = List.copyOf(applicationArguments);
-        ProtosGuestCarrier carrier = new ProtosGuestCarrier("protos-embedded-guest");
-        try {
-            return carrier.call(
-                    () -> openOnCarrier(carrier, coreRoot, sourceFile, arguments, in, out, err));
-        } catch (IOException | RuntimeException | Error failure) {
-            carrier.close();
-            throw failure;
-        }
+        return openSession(coreRoot, sourceFile, List.copyOf(applicationArguments), in, out, err);
     }
 
     /** Convenience form: no application arguments, empty stdin, discarded stdout and stderr. */
@@ -130,8 +125,7 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
                 OutputStream.nullOutputStream());
     }
 
-    private static ProtosStandaloneHostedSession openOnCarrier(
-            ProtosGuestCarrier carrier,
+    private static ProtosStandaloneHostedSession openSession(
             Path coreRoot,
             Path sourceFile,
             List<String> arguments,
@@ -188,7 +182,6 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
                                 initialActivation.executionDomain());
             }
             return new ProtosStandaloneHostedSession(
-                    carrier,
                     resolver,
                     process,
                     runtimeHost,
@@ -220,7 +213,12 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
      */
     public ProtosExecutionOutcome invokeTopLevel(String name) throws IOException {
         Objects.requireNonNull(name, "name");
-        return carrier.call(() -> invokeResolved(resolveTopLevelClosure(name)));
+        gate.lock();
+        try {
+            return invokeResolved(resolveTopLevelClosure(name));
+        } finally {
+            gate.unlock();
+        }
     }
 
     /**
@@ -234,12 +232,17 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
      */
     public PreparedTopLevel prepareTopLevel(String name) throws IOException {
         Objects.requireNonNull(name, "name");
-        return carrier.call(() -> new PreparedTopLevel(resolveTopLevelClosure(name)));
+        gate.lock();
+        try {
+            return new PreparedTopLevel(resolveTopLevelClosure(name));
+        } finally {
+            gate.unlock();
+        }
     }
 
     /**
      * A no-argument top-level Closure resolved by {@link #prepareTopLevel}. It is tied to its owning
-     * session: it uses that session's carrier, Process, and Polyglot Context, owns no resources of
+     * session: it uses that session's gate, Process, and Polyglot Context, owns no resources of
      * its own, and cannot be invoked once the session is closed.
      */
     public final class PreparedTopLevel {
@@ -255,11 +258,16 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
          * session is closed.
          */
         public ProtosExecutionOutcome invoke() throws IOException {
-            return carrier.call(() -> invokeResolved(closure));
+            gate.lock();
+            try {
+                return invokeResolved(closure);
+            } finally {
+                gate.unlock();
+            }
         }
     }
 
-    /** Carrier-only: the dynamic slot read and source-backed Closure validation. */
+    /** Gate held: the dynamic slot read and source-backed Closure validation. */
     private ProtosClosureValue resolveTopLevelClosure(String name) {
         requireOpen();
         if (entryModule == null) {
@@ -280,7 +288,7 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
         return closure;
     }
 
-    /** Carrier-only: runs a resolved Closure as a fresh RootActor-local task of this Process. */
+    /** Gate held: runs a resolved Closure as a fresh RootActor-local task of this Process. */
     private ProtosExecutionOutcome invokeResolved(ProtosClosureValue closure) {
         requireOpen();
         return process.callInExecutionHostForRuntime(
@@ -294,25 +302,23 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
     }
 
     /**
-     * Requests Process termination, waits for terminal Process completion and Context disposition,
-     * then closes the runtime host and module resolver. Idempotent; a failure is thrown after every
-     * step has been attempted.
+     * Makes the close cutover visible, so no further guest operation begins, waits for an
+     * already-started operation to finish, then requests Process termination, waits for terminal
+     * Process completion and Context disposition, and closes the runtime host and module resolver.
+     * Idempotent; a failure is thrown after every step has been attempted.
      */
     @Override
     public void close() throws IOException {
         if (!closeStarted.compareAndSet(false, true)) return;
+        Throwable failure;
+        gate.lock();
         try {
-            carrier.call(
-                    () -> {
-                        Throwable failure = shutdown(process, runtimeHost, resolver);
-                        if (failure instanceof IOException io) throw io;
-                        if (failure instanceof RuntimeException runtime) throw runtime;
-                        if (failure instanceof Error error) throw error;
-                        return null;
-                    });
+            failure = shutdown(process, runtimeHost, resolver);
         } finally {
-            carrier.close();
+            gate.unlock();
         }
+        if (failure instanceof RuntimeException runtime) throw runtime;
+        if (failure instanceof Error error) throw error;
     }
 
     /**
@@ -366,7 +372,7 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
         return processContext;
     }
 
-    boolean isCarrierThreadForTesting() {
-        return carrier.isCarrierThread();
+    boolean hasQueuedGuestOperationForTesting(Thread thread) {
+        return gate.hasQueuedThread(thread);
     }
 }

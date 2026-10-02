@@ -43,7 +43,6 @@ final class ProtosStandaloneHostedSessionLifecycleTest {
         ProtosPolyglotRuntimeHost runtimeHost = session.runtimeHostForTesting();
         ProtosPolyglotProcessContext processContext = session.processContextForTesting();
 
-        assertFalse(session.isCarrierThreadForTesting());
         session.invokeTopLevel("run");
         assertEquals(ProtosProcessRuntime.LifecycleState.RUNNING, process.lifecycleState());
         assertFalse(processContext.isClosedForTesting());
