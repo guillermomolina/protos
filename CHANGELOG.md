@@ -7,6 +7,36 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.141-SNAPSHOT
+
+- `PERF026-D2` (#769) adds the standard `Map.each` and `IdentityMap.each`
+  consumers of the PLAT044 (#766) Candidate B′ inline literal callback
+  mechanism, without changing observable Protos semantics or the
+  specification. B′ is extended only to an immediate Closure literal with
+  exactly two ordinary required positional parameters (no default, not rest)
+  and no nested Closure, staged as the sole argument by a candidate check kept
+  separate from the one-parameter indexed each candidate and the
+  zero-parameter Boolean/while candidates. After ordinary lookup and selection
+  prepare the canonical standard `Map.each` or `IdentityMap.each` with exactly
+  that staged literal, and it neither owns its return home nor requires a
+  Context-local projection, the loop is sequenced in the semantic source root
+  instead of the structured-dispatch helper root. Admission prepares nothing
+  and does not examine callback arity: receiver validation, callback
+  callability validation, the single shallow insertion-ordered association
+  snapshot, the fresh per-association activation carrying the exact
+  representative key and value, advance only after normal callback
+  completion, the ignored callback result and the original receiver result
+  all stay owned by the existing prepared Map/IdentityMap each calls; no
+  hash, equality or identity re-search is added. Each association child that
+  passes the shared B′ exact-invocation proof runs inline with its own
+  RootTag and projected debugger scope, binding `key` and `value` through the
+  ordinary Closure parameter binding from that prepared activation; a child
+  that fails it keeps its exact physical invocation. The D1 local loop is
+  generalized over a common prepared each view instead of being duplicated.
+  Every other callback shape and every other `each` keep the existing paths.
+  Focused topology, tooling, fallback and semantic tests are added; no
+  performance claim is made.
+
 ## 0.3.140-SNAPSHOT
 
 - `PERF026-D1` (#769) adds the standard `Array.each` and `Bytes.each`

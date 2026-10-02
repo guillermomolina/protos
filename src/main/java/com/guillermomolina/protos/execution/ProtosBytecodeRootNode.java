@@ -1300,6 +1300,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return false;
         }
 
+        /**
+         * PLAT044 B′ (PERF026-D2) whole-call admission of a selected standard
+         * Map.each or IdentityMap.each; see {@link
+         * NativeCall#admitsInlineLiteralAssociationEach}.
+         */
+        default boolean admitsInlineLiteralAssociationEach(Object callback) {
+            return false;
+        }
+
         default PreparedMapMatchCall prepareStructuredMapMatch() {
             throw new IllegalStateException(
                     "prepared Closure call has no structured Map.match capability");
@@ -1684,6 +1693,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Override
         public boolean admitsInlineLiteralIndexedEach(Object callback) {
             return (isStructuredArrayEach() || isStructuredBytesEach())
+                    && supplied.size() == 1
+                    && supplied.get(0) == callback
+                    && isInlineLiteralCallbackValue(callback);
+        }
+
+        /**
+         * PLAT044 B′ (PERF026-D2): the {@link #admitsInlineLiteralIndexedEach}
+         * proof for the canonical standard Map.each or IdentityMap.each
+         * capability and the send site's staged two-parameter {@code
+         * callback} literal value. Equally a pure read: {@code
+         * PreparedMapEachCall}/{@code PreparedIdentityMapEachCall} keep sole
+         * authority over receiver and callability validation, the association
+         * snapshot and every per-entry activation, and callback arity is not
+         * examined here.
+         */
+        @Override
+        public boolean admitsInlineLiteralAssociationEach(Object callback) {
+            return (isStructuredMapEach() || isStructuredIdentityMapEach())
                     && supplied.size() == 1
                     && supplied.get(0) == callback
                     && isInlineLiteralCallbackValue(callback);
@@ -2780,17 +2807,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * PLAT044 B′ (PERF026-D1) common view of the standard Array.each and
-     * Bytes.each loops, whose observable shapes coincide: validated receiver
-     * and callback, one shallow ascending indexed snapshot, one fresh
-     * one-argument callback invocation per snapshot position, advance only
-     * after that invocation completes normally, and the original receiver as
-     * result. It lets a send site sequence either loop locally without
-     * duplicating its inline callback region; each implementation keeps its
-     * own validation and snapshot authority.
+     * PLAT044 B′ common loop state of a standard each whose callback a send
+     * site may sequence locally (PERF026-D1 indexed, PERF026-D2 association):
+     * validated receiver and callback, one shallow snapshot, one fresh
+     * callback invocation per snapshot position carrying exactly that
+     * position's arguments, advance only after that invocation completes
+     * normally, and the original receiver as result. It lets a send site
+     * sequence any such loop without duplicating its inline callback region;
+     * each implementation keeps its own validation and snapshot authority.
      */
-    sealed interface PreparedIndexedEachCall
-            permits PreparedArrayEachCall, PreparedBytesEachCall {
+    sealed interface PreparedLocalEachCall
+            permits PreparedIndexedEachCall, PreparedAssociationEachCall {
         boolean hasNext();
 
         PreparedClosureCall prepareCurrent();
@@ -2803,13 +2830,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         Object callback();
 
         /**
-         * Inline eligibility of an already prepared per-element {@code
+         * Inline eligibility of an already prepared per-position {@code
          * child}: the callback is exactly the staged {@code literal} and
          * {@code child} is its exact inline-equivalent invocation ({@link
          * #isInlineLiteralInvocation}), whose activation already carries the
-         * snapshot argument the inline region binds.
+         * snapshot arguments the inline region binds.
          */
-        default boolean admitsInlineLiteralElement(
+        default boolean admitsInlineLiteralChild(
                 PreparedClosureCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
@@ -2817,6 +2844,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     && isInlineLiteralInvocation(child, literalPlan);
         }
     }
+
+    /**
+     * PLAT044 B′ (PERF026-D1) standard Array.each and Bytes.each loops, whose
+     * observable shapes coincide: an ascending indexed snapshot and one
+     * one-argument callback invocation per snapshot element.
+     */
+    sealed interface PreparedIndexedEachCall extends PreparedLocalEachCall
+            permits PreparedArrayEachCall, PreparedBytesEachCall {}
+
+    /**
+     * PLAT044 B′ (PERF026-D2) standard Map.each and IdentityMap.each loops,
+     * whose observable shapes coincide: an insertion-ordered association
+     * snapshot of representative keys and their values, and one
+     * {@code block(key, value)} invocation per snapshot association. The two
+     * receiver families stay distinct; only the loop view is shared.
+     */
+    sealed interface PreparedAssociationEachCall extends PreparedLocalEachCall
+            permits PreparedMapEachCall, PreparedIdentityMapEachCall {}
 
     static final class PreparedArrayEachCall implements PreparedIndexedEachCall {
         private final ProtosArrayValue array;
@@ -3464,7 +3509,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
 
-    static final class PreparedIdentityMapEachCall {
+    static final class PreparedIdentityMapEachCall implements PreparedAssociationEachCall {
         private final ProtosIdentityMapValue identityMap;
         private final List<java.util.Map.Entry<Object, Object>> snapshot;
         private final Object block;
@@ -3490,11 +3535,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.snapshot = List.copyOf(value.associationSnapshot());
         }
 
-        boolean hasNext() {
+        @Override
+        public boolean hasNext() {
             return index < snapshot.size();
         }
 
-        PreparedClosureCall prepareCurrent() {
+        @Override
+        public PreparedClosureCall prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "IdentityMap.each callback requested after snapshot exhaustion");
@@ -3506,7 +3553,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
-        void advance() {
+        @Override
+        public void advance() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "IdentityMap.each cursor advanced after snapshot exhaustion");
@@ -3514,12 +3562,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             index++;
         }
 
-        Object finish() {
+        @Override
+        public Object finish() {
             if (hasNext()) {
                 throw new IllegalStateException(
                         "IdentityMap.each finished before snapshot exhaustion");
             }
             return identityMap;
+        }
+
+        @Override
+        public Object callback() {
+            return block;
         }
     }
 
@@ -5054,7 +5108,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    static final class PreparedMapEachCall {
+    static final class PreparedMapEachCall implements PreparedAssociationEachCall {
         private final ProtosMapValue map;
         private final List<java.util.Map.Entry<Object, Object>> snapshot;
         private final Object block;
@@ -5080,11 +5134,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             this.snapshot = List.copyOf(value.associationSnapshot());
         }
 
-        boolean hasNext() {
+        @Override
+        public boolean hasNext() {
             return index < snapshot.size();
         }
 
-        PreparedClosureCall prepareCurrent() {
+        @Override
+        public PreparedClosureCall prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Map.each callback requested after snapshot exhaustion");
@@ -5096,7 +5152,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
-        void advance() {
+        @Override
+        public void advance() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Map.each cursor advanced after snapshot exhaustion");
@@ -5104,12 +5161,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             index++;
         }
 
-        Object finish() {
+        @Override
+        public Object finish() {
             if (hasNext()) {
                 throw new IllegalStateException(
                         "Map.each finished before snapshot exhaustion");
             }
             return map;
+        }
+
+        @Override
+        public Object callback() {
+            return block;
         }
     }
 
