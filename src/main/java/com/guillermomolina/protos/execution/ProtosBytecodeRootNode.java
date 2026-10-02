@@ -2451,10 +2451,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /**
-         * PLAT044 B′ (PERF026-B1) inline eligibility of an already prepared
+         * PLAT044 B′ single-literal kinds (PERF026-B1 IF_TRUE, PERF026-B2
+         * IF_FALSE, AND, OR): each has exactly one supplied callback, which is
+         * the selected one whenever {@link #hasCallback} holds.
+         * IF_TRUE_IF_FALSE carries two eagerly evaluated callbacks and stays
+         * on the physical path.
+         */
+        private boolean supportsSingleLiteralInlineCallback() {
+            return switch (kind) {
+                case IF_TRUE, IF_FALSE, AND, OR -> true;
+                case IF_TRUE_IF_FALSE -> false;
+            };
+        }
+
+        /**
+         * PLAT044 B′ (PERF026-B1/B2) inline eligibility of an already prepared
          * selected callback {@code child}.
          *
-         * <p>True only when this standard capability is one B1 admits (IF_TRUE),
+         * <p>True only when this standard capability is a single-callback
+         * kind B′ admits ({@link #supportsSingleLiteralInlineCallback}),
          * it selected exactly {@code literal} (the immediate Closure literal
          * value staged by the send site), and {@code child} is the ordinary
          * source invocation of that literal's own semantic activation root
@@ -2465,13 +2480,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * ReturnHomeOwningCall#handleControlTransfer} can only rethrow. Any
          * other shape (a re-projected plan, a compact or native call, an
          * owned return home, a different selected value) keeps the exact
-         * physical callback invocation.
+         * physical callback invocation. The inline result still completes
+         * through {@link #finishCallback}, so AND/OR Boolean-result
+         * validation is unchanged.
          */
         boolean admitsInlineLiteralCallback(
                 PreparedClosureCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
-            return kind == ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE
+            return supportsSingleLiteralInlineCallback()
                     && hasCallback()
                     && supplied.get(0) == literal
                     && child instanceof OrdinarySourceCall ordinary

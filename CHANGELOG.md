@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.136-SNAPSHOT
+
+- `PERF026-B2` (#767) extends the PLAT044 (#766) Candidate B′ single-literal
+  inline callback path published by `PERF026-B1` from standard `IF_TRUE` to
+  standard `IF_FALSE`, `AND` and `OR`, without changing observable Protos
+  semantics or the specification. Eligibility is still decided after ordinary
+  lookup and the existing `PreparedBooleanCall` classification, only when the
+  one supplied callback is actually selected and every existing B1 shape check
+  holds; unselected callbacks are never entered. The inline callback result
+  still completes through the standard Boolean callback finish, so `and`/`or`
+  keep the exact Boolean-result validation and Error. `IF_TRUE_IF_FALSE`
+  keeps its physical callback path (PERF026-B3), as do all B1 fallbacks. The
+  guest carrier and its 64 MiB stack size are unchanged. Focused topology,
+  tooling and semantic tests are added; no performance claim is made.
+
 ## 0.3.135-SNAPSHOT
 
 - `PERF026-B1` (#767) implements the first PLAT044 (#766) Candidate B′ slice,

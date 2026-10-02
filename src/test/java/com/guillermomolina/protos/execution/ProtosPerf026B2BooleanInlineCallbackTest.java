@@ -22,6 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -29,6 +31,8 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.RootCallTarget;
@@ -58,118 +62,182 @@ import org.graalvm.polyglot.Instrument;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF026-B1 (PLAT044 B′) focal evidence: an eligible standard {@code ifTrue}
- * immediate literal callback runs inline in its semantic source root under its
- * own fresh activation, with a custom RootTag and activation-projecting tooling
- * scope; every non-eligible shape keeps its exact physical callback root.
+ * PERF026-B2 (PLAT044 B′) focal evidence: the B1 single-literal inline callback
+ * path now also serves standard {@code ifFalse}, {@code and} and {@code or}
+ * when their one callback is selected; unselected callbacks are never entered,
+ * AND/OR results still pass the standard Boolean-result validation, and
+ * {@code ifTrueIfFalse} keeps its physical callback root (PERF026-B3).
  *
  * <p>Eligible sites are placed inside a Closure ({@code run}) because a literal
- * at module top level owns a fresh return home, a shape B1 keeps on the physical
- * path.
+ * at module top level owns a fresh return home, a shape B′ keeps on the
+ * physical path.
  */
-final class ProtosPerf026B1BooleanInlineCallbackTest {
+final class ProtosPerf026B2BooleanInlineCallbackTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void eligibleIfTrueLiteralCallbackRunsInlineInItsSourceRoot() throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root =
-                        lowerRoot(
-                                """
-                                run: () => {
-                                    true.ifTrue(() => {
-                                        probe()
-                                        1
-                                    })
-                                }
-                                run()
-                                """);
+    void eligibleIfFalseLiteralCallbackRunsInline() throws Exception {
+        Object result =
+                assertCallbackRootRemoved(
+                        """
+                        run: () => {
+                            false.ifFalse(() => {
+                                probe()
+                                1
+                            })
+                        }
+                        run()
+                        """);
+        assertInteger(1, result);
+        System.out.println("PERF026_B2_IF_FALSE_LITERAL_CALLBACK_ROOT_REMOVED=YES");
+    }
 
-                assertInteger(1, root.getCallTarget().call(probe.module()));
+    @Test
+    void eligibleAndLiteralCallbackRunsInline() throws Exception {
+        Object result =
+                assertCallbackRootRemoved(
+                        """
+                        run: () => {
+                            true.and(() => {
+                                probe()
+                                true
+                            })
+                        }
+                        run()
+                        """);
+        assertSame(ProtosBooleanValue.TRUE, result);
+        System.out.println("PERF026_B2_AND_LITERAL_CALLBACK_ROOT_REMOVED=YES");
+    }
 
-                assertEquals(1, probe.calls.get());
-                assertEquals(2, probe.stack.size(), () -> "stack=" + probe.stack);
-                ProtosSemanticBytecodeRootNode runRoot =
-                        assertInstanceOf(ProtosSemanticBytecodeRootNode.class, probe.stack.get(0));
-                assertSame(root, probe.stack.get(1));
+    @Test
+    void eligibleOrLiteralCallbackRunsInline() throws Exception {
+        Object result =
+                assertCallbackRootRemoved(
+                        """
+                        run: () => {
+                            false.or(() => {
+                                probe()
+                                false
+                            })
+                        }
+                        run()
+                        """);
+        assertSame(ProtosBooleanValue.FALSE, result);
+        System.out.println("PERF026_B2_OR_LITERAL_CALLBACK_ROOT_REMOVED=YES");
+    }
 
-                runRoot.getRootNodes().ensureComplete();
-                assertEquals(
-                        2,
-                        rootTags(runRoot.getBytecodeNode()),
-                        "automatic RootTag of run plus the inline callback RootTag");
-            } finally {
-                context.leave();
-            }
-        }
-        System.out.println("PERF026_B1_IFTRUE_LITERAL_CALLBACK_ROOT_REMOVED=YES");
-        System.out.println("PERF026_B1_IFTRUE_INLINE_ROOTTAG=YES");
+    @Test
+    void unselectedCallbacksAreNotEntered() throws Exception {
+        assertSame(
+                ProtosNullValue.INSTANCE,
+                assertCallbackNotEntered(
+                        """
+                        run: () => {
+                            true.ifFalse(() => {
+                                probe()
+                                1
+                            })
+                        }
+                        run()
+                        """));
+        System.out.println("PERF026_B2_TRUE_IF_FALSE_CALLBACK_ENTERED=NO");
+
+        assertSame(
+                ProtosBooleanValue.FALSE,
+                assertCallbackNotEntered(
+                        """
+                        run: () => {
+                            false.and(() => {
+                                probe()
+                                true
+                            })
+                        }
+                        run()
+                        """));
+        System.out.println("PERF026_B2_FALSE_AND_CALLBACK_ENTERED=NO");
+
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                assertCallbackNotEntered(
+                        """
+                        run: () => {
+                            true.or(() => {
+                                probe()
+                                false
+                            })
+                        }
+                        run()
+                        """));
+        System.out.println("PERF026_B2_TRUE_OR_CALLBACK_ENTERED=NO");
+    }
+
+    /**
+     * A non-Boolean result of an inline AND/OR callback still reaches
+     * FinishStructuredBooleanCallback: it signals an Error with the same
+     * prototype as the physical (dynamic-callback) path in the same module.
+     */
+    @Test
+    void inlineAndOrCallbackResultsKeepBooleanValidation() throws Exception {
+        assertSameInvalidResultError("true.and", "1");
+        System.out.println("PERF026_B2_AND_BOOLEAN_RESULT_VALIDATION_PRESERVED=YES");
+        assertSameInvalidResultError("false.or", "null");
+        System.out.println("PERF026_B2_OR_BOOLEAN_RESULT_VALIDATION_PRESERVED=YES");
+    }
+
+    /** PERF026-B3 boundary: both selected branches keep their physical root. */
+    @Test
+    void ifTrueIfFalseRetainsItsPhysicalCallbackRoot() throws Exception {
+        assertCallbackRootPreserved(
+                """
+                run: () => {
+                    true.ifTrueIfFalse(() => {
+                        probe()
+                        1
+                    }, () => { 2 })
+                }
+                run()
+                """);
+        assertCallbackRootPreserved(
+                """
+                run: () => {
+                    false.ifTrueIfFalse(() => { 1 }, () => {
+                        probe()
+                        2
+                    })
+                }
+                run()
+                """);
+        System.out.println("PERF026_B2_IF_TRUE_IF_FALSE_ROOT_PRESERVED=YES");
     }
 
     @Test
     void dynamicCallbackRetainsItsPhysicalRoot() throws Exception {
-        assertCallbackRootPreserved(
-                """
-                run: () => {
-                    callback: () => {
-                        probe()
-                        1
+        for (String site :
+                List.of(
+                        "false.ifFalse(callback)",
+                        "true.and(callback)",
+                        "false.or(callback)")) {
+            assertCallbackRootPreserved(
+                    """
+                    run: () => {
+                        callback: () => {
+                            probe()
+                            true
+                        }
+                        %s
                     }
-                    true.ifTrue(callback)
-                }
-                run()
-                """);
-        System.out.println("PERF026_B1_DYNAMIC_CALLBACK_ROOT_PRESERVED=YES");
-    }
-
-    @Test
-    void ownedReturnHomeLiteralRetainsItsPhysicalRoot() throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root =
-                        lowerRoot(
-                                """
-                                true.ifTrue(() => {
-                                    probe()
-                                    1
-                                })
-                                """);
-
-                assertInteger(1, root.getCallTarget().call(probe.module()));
-                assertEquals(2, probe.stack.size(), () -> "stack=" + probe.stack);
-                assertNotSame(root, probe.stack.get(0));
-                assertSame(root, probe.stack.get(1));
-            } finally {
-                context.leave();
-            }
+                    run()
+                    """
+                            .formatted(site));
         }
-        System.out.println("PERF026_B1_OWNED_RETURN_HOME_FALLBACK=YES");
-    }
-
-    /**
-     * B1 consumes only IF_TRUE; PERF026-B2 later admits IF_FALSE, AND and OR
-     * (covered by {@link ProtosPerf026B2BooleanInlineCallbackTest}), while
-     * IF_TRUE_IF_FALSE stays physical.
-     */
-    @Test
-    void ifTrueIfFalseRetainsItsPhysicalCallbackRoot() throws Exception {
-        assertCallbackRootPreserved(
-                "run: () => {\nfalse.ifTrueIfFalse(() => 1, () => { probe() })\n}\nrun()\n");
-        System.out.println("PERF026_B1_IF_TRUE_IF_FALSE_UNCHANGED=YES");
+        System.out.println("PERF026_B2_DYNAMIC_CALLBACK_ROOT_PRESERVED=YES");
     }
 
     @Test
-    void ordinarySelectionAndNonClosureCallbacksStayOrdinary() throws Exception {
+    void customSelectorAndNonClosureCallbacksStayOrdinary() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -180,12 +248,12 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                 """
                                 run: () => {
                                     custom: {
-                                        ifTrue: (callback) => {
+                                        and: (callback) => {
                                             probe()
                                             5
                                         }
                                     }
-                                    custom.ifTrue(() => { 1 })
+                                    custom.and(() => { true })
                                 }
                                 run()
                                 """);
@@ -200,49 +268,23 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                     callable: {
                                         call: () => {
                                             probe()
-                                            7
+                                            true
                                         }
                                     }
-                                    true.ifTrue(callable)
+                                    false.or(callable)
                                 }
                                 run()
                                 """);
-                assertInteger(7, callableRoot.getCallTarget().call(callable.module()));
+                assertSame(
+                        ProtosBooleanValue.TRUE,
+                        callableRoot.getCallTarget().call(callable.module()));
                 assertEquals(3, callable.stack.size(), () -> "stack=" + callable.stack);
             } finally {
                 context.leave();
             }
         }
-        System.out.println("PERF026_B1_CUSTOM_IFTRUE_ORDINARY_DISPATCH_PRESERVED=YES");
-        System.out.println("PERF026_B1_NONCLOSURE_INVOKABLE_FALLBACK_PRESERVED=YES");
-    }
-
-    @Test
-    void falseIfTrueEntersNoInlineCallback() throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                Probe probe = new Probe();
-                ProtosSemanticBytecodeRootNode root =
-                        lowerRoot(
-                                """
-                                run: () => {
-                                    false.ifTrue(() => {
-                                        probe()
-                                        1
-                                    })
-                                }
-                                run()
-                                """);
-
-                assertSame(ProtosNullValue.INSTANCE, root.getCallTarget().call(probe.module()));
-                assertEquals(0, probe.calls.get());
-            } finally {
-                context.leave();
-            }
-        }
-        System.out.println("PERF026_B1_FALSE_IFTRUE_CALLBACK_ENTERED=NO");
+        System.out.println("PERF026_B2_CUSTOM_BOOLEAN_SELECTOR_FALLBACK_PRESERVED=YES");
+        System.out.println("PERF026_B2_NONCLOSURE_INVOKABLE_FALLBACK_PRESERVED=YES");
     }
 
     @Test
@@ -257,7 +299,7 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                         lowerRoot(
                                         """
                                         run: () => {
-                                            true.ifTrue(() => {
+                                            false.ifFalse(() => {
                                                 probe()
                                                 ^41
                                             })
@@ -276,9 +318,10 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                         """
                                         run: () => {
                                             count: 1
-                                            true.ifTrue(() => {
+                                            true.and(() => {
                                                 probe()
                                                 count = count + 40
+                                                true
                                             })
                                             count + 1
                                         }
@@ -295,12 +338,13 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                         """
                                         run: () => {
                                             outer: context
-                                            first: true.ifTrue(() => {
+                                            first: null
+                                            false.or(() => {
                                                 probe()
-                                                local: 1
-                                                context
+                                                first = context
+                                                true
                                             })
-                                            second: true.ifTrue(() => { context })
+                                            second: false.ifFalse(() => { context })
                                             (outer !== first) && (first !== second)
                                         }
                                         run()
@@ -312,19 +356,19 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                 context.leave();
             }
         }
-        System.out.println("PERF026_B1_NLR_PRESERVED=YES");
-        System.out.println("PERF026_B1_CAPTURE_BY_REFERENCE_PRESERVED=YES");
-        System.out.println("PERF026_B1_IFTRUE_LITERAL_FRESH_ACTIVATION_PRESERVED=YES");
+        System.out.println("PERF026_B2_NLR_PRESERVED=YES");
+        System.out.println("PERF026_B2_CAPTURE_BY_REFERENCE_PRESERVED=YES");
+        System.out.println("PERF026_B2_FRESH_ACTIVATION_PRESERVED=YES");
     }
 
     @Test
     void errorAndSuspensionCrossTheInlineCallback() throws Exception {
         ProtosExecutionOutcome error =
                 ProtosTestExecutionSupport.execute(
-                        "perf026-b1-error.protos",
+                        "perf026-b2-error.protos",
                         """
                         Error.handle(() => {
-                            true.ifTrue(() => { Error().signal() })
+                            false.ifFalse(() => { Error().signal() })
                             0
                         }, (caught) => { 42 })
                         """,
@@ -333,43 +377,46 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
 
         ProtosExecutionOutcome suspension =
                 ProtosTestExecutionSupport.execute(
-                        "perf026-b1-suspension.protos",
+                        "perf026-b2-suspension.protos",
                         """
                         run: () => {
                             pending: (() => { 41 }).future()
-                            true.ifTrue(() => { pending.value() + 1 })
+                            result: 0
+                            true.and(() => {
+                                result = pending.value() + 1
+                                true
+                            })
+                            result
                         }
                         run()
                         """,
                         new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation());
         assertCompletedWith(42, suspension);
 
-        System.out.println("PERF026_B1_ERROR_PROPAGATION_PRESERVED=YES");
-        System.out.println("PERF026_B1_FUTURE_WAIT_PRESERVED=YES");
+        System.out.println("PERF026_B2_ERROR_PROPAGATION_PRESERVED=YES");
+        System.out.println("PERF026_B2_FUTURE_WAIT_PRESERVED=YES");
     }
 
-    /**
-     * The approved PLAT044 tooling delta: no distinct callback debugger frame,
-     * but a breakpoint inside the inline region suspends once and its scope is
-     * the callback activation (its own binding plus captured ones).
-     */
+    /** The generic B1 inline RootTag/scope projection serves a B2 kind. */
     @Test
-    void debuggerScopeInsideInlineCallbackProjectsTheCallbackActivation() throws Exception {
+    void debuggerScopeInsideInlineOrCallbackProjectsTheCallbackActivation()
+            throws Exception {
         Source source =
                 Source.newBuilder(
                                 ProtosLanguage.ID,
                                 """
                                 run: () => {
                                     outerMarker: 1
-                                    true.ifTrue(() => {
+                                    false.or(() => {
                                         innerMarker: 2
                                         innerMarker + outerMarker
+                                        true
                                     })
                                 }
                                 run()
                                 """,
-                                "perf026-b1-debugger.protos")
-                        .uri(URI.create("memory:///perf026-b1-debugger.protos"))
+                                "perf026-b2-debugger.protos")
+                        .uri(URI.create("memory:///perf026-b2-debugger.protos"))
                         .mimeType(ProtosLanguage.MIME_TYPE)
                         .build();
         ProtosActivation module = new ProtosCoreBootstrap().bootstrap(CORE).newModuleActivation();
@@ -406,7 +453,12 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
                                 }
                             })) {
                 session.install(Breakpoint.newBuilder(source).lineIs(5).build());
-                assertCompletedWith(3, polyglot.execute(source, module));
+                ProtosExecutionOutcome outcome = polyglot.execute(source, module);
+                assertEquals(
+                        ProtosExecutionOutcome.State.COMPLETED,
+                        outcome.state(),
+                        () -> "error=" + outcome.error());
+                assertSame(ProtosBooleanValue.TRUE, outcome.value());
             }
         }
 
@@ -416,7 +468,50 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
         assertEquals(1, suspensions.get(), "exactly one inline-region breakpoint suspension");
         assertEquals("2", inner.get());
         assertEquals("1", outer.get());
-        System.out.println("PERF026_B1_IFTRUE_INLINE_SCOPE_PROJECTION=YES");
+        System.out.println("PERF026_B2_INLINE_SCOPE_PROJECTION_PRESERVED=YES");
+    }
+
+    private static Object assertCallbackRootRemoved(String characters) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosSemanticBytecodeRootNode root = lowerRoot(characters);
+
+                Object result = root.getCallTarget().call(probe.module());
+
+                assertEquals(1, probe.calls.get(), characters);
+                assertEquals(2, probe.stack.size(), () -> characters + " stack=" + probe.stack);
+                ProtosSemanticBytecodeRootNode runRoot =
+                        assertInstanceOf(ProtosSemanticBytecodeRootNode.class, probe.stack.get(0));
+                assertSame(root, probe.stack.get(1));
+
+                runRoot.getRootNodes().ensureComplete();
+                assertEquals(
+                        2,
+                        rootTags(runRoot.getBytecodeNode()),
+                        "automatic RootTag of run plus the inline callback RootTag");
+                return result;
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static Object assertCallbackNotEntered(String characters) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                Object result = lowerRoot(characters).getCallTarget().call(probe.module());
+                assertEquals(0, probe.calls.get(), characters);
+                return result;
+            } finally {
+                context.leave();
+            }
+        }
     }
 
     private static void assertCallbackRootPreserved(String characters) throws Exception {
@@ -437,6 +532,70 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
 
                 callback.getRootNodes().ensureComplete();
                 assertEquals(1, rootTags(callback.getBytecodeNode()), characters);
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /**
+     * Runs {@code receiverSend(() => { probe(); value })} inline and the same
+     * send with a dynamic callback physically, in one module, and requires both
+     * to signal an Error of the same prototype; the inline run must have had
+     * no callback root.
+     */
+    private static void assertSameInvalidResultError(String receiverSend, String value)
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosActivation module = probe.module();
+                ProtosSemanticBytecodeRootNode inlineRoot =
+                        lowerRoot(
+                                """
+                                inlineRun: () => {
+                                    %s(() => {
+                                        probe()
+                                        %s
+                                    })
+                                }
+                                inlineRun()
+                                """
+                                        .formatted(receiverSend, value));
+                ProtosSignalException inline =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () -> inlineRoot.getCallTarget().call(module));
+                assertEquals(1, probe.calls.get());
+                assertEquals(2, probe.stack.size(), () -> "stack=" + probe.stack);
+
+                ProtosSemanticBytecodeRootNode physicalRoot =
+                        lowerRoot(
+                                """
+                                physicalRun: () => {
+                                    callback: () => {
+                                        probe()
+                                        %s
+                                    }
+                                    %s(callback)
+                                }
+                                physicalRun()
+                                """
+                                        .formatted(value, receiverSend));
+                ProtosSignalException physical =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () -> physicalRoot.getCallTarget().call(module));
+                assertEquals(2, probe.calls.get());
+                assertEquals(3, probe.stack.size(), () -> "stack=" + probe.stack);
+
+                ProtosObjectValue inlineError = inline.error();
+                ProtosObjectValue physicalError = physical.error();
+                assertNotSame(inlineError, physicalError);
+                assertTrue(inlineError.parent().isPresent());
+                assertSame(physicalError.parent().orElseThrow(), inlineError.parent().orElseThrow());
             } finally {
                 context.leave();
             }
@@ -473,7 +632,7 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
 
     private static ProtosSemanticBytecodeRootNode lowerRoot(String characters) {
         Source source =
-                Source.newBuilder(ProtosLanguage.ID, characters, "perf026-b1.protos").build();
+                Source.newBuilder(ProtosLanguage.ID, characters, "perf026-b2.protos").build();
         CanonicalSequence sequence =
                 (CanonicalSequence)
                         new Canonicalizer()
