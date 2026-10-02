@@ -21,7 +21,7 @@ JAVA_SUREFIRE_REPORTS := target/surefire-reports
 JAVA_SLOW_TEST_GUARD := $(PYTHON) tools/java_slow_test_guard.py
 JAVA_SLOW_TEST_ALLOWLIST := tools/java_slow_tests_allowlist.txt
 
-.PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-java-stress test-protos check verify clean dist dist-validate
+.PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-java-stress test-protos check verify clean artifacts artifacts-verify dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -36,7 +36,10 @@ help:
 		'  make check          Verify the toolchain, then run both test suites' \
 		'  make verify         Run a clean Maven verify lifecycle' \
 		'  make clean          Remove Maven build output' \
-		'  make dist           Build the portable distribution' \
+		'  make artifacts      Build the canonical exact-revision artifact set' \
+		'                      (Native + portable JVM + D064 docs + manifest; not a release)' \
+		'  make artifacts-verify  Re-verify target/artifact-set against its manifest' \
+		'  make dist           Build only the portable JVM distribution' \
 		'  make dist-validate  Build and validate the portable distribution' \
 		'' \
 		'Overrides: MVN=... PYTHON=... SH=... MVN_FLAGS=... JAVA_TEST_JOBS=... PROTOS_TEST_JOBS=... DIST_VALIDATE_FLAGS=...'
@@ -93,6 +96,14 @@ verify:
 
 clean:
 	$(MVN) $(MVN_FLAGS) clean
+
+# DIST010: one clean revision -> Native + portable JVM + D064 + manifest.
+# Building an artifact set never creates a tag, GitHub Release, or upload.
+artifacts:
+	$(PYTHON) dist/build_artifact_set.py
+
+artifacts-verify:
+	$(PYTHON) dist/build_artifact_set.py --verify target/artifact-set
 
 dist:
 	$(PYTHON) dist/build_portable.py

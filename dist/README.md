@@ -6,7 +6,70 @@ It does not create a Git tag or GitHub Release. The resulting archive is a
 development distribution until a later explicitly selected release candidate
 passes DIST001-B/D/E.
 
-## Build
+## Which command
+
+| Purpose | Command |
+|---|---|
+| Canonical exact-revision artifact set (Native + portable JVM + D064) | `make artifacts` |
+| Portable JVM distribution only | `make dist` |
+| Validate the extracted portable distribution | `make dist-validate` |
+| Public release preparation/publication (explicit decision only) | `dist/prepare_release.py`, `dist/publish_release.py` |
+
+Building artifacts and publishing a release are separate operations. No build
+command above creates a Git tag, GitHub Release, upload, or version
+transition.
+
+## Canonical exact-revision artifact set
+
+`DIST010` defines one entry point that constructs every artifact for one exact
+source revision:
+
+```sh
+make artifacts
+```
+
+Run it from a clean checkout inside the canonical Native builder environment
+(Oracle Linux 10 with the GraalVM from `build/native/Dockerfile`, as in the
+development container). It is substantially more expensive than `make dist`
+because it includes a Native Image build.
+
+`dist/build_artifact_set.py` refuses a dirty checkout, runs `mvn clean`, then
+composes the existing builders (`make -C build/native build`,
+`dist/build_native.py`, `dist/build_portable.py`) in development mode, and runs
+the Protos-owned D064 Standard Library documentation producer twice from the
+same checkout, requiring byte-identical output. The result is:
+
+```text
+target/artifact-set/
+├── protos-<version>-posix-jvm.zip
+├── protos-<version>-native-<os>-<arch>.zip
+├── protos-<version>-stdlib-documentation.json           (D064)
+├── protos-<version>-stdlib-documentation-coverage.txt   (D067 coverage)
+├── SHA256SUMS
+└── ARTIFACT-SET.json
+```
+
+`ARTIFACT-SET.json` is a deterministic (no timestamp, sorted keys/entries)
+envelope recording the repository, exact revision, project version, and, per
+artifact, its kind, file name, SHA-256, and identity: the archive's platform
+and toolchain identity from its `RUNTIME.txt`, or the D064 format and
+provenance. Each archive's own `SOURCE.txt` and the D064 `provenance.revision`
+must equal the set revision, be clean, and not be a public release.
+
+The set is assembled in `target/artifact-set.partial` and renamed to
+`target/artifact-set` only after the envelope verifies; any previous set is
+removed before building starts, so a failed build leaves no complete-looking
+set. To re-verify an existing set against its bytes:
+
+```sh
+make artifacts-verify
+python3 dist/build_artifact_set.py --verify target/artifact-set --expect-revision <sha>
+```
+
+This set is local construction evidence. Durable exact-revision publication
+of the D064 artifact is a separate later step (`DIST010-B`).
+
+## Portable JVM build
 
 From the repository root:
 
