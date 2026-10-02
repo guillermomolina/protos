@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.143-SNAPSHOT
+
+- `PERF025-C2D` (#758) reduces the shared explicit JVM guest-carrier stack
+  budget (`ProtosStandaloneHostedExecution.GUEST_CALL_STACK_SIZE_BYTES`)
+  from 64 MiB to 16 MiB after the post-B′ PERF025-C2C evidence gate showed
+  the artificial per-level root multipliers removed. The dedicated guest
+  carrier, Test Tool per-Case carrier use, serialization/placement
+  behavior, the unchanged 10,000-deep
+  `deep-recursive-closure-call-stack-capacity` regression workload, and all
+  observable Protos semantics are retained; the specification is unchanged.
+  16 MiB is a conservative fixed budget recorded as part of the reference
+  runtime's run identity, not a claimed minimum. The benchmark README now
+  records the 16 MiB carrier stack.
+
 ## 0.3.142-SNAPSHOT
 
 - `PERF026-D3` (#769) adds the standard `Environment.each` consumer of the

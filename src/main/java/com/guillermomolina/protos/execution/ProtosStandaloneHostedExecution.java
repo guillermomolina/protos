@@ -53,15 +53,14 @@ public final class ProtosStandaloneHostedExecution {
      * B′) an eligible standard {@code ifTrue} immediate literal callback (as in each level of the
      * retained recursive benchmark drivers) runs inline in its source root with no callback
      * CallTarget; other structured invocations and non-eligible callbacks still add their roots.
-     * This budget is deliberately unchanged until post-PLAT044 stack evidence is recorded, so the
-     * retained 10,000-deep drivers keep a large fixed stack. Guest execution therefore never depends
-     * on the ambient stack size of whichever
-     * thread happens to call in (a JVM main thread, a test worker, an embedder's thread) and runs
-     * on a dedicated carrier thread with this explicit, fixed budget, which remains a stable,
-     * recorded part of this reference runtime's execution identity; see
-     * {@code protos/benchmarks/README.md}.
+     * With those artificial per-level root multipliers removed, PERF025-C2D adopts a conservative
+     * fixed 16 MiB budget for the retained 10,000-deep drivers; it is not a claimed minimum. Guest
+     * execution never depends on the ambient stack size of whichever thread happens to call in (a
+     * JVM main thread, a test worker, an embedder's thread) and runs on a dedicated carrier thread
+     * with this explicit, fixed budget, which remains a stable, recorded part of
+     * this reference runtime's execution identity; see {@code protos/benchmarks/README.md}.
      */
-    public static final long GUEST_CALL_STACK_SIZE_BYTES = 64L * 1024 * 1024;
+    public static final long GUEST_CALL_STACK_SIZE_BYTES = 16L * 1024 * 1024;
 
     private ProtosStandaloneHostedExecution() {}
 

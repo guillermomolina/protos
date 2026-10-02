@@ -15,7 +15,7 @@ runtime may provision a larger call stack when required, but that runtime option
 must be fixed and recorded as part of the retained run identity.
 
 `bin/protos` (BUG008) satisfies this requirement by always dispatching guest
-execution on a dedicated carrier thread with a fixed 64 MiB call stack,
+execution on a dedicated carrier thread with a fixed 16 MiB call stack,
 regardless of the ambient stack size of whichever thread called into the CLI.
 This keeps the corpus's checked-in recursive repetition counts, including the
 10,000-deep micro/runtime drivers, executable on the reference runtime without
