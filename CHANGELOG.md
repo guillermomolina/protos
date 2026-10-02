@@ -7,6 +7,19 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.147-SNAPSHOT
+
+- `PERF025-G1` (#758) makes Task structured-child bookkeeping pay-only-when-used.
+  `ProtosTask.children` is now materialized on the first `addChild`; a never
+  materialized set behaves as the empty set, and child snapshots of an empty
+  set return `Set.of()` without allocation. The per-Task anonymous child-drain
+  `WaitDependency` is replaced by one shared stateless identity sentinel,
+  compared only against each Task's own wait/resume dependency. New
+  `ProtosPerf025G1LazyTaskChildrenTest` covers childless completion without
+  materialization, first-child ownership and removal, completion, failure and
+  cancellation child drain. No observable Protos semantics change; the
+  specification is unchanged.
+
 ## 0.3.146-SNAPSHOT
 
 - `PERF025-F1` (#758) implements PLAT046 Candidate B: direct-caller hosted

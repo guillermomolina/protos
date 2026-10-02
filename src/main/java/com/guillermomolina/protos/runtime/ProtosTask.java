@@ -79,7 +79,11 @@ public final class ProtosTask {
 
     private final ProtosActorExecutionDomain owner;
     private ProtosTask parent;
-    private final Set<ProtosTask> children = new LinkedHashSet<>();
+    /*
+     * PERF025-G1 pay-only-when-used structured-child bookkeeping. Null is equivalent to the
+     * empty set; the first addChild materializes it.
+     */
+    private Set<ProtosTask> children;
     private final Object associatedFuture;
     private final Continuation continuation;
 
@@ -110,7 +114,12 @@ public final class ProtosTask {
 
 
     private WaitDependency resumedDependency;
-    private final WaitDependency childDrain = new WaitDependency() {};
+    /*
+     * PERF025-G1: child drain is a stateless backend-private identity sentinel. Identity is only
+     * compared against this task's own waitDependency/resumedDependency, so one shared instance
+     * replaces the former per-task allocation.
+     */
+    private static final WaitDependency CHILD_DRAIN = new WaitDependency() {};
     private Object pendingCompletion;
     private ProtosDynamicControlState dynamicControlState;
 
@@ -134,7 +143,7 @@ public final class ProtosTask {
     }
 
     public synchronized Set<ProtosTask> children() {
-        return Set.copyOf(children);
+        return childrenSnapshot();
     }
 
     public synchronized Optional<Object> associatedFuture() {
@@ -230,16 +239,37 @@ public final class ProtosTask {
         if (isTerminal()) {
             throw new IllegalStateException("terminal task cannot acquire a structured child");
         }
-        children.add(Objects.requireNonNull(child, "child"));
+        Objects.requireNonNull(child, "child");
+        if (children == null) {
+            children = new LinkedHashSet<>();
+        }
+        children.add(child);
+    }
+
+    /** Caller holds this monitor. */
+    private boolean hasChildren() {
+        return children != null && !children.isEmpty();
+    }
+
+    /** Caller holds this monitor. Returns an allocation-free empty set when no child is owned. */
+    private Set<ProtosTask> childrenSnapshot() {
+        return hasChildren() ? Set.copyOf(children) : Set.of();
+    }
+
+    /** Testing seam: whether the structured-child collection has ever been materialized. */
+    synchronized boolean childrenMaterializedForTesting() {
+        return children != null;
     }
 
     void removeChild(ProtosTask child) {
         boolean wake;
         synchronized (this) {
-            children.remove(child);
-            wake = children.isEmpty() && state == State.SUSPENDED && waitDependency == childDrain;
+            if (children != null) {
+                children.remove(child);
+            }
+            wake = !hasChildren() && state == State.SUSPENDED && waitDependency == CHILD_DRAIN;
         }
-        if (wake) resume(childDrain);
+        if (wake) resume(CHILD_DRAIN);
     }
 
     synchronized boolean markQueued() {
@@ -294,7 +324,7 @@ public final class ProtosTask {
             deferredCompletion = pendingCompletion;
             finishCancellationChildDrain =
                     cancellationPhase == CancellationPhase.UNWINDING
-                            && resumedDependency == childDrain;
+                            && resumedDependency == CHILD_DRAIN;
             if (finishCancellationChildDrain) {
                 resumedDependency = null;
             }
@@ -553,7 +583,7 @@ public final class ProtosTask {
             }
 
             cancellationPhase = CancellationPhase.UNWINDING;
-            cancelChildren = Set.copyOf(children);
+            cancelChildren = childrenSnapshot();
             boolean hasEnsureCleanup =
                     dynamicControlState != null
                             && dynamicControlState.hasActiveEnsureFrames();
@@ -564,7 +594,7 @@ public final class ProtosTask {
                 terminalNow = false;
             } else if (!cancelChildren.isEmpty()) {
                 state = State.SUSPENDED;
-                waitDependency = childDrain;
+                waitDependency = CHILD_DRAIN;
                 terminalNow = false;
             } else {
                 cancellationPhase = CancellationPhase.TERMINAL;
@@ -602,7 +632,7 @@ public final class ProtosTask {
             }
             requireState(State.RUNNING, "begin continuation cancellation unwind");
             cancellationPhase = CancellationPhase.UNWINDING;
-            cancelChildren = Set.copyOf(children);
+            cancelChildren = childrenSnapshot();
         }
 
         for (ProtosTask child : cancelChildren) {
@@ -627,16 +657,16 @@ public final class ProtosTask {
             }
 
             if (state == State.RUNNING) {
-                cancelChildren = Set.copyOf(children);
+                cancelChildren = childrenSnapshot();
                 if (!cancelChildren.isEmpty()) {
                     state = State.SUSPENDED;
-                    waitDependency = childDrain;
+                    waitDependency = CHILD_DRAIN;
                 } else {
                     cancellationPhase = CancellationPhase.TERMINAL;
                     state = State.CANCELLED;
                     terminalNow = true;
                 }
-            } else if (state == State.SUSPENDED && waitDependency == childDrain) {
+            } else if (state == State.SUSPENDED && waitDependency == CHILD_DRAIN) {
                 return true;
             } else {
                 throw new IllegalStateException(
@@ -666,7 +696,7 @@ public final class ProtosTask {
             return false;
         }
         cancellationPhase = CancellationPhase.SUPERSEDED;
-        if (state == State.SUSPENDED && waitDependency == childDrain) {
+        if (state == State.SUSPENDED && waitDependency == CHILD_DRAIN) {
             state = State.RUNNING;
             waitDependency = null;
             resumedDependency = null;
@@ -687,7 +717,7 @@ public final class ProtosTask {
                         "cancellation child drain requires UNWINDING phase");
             }
             requireState(State.RUNNING, "finish cancellation child drain");
-            if (!children.isEmpty()) {
+            if (hasChildren()) {
                 throw new IllegalStateException(
                         "cancellation child drain resumed before children became terminal");
             }
@@ -706,10 +736,10 @@ public final class ProtosTask {
         Object completed;
         synchronized (this) {
             requireState(State.RUNNING, "complete");
-            if (!children.isEmpty()) {
+            if (hasChildren()) {
                 pendingCompletion = value;
                 state = State.SUSPENDED;
-                waitDependency = childDrain;
+                waitDependency = CHILD_DRAIN;
                 return;
             }
             state = State.COMPLETED;
@@ -728,11 +758,11 @@ public final class ProtosTask {
         java.util.Set<ProtosTask> cancelChildren;
         synchronized (this) {
             requireState(State.RUNNING, "fail");
-            cancelChildren = Set.copyOf(children);
+            cancelChildren = childrenSnapshot();
             if (!cancelChildren.isEmpty()) {
                 failure = checked;
                 state = State.SUSPENDED;
-                waitDependency = childDrain;
+                waitDependency = CHILD_DRAIN;
             } else {
                 state = State.FAILED;
                 if (cancellationRequestRecorded) {
