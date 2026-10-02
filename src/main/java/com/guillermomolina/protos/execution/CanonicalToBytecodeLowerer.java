@@ -104,6 +104,15 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal literal,
             ProtosClosureExecutionPlanCell literalPlan) {}
 
+    /**
+     * A send site's PLAT044 B′ (PERF026-C1) inline whileTrue candidate pair:
+     * the receiver literal staged as the condition and the sole supplied
+     * literal staged as the body. The condition's {@code position} is unused.
+     */
+    private record InlineLiteralWhile(
+            InlineLiteralCallback condition,
+            InlineLiteralCallback body) {}
+
     private final ProtosLanguage language;
     private final Source source;
 
@@ -2885,7 +2894,8 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue,
-                java.util.List.of());
+                java.util.List.of(),
+                null);
     }
 
     /**
@@ -2893,6 +2903,12 @@ final class CanonicalToBytecodeLowerer {
      * literals (see {@link #inlineLiteralCallbackCandidates}); they only add
      * guarded inline alternatives to the selected Boolean callback invocation
      * and never change selection.
+     *
+     * <p>{@code inlineWhile}, when non-null, is the send site's PERF026-C1
+     * whileTrue literal pair ({@link #isInlineLiteralWhileCandidate}): a
+     * prepared call that admits exactly that pair is sequenced by {@link
+     * #emitLocalInlineLiteralWhile}; every other prepared call, including any
+     * other standard while, keeps the dispatch below unchanged.
      */
     private void emitPreparedInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -2900,12 +2916,32 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
-            java.util.List<InlineLiteralCallback> inlineCallbacks) {
+            java.util.List<InlineLiteralCallback> inlineCallbacks,
+            InlineLiteralWhile inlineWhile) {
         requireDefaultScratch(
                 result,
                 preparedCall,
                 childResult,
                 resumeValue);
+
+        if (inlineWhile != null) {
+            builder.beginIfThenElse();
+            builder.beginAdmitsInlineLiteralWhile();
+            builder.emitLoadLocal(preparedCall);
+            builder.emitLoadLocal(inlineWhile.condition().literal());
+            builder.emitLoadLocal(inlineWhile.body().literal());
+            builder.endAdmitsInlineLiteralWhile();
+
+            emitLocalInlineLiteralWhile(
+                    builder,
+                    result,
+                    preparedCall,
+                    childResult,
+                    resumeValue,
+                    inlineWhile);
+
+            builder.beginBlock();
+        }
 
         builder.beginIfThenElse();
 
@@ -2928,6 +2964,185 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
+
+        builder.endIfThenElse();
+
+        if (inlineWhile != null) {
+            builder.endBlock();
+            builder.endIfThenElse();
+        }
+    }
+
+    /**
+     * PLAT044 B′ (PERF026-C1) local standard whileTrue over an admitted
+     * literal pair.
+     *
+     * <p>Mirrors the while branch of {@code ProtosStructuredDispatchLowerer}
+     * against the same {@code PreparedWhileCall} state machine, so the outer
+     * prepared call is completed exactly once by the enclosing TryFinally,
+     * the receiver/body are validated before the first condition activation,
+     * each condition and (only after a canonical {@code true}) each body
+     * activation is prepared fresh at the same point, the condition result
+     * keeps its strict canonical Boolean authority, the body result is
+     * ignored and normal completion is canonical {@code null}. The loop phase
+     * lives in this root's Bytecode control state, so suspension resumes at
+     * the exact loop PC through this root's continuation (PLAT014/PLAT021).
+     *
+     * <p>Each fresh child that {@code PreparedWhileCall} admits for its
+     * staged literal runs inline ({@link #emitInlineLiteralCallback}); a
+     * child that is not admitted keeps the helper's exact scoped invocation
+     * ({@link #emitLocalInlineLiteralWhileChild}).
+     */
+    private void emitLocalInlineLiteralWhile(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            InlineLiteralWhile inlineWhile) {
+        builder.beginBlock();
+        BytecodeLocal structuredWhile =
+                builder.createLocal("structuredWhile", null);
+        BytecodeLocal structuredWhileChild =
+                builder.createLocal("structuredWhileChild", null);
+        BytecodeLocal structuredWhileConditionResult =
+                builder.createLocal("structuredWhileConditionResult", null);
+
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(preparedCall);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginBlock();
+
+        builder.beginStoreLocal(structuredWhile);
+        builder.beginPrepareStructuredWhileCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endPrepareStructuredWhileCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredWhileChild);
+        builder.beginPrepareStructuredWhileConditionCall();
+        builder.emitLoadLocal(structuredWhile);
+        builder.endPrepareStructuredWhileConditionCall();
+        builder.endStoreLocal();
+        emitLocalInlineLiteralWhileChild(
+                builder,
+                structuredWhileConditionResult,
+                structuredWhile,
+                structuredWhileChild,
+                childResult,
+                resumeValue,
+                inlineWhile.condition(),
+                true);
+        builder.beginStructuredWhileCondition();
+        builder.emitLoadLocal(structuredWhile);
+        builder.emitLoadLocal(structuredWhileConditionResult);
+        builder.endStructuredWhileCondition();
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginStoreLocal(structuredWhileChild);
+        builder.beginPrepareStructuredWhileBodyCall();
+        builder.emitLoadLocal(structuredWhile);
+        builder.endPrepareStructuredWhileBodyCall();
+        builder.endStoreLocal();
+        emitLocalInlineLiteralWhileChild(
+                builder,
+                childResult,
+                structuredWhile,
+                structuredWhileChild,
+                childResult,
+                resumeValue,
+                inlineWhile.body(),
+                false);
+        builder.endBlock();
+
+        builder.endWhile();
+
+        builder.beginStoreLocal(result);
+        builder.emitLoadConstant(ProtosNullValue.INSTANCE);
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endTryFinally();
+        builder.endBlock();
+    }
+
+    /**
+     * One fresh while condition ({@code condition}) or body child: a child
+     * requiring structured dispatch enters the untagged root, and any other
+     * child is completed by its own TryFinally around either the admitted
+     * inline region or the exact ordinary invocation, as in {@link
+     * #emitLocalBooleanInvocation}.
+     */
+    private void emitLocalInlineLiteralWhileChild(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal structuredWhile,
+            BytecodeLocal child,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue,
+            InlineLiteralCallback literal,
+            boolean condition) {
+        builder.beginIfThenElse();
+        builder.beginRequiresStructuredDispatch();
+        builder.emitLoadLocal(child);
+        builder.endRequiresStructuredDispatch();
+
+        builder.beginBlock();
+        emitNestedStructuredInvocation(
+                builder,
+                result,
+                child,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(child);
+                    builder.endCompleteClosureCall();
+                });
+        builder.beginIfThenElse();
+        if (condition) {
+            builder.beginAdmitsInlineLiteralWhileCondition();
+        } else {
+            builder.beginAdmitsInlineLiteralWhileBody();
+        }
+        builder.emitLoadLocal(structuredWhile);
+        builder.emitLoadLocal(child);
+        builder.emitLoadLocal(literal.literal());
+        builder.emitLoadConstant(literal.literalPlan());
+        if (condition) {
+            builder.endAdmitsInlineLiteralWhileCondition();
+        } else {
+            builder.endAdmitsInlineLiteralWhileBody();
+        }
+
+        emitInlineLiteralCallback(
+                builder,
+                literal.definition(),
+                child,
+                result);
+
+        builder.beginBlock();
+        emitOrdinaryPreparedInvocation(
+                builder,
+                result,
+                child,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+        builder.endIfThenElse();
+        builder.endTryFinally();
         builder.endBlock();
 
         builder.endIfThenElse();
@@ -3784,13 +3999,39 @@ final class CanonicalToBytecodeLowerer {
                             bytecodeClosurePlans.get(candidate)));
         }
 
+        /*
+         * PERF026-C1: a while pair candidate always has its body at supplied
+         * position 0 among the Boolean candidates, so both literals are
+         * already staged; the receiver literal is staged in receiverValue.
+         */
+        InlineLiteralWhile inlineWhile = null;
+        if (!spreadArguments && isInlineLiteralWhileCandidate(send)) {
+            CanonicalClosure condition = (CanonicalClosure) receiver;
+            inlineWhile =
+                    new InlineLiteralWhile(
+                            new InlineLiteralCallback(
+                                    condition,
+                                    -1,
+                                    receiverValue,
+                                    bytecodeClosurePlans.get(condition)),
+                            inlineCallbacks.get(0));
+            /*
+             * A Closure-literal receiver can never be admitted by a selected
+             * standard Boolean capability (PreparedBooleanCall rejects a
+             * non-Boolean receiver before preparing any callback), so no
+             * unreachable Boolean inline region is emitted for this site.
+             */
+            inlineCallbacks = java.util.List.of();
+        }
+
         emitPreparedInvocation(
                 builder,
                 result,
                 preparedCall,
                 childResult,
                 resumeValue,
-                inlineCallbacks);
+                inlineCallbacks,
+                inlineWhile);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
@@ -3815,13 +4056,33 @@ final class CanonicalToBytecodeLowerer {
         }
         java.util.List<Integer> positions = new java.util.ArrayList<>(2);
         for (int position = 0; position < arguments.size(); position++) {
-            if (arguments.get(position) instanceof CanonicalClosure closure
-                    && closure.parameters().isEmpty()
-                    && !containsClosure(closure.body())) {
+            if (isInlineLiteralCallbackCandidate(arguments.get(position))) {
                 positions.add(position);
             }
         }
         return positions;
+    }
+
+    /**
+     * PLAT044 B′ (PERF026-C1) compile-time whileTrue pair candidate: the
+     * receiver and the sole supplied argument are both inline literal
+     * callback candidates ({@link #isInlineLiteralCallbackCandidate}). As for
+     * Boolean candidates the selector is never consulted; the local loop is
+     * taken only after ordinary selection prepared the canonical standard
+     * whileTrue with exactly these two staged values ({@link
+     * ProtosBytecodeRootNode.PreparedClosureCall#admitsInlineLiteralWhile}).
+     */
+    private static boolean isInlineLiteralWhileCandidate(CanonicalSend send) {
+        return send.arguments().size() == 1
+                && isInlineLiteralCallbackCandidate(send.receiver())
+                && isInlineLiteralCallbackCandidate(send.arguments().get(0));
+    }
+
+    private static boolean isInlineLiteralCallbackCandidate(
+            CanonicalExpression expression) {
+        return expression instanceof CanonicalClosure closure
+                && closure.parameters().isEmpty()
+                && !containsClosure(closure.body());
     }
 
     private static boolean containsClosure(CanonicalExpression expression) {

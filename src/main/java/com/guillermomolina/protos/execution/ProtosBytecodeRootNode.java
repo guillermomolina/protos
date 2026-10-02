@@ -1283,6 +1283,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         default boolean isStructuredMapAtPut() { return false; }
         default boolean isStructuredMapRemove() { return false; }
 
+        /**
+         * PLAT044 B′ (PERF026-C1) whole-pair admission of a selected standard
+         * whileTrue; see {@link NativeCall#admitsInlineLiteralWhile}.
+         */
+        default boolean admitsInlineLiteralWhile(Object condition, Object body) {
+            return false;
+        }
+
         default PreparedMapMatchCall prepareStructuredMapMatch() {
             throw new IllegalStateException(
                     "prepared Closure call has no structured Map.match capability");
@@ -1627,6 +1635,36 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Override
         public boolean isStructuredWhile() { return structured != null && structured.whileLoop; }
+
+        /**
+         * PLAT044 B′ (PERF026-C1): true only when ordinary selection prepared
+         * the canonical standard whileTrue capability and its receiver and
+         * sole supplied value are exactly the send site's staged {@code
+         * condition} and {@code body} literal values, and neither literal
+         * would fail the per-child B′ proof for a reason already known now:
+         * an owned return home (no captured one) or a required Context-local
+         * plan projection. A pure read of the already prepared call and the
+         * literal values: no activation is prepared and nothing is validated,
+         * so condition/body preparation timing is unchanged, and any other
+         * shape keeps the structured-dispatch while. A per-child proof that
+         * still fails later (for example a foreign-Context plan) keeps that
+         * child's exact physical invocation.
+         */
+        @Override
+        public boolean admitsInlineLiteralWhile(Object condition, Object body) {
+            return isStructuredWhile()
+                    && activation.receiver() == condition
+                    && supplied.size() == 1
+                    && supplied.get(0) == body
+                    && isInlineLiteralWhileCallback(condition)
+                    && isInlineLiteralWhileCallback(body);
+        }
+
+        private static boolean isInlineLiteralWhileCallback(Object value) {
+            return value instanceof ProtosClosureValue closure
+                    && closure.returnHome().isPresent()
+                    && !closure.requiresContextLocalExecutionProjectionForRuntime();
+        }
 
         @Override
         public boolean isStructuredBoolean() {
@@ -2323,6 +2361,51 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation,
                     ProtosCoreErrors.newError(activation));
         }
+
+        /**
+         * PLAT044 B′ (PERF026-C1) inline eligibility of an already prepared
+         * fresh condition {@code child}: the condition is exactly the staged
+         * {@code literal} and {@code child} is its exact inline-equivalent
+         * invocation ({@link #isInlineLiteralInvocation}).
+         */
+        boolean admitsInlineLiteralCondition(
+                PreparedClosureCall child,
+                Object literal,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return condition == literal
+                    && isInlineLiteralInvocation(child, literalPlan);
+        }
+
+        /** As {@link #admitsInlineLiteralCondition}, for a fresh body child. */
+        boolean admitsInlineLiteralBody(
+                PreparedClosureCall child,
+                Object literal,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return body == literal
+                    && isInlineLiteralInvocation(child, literalPlan);
+        }
+    }
+
+    /**
+     * PLAT044 B′ exact-invocation proof shared by every inline literal
+     * callback consumer: {@code child} is the ordinary source invocation of
+     * {@code literalPlan}'s own semantic activation root with a rich
+     * activation whose return home is captured. Executing the literal's body
+     * inline under {@code child.activation()} is then exactly {@code
+     * call(child.bodyTarget(), child.activation())}: the same body and the
+     * same fresh activation, and {@link
+     * ReturnHomeOwningCall#handleControlTransfer} can only rethrow. Any other
+     * shape (a re-projected plan, a compact or native call, an owned return
+     * home) keeps the exact physical callback invocation.
+     */
+    private static boolean isInlineLiteralInvocation(
+            PreparedClosureCall child,
+            ProtosClosureExecutionPlanCell literalPlan) {
+        return child instanceof OrdinarySourceCall ordinary
+                && ordinary.activation != null
+                && !ordinary.activation.ownsReturnHome()
+                && ordinary.bodyTarget
+                        == literalPlan.plan().bytecodeActivationTargetForComposition();
     }
 
     static final class PreparedErrorHandlerCall {
@@ -2467,20 +2550,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * selected supplied position ({@link #selectedIndex}) is exactly the
          * send site's candidate {@code position}, the value supplied there is
          * exactly {@code literal} (the immediate Closure literal value staged
-         * by the send site), and {@code child} is the ordinary source
-         * invocation of that literal's own semantic activation root with a
-         * rich activation whose return home is captured. For IF_TRUE_IF_FALSE
-         * both callbacks are eagerly evaluated and staged, but only the
-         * selected position can be admitted, so the unselected literal is
-         * never entered. Executing the literal's body inline under {@code
-         * child.activation()} is then exactly {@code call(child.bodyTarget(),
-         * child.activation())}: the same body and the same fresh activation,
-         * and {@link ReturnHomeOwningCall#handleControlTransfer} can only
-         * rethrow. Any other shape (a re-projected plan, a compact or native
-         * call, an owned return home, a different selected value or position)
-         * keeps the exact physical callback invocation. The inline result
-         * still completes through {@link #finishCallback}, so AND/OR
-         * Boolean-result validation is unchanged.
+         * by the send site), and {@code child} is that literal's exact
+         * inline-equivalent invocation ({@link #isInlineLiteralInvocation}).
+         * For IF_TRUE_IF_FALSE both callbacks are eagerly evaluated and
+         * staged, but only the selected position can be admitted, so the
+         * unselected literal is never entered. Any other shape (including a
+         * different selected value or position) keeps the exact physical
+         * callback invocation. The inline result still completes through
+         * {@link #finishCallback}, so AND/OR Boolean-result validation is
+         * unchanged.
          */
         boolean admitsInlineLiteralCallback(
                 PreparedClosureCall child,
@@ -2490,11 +2568,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return hasCallback()
                     && selectedIndex() == position
                     && supplied.get(position) == literal
-                    && child instanceof OrdinarySourceCall ordinary
-                    && ordinary.activation != null
-                    && !ordinary.activation.ownsReturnHome()
-                    && ordinary.bodyTarget
-                            == literalPlan.plan().bytecodeActivationTargetForComposition();
+                    && isInlineLiteralInvocation(child, literalPlan);
         }
     }
 

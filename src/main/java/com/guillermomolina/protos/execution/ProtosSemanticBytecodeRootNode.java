@@ -26,6 +26,7 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedArgum
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedBooleanCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedMapInitialDefinition;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedWhileCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -1183,6 +1184,81 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosClosureExecutionPlanCell literalPlan,
                 int position) {
             return prepared.admitsInlineLiteralCallback(child, literal, literalPlan, position);
+        }
+    }
+
+    // ---- PLAT044 B′ inline literal whileTrue (PERF026-C1) ---------------------------
+    //
+    // A selected standard whileTrue whose receiver and body are exactly the
+    // send site's staged literals is sequenced locally in this root; every
+    // other while keeps the structured-dispatch root. The loop state machine
+    // and Boolean condition authority stay owned by
+    // ProtosBytecodeRootNode.PreparedWhileCall.
+
+    @Operation
+    public static final class AdmitsInlineLiteralWhile {
+        @Specialization
+        public static boolean perform(
+                PreparedClosureCall prepared,
+                Object condition,
+                Object body) {
+            return prepared.admitsInlineLiteralWhile(condition, body);
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredWhileCall {
+        @Specialization
+        public static PreparedWhileCall perform(PreparedClosureCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredWhileCall.perform(prepared);
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredWhileConditionCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedWhileCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredWhileConditionCall.perform(prepared);
+        }
+    }
+
+    @Operation
+    public static final class PrepareStructuredWhileBodyCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedWhileCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredWhileBodyCall.perform(prepared);
+        }
+    }
+
+    @Operation
+    public static final class StructuredWhileCondition {
+        @Specialization
+        public static boolean perform(PreparedWhileCall prepared, Object result) {
+            return ProtosBytecodeRootNode.StructuredWhileCondition.perform(prepared, result);
+        }
+    }
+
+    @Operation
+    public static final class AdmitsInlineLiteralWhileCondition {
+        @Specialization
+        public static boolean perform(
+                PreparedWhileCall prepared,
+                PreparedClosureCall child,
+                Object literal,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return prepared.admitsInlineLiteralCondition(child, literal, literalPlan);
+        }
+    }
+
+    @Operation
+    public static final class AdmitsInlineLiteralWhileBody {
+        @Specialization
+        public static boolean perform(
+                PreparedWhileCall prepared,
+                PreparedClosureCall child,
+                Object literal,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return prepared.admitsInlineLiteralBody(child, literal, literalPlan);
         }
     }
 

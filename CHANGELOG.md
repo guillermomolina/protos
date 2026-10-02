@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.139-SNAPSHOT
+
+- `PERF026-C1` (#768) adds the first standard `whileTrue` consumer of the
+  PLAT044 (#766) Candidate B′ inline literal callback mechanism, without
+  changing observable Protos semantics or the specification. When the
+  condition receiver and the sole body argument are both immediate
+  zero-parameter Closure literals without nested Closures, both are staged
+  in their ordinary evaluation order. After ordinary lookup and selection
+  prepare the canonical standard `whileTrue` with exactly those two values,
+  and neither literal owns its return home or requires a Context-local
+  projection, the loop is sequenced in the semantic source root instead of
+  the structured-dispatch helper root. Admission prepares no activation, so
+  receiver/body validation, the fresh per-iteration condition activation,
+  the body activation prepared only after a canonical `true`, the strict
+  Boolean condition authority, the ignored body result and the canonical
+  `null` result are all unchanged. Each fresh child that passes the shared
+  B′ exact-invocation proof runs inline with its own RootTag and projected
+  debugger scope; a child that fails it keeps its exact physical invocation.
+  Every other while keeps the existing structured-dispatch path. Focused
+  topology, tooling and semantic tests are added; no performance claim is
+  made.
+
 ## 0.3.138-SNAPSHOT
 
 - `PERF026-B3` (#767) completes the standard Boolean PLAT044 (#766) Candidate
