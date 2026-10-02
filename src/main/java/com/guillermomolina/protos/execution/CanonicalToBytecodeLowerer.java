@@ -94,11 +94,13 @@ final class CanonicalToBytecodeLowerer {
     static final String INLINE_CALLBACK_ACTIVATION_LOCAL = "inlineCallbackActivation";
 
     /**
-     * A send site's PLAT044 B′ inline candidate: the literal's definition, the
-     * argument local holding its materialized value, and its own plan cell.
+     * A send site's PLAT044 B′ inline candidate: the literal's definition, its
+     * supplied argument position, the argument local holding its materialized
+     * value, and its own plan cell.
      */
     private record InlineLiteralCallback(
             CanonicalClosure definition,
+            int position,
             BytecodeLocal literal,
             ProtosClosureExecutionPlanCell literalPlan) {}
 
@@ -2883,14 +2885,14 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue,
-                null);
+                java.util.List.of());
     }
 
     /**
-     * {@code inlineCallback}, when non-null, is the send site's PLAT044 B′
-     * candidate literal (see {@link #inlineLiteralCallbackCandidate}); it only
-     * adds a guarded inline alternative to the selected Boolean callback
-     * invocation and never changes selection.
+     * {@code inlineCallbacks} are the send site's PLAT044 B′ candidate
+     * literals (see {@link #inlineLiteralCallbackCandidates}); they only add
+     * guarded inline alternatives to the selected Boolean callback invocation
+     * and never change selection.
      */
     private void emitPreparedInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -2898,7 +2900,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
-            InlineLiteralCallback inlineCallback) {
+            java.util.List<InlineLiteralCallback> inlineCallbacks) {
         requireDefaultScratch(
                 result,
                 preparedCall,
@@ -2917,7 +2919,7 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue,
-                inlineCallback);
+                inlineCallbacks);
 
         builder.beginBlock();
         emitDispatchedPreparedInvocation(
@@ -3019,11 +3021,14 @@ final class CanonicalToBytecodeLowerer {
      * child are composed through this root (PLAT014); no new continuation
      * kind, Task, handler or return home is introduced.
      *
-     * <p>PLAT044 B′ (PERF026-B1): with an {@code inlineCallback} candidate, a
-     * non-structured selected child that {@code PreparedBooleanCall} admits
-     * runs inline ({@link #emitInlineLiteralCallback}) instead of entering
-     * the callback's RootCallTarget; every other child keeps the exact
-     * ordinary invocation. The child TryFinally completes either form.
+     * <p>PLAT044 B′ (PERF026-B1/B3): for each {@code inlineCallbacks}
+     * candidate, a non-structured selected child that {@code
+     * PreparedBooleanCall} admits for that candidate's exact position,
+     * literal value and plan runs that candidate's body inline ({@link
+     * #emitInlineLiteralCallback}) instead of entering the callback's
+     * RootCallTarget; every other child keeps the exact ordinary invocation.
+     * Admission follows the prepared selection, so at most one candidate can
+     * match. The child TryFinally completes either form.
      */
     private void emitLocalBooleanInvocation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -3031,7 +3036,7 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal preparedCall,
             BytecodeLocal childResult,
             BytecodeLocal resumeValue,
-            InlineLiteralCallback inlineCallback) {
+            java.util.List<InlineLiteralCallback> inlineCallbacks) {
         builder.beginBlock();
         BytecodeLocal structuredBoolean =
                 builder.createLocal("structuredBoolean", null);
@@ -3086,20 +3091,14 @@ final class CanonicalToBytecodeLowerer {
                     builder.endCompleteClosureCall();
                 });
         builder.beginBlock();
-        if (inlineCallback == null) {
-            emitOrdinaryPreparedInvocation(
-                    builder,
-                    childResult,
-                    structuredBooleanChild,
-                    childResult,
-                    resumeValue);
-        } else {
+        for (InlineLiteralCallback inlineCallback : inlineCallbacks) {
             builder.beginIfThenElse();
             builder.beginAdmitsInlineLiteralCallback();
             builder.emitLoadLocal(structuredBoolean);
             builder.emitLoadLocal(structuredBooleanChild);
             builder.emitLoadLocal(inlineCallback.literal());
             builder.emitLoadConstant(inlineCallback.literalPlan());
+            builder.emitLoadConstant(inlineCallback.position());
             builder.endAdmitsInlineLiteralCallback();
 
             emitInlineLiteralCallback(
@@ -3109,12 +3108,14 @@ final class CanonicalToBytecodeLowerer {
                     childResult);
 
             builder.beginBlock();
-            emitOrdinaryPreparedInvocation(
-                    builder,
-                    childResult,
-                    structuredBooleanChild,
-                    childResult,
-                    resumeValue);
+        }
+        emitOrdinaryPreparedInvocation(
+                builder,
+                childResult,
+                structuredBooleanChild,
+                childResult,
+                resumeValue);
+        for (int i = 0; i < inlineCallbacks.size(); i++) {
             builder.endBlock();
             builder.endIfThenElse();
         }
@@ -3158,7 +3159,7 @@ final class CanonicalToBytecodeLowerer {
      * (PLAT041 precedent). Like an inline object body, the region takes no
      * direct-local fast path, so every lexical access goes through the
      * runtime authority of that activation; nested Closures never occur here
-     * ({@link #inlineLiteralCallbackCandidate}). Suspension inside the body is
+     * ({@link #inlineLiteralCallbackCandidates}). Suspension inside the body is
      * captured by this root's own continuation (PLAT014), and no handler,
      * return home or cancellation boundary is added.
      *
@@ -3663,18 +3664,20 @@ final class CanonicalToBytecodeLowerer {
                 hasComposedArgument(send.arguments());
         boolean spreadArguments =
                 hasSpreadArgument(send.arguments());
-        CanonicalClosure inlineCallbackCandidate =
-                inlineLiteralCallbackCandidate(send.arguments());
+        java.util.List<Integer> inlineCallbackPositions =
+                spreadArguments
+                        ? java.util.List.of()
+                        : inlineLiteralCallbackCandidates(send.arguments());
         /*
-         * PLAT044 B′: a candidate literal is staged in an ordinary argument
-         * local (still evaluated exactly once, in order) so the prepared
-         * Boolean call can compare its selected callback with it.
+         * PLAT044 B′: candidate literals are staged in ordinary argument
+         * locals (still evaluated exactly once, in order) so the prepared
+         * Boolean call can compare its selected callback with them.
          */
         boolean stageInputs =
                 stageReceiver
                         || stageArguments
                         || spreadArguments
-                        || inlineCallbackCandidate != null;
+                        || !inlineCallbackPositions.isEmpty();
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues =
@@ -3768,13 +3771,18 @@ final class CanonicalToBytecodeLowerer {
         }
         builder.endStoreLocal();
 
-        InlineLiteralCallback inlineCallback =
-                inlineCallbackCandidate == null
-                        ? null
-                        : new InlineLiteralCallback(
-                                inlineCallbackCandidate,
-                                argumentValues.get(0),
-                                bytecodeClosurePlans.get(inlineCallbackCandidate));
+        java.util.List<InlineLiteralCallback> inlineCallbacks =
+                new java.util.ArrayList<>(inlineCallbackPositions.size());
+        for (int position : inlineCallbackPositions) {
+            CanonicalClosure candidate =
+                    (CanonicalClosure) send.arguments().get(position);
+            inlineCallbacks.add(
+                    new InlineLiteralCallback(
+                            candidate,
+                            position,
+                            argumentValues.get(position),
+                            bytecodeClosurePlans.get(candidate)));
+        }
 
         emitPreparedInvocation(
                 builder,
@@ -3782,31 +3790,38 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue,
-                inlineCallback);
+                inlineCallbacks);
         builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
 
     /**
-     * PLAT044 B′ (PERF026-B1) compile-time candidate: the single supplied
-     * argument of a send is an immediate zero-parameter Closure literal whose
-     * body creates no nested Closure. The literal's own root and plan cell
-     * exist (it is materialized as the argument), so the body can also be
-     * lowered inline. Nested Closures are excluded because capturing a
-     * callback-owned binding would need lexical machinery B1 does not
-     * establish. Nothing here consults the selector: whether the inline path
-     * is taken is decided at run time, after ordinary selection, by {@link
+     * PLAT044 B′ (PERF026-B1/B3) compile-time candidates: the supplied
+     * positions, of a send with one or two non-spread arguments (the arities
+     * of the standard Boolean callback capabilities), that hold an immediate
+     * zero-parameter Closure literal whose body creates no nested Closure.
+     * The literal's own root and plan cell exist (it is materialized as the
+     * argument), so the body can also be lowered inline. Nested Closures are
+     * excluded because capturing a callback-owned binding would need lexical
+     * machinery B1 does not establish. Nothing here consults the selector:
+     * whether, and for which position, the inline path is taken is decided at
+     * run time, after ordinary selection, by {@link
      * ProtosBytecodeRootNode.PreparedBooleanCall#admitsInlineLiteralCallback}.
      */
-    private static CanonicalClosure inlineLiteralCallbackCandidate(
+    private static java.util.List<Integer> inlineLiteralCallbackCandidates(
             java.util.List<CanonicalExpression> arguments) {
-        if (arguments.size() == 1
-                && arguments.get(0) instanceof CanonicalClosure closure
-                && closure.parameters().isEmpty()
-                && !containsClosure(closure.body())) {
-            return closure;
+        if (arguments.size() > 2) {
+            return java.util.List.of();
         }
-        return null;
+        java.util.List<Integer> positions = new java.util.ArrayList<>(2);
+        for (int position = 0; position < arguments.size(); position++) {
+            if (arguments.get(position) instanceof CanonicalClosure closure
+                    && closure.parameters().isEmpty()
+                    && !containsClosure(closure.body())) {
+                positions.add(position);
+            }
+        }
+        return positions;
     }
 
     private static boolean containsClosure(CanonicalExpression expression) {

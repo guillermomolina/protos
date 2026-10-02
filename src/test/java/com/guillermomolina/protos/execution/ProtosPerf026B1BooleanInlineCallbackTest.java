@@ -156,18 +156,6 @@ final class ProtosPerf026B1BooleanInlineCallbackTest {
         System.out.println("PERF026_B1_OWNED_RETURN_HOME_FALLBACK=YES");
     }
 
-    /**
-     * B1 consumes only IF_TRUE; PERF026-B2 later admits IF_FALSE, AND and OR
-     * (covered by {@link ProtosPerf026B2BooleanInlineCallbackTest}), while
-     * IF_TRUE_IF_FALSE stays physical.
-     */
-    @Test
-    void ifTrueIfFalseRetainsItsPhysicalCallbackRoot() throws Exception {
-        assertCallbackRootPreserved(
-                "run: () => {\nfalse.ifTrueIfFalse(() => 1, () => { probe() })\n}\nrun()\n");
-        System.out.println("PERF026_B1_IF_TRUE_IF_FALSE_UNCHANGED=YES");
-    }
-
     @Test
     void ordinarySelectionAndNonClosureCallbacksStayOrdinary() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {

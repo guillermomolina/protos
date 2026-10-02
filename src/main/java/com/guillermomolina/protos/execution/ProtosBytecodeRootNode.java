@@ -2414,15 +2414,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 throw new IllegalStateException(
                         "short-circuited Boolean operation has no selected callback");
             }
-            Object selected =
-                    switch (kind) {
-                        case IF_TRUE, IF_FALSE, AND, OR -> supplied.get(0);
-                        case IF_TRUE_IF_FALSE ->
-                                receiver == ProtosBooleanValue.TRUE
-                                        ? supplied.get(0)
-                                        : supplied.get(1);
-                    };
-            return prepareClosureCall(selected, List.of(), activation);
+            return prepareClosureCall(
+                    supplied.get(selectedIndex()),
+                    List.of(),
+                    activation);
+        }
+
+        /**
+         * Supplied position of the selected callback; meaningful only when
+         * {@link #hasCallback} holds. Shared by {@link #prepareCallback} and
+         * {@link #admitsInlineLiteralCallback} so inline admission can never
+         * disagree with ordinary selection.
+         */
+        private int selectedIndex() {
+            return switch (kind) {
+                case IF_TRUE, IF_FALSE, AND, OR -> 0;
+                case IF_TRUE_IF_FALSE ->
+                        receiver == ProtosBooleanValue.TRUE ? 0 : 1;
+            };
         }
 
         Object immediateResult() {
@@ -2451,46 +2460,36 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /**
-         * PLAT044 B′ single-literal kinds (PERF026-B1 IF_TRUE, PERF026-B2
-         * IF_FALSE, AND, OR): each has exactly one supplied callback, which is
-         * the selected one whenever {@link #hasCallback} holds.
-         * IF_TRUE_IF_FALSE carries two eagerly evaluated callbacks and stays
-         * on the physical path.
-         */
-        private boolean supportsSingleLiteralInlineCallback() {
-            return switch (kind) {
-                case IF_TRUE, IF_FALSE, AND, OR -> true;
-                case IF_TRUE_IF_FALSE -> false;
-            };
-        }
-
-        /**
-         * PLAT044 B′ (PERF026-B1/B2) inline eligibility of an already prepared
-         * selected callback {@code child}.
+         * PLAT044 B′ (PERF026-B1/B2/B3) inline eligibility of an already
+         * prepared selected callback {@code child}.
          *
-         * <p>True only when this standard capability is a single-callback
-         * kind B′ admits ({@link #supportsSingleLiteralInlineCallback}),
-         * it selected exactly {@code literal} (the immediate Closure literal
-         * value staged by the send site), and {@code child} is the ordinary
-         * source invocation of that literal's own semantic activation root
-         * with a rich activation whose return home is captured. Executing the
-         * literal's body inline under {@code child.activation()} is then
-         * exactly {@code call(child.bodyTarget(), child.activation())}: the
-         * same body and the same fresh activation, and {@link
-         * ReturnHomeOwningCall#handleControlTransfer} can only rethrow. Any
-         * other shape (a re-projected plan, a compact or native call, an
-         * owned return home, a different selected value) keeps the exact
-         * physical callback invocation. The inline result still completes
-         * through {@link #finishCallback}, so AND/OR Boolean-result
-         * validation is unchanged.
+         * <p>True only when this standard capability selected a callback, the
+         * selected supplied position ({@link #selectedIndex}) is exactly the
+         * send site's candidate {@code position}, the value supplied there is
+         * exactly {@code literal} (the immediate Closure literal value staged
+         * by the send site), and {@code child} is the ordinary source
+         * invocation of that literal's own semantic activation root with a
+         * rich activation whose return home is captured. For IF_TRUE_IF_FALSE
+         * both callbacks are eagerly evaluated and staged, but only the
+         * selected position can be admitted, so the unselected literal is
+         * never entered. Executing the literal's body inline under {@code
+         * child.activation()} is then exactly {@code call(child.bodyTarget(),
+         * child.activation())}: the same body and the same fresh activation,
+         * and {@link ReturnHomeOwningCall#handleControlTransfer} can only
+         * rethrow. Any other shape (a re-projected plan, a compact or native
+         * call, an owned return home, a different selected value or position)
+         * keeps the exact physical callback invocation. The inline result
+         * still completes through {@link #finishCallback}, so AND/OR
+         * Boolean-result validation is unchanged.
          */
         boolean admitsInlineLiteralCallback(
                 PreparedClosureCall child,
                 Object literal,
-                ProtosClosureExecutionPlanCell literalPlan) {
-            return supportsSingleLiteralInlineCallback()
-                    && hasCallback()
-                    && supplied.get(0) == literal
+                ProtosClosureExecutionPlanCell literalPlan,
+                int position) {
+            return hasCallback()
+                    && selectedIndex() == position
+                    && supplied.get(position) == literal
                     && child instanceof OrdinarySourceCall ordinary
                     && ordinary.activation != null
                     && !ordinary.activation.ownsReturnHome()

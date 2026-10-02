@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.138-SNAPSHOT
+
+- `PERF026-B3` (#767) completes the standard Boolean PLAT044 (#766) Candidate
+  B′ family by adding `IF_TRUE_IF_FALSE` two-candidate selected-branch
+  handling, without changing observable Protos semantics or the specification.
+  Both callback arguments are still evaluated eagerly, exactly once and in
+  source order; each eligible immediate literal position is staged as a
+  positional candidate. After ordinary lookup, `PreparedBooleanCall`
+  selection and selected-callback preparation, the selected callback runs
+  inline only when its position and exact value match a staged literal and
+  every existing B1 shape check holds. Selection and admission share one
+  selected-position authority, so the unselected callback is never entered
+  and any other shape keeps the exact physical callback invocation. The
+  selected result completes through the existing Boolean callback finish. The
+  guest carrier and its 64 MiB stack size are unchanged. The superseded
+  B1/B2 `ifTrueIfFalse` physical-boundary tests are replaced by focused B3
+  topology, tooling and semantic tests; no performance claim is made.
+
 ## 0.3.137-SNAPSHOT
 
 - `BUG013-F` implements the ratified PLAT045 (#772) Candidate B contract

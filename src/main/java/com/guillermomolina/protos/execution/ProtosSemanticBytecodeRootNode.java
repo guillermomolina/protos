@@ -1180,8 +1180,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 PreparedBooleanCall prepared,
                 PreparedClosureCall child,
                 Object literal,
-                ProtosClosureExecutionPlanCell literalPlan) {
-            return prepared.admitsInlineLiteralCallback(child, literal, literalPlan);
+                ProtosClosureExecutionPlanCell literalPlan,
+                int position) {
+            return prepared.admitsInlineLiteralCallback(child, literal, literalPlan, position);
         }
     }
 
