@@ -2449,6 +2449,37 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 case IF_TRUE, IF_FALSE, IF_TRUE_IF_FALSE -> result;
             };
         }
+
+        /**
+         * PLAT044 B′ (PERF026-B1) inline eligibility of an already prepared
+         * selected callback {@code child}.
+         *
+         * <p>True only when this standard capability is one B1 admits (IF_TRUE),
+         * it selected exactly {@code literal} (the immediate Closure literal
+         * value staged by the send site), and {@code child} is the ordinary
+         * source invocation of that literal's own semantic activation root
+         * with a rich activation whose return home is captured. Executing the
+         * literal's body inline under {@code child.activation()} is then
+         * exactly {@code call(child.bodyTarget(), child.activation())}: the
+         * same body and the same fresh activation, and {@link
+         * ReturnHomeOwningCall#handleControlTransfer} can only rethrow. Any
+         * other shape (a re-projected plan, a compact or native call, an
+         * owned return home, a different selected value) keeps the exact
+         * physical callback invocation.
+         */
+        boolean admitsInlineLiteralCallback(
+                PreparedClosureCall child,
+                Object literal,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return kind == ProtosStandardBooleanProtocol.StructuredCallbackKind.IF_TRUE
+                    && hasCallback()
+                    && supplied.get(0) == literal
+                    && child instanceof OrdinarySourceCall ordinary
+                    && ordinary.activation != null
+                    && !ordinary.activation.ownsReturnHome()
+                    && ordinary.bodyTarget
+                            == literalPlan.plan().bytecodeActivationTargetForComposition();
+        }
     }
 
     @Operation

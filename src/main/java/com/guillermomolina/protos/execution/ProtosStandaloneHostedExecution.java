@@ -48,10 +48,13 @@ import java.util.Map;
 public final class ProtosStandaloneHostedExecution {
     /**
      * BUG008: guest recursion consumes substantial host stack per level. Since PERF025-C (PLAT042
-     * B′) an ordinary source Closure call is one Bytecode CallTarget, but a structured protocol
-     * invocation (for example the {@code ifTrue} in each level of the retained recursive benchmark
-     * drivers) still adds the structured-dispatch root and its callback root, so the retained
-     * 10,000-deep drivers still need a large fixed stack. Guest execution therefore never depends
+     * B′) an ordinary source Closure call is one Bytecode CallTarget. Since PERF025-C2B (PLAT043)
+     * standard Boolean control enters no structured-dispatch root, and since PERF026-B1 (PLAT044
+     * B′) an eligible standard {@code ifTrue} immediate literal callback (as in each level of the
+     * retained recursive benchmark drivers) runs inline in its source root with no callback
+     * CallTarget; other structured invocations and non-eligible callbacks still add their roots.
+     * This budget is deliberately unchanged until post-PLAT044 stack evidence is recorded, so the
+     * retained 10,000-deep drivers keep a large fixed stack. Guest execution therefore never depends
      * on the ambient stack size of whichever
      * thread happens to call in (a JVM main thread, a test worker, an embedder's thread) and runs
      * on a dedicated carrier thread with this explicit, fixed budget, which remains a stable,

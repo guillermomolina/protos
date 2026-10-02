@@ -85,6 +85,47 @@ tests: [
         }
         Assertions.require(tool009LegacyCase() == 33)
     }),
+    Test("literal ifTrue callback captures enclosing bindings by reference", () => {
+        tool009LegacyCase: () => {
+            count: 1
+            seen: true.ifTrue(() => {
+                count = count + 40
+                count
+            })
+            (count == 41) && (seen == 41)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("literal ifTrue callback runs in its own fresh activation", () => {
+        tool009LegacyCase: () => {
+            outer: context
+            first: true.ifTrue(() => {
+                local: 1
+                context
+            })
+            second: true.ifTrue(() => { context })
+            (outer !== first) && (first !== second)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("unselected literal ifTrue callback is not entered", () => {
+        tool009LegacyCase: () => {
+            entered: 0
+            result: false.ifTrue(() => {
+                entered = entered + 1
+                1
+            })
+            (entered == 0) && (result === null)
+        }
+        Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("literal ifTrue callback may wait for a future", () => {
+        tool009LegacyCase: () => {
+            pending: (() => { 41 }).future()
+            true.ifTrue(() => { pending.value() + 1 })
+        }
+        Assertions.require(tool009LegacyCase() == 42)
+    }),
     Test("copied standard ifTrue keeps its non-boolean receiver", () => {
         Assertions.signals(Error, () => {
             copied: Object.slotValue("ifTrue")

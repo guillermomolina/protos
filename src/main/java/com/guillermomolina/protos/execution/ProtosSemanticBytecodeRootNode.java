@@ -1166,6 +1166,33 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    // ---- PLAT044 B′ inline literal callback (PERF026-B1) ----------------------------
+    //
+    // After ordinary selection and PLAT043 preparation, an eligible immediate
+    // literal callback runs its body inline in this root under the prepared
+    // child's own fresh activation (see CanonicalToBytecodeLowerer
+    // #emitInlineLiteralCallback). Eligibility is owned by PreparedBooleanCall.
+
+    @Operation
+    public static final class AdmitsInlineLiteralCallback {
+        @Specialization
+        public static boolean perform(
+                PreparedBooleanCall prepared,
+                PreparedClosureCall child,
+                Object literal,
+                ProtosClosureExecutionPlanCell literalPlan) {
+            return prepared.admitsInlineLiteralCallback(child, literal, literalPlan);
+        }
+    }
+
+    @Operation
+    public static final class LoadInlineCallbackActivation {
+        @Specialization
+        public static ProtosActivation perform(PreparedClosureCall child) {
+            return child.activation();
+        }
+    }
+
     @Operation
     public static final class CompleteClosureCall {
         @Specialization

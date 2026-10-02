@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.135-SNAPSHOT
+
+- `PERF026-B1` (#767) implements the first PLAT044 (#766) Candidate B′ slice,
+  without changing observable Protos semantics or the specification. After
+  ordinary lookup and the existing `PreparedBooleanCall` classification, an
+  eligible standard `IF_TRUE` immediate literal callback (a zero-parameter
+  Closure literal with no nested Closure, whose prepared invocation is its own
+  activation root with a rich activation and a captured return home) no longer
+  enters a distinct callback RootCallTarget: its body runs inline in the
+  containing semantic source root. The literal is still evaluated exactly once
+  as an ordinary argument, and the fresh semantic callback activation is
+  preserved and selected as the current activation for the whole inline
+  region, so `context`, lexical capture by reference, non-local return, Error
+  propagation and suspension behave exactly as before. The inline region
+  carries a custom RootTag, and debugger scopes inside it project the callback
+  activation; as approved by PLAT044, the callback no longer appears as a
+  separate debugger or Truffle stack frame. Dynamic callbacks, non-Closure
+  invokables, custom same-name selectors, top-level literals owning their
+  return home, every other non-eligible shape, and `IF_FALSE`,
+  `IF_TRUE_IF_FALSE`, `AND` and `OR` keep the exact physical callback path.
+  The guest carrier and its 64 MiB stack size are unchanged. Focused topology,
+  tooling and semantic tests and Boolean conformance cases are added.
+
 ## 0.3.134-SNAPSHOT
 
 - `PERF025-C2B` implements the PLAT043 (#763) standard Boolean ownership

@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
 import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.interop.NodeLibrary;
@@ -34,6 +35,13 @@ import com.oracle.truffle.api.library.ExportMessage;
  * lexical bindings. Tooling therefore projects the exact activation from frame
  * argument zero through the same bounded {@link ProtosDebuggerScope} used by the
  * AST backend.</p>
+ *
+ * <p>PLAT044 B′: inside an inline literal callback region frame argument zero is
+ * the enclosing activation, while the semantic current activation is the
+ * callback's own, held in the region's {@link
+ * CanonicalToBytecodeLowerer#INLINE_CALLBACK_ACTIVATION_LOCAL}. A location whose
+ * bytecode index lies in such a region projects that activation instead; no
+ * additional frame is fabricated.</p>
  */
 @ExportLibrary(value = NodeLibrary.class, receiverType = TagTreeNode.class)
 final class ProtosBytecodeTagTreeNodeExports {
@@ -41,24 +49,51 @@ final class ProtosBytecodeTagTreeNodeExports {
 
     @ExportMessage
     static boolean hasScope(
-            @SuppressWarnings("unused") TagTreeNode node,
+            TagTreeNode node,
             Frame frame) {
         if (frame == null) {
             return false;
         }
-        return ProtosFrameArguments.hasActivation(frame);
+        return inlineCallbackActivation(node, frame) != null
+                || ProtosFrameArguments.hasActivation(frame);
     }
 
     @ExportMessage
     static Object getScope(
-            @SuppressWarnings("unused") TagTreeNode node,
+            TagTreeNode node,
             Frame frame,
             @SuppressWarnings("unused") boolean nodeEnter)
             throws UnsupportedMessageException {
         if (!hasScope(node, frame)) {
             throw UnsupportedMessageException.create();
         }
-        return debuggerScope(ProtosFrameArguments.activation(frame));
+        ProtosActivation inline = inlineCallbackActivation(node, frame);
+        return debuggerScope(
+                inline != null ? inline : ProtosFrameArguments.activation(frame));
+    }
+
+    /**
+     * The activation of the innermost inline callback region live at {@code
+     * node}'s location, or {@code null} outside every such region. Block
+     * scoping makes the region local visible only inside its own region; the
+     * last live match is the innermost one. Only reached from tooling scope
+     * queries, never from guest execution.
+     */
+    private static ProtosActivation inlineCallbackActivation(TagTreeNode node, Frame frame) {
+        if (node == null) {
+            return null;
+        }
+        BytecodeNode bytecode = node.getBytecodeNode();
+        int bytecodeIndex = node.getEnterBytecodeIndex();
+        Object[] names = bytecode.getLocalNames(bytecodeIndex);
+        for (int offset = names.length - 1; offset >= 0; offset--) {
+            if (CanonicalToBytecodeLowerer.INLINE_CALLBACK_ACTIVATION_LOCAL.equals(names[offset])
+                    && bytecode.getLocalValue(bytecodeIndex, frame, offset)
+                            instanceof ProtosActivation activation) {
+                return activation;
+            }
+        }
+        return null;
     }
 
     @TruffleBoundary
