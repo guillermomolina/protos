@@ -7,6 +7,42 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.142-SNAPSHOT
+
+- `PERF026-D3` (#769) adds the standard `Environment.each` consumer of the
+  PLAT044 (#766) Candidate B′ inline literal callback mechanism, without
+  changing observable Protos semantics or the specification. It reuses the
+  PERF026-D2 two-parameter literal candidate (exactly two ordinary required
+  positional parameters, no default, not rest, no nested Closure) unchanged;
+  only runtime capability distinguishes the families. After ordinary lookup
+  and selection prepare the canonical standard `Environment.each` with
+  exactly that staged literal, and it neither owns its return home nor
+  requires a Context-local projection, the loop is sequenced in the semantic
+  source root instead of the structured-dispatch helper root. Admission
+  prepares and validates nothing and does not examine callback arity:
+  receiver validation, callback callability validation before portable
+  validation, the complete portable (String, String) conversion and
+  validation with canonical name ordering before callback #1, the fresh
+  per-entry activation carrying the exact portable name and value Strings,
+  advance only after normal callback completion, the ignored callback
+  result and the original receiver result all stay owned by the existing
+  prepared Environment each call, which joins the common local each view
+  directly rather than as an association each. Each entry child that passes
+  the shared B′ exact-invocation proof runs inline with its own RootTag and
+  projected debugger scope, binding `name` and `value` through the ordinary
+  Closure parameter binding from that prepared activation; a child that
+  fails it keeps its exact physical invocation. The two-parameter send-site
+  admission and preparation operations now cover Map, IdentityMap and
+  Environment, so the inline callback region is not duplicated. Because the
+  generic preparation path classifies the structured Environment.each
+  capability by implementation identity alone, the Environment admission
+  additionally re-proves the canonical home from the call's own receiver and
+  method home, so the standard `each` copied to another home keeps its
+  ordinary path. Every other
+  callback shape and every other `each` keep the existing paths. Focused
+  topology, tooling, fallback and semantic tests are added; no performance
+  claim is made.
+
 ## 0.3.141-SNAPSHOT
 
 - `PERF026-D2` (#769) adds the standard `Map.each` and `IdentityMap.each`

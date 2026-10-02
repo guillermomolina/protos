@@ -1309,6 +1309,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return false;
         }
 
+        /**
+         * PLAT044 B′ (PERF026-D3) whole-call admission of a selected standard
+         * Environment.each; see {@link
+         * NativeCall#admitsInlineLiteralEnvironmentEach}.
+         */
+        default boolean admitsInlineLiteralEnvironmentEach(Object callback) {
+            return false;
+        }
+
         default PreparedMapMatchCall prepareStructuredMapMatch() {
             throw new IllegalStateException(
                     "prepared Closure call has no structured Map.match capability");
@@ -1711,6 +1720,36 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         @Override
         public boolean admitsInlineLiteralAssociationEach(Object callback) {
             return (isStructuredMapEach() || isStructuredIdentityMapEach())
+                    && supplied.size() == 1
+                    && supplied.get(0) == callback
+                    && isInlineLiteralCallbackValue(callback);
+        }
+
+        /**
+         * PLAT044 B′ (PERF026-D3): the {@link #admitsInlineLiteralIndexedEach}
+         * proof for the canonical standard Environment.each capability and the
+         * send site's staged two-parameter {@code callback} literal value.
+         * Equally a pure read: no callability check, portable conversion,
+         * ordering or activation happens here, so {@code
+         * PreparedEnvironmentEachCall} keeps sole authority over receiver and
+         * callability validation, the complete portable canonically ordered
+         * snapshot established before callback #1 and every per-entry
+         * activation, and callback arity is not examined here.
+         *
+         * <p>The structured capability may have been classified by the
+         * standard each implementation alone (the generic preparation path),
+         * which a copy of that Closure at another home shares; admission
+         * therefore re-proves the canonical home from this call's own
+         * receiver and method home, so a copied each keeps its ordinary path.
+         */
+        @Override
+        public boolean admitsInlineLiteralEnvironmentEach(Object callback) {
+            return isStructuredEnvironmentEach()
+                    && activation.methodHome()
+                            .map(home ->
+                                    ProtosStandardEnvironmentProtocol.isCanonicalStandardEachHome(
+                                            activation.receiver(), home))
+                            .orElse(false)
                     && supplied.size() == 1
                     && supplied.get(0) == callback
                     && isInlineLiteralCallbackValue(callback);
@@ -2808,8 +2847,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     /**
      * PLAT044 B′ common loop state of a standard each whose callback a send
-     * site may sequence locally (PERF026-D1 indexed, PERF026-D2 association):
-     * validated receiver and callback, one shallow snapshot, one fresh
+     * site may sequence locally (PERF026-D1 indexed, PERF026-D2 association,
+     * PERF026-D3 Environment): validated receiver and callback, one snapshot
+     * established before the first callback, one fresh
      * callback invocation per snapshot position carrying exactly that
      * position's arguments, advance only after that invocation completes
      * normally, and the original receiver as result. It lets a send site
@@ -2817,7 +2857,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * each implementation keeps its own validation and snapshot authority.
      */
     sealed interface PreparedLocalEachCall
-            permits PreparedIndexedEachCall, PreparedAssociationEachCall {
+            permits PreparedIndexedEachCall,
+                    PreparedAssociationEachCall,
+                    PreparedEnvironmentEachCall {
         boolean hasNext();
 
         PreparedClosureCall prepareCurrent();
@@ -3267,7 +3309,15 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    static final class PreparedEnvironmentEachCall {
+    /**
+     * Standard Environment.each loop state. It joins the PLAT044 B′
+     * (PERF026-D3) local each view directly, not as an association each: its
+     * snapshot is not a shallow association snapshot but the complete
+     * portable (String, String) snapshot, converted, validated and
+     * canonically ordered by the Environment protocol before any callback is
+     * prepared.
+     */
+    static final class PreparedEnvironmentEachCall implements PreparedLocalEachCall {
         private final ProtosEnvironmentValue environment;
         private final List<ProtosEnvironmentValue.PortableEntry> snapshot;
         private final Object block;
@@ -3302,11 +3352,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     activation));
         }
 
-        boolean hasNext() {
+        @Override
+        public boolean hasNext() {
             return index < snapshot.size();
         }
 
-        PreparedClosureCall prepareCurrent() {
+        @Override
+        public PreparedClosureCall prepareCurrent() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Environment.each callback requested after snapshot exhaustion");
@@ -3318,7 +3370,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
-        void advance() {
+        @Override
+        public void advance() {
             if (!hasNext()) {
                 throw new IllegalStateException(
                         "Environment.each cursor advanced after snapshot exhaustion");
@@ -3326,12 +3379,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             index++;
         }
 
-        Object finish() {
+        @Override
+        public Object finish() {
             if (hasNext()) {
                 throw new IllegalStateException(
                         "Environment.each finished before snapshot exhaustion");
             }
             return environment;
+        }
+
+        @Override
+        public Object callback() {
+            return block;
         }
     }
 

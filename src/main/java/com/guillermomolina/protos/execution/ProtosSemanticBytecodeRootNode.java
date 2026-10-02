@@ -23,7 +23,6 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendAr
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedSendTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedStructuredSend;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedArgumentVector;
-import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedAssociationEachCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedBooleanCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedIndexedEachCall;
@@ -1265,15 +1264,16 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
-    // ---- PLAT044 B′ inline literal standard each (PERF026-D1, PERF026-D2) -----------
+    // ---- PLAT044 B′ inline literal standard each (PERF026-D1/D2/D3) ------------------
     //
     // A selected standard Array.each or Bytes.each whose sole argument is
     // exactly the send site's staged one-parameter literal, or a selected
-    // standard Map.each or IdentityMap.each whose sole argument is exactly
-    // the staged two-parameter literal, is sequenced locally in this root;
-    // every other each keeps the structured-dispatch root. Validation, the
-    // snapshot, the cursor and every per-position activation stay owned by
-    // the prepared each calls of ProtosBytecodeRootNode.
+    // standard Map.each, IdentityMap.each or Environment.each whose sole
+    // argument is exactly the staged two-parameter literal, is sequenced
+    // locally in this root; every other each keeps the structured-dispatch
+    // root. Validation, the snapshot, the cursor and every per-position
+    // activation stay owned by the prepared each calls of
+    // ProtosBytecodeRootNode.
 
     @Operation
     public static final class AdmitsInlineLiteralIndexedEach {
@@ -1299,22 +1299,29 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     @Operation
-    public static final class AdmitsInlineLiteralAssociationEach {
+    public static final class AdmitsInlineLiteralTwoParameterEach {
         @Specialization
         public static boolean perform(PreparedClosureCall prepared, Object callback) {
-            return prepared.admitsInlineLiteralAssociationEach(callback);
+            return prepared.admitsInlineLiteralAssociationEach(callback)
+                    || prepared.admitsInlineLiteralEnvironmentEach(callback);
         }
     }
 
     /**
-     * Reached only after {@link AdmitsInlineLiteralAssociationEach}, so
-     * exactly one of the two standard capabilities was selected; the
-     * ordinary structured preparation of that capability runs unchanged.
+     * Reached only after {@link AdmitsInlineLiteralTwoParameterEach}, so
+     * exactly one of the three standard capabilities was selected; the
+     * ordinary structured preparation of that capability runs unchanged. For
+     * Environment.each that preparation still validates callability, then
+     * converts, validates and canonically orders the complete portable
+     * snapshot before any callback child exists.
      */
     @Operation
-    public static final class PrepareStructuredAssociationEachCall {
+    public static final class PrepareStructuredTwoParameterEachCall {
         @Specialization
-        public static PreparedAssociationEachCall perform(PreparedClosureCall prepared) {
+        public static PreparedLocalEachCall perform(PreparedClosureCall prepared) {
+            if (prepared.isStructuredEnvironmentEach()) {
+                return ProtosBytecodeRootNode.PrepareStructuredEnvironmentEachCall.perform(prepared);
+            }
             return prepared.isStructuredMapEach()
                     ? ProtosBytecodeRootNode.PrepareStructuredMapEachCall.perform(prepared)
                     : ProtosBytecodeRootNode.PrepareStructuredIdentityMapEachCall.perform(prepared);

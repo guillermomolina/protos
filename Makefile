@@ -21,7 +21,7 @@ JAVA_SUREFIRE_REPORTS := target/surefire-reports
 JAVA_SLOW_TEST_GUARD := $(PYTHON) tools/java_slow_test_guard.py
 JAVA_SLOW_TEST_ALLOWLIST := tools/java_slow_tests_allowlist.txt
 
-.PHONY: help toolchain compile build test test-java test-java-parallel test-java-serial test-java-stress test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-stress test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -59,9 +59,20 @@ test: test-java test-protos
 
 test-java:
 	$(JAVA_SLOW_TEST_GUARD) reset --reports $(JAVA_SUREFIRE_REPORTS) --log $(JAVA_TEST_LOG)
-	$(JAVA_SLOW_TEST_GUARD) run --log $(JAVA_TEST_LOG) -- $(MAKE) --no-print-directory test-java-parallel
-	$(JAVA_SLOW_TEST_GUARD) run --log $(JAVA_TEST_LOG) -- $(MAKE) --no-print-directory test-java-serial
+	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-parallel
+	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-serial
 	$(JAVA_SLOW_TEST_GUARD) check --reports $(JAVA_SUREFIRE_REPORTS) --allowlist $(JAVA_SLOW_TEST_ALLOWLIST)
+
+# Streams one test-java phase live to the terminal through tee while appending
+# it to the retained log, and fails with the phase's own exit status (POSIX sh
+# has no pipefail, so the status crosses the pipe through a file).
+java-test-phase:
+	@status_file=$(JAVA_TEST_LOG).status; \
+	{ $(MAKE) --no-print-directory $(JAVA_TEST_PHASE) 2>&1; echo $$? > "$$status_file"; } \
+		| tee -a $(JAVA_TEST_LOG); \
+	status=$$(cat "$$status_file"); \
+	rm -f "$$status_file"; \
+	test "$$status" -eq 0
 
 test-java-parallel:
 	$(MVN) $(MVN_FLAGS) \

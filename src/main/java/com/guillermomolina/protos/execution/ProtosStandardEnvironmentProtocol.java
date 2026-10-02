@@ -55,7 +55,18 @@ public final class ProtosStandardEnvironmentProtocol {
             Object receiver,
             ProtosObjectValue home) {
         return behavior == STANDARD_EACH
-                && home instanceof StandardPrototype
+                && isCanonicalStandardEachHome(receiver, home);
+    }
+
+    /**
+     * The home half of {@link #isCanonicalStandardEachSelection}, for a
+     * prepared call whose selected behavior is already known to have the
+     * standard each body ({@link #isStandardEachImplementation}) but which
+     * no longer retains the selected Closure. Implementation identity alone
+     * admits the standard each copied to another home; this does not.
+     */
+    static boolean isCanonicalStandardEachHome(Object receiver, ProtosObjectValue home) {
+        return home instanceof StandardPrototype
                 && receiver instanceof ProtosEnvironmentValue environment
                 && environment.prototypeForRuntime() == home;
     }

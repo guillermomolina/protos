@@ -115,14 +115,15 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * A send site's PLAT044 B′ inline standard each candidate: the sole
-     * supplied literal and whether it is the PERF026-D2 two-parameter
-     * association shape (Map.each/IdentityMap.each) rather than the
-     * PERF026-D1 one-parameter indexed shape (Array.each/Bytes.each). The
-     * family only selects which standard capabilities may admit it.
+     * supplied literal and whether it is the two-parameter {@code
+     * block(a, b)} shape (Map.each/IdentityMap.each, PERF026-D2;
+     * Environment.each, PERF026-D3) rather than the PERF026-D1 one-parameter
+     * indexed shape (Array.each/Bytes.each). The shape only selects which
+     * standard capabilities may admit it.
      */
     private record InlineLiteralEach(
             InlineLiteralCallback callback,
-            boolean association) {}
+            boolean twoParameter) {}
 
     private final ProtosLanguage language;
     private final Source source;
@@ -2924,10 +2925,10 @@ final class CanonicalToBytecodeLowerer {
      *
      * <p>{@code inlineEach}, when non-null, is the send site's PERF026-D1
      * one-parameter ({@link #isInlineLiteralIndexedEachCandidate}) or
-     * PERF026-D2 two-parameter ({@link
-     * #isInlineLiteralAssociationEachCandidate}) literal argument: a prepared
-     * standard Array.each or Bytes.each, respectively Map.each or
-     * IdentityMap.each, that admits exactly that literal is sequenced by
+     * PERF026-D2/D3 two-parameter ({@link
+     * #isInlineLiteralTwoParameterEachCandidate}) literal argument: a prepared
+     * standard Array.each or Bytes.each, respectively Map.each,
+     * IdentityMap.each or Environment.each, that admits exactly that literal is sequenced by
      * {@link #emitLocalInlineLiteralEach}; every other prepared call keeps the
      * dispatch below unchanged.
      */
@@ -2967,15 +2968,15 @@ final class CanonicalToBytecodeLowerer {
 
         if (inlineEach != null) {
             builder.beginIfThenElse();
-            if (inlineEach.association()) {
-                builder.beginAdmitsInlineLiteralAssociationEach();
+            if (inlineEach.twoParameter()) {
+                builder.beginAdmitsInlineLiteralTwoParameterEach();
             } else {
                 builder.beginAdmitsInlineLiteralIndexedEach();
             }
             builder.emitLoadLocal(preparedCall);
             builder.emitLoadLocal(inlineEach.callback().literal());
-            if (inlineEach.association()) {
-                builder.endAdmitsInlineLiteralAssociationEach();
+            if (inlineEach.twoParameter()) {
+                builder.endAdmitsInlineLiteralTwoParameterEach();
             } else {
                 builder.endAdmitsInlineLiteralIndexedEach();
             }
@@ -3144,18 +3145,21 @@ final class CanonicalToBytecodeLowerer {
     /**
      * PLAT044 B′ local standard each over an admitted literal callback:
      * Array.each or Bytes.each with a one-parameter literal (PERF026-D1), or
-     * Map.each or IdentityMap.each with a two-parameter literal (PERF026-D2).
+     * Map.each or IdentityMap.each (PERF026-D2) or Environment.each
+     * (PERF026-D3) with a two-parameter literal.
      *
      * <p>Mirrors the corresponding each branches of {@code
      * ProtosStructuredDispatchLowerer} against the same prepared loop state
      * ({@code PreparedArrayEachCall}/{@code PreparedBytesEachCall} or {@code
-     * PreparedMapEachCall}/{@code PreparedIdentityMapEachCall}, viewed as
-     * {@code PreparedLocalEachCall}), so the outer prepared call is completed
-     * exactly once by the enclosing TryFinally, the receiver and callback
-     * callability are validated before the single shallow snapshot is
-     * established, each child is prepared fresh with exactly its snapshot
-     * arguments (the element or octet, or the representative key and value)
-     * as supplied arguments, the cursor advances only after that child
+     * PreparedMapEachCall}/{@code PreparedIdentityMapEachCall} or {@code
+     * PreparedEnvironmentEachCall}, viewed as {@code PreparedLocalEachCall}),
+     * so the outer prepared call is completed exactly once by the enclosing
+     * TryFinally, the receiver and callback callability are validated before
+     * the single snapshot is established (for Environment.each, the complete
+     * portable, canonically ordered String snapshot), each child is prepared
+     * fresh with exactly its snapshot arguments (the element or octet, the
+     * representative key and value, or the portable name and value) as
+     * supplied arguments, the cursor advances only after that child
      * completes normally, an Error or non-local return unwinds without a
      * later visit, and normal completion returns the original receiver. The
      * loop phase lives in this root's Bytecode control state, so suspension
@@ -3190,10 +3194,10 @@ final class CanonicalToBytecodeLowerer {
         builder.beginBlock();
 
         builder.beginStoreLocal(structuredEach);
-        if (inlineEach.association()) {
-            builder.beginPrepareStructuredAssociationEachCall();
+        if (inlineEach.twoParameter()) {
+            builder.beginPrepareStructuredTwoParameterEachCall();
             builder.emitLoadLocal(preparedCall);
-            builder.endPrepareStructuredAssociationEachCall();
+            builder.endPrepareStructuredTwoParameterEachCall();
         } else {
             builder.beginPrepareStructuredIndexedEachCall();
             builder.emitLoadLocal(preparedCall);
@@ -3248,10 +3252,9 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * One fresh callback child of a locally sequenced loop (a while condition
-     * or body, or a standard each element or association): a child requiring
-     * structured dispatch enters the untagged root, and any other child is
-     * completed by
-     * its own TryFinally around either the inline region of {@code
+     * or body, or a standard each element, association or entry): a child
+     * requiring structured dispatch enters the untagged root, and any other
+     * child is completed by its own TryFinally around either the inline region of {@code
      * definition}, taken only when the Boolean {@code emitAdmission} operation
      * admits {@code child}, or the exact ordinary invocation, as in {@link
      * #emitLocalBooleanInvocation}.
@@ -4059,9 +4062,9 @@ final class CanonicalToBytecodeLowerer {
         boolean inlineIndexedEachCandidate =
                 !spreadArguments
                         && isInlineLiteralIndexedEachCandidate(send.arguments());
-        boolean inlineAssociationEachCandidate =
+        boolean inlineTwoParameterEachCandidate =
                 !spreadArguments
-                        && isInlineLiteralAssociationEachCandidate(send.arguments());
+                        && isInlineLiteralTwoParameterEachCandidate(send.arguments());
         /*
          * PLAT044 B′: candidate literals are staged in ordinary argument
          * locals (still evaluated exactly once, in order) so the prepared
@@ -4073,7 +4076,7 @@ final class CanonicalToBytecodeLowerer {
                         || spreadArguments
                         || !inlineCallbackPositions.isEmpty()
                         || inlineIndexedEachCandidate
-                        || inlineAssociationEachCandidate;
+                        || inlineTwoParameterEachCandidate;
         BytecodeLocal receiverValue = null;
         BytecodeLocal suppliedVector = null;
         java.util.List<BytecodeLocal> argumentValues =
@@ -4206,12 +4209,12 @@ final class CanonicalToBytecodeLowerer {
         }
 
         /*
-         * PERF026-D1/D2: disjoint from each other (one versus two
+         * PERF026-D1/D2/D3: disjoint from each other (one versus two
          * parameters) and from the Boolean and while candidates, which
          * require zero-parameter literals.
          */
         InlineLiteralEach inlineEach = null;
-        if (inlineIndexedEachCandidate || inlineAssociationEachCandidate) {
+        if (inlineIndexedEachCandidate || inlineTwoParameterEachCandidate) {
             CanonicalClosure callback =
                     (CanonicalClosure) send.arguments().get(0);
             inlineEach =
@@ -4221,7 +4224,7 @@ final class CanonicalToBytecodeLowerer {
                                     0,
                                     argumentValues.get(0),
                                     bytecodeClosurePlans.get(callback)),
-                            inlineAssociationEachCandidate);
+                            inlineTwoParameterEachCandidate);
         }
 
         emitPreparedInvocation(
@@ -4299,21 +4302,24 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * PLAT044 B′ (PERF026-D2) compile-time association each candidate: as
-     * {@link #isInlineLiteralIndexedEachCandidate}, but the literal has
+     * PLAT044 B′ (PERF026-D2/D3) compile-time two-parameter each candidate:
+     * as {@link #isInlineLiteralIndexedEachCandidate}, but the literal has
      * exactly two ordinary required positional parameters (neither with a
      * default nor rest), matching the two arguments of a standard
-     * {@code block(key, value)} invocation. It is disjoint from the
-     * one-parameter indexed candidate and from the zero-parameter Boolean and
-     * while candidates. The local loop is taken only after ordinary
-     * selection prepared the canonical standard Map.each or IdentityMap.each
-     * with exactly this staged value ({@link
-     * ProtosBytecodeRootNode.PreparedClosureCall#admitsInlineLiteralAssociationEach}),
+     * {@code block(key, value)} or {@code block(name, value)} invocation. It
+     * is disjoint from the one-parameter indexed candidate and from the
+     * zero-parameter Boolean and while candidates. The source shape is only a
+     * candidate: the local loop is taken only after ordinary selection
+     * prepared the canonical standard Map.each, IdentityMap.each or
+     * Environment.each with exactly this staged value ({@link
+     * ProtosBytecodeRootNode.PreparedClosureCall#admitsInlineLiteralAssociationEach},
+     * {@link
+     * ProtosBytecodeRootNode.PreparedClosureCall#admitsInlineLiteralEnvironmentEach}),
      * and both formals are then bound by the ordinary parameter binding from
-     * the prepared per-association activation. Any other shape keeps the
+     * the prepared per-position activation. Any other shape keeps the
      * ordinary path, including its ordinary callback arity behavior.
      */
-    private static boolean isInlineLiteralAssociationEachCandidate(
+    private static boolean isInlineLiteralTwoParameterEachCandidate(
             java.util.List<CanonicalExpression> arguments) {
         return isInlineLiteralEachCandidate(arguments, 2);
     }
