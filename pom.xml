@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.143-SNAPSHOT</version>
+    <version>0.3.144-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -279,14 +279,6 @@
     <profiles>
         <profile>
             <id>native</id>
-            <properties>
-                <!--
-                    Native Image consumes the thin application JAR plus the
-                    resolved runtime dependency graph directly. Do not feed it
-                    an uber-JAR containing those dependencies a second time.
-                -->
-                <protos.shade.skip>true</protos.shade.skip>
-            </properties>
             <build>
                 <plugins>
                     <plugin>
@@ -329,6 +321,12 @@
                             <mainClass>com.guillermomolina.protos.cli.ProtosCli</mainClass>
                             <imageName>protos</imageName>
                             <outputDirectory>${project.build.directory}/native</outputDirectory>
+                            <!--
+                                Native Image consumes compiled application classes
+                                plus the resolved dependency graph directly. Keep
+                                the ordinary shaded checkout JAR intact.
+                            -->
+                            <classesDirectory>${project.build.outputDirectory}</classesDirectory>
                             <!--
                                 PLAT045 (#772): Native guest execution uses the
                                 supported interpreter-only fallback Truffle

@@ -62,7 +62,12 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
                 pom.indexOf(FALLBACK_BUILD_ARG),
                 pom.lastIndexOf(FALLBACK_BUILD_ARG),
                 "fallback runtime must be selected exactly once");
-        assertTrue(nativeProfile(pom).contains(FALLBACK_BUILD_ARG));
+        String nativeProfile = nativeProfile(pom);
+        assertTrue(nativeProfile.contains(FALLBACK_BUILD_ARG));
+        assertTrue(
+                nativeProfile.contains(
+                        "<classesDirectory>${project.build.outputDirectory}</classesDirectory>"));
+        assertFalse(nativeProfile.contains("<protos.shade.skip>true</protos.shade.skip>"));
         assertFalse(withoutNativeProfile(pom).contains("UseFallbackRuntime"));
         assertFalse(launcher.contains("WarnInterpreterOnly=false"));
         assertFalse(launcher.contains("UseFallbackRuntime=true"));
@@ -71,6 +76,8 @@ final class ProtosPerf006C1OptimizingRuntimeClosureTest {
         System.out.println("PERF006_C1_CHECKOUT_RUNTIME_PLANE=PASS");
         System.out.println("PLAT045_NATIVE_PROFILE_FALLBACK_RUNTIME=YES");
         System.out.println("PLAT045_JVM_FALLBACK_RUNTIME=NO");
+        System.out.println("BUG014_NATIVE_PROFILE_SHADE_SKIP=NO");
+        System.out.println("BUG014_NATIVE_PROFILE_APPLICATION_INPUT=CLASSES_DIRECTORY");
     }
 
     /** PLAT045 (#772): Native admission is interpreter-only and must never claim guest JIT. */

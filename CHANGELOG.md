@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.144-SNAPSHOT
+
+- `BUG014` restores the ordinary shaded checkout JAR under the `native`
+  Maven profile. The profile no longer sets `protos.shade.skip=true`;
+  instead `native-maven-plugin` receives the compiled application classes
+  directly through
+  `<classesDirectory>${project.build.outputDirectory}</classesDirectory>`
+  plus the resolved dependency graph, so Native Image still never consumes
+  an uber-JAR that duplicates those dependencies. The PLAT045 interpreter-only
+  fallback runtime selection is unchanged.
+  `ProtosPerf006C1OptimizingRuntimeClosureTest` now asserts the
+  classes-directory input and the absence of the shade skip. No observable
+  Protos semantics change; the specification is unchanged.
+
 ## 0.3.143-SNAPSHOT
 
 - `PERF025-C2D` (#758) reduces the shared explicit JVM guest-carrier stack
