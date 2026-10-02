@@ -19,7 +19,7 @@ help:
 	@printf '%s\n' \
 		'Protos Native Image targets:' \
 		'  make -C build/native build   Build the Stage1 Native Image executable' \
-		'  make -C build/native test    Build and validate Native guest runtime compilation' \
+		'  make -C build/native test    Build and validate interpreter-only Native (PLAT045)' \
 		'  make -C build/native clean   Remove Native Image-specific build artifacts' \
 		'' \
 		'Overrides: MVN=... MVN_FLAGS=... BASH=...'

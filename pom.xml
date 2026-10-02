@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.3.136-SNAPSHOT</version>
+    <version>0.3.137-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -329,7 +329,16 @@
                             <mainClass>com.guillermomolina.protos.cli.ProtosCli</mainClass>
                             <imageName>protos</imageName>
                             <outputDirectory>${project.build.directory}/native</outputDirectory>
+                            <!--
+                                PLAT045 (#772): Native guest execution uses the
+                                supported interpreter-only fallback Truffle
+                                runtime while oracle/graal#14579 prevents
+                                Bytecode DSL Tier-2 runtime compilation in
+                                Native Image. Scoped to this profile only; the
+                                JVM path keeps the optimizing runtime.
+                            -->
                             <buildArgs>
+                                <buildArg>-Dtruffle.UseFallbackRuntime=true</buildArg>
                                 <buildArg>-march=compatibility</buildArg>
                                 <buildArg>@${project.build.directory}/native-image-init.args</buildArg>
                             </buildArgs>

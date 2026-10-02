@@ -528,10 +528,15 @@ To rebuild the Native Image and run its regression suite:
 make -C build/native test
 ```
 
-The Native regression suite verifies the CLI and basic guest execution, then
-forces Truffle guest compilation and requires both generated Protos Bytecode DSL
-roots to compile successfully at Tier 2. It also guards against runtime-compiler
-regressions such as `FrameWithoutBoxing` materialization failures.
+The Native executable is a real GraalVM Native Image (AOT) host, but guest
+code currently runs interpreter-only: the Native build selects Truffle's
+fallback runtime because Truffle guest JIT compilation of Protos Bytecode DSL
+roots is blocked upstream by
+[oracle/graal#14579](https://github.com/oracle/graal/issues/14579). The JVM
+path keeps the optimizing runtime and guest JIT. The Native regression suite
+verifies the CLI, guest execution, the Test Tool, and DAP, and checks that
+interpreter-only execution reports no compilation or `FrameWithoutBoxing`
+failures.
 
 ## Learn Protos
 

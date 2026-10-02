@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.137-SNAPSHOT
+
+- `BUG013-F` implements the ratified PLAT045 (#772) Candidate B contract
+  ("Native Image supported, guest JIT unavailable"). The `native` Maven
+  profile now builds with the supported fallback Truffle runtime
+  (`-Dtruffle.UseFallbackRuntime=true`): the executable remains a real
+  GraalVM Native Image AOT host, but guest execution is interpreter-only and
+  Native guest JIT is unavailable while upstream `oracle/graal#14579` blocks
+  Bytecode DSL Tier-2 compilation in Native Image. The JVM path, Surefire and
+  `bin/protos` keep the optimizing runtime and guest JIT unchanged; observable
+  Protos semantics and the specification do not change. The maintained Native
+  regression (`build/native/test-native.sh`) no longer claims forced Tier-2
+  success: it keeps the CLI, guest, Test Tool and DAP gates and instead
+  validates interpreter-only execution, failing closed on a missing fallback
+  runtime, any guest compilation, opt failure, `FrameWithoutBoxing` or
+  compilation failure. The interpreter-only warning is not suppressed.
+  Restoring Native guest JIT remains gated on an upstream fix and Native
+  Tier-2 revalidation. No release is implied.
+
 ## 0.3.136-SNAPSHOT
 
 - `PERF026-B2` (#767) extends the PLAT044 (#766) Candidate B′ single-literal
