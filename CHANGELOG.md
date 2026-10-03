@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.175-SNAPSHOT
+
+- `PERF025` repairs the slice 3 inline callback consumer evidence. A
+  non-canonical guarded Integer send inside a frame-native inline callback (for
+  example `n < 3`) now prepares its native invocation with the
+  provenance-equivalent caller, as the ordinary-send and direct-Closure-call
+  consumers already do, instead of materializing the callback activation. The
+  focal test now warms each scenario past the Bytecode DSL uncached-interpreter
+  threshold before observing the specialized cached tier, and reads bindings
+  from the durable authority once they have been transferred. No observable
+  semantics change.
+
 ## 0.3.174-SNAPSHOT
 
 - `I063` follow-up: removes stale append wording from the

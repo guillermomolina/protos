@@ -1932,7 +1932,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             }
             return ProtosBytecodeRootNode.PrepareSendArguments.guardedIntegerSend(
                     receiver, selector,
-                    ProtosInlineCallbackFrameBindings.durableActivation(
+                    ProtosInlineCallbackFrameBindings.invocationCaller(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                     supplied, enteredContext, prelude,
                     cachedSelector, cachedContext, cachedPrelude, cachedInteger);

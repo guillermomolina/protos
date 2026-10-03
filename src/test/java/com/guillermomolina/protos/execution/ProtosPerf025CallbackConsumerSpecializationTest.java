@@ -28,6 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.Instruction;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
@@ -445,14 +446,31 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
     }
 
     /**
-     * Runs {@code characters} with breakpoints on {@code lines} and records,
-     * at each hit, the innermost live carrier and the region's block-local
-     * bindings, read from the raw frame. Installs {@code bump(value)}, a
-     * native Closure answering {@code value * 10}, reached by dynamic lookup.
+     * Executions of the trailing {@code run()} call per scenario. The Bytecode
+     * DSL uncached interpreter (default threshold 16 calls/back-edges per
+     * BytecodeNode) only runs each operation's generic specialization, which
+     * by design materializes the callback activation; the specialized
+     * consumers under test exist only in the cached tier. Earlier runs warm
+     * {@code run}'s BytecodeNode past that threshold and only the final run's
+     * stops are evaluated.
+     */
+    private static final int RUNS = 20;
+
+    /**
+     * Runs {@code characters}, whose last line must be {@code run()}, with
+     * breakpoints on {@code lines}; that call is repeated {@link #RUNS} times
+     * and only the final run's hits are recorded: at each, the innermost live
+     * carrier and the region's block-local bindings, read from the raw frame.
+     * Installs {@code bump(value)}, a native Closure answering
+     * {@code value * 10}, reached by dynamic lookup.
      */
     private static Run runToLine(String characters, int... lines) throws Exception {
+        assertTrue(characters.endsWith("run()\n"), "scenario must end with run()");
         Source source =
-                Source.newBuilder(ProtosLanguage.ID, characters, "perf025-s3.protos")
+                Source.newBuilder(
+                                ProtosLanguage.ID,
+                                characters + "run()\n".repeat(RUNS - 1),
+                                "perf025-s3.protos")
                         .uri(URI.create("memory:///perf025-s3.protos"))
                         .mimeType(ProtosLanguage.MIME_TYPE)
                         .build();
@@ -498,7 +516,10 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         if (callbackFailure.get() != null) {
             throw new AssertionError("debugger callback failed", callbackFailure.get());
         }
-        return new Run(outcome, stops);
+        assertEquals(0, stops.size() % RUNS, "every run must hit the same breakpoints");
+        int finalRunStops = stops.size() / RUNS;
+        return new Run(
+                outcome, List.copyOf(stops.subList(stops.size() - finalRunStops, stops.size())));
     }
 
     private static Stop stopOf(DebugStackFrame top) {
@@ -526,6 +547,13 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
             }
         }
         assertTrue(call != null, () -> "no live inline callback carrier at the breakpoint");
+        if (call.frameBindingsTransferred()) {
+            // Transferred bindings, and any established afterwards, live in the
+            // durable authority installed on the materialized activation.
+            ProtosLexicalBindingAuthority durable =
+                    call.activation().currentLexicalBindingAuthorityForRuntime();
+            bindings.replaceAll((name, value) -> durable.readBinding(name).orElse(null));
+        }
         List<String> instructions =
                 bytecode.getInstructionsAsList().stream().map(Instruction::getName).toList();
         return new Stop(
