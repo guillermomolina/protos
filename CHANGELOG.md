@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.179-SNAPSHOT
+
+- `PERF030` establishes a statically proven target-less creation of a root
+  that installs its persistent frame authority through the new
+  `CreateCurrentIndexedLocalSlot` operation, whose layout and frame ordinal are
+  Bytecode DSL constant operands taken at lowering time. While that root's
+  authority admits creation and stores the expected layout, the binding is
+  created at its known ordinal (still rejecting a PRESENT binding as a
+  duplicate creation); any other state takes the unchanged named
+  `CreateCurrentLocalSlot` path. The ordinary path no longer resolves the frame
+  ordinal from the runtime binding name before its frame-local accesses, which
+  partial evaluation could not reduce to a constant. No observable semantics
+  change.
+
 ## 0.3.178-SNAPSHOT
 
 - `I058` implements D160 (Candidate B): the parallel Array algorithms move from

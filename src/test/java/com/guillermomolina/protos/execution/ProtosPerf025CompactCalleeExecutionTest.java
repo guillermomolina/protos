@@ -165,6 +165,52 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
+    void persistentAuthorityCreationUsesConstantIndexedOrdinal() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue run =
+                    closure("() => {\nidentity: (value) => { value }\nidentity(1)\n}", module);
+            List<String> names = instructionNames(run);
+            assertContains(names, "InstallFrameLexicalAuthority");
+            assertContains(names, "CreateCurrentIndexedLocalSlot");
+            assertNone(names, "CreateCurrentLocalSlot");
+            assertNone(names, "CreateCurrentFrameLocal");
+            ProtosFrameLexicalLayout layout =
+                    assertInstanceOf(
+                            ProtosFrameLexicalLayout.class,
+                            constantArgumentOf(run, "InstallFrameLexicalAuthority", "frameBackedLayout"));
+            assertSame(
+                    layout,
+                    constantArgumentOf(run, "CreateCurrentIndexedLocalSlot", "frameBackedLayout"),
+                    "the indexed creation carries the installed persistent layout");
+            assertEquals(
+                    layout.offsetOf("identity"),
+                    constantOrdinalOf(run, "CreateCurrentIndexedLocalSlot"));
+            assertEquals(BigInteger.ONE, integerValue(enter(fastDirect(run, module))));
+
+            ProtosBytecodeRootNode.PreparedClosureCall duplicate =
+                    fastDirect(
+                            closure("() => {\nf: (value) => { value }\nf: 2\n}", module),
+                            module);
+            assertThrows(ProtosSignalException.class, () -> enter(duplicate));
+
+            ProtosFrameLexicalLayout foreign =
+                    ProtosFrameLexicalLayout.of(new String[] {"perf030Fallback"});
+            ProtosIntegerValue value = integer(3);
+            assertSame(
+                    value,
+                    ProtosBytecodeRootNode.createIndexedCurrentLocalSlot(
+                            foreign, module, 0, "perf030Fallback", value));
+            assertSame(value, evaluate("perf030Fallback", module), "named fallback created the slot");
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> ProtosBytecodeRootNode.createIndexedCurrentLocalSlot(
+                            foreign, module, 0, "perf030Fallback", value),
+                    "the named fallback keeps the duplicate-creation Error");
+        });
+        System.out.println("PERSISTENT_AUTHORITY_INDEXED_CREATION=PASS");
+    }
+
+    @Test
     void defaultsSeeOnlyEarlierParametersAndOrdinaryLookup() throws Exception {
         withCore(module -> {
             ProtosClosureValue earlier = closure("(a, b = a) => { b }", module);
@@ -469,6 +515,26 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             case INTEGER -> ordinal.asInteger();
             default -> throw new AssertionError("ordinal is not a constant: " + ordinal);
         };
+    }
+
+    /** The object constant operand {@code argument} of the single {@code operation} instruction. */
+    private static Object constantArgumentOf(
+            ProtosClosureValue closure, String operation, String argument) {
+        List<Instruction> matching =
+                closure.executionPlan()
+                        .orElseThrow()
+                        .bytecodeActivationRootForTesting()
+                        .getBytecodeNode()
+                        .getInstructionsAsList()
+                        .stream()
+                        .filter(instruction -> instruction.getName().contains(operation))
+                        .toList();
+        assertEquals(1, matching.size(), () -> "expected one " + operation);
+        return matching.get(0).getArguments().stream()
+                .filter(candidate -> candidate.getName().equals(argument))
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("no constant " + argument + " operand"))
+                .asConstant();
     }
 
     private static void assertContains(List<String> names, String operation) {

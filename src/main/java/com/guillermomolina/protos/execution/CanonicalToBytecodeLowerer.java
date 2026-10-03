@@ -1010,6 +1010,29 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
+     * PERF030: the layout ordinal at which the target-less {@code create} of a
+     * root that installs its persistent frame authority is established, or
+     * {@code -1} when its static identity is not proven, under exactly the
+     * conditions of {@link #indexedParameterOrdinal}. Presence is still
+     * checked at run time.
+     */
+    private int indexedCreateOrdinal(CanonicalCreate create) {
+        String name = create.name();
+        if (currentRootIndexedParameterLayout == null
+                || currentActivationLocal != null
+                || currentRootAnalysis == null
+                || !currentRootFrameLocals.containsKey(name)
+                || currentRootAnalysis.identityOf(create)
+                        .map(identity -> identity.owner() != currentRootTopScope
+                                || !identity.name().equals(name))
+                        .orElse(true)) {
+            return -1;
+        }
+        Integer ordinal = currentRootIndexedParameterLayout.offsetOf(name);
+        return ordinal == null ? -1 : ordinal;
+    }
+
+    /**
      * Emits each expression of {@code sequence} as one source statement
      * (StatementTag + ExpressionTag over its exact span), storing each value
      * into {@code result}. Shared by root bodies and inline object-construction
@@ -1644,12 +1667,15 @@ final class CanonicalToBytecodeLowerer {
      * Emits the target-less creation of {@code name} from {@code value}: the
      * PERF025 frame-native {@code CreateCurrentFrameLocal} for a binding of a
      * root lowered without a persistent frame authority, otherwise the
-     * unchanged {@code CreateCurrentLocalSlot}.
+     * PERF030 {@code CreateCurrentIndexedLocalSlot} for a statically proven
+     * binding of a root that installs one, otherwise the unchanged {@code
+     * CreateCurrentLocalSlot}.
      */
     private void emitCreateCurrentBinding(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
-            String name,
+            CanonicalCreate create,
             BytecodeLocal value) {
+        String name = create.name();
         int ordinal = frameNativeOrdinal(name);
         if (ordinal >= 0) {
             if (currentInlineCallbackFrameNative) {
@@ -1676,6 +1702,17 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(name);
             builder.emitLoadLocal(value);
             builder.endCreateCurrentFrameLocal();
+            return;
+        }
+        ordinal = indexedCreateOrdinal(create);
+        if (ordinal >= 0) {
+            builder.beginCreateCurrentIndexedLocalSlot(
+                    currentRootIndexedParameterLayout,
+                    ordinal);
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(name);
+            builder.emitLoadLocal(value);
+            builder.endCreateCurrentIndexedLocalSlot();
             return;
         }
         builder.beginCreateCurrentLocalSlot();
@@ -2743,7 +2780,7 @@ final class CanonicalToBytecodeLowerer {
             emitBodyExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(result);
-            emitCreateCurrentBinding(builder, create.name(), value);
+            emitCreateCurrentBinding(builder, create, value);
             builder.endStoreLocal();
             return;
         }
@@ -2995,7 +3032,7 @@ final class CanonicalToBytecodeLowerer {
             emitDefaultExpressionToLocal(
                     builder, create.value(), value, preparedCall, childResult, resumeValue);
             builder.beginStoreLocal(result);
-            emitCreateCurrentBinding(builder, create.name(), value);
+            emitCreateCurrentBinding(builder, create, value);
             builder.endStoreLocal();
             return;
         }

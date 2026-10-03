@@ -1284,6 +1284,32 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /**
+     * PERF030: {@link CreateCurrentLocalSlot} for a statically proven current
+     * binding of a root that installs its persistent frame authority. The
+     * {@code ordinal} is a constant operand because the frame-local accesses
+     * of {@link ProtosFrameLexicalBindingAuthority#createFrameBackedBindingAt}
+     * require a partial-evaluation constant index; only the unchanged named
+     * fallback resolves {@code name}.
+     */
+    @Operation
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
+    public static final class CreateCurrentIndexedLocalSlot {
+        @Specialization
+        public static Object perform(
+                ProtosFrameLexicalLayout frameBackedLayout,
+                int ordinal,
+                ProtosActivation activation,
+                String name,
+                Object value) {
+            return ProtosBytecodeRootNode.createIndexedCurrentLocalSlot(
+                    frameBackedLayout, activation, ordinal, name, value);
+        }
+    }
+
     @Operation
     public static final class CreateLocalSlot {
         @Specialization

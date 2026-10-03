@@ -293,6 +293,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         createClosureParameterSlot(activation, name, value);
     }
 
+    /**
+     * PERF030: target-less creation of a statically proven current binding of
+     * a root that installs its persistent frame authority, at the ordinal the
+     * lowerer took from {@code frameBackedLayout}. Admitted exactly like
+     * {@link #bindIndexedClosureParameter}, still rejecting a PRESENT binding
+     * as a duplicate creation; any other state takes the unchanged named
+     * {@link CreateCurrentLocalSlot} path.
+     */
+    static Object createIndexedCurrentLocalSlot(
+            ProtosFrameLexicalLayout frameBackedLayout,
+            ProtosActivation activation,
+            int ordinal,
+            String name,
+            Object value) {
+        if (activation.currentAuthorityAdmittingLocalCreationForRuntime()
+                        instanceof ProtosFrameLexicalBindingAuthority authority
+                && authority.storesLayout(frameBackedLayout)) {
+            try {
+                authority.createFrameBackedBindingAt(ordinal, value);
+            } catch (IllegalStateException invalidCreation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            return value;
+        }
+        return CreateCurrentLocalSlot.perform(activation, name, value);
+    }
+
     /** PERF025-H1 rest counterpart of {@link #bindIndexedClosureParameter}. */
     static void bindIndexedClosureRest(
             ProtosFrameLexicalLayout frameBackedLayout,
