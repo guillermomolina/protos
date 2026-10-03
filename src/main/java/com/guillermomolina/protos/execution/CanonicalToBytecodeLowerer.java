@@ -1295,10 +1295,18 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal value) {
         int ordinal = frameNativeOrdinal(name);
         if (ordinal >= 0) {
+            /*
+             * PERF025: a frame-native root has no inline object body or
+             * inline callback region, so its current activation is always its
+             * own frame argument 0, which the operation reads itself.
+             */
+            if (currentActivationLocal != null) {
+                throw new AssertionError(
+                        "frame-native creation inside an inline activation region: " + name);
+            }
             builder.beginCreateCurrentFrameLocal(
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout);
-            emitCurrentActivation(builder);
             builder.emitLoadConstant(ordinal);
             builder.emitLoadConstant(name);
             builder.emitLoadLocal(value);
@@ -2472,10 +2480,16 @@ final class CanonicalToBytecodeLowerer {
         } else if (currentFrameLocal != null) {
             /* PERF028-A: select (and retain) the destination before RHS evaluation. */
             builder.beginStoreLocal(mutationTarget);
-            builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(assign.name());
-            builder.endResolveCurrentFrameLocalWriteTarget();
+            if (currentActivationLocal == null) {
+                builder.beginResolveRootFrameLocalWriteTarget(currentFrameLocal);
+                builder.emitLoadConstant(assign.name());
+                builder.endResolveRootFrameLocalWriteTarget();
+            } else {
+                builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
+                emitCurrentActivation(builder);
+                builder.emitLoadConstant(assign.name());
+                builder.endResolveCurrentFrameLocalWriteTarget();
+            }
             builder.endStoreLocal();
         } else {
             /* AST authority resolves the writable lexical destination before RHS evaluation. */
@@ -2514,12 +2528,20 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(value);
             builder.endAssignLocalSlot();
         } else if (currentFrameLocal != null) {
-            builder.beginAssignCurrentFrameLocal(currentFrameLocal);
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(mutationTarget);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadLocal(value);
-            builder.endAssignCurrentFrameLocal();
+            if (currentActivationLocal == null) {
+                builder.beginAssignRootFrameLocal(currentFrameLocal);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignRootFrameLocal();
+            } else {
+                builder.beginAssignCurrentFrameLocal(currentFrameLocal);
+                emitCurrentActivation(builder);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignCurrentFrameLocal();
+            }
         } else {
             builder.beginAssignResolvedLexicalTarget();
             emitCurrentActivation(builder);
@@ -2706,10 +2728,16 @@ final class CanonicalToBytecodeLowerer {
             builder.endStoreLocal();
         } else if (currentFrameLocal != null) {
             builder.beginStoreLocal(mutationTarget);
-            builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(assign.name());
-            builder.endResolveCurrentFrameLocalWriteTarget();
+            if (currentActivationLocal == null) {
+                builder.beginResolveRootFrameLocalWriteTarget(currentFrameLocal);
+                builder.emitLoadConstant(assign.name());
+                builder.endResolveRootFrameLocalWriteTarget();
+            } else {
+                builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
+                emitCurrentActivation(builder);
+                builder.emitLoadConstant(assign.name());
+                builder.endResolveCurrentFrameLocalWriteTarget();
+            }
             builder.endStoreLocal();
         } else {
             builder.beginStoreLocal(mutationTarget);
@@ -2747,12 +2775,20 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadLocal(value);
             builder.endAssignLocalSlot();
         } else if (currentFrameLocal != null) {
-            builder.beginAssignCurrentFrameLocal(currentFrameLocal);
-            emitCurrentActivation(builder);
-            builder.emitLoadLocal(mutationTarget);
-            builder.emitLoadConstant(assign.name());
-            builder.emitLoadLocal(value);
-            builder.endAssignCurrentFrameLocal();
+            if (currentActivationLocal == null) {
+                builder.beginAssignRootFrameLocal(currentFrameLocal);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignRootFrameLocal();
+            } else {
+                builder.beginAssignCurrentFrameLocal(currentFrameLocal);
+                emitCurrentActivation(builder);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignCurrentFrameLocal();
+            }
         } else {
             builder.beginAssignResolvedLexicalTarget();
             emitCurrentActivation(builder);

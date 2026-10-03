@@ -380,18 +380,31 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
     public static final class CreateCurrentFrameLocal {
+        /**
+         * PERF025 compact callee execution: the body-level counterpart of
+         * {@link BindClosureFrameParameter}. While the frame is still in
+         * compact source-call form the context is unobserved and has no
+         * authority, so an ABSENT local is established directly in the frame;
+         * a PRESENT one (duplicate creation) or any other state takes the
+         * unchanged activation path, including its exact creation Error.
+         */
         @Specialization
         public static Object perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
                 int ordinal,
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
+                frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
+                return value;
+            }
             return ProtosBytecodeRootNode.CreateCurrentFrameLocal.perform(
-                    frameBackedLocals, frameBackedLayout, activation,
+                    frameBackedLocals, frameBackedLayout, ProtosFrameArguments.activation(arguments),
                     ordinal, name, value, bytecodeNode, frame);
         }
     }
@@ -596,6 +609,64 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Bind("$frame") VirtualFrame frame) {
             return ProtosBytecodeRootNode.AssignCurrentFrameLocal.perform(
                     accessor, activation, destination, name, value, bytecodeNode, frame);
+        }
+    }
+
+    /**
+     * PERF025 compact callee execution: root-level form of {@link
+     * ResolveCurrentFrameLocalWriteTarget}, emitted when the current
+     * activation is the root's own. A frame still in compact source-call form
+     * denotes a genuine, unobserved (hence OPEN, non-FROZEN) execution
+     * context, so a PRESENT local is selected directly; an ABSENT one (D179
+     * C0) materializes the exact activation and runs the unchanged selection.
+     */
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    public static final class ResolveRootFrameLocalWriteTarget {
+        @Specialization
+        public static ResolvedLexicalWriteTarget perform(
+                LocalAccessor accessor,
+                String name,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && !accessor.isCleared(bytecodeNode, frame)) {
+                return ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL;
+            }
+            return ProtosBytecodeRootNode.ResolveCurrentFrameLocalWriteTarget.perform(
+                    accessor, ProtosFrameArguments.activation(arguments), name, bytecodeNode, frame);
+        }
+    }
+
+    /**
+     * PERF025 compact callee execution: root-level form of {@link
+     * AssignCurrentFrameLocal}. The retained static destination of a still
+     * compact (never FROZEN) context is written directly when PRESENT; a local
+     * cleared by the RHS, and every other destination, takes the unchanged
+     * activation path and its exact mutation Error.
+     */
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    public static final class AssignRootFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalAccessor accessor,
+                ResolvedLexicalWriteTarget destination,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (destination == ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL
+                    && ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && !accessor.isCleared(bytecodeNode, frame)) {
+                accessor.setObject(bytecodeNode, frame, value);
+                return value;
+            }
+            return ProtosBytecodeRootNode.AssignCurrentFrameLocal.perform(
+                    accessor, ProtosFrameArguments.activation(arguments),
+                    destination, name, value, bytecodeNode, frame);
         }
     }
 

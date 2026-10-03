@@ -47,7 +47,11 @@ public final class ProtosActivation {
         private ProtosArrayValue guestArray;
 
         private DeferredSuppliedArguments(List<?> values) {
-            this.values = List.copyOf(Objects.requireNonNull(values, "values"));
+            Objects.requireNonNull(values, "values");
+            this.values =
+                    values instanceof FrameBackedSuppliedArguments
+                            ? values
+                            : List.copyOf(values);
         }
 
         private List<?> values() {
@@ -62,6 +66,48 @@ public final class ProtosActivation {
             }
             return guestArray;
         }
+    }
+
+    /**
+     * PERF025 read-only view of the supplied-argument range of a compact
+     * source-call frame-argument array, adopted by a materialized activation
+     * without copying. Valid only because that range is written once when the
+     * call is prepared and never mutated afterwards.
+     */
+    private static final class FrameBackedSuppliedArguments
+            extends java.util.AbstractList<Object>
+            implements java.util.RandomAccess {
+        private final Object[] frameArguments;
+        private final int offset;
+
+        private FrameBackedSuppliedArguments(Object[] frameArguments, int offset) {
+            this.frameArguments = frameArguments;
+            this.offset = offset;
+        }
+
+        @Override
+        public Object get(int index) {
+            Objects.checkIndex(index, size());
+            return frameArguments[offset + index];
+        }
+
+        @Override
+        public int size() {
+            return frameArguments.length - offset;
+        }
+    }
+
+    /**
+     * Internal PERF025 seam: the supplied values of a compact source-call
+     * frame-argument array starting at {@code offset}, as a read-only view the
+     * deferred invocation factories adopt without copying. The caller
+     * guarantees that range is never mutated.
+     */
+    public static List<?> frameBackedSuppliedArgumentsForRuntime(
+            Object[] frameArguments, int offset) {
+        Objects.requireNonNull(frameArguments, "frameArguments");
+        Objects.checkFromToIndex(offset, frameArguments.length, frameArguments.length);
+        return new FrameBackedSuppliedArguments(frameArguments, offset);
     }
 
     public ProtosActivation(

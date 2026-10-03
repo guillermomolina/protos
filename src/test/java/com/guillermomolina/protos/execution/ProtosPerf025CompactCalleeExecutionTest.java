@@ -1,0 +1,464 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+package com.guillermomolina.protos.execution;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosExecutionContextValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosTask;
+import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.bytecode.Instruction;
+import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
+import com.oracle.truffle.api.source.Source;
+import java.lang.reflect.Field;
+import java.math.BigInteger;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
+import org.graalvm.polyglot.Context;
+import org.junit.jupiter.api.Test;
+
+/**
+ * PERF025 compact callee execution: a source root entered through the compact
+ * source-call ABI keeps that compact invocation state authoritative through
+ * ordinary execution. It no longer publishes a materialized activation at
+ * entry; supplied parameters are read from the frame arguments and bound
+ * directly into their lowering-time Bytecode locals; the exact activation (and
+ * any frame lexical authority) is materialized once, on the first semantic
+ * observation, and shared by every later observer.
+ */
+final class ProtosPerf025CompactCalleeExecutionTest {
+    private static final Path CORE = Path.of("protos", "lib", "core");
+
+    @Test
+    void identityCalleeExecutesWithoutMaterializingAnything() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue identity = closure("(value) => { value }", module);
+            List<String> names = instructionNames(identity);
+            assertNone(names, "CurrentActivation");
+            assertNone(names, "InstallFrameLexicalAuthority");
+            assertNone(names, "BindClosureParameter");
+            assertContains(names, "BindClosureFrameParameter");
+            assertContains(names, "ReadRootFrameLocal");
+
+            ProtosIntegerValue one = integer(1);
+            Object[] method =
+                    ProtosFrameArguments.compactImmediateMethodCall(
+                            identity, newObject(), newObject(), module, new Object[] {one});
+            assertSame(one, target(identity).call(method));
+            assertSame(identity, method[0], "no activation was materialized or published");
+
+            ProtosIntegerValue two = integer(2);
+            ProtosBytecodeRootNode.PreparedClosureCall direct = fastDirect(identity, module, two);
+            assertSame(two, enter(direct));
+            assertSame(identity, direct.targetArguments()[0]);
+        });
+        System.out.println("SOURCE_ROOT_UNIVERSAL_PUBLISH_FRAME_ACTIVATION=NO");
+        System.out.println("CALLEE_ACTIVATION_EAGER=NO");
+        System.out.println("FRAME_MATERIALIZATION_EAGER=NO");
+        System.out.println("PARAMETER_DIRECT_LOCAL_BINDING=YES");
+        System.out.println("IMMEDIATE_METHOD_COMPACT_PATH=PASS");
+        System.out.println("DIRECT_SOURCE_CLOSURE_COMPACT_PATH=PASS");
+    }
+
+    @Test
+    void multipleParametersBindInOrderAndCountErrorsMaterializeOnDemand() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue middle = closure("(a, b, c) => { b }", module);
+            assertNone(instructionNames(middle), "CurrentActivation");
+            ProtosIntegerValue a = integer(1);
+            ProtosIntegerValue b = integer(2);
+            ProtosIntegerValue c = integer(3);
+            ProtosBytecodeRootNode.PreparedClosureCall ordinary = fastDirect(middle, module, a, b, c);
+            assertSame(b, enter(ordinary));
+            assertSame(middle, ordinary.targetArguments()[0]);
+
+            ProtosBytecodeRootNode.PreparedClosureCall missing = fastDirect(middle, module, a, b);
+            assertThrows(ProtosSignalException.class, () -> enter(missing));
+            assertInstanceOf(
+                    ProtosActivation.class,
+                    missing.targetArguments()[0],
+                    "the argument-count Error materialized the exact activation");
+
+            ProtosBytecodeRootNode.PreparedClosureCall excess =
+                    fastDirect(middle, module, a, b, c, integer(4));
+            assertThrows(ProtosSignalException.class, () -> enter(excess));
+            /*
+             * The grammar requires required parameters to precede defaulted
+             * ones, so no default effect can precede a missing required
+             * argument; the earlier-parameter effect is the binding itself.
+             */
+        });
+        System.out.println("LEFT_TO_RIGHT_PARAMETER_BINDING=PASS");
+        System.out.println("MISSING_ARGUMENT_PRECEDENCE=PASS");
+        System.out.println("EXCESS_ARGUMENT_PRECEDENCE=PASS");
+    }
+
+    @Test
+    void localOnlyCalleeCreatesAndAssignsWithoutMaterializing() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue locals = closure("(a) => { b: a\nc: b\nc = a\nc }", module);
+            List<String> names = instructionNames(locals);
+            assertNone(names, "CurrentActivation");
+            assertContains(names, "CreateCurrentFrameLocal");
+            assertContains(names, "ResolveRootFrameLocalWriteTarget");
+            assertContains(names, "AssignRootFrameLocal");
+            ProtosIntegerValue a = integer(4);
+            ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(locals, module, a);
+            assertSame(a, enter(prepared));
+            assertSame(locals, prepared.targetArguments()[0], "no activation was materialized");
+
+            ProtosBytecodeRootNode.PreparedClosureCall duplicate =
+                    fastDirect(closure("(a) => { b: a\nb: a }", module), module, a);
+            assertThrows(ProtosSignalException.class, () -> enter(duplicate));
+            assertInstanceOf(ProtosActivation.class, duplicate.targetArguments()[0]);
+        });
+        System.out.println("ORDINARY_LOCAL_ONLY_ROOT_EAGER_FRAME_MATERIALIZATION=NO");
+    }
+
+    @Test
+    void defaultsSeeOnlyEarlierParametersAndOrdinaryLookup() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue earlier = closure("(a, b = a) => { b }", module);
+            assertNone(instructionNames(earlier), "CurrentActivation");
+            ProtosIntegerValue a = integer(5);
+            ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(earlier, module, a);
+            assertSame(a, enter(prepared));
+            assertSame(earlier, prepared.targetArguments()[0]);
+
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(evaluate("b: 7\nf: (a = b, b = 1) => { a }\nf()\n", module)),
+                    "a default never reads a later parameter's future value");
+        });
+        System.out.println("DEFAULT_BINDING_VISIBILITY=PASS");
+    }
+
+    @Test
+    void contextObservedByDefaultShowsExactlyEarlierBindings() throws Exception {
+        withCore(module -> {
+            Object observed =
+                    evaluate(
+                            "f: (a, b = [context.hasSlot(\"a\"), context.hasSlot(\"b\")]) => { b }\n"
+                                    + "f(1)\n",
+                            module);
+            List<Object> presence = assertInstanceOf(ProtosArrayValue.class, observed).indexedSnapshot();
+            assertSame(ProtosBooleanValue.TRUE, presence.get(0));
+            assertSame(ProtosBooleanValue.FALSE, presence.get(1));
+
+            ProtosExecutionContextValue late =
+                    assertInstanceOf(
+                            ProtosExecutionContextValue.class,
+                            evaluate("late: (a) => { b: a\ncontext }\nlate(3)\n", module));
+            assertTrue(late.hasLocalSlot("a"));
+            assertTrue(late.hasLocalSlot("b"));
+            assertFalse(late.hasLocalSlot("d"));
+            assertEquals(BigInteger.valueOf(3), integerValue(late.readLocalSlot("b").orElseThrow()));
+
+            List<Object> contexts =
+                    assertInstanceOf(
+                                    ProtosArrayValue.class,
+                                    evaluate("g: (x) => { context }\n[g(1), g(2)]\n", module))
+                            .indexedSnapshot();
+            assertInstanceOf(ProtosExecutionContextValue.class, contexts.get(0));
+            assertNotSame(contexts.get(0), contexts.get(1));
+        });
+        System.out.println("LATE_CONTEXT_PROJECTION=PASS");
+        System.out.println("FRESH_CONTEXT_IDENTITY=PASS");
+    }
+
+    @Test
+    void slotCreationConflictAndD179PresenceArePreserved() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue recreate = closure("(a) => { a: 2 }", module);
+            ProtosBytecodeRootNode.PreparedClosureCall conflict =
+                    fastDirect(recreate, module, integer(1));
+            assertThrows(
+                    ProtosSignalException.class,
+                    () -> enter(conflict),
+                    "creating an already PRESENT parameter name is a slot-creation conflict");
+
+            ProtosClosureValue identity = closure("(value) => { value }", module);
+            ProtosBytecodeRootNode.PreparedClosureCall nullCall =
+                    fastDirect(identity, module, ProtosNullValue.INSTANCE);
+            assertSame(ProtosNullValue.INSTANCE, enter(nullCall), "PRESENT(null) is not ABSENT");
+            assertSame(identity, nullCall.targetArguments()[0]);
+
+            List<Object> removed =
+                    assertInstanceOf(
+                                    ProtosArrayValue.class,
+                                    evaluate(
+                                            "f: (x) => { context.removeSlot(\"x\")\n"
+                                                    + "absent: context.hasSlot(\"x\")\nx: 5\n[absent, x] }\n"
+                                                    + "f(1)\n",
+                                            module))
+                            .indexedSnapshot();
+            assertSame(ProtosBooleanValue.FALSE, removed.get(0));
+            assertEquals(BigInteger.valueOf(5), integerValue(removed.get(1)));
+        });
+        System.out.println("D179_PRESENT_ABSENT=PASS");
+        System.out.println("D179_REMOVE_RECREATE=PASS");
+    }
+
+    @Test
+    void restCaptureErrorAndReturnSemanticsAreUnchanged() throws Exception {
+        withCore(module -> {
+            List<Object> rest =
+                    assertInstanceOf(
+                                    ProtosArrayValue.class,
+                                    evaluate("r: (first, ...rest) => { rest }\nr(1, 2, 3)\n", module))
+                            .indexedSnapshot();
+            assertEquals(List.of(BigInteger.TWO, BigInteger.valueOf(3)),
+                    rest.stream().map(ProtosPerf025CompactCalleeExecutionTest::integerValue).toList());
+
+            assertEquals(
+                    BigInteger.valueOf(6),
+                    integerValue(evaluate(
+                            "f: (x) => { set: (v) => { x = v }\nget: () => x\nset(6)\nget }\nf(1)()\n",
+                            module)),
+                    "a Closure created by the invocation captures its context by reference");
+
+            assertEquals(
+                    BigInteger.valueOf(42),
+                    integerValue(evaluate(
+                            "Error.handle(() => {\n f: (value) => { value }\n f()\n}, (caught) => 42)\n",
+                            module)),
+                    "an Error raised by a compact callee selects the ordinary handler");
+
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(evaluate(
+                            "outer: () => {\n inner: (v) => { ^ v }\n inner(7)\n 99\n}\nouter()\n",
+                            module)));
+        });
+        System.out.println("REST_ARRAY_SEMANTICS=PASS");
+        System.out.println("CAPTURE_BY_REFERENCE=PASS");
+        System.out.println("ERROR_HANDLER_SELECTION=PASS");
+        System.out.println("NON_LOCAL_RETURN=PASS");
+    }
+
+    @Test
+    void lateObservationsShareOneMaterializedActivation() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue identity = closure("(value) => { value }", module);
+            Object[] arguments =
+                    ProtosFrameArguments.compactImmediateMethodCall(
+                            identity, newObject(), newObject(), module, new Object[] {integer(1)});
+            VirtualFrame frame =
+                    Truffle.getRuntime()
+                            .createVirtualFrame(arguments, FrameDescriptor.newBuilder().build());
+            assertTrue(ProtosBytecodeTagTreeNodeExports.hasScope(null, frame));
+            assertSame(identity, arguments[0], "hasScope does not materialize");
+
+            ProtosBytecodeTagTreeNodeExports.getScope(null, frame, true);
+            ProtosActivation observed = assertInstanceOf(ProtosActivation.class, arguments[0]);
+            ProtosBytecodeTagTreeNodeExports.getScope(null, frame, true);
+            assertSame(observed, arguments[0]);
+            assertSame(observed, ProtosFrameArguments.activation(frame));
+            assertSame(observed.context(), ProtosFrameArguments.activation(frame).context());
+            assertNull(privateField(privateField(observed, "deferredSuppliedArguments"), "guestArray"));
+            assertEquals(
+                    "FrameBackedSuppliedArguments",
+                    privateField(privateField(observed, "deferredSuppliedArguments"), "values")
+                            .getClass()
+                            .getSimpleName(),
+                    "the supplied vector stays backed by the frame arguments, uncopied");
+        });
+        System.out.println("MATERIALIZED_ACTIVATION_IDENTITY_PER_INVOCATION=ONE");
+        System.out.println("SUPPLIED_ARGUMENT_LIST_COPY_ON_ENTRY=NO");
+    }
+
+    @Test
+    void taskOwnedCompactCalleeKeepsItsExactTask() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue identity = closure("(value) => { value }", module);
+            AtomicReference<ProtosBytecodeRootNode.PreparedClosureCall> preparedRef =
+                    new AtomicReference<>();
+            ProtosTask task =
+                    module.executionDomain()
+                            .createTask(
+                                    null,
+                                    current -> {
+                                        ProtosBytecodeRootNode.PreparedClosureCall prepared =
+                                                ProtosBytecodeRootNode
+                                                        .prepareTaskOwnedDirectClosureIfBytecode(
+                                                                identity,
+                                                                List.of(integer(8)),
+                                                                module,
+                                                                current);
+                                        preparedRef.set(prepared);
+                                        ProtosBytecodeTaskExecution.executePreparedClosure(
+                                                current, prepared);
+                                    });
+            assertTrue(module.executionDomain().dispatchOne());
+            assertEquals(ProtosTask.State.COMPLETED, task.state());
+            assertEquals(BigInteger.valueOf(8), integerValue(task.result().orElseThrow()));
+
+            Object[] arguments = preparedRef.get().targetArguments();
+            assertSame(identity, arguments[0], "the Task-owned callee stayed compact");
+            assertSame(task, preparedRef.get().taskForRuntime());
+            assertSame(task, ProtosFrameArguments.activation(arguments).task().orElseThrow());
+            assertSame(task, preparedRef.get().taskForRuntime(), "same Task after materialization");
+            assertTrue(module.task().isEmpty());
+        });
+        System.out.println("TASK_DYNAMIC_CONTROL=PASS");
+    }
+
+    private interface CoreTest {
+        void run(ProtosActivation module) throws Exception;
+    }
+
+    private static void withCore(CoreTest test) throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+                test.run(prelude.newModuleActivation());
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    private static Object evaluate(String characters, ProtosActivation activation) {
+        Source source =
+                Source.newBuilder(ProtosLanguage.ID, characters, "perf025-compact-callee.protos")
+                        .mimeType(ProtosLanguage.MIME_TYPE)
+                        .build();
+        CallTarget target = ProtosLanguageContext.current().parsePublic(source);
+        try {
+            return target.call(activation);
+        } catch (ProtosSignalException signal) {
+            throw new AssertionError(
+                    "guest snippet signaled " + standardErrorName(activation, signal) + ":\n" + characters,
+                    signal);
+        }
+    }
+
+    private static String standardErrorName(ProtosActivation activation, ProtosSignalException signal) {
+        Object parent = signal.error().parent().orElse(null);
+        for (ProtosCoreErrors.StandardError kind : ProtosCoreErrors.StandardError.values()) {
+            try {
+                if (parent == ProtosCoreErrors.prototype(activation, kind)) {
+                    return kind.prototypeName();
+                }
+            } catch (RuntimeException unavailable) {
+                // Not published by this prelude; keep looking.
+            }
+        }
+        return "a non-standard Error";
+    }
+
+    private static ProtosClosureValue closure(String characters, ProtosActivation activation) {
+        return assertInstanceOf(ProtosClosureValue.class, evaluate(characters, activation));
+    }
+
+    private static RootCallTarget target(ProtosClosureValue closure) {
+        return ProtosBytecodeRootNode.PrepareSendArguments.fastOrdinarySendTarget(
+                closure, ProtosLanguageContext.currentIfEnteredForRuntime());
+    }
+
+    private static ProtosBytecodeRootNode.PreparedClosureCall fastDirect(
+            ProtosClosureValue closure, ProtosActivation caller, Object... supplied) {
+        ProtosLanguageContext entered = ProtosLanguageContext.currentIfEnteredForRuntime();
+        ProtosClosureValue selected =
+                ProtosBytecodeRootNode.directClosureCallSelectionOrNull(closure, caller);
+        assertSame(closure, selected, "canonical direct Closure-call selection");
+        return ProtosBytecodeRootNode.PrepareClosureCallArguments.fastDirect(
+                closure,
+                caller,
+                supplied,
+                selected,
+                selected.definition(),
+                entered,
+                selected.definition(),
+                entered,
+                target(closure));
+    }
+
+    private static Object enter(ProtosBytecodeRootNode.PreparedClosureCall prepared) {
+        Object entered =
+                ProtosBytecodeRootNode.EnterClosureCall.indirect(
+                        prepared, IndirectCallNode.create());
+        return ProtosBytecodeRootNode.FinishClosureCall.perform(prepared, entered);
+    }
+
+    private static List<String> instructionNames(ProtosClosureValue closure) {
+        return closure.executionPlan()
+                .orElseThrow()
+                .bytecodeActivationRootForTesting()
+                .getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .map(Instruction::getName)
+                .toList();
+    }
+
+    private static void assertContains(List<String> names, String operation) {
+        assertTrue(
+                names.stream().anyMatch(name -> name.contains(operation)),
+                () -> "expected " + operation + " in: " + names);
+    }
+
+    private static void assertNone(List<String> names, String operation) {
+        assertTrue(
+                names.stream().noneMatch(name -> name.contains(operation)),
+                () -> "unexpected " + operation + " in: " + names);
+    }
+
+    private static ProtosObjectValue newObject() {
+        return new ProtosObjectValue(ProtosObjectValue.rootObject());
+    }
+
+    private static ProtosIntegerValue integer(long value) {
+        return new ProtosIntegerValue(BigInteger.valueOf(value));
+    }
+
+    private static BigInteger integerValue(Object value) {
+        return assertInstanceOf(ProtosIntegerValue.class, value).value();
+    }
+
+    private static Object privateField(Object target, String name)
+            throws ReflectiveOperationException {
+        Field field = target.getClass().getDeclaredField(name);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+}

@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.154-SNAPSHOT
+
+- `PERF025` completes compact callee execution on top of `PERF025-H1`: a
+  compact source root keeps its compact invocation state authoritative through
+  ordinary body-level local creation and assignment, not only through
+  parameter binding and reads. `CreateCurrentFrameLocal` establishes an ABSENT
+  frame-native local directly while the frame is still compact, and new
+  root-level `ResolveRootFrameLocalWriteTarget`/`AssignRootFrameLocal`
+  operations select and write a PRESENT statically `Resolved` current local
+  through its constant `LocalAccessor` without materializing the activation;
+  duplicate creation, ABSENT (D179 C0) targets, FROZEN contexts and every
+  other destination take the unchanged activation path and Errors. When a
+  compact invocation is materialized, the activation adopts a read-only view
+  of the frame-argument supplied range instead of copying it with
+  `List.copyOf`, and `ProtosFrameArguments.compactTask` reports the published
+  activation's exact Task after materialization. BUG013 (no retained
+  `VirtualFrame`), D179 presence, parameter/default/rest order, Context
+  identity, Error-handler selection, ReturnHome and Task/control provenance
+  are preserved. New `ProtosPerf025CompactCalleeExecutionTest`;
+  `ProtosPerf025FrameMaterializationSliceTest` and
+  `ProtosPerf028AResolvedCurrentLexicalWriteTest` accept the root-level write
+  operations. No observable Protos semantics change; the specification is
+  unchanged.
+
 ## 0.3.153-SNAPSHOT
 
 - `PERF025-H1` (#758) removes the unconditional `ProtosActivation`

@@ -441,8 +441,8 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                             memberNames.stream()
                                     .noneMatch(
                                             name ->
-                                                    name.contains(RESOLVE_CURRENT)
-                                                            || name.contains(ASSIGN_CURRENT)),
+                                                    isCurrentResolve(name)
+                                                            || isCurrentAssign(name)),
                             () -> "explicit member assignment used the current-local path: " + memberNames);
                     assertEquals(2L, unwrapNumber(member.getCallTarget().call(fixture.module)));
 
@@ -458,8 +458,8 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                             capturedNames.stream()
                                     .noneMatch(
                                             name ->
-                                                    name.contains(RESOLVE_CURRENT)
-                                                            || name.contains(ASSIGN_CURRENT)),
+                                                    isCurrentResolve(name)
+                                                            || isCurrentAssign(name)),
                             () -> "captured write used the current-local path: " + capturedNames);
                 });
         System.out.println("CANDIDATE_FALLBACK_PRESERVED=YES");
@@ -519,13 +519,28 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
         return roots.getNode(0);
     }
 
+    /*
+     * PERF025 compact callee execution: a write whose current activation is
+     * the root's own emits the root-level form of the same accessor path.
+     */
+    private static final String RESOLVE_ROOT = "ResolveRootFrameLocalWriteTarget";
+    private static final String ASSIGN_ROOT = "AssignRootFrameLocal";
+
+    private static boolean isCurrentResolve(String name) {
+        return name.contains(RESOLVE_CURRENT) || name.contains(RESOLVE_ROOT);
+    }
+
+    private static boolean isCurrentAssign(String name) {
+        return name.contains(ASSIGN_CURRENT) || name.contains(ASSIGN_ROOT);
+    }
+
     private static void assertCurrentFrameLocalWritePath(BytecodeNode node) {
         List<String> names = instructionNames(node);
         assertTrue(
-                names.stream().anyMatch(name -> name.contains(RESOLVE_CURRENT)),
+                names.stream().anyMatch(name -> isCurrentResolve(name)),
                 () -> "Resolved current write did not select the accessor resolve path: " + names);
         assertTrue(
-                names.stream().anyMatch(name -> name.contains(ASSIGN_CURRENT)),
+                names.stream().anyMatch(name -> isCurrentAssign(name)),
                 () -> "Resolved current write did not select the accessor assign path: " + names);
         assertTrue(
                 names.stream()
@@ -543,7 +558,7 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                 () -> "ineligible write lost the generic assign path: " + names);
         assertTrue(
                 names.stream()
-                        .noneMatch(name -> name.contains(RESOLVE_CURRENT) || name.contains(ASSIGN_CURRENT)),
+                        .noneMatch(name -> isCurrentResolve(name) || isCurrentAssign(name)),
                 () -> "ineligible write used the current-local accessor path: " + names);
     }
 

@@ -23,7 +23,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.frame.Frame;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
@@ -151,9 +150,15 @@ final class ProtosFrameArguments {
                 (ProtosActivation) arguments[CALLER_INDEX];
         ProtosReturnHome returnHome =
                 (ProtosReturnHome) arguments[RETURN_HOME_INDEX];
-        List<Object> supplied =
-                Arrays.asList(arguments)
-                        .subList(USER_ARGUMENT_OFFSET, arguments.length);
+        /*
+         * The supplied values stay backed by this frame-argument array: the
+         * user-argument range is written once by compactCall and never
+         * mutated, so the activation adopts it as a read-only view rather
+         * than copying it.
+         */
+        List<?> supplied =
+                ProtosActivation.frameBackedSuppliedArgumentsForRuntime(
+                        arguments, USER_ARGUMENT_OFFSET);
 
         ProtosActivation materialized;
         ProtosTask explicitTask = null;
@@ -249,6 +254,10 @@ final class ProtosFrameArguments {
      * {@code null}), without materializing that activation.
      */
     static ProtosTask compactTask(Object[] arguments) {
+        if (arguments.length > 0
+                && arguments[CLOSURE_INDEX] instanceof ProtosActivation materialized) {
+            return materialized.task().orElse(null);
+        }
         if (isDirectClosureCall(arguments)
                 && arguments[TASK_INDEX] instanceof ProtosTask task) {
             return task;
