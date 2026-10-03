@@ -109,7 +109,7 @@ public final class ProtosActorValueTransfer {
                 return remember(value, new ProtosFloatValue(floating.value()));
             }
             if (value instanceof ProtosStringValue string) {
-                return remember(value, new ProtosStringValue(string.value()));
+                return remember(value, string.copyForRuntime());
             }
             if (value instanceof ProtosPathValue path) {
                 return remember(

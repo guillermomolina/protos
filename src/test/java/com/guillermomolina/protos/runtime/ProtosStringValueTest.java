@@ -18,16 +18,31 @@
 package com.guillermomolina.protos.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class ProtosStringValueTest {
     @Test
+    void validatesAndCachesExactUnicodeScalarCountInOneSemanticValue() {
+        assertScalarCount("", 0);
+        assertScalarCount("abc", 3);
+        assertScalarCount("e\u0301", 2);
+        assertScalarCount("😀", 1);
+        assertScalarCount("👨‍👩‍👧‍👦", 7);
+    }
+
+    @Test
     void acceptsExactUnicodeScalarSequencesIncludingSupplementaryScalars() {
         String value = "e\u0301😀";
 
-        assertEquals(value, new ProtosStringValue(value).value());
+        ProtosStringValue string = new ProtosStringValue(value);
+
+        assertEquals(value, string.value());
+        assertEquals(3, string.scalarCountForRuntime());
     }
 
     @Test
@@ -42,5 +57,49 @@ final class ProtosStringValueTest {
         String value = Character.toString((char) 0xDC00);
 
         assertThrows(IllegalArgumentException.class, () -> new ProtosStringValue(value));
+    }
+
+    @Test
+    void derivedConcatenationComposesUnicodeProofAndScalarCountWithoutNormalization() {
+        ProtosStringValue left = new ProtosStringValue("é😀");
+        ProtosStringValue right = new ProtosStringValue("e\u0301");
+
+        ProtosStringValue pair =
+                ProtosStringValue.concatenateForRuntime(left, right);
+        ProtosStringValue aggregate =
+                ProtosStringValue.concatenateAllForRuntime(
+                        left,
+                        List.of(
+                                new ProtosStringValue(""),
+                                new ProtosStringValue("😀"),
+                                right));
+
+        assertEquals("é😀e\u0301", pair.value());
+        assertEquals(4, pair.scalarCountForRuntime());
+
+        assertEquals("é😀😀e\u0301", aggregate.value());
+        assertEquals(5, aggregate.scalarCountForRuntime());
+    }
+
+    @Test
+    void scalarExtractionAndRuntimeCopyPreserveEstablishedUnicodeProof() {
+        ProtosStringValue source = new ProtosStringValue("Ae\u0301😀");
+        ProtosStringValue combiningMark = source.scalarAtForRuntime(2);
+        ProtosStringValue supplementary = source.scalarAtForRuntime(3);
+        ProtosStringValue copied = source.copyForRuntime();
+
+        assertEquals("\u0301", combiningMark.value());
+        assertEquals(1, combiningMark.scalarCountForRuntime());
+        assertEquals("😀", supplementary.value());
+        assertEquals(1, supplementary.scalarCountForRuntime());
+        assertNull(source.scalarAtForRuntime(4));
+
+        assertNotSame(source, copied);
+        assertEquals(source.value(), copied.value());
+        assertEquals(source.scalarCountForRuntime(), copied.scalarCountForRuntime());
+    }
+
+    private static void assertScalarCount(String value, int expected) {
+        assertEquals(expected, new ProtosStringValue(value).scalarCountForRuntime());
     }
 }

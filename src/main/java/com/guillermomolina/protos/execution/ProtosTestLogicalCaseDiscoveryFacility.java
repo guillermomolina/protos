@@ -192,8 +192,8 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
                             .instance();
 
             ArrayList<Object> discoverySourceAssociation = new ArrayList<>();
-            discoverySourceAssociation.add(new ProtosStringValue(corpusId.value()));
-            discoverySourceAssociation.add(new ProtosStringValue(sourcePath.value()));
+            discoverySourceAssociation.add(corpusId.copyForRuntime());
+            discoverySourceAssociation.add(sourcePath.copyForRuntime());
 
             if (projectTreeDescriptor != null) {
                 discoverySourceAssociation.add(
@@ -266,7 +266,7 @@ public final class ProtosTestLogicalCaseDiscoveryFacility {
                 throw ProtosExactExecutionFacility.ordinaryError(caller);
             }
 
-            copy.add(new ProtosStringValue(value.value()));
+            copy.add(value.copyForRuntime());
         }
 
         ProtosArrayValue rematerialized = discoveryPrelude.newFrozenArray(copy);

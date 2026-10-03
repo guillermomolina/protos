@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.163-SNAPSHOT
+
+- `PERF025` preserves already-established Unicode-scalar-sequence proof and
+  derived scalar cardinality across Core String operations instead of
+  repeatedly forgetting and reconstructing that information. Arbitrary host
+  `String` ingress still validates the complete UTF-16 representation and
+  rejects unpaired surrogates, but now derives the exact semantic scalar count
+  in that same traversal and stores it immutably in `ProtosStringValue`.
+  Standard `String.size` reads the cached count directly; standard `String.at`
+  creates its already-proven one-scalar result without revalidation; standard
+  `String +` and variadic `String.concat` compose validity and scalar counts
+  from already-valid semantic String operands without rescanning the complete
+  derived text. Actor transfer, isolated-P transfer, detached execution and
+  Test Tool discovery rematerialization likewise preserve the proof metadata
+  while retaining fresh wrappers where their existing isolation/copy policy
+  requires one. String identity/equality/hash, interop, strict String domains,
+  exact scalar-sequence semantics and the prohibition on implicit Unicode
+  normalization remain unchanged. New PERF025 focal regressions freeze the
+  cached-count and proof-preserving productive paths. This is an internal
+  representation/runtime-cost optimization only: no Protos specification or
+  platform decision changes, and no performance magnitude is claimed.
+
 ## 0.3.162-SNAPSHOT
 
 - `PERF025` makes `Bytes` and recursive `ByteRegion` reservation coordination

@@ -59,9 +59,7 @@ public final class ProtosStandardStringProtocol {
                         (activation, supplied) -> {
                             ProtosStringValue receiver = requireStringReceiver(activation);
                             requireArity(activation, supplied.size(), 0);
-                            return new ProtosIntegerValue(
-                                    receiver.value().codePointCount(
-                                            0, receiver.value().length()));
+                            return new ProtosIntegerValue(receiver.scalarCountForRuntime());
                         }));
 
         stringPrototype.createLocalSlot(
@@ -74,11 +72,11 @@ public final class ProtosStandardStringProtocol {
                             if (index < 0) {
                                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                             }
-                            String scalar = scalarAt(receiver.value(), index);
+                            ProtosStringValue scalar = receiver.scalarAtForRuntime(index);
                             if (scalar == null) {
                                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                             }
-                            return new ProtosStringValue(scalar);
+                            return scalar;
                         }));
 
         stringPrototype.createLocalSlot(
@@ -90,7 +88,7 @@ public final class ProtosStandardStringProtocol {
                             if (!(supplied.get(0) instanceof ProtosStringValue right)) {
                                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                             }
-                            return new ProtosStringValue(receiver.value() + right.value());
+                            return ProtosStringValue.concatenateForRuntime(receiver, right);
                         }));
 
         stringPrototype.createLocalSlot(
@@ -106,11 +104,8 @@ public final class ProtosStandardStringProtocol {
                                 }
                             }
 
-                            StringBuilder result = new StringBuilder(receiver.value());
-                            for (Object value : supplied) {
-                                result.append(((ProtosStringValue) value).value());
-                            }
-                            return new ProtosStringValue(result.toString());
+                            return ProtosStringValue.concatenateAllForRuntime(
+                                    receiver, supplied);
                         }));
     }
 
@@ -141,18 +136,5 @@ public final class ProtosStandardStringProtocol {
         throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
     }
 
-    private static String scalarAt(String text, int wanted) {
-        int index = 0;
-        for (int start = 0; start < text.length(); ) {
-            int codePoint = text.codePointAt(start);
-            int end = start + Character.charCount(codePoint);
-            if (index == wanted) {
-                return text.substring(start, end);
-            }
-            index++;
-            start = end;
-        }
-        return null;
-    }
 
 }

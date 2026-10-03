@@ -118,7 +118,7 @@ public final class ProtosDetachedExecutionValue {
                 return remember(value, new ProtosFloatValue(floating.value()));
             }
             if (value instanceof ProtosStringValue string) {
-                return remember(value, new ProtosStringValue(string.value()));
+                return remember(value, string.copyForRuntime());
             }
 
             if (nonTransferableRuntimeValue(value)) {
