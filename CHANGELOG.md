@@ -7,6 +7,13 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.174-SNAPSHOT
+
+- `I063` follow-up: removes stale append wording from the
+  `ProtosStandardFilesystemProtocol` Javadoc (File capability descriptors match
+  the captured read/write authority; captured-tree backends reject
+  write/create/truncate opens). No behavior change.
+
 ## 0.3.173-SNAPSHOT
 
 - `I063` implements D170 by removing the standard File append institution.

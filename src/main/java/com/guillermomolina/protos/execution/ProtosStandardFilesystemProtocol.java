@@ -56,7 +56,7 @@ import java.util.Objects;
  * transition from its Future outcome. I024-B reuses the host-neutral tree-observation flow for
  * {@code entries} and {@code captureTree}; captured-tree backends are structurally adapted as
  * read-only Filesystem authorities and never acquire a public Filesystem {@code close} surface.
- * File capability descriptors must exactly match the captured read/write/append authority; optional
+ * File capability descriptors must exactly match the captured read/write authority; optional
  * seek/size/truncate/sync surfaces may be advertised only when the selected backend resource
  * implements their complete standard contracts.
  */
@@ -79,7 +79,7 @@ public final class ProtosStandardFilesystemProtocol {
      *
      * <p>This is implementation machinery, not a Protos-visible Directory or resource-lifetime
      * family. Materialization wraps it as a structurally read-only standard Filesystem: mutation
-     * never delegates and write/create/truncate/append opens fail before this backend is exercised.
+     * never delegates and write/create/truncate opens fail before this backend is exercised.
      */
     public interface CapturedBackend
             extends Backend, ProtosFilesystemTreeObservationFlow.CapturedTree {}
