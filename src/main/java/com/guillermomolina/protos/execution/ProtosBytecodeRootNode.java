@@ -4213,7 +4213,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosStandardIdentityMapProtocol.requireInvokableForStructured(
                     block,
                     activation);
-            this.snapshot = List.copyOf(value.associationSnapshot());
+            this.snapshot = value.associationSnapshot();
         }
 
         @Override

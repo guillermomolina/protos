@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.167-SNAPSHOT
+
+- `PERF025` replaces eager O(n) `IdentityMap` snapshot copying with a
+  generation-backed copy-on-write representation while preserving the existing
+  shallow logical snapshot contract and exact semantic-identity lookup.
+  `keyedSnapshot()` now publishes and reuses a read-only insertion-order view
+  of the current generation, while `associationSnapshot()` projects the same
+  generation without allocating one host `Map.Entry` pair per association.
+  Once either snapshot is published, the first later append, replacement or
+  removal detaches the live map to a fresh generation with fresh entry objects
+  and rebuilt recorded-identity-hash buckets; previously published generations
+  therefore retain their exact representative key references, mapped value
+  references, membership and order. Mutations before publication and subsequent
+  mutations before another publication remain in-place, so never-snapshotted
+  maps pay no copy-on-write cost. Standard `IdentityMap.each` retains the stable
+  generation view directly instead of immediately copying it again. Existing
+  exact recorded-hash bucket lookup, semantic `===` collision resolution,
+  remove/reinsert ordering, open/closed/frozen behavior, Actor transfer and
+  isolated-P transfer remain unchanged. New PERF025 focal coverage freezes
+  generation reuse, detach-on-first-mutation, historical snapshot stability,
+  collision-bucket preservation, read-only exposure and P-isolation after
+  capture. Existing affected `each`, physical-index, Actor-transfer and
+  collection-state regressions plus the full test suite remain green. This is
+  an internal physical-representation optimization only: no observable Protos
+  semantic, specification or platform decision changes, and no performance
+  magnitude is claimed.
+
 ## 0.3.166-SNAPSHOT
 
 - `PERF025` replaces eager O(n) Array snapshot reference copying with a

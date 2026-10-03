@@ -29,6 +29,40 @@ class ProtosParallelExecutionTest{
  @Test void parallelReturnsCallerDomainFuture()throws Exception{var p=core();try(var h=ProtosHostedExecutionTestFixture.open(p)){var a=h.activation();var d=a.executionDomain();var f=(ProtosFutureValue)evalHosted(h,"((x) => x).parallel(42)");assertSame(d,f.domain());while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}assertEquals(BigInteger.valueOf(42),((ProtosIntegerValue)f.resolvedValue().orElseThrow()).value());}}
  @Test void highIndexCompletionCannotSelectFailure()throws Exception{var p=core();try(var h=ProtosHostedExecutionTestFixture.open(p)){var a=h.activation();var d=a.executionDomain();CountDownLatch high=new CountDownLatch(1),lowRelease=new CountDownLatch(1);a.context().createLocalSlot("worker",ProtosClosureValue.nativeClosure((x,args)->{int n=((ProtosIntegerValue)args.get(0)).value().intValueExact();try{if(n==1){high.await();lowRelease.await();}else high.countDown();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new AssertionError(e);}throw new ProtosSignalException(ProtosCoreErrors.newError(x));}));a.context().createLocalSlot("xs",p.newArray(List.of(new ProtosIntegerValue(BigInteger.ONE),new ProtosIntegerValue(BigInteger.TWO))));var f=(ProtosFutureValue)evalHosted(h,"xs.parallelMap(worker)");assertTrue(high.await(5,TimeUnit.SECONDS));lowRelease.countDown();while(f.isPending()){dispatchHosted(h,d);Thread.onSpinWait();}assertEquals(ProtosFutureValue.State.FAILED,f.state());}}
 
+ @Test void identityMapSnapshotCaptureIsIsolatedFromLaterSourceMutation()throws Exception{
+  var p=core();
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   var d=h.activation().executionDomain();
+   var f=assertInstanceOf(
+       ProtosFutureValue.class,
+       evalHosted(
+           h,
+           "m: IdentityMap()\n"
+               + "m[1] = 10\n"
+               + "((copy) => copy[1]).parallel(m)"));
+   assertEquals(
+       BigInteger.valueOf(20),
+       assertInstanceOf(
+           ProtosIntegerValue.class,
+           evalHosted(h,"m[1] = 20"))
+           .value());
+   while(f.isPending()){
+    dispatchHosted(h,d);
+    Thread.onSpinWait();
+   }
+   assertEquals(ProtosFutureValue.State.RESOLVED,f.state());
+   assertEquals(
+       BigInteger.TEN,
+       assertInstanceOf(
+           ProtosIntegerValue.class,
+           f.resolvedValue().orElseThrow())
+           .value());
+   dispatchHosted(h,d);
+   assertEquals(0,d.liveTaskCount());
+  }
+ }
+
+
  @Test void ipDataTransferConformanceSourceRoundTripsThroughP()throws Exception{
   var p=core();
   try(var h=ProtosHostedExecutionTestFixture.open(p)){
