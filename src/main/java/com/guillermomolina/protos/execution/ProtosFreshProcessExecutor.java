@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
@@ -40,6 +41,12 @@ import java.util.Objects;
  * supply an explicit {@link ProtosPolyglotRuntimeHost} so many fresh Processes reuse one Engine
  * while retaining one distinct Context per Process. The no-host overload owns one temporary host.
  * The returned outcome intentionally contains no Process/Actor/task handle.
+ *
+ * <p>A request may carry an already-selected optional default Network grant (D047/D173). It is
+ * forwarded unchanged to the bootstrap, which binds the initial {@code moduleContext} local slot
+ * {@code network} only when the grant is present. The executor never provisions Network itself; a
+ * grant must come from {@link ProtosPolyglotRuntimeHost#provisionHostNetwork} on the same live host
+ * that executes the Process, so the no-host overload rejects requests that carry one.
  */
 public final class ProtosFreshProcessExecutor {
     private ProtosFreshProcessExecutor() {}
@@ -56,7 +63,8 @@ public final class ProtosFreshProcessExecutor {
             ProtosEncodingValue stdinEncoding,
             ProtosEncodingValue stdoutEncoding,
             ProtosEncodingValue stderrEncoding,
-            ProtosFilesystemValue defaultFilesystem) {
+            ProtosFilesystemValue defaultFilesystem,
+            ProtosNetworkCapabilityValue defaultNetwork) {
 
         public Request {
             Objects.requireNonNull(prelude, "prelude");
@@ -71,6 +79,10 @@ public final class ProtosFreshProcessExecutor {
 
     public static ProtosExecutionOutcome execute(Request request) {
         Objects.requireNonNull(request, "request");
+        if (request.defaultNetwork() != null) {
+            throw new IllegalArgumentException(
+                    "a Network grant requires execution on the RuntimeHost that provisioned it");
+        }
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
             return execute(request, runtimeHost);
         }
@@ -93,7 +105,8 @@ public final class ProtosFreshProcessExecutor {
                         request.stdinEncoding(),
                         request.stdoutEncoding(),
                         request.stderrEncoding(),
-                        request.defaultFilesystem());
+                        request.defaultFilesystem(),
+                        request.defaultNetwork());
         ProtosProcessRuntime process = bootstrap.process();
 
         try {

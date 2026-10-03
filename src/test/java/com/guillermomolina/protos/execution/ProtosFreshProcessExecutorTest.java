@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -275,6 +276,56 @@ final class ProtosFreshProcessExecutorTest {
         }
     }
 
+    @Test
+    void requestWithoutNetworkGrantLeavesInitialNetworkSlotAbsent() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            ProtosExecutionOutcome outcome =
+                    ProtosFreshProcessExecutor.execute(
+                            request(prelude, source("network")), runtimeHost);
+
+            assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+            assertNull(outcome.value());
+            assertNotNull(outcome.error());
+            assertFalse(runtimeHost.networkHostInitializedForTesting());
+        }
+    }
+
+    @Test
+    void explicitNetworkGrantReachesInitialModuleContextUnchanged() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            ProtosNetworkCapabilityValue network = runtimeHost.provisionHostNetwork(prelude);
+
+            ProtosExecutionOutcome outcome =
+                    ProtosFreshProcessExecutor.execute(
+                            request(prelude, source("network"), null, network), runtimeHost);
+
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+            assertSame(network, outcome.value());
+        }
+    }
+
+    @Test
+    void temporaryHostOverloadRejectsNetworkGrantBeforeGuestExecution() throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        try (ProtosPolyglotRuntimeHost owningHost = ProtosPolyglotRuntimeHost.open()) {
+            ProtosNetworkCapabilityValue network = owningHost.provisionHostNetwork(prelude);
+            ProtosFreshProcessExecutor.Request request =
+                    request(
+                            prelude,
+                            source("process.stdout().write(Encoding.UTF8.encode(\"ran\")).value()"),
+                            capturingBackend(stdout),
+                            network);
+
+            assertThrows(
+                    IllegalArgumentException.class,
+                    () -> ProtosFreshProcessExecutor.execute(request));
+            assertEquals(0, stdout.size(), "guest Process must not have executed");
+        }
+    }
+
     private static ProtosFreshProcessExecutor.Request concurrentRequest(
             ProtosPrelude prelude,
             Source entry,
@@ -293,6 +344,7 @@ final class ProtosFreshProcessExecutorTest {
                 null,
                 utf8,
                 utf8,
+                null,
                 null,
                 null);
     }
@@ -321,6 +373,14 @@ final class ProtosFreshProcessExecutorTest {
     private static ProtosFreshProcessExecutor.Request request(
             ProtosPrelude prelude,
             Source entry) {
+        return request(prelude, entry, null, null);
+    }
+
+    private static ProtosFreshProcessExecutor.Request request(
+            ProtosPrelude prelude,
+            Source entry,
+            ProtosProcessStandardStreamBinding.WritableBackend stdout,
+            ProtosNetworkCapabilityValue network) {
         return new ProtosFreshProcessExecutor.Request(
                 prelude,
                 entry,
@@ -330,12 +390,13 @@ final class ProtosFreshProcessExecutorTest {
                         new ProtosEnvironmentValue.NativeEntry("A", "one"),
                         new ProtosEnvironmentValue.NativeEntry("B", "two")),
                 null,
+                stdout,
                 null,
                 null,
                 null,
                 null,
                 null,
-                null);
+                network);
     }
 
     private static Source source(String characters) {

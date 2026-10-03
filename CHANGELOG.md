@@ -7,6 +7,17 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.171-SNAPSHOT
+
+- `I065` lets a fresh application Process executed on a caller-supplied
+  `ProtosPolyglotRuntimeHost` carry an explicit, already-selected Network grant
+  into the existing D047 bootstrap authority model: the grant binds the initial
+  `moduleContext` local `network` slot, and without a grant the slot remains
+  absent. The temporary-host convenience overload rejects a request carrying a
+  grant before any guest execution, so a Network is never used by a Process
+  hosted outside the RuntimeHost that provisioned it. Captured tool Processes
+  remain Network-less. No CLI, workspace or session selection syntax is added.
+
 ## 0.3.170-SNAPSHOT
 
 - `I078` records the D180 Candidate B rename of the standard Closure pre-test

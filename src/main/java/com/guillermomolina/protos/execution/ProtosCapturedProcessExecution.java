@@ -137,7 +137,8 @@ public final class ProtosCapturedProcessExecution {
                                 request.stdinEncoding(),
                                 request.stdoutEncoding(),
                                 request.stderrEncoding(),
-                                request.defaultFilesystem()),
+                                request.defaultFilesystem(),
+                                null),
                         runtimeHost);
 
         return new Result(outcome, stdout.snapshot(), stderr.snapshot());
