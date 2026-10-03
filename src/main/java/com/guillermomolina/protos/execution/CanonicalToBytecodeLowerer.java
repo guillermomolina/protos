@@ -1671,8 +1671,8 @@ final class CanonicalToBytecodeLowerer {
             }
             builder.beginCreateCurrentFrameLocal(
                     currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
-            builder.emitLoadConstant(ordinal);
+                    currentRootFrameNativeLayout,
+                    ordinal);
             builder.emitLoadConstant(name);
             builder.emitLoadLocal(value);
             builder.endCreateCurrentFrameLocal();

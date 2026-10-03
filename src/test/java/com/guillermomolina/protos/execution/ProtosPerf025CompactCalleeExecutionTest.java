@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -147,6 +148,13 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             ProtosBytecodeRootNode.PreparedClosureCall prepared = fastDirect(locals, module, a);
             assertSame(a, enter(prepared));
             assertSame(locals, prepared.targetArguments()[0], "no activation was materialized");
+
+            ProtosClosureValue single = closure("(a) => { b: a\nb }", module);
+            assertNotEquals(
+                    constantOrdinalOf(single, "BindClosureFrameParameter"),
+                    constantOrdinalOf(single, "CreateCurrentFrameLocal"),
+                    "PERF030: the creation index is its own instruction constant");
+            assertSame(a, enter(fastDirect(single, module, a)));
 
             ProtosBytecodeRootNode.PreparedClosureCall duplicate =
                     fastDirect(closure("(a) => { b: a\nb: a }", module), module, a);

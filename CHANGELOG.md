@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.177-SNAPSHOT
+
+- `PERF030` makes the statically known `CreateCurrentFrameLocal` frame-local
+  ordinal a Bytecode DSL constant operand, as PERF029 did for
+  `BindClosureFrameParameter`. Lowering no longer emits that ordinal as a
+  runtime stack operand, so every `LocalRangeAccessor` access it drives sees a
+  partial-evaluation constant index. This addresses the permanent
+  partial-evaluation constant-index bailout identified as `8231|Pi`. The
+  compact-call direct creation path and the activation fallback (including
+  duplicate creation Errors, OPEN/frozen/conflict rules, and the returned
+  value) are unchanged. No semantic change.
+
 ## 0.3.176-SNAPSHOT
 
 - `I057` implements D161: removes `ByteRegion` and writable parallel-range

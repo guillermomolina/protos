@@ -534,6 +534,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
     public static final class CreateCurrentFrameLocal {
         /**
          * PERF025 compact callee execution: the body-level counterpart of
@@ -542,6 +543,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          * authority, so an ABSENT local is established directly in the frame;
          * a PRESENT one (duplicate creation) or any other state takes the
          * unchanged activation path, including its exact creation Error.
+         *
+         * <p>PERF030: {@code ordinal} is a constant operand for the same
+         * reason as in {@link BindClosureFrameParameter}.
          */
         @Specialization
         public static Object perform(
