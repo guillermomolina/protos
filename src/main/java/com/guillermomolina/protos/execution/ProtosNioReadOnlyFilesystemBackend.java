@@ -111,7 +111,7 @@ public final class ProtosNioReadOnlyFilesystemBackend
             completion.succeeded(
                     resource,
                     new ProtosFileFlow.Capabilities(
-                            true, false, false, false, false, false, false),
+                            true, false, false, false, false, false),
                     resource::closeSilently);
         } catch (IOException | RuntimeException failure) {
             closeSilently(channel);
@@ -143,8 +143,7 @@ public final class ProtosNioReadOnlyFilesystemBackend
         return options.readAccess()
                 && !options.writeAccess()
                 && options.creation() == ProtosFilesystemOpenOptions.Creation.EXISTING
-                && !options.truncateInitialContent()
-                && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
+                && !options.truncateInitialContent();
     }
 
     private void requireDirectChildName(String name) {

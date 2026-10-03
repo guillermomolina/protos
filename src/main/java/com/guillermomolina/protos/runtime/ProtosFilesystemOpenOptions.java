@@ -34,37 +34,28 @@ public final class ProtosFilesystemOpenOptions {
         CREATE_NEW
     }
 
-    public enum Placement {
-        POSITIONED,
-        APPEND
-    }
-
     private static final Set<String> STANDARD_OPTION_NAMES =
-            Set.of("read", "write", "create", "createNew", "truncate", "append");
+            Set.of("read", "write", "create", "createNew", "truncate");
 
     private final boolean read;
     private final boolean write;
     private final Creation creation;
     private final boolean truncate;
-    private final Placement placement;
 
     private ProtosFilesystemOpenOptions(
             boolean read,
             boolean write,
             Creation creation,
-            boolean truncate,
-            Placement placement) {
+            boolean truncate) {
         this.read = read;
         this.write = write;
         this.creation = Objects.requireNonNull(creation, "creation");
         this.truncate = truncate;
-        this.placement = Objects.requireNonNull(placement, "placement");
     }
 
-    /** Standard one-argument open defaults: read existing content, preserve, positioned. */
+    /** Standard one-argument open defaults: read existing content, preserve. */
     public static ProtosFilesystemOpenOptions defaults() {
-        return new ProtosFilesystemOpenOptions(
-                true, false, Creation.EXISTING, false, Placement.POSITIONED);
+        return new ProtosFilesystemOpenOptions(true, false, Creation.EXISTING, false);
     }
 
     /**
@@ -99,7 +90,6 @@ public final class ProtosFilesystemOpenOptions {
         boolean create = booleanOption(slots, "create", false);
         boolean createNew = booleanOption(slots, "createNew", false);
         boolean truncate = booleanOption(slots, "truncate", false);
-        boolean append = booleanOption(slots, "append", false);
 
         if (!read && !write) {
             throw new IllegalArgumentException("filesystem open requires read or write access");
@@ -107,20 +97,13 @@ public final class ProtosFilesystemOpenOptions {
         if (create && createNew) {
             throw new IllegalArgumentException("create and createNew are mutually exclusive");
         }
-        if (append && !write) {
-            throw new IllegalArgumentException("append requires write access");
-        }
         if (truncate && !write) {
             throw new IllegalArgumentException("truncate requires write access");
-        }
-        if (append && truncate) {
-            throw new IllegalArgumentException("append and truncate are mutually exclusive");
         }
 
         Creation creation =
                 createNew ? Creation.CREATE_NEW : create ? Creation.CREATE : Creation.EXISTING;
-        Placement placement = append ? Placement.APPEND : Placement.POSITIONED;
-        return new ProtosFilesystemOpenOptions(read, write, creation, truncate, placement);
+        return new ProtosFilesystemOpenOptions(read, write, creation, truncate);
     }
 
     public boolean readAccess() {
@@ -137,10 +120,6 @@ public final class ProtosFilesystemOpenOptions {
 
     public boolean truncateInitialContent() {
         return truncate;
-    }
-
-    public Placement placement() {
-        return placement;
     }
 
     private static boolean booleanOption(

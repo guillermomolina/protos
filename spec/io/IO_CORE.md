@@ -580,7 +580,6 @@ I/O Error category never implies retry safety; commitment/effect semantics remai
 ByteWritable.write captures its Bytes value snapshot at invocation.
 Later mutation of the caller's Bytes cannot change that write.
 A failed ByteWritable write contributes one contiguous prefix of its captured sequence; failure does not reveal that prefix length or make whole-write retry safe.
-Append writes update logical position only through actual byte contribution: zero contribution leaves it unchanged; otherwise it becomes the position immediately after that append operation's last contributed byte.
 Truncatable.truncate is failure-atomic: a failed truncate contributes no size/content change, and a backend unable to provide that contract does not expose standard Truncatable.
 Pending writes remain subject to finite end-to-end admission; write snapshots do not authorize unbounded retained output.
 Distinct proxies for one logical output flow share its ordering domain; concurrent successful writes are ordered as whole logical byte sequences, not byte-interleaved.
@@ -620,7 +619,7 @@ Filesystem carries filesystem authority.
 File access mode guarantees ByteReadable/ByteWritable as requested, while ByteSeekable, ByteSized, Truncatable, and Syncable are exposed only when that backend can meet each protocol's normative contract.
 Path resolution through a Filesystem is confined to that capability's authorized namespace; path syntax or backend indirection cannot escape into ambient authority.
 filesystem.open may report cancelled only before any portable create/truncate effect and before File-result commitment.
-filesystem.open captures its complete semantic option configuration at invocation; later mutation of an options builder/value cannot change access, creation, truncation, append, or capability outcome.
+filesystem.open captures its complete semantic option configuration at invocation; later mutation of an options builder/value cannot change access, creation, truncation, or capability outcome.
 A failed committed open does not compensate by deleting an already-created target or restoring already-truncated content.
 
 A Protos Process is an execution domain, not an OS process.

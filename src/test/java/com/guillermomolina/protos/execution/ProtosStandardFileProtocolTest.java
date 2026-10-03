@@ -38,7 +38,7 @@ class ProtosStandardFileProtocolTest {
         ProtosFileFlow.Capabilities capabilities =
                 new ProtosFileFlow.Capabilities(true, true, true, true, true, true);
         ProtosObjectValue file =
-                ProtosStandardFileProtocol.createPositioned(
+                ProtosStandardFileProtocol.create(
                         bytesPrototype, activation, resource, capabilities);
         return new Fixture(prelude, activation, bytesPrototype, resource, file);
     }
@@ -52,7 +52,7 @@ class ProtosStandardFileProtocolTest {
         ProtosStandardBytesProtocol.install(bytesPrototype);
         TestResource resource = new TestResource();
         ProtosObjectValue file =
-                ProtosStandardFileProtocol.createPositioned(
+                ProtosStandardFileProtocol.create(
                         bytesPrototype,
                         activation,
                         resource,
@@ -225,6 +225,45 @@ class ProtosStandardFileProtocolTest {
         assertEquals(ProtosFutureValue.State.PENDING, sync.state());
         durability.succeeded();
         assertSame(fixture.file, sync.resolvedValue().orElseThrow());
+    }
+
+    @Test
+    void seekToEndThenWriteIsAnOrdinaryPositionedWriteAtTheObservedEnd() throws Exception {
+        Fixture fixture = fixture();
+
+        ProtosFutureValue end =
+                (ProtosFutureValue)
+                        ProtosInvocation.invokeMessage(
+                                fixture.file, "seekToEnd", List.of(), fixture.activation);
+        ProtosFutureValue write =
+                (ProtosFutureValue)
+                        ProtosInvocation.invokeMessage(
+                                fixture.file,
+                                "write",
+                                List.of(bytes(fixture.bytesPrototype, 1, 2)),
+                                fixture.activation);
+        assertTrue(fixture.resource.writePositions.isEmpty());
+
+        fixture.resource.endCompletions.remove().succeeded(BigInteger.valueOf(6));
+        assertEquals(
+                BigInteger.valueOf(6),
+                ((ProtosIntegerValue) end.resolvedValue().orElseThrow()).value());
+
+        // The write uses the File's own logical position; it does not re-select the end.
+        assertEquals(BigInteger.valueOf(6), fixture.resource.writePositions.remove());
+        ProtosFileFlow.WriteCompletion completion = fixture.resource.writeCompletions.remove();
+        assertTrue(completion.commitFirstContribution());
+        completion.succeeded();
+        assertSame(fixture.file, write.resolvedValue().orElseThrow());
+        assertTrue(fixture.resource.endCompletions.isEmpty());
+
+        ProtosFutureValue position =
+                (ProtosFutureValue)
+                        ProtosInvocation.invokeMessage(
+                                fixture.file, "position", List.of(), fixture.activation);
+        assertEquals(
+                BigInteger.valueOf(8),
+                ((ProtosIntegerValue) position.resolvedValue().orElseThrow()).value());
     }
 
     @Test

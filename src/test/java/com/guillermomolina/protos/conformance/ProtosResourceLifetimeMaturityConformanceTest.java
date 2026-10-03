@@ -136,14 +136,13 @@ activation);
                     || !options.readAccess()
                     || options.writeAccess()
                     || options.creation() != ProtosFilesystemOpenOptions.Creation.EXISTING
-                    || options.truncateInitialContent()
-                    || options.placement() != ProtosFilesystemOpenOptions.Placement.POSITIONED) {
+                    || options.truncateInitialContent()) {
                 completion.failed();
                 return () -> {};
             }
             completion.succeeded(
                     resource,
-                    new ProtosFileFlow.Capabilities(true, false, false, false, false, false, false),
+                    new ProtosFileFlow.Capabilities(true, false, false, false, false, false),
                     resource::releaseSilently);
             return () -> {};
         }

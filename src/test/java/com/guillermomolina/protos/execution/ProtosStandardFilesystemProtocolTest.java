@@ -76,9 +76,7 @@ class ProtosStandardFilesystemProtocolTest {
         assertEquals(
                 ProtosFilesystemOpenOptions.Creation.EXISTING,
                 invocation.options.creation());
-        assertEquals(
-                ProtosFilesystemOpenOptions.Placement.POSITIONED,
-                invocation.options.placement());
+        assertFalse(invocation.options.truncateInitialContent());
 
         AtomicInteger releases = new AtomicInteger();
         invocation.completion.succeeded(
@@ -99,12 +97,11 @@ class ProtosStandardFilesystemProtocolTest {
     }
 
     @Test
-    void appendOpenMaterializesAppendFileWithZeroInitialLogicalPosition() throws Exception {
+    void writableOpenMaterializesPositionedFileWithZeroInitialLogicalPosition() throws Exception {
         Fixture x = fixture();
         ProtosObjectValue options = ordinaryOptions();
         options.createLocalSlot("read", ProtosBooleanValue.FALSE);
         options.createLocalSlot("write", ProtosBooleanValue.TRUE);
-        options.createLocalSlot("append", ProtosBooleanValue.TRUE);
 
         ProtosFutureValue future =
                 (ProtosFutureValue)
@@ -115,18 +112,20 @@ class ProtosStandardFilesystemProtocolTest {
                                 x.activation);
 
         Invocation invocation = x.backend.invocations.remove();
-        assertEquals(
-                ProtosFilesystemOpenOptions.Placement.APPEND,
-                invocation.options.placement());
+        assertFalse(invocation.options.readAccess());
+        assertTrue(invocation.options.writeAccess());
 
         invocation.completion.succeeded(
-                new AppendSeekResource(),
+                new PositionedWriteSeekResource(),
                 new ProtosFileFlow.Capabilities(
-                        false, true, true, false, false, false, true),
+                        false, true, true, false, false, false),
                 () -> {});
 
         ProtosObjectValue file =
                 (ProtosObjectValue) future.resolvedValue().orElseThrow();
+        assertTrue(file.hasLocalSlot("write"));
+        assertTrue(file.hasLocalSlot("seekToEnd"));
+        assertFalse(file.hasLocalSlot("append"));
         ProtosFutureValue position =
                 (ProtosFutureValue)
                         ProtosInvocation.invokeMessage(
@@ -134,6 +133,25 @@ class ProtosStandardFilesystemProtocolTest {
         assertEquals(
                 BigInteger.ZERO,
                 ((ProtosIntegerValue) position.resolvedValue().orElseThrow()).value());
+    }
+
+    @Test
+    void appendIsNotAStandardOpenOption() throws Exception {
+        Fixture x = fixture();
+        for (ProtosBooleanValue value : List.of(ProtosBooleanValue.TRUE, ProtosBooleanValue.FALSE)) {
+            ProtosObjectValue options = ordinaryOptions();
+            options.createLocalSlot("write", ProtosBooleanValue.TRUE);
+            options.createLocalSlot("append", value);
+            ProtosFutureValue future =
+                    (ProtosFutureValue)
+                            ProtosInvocation.invokeMessage(
+                                    x.filesystem,
+                                    "open",
+                                    List.of(path(x.prelude, "log.bin"), options),
+                                    x.activation);
+            assertInvalid(x, future);
+        }
+        assertTrue(x.backend.invocations.isEmpty());
     }
 
     @Test
@@ -305,11 +323,11 @@ class ProtosStandardFilesystemProtocolTest {
         }
     }
 
-    private static final class AppendSeekResource
-            implements ProtosFileFlow.AppendWritableResource, ProtosFileFlow.SeekableResource {
+    private static final class PositionedWriteSeekResource
+            implements ProtosFileFlow.WritableResource, ProtosFileFlow.SeekableResource {
         @Override
-        public ProtosFileFlow.Cancellation append(
-                byte[] bytes, ProtosFileFlow.AppendCompletion completion) {
+        public ProtosFileFlow.Cancellation writeAt(
+                BigInteger position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
             return () -> {};
         }
 

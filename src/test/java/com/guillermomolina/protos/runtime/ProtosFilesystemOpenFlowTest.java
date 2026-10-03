@@ -42,9 +42,6 @@ class ProtosFilesystemOpenFlowTest {
                 ProtosFilesystemOpenOptions.Creation.EXISTING,
                 invocation.options.creation());
         assertFalse(invocation.options.truncateInitialContent());
-        assertEquals(
-                ProtosFilesystemOpenOptions.Placement.POSITIONED,
-                invocation.options.placement());
 
         ProtosObjectValue file = new ProtosObjectValue(ProtosObjectValue.rootObject());
         AtomicInteger releases = new AtomicInteger();
@@ -77,8 +74,6 @@ class ProtosFilesystemOpenFlowTest {
         assertFalse(captured.readAccess());
         assertTrue(captured.writeAccess());
         assertEquals(ProtosFilesystemOpenOptions.Creation.CREATE, captured.creation());
-        assertEquals(
-                ProtosFilesystemOpenOptions.Placement.POSITIONED, captured.placement());
     }
 
     @Test
@@ -90,19 +85,15 @@ class ProtosFilesystemOpenFlowTest {
         noAccess.createLocalSlot("read", ProtosBooleanValue.FALSE);
         invalid.add(noAccess);
 
-        ProtosObjectValue appendWithoutWrite = options();
-        appendWithoutWrite.createLocalSlot("append", ProtosBooleanValue.TRUE);
-        invalid.add(appendWithoutWrite);
+        // append is not a standard open option; otherwise-valid writable options become invalid.
+        ProtosObjectValue removedAppendOption = options();
+        removedAppendOption.createLocalSlot("write", ProtosBooleanValue.TRUE);
+        removedAppendOption.createLocalSlot("append", ProtosBooleanValue.TRUE);
+        invalid.add(removedAppendOption);
 
         ProtosObjectValue truncateWithoutWrite = options();
         truncateWithoutWrite.createLocalSlot("truncate", ProtosBooleanValue.TRUE);
         invalid.add(truncateWithoutWrite);
-
-        ProtosObjectValue appendAndTruncate = options();
-        appendAndTruncate.createLocalSlot("write", ProtosBooleanValue.TRUE);
-        appendAndTruncate.createLocalSlot("append", ProtosBooleanValue.TRUE);
-        appendAndTruncate.createLocalSlot("truncate", ProtosBooleanValue.TRUE);
-        invalid.add(appendAndTruncate);
 
         ProtosObjectValue bothCreationModes = options();
         bothCreationModes.createLocalSlot("create", ProtosBooleanValue.TRUE);

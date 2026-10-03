@@ -116,8 +116,7 @@ final class ProtosFilesystemMaturityConformanceTest {
             SharedFile shared = name == null ? null : files.get(name);
             if (shared == null
                     || options.creation() != ProtosFilesystemOpenOptions.Creation.EXISTING
-                    || options.truncateInitialContent()
-                    || options.placement() != ProtosFilesystemOpenOptions.Placement.POSITIONED) {
+                    || options.truncateInitialContent()) {
                 completion.failed();
                 return () -> {};
             }
@@ -131,7 +130,6 @@ final class ProtosFilesystemMaturityConformanceTest {
                             true,
                             true,
                             options.writeAccess(),
-                            false,
                             false),
                     resource::releaseSilently);
             return () -> {};

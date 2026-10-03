@@ -929,7 +929,6 @@ Instead, open configuration separates:
 read/write access
 existing/create/createNew
 preserve/truncate
-positioned/append
 ```
 
 The public options object uses the standard local Boolean slots:
@@ -940,10 +939,10 @@ write
 create
 createNew
 truncate
-append
 ```
 
-Only the captured standard local slots participate.
+Only the captured standard local slots participate. There is no append option or
+append mode; any other local slot, including `append`, makes the options invalid.
 
 The configuration is snapshotted at invocation so later mutation of the options
 object cannot change an already invoked open.
@@ -1002,19 +1001,22 @@ possibly perform some approximate operation.
 
 The language-visible capability shape must be truthful.
 
-## Positioned writes and append writes are different
+## Writes are positioned; there is no append mode
 
-A writable positioned File writes relative to that File's logical position.
+A writable File writes relative to that File's logical position.
 
-An append File selects the then-current end according to the append contract.
+A File that exposes `ByteSeekable` lets a program compose:
 
-Append does not simply mean "seek to end once during open".
+```text
+seekToEnd()
+write(bytes)
+```
 
-That distinction matters when several File aliases append to the same underlying
-resource.
-
-The append contract owns placement/no-overlap behavior; ordinary positioned
-cursor rules are a different semantic mode.
+That is two ordinary operations on one File, not an append mode. The write
+starts at the File's logical position; it does not re-select the end at write
+time. The composition is not atomic and gives no placement, non-overlap, or
+non-interleaving guarantee against writes through other File capabilities,
+aliases, or external writers selecting the same resource.
 
 ## File position is logical, not a leaked native cursor
 
@@ -1438,7 +1440,7 @@ same.
     Path, or Actor source order.
 33. A File exposes only the read/write/seek/size/truncate/sync capabilities its
     acquired descriptor actually promises, plus its standard close lifecycle.
-34. Positioned and append write placement are distinct semantic modes.
+34. File writes are positioned; Core defines no append open option or mode.
 35. File position is a logical Protos property, not leaked native cursor state.
 36. `sync()` is distinct from ordinary `write()` completion.
 37. Current Filesystem namespace mutation uses explicit `replace` and non-recursive

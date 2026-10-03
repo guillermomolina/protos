@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.173-SNAPSHOT
+
+- `I063` implements D170 by removing the standard File append institution.
+  `Filesystem.open` no longer accepts an `append` option: it is now an ordinary
+  unknown option and fails with `InvalidIOArgument` before backend authority is
+  exercised. `ProtosFilesystemOpenOptions` drops its write-placement state, and
+  `ProtosFileFlow` drops `AppendWritableResource`, `AppendCompletion`, the
+  append-only write path, the append capability flag and the cross-alias
+  append-placement contract. `ProtosStandardFileProtocol` now has a single
+  `create` factory. Every writable File writes at its own logical position.
+  `ByteSeekable` (`position`, `seek`, `seekBy`, `seekToEnd`), `ByteSized`,
+  `Truncatable`, `Syncable`, truncate-on-open and the generic
+  commitment/cancellation/lifecycle machinery are unchanged, and backends still
+  expose only the capabilities they can honestly support. The Standard Library
+  `Files` helper no longer passes `append: false`.
+
 ## 0.3.172-SNAPSHOT
 
 - `PERF029` removes the two permanent Truffle partial-evaluation bailouts

@@ -108,7 +108,6 @@ writeAllBytes: (filesystem, path, bytes) => {
                 write: true
                 create: true
                 truncate: true
-                append: false
             }
             openFuture = filesystem.open(path, options)
             file = openFuture.value()

@@ -11,7 +11,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.Objects;
 
 /**
- * I016-C installer for one already-acquired positioned or append File capability.
+ * I016-C installer for one already-acquired positioned File capability.
  *
  * <p>Only capabilities that the immutable File capability descriptor promises are installed. A raw
  * File deliberately does not gain Flushable merely because byte-I/O adapters elsewhere expose it.
@@ -19,31 +19,7 @@ import java.util.Objects;
 public final class ProtosStandardFileProtocol {
     private ProtosStandardFileProtocol() {}
 
-    public static ProtosObjectValue createPositioned(
-            ProtosObjectValue bytesPrototype,
-            ProtosActivation constructionActivation,
-            ProtosFileFlow.Resource resource,
-            ProtosFileFlow.Capabilities capabilities) {
-        if (Objects.requireNonNull(capabilities, "capabilities").append()) {
-            throw new IllegalArgumentException(
-                    "createPositioned requires non-append File capabilities");
-        }
-        return create(bytesPrototype, constructionActivation, resource, capabilities);
-    }
-
-    public static ProtosObjectValue createAppend(
-            ProtosObjectValue bytesPrototype,
-            ProtosActivation constructionActivation,
-            ProtosFileFlow.Resource resource,
-            ProtosFileFlow.Capabilities capabilities) {
-        if (!Objects.requireNonNull(capabilities, "capabilities").append()) {
-            throw new IllegalArgumentException(
-                    "createAppend requires append-mode File capabilities");
-        }
-        return create(bytesPrototype, constructionActivation, resource, capabilities);
-    }
-
-    private static ProtosObjectValue create(
+    public static ProtosObjectValue create(
             ProtosObjectValue bytesPrototype,
             ProtosActivation constructionActivation,
             ProtosFileFlow.Resource resource,

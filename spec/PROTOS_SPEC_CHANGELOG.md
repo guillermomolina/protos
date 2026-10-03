@@ -23,6 +23,28 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.438] - 2026-10-03
+
+### I063 / D170 — Remove standard File append semantics
+- `spec/io/FILESYSTEM.md` (section 18 File open semantics): standard
+  `filesystem.open` has no `append` option, append mode, or write-placement
+  dimension; the standard option slots are exactly `read`, `write`, `create`,
+  `createNew`, and `truncate`, so a local `append` slot is an invalid unknown
+  option. The append-specific combination rules, the append placement and
+  logical-position rules, and the cross-File/cross-alias atomic
+  append-placement invariant are removed. Section 18.3 now states that every
+  writable standard File uses positioned writes, and that `seekToEnd()`
+  followed by `write(bytes)` is an ordinary two-operation composition on one
+  receiver. That composition is not atomic and gives no placement
+  coordination or non-interleaving guarantee across File capabilities or
+  aliases. Zero initial logical position, truncate-on-open, and the optional
+  `ByteSeekable`, `ByteSized`, `Truncatable`, and `Syncable` File capabilities
+  are unchanged.
+- `spec/io/IO_CORE.md`: removed the append-write logical-position rule and the
+  append dimension from the open-configuration capture summary.
+- `spec/io/BYTE_IO.md`: removed append writes from the sequence-state ordering
+  domain examples.
+
 ## [0.1.437] - 2026-10-03
 
 ### D180 — Rename the standard Closure loop selector to `whileTrue`

@@ -388,8 +388,7 @@ public final class ProtosStandardFilesystemProtocol {
         return options.readAccess()
                 && !options.writeAccess()
                 && options.creation() == ProtosFilesystemOpenOptions.Creation.EXISTING
-                && !options.truncateInitialContent()
-                && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
+                && !options.truncateInitialContent();
     }
 
     private static void materialize(
@@ -405,27 +404,15 @@ public final class ProtosStandardFilesystemProtocol {
             Objects.requireNonNull(capabilities, "capabilities");
             Objects.requireNonNull(releaseIfUntransferred, "releaseIfUntransferred");
 
-            boolean append =
-                    options.placement() == ProtosFilesystemOpenOptions.Placement.APPEND;
             if (capabilities.readable() != options.readAccess()
-                    || capabilities.writable() != options.writeAccess()
-                    || capabilities.append() != append) {
+                    || capabilities.writable() != options.writeAccess()) {
                 throw new IllegalArgumentException(
                         "backend File capability shape does not match captured open authority");
             }
 
             ProtosObjectValue file =
-                    append
-                            ? ProtosStandardFileProtocol.createAppend(
-                                    bytesPrototype,
-                                    constructionActivation,
-                                    resource,
-                                    capabilities)
-                            : ProtosStandardFileProtocol.createPositioned(
-                                    bytesPrototype,
-                                    constructionActivation,
-                                    resource,
-                                    capabilities);
+                    ProtosStandardFileProtocol.create(
+                            bytesPrototype, constructionActivation, resource, capabilities);
             completion.succeeded(file, releaseIfUntransferred);
         } catch (RuntimeException invalidBackendDescriptor) {
             releaseSafely(releaseIfUntransferred);

@@ -1153,9 +1153,7 @@ fixture.activation());
                     || options.writeAccess()
                     || options.creation()
                             != com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions.Creation.EXISTING
-                    || options.truncateInitialContent()
-                    || options.placement()
-                            != com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions.Placement.POSITIONED) {
+                    || options.truncateInitialContent()) {
                 completion.failed();
                 return () -> {};
             }

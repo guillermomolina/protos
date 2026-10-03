@@ -689,7 +689,6 @@ final class ProtosFilesystemLibraryConformanceTest {
         assertFalse(options.writeAccess());
         assertEquals(ProtosFilesystemOpenOptions.Creation.EXISTING, options.creation());
         assertFalse(options.truncateInitialContent());
-        assertEquals(ProtosFilesystemOpenOptions.Placement.POSITIONED, options.placement());
         assertEquals(1, backend.openCount());
         assertEquals(0, backend.openCancellations());
     }
@@ -700,7 +699,6 @@ final class ProtosFilesystemLibraryConformanceTest {
         assertFalse(options.writeAccess());
         assertEquals(ProtosFilesystemOpenOptions.Creation.EXISTING, options.creation());
         assertFalse(options.truncateInitialContent());
-        assertEquals(ProtosFilesystemOpenOptions.Placement.POSITIONED, options.placement());
         assertEquals(1, backend.openCount());
     }
 
@@ -712,7 +710,6 @@ final class ProtosFilesystemLibraryConformanceTest {
         assertTrue(options.writeAccess());
         assertEquals(ProtosFilesystemOpenOptions.Creation.CREATE, options.creation());
         assertTrue(options.truncateInitialContent());
-        assertEquals(ProtosFilesystemOpenOptions.Placement.POSITIONED, options.placement());
         assertEquals(1, backend.writeOpenCount());
     }
 
@@ -1051,16 +1048,14 @@ activation);
             return !options.readAccess()
                     && options.writeAccess()
                     && options.creation() == ProtosFilesystemOpenOptions.Creation.CREATE
-                    && options.truncateInitialContent()
-                    && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
+                    && options.truncateInitialContent();
         }
 
         private static boolean isDefaultReadOpen(ProtosFilesystemOpenOptions options) {
             return options.readAccess()
                     && !options.writeAccess()
                     && options.creation() == ProtosFilesystemOpenOptions.Creation.EXISTING
-                    && !options.truncateInitialContent()
-                    && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
+                    && !options.truncateInitialContent();
         }
 
         private synchronized void replaceContent(byte[] bytes) {

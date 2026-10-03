@@ -269,9 +269,7 @@ activation);
                 ProtosFilesystemOpenOptions options,
                 ProtosStandardFilesystemProtocol.OpenCompletion completion) {
             String name = directChild(path);
-            if (name == null
-                    || options.placement()
-                            != ProtosFilesystemOpenOptions.Placement.POSITIONED) {
+            if (name == null) {
                 completion.failed();
                 return () -> {};
             }
@@ -330,7 +328,6 @@ activation);
                             true,
                             true,
                             options.writeAccess(),
-                            false,
                             false),
                     resource::releaseSilently);
             return () -> {};

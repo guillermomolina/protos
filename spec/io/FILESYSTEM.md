@@ -36,26 +36,24 @@ creation:
 initial content:
     preserve
     truncate
-
-write placement:
-    positioned
-    append
 ```
+
+Core v0.1 defines no append open option, append mode, or other write-placement dimension. Every writable standard `File` uses the positioned write semantics of section 18.2.1.
 
 ### 18.0 Public open surface
 
-The portable call forms are `filesystem.open(path)` and `filesystem.open(path, options)`. The one-argument form means read access, existing target, preserved content, and positioned placement.
+The portable call forms are `filesystem.open(path)` and `filesystem.open(path, options)`. The one-argument form means read access, existing target, and preserved content.
 
-`options` is an ordinary Protos object. Its standard option slots are exactly `read`, `write`, `create`, `createNew`, `truncate`, and `append`. Only local slots owned by that object participate; delegated slots are ignored. Each present standard slot must contain exactly canonical `true` or `false`. Missing slots default to `false`, except `read`, which defaults to `true`. Any other local slot makes the options invalid. The options object need not have a special prototype and need not be frozen or closed. Explicit `null` and non-object-domain values are invalid options.
+`options` is an ordinary Protos object. Its standard option slots are exactly `read`, `write`, `create`, `createNew`, and `truncate`. Only local slots owned by that object participate; delegated slots are ignored. Each present standard slot must contain exactly canonical `true` or `false`. Missing slots default to `false`, except `read`, which defaults to `true`. Any other local slot makes the options invalid. The options object need not have a special prototype and need not be frozen or closed. Explicit `null` and non-object-domain values are invalid options.
 
-The tuple is: access from `read`/`write`; creation is `createNew` when true, otherwise `create` when true, otherwise `existing`; initial content is `truncate` when true, otherwise `preserve`; placement is `append` when true, otherwise `positioned`. `create` plus `createNew` is invalid, in addition to the combination rules below.
+The tuple is: access from `read`/`write`; creation is `createNew` when true, otherwise `create` when true, otherwise `existing`; initial content is `truncate` when true, otherwise `preserve`. `create` plus `createNew` is invalid, in addition to the combination rules below.
 
 After ordinary argument evaluation, `open` reads these local slots and snapshots their Boolean/default values exactly once during invocation. No getter/callback protocol is invoked. Later mutation cannot affect the captured configuration. An Error while evaluating the expression supplying `options` propagates before `open` is invoked.
 
 After successful dispatch, an invalid Path-domain argument, invalid options-domain value, invalid/unknown option slot, or invalid captured combination fails the returned Future with a fresh `InvalidIOArgument` under `IO_CORE.md`, before namespace/backend effects.
 
 
-`filesystem.open(path, options)` captures the complete semantic open configuration at invocation time, before the operation may remain pending, wait for another operation, or begin host/backend I/O. The captured configuration consists of the access, creation, initial-content, and write-placement choices defined above.
+`filesystem.open(path, options)` captures the complete semantic open configuration at invocation time, before the operation may remain pending, wait for another operation, or begin host/backend I/O. The captured configuration consists of the access, creation, and initial-content choices defined above.
 
 Later mutation of an ordinary object, collection, builder, or other library value that was used to express `options` cannot change the configuration of an already-invoked open. Each open invocation captures its own configuration independently.
 
@@ -63,27 +61,21 @@ This is a semantic value capture, not a requirement to eagerly copy a particular
 
 Capturing the configuration does not itself commit any filesystem effect and does not by itself prevent cancellation. The ordinary open commitment rules below still determine when creation, truncation, or File-result custody makes cancellation impossible.
 
-Validation of access/creation/initial-content/write-placement combinations is performed against that captured configuration. A later mutation of the value originally used to express the options cannot turn an invalid captured open into a valid one, change a valid captured open into a destructive one, alter its access rights, or otherwise change its eventual File capability shape.
+Validation of access/creation/initial-content combinations is performed against that captured configuration. A later mutation of the value originally used to express the options cannot turn an invalid captured open into a valid one, change a valid captured open into a destructive one, alter its access rights, or otherwise change its eventual File capability shape.
 
 At least read or write access is required.
 
-Append requires write access.
-
 Truncate requires write access.
-
-Append plus truncate is invalid.
 
 `create` and `createNew` are mutually exclusive choices.
 
 Write access alone does not imply create or truncate.
 
-Append alone does not imply create.
-
 Invalid combinations fail open.
 
-Validation of the captured standard open-configuration tuple is a preflight semantic step. After ordinary argument evaluation has supplied the `Filesystem`, `Path`, and captured open configuration required by the invocation, the access/creation/initial-content/write-placement combination is validated before that open performs filesystem namespace resolution, resource selection/acquisition, creation, truncation, or other host/backend I/O for the target.
+Validation of the captured standard open-configuration tuple is a preflight semantic step. After ordinary argument evaluation has supplied the `Filesystem`, `Path`, and captured open configuration required by the invocation, the access/creation/initial-content combination is validated before that open performs filesystem namespace resolution, resource selection/acquisition, creation, truncation, or other host/backend I/O for the target.
 
-If that captured combination is invalid under the standard rules above, the `filesystem.open` Future fails for invalid open configuration without exercising filesystem authority against the supplied Path and without producing any namespace, content, cursor, resource-acquisition, or other target effect. In particular, an implementation must not discover `append + truncate`, missing read/write access, read-only truncate, or another standard-invalid combination only after it has looked up, created, opened, or modified the target.
+If that captured combination is invalid under the standard rules above, the `filesystem.open` Future fails for invalid open configuration without exercising filesystem authority against the supplied Path and without producing any namespace, content, cursor, resource-acquisition, or other target effect. In particular, an implementation must not discover missing read/write access, read-only truncate, or another standard-invalid combination only after it has looked up, created, opened, or modified the target.
 
 Because this validity decision depends only on the already-captured semantic configuration, implementations may and normally will return an already-failed Future. The standard asynchronous API is preserved: this rule does not introduce a separate synchronous exception path for an otherwise well-formed `filesystem.open` invocation merely because its captured option combination is invalid.
 
@@ -105,7 +97,7 @@ A program that requires one open's terminal result or committed effects to prece
 
 An implementation may internally serialize some or all opens for a backend when doing so cannot change outcomes allowed by this rule, but that queueing policy is not portable Protos ordering. Conversely, implementations may perform independent opens concurrently, batch them, or use backend-native asynchronous acquisition. No global Filesystem lock, per-Path queue, or same-Actor namespace FIFO is required solely by the standard `open` protocol.
 
-This rule concerns ordering among distinct open operations. It does not weaken the stable ordering domains of a `File` after acquisition, the cross-File append-placement invariant for append operations selecting the same underlying resource, or any stronger future Filesystem operation that explicitly defines its own transaction/order domain.
+This rule concerns ordering among distinct open operations. It does not weaken the stable ordering domains of a `File` after acquisition or any stronger future Filesystem operation that explicitly defines its own transaction/order domain.
 
 Standard Filesystem opens are independent asynchronous acquisitions: same Filesystem, same Path, or same-Actor invocation does not by itself order their namespace selection/commitment points; dependencies must be established explicitly.
 
@@ -167,7 +159,7 @@ Standard truncate-on-open is therefore failure-atomic with respect to its own co
 
 ### 18.2.1 Positioned File writes
 
-For a writable standard `File` opened with `write placement: positioned`, each `ByteWritable.write(bytes)` starts at that File's logical sequence position applicable when the operation reaches its ordered evaluation point. Let that starting position be `p` and let the captured write sequence have length `N`.
+For a writable standard `File`, each `ByteWritable.write(bytes)` starts at that File's logical sequence position applicable when the operation reaches its ordered evaluation point. Let that starting position be `p` and let the captured write sequence have length `N`.
 
 The write replaces existing file octets beginning at `p`; it does not insert bytes and shift later file content. If the operation contributes a prefix of length `k` under the ordinary `ByteWritable` success/failure rules, its own byte contribution occupies exactly offsets `p` through `p + k - 1`, in source order. For `k > 0`, the File's logical position after that operation is `p + k`, whether the Future ultimately succeeds or fails. For `k = 0`, the logical position is unchanged.
 
@@ -183,53 +175,21 @@ For operations ordered on the same logical File, the ordinary sequence-state dom
 
 A standard positioned File write overwrites from the File's current logical position, advances that position by exactly its contributed prefix, grows the file when necessary, and exposes deterministic zero-valued logical gap octets when placement begins beyond EOF.
 
-### 18.3 Append
+### 18.3 No append mode; initial logical position
 
-Append is not merely an initial seek to EOF.
+Standard `filesystem.open` has no append option or append mode. A writable standard `File` never selects its write placement from the current file end independently of its logical position; every write follows section 18.2.1.
 
-Every append-mode write is placed at the current file end applicable to that write independently of the current seek position.
+Where a `File` exposes `ByteSeekable`, a program may invoke `seekToEnd()` and then `write(bytes)`. That is an ordinary composition of two operations on one logical receiver: `seekToEnd()` sets the File's logical position to the end applicable when it is evaluated, and the later write is an ordinary positioned write starting at the File's logical position applicable at its own ordered evaluation point. The composition does not re-select the file end at write time, is not atomic, and establishes no placement coordination, non-overlap, or non-interleaving guarantee with writes through other `File` capabilities, aliases, external writers, or backend agents selecting the same resource. Those interactions remain governed by section 18.4.
 
-Therefore `seekToEnd()` followed by an ordinary positioned write is not semantically equivalent to append in the presence of concurrent external writers.
-
-Append placement and logical-position aftermath follow the ordinary `ByteWritable` prefix semantics. Merely determining or consulting the current EOF is not an irreversible output effect. A cancelled append whose cancellation wins before any byte contribution leaves the handle's logical position unchanged.
-
-For a captured append sequence of length `N`, let `k` be the contiguous prefix length contributed by that write according to the ordinary failed-write rule. If the write fails with `k = 0`, its logical position is unchanged. If it contributes at least one byte, whether the Future ultimately resolves successfully or fails, the handle's logical position becomes one greater than the file offset at which the last byte contributed by that append operation was placed.
-
-Consequently, after a failed append that contributed bytes, the logical position does not revert merely because the Future failed. Conversely, a failed append that contributed no bytes does not move the logical position merely because an implementation/native API temporarily positioned a backend cursor at EOF.
-
-A successful append of non-empty `Bytes` uses the same rule and therefore leaves the logical position immediately after that operation's last contributed byte. A successful append of `Bytes()` contributes no byte and leaves the logical position unchanged.
-
-The logical position established by an append is a numeric position, not a promise that it remains the current EOF. A later append still uses the then-current EOF rather than assuming that the stored logical position is still the end.
-
-Unrelated external writers or independently authorized operations may change the file between backend-level append actions when the backend does not provide stronger atomicity. Such changes do not retroactively alter the logical position already established by a contributed byte. They may also mean that the final position cannot be derived as the pre-write position plus `k`, or as one initial EOF plus `k`; the normative rule is the position immediately following this operation's last contributed byte.
-
-A read+append handle may seek for reading. Append writes nevertheless retain append placement semantics.
-
-Every successful standard `File` open whose read/write behavior uses a logical sequence position establishes that position as zero before the `File` result commits. This is independent of `existing`/`create`/`createNew`, `preserve`/`truncate`, and `positioned`/`append` choices.
+Every successful standard `File` open whose read/write behavior uses a logical sequence position establishes that position as zero before the `File` result commits. This is independent of `existing`/`create`/`createNew` and `preserve`/`truncate` choices.
 
 The zero position is a Protos logical-position guarantee, not a requirement that the backend's native cursor already has that value. An implementation may use positional I/O, a virtual cursor, a native handle whose cursor is initialized differently, or another representation, but the first position-sensitive Protos operation must observe the same state as if the File's logical position had begun at zero.
-
-Append mode does not change this initialization rule. An append write still chooses its placement from the current file end independently of the stored logical position and then updates that logical position according to the append-contribution rules above. Thus opening in append mode does not itself seek the Protos logical position to EOF, even on a host API or standard library whose append-opening helper happens to do so internally.
 
 Likewise, truncate-on-open establishing file size zero does not create a distinct initial-position rule: the returned File's logical position is zero because every standard positioned File begins there, not because truncation happened to make EOF zero.
 
 A backend or host adapter that cannot provide or emulate this initial logical-position state must not expose a standard File whose operations depend on that position while leaking an implementation-selected starting cursor.
 
-A newly opened standard File begins at logical byte position zero whenever it has position-sensitive read/write behavior; append changes each write's placement, not the File's initial logical position.
-
-The standard Protos append contract does not promise stronger non-interleaving with unrelated external writers than the backend can provide.
-
-For append writes performed through standard Protos `File` capabilities that select the same underlying filesystem resource, each write operation has an atomic append-placement boundary. Concurrent append writes have no predetermined relative order, but once the filesystem accepts one append operation as the next append contributor, no byte from another append write may be placed between bytes contributed by that operation. A failed append therefore contributes its contiguous prefix, if any, before the next append operation can contribute bytes to a later file position.
-
-The placement boundary is distinct from the write's completion boundary. An append may contribute a prefix and subsequently fail, and the next append may then continue from the resulting file end. An implementation must not reserve the complete requested sequence in advance and thereby create a semantic hole when a committed append contributes fewer bytes than requested.
-
-This guarantee applies to standard Protos append operations selecting the same resource, even when they are reached through distinct `File` capabilities or aliases. Their relative order remains nondeterministic when genuinely concurrent; Protos does not expose which operation won. The guarantee is nevertheless strong enough to prevent two such append operations from overlapping or interleaving their contributed byte sequences.
-
-If a backend cannot provide or emulate this append-placement boundary for the resource, it must not expose standard append mode for that resource. It may expose a weaker host-specific facility separately.
-
-This rule does not establish a general ordering domain for independently opened Files. It is a specific invariant of append placement required to make the standard append contract meaningful across independently opened capabilities. Other operations on those capabilities remain governed by their ordinary cross-capability semantics.
-
-Append writes selecting the same underlying resource have an atomic placement boundary: concurrent operations may be ordered either way, but their contributed byte sequences do not overlap or interleave, and a partial failed append does not reserve an uncommitted suffix.
+A newly opened standard File begins at logical byte position zero whenever it has position-sensitive read/write behavior.
 
 Writes invoked on the same receiver still preserve their required invocation ordering.
 
@@ -694,8 +654,8 @@ captured Filesystem keep the ordinary File capability/lifecycle rules, including
 The returned Filesystem is permanently read-only:
 
 - standard read/existing opens of captured regular resources may succeed;
-- a semantically valid open requiring write, create, createNew, truncate or
-  append authority fails through the ordinary I/O support/resource failure
+- a semantically valid open requiring write, create, createNew or truncate
+  authority fails through the ordinary I/O support/resource failure
   boundary;
 - `replace` and `remove` fail and cannot mutate the captured namespace;
 - `entries` observes the captured immutable namespace;

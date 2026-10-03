@@ -168,7 +168,7 @@ public final class ProtosNioConfinedFilesystemBackend
             completion.succeeded(
                     resource,
                     new ProtosFileFlow.Capabilities(
-                            false, true, false, false, false, false, false),
+                            false, true, false, false, false, false),
                     resource::closeSilently);
         } catch (IOException | RuntimeException failure) {
             closeSilently(channel);
@@ -262,8 +262,7 @@ public final class ProtosNioConfinedFilesystemBackend
         return !options.readAccess()
                 && options.writeAccess()
                 && options.creation() == ProtosFilesystemOpenOptions.Creation.CREATE_NEW
-                && !options.truncateInitialContent()
-                && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
+                && !options.truncateInitialContent();
     }
 
     private Path nativeChild(String name) {

@@ -329,7 +329,7 @@ final class ProtosNioCapturedTreeFilesystemBackend
             completion.succeeded(
                     resource,
                     new ProtosFileFlow.Capabilities(
-                            true, false, false, false, false, false, false),
+                            true, false, false, false, false, false),
                     resource::closeSilently);
         } catch (IOException | RuntimeException failure) {
             closeSilently(channel);
@@ -446,8 +446,7 @@ final class ProtosNioCapturedTreeFilesystemBackend
         return options.readAccess()
                 && !options.writeAccess()
                 && options.creation() == ProtosFilesystemOpenOptions.Creation.EXISTING
-                && !options.truncateInitialContent()
-                && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
+                && !options.truncateInitialContent();
     }
 
     private static final class ReadOnlyResource implements ProtosFileFlow.ReadableResource {
