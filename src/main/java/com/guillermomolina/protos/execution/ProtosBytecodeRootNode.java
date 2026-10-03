@@ -2852,6 +2852,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return prepareDirectClosureCall(body, List.of(), activation);
         }
 
+        PreparedInlineLiteralCall prepareInlineCondition() {
+            return prepareInlineLiteralCall(condition, List.of(), activation);
+        }
+
+        PreparedInlineLiteralCall prepareInlineBody() {
+            return prepareInlineLiteralCall(body, List.of(), activation);
+        }
+
         boolean conditionResult(Object result) {
             if (result == ProtosBooleanValue.TRUE) {
                 return true;
@@ -2865,49 +2873,108 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         /**
-         * PLAT044 B′ (PERF026-C1) inline eligibility of an already prepared
-         * fresh condition {@code child}: the condition is exactly the staged
-         * {@code literal} and {@code child} is its exact inline-equivalent
-         * invocation ({@link #isInlineLiteralInvocation}).
+         * PLAT044 B′ (PERF026-C1) inline eligibility of the freshly prepared
+         * condition invocation. The condition is exactly the staged literal
+         * and the invocation has already performed authoritative ordinary
+         * {@code call} selection, but has not materialized a rich activation
+         * or physical prepared source call merely to prove inline execution.
          */
         boolean admitsInlineLiteralCondition(
-                PreparedClosureCall child,
+                PreparedInlineLiteralCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
             return condition == literal
-                    && isInlineLiteralInvocation(child, literalPlan);
+                    && child.admits(literalPlan);
         }
 
-        /** As {@link #admitsInlineLiteralCondition}, for a fresh body child. */
+        /** As {@link #admitsInlineLiteralCondition}, for a fresh body invocation. */
         boolean admitsInlineLiteralBody(
-                PreparedClosureCall child,
+                PreparedInlineLiteralCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
             return body == literal
-                    && isInlineLiteralInvocation(child, literalPlan);
+                    && child.admits(literalPlan);
         }
     }
 
     /**
-     * PLAT044 B′ exact-invocation proof shared by every inline literal
-     * callback consumer: {@code child} is the ordinary source invocation of
-     * {@code literalPlan}'s own semantic activation root with a rich
-     * activation whose return home is captured. Executing the literal's body
-     * inline under {@code child.activation()} is then exactly {@code
-     * call(child.bodyTarget(), child.activation())}: the same body and the
-     * same fresh activation, and {@link
-     * ReturnHomeOwningCall#handleControlTransfer} can only rethrow. Any other
-     * shape (a re-projected plan, a compact or native call, an owned return
-     * home) keeps the exact physical callback invocation.
+     * PERF025 / PLAT044 B′ pay-as-you-grow callback invocation.
+     *
+     * <p>For the exact canonical ordinary {@code Closure.call} selection of a
+     * source-backed Closure, this carrier keeps only the effective Context-owned
+     * target and the compact direct-Closure frame arguments. No
+     * {@link PreparedClosureCall} and no rich {@link ProtosActivation} are
+     * constructed on the admitted inline path. If PLAT044 admission later
+     * fails, {@link #fallbackCall()} materializes the ordinary compact physical
+     * source call without repeating lookup. A non-canonical selection keeps the
+     * already prepared ordinary fallback, preserving override/alias semantics.
      */
-    private static boolean isInlineLiteralInvocation(
-            PreparedClosureCall child,
-            ProtosClosureExecutionPlanCell literalPlan) {
-        return child instanceof OrdinarySourceCall ordinary
-                && ordinary.activation != null
-                && !ordinary.activation.ownsReturnHome()
-                && ordinary.bodyTarget
-                        == literalPlan.plan().bytecodeActivationTargetForComposition();
+    static final class PreparedInlineLiteralCall {
+        private final RootCallTarget bodyTarget;
+        private final Object[] compactTargetArguments;
+        private final PreparedClosureCall fallback;
+        private final boolean ownsReturnHome;
+
+        private PreparedInlineLiteralCall(
+                RootCallTarget bodyTarget,
+                Object[] compactTargetArguments,
+                PreparedClosureCall fallback,
+                boolean ownsReturnHome) {
+            this.bodyTarget = bodyTarget;
+            this.compactTargetArguments = compactTargetArguments;
+            this.fallback = fallback;
+            this.ownsReturnHome = ownsReturnHome;
+        }
+
+        static PreparedInlineLiteralCall direct(
+                RootCallTarget bodyTarget,
+                Object[] compactTargetArguments) {
+            java.util.Objects.requireNonNull(bodyTarget, "bodyTarget");
+            java.util.Objects.requireNonNull(
+                    compactTargetArguments, "compactTargetArguments");
+            return new PreparedInlineLiteralCall(
+                    bodyTarget,
+                    compactTargetArguments,
+                    null,
+                    ProtosFrameArguments.compactOwnsReturnHome(
+                            compactTargetArguments));
+        }
+
+        static PreparedInlineLiteralCall fallback(PreparedClosureCall fallback) {
+            return new PreparedInlineLiteralCall(
+                    null,
+                    null,
+                    java.util.Objects.requireNonNull(fallback, "fallback"),
+                    false);
+        }
+
+        boolean admits(ProtosClosureExecutionPlanCell literalPlan) {
+            return fallback == null
+                    && !ownsReturnHome
+                    && bodyTarget
+                            == literalPlan.plan().bytecodeActivationTargetForComposition();
+        }
+
+        boolean requiresStructuredDispatch() {
+            return fallback != null && fallback.requiresStructuredDispatch();
+        }
+
+        PreparedClosureCall fallbackCall() {
+            if (fallback != null) {
+                return fallback;
+            }
+            return PreparedClosureCall.ordinaryCompact(
+                    bodyTarget,
+                    compactTargetArguments);
+        }
+
+        ProtosActivation activation() {
+            if (compactTargetArguments == null) {
+                throw new IllegalStateException(
+                        "non-direct inline callback invocation has no compact activation");
+            }
+            return ProtosFrameArguments.activation(compactTargetArguments);
+        }
     }
 
     static final class PreparedErrorHandlerCall {
@@ -3005,6 +3072,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation);
         }
 
+        PreparedInlineLiteralCall prepareInlineCallback() {
+            if (!hasCallback()) {
+                throw new IllegalStateException(
+                        "short-circuited Boolean operation has no selected callback");
+            }
+            return prepareInlineLiteralCall(
+                    supplied.get(selectedIndex()),
+                    List.of(),
+                    activation);
+        }
+
         /**
          * Supplied position of the selected callback; meaningful only when
          * {@link #hasCallback} holds. Shared by {@link #prepareCallback} and
@@ -3063,14 +3141,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * unchanged.
          */
         boolean admitsInlineLiteralCallback(
-                PreparedClosureCall child,
+                PreparedInlineLiteralCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan,
                 int position) {
             return hasCallback()
                     && selectedIndex() == position
                     && supplied.get(position) == literal
-                    && isInlineLiteralInvocation(child, literalPlan);
+                    && child.admits(literalPlan);
         }
     }
 
@@ -3271,6 +3349,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         PreparedClosureCall prepareCurrent();
 
+        PreparedInlineLiteralCall prepareInlineCurrent();
+
         void advance();
 
         Object finish();
@@ -3286,11 +3366,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
          * snapshot arguments the inline region binds.
          */
         default boolean admitsInlineLiteralChild(
-                PreparedClosureCall child,
+                PreparedInlineLiteralCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
             return callback() == literal
-                    && isInlineLiteralInvocation(child, literalPlan);
+                    && child.admits(literalPlan);
         }
     }
 
@@ -3350,6 +3430,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         "Array.each callback requested after snapshot exhaustion");
             }
             return prepareClosureCall(
+                    block,
+                    List.of(snapshot.get(index)),
+                    activation);
+        }
+
+        @Override
+        public PreparedInlineLiteralCall prepareInlineCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Array.each callback requested after snapshot exhaustion");
+            }
+            return prepareInlineLiteralCall(
                     block,
                     List.of(snapshot.get(index)),
                     activation);
@@ -3645,6 +3737,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Override
+        public PreparedInlineLiteralCall prepareInlineCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Bytes.each callback requested after snapshot exhaustion");
+            }
+            return prepareInlineLiteralCall(
+                    block,
+                    List.of(snapshot.get(index)),
+                    activation);
+        }
+
+        @Override
         public void advance() {
             if (!hasNext()) {
                 throw new IllegalStateException(
@@ -3772,6 +3876,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             ProtosEnvironmentValue.PortableEntry entry = snapshot.get(index);
             return prepareClosureCall(
+                    block,
+                    List.of(entry.name(), entry.value()),
+                    activation);
+        }
+
+        @Override
+        public PreparedInlineLiteralCall prepareInlineCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Environment.each callback requested after snapshot exhaustion");
+            }
+            ProtosEnvironmentValue.PortableEntry entry = snapshot.get(index);
+            return prepareInlineLiteralCall(
                     block,
                     List.of(entry.name(), entry.value()),
                     activation);
@@ -4014,6 +4131,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
             return prepareClosureCall(
+                    block,
+                    List.of(entry.getKey(), entry.getValue()),
+                    activation);
+        }
+
+        @Override
+        public PreparedInlineLiteralCall prepareInlineCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "IdentityMap.each callback requested after snapshot exhaustion");
+            }
+            java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
+            return prepareInlineLiteralCall(
                     block,
                     List.of(entry.getKey(), entry.getValue()),
                     activation);
@@ -5619,6 +5749,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
 
         @Override
+        public PreparedInlineLiteralCall prepareInlineCurrent() {
+            if (!hasNext()) {
+                throw new IllegalStateException(
+                        "Map.each callback requested after snapshot exhaustion");
+            }
+            java.util.Map.Entry<Object, Object> entry = snapshot.get(index);
+            return prepareInlineLiteralCall(
+                    block,
+                    List.of(entry.getKey(), entry.getValue()),
+                    activation);
+        }
+
+        @Override
         public void advance() {
             if (!hasNext()) {
                 throw new IllegalStateException(
@@ -6433,6 +6576,58 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             Object receiver,
             List<?> supplied,
             ProtosActivation caller) {
+        return prepareSelectedClosureCall(
+                receiver,
+                supplied,
+                caller,
+                selectClosureCall(receiver, caller));
+    }
+
+    /**
+     * PERF025 / PLAT044 B′ preparation seam for an inline-literal candidate.
+     * Ordinary D013 {@code call} selection happens exactly once. The canonical
+     * source-backed Closure selection keeps only its effective target and
+     * compact frame arguments; every other selection is prepared through the
+     * unchanged ordinary fallback immediately.
+     */
+    private static PreparedInlineLiteralCall prepareInlineLiteralCall(
+            Object receiver,
+            List<?> supplied,
+            ProtosActivation caller) {
+        ProtosSlotLookupResult selected = selectClosureCall(receiver, caller);
+        ProtosClosureValue callBehavior =
+                (ProtosClosureValue) selected.value();
+
+        if (receiver instanceof ProtosClosureValue targetClosure
+                && targetClosure.nativeBody().isEmpty()
+                && ProtosStandardObjectProtocol
+                        .isCanonicalStandardCallSelection(
+                                callBehavior,
+                                selected.home())) {
+            ProtosClosureExecutionPlan plan =
+                    taskOwnedBytecodePlan(targetClosure);
+            if (plan != null && plan.isBytecodeBackendForRuntime()) {
+                return PreparedInlineLiteralCall.direct(
+                        plan.bytecodeActivationTargetForComposition(),
+                        ProtosFrameArguments.compactDirectClosureCall(
+                                targetClosure,
+                                caller,
+                                null,
+                                supplied.toArray()));
+            }
+        }
+
+        return PreparedInlineLiteralCall.fallback(
+                prepareSelectedClosureCall(
+                        receiver,
+                        supplied,
+                        caller,
+                        selected));
+    }
+
+    private static ProtosSlotLookupResult selectClosureCall(
+            Object receiver,
+            ProtosActivation caller) {
         ProtosPrelude prelude =
                 caller.prelude()
                         .orElseThrow(
@@ -6455,10 +6650,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosCoreErrors.newError(caller));
         }
 
-        if (!(selected.value() instanceof ProtosClosureValue callBehavior)) {
+        if (!(selected.value() instanceof ProtosClosureValue)) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(caller));
         }
+        return selected;
+    }
+
+    private static PreparedClosureCall prepareSelectedClosureCall(
+            Object receiver,
+            List<?> supplied,
+            ProtosActivation caller,
+            ProtosSlotLookupResult selected) {
+        ProtosClosureValue callBehavior =
+                (ProtosClosureValue) selected.value();
 
         /*
          * PLAT017-A: D013 lookup has already selected one ordinary `call`

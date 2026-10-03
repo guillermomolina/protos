@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.159-SNAPSHOT
+
+- `PERF025` makes PLAT044 B′ immediate literal standard-control callbacks pay
+  for a rich Closure invocation only when it is actually required. Boolean,
+  `whileTrue` and local `each` callback preparation now performs authoritative
+  ordinary D013 `call` selection once and retains a lean
+  `PreparedInlineLiteralCall` carrying the selected source target plus compact
+  invocation arguments. Inline admission is decided from that carrier before
+  any rich `ProtosActivation`, guest Context/argument Array or physical
+  `PreparedClosureCall` is materialized; an admitted callback materializes its
+  one fresh semantic Closure activation only when entering the parser-inlined
+  resumable region, while a missed admission constructs the exact ordinary
+  prepared call lazily from the already-selected target without repeating
+  lookup. Canonical `call` overrides, alias-home selection and invalidation,
+  captured lexical state and ReturnHome provenance, Task/dynamic control,
+  Error/non-local-return/suspension behavior, debugger scope projection and
+  ordinary structured/physical fallback remain unchanged. The callback body
+  remains parser-inlined in its caller semantic Bytecode root under PLAT044;
+  callback-specific lexical/frame-native lowering is deliberately unchanged
+  for the later slice. New
+  `ProtosPerf025InlineCallbackPreparationTest` freezes the preparation boundary
+  for Boolean, `whileTrue` and `Array.each`, while the existing PERF026 B1/B2/B3,
+  C1 and D1/D2/D3 regressions continue to cover observable semantics and
+  tooling. No performance magnitude is claimed.
+
 ## 0.3.158-SNAPSHOT
 
 - `PERF027` removes the mandatory `BigInteger` physical representation from

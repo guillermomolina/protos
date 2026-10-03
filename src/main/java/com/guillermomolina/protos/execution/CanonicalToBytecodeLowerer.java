@@ -3552,9 +3552,9 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredWhileChild);
-        builder.beginPrepareStructuredWhileConditionCall();
+        builder.beginPrepareInlineStructuredWhileConditionCall();
         builder.emitLoadLocal(structuredWhile);
-        builder.endPrepareStructuredWhileConditionCall();
+        builder.endPrepareInlineStructuredWhileConditionCall();
         builder.endStoreLocal();
         emitLocalInlineLiteralChild(
                 builder,
@@ -3580,9 +3580,9 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredWhileChild);
-        builder.beginPrepareStructuredWhileBodyCall();
+        builder.beginPrepareInlineStructuredWhileBodyCall();
         builder.emitLoadLocal(structuredWhile);
-        builder.endPrepareStructuredWhileBodyCall();
+        builder.endPrepareInlineStructuredWhileBodyCall();
         builder.endStoreLocal();
         emitLocalInlineLiteralChild(
                 builder,
@@ -3683,9 +3683,9 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredEachChild);
-        builder.beginPrepareStructuredLocalEachChildCall();
+        builder.beginPrepareInlineStructuredLocalEachChildCall();
         builder.emitLoadLocal(structuredEach);
-        builder.endPrepareStructuredLocalEachChildCall();
+        builder.endPrepareInlineStructuredLocalEachChildCall();
         builder.endStoreLocal();
         emitLocalInlineLiteralChild(
                 builder,
@@ -3723,12 +3723,14 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * One fresh callback child of a locally sequenced loop (a while condition
-     * or body, or a standard each element, association or entry): a child
-     * requiring structured dispatch enters the untagged root, and any other
-     * child is completed by its own TryFinally around either the inline region of {@code
-     * definition}, taken only when the Boolean {@code emitAdmission} operation
-     * admits {@code child}, or the exact ordinary invocation, as in {@link
-     * #emitLocalBooleanInvocation}.
+     * or body, or a standard each element, association or entry).
+     *
+     * <p>Preparation has already performed authoritative ordinary
+     * {@code call} selection, but an eligible canonical source callback is
+     * still represented only by its compact invocation carrier. PLAT044
+     * admission therefore happens before rich activation or physical
+     * PreparedClosureCall construction. Only an admission miss materializes
+     * the exact physical fallback.
      */
     private void emitLocalInlineLiteralChild(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -3739,27 +3741,6 @@ final class CanonicalToBytecodeLowerer {
             CanonicalClosure definition,
             Runnable emitAdmission) {
         builder.beginIfThenElse();
-        builder.beginRequiresStructuredDispatch();
-        builder.emitLoadLocal(child);
-        builder.endRequiresStructuredDispatch();
-
-        builder.beginBlock();
-        emitNestedStructuredInvocation(
-                builder,
-                result,
-                child,
-                childResult,
-                resumeValue);
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginTryFinally(
-                () -> {
-                    builder.beginCompleteClosureCall();
-                    builder.emitLoadLocal(child);
-                    builder.endCompleteClosureCall();
-                });
-        builder.beginIfThenElse();
         emitAdmission.run();
 
         emitInlineLiteralCallback(
@@ -3769,18 +3750,77 @@ final class CanonicalToBytecodeLowerer {
                 result);
 
         builder.beginBlock();
-        emitOrdinaryPreparedInvocation(
+        emitInlineLiteralFallbackInvocation(
                 builder,
                 result,
                 child,
                 childResult,
                 resumeValue);
         builder.endBlock();
+
         builder.endIfThenElse();
+    }
+
+    /**
+     * Materializes a PLAT044 carrier's physical fallback only after inline
+     * admission has failed. A structured fallback retains the existing
+     * structured-dispatch helper boundary; an ordinary fallback retains the
+     * existing scoped completion discipline.
+     */
+    private static void emitInlineLiteralFallbackInvocation(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal child,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginBlock();
+
+        BytecodeLocal fallback =
+                builder.createLocal("inlineCallbackFallback", null);
+
+        builder.beginStoreLocal(fallback);
+        builder.beginLoadInlineLiteralFallbackCall();
+        builder.emitLoadLocal(child);
+        builder.endLoadInlineLiteralFallbackCall();
+        builder.endStoreLocal();
+
+        builder.beginIfThenElse();
+
+        builder.beginRequiresStructuredDispatch();
+        builder.emitLoadLocal(fallback);
+        builder.endRequiresStructuredDispatch();
+
+        builder.beginBlock();
+        emitNestedStructuredInvocation(
+                builder,
+                result,
+                fallback,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
+        builder.beginBlock();
+        builder.beginTryFinally(
+                () -> {
+                    builder.beginCompleteClosureCall();
+                    builder.emitLoadLocal(fallback);
+                    builder.endCompleteClosureCall();
+                });
+
+        builder.beginBlock();
+        emitOrdinaryPreparedInvocation(
+                builder,
+                result,
+                fallback,
+                childResult,
+                resumeValue);
+        builder.endBlock();
+
         builder.endTryFinally();
         builder.endBlock();
 
         builder.endIfThenElse();
+        builder.endBlock();
     }
 
     /** Operands of a per-child admission: loop state, child, staged literal and plan. */
@@ -3926,33 +3966,11 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginBlock();
         builder.beginStoreLocal(structuredBooleanChild);
-        builder.beginPrepareStructuredBooleanCallbackCall();
+        builder.beginPrepareInlineStructuredBooleanCallbackCall();
         builder.emitLoadLocal(structuredBoolean);
-        builder.endPrepareStructuredBooleanCallbackCall();
+        builder.endPrepareInlineStructuredBooleanCallbackCall();
         builder.endStoreLocal();
 
-        builder.beginIfThenElse();
-        builder.beginRequiresStructuredDispatch();
-        builder.emitLoadLocal(structuredBooleanChild);
-        builder.endRequiresStructuredDispatch();
-
-        builder.beginBlock();
-        emitNestedStructuredInvocation(
-                builder,
-                childResult,
-                structuredBooleanChild,
-                childResult,
-                resumeValue);
-        builder.endBlock();
-
-        builder.beginBlock();
-        builder.beginTryFinally(
-                () -> {
-                    builder.beginCompleteClosureCall();
-                    builder.emitLoadLocal(structuredBooleanChild);
-                    builder.endCompleteClosureCall();
-                });
-        builder.beginBlock();
         for (InlineLiteralCallback inlineCallback : inlineCallbacks) {
             builder.beginIfThenElse();
             builder.beginAdmitsInlineLiteralCallback();
@@ -3971,21 +3989,18 @@ final class CanonicalToBytecodeLowerer {
 
             builder.beginBlock();
         }
-        emitOrdinaryPreparedInvocation(
+
+        emitInlineLiteralFallbackInvocation(
                 builder,
                 childResult,
                 structuredBooleanChild,
                 childResult,
                 resumeValue);
+
         for (int i = 0; i < inlineCallbacks.size(); i++) {
             builder.endBlock();
             builder.endIfThenElse();
         }
-        builder.endBlock();
-        builder.endTryFinally();
-        builder.endBlock();
-
-        builder.endIfThenElse();
 
         builder.beginStoreLocal(result);
         builder.beginFinishStructuredBooleanCallback();
@@ -4012,9 +4027,9 @@ final class CanonicalToBytecodeLowerer {
     /**
      * PLAT044 B′ inline callback region for an admitted literal callback.
      *
-     * <p>The region keeps the semantic Closure activation: the prepared
-     * child's own fresh activation is held in {@link
-     * #INLINE_CALLBACK_ACTIVATION_LOCAL} and selected by {@link
+     * <p>The region keeps the semantic Closure activation: the lean callback
+     * carrier materializes its own fresh activation only after admission. That
+     * activation is held in {@link #INLINE_CALLBACK_ACTIVATION_LOCAL} and selected by {@link
      * #emitCurrentActivation} for the whole body, so {@code context}, lookup
      * and non-local return observe the callback activation exactly as its
      * physical root would, and the enclosing selection is restored afterwards
@@ -4028,8 +4043,9 @@ final class CanonicalToBytecodeLowerer {
      * <p>A custom {@link StandardTags.RootTag} over the body's exact source
      * span stands in for the callback root's automatic RootTag; {@link
      * ProtosBytecodeTagTreeNodeExports} projects the callback activation for
-     * locations inside it. The normal body result completes through {@code
-     * FinishClosureCall} exactly as the physical call's result does.
+     * locations inside it. Admission requires a captured return home, so the
+     * inline invocation owns no return-home lifecycle to complete; its normal
+     * body result is therefore the callback result directly.
      */
     private void emitInlineLiteralCallback(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -4084,10 +4100,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endSourceSection();
 
         builder.beginStoreLocal(result);
-        builder.beginFinishClosureCall();
-        builder.emitLoadLocal(child);
         builder.emitLoadLocal(bodyResult);
-        builder.endFinishClosureCall();
         builder.endStoreLocal();
         builder.endBlock();
     }

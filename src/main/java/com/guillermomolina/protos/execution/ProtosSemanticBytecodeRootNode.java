@@ -25,6 +25,7 @@ import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendAr
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedArgumentVector;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedBooleanCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedClosureCall;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedIndexedEachCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedLocalEachCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedMapInitialDefinition;
@@ -1528,6 +1529,14 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     @Operation
+    public static final class PrepareInlineStructuredBooleanCallbackCall {
+        @Specialization
+        public static PreparedInlineLiteralCall perform(PreparedBooleanCall prepared) {
+            return prepared.prepareInlineCallback();
+        }
+    }
+
+    @Operation
     public static final class StructuredBooleanImmediateResult {
         @Specialization
         public static Object perform(PreparedBooleanCall prepared) {
@@ -1555,7 +1564,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         public static boolean perform(
                 PreparedBooleanCall prepared,
-                PreparedClosureCall child,
+                PreparedInlineLiteralCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan,
                 int position) {
@@ -1607,6 +1616,22 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     @Operation
+    public static final class PrepareInlineStructuredWhileConditionCall {
+        @Specialization
+        public static PreparedInlineLiteralCall perform(PreparedWhileCall prepared) {
+            return prepared.prepareInlineCondition();
+        }
+    }
+
+    @Operation
+    public static final class PrepareInlineStructuredWhileBodyCall {
+        @Specialization
+        public static PreparedInlineLiteralCall perform(PreparedWhileCall prepared) {
+            return prepared.prepareInlineBody();
+        }
+    }
+
+    @Operation
     public static final class StructuredWhileCondition {
         @Specialization
         public static boolean perform(PreparedWhileCall prepared, Object result) {
@@ -1619,7 +1644,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         public static boolean perform(
                 PreparedWhileCall prepared,
-                PreparedClosureCall child,
+                PreparedInlineLiteralCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
             return prepared.admitsInlineLiteralCondition(child, literal, literalPlan);
@@ -1631,7 +1656,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         public static boolean perform(
                 PreparedWhileCall prepared,
-                PreparedClosureCall child,
+                PreparedInlineLiteralCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
             return prepared.admitsInlineLiteralBody(child, literal, literalPlan);
@@ -1719,6 +1744,14 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     @Operation
+    public static final class PrepareInlineStructuredLocalEachChildCall {
+        @Specialization
+        public static PreparedInlineLiteralCall perform(PreparedLocalEachCall prepared) {
+            return prepared.prepareInlineCurrent();
+        }
+    }
+
+    @Operation
     public static final class AdvanceStructuredLocalEach {
         @Specialization
         public static void perform(PreparedLocalEachCall prepared) {
@@ -1739,7 +1772,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         public static boolean perform(
                 PreparedLocalEachCall prepared,
-                PreparedClosureCall child,
+                PreparedInlineLiteralCall child,
                 Object literal,
                 ProtosClosureExecutionPlanCell literalPlan) {
             return prepared.admitsInlineLiteralChild(child, literal, literalPlan);
@@ -1749,8 +1782,16 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class LoadInlineCallbackActivation {
         @Specialization
-        public static ProtosActivation perform(PreparedClosureCall child) {
+        public static ProtosActivation perform(PreparedInlineLiteralCall child) {
             return child.activation();
+        }
+    }
+
+    @Operation
+    public static final class LoadInlineLiteralFallbackCall {
+        @Specialization
+        public static PreparedClosureCall perform(PreparedInlineLiteralCall child) {
+            return child.fallbackCall();
         }
     }
 
