@@ -4692,9 +4692,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final Object fallback;
         private final ProtosActivation activation;
         private BigInteger queryHash;
-        private List<ProtosStandardMapProtocol.StableAssociation> snapshot;
+        private List<ProtosMapValue.Entry> candidates;
         private int index;
-        private ProtosStandardMapProtocol.StableAssociation match;
+        private ProtosMapValue.Entry match;
         private boolean hashAccepted;
         private boolean comparisonEntered;
         private boolean fallbackPrepared;
@@ -4767,7 +4767,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosStandardMapProtocol.requireHashResultForStructured(
                             result,
                             activation);
-            snapshot = ProtosStandardMapProtocol.stableSnapshot(map);
+            candidates = map.candidatesForRecordedHash(queryHash);
             hashAccepted = true;
         }
 
@@ -4776,11 +4776,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             if (match != null) {
                 return false;
             }
-            while (index < snapshot.size()
-                    && !snapshot.get(index).recordedHash().equals(queryHash)) {
-                index++;
-            }
-            return index < snapshot.size();
+            return index < candidates.size();
         }
 
         PreparedClosureCall prepareEquality() {
@@ -4792,7 +4788,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     key,
                     "==",
                     activation,
-                    List.of(snapshot.get(index).key()));
+                    List.of(candidates.get(index).key()));
         }
 
         void acceptEquality(Object result) {
@@ -4809,7 +4805,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             result,
                             activation);
             if (equal) {
-                match = snapshot.get(index);
+                match = candidates.get(index);
             } else {
                 index++;
             }
@@ -5038,7 +5034,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final Object value;
         private final ProtosActivation activation;
         private BigInteger queryHash;
-        private List<ProtosMapValue.Entry> snapshot;
+        private List<ProtosMapValue.Entry> candidates;
         private int index;
         private ProtosMapValue.Entry match;
         private boolean hashAccepted;
@@ -5111,7 +5107,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosStandardMapProtocol.requireHashResultForStructured(
                             result,
                             activation);
-            snapshot = List.copyOf(map.keyedSnapshot());
+            candidates = map.candidatesForRecordedHash(queryHash);
             hashAccepted = true;
         }
 
@@ -5122,14 +5118,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 return false;
             }
 
-            while (index < snapshot.size()
-                    && !snapshot.get(index)
-                            .recordedHash()
-                            .equals(queryHash)) {
-                index++;
-            }
-
-            return index < snapshot.size();
+            return index < candidates.size();
         }
 
         PreparedClosureCall prepareEquality() {
@@ -5142,7 +5131,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     key,
                     "==",
                     activation,
-                    List.of(snapshot.get(index).key()));
+                    List.of(candidates.get(index).key()));
         }
 
         void acceptEquality(Object result) {
@@ -5161,7 +5150,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             activation);
 
             if (equal) {
-                match = snapshot.get(index);
+                match = candidates.get(index);
             } else {
                 index++;
             }
@@ -5294,7 +5283,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final Object newValue;
         private final ProtosActivation activation;
         private BigInteger queryHash;
-        private List<ProtosMapValue.Entry> snapshot;
+        private List<ProtosMapValue.Entry> candidates;
         private int index;
         private ProtosMapValue.Entry match;
         private boolean hashAccepted;
@@ -5356,7 +5345,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosStandardMapProtocol.requireHashResultForStructured(
                             result,
                             activation);
-            snapshot = List.copyOf(map.keyedSnapshot());
+            candidates = map.candidatesForRecordedHash(queryHash);
             hashAccepted = true;
         }
 
@@ -5365,11 +5354,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             if (match != null) {
                 return false;
             }
-            while (index < snapshot.size()
-                    && !snapshot.get(index).recordedHash().equals(queryHash)) {
-                index++;
-            }
-            return index < snapshot.size();
+            return index < candidates.size();
         }
 
         PreparedClosureCall prepareEquality() {
@@ -5381,7 +5366,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     key,
                     "==",
                     activation,
-                    List.of(snapshot.get(index).key()));
+                    List.of(candidates.get(index).key()));
         }
 
         void acceptEquality(Object result) {
@@ -5398,7 +5383,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             result,
                             activation);
             if (equal) {
-                match = snapshot.get(index);
+                match = candidates.get(index);
             } else {
                 index++;
             }
@@ -5525,7 +5510,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final Object key;
         private final ProtosActivation activation;
         private BigInteger queryHash;
-        private List<ProtosMapValue.Entry> snapshot;
+        private List<ProtosMapValue.Entry> candidates;
         private int index;
         private ProtosMapValue.Entry match;
         private boolean hashAccepted;
@@ -5591,7 +5576,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosStandardMapProtocol.requireHashResultForStructured(
                             result,
                             activation);
-            snapshot = List.copyOf(map.keyedSnapshot());
+            candidates = map.candidatesForRecordedHash(queryHash);
             hashAccepted = true;
         }
 
@@ -5600,11 +5585,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             if (match != null) {
                 return false;
             }
-            while (index < snapshot.size()
-                    && !snapshot.get(index).recordedHash().equals(queryHash)) {
-                index++;
-            }
-            return index < snapshot.size();
+            return index < candidates.size();
         }
 
         PreparedClosureCall prepareEquality() {
@@ -5616,7 +5597,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     key,
                     "==",
                     activation,
-                    List.of(snapshot.get(index).key()));
+                    List.of(candidates.get(index).key()));
         }
 
         void acceptEquality(Object result) {
@@ -5633,7 +5614,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             result,
                             activation);
             if (equal) {
-                match = snapshot.get(index);
+                match = candidates.get(index);
             } else {
                 index++;
             }

@@ -7,6 +7,41 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.161-SNAPSHOT
+
+- `PERF025` replaces whole-collection keyed search in `Map` and `IdentityMap`
+  with physical exact-hash indexing while preserving the existing logical
+  insertion-order sequence and all observable collection semantics. Each live
+  association remains present exactly once in insertion order and is also
+  registered in one bucket keyed by its exact recorded `BigInteger` hash;
+  bucket candidate order is insertion order, replacement changes only the
+  value, removal updates both authorities and drops an empty bucket, and
+  reinsertion appends normally. Ordinary `Map` lookup now computes the query
+  hash once and examines only entries whose recorded hash is exactly equal
+  before applying the existing directed `queryKey == storedKey` comparison.
+  Structured Map read lookup, initial definition, `atPut` and `remove` select
+  that same exact bucket after the guest hash result is accepted instead of
+  copying `keyedSnapshot()` or scanning unrelated recorded hashes. Absent
+  `atPut` continues to store the already-computed query hash, retaining the
+  existing single-hash I035 behavior and representative key, recorded hash and
+  insertion position on replacement. `IdentityMap` analogously indexes by
+  exact recorded identity hash and still resolves collisions exclusively with
+  `ProtosIdentity.identical`; it does not introduce Java reference identity or
+  `IdentityHashMap`, and absent `atPut` reuses its single computed identity
+  hash. The existing Map comparison-scope, suspension/cancellation/error and
+  open/closed/frozen machinery is unchanged. Logical snapshots used by
+  `Map.each`, `IdentityMap.each`, `Map.match`, transfer/copy/render paths and
+  Array/Bytes are deliberately unchanged. New
+  `ProtosPerf025MapPhysicalIndexTest` freezes bucket ordering,
+  remove/reinsert behavior, semantic IdentityMap identity and the structural
+  absence of productive whole-Map search snapshots; the existing PLAT028,
+  I049, F-prime construction, Map.match and PERF026-D2 regressions cover
+  callback direction, exact recorded-hash filtering, representative-key
+  retention, single-hash behavior, suspension/unwind, state boundaries and
+  snapshot stability. This is a physical representation/indexing
+  optimization only: no observable Protos semantic or specification change,
+  and no performance magnitude is claimed.
+
 ## 0.3.160-SNAPSHOT
 
 - `PERF025` makes ordinary object/member and frame-backed lexical storage pay

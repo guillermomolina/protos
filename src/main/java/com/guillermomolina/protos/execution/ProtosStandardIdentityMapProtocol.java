@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.*; import java.math.BigInteger; import java.util.*;
 public final class ProtosStandardIdentityMapProtocol {
@@ -58,7 +73,7 @@ public final class ProtosStandardIdentityMapProtocol {
   p.createLocalSlot("at",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);var e=find(m,x.get(0));if(e==null)throw err(a);return e.value();}));
   p.createLocalSlot("containsKey",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);return find(m,x.get(0))==null?ProtosBooleanValue.FALSE:ProtosBooleanValue.TRUE;}));
   p.createLocalSlot("atIfAbsent", STANDARD_AT_IF_ABSENT);
-  p.createLocalSlot("atPut",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,2);if(m.isFrozen())throw err(a);Object k=x.get(0),v=x.get(1);var e=find(m,k);if(e!=null){m.replaceValue(e,v);return v;}if(!m.isOpen())throw err(a);m.append(k,ProtosIdentity.identityHash(k),v);return v;}));
+  p.createLocalSlot("atPut",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,2);if(m.isFrozen())throw err(a);Object k=x.get(0),v=x.get(1);BigInteger h=ProtosIdentity.identityHash(k);var e=find(m,k,h);if(e!=null){m.replaceValue(e,v);return v;}if(!m.isOpen())throw err(a);m.append(k,h,v);return v;}));
   p.createLocalSlot("remove",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);if(!m.isOpen())throw err(a);var e=find(m,x.get(0));if(e==null)throw err(a);return m.remove(e);}));
   p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,0);return new ProtosIntegerValue(BigInteger.valueOf(m.keyedSize()));}));
   p.createLocalSlot("each", STANDARD_EACH);
@@ -88,7 +103,15 @@ public final class ProtosStandardIdentityMapProtocol {
   return find(map, key);
  }
 
- private static ProtosIdentityMapValue.Entry find(ProtosIdentityMapValue m,Object k){BigInteger h=ProtosIdentity.identityHash(k);for(var e:m.keyedSnapshot())if(e.recordedIdentityHash().equals(h)&&ProtosIdentity.identical(k,e.key()))return e;return null;}
+ private static ProtosIdentityMapValue.Entry find(ProtosIdentityMapValue m,Object k){
+  return find(m,k,ProtosIdentity.identityHash(k));
+ }
+ private static ProtosIdentityMapValue.Entry find(ProtosIdentityMapValue m,Object k,BigInteger h){
+  for(var e:m.candidatesForRecordedIdentityHash(h)){
+   if(ProtosIdentity.identical(k,e.key()))return e;
+  }
+  return null;
+ }
  private static ProtosIdentityMapValue map(ProtosActivation a){if(!(a.receiver() instanceof ProtosIdentityMapValue m))throw err(a);return m;} private static void arity(ProtosActivation a,List<?> x,int n){if(x.size()!=n)throw err(a);}
  static void requireInvokableForStructured(Object c, ProtosActivation a) {
   ProtosPrelude p = a.prelude().orElseThrow();
