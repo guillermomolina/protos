@@ -183,6 +183,34 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         return declaringRoot == bytecodeNode.getBytecodeRootNode() && frame == candidate;
     }
 
+    /** PERF025-H1: true when {@code layout} is the very layout this authority stores. */
+    boolean storesLayout(ProtosFrameLexicalLayout layout) {
+        return frameBackedLayout == layout;
+    }
+
+    /**
+     * PERF025-H1: creates the frame-backed binding at {@code ordinal} of this
+     * authority's layout, the exact effect of {@link #containsBinding} followed
+     * by {@link #putBinding} for that layout name, without resolving the name
+     * to the ordinal again. Callers pass an ordinal the lowerer proved from
+     * this same layout instance (see {@link #storesLayout}) and must already
+     * have applied the owning context's OPEN/CLOSED/FROZEN creation rule.
+     * Static identity never implies presence (D179 C0): a PRESENT binding,
+     * including PRESENT(null), is still rejected as a duplicate creation, and
+     * a cleared (never established or removed) one is established at the same
+     * stable ordinal. Establishment order is recorded exactly as before.
+     */
+    void createFrameBackedBindingAt(int ordinal, Object value) {
+        Objects.requireNonNull(value, "value");
+        BytecodeNode bytecodeNode = currentBytecodeNode();
+        String name = frameBackedLayout.nameAt(ordinal);
+        if (!frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
+            throw new IllegalStateException("local slot already exists: " + name);
+        }
+        establishmentOrder.add(name);
+        frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
+    }
+
     /**
      * PERF025 frame-materialization slice: records every frame-backed binding
      * already PRESENT in the retained frame as established, in layout

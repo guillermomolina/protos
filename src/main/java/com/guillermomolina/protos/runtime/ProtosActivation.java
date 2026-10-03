@@ -660,6 +660,29 @@ public final class ProtosActivation {
         deferredContextAuthority.putBinding(name, value);
     }
 
+    /**
+     * PERF025-H1 backend seam: the installed lexical-binding authority when a
+     * current binding created now would take exactly its creation path, else
+     * {@code null}, in which case only {@link #createCurrentLocalSlotForRuntime}
+     * reproduces the exact creation rule. An unmaterialized execution context
+     * is necessarily OPEN; a materialized one qualifies only while it is an
+     * OPEN execution context whose own authority is still the installed one.
+     * The caller must still reject a PRESENT binding. Nothing else of {@link
+     * ProtosObjectValue#createLocalSlot} is bypassed: an execution context
+     * never registers lookup dependencies. Never materializes the guest Context.
+     */
+    public ProtosLexicalBindingAuthority currentAuthorityAdmittingLocalCreationForRuntime() {
+        ProtosLexicalBindingAuthority authority = deferredContextAuthority;
+        if (authority == null || context == null) {
+            return authority;
+        }
+        return context instanceof ProtosExecutionContextValue executionContext
+                        && executionContext.isOpen()
+                        && executionContext.lexicalBindingAuthorityForRuntime() == authority
+                ? authority
+                : null;
+    }
+
     public void assignCurrentLocalSlotForRuntime(
             String name,
             Object value) {

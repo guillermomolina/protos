@@ -272,6 +272,47 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /**
+     * PERF025-H1: binds a statically proven parameter of a root that installs
+     * its persistent frame authority, at the ordinal the lowerer took from
+     * {@code frameBackedLayout} instead of re-resolving {@code name}, which
+     * only the unchanged named fallback uses.
+     */
+    @Operation
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class BindClosureIndexedParameter {
+        @Specialization
+        public static void perform(
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                Object value) {
+            ProtosBytecodeRootNode.bindIndexedClosureParameter(
+                    frameBackedLayout, activation, ordinal, name, value);
+        }
+    }
+
+    /** PERF025-H1 rest counterpart of {@link BindClosureIndexedParameter}. */
+    @Operation
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class BindClosureIndexedRest {
+        @Specialization
+        public static void perform(
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                int positionalParametersBeforeRest) {
+            ProtosBytecodeRootNode.bindIndexedClosureRest(
+                    frameBackedLayout, activation, ordinal, name, positionalParametersBeforeRest);
+        }
+    }
+
     @Operation
     public static final class CheckClosureArgumentUpperBound {
         @Specialization

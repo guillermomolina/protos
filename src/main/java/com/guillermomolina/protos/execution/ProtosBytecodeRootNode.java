@@ -262,6 +262,51 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * PERF025-H1: establishes a Closure parameter whose binding identity the
+     * lowerer proved to be {@code ordinal} of {@code frameBackedLayout}, the
+     * layout of a root that installs its persistent frame authority at entry.
+     * While that root's authority is the activation's current one and the
+     * context admits creation, the parameter is created at its known ordinal,
+     * still rejecting a PRESENT binding exactly as a duplicate creation. Any
+     * other state (a non-OPEN context, or another authority) takes the
+     * unchanged named path of {@link BindClosureParameter}.
+     */
+    static void bindIndexedClosureParameter(
+            ProtosFrameLexicalLayout frameBackedLayout,
+            ProtosActivation activation,
+            int ordinal,
+            String name,
+            Object value) {
+        if (activation.currentAuthorityAdmittingLocalCreationForRuntime()
+                        instanceof ProtosFrameLexicalBindingAuthority authority
+                && authority.storesLayout(frameBackedLayout)) {
+            try {
+                authority.createFrameBackedBindingAt(ordinal, value);
+            } catch (IllegalStateException invalidCreation) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(activation));
+            }
+            return;
+        }
+        createClosureParameterSlot(activation, name, value);
+    }
+
+    /** PERF025-H1 rest counterpart of {@link #bindIndexedClosureParameter}. */
+    static void bindIndexedClosureRest(
+            ProtosFrameLexicalLayout frameBackedLayout,
+            ProtosActivation activation,
+            int ordinal,
+            String name,
+            int positionalParametersBeforeRest) {
+        bindIndexedClosureParameter(
+                frameBackedLayout,
+                activation,
+                ordinal,
+                name,
+                closureRestArray(activation, positionalParametersBeforeRest));
+    }
+
     private static ProtosSignalException closureArgumentCountError(
             ProtosActivation activation) {
         return new ProtosSignalException(

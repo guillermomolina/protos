@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.156-SNAPSHOT
+
+- `PERF025-H1` establishes statically proven Closure parameters of a root that
+  installs its persistent frame authority at their known layout ordinal. The
+  lowerer emits the new `BindClosureIndexedParameter`/`BindClosureIndexedRest`
+  operations, carrying the root's `ProtosFrameLexicalLayout` and the
+  parameter's ordinal, for every parameter whose binding identity is owned by
+  that root's own scope; `ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt`
+  then checks presence and writes the frame local directly at that ordinal,
+  recording establishment order exactly as before, instead of re-resolving the
+  name through `containsBinding`/`putBinding`. The indexed path applies only
+  while the activation's current authority stores that exact layout and the
+  execution context admits creation
+  (`ProtosActivation.currentAuthorityAdmittingLocalCreationForRuntime`: an
+  unmaterialized, or an OPEN materialized, execution context still using that
+  authority); a CLOSED or FROZEN context, another authority, or an unproven
+  parameter takes the unchanged named `BindClosureParameter`/`BindClosureRest`
+  path. Static identity never implies presence: a PRESENT binding, including
+  PRESENT(null), is still a duplicate-creation Error, and a binding removed
+  before its formal bind (D179 C0) is re-established at the same ordinal.
+  Defaults, rest Array creation, argument transport and the frame-native
+  `BindClosureFrameParameter` path are unchanged; no observable semantic
+  change. New `ProtosPerf025H1IndexedParameterEstablishmentTest`.
+
 ## 0.3.155-SNAPSHOT
 
 - `PERF025` virtualizes statically unobservable Closure return homes. A new

@@ -192,6 +192,16 @@ final class CanonicalToBytecodeLowerer {
     private ProtosFrameLexicalLayout currentRootFrameNativeLayout;
 
     /**
+     * PERF025-H1: the frame-binding layout of the genuine root currently being
+     * lowered when it installs its persistent frame authority at entry, else
+     * {@code null}. While non-null, that root's statically proven parameters
+     * are established at their layout ordinal ({@link
+     * #indexedParameterOrdinal}). Saved and restored with the other per-root
+     * fast-path context.
+     */
+    private ProtosFrameLexicalLayout currentRootIndexedParameterLayout;
+
+    /**
      * PLAT041 C′ lowering-time source of the current {@link
      * com.guillermomolina.protos.runtime.ProtosActivation} consumed by {@link
      * #emitCurrentActivation}: {@code null} selects the root's frame argument
@@ -518,6 +528,7 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal savedActivationLocal = currentActivationLocal;
         BytecodeLocal[] savedFrameNativeLocals = currentRootFrameNativeLocals;
         ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
+        ProtosFrameLexicalLayout savedIndexedParameterLayout = currentRootIndexedParameterLayout;
         try {
             currentRootAnalysis = analysisForThisRoot;
             currentRootTopScope = scopeForThisRoot;
@@ -525,6 +536,7 @@ final class CanonicalToBytecodeLowerer {
             currentActivationLocal = null;
             currentRootFrameNativeLocals = null;
             currentRootFrameNativeLayout = null;
+            currentRootIndexedParameterLayout = null;
             return emitRootBody(
                     builder,
                     sequence,
@@ -537,6 +549,7 @@ final class CanonicalToBytecodeLowerer {
             currentActivationLocal = savedActivationLocal;
             currentRootFrameNativeLocals = savedFrameNativeLocals;
             currentRootFrameNativeLayout = savedFrameNativeLayout;
+            currentRootIndexedParameterLayout = savedIndexedParameterLayout;
         }
     }
 
@@ -641,6 +654,7 @@ final class CanonicalToBytecodeLowerer {
                         frameLocalLayout);
                 emitCurrentActivation(builder);
                 builder.endInstallFrameLexicalAuthority();
+                currentRootIndexedParameterLayout = frameLocalLayout;
             } else {
                 currentRootFrameNativeLocals = frameLocalRange;
                 currentRootFrameNativeLayout = frameLocalLayout;
@@ -878,6 +892,32 @@ final class CanonicalToBytecodeLowerer {
             return -1;
         }
         Integer ordinal = currentRootFrameNativeLayout.offsetOf(name);
+        return ordinal == null ? -1 : ordinal;
+    }
+
+    /**
+     * PERF025-H1: the layout ordinal at which {@code parameter} of a root that
+     * installs its persistent frame authority is established, or {@code -1}
+     * when its static identity is not proven: the root has no such authority,
+     * the current activation is not the root's own, or the binding analysis
+     * gives the parameter no identity owned by this root's own scope and
+     * backed by one of its frame locals. The ordinal is taken from the very
+     * layout instance the indexed operation carries, so it denotes exactly
+     * that parameter's binding; presence is still checked at run time.
+     */
+    private int indexedParameterOrdinal(CanonicalParameter parameter) {
+        String name = parameter.name();
+        if (currentRootIndexedParameterLayout == null
+                || currentActivationLocal != null
+                || currentRootAnalysis == null
+                || !currentRootFrameLocals.containsKey(name)
+                || currentRootAnalysis.identityOf(parameter)
+                        .map(identity -> identity.owner() != currentRootTopScope
+                                || !identity.name().equals(name))
+                        .orElse(true)) {
+            return -1;
+        }
+        Integer ordinal = currentRootIndexedParameterLayout.offsetOf(name);
         return ordinal == null ? -1 : ordinal;
     }
 
@@ -1124,6 +1164,7 @@ final class CanonicalToBytecodeLowerer {
         for (CanonicalParameter parameter : definition.parameters()) {
             if (parameter.rest()) {
                 int restOrdinal = frameNativeOrdinal(parameter.name());
+                int indexedRestOrdinal = indexedParameterOrdinal(parameter);
                 if (restOrdinal >= 0) {
                     builder.beginBindClosureFrameRest(
                             currentRootFrameNativeLocals,
@@ -1133,6 +1174,14 @@ final class CanonicalToBytecodeLowerer {
                     builder.emitLoadConstant(parameter.name());
                     builder.emitLoadConstant(positionalIndex);
                     builder.endBindClosureFrameRest();
+                } else if (indexedRestOrdinal >= 0) {
+                    builder.beginBindClosureIndexedRest(
+                            currentRootIndexedParameterLayout);
+                    emitCurrentActivation(builder);
+                    builder.emitLoadConstant(indexedRestOrdinal);
+                    builder.emitLoadConstant(parameter.name());
+                    builder.emitLoadConstant(positionalIndex);
+                    builder.endBindClosureIndexedRest();
                 } else {
                     builder.beginBindClosureRest();
                     emitCurrentActivation(builder);
@@ -1198,14 +1247,14 @@ final class CanonicalToBytecodeLowerer {
                             defaultResumeValue);
                     emitBindDefaultLocal(builder, parameter, defaultValue);
                 } else {
-                    boolean frameNative =
-                            beginBindClosureParameter(builder, parameter.name());
+                    ParameterBindingForm form =
+                            beginBindClosureParameter(builder, parameter);
                     builder.beginSourceSection(
                             defaultExpression.span().startOffset(),
                             defaultExpression.span().length());
                     emitExpression(builder, defaultExpression);
                     builder.endSourceSection();
-                    endBindClosureParameter(builder, frameNative);
+                    endBindClosureParameter(builder, form);
                 }
                 builder.endBlock();
 
@@ -1241,45 +1290,64 @@ final class CanonicalToBytecodeLowerer {
         if (defaultValue == null) {
             throw new AssertionError("composed default value local was not allocated");
         }
-        boolean frameNative = beginBindClosureParameter(builder, parameter.name());
+        ParameterBindingForm form = beginBindClosureParameter(builder, parameter);
         builder.emitLoadLocal(defaultValue);
-        endBindClosureParameter(builder, frameNative);
+        endBindClosureParameter(builder, form);
+    }
+
+    /** The binding operation opened for one Closure parameter. */
+    private enum ParameterBindingForm {
+        FRAME_NATIVE,
+        INDEXED,
+        NAMED
     }
 
     /**
      * Opens the binding operation of one Closure parameter: the PERF025
      * frame-native {@code BindClosureFrameParameter} for a parameter of a
-     * root lowered without a persistent frame authority, otherwise the
-     * unchanged {@code BindClosureParameter}. Both then take the value
-     * operand; returns whether the frame-native form was opened. The
+     * root lowered without a persistent frame authority; the PERF025-H1
+     * {@code BindClosureIndexedParameter} for a statically proven parameter
+     * of a root that installs one; otherwise the unchanged named {@code
+     * BindClosureParameter}. Each then takes the value operand. The
      * frame-native form (only ever opened for the root's own activation)
      * takes no activation operand, so binding a parameter of a compact
      * source call does not materialize one (PERF025-H1).
      */
-    private boolean beginBindClosureParameter(
+    private ParameterBindingForm beginBindClosureParameter(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
-            String name) {
+            CanonicalParameter parameter) {
+        String name = parameter.name();
         int ordinal = frameNativeOrdinal(name);
         if (ordinal >= 0) {
             builder.beginBindClosureFrameParameter(
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout);
             builder.emitLoadConstant(ordinal);
-        } else {
-            builder.beginBindClosureParameter();
-            emitCurrentActivation(builder);
+            builder.emitLoadConstant(name);
+            return ParameterBindingForm.FRAME_NATIVE;
         }
+        ordinal = indexedParameterOrdinal(parameter);
+        if (ordinal >= 0) {
+            builder.beginBindClosureIndexedParameter(
+                    currentRootIndexedParameterLayout);
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(ordinal);
+            builder.emitLoadConstant(name);
+            return ParameterBindingForm.INDEXED;
+        }
+        builder.beginBindClosureParameter();
+        emitCurrentActivation(builder);
         builder.emitLoadConstant(name);
-        return ordinal >= 0;
+        return ParameterBindingForm.NAMED;
     }
 
     private static void endBindClosureParameter(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
-            boolean frameNative) {
-        if (frameNative) {
-            builder.endBindClosureFrameParameter();
-        } else {
-            builder.endBindClosureParameter();
+            ParameterBindingForm form) {
+        switch (form) {
+            case FRAME_NATIVE -> builder.endBindClosureFrameParameter();
+            case INDEXED -> builder.endBindClosureIndexedParameter();
+            case NAMED -> builder.endBindClosureParameter();
         }
     }
 
@@ -4073,7 +4141,7 @@ final class CanonicalToBytecodeLowerer {
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalParameter parameter,
             int positionalIndex) {
-        boolean frameNative = beginBindClosureParameter(builder, parameter.name());
+        ParameterBindingForm form = beginBindClosureParameter(builder, parameter);
         if (currentActivationLocal == null) {
             builder.beginLoadFrameClosureArgument();
             builder.emitLoadConstant(positionalIndex);
@@ -4084,7 +4152,7 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadConstant(positionalIndex);
             builder.endLoadClosureArgument();
         }
-        endBindClosureParameter(builder, frameNative);
+        endBindClosureParameter(builder, form);
     }
 
     private void validateSupported(CanonicalSequence sequence) {
