@@ -228,11 +228,20 @@ Scheduling and infrastructure provisioning are separate responsibilities.
 The scheduler uses capacity already incorporated into Protos through
 normal bootstrap/discovery/membership mechanisms.
 
-If no suitable capacity exists, admission may remain pending and may
-produce semantic capacity-demand signals. An external or explicitly
-integrated Infrastructure Controller may react by provisioning raw
-execution capacity, but that capacity becomes usable by Protos only after
-normal runtime bootstrap and membership.
+If suitable capacity is unavailable, admission may remain pending: the
+same Actor remains initializing and capacity shortage alone is not an
+automatic spawn failure. The runtime may observe or expose
+implementation-specific capacity or pressure feedback, but Protos does
+not require a semantic capacity-shortage signal, value, or stream, nor any
+particular signal shape, cadence, aggregation model, or proactive timing.
+
+External infrastructure may independently add or remove raw execution
+capacity. No infrastructure-provisioning controller is required as a
+Protos semantic institution, and external infrastructure is not Protos
+semantic authority. Raw capacity becomes usable by Protos only through the
+normal Protos runtime lifecycle (bootstrap, discovery, and membership as
+applicable). `spawn()` does not provision infrastructure, and correctness
+does not depend on graceful draining of removed capacity.
 
 External infrastructure does not directly create Actors, Group members,
 Protos Nodes, or Cluster membership merely by creating physical
@@ -249,23 +258,30 @@ model.
 
 **DIRECTION CLOSED, DETAILS OPEN --- REVISED**
 
-Protos does not define one universal PACK or SPREAD placement strategy.
+Protos does not define one universal PACK or SPREAD placement strategy,
+and Core does not require a universal objective function, a placement
+score, a scheduler pipeline, or any particular ordering or priority among
+placement objectives.
 
-Placement balances multiple objectives such as:
+Hard feasibility is separate from optimization and remains mandatory
+where applicable: a hard constraint is not a soft preference, and soft
+optimization never makes an infeasible destination valid.
 
--   Performance
--   Scalability
--   Availability/resilience
--   Resource efficiency
+Within the feasible set, implementations MAY optimize placement using one
+or more objectives. Illustrative implementation/policy examples include:
+
 -   Locality
+-   Load spreading
+-   Resource efficiency
 -   Stability
+-   Availability evidence
 
-PACK and SPREAD are possible resulting strategies rather than universal
-language modes.
-
-Communication-heavy Actors may benefit from physical locality. CPU-heavy
-Actors may benefit from spreading. High-availability requirements may
-override a pure performance optimum.
+PACK and SPREAD are possible resulting implementation strategies rather
+than universal language modes. For example, an implementation may favor
+locality for communication-heavy Actors or spreading for CPU-heavy
+Actors. Availability-oriented placement may only be claimed satisfied on
+demonstrable evidence of failure independence; HA placement is not
+persistence, replication, consensus, or exactly-once delivery.
 
 Rebalancing is the process of improving runtime placement or distribution
 over time. It does not imply live Actor migration.
@@ -284,5 +300,6 @@ Rebalancing may occur by:
 The runtime should avoid churn: rebalancing should occur only when the
 expected benefit justifies its cost and disruption.
 
-Exact placement scoring, hysteresis, affinity APIs, and migration
-mechanics remain open.
+Exact rebalancing algorithms and policies, hysteresis, affinity APIs,
+and migration mechanics remain open; any placement optimization strategy
+is implementation freedom.
