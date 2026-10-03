@@ -334,6 +334,132 @@ final class ProtosPerf025LazyLexicalCaptureTest {
                                             module,
                                             receivers.get(0))
                                     .result()));
+
+            ProtosObjectValue inheritedPrototype =
+                    new ProtosObjectValue(
+                            ProtosObjectValue.rootObject());
+            Object inheritedFirst = integer(42);
+            Object inheritedSecond = integer(43);
+            inheritedPrototype.createLocalSlot(
+                    "value",
+                    inheritedFirst);
+
+            java.util.ArrayList<ProtosObjectValue> inheritedReceivers =
+                    new java.util.ArrayList<>();
+            for (int index = 0; index < 6; index++) {
+                inheritedReceivers.add(
+                        new ProtosObjectValue(
+                                inheritedPrototype));
+            }
+
+            for (ProtosObjectValue candidate : inheritedReceivers) {
+                assertSame(
+                        inheritedFirst,
+                        invokeDirect(
+                                        polymorphicReader,
+                                        module,
+                                        candidate)
+                                .result());
+            }
+
+            ProtosObjectValue shadowed =
+                    inheritedReceivers.get(0);
+            Object shadowValue = integer(99);
+            shadowed.createLocalSlot(
+                    "value",
+                    shadowValue);
+            assertSame(
+                    shadowValue,
+                    invokeDirect(
+                                    polymorphicReader,
+                                    module,
+                                    shadowed)
+                            .result());
+
+            shadowed.removeLocalSlot("value");
+            assertSame(
+                    inheritedFirst,
+                    invokeDirect(
+                                    polymorphicReader,
+                                    module,
+                                    shadowed)
+                            .result());
+
+            inheritedPrototype.assignLocalSlot(
+                    "value",
+                    inheritedSecond);
+            for (ProtosObjectValue candidate : inheritedReceivers) {
+                assertSame(
+                        inheritedSecond,
+                        invokeDirect(
+                                        polymorphicReader,
+                                        module,
+                                        candidate)
+                                .result());
+            }
+
+            ProtosObjectValue methodPrototype =
+                    new ProtosObjectValue(
+                            ProtosObjectValue.rootObject());
+            methodPrototype.createLocalSlot(
+                    "method",
+                    storedMethod);
+            ProtosObjectValue firstMethodReceiver =
+                    new ProtosObjectValue(
+                            methodPrototype);
+            ProtosObjectValue secondMethodReceiver =
+                    new ProtosObjectValue(
+                            methodPrototype);
+
+            ProtosClosureValue inheritedFirstExtraction =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            invokeDirect(
+                                            methodReader,
+                                            module,
+                                            firstMethodReceiver)
+                                    .result());
+            ProtosClosureValue inheritedSecondExtraction =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            invokeDirect(
+                                            methodReader,
+                                            module,
+                                            secondMethodReceiver)
+                                    .result());
+            ProtosClosureValue inheritedRepeatedExtraction =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            invokeDirect(
+                                            methodReader,
+                                            module,
+                                            firstMethodReceiver)
+                                    .result());
+
+            assertNotSame(
+                    inheritedFirstExtraction,
+                    inheritedSecondExtraction);
+            assertNotSame(
+                    inheritedFirstExtraction,
+                    inheritedRepeatedExtraction);
+            assertSame(
+                    firstMethodReceiver,
+                    inheritedFirstExtraction.capturedReceiver());
+            assertSame(
+                    secondMethodReceiver,
+                    inheritedSecondExtraction.capturedReceiver());
+            assertSame(
+                    firstMethodReceiver,
+                    inheritedRepeatedExtraction.capturedReceiver());
+            assertSame(
+                    methodPrototype,
+                    inheritedFirstExtraction.methodHome().orElseThrow());
+            assertSame(
+                    methodPrototype,
+                    inheritedSecondExtraction.methodHome().orElseThrow());
+            assertSame(
+                    methodPrototype,
+                    inheritedRepeatedExtraction.methodHome().orElseThrow());
         });
 
         System.out.println("GUARDED_MEMBER_READ_INVALIDATION=PASS");

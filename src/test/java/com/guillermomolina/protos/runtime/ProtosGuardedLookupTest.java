@@ -67,6 +67,135 @@ final class ProtosGuardedLookupTest {
     }
 
     @Test
+    void sharedInheritedLookupTracksParentChainButNotSiblingShadows() {
+        var parent = object();
+        Object inherited = new Object();
+        Object replacement = new Object();
+        parent.createLocalSlot("pick", inherited);
+
+        var first = new ProtosObjectValue(parent);
+        var second = new ProtosObjectValue(parent);
+        var third = new ProtosObjectValue(parent);
+
+        var shared =
+                ProtosValueLookup.lookupGuardedSharedInherited(
+                        first,
+                        "pick",
+                        null);
+        assertNotNull(shared);
+        assertSame(parent, shared.exactParent());
+        assertSame(inherited, shared.selected().value());
+        assertSame(parent, shared.selected().home());
+        assertTrue(shared.stability().isValid());
+
+        assertTrue(
+                ProtosValueLookup.matchesGuardedSharedInherited(
+                        second,
+                        "pick",
+                        shared));
+        assertTrue(
+                ProtosValueLookup.matchesGuardedSharedInherited(
+                        third,
+                        "pick",
+                        shared));
+
+        second.createLocalSlot("pick", new Object());
+        assertFalse(
+                ProtosValueLookup.matchesGuardedSharedInherited(
+                        second,
+                        "pick",
+                        shared));
+        assertTrue(
+                shared.stability().isValid(),
+                "a sibling-local shadow is deliberately not a parent-chain dependency");
+
+        second.removeLocalSlot("pick");
+        assertTrue(
+                ProtosValueLookup.matchesGuardedSharedInherited(
+                        second,
+                        "pick",
+                        shared));
+        assertTrue(shared.stability().isValid());
+
+        parent.assignLocalSlot("pick", replacement);
+        assertFalse(shared.stability().isValid());
+
+        var refreshed =
+                ProtosValueLookup.lookupGuardedSharedInherited(
+                        third,
+                        "pick",
+                        null);
+        assertNotNull(refreshed);
+        assertSame(replacement, refreshed.selected().value());
+        assertSame(parent, refreshed.selected().home());
+    }
+
+    @Test
+    void sharedInheritedLookupInvalidatesForLateIntermediateShadow() {
+        var ancestor = object();
+        Object inherited = new Object();
+        Object nearer = new Object();
+        ancestor.createLocalSlot("pick", inherited);
+
+        var parent = new ProtosObjectValue(ancestor);
+        var first = new ProtosObjectValue(parent);
+        var second = new ProtosObjectValue(parent);
+
+        var shared =
+                ProtosValueLookup.lookupGuardedSharedInherited(
+                        first,
+                        "pick",
+                        null);
+        assertNotNull(shared);
+        assertSame(parent, shared.exactParent());
+        assertSame(ancestor, shared.selected().home());
+        assertSame(inherited, shared.selected().value());
+
+        parent.createLocalSlot("pick", nearer);
+        assertFalse(shared.stability().isValid());
+
+        var refreshed =
+                ProtosValueLookup.lookupGuardedSharedInherited(
+                        second,
+                        "pick",
+                        null);
+        assertNotNull(refreshed);
+        assertSame(parent, refreshed.selected().home());
+        assertSame(nearer, refreshed.selected().value());
+    }
+
+    @Test
+    void sharedInheritedLookupRejectsOwnSlotsAndSubclassChains() {
+        var parent = object();
+        parent.createLocalSlot("pick", new Object());
+
+        var own = new ProtosObjectValue(parent);
+        own.createLocalSlot("pick", new Object());
+        assertNull(
+                ProtosValueLookup.lookupGuardedSharedInherited(
+                        own,
+                        "pick",
+                        null));
+
+        var context =
+                new ProtosExecutionContextValue(
+                        ProtosObjectValue.rootObject());
+        context.createLocalSlot("pick", new Object());
+        assertNull(
+                ProtosValueLookup.lookupGuardedSharedInherited(
+                        context,
+                        "pick",
+                        null));
+
+        var childOfContext = new ProtosObjectValue(context);
+        assertNull(
+                ProtosValueLookup.lookupGuardedSharedInherited(
+                        childOfContext,
+                        "pick",
+                        null));
+    }
+
+    @Test
     void removalRejectsStaleHomeAndRevealsInheritedSelection() {
         var parent = object();
         var receiver = new ProtosObjectValue(parent);

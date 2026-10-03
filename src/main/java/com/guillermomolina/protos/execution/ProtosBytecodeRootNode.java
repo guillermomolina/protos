@@ -1274,10 +1274,38 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class ReadMember {
         /**
-         * PERF025 ordinary member-read PIC. Selection is cached, never the
-         * semantically observable extracted value. In particular a selected
-         * Closure is rebound through materializeMemberRead on every hit, so
-         * CALLABLES fresh receiver-bound extraction identity remains exact.
+         * PERF025-H3A shared inherited-member PIC. Distinct exact ordinary
+         * receivers may share one selection when they have the same exact
+         * direct parent and none owns the selector locally. The D013
+         * dependency starts at the parent; local shadowing is guarded per
+         * receiver and therefore does not invalidate unrelated siblings.
+         */
+        @Specialization(
+                guards = {
+                    "name.equals(cachedName)",
+                    "cachedLookup != null",
+                    "matchesSharedInheritedLookup(receiver, cachedName, cachedLookup)"
+                },
+                assumptions = "cachedLookup.stability()",
+                limit = "3")
+        public static Object guardedSharedInherited(
+                ProtosActivation activation,
+                Object receiver,
+                String name,
+                @Cached("name") String cachedName,
+                @Cached("createSharedInheritedLookup(receiver, name, activation)")
+                        ProtosValueLookup.SharedInheritedLookup cachedLookup) {
+            return ProtosValueLookup.materializeMemberRead(
+                    receiver,
+                    cachedLookup.selected());
+        }
+
+        /**
+         * PERF025 ordinary exact-receiver member-read PIC. Selection is cached,
+         * never the semantically observable extracted value. In particular a
+         * selected Closure is rebound through materializeMemberRead on every
+         * hit, so CALLABLES fresh receiver-bound extraction identity remains
+         * exact.
          */
         @Specialization(
                 guards = {
@@ -1287,7 +1315,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 },
                 assumptions = "cachedLookup.stability()",
                 limit = "3")
-        public static Object guarded(
+        public static Object guardedExactReceiver(
                 ProtosActivation activation,
                 Object receiver,
                 String name,
@@ -1300,7 +1328,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     cachedLookup.selected());
         }
 
-        @Specialization(replaces = "guarded")
+        @Specialization(
+                replaces = {
+                    "guardedSharedInherited",
+                    "guardedExactReceiver"
+                })
         public static Object perform(
                 ProtosActivation activation,
                 Object receiver,
@@ -1315,6 +1347,26 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             } catch (UnsupportedOperationException unsupportedRepresentation) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
             }
+        }
+
+        static ProtosValueLookup.SharedInheritedLookup createSharedInheritedLookup(
+                Object receiver,
+                String name,
+                ProtosActivation activation) {
+            return ProtosValueLookup.lookupGuardedSharedInherited(
+                    receiver,
+                    name,
+                    activation.preludeOrNullForRuntime());
+        }
+
+        static boolean matchesSharedInheritedLookup(
+                Object receiver,
+                String name,
+                ProtosValueLookup.SharedInheritedLookup cachedLookup) {
+            return ProtosValueLookup.matchesGuardedSharedInherited(
+                    receiver,
+                    name,
+                    cachedLookup);
         }
 
         static ProtosValueLookup.GuardedLookup createGuardedLookup(

@@ -160,6 +160,17 @@ public class ProtosObjectValue implements TruffleObject {
         return Optional.ofNullable(parent);
     }
 
+    /**
+     * Backend-private direct-parent projection for guarded ordinary lookup.
+     *
+     * <p>Unlike {@link #parent()}, this avoids Optional construction in the hot
+     * shared-inherited member-read guard. The semantic parent remains immutable
+     * and the public parent surface is unchanged.
+     */
+    final Object directParentForGuardedLookup() {
+        return parent;
+    }
+
     public MutationState mutationState() {
         return mutationState;
     }

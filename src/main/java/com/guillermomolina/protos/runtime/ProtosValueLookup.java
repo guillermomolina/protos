@@ -40,6 +40,29 @@ public final class ProtosValueLookup {
             Assumption stability) {}
 
     /**
+     * PERF025-H3A shared inherited selection. The exact direct parent is the
+     * shareable semantic anchor; the guarded lookup starts at that parent, so
+     * sibling receivers are not registered as dependencies. Each actual
+     * receiver separately proves local absence of the selector on every hit.
+     */
+    public record SharedInheritedLookup(
+            Object exactParent,
+            GuardedLookup parentLookup) {
+        public SharedInheritedLookup {
+            Objects.requireNonNull(exactParent, "exactParent");
+            Objects.requireNonNull(parentLookup, "parentLookup");
+        }
+
+        public ProtosSlotLookupResult selected() {
+            return parentLookup.selected();
+        }
+
+        public Assumption stability() {
+            return parentLookup.stability();
+        }
+    }
+
+    /**
      * Establishes a cache entry using the same lookup implementation as the
      * generic path. This is specialization-time work, never valid-hit work.
      *
@@ -65,6 +88,74 @@ public final class ProtosValueLookup {
             return null;
         }
         return new GuardedLookup(selected.orElseThrow(), stability);
+    }
+
+    /**
+     * Establishes a shared inherited-member selection for an exact ordinary
+     * receiver. The receiver itself must not own {@code name}; lookup and D013
+     * dependency registration begin at its exact direct parent.
+     *
+     * <p>This deliberately shares only inherited selection. Own-slot reads stay
+     * on the exact-receiver PIC because ordinary slot storage is still
+     * String-keyed LinkedHashMap storage rather than a shared ordinal layout.
+     *
+     * @return a shared inherited selection, or null when the shape is not
+     *         safely admitted
+     */
+    public static SharedInheritedLookup lookupGuardedSharedInherited(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude) {
+        CompilerAsserts.neverPartOfCompilation();
+        Objects.requireNonNull(name, "name");
+
+        if (receiver == null || receiver.getClass() != ProtosObjectValue.class) {
+            return null;
+        }
+
+        ProtosObjectValue ordinary = (ProtosObjectValue) receiver;
+        if (ordinary.hasLocalSlot(name)) {
+            return null;
+        }
+
+        Object parent = ordinary.directParentForGuardedLookup();
+        if (parent == null) {
+            return null;
+        }
+
+        try {
+            GuardedLookup parentLookup =
+                    lookupGuarded(parent, name, prelude);
+            if (parentLookup == null) {
+                return null;
+            }
+            return new SharedInheritedLookup(parent, parentLookup);
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            return null;
+        }
+    }
+
+    /**
+     * Valid-hit guard for {@link #lookupGuardedSharedInherited}. The exact
+     * parent identity is immutable; local selector absence is intentionally
+     * checked per receiver so one sibling's shadowing does not invalidate the
+     * shared parent-chain selection for every other sibling.
+     */
+    public static boolean matchesGuardedSharedInherited(
+            Object receiver,
+            String name,
+            SharedInheritedLookup cachedLookup) {
+        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(cachedLookup, "cachedLookup");
+
+        if (receiver == null || receiver.getClass() != ProtosObjectValue.class) {
+            return false;
+        }
+
+        ProtosObjectValue ordinary = (ProtosObjectValue) receiver;
+        return ordinary.directParentForGuardedLookup()
+                        == cachedLookup.exactParent()
+                && !ordinary.hasLocalSlot(name);
     }
 
     /**

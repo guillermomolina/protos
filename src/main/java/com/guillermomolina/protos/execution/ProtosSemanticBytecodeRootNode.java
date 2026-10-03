@@ -768,13 +768,36 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     public static final class ReadMember {
         @Specialization(
                 guards = {
+                    "name.equals(cachedName)",
+                    "cachedLookup != null",
+                    "matchesSharedInheritedLookup(receiver, cachedName, cachedLookup)"
+                },
+                assumptions = "cachedLookup.stability()",
+                limit = "3")
+        public static Object guardedSharedInherited(
+                ProtosActivation activation,
+                Object receiver,
+                String name,
+                @Cached("name") String cachedName,
+                @Cached("createSharedInheritedLookup(receiver, name, activation)")
+                        ProtosValueLookup.SharedInheritedLookup cachedLookup) {
+            return ProtosBytecodeRootNode.ReadMember.guardedSharedInherited(
+                    activation,
+                    receiver,
+                    name,
+                    cachedName,
+                    cachedLookup);
+        }
+
+        @Specialization(
+                guards = {
                     "receiver == cachedReceiver",
                     "name.equals(cachedName)",
                     "cachedLookup != null"
                 },
                 assumptions = "cachedLookup.stability()",
                 limit = "3")
-        public static Object guarded(
+        public static Object guardedExactReceiver(
                 ProtosActivation activation,
                 Object receiver,
                 String name,
@@ -782,7 +805,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Cached("name") String cachedName,
                 @Cached("createGuardedLookup(receiver, name, activation)")
                         ProtosValueLookup.GuardedLookup cachedLookup) {
-            return ProtosBytecodeRootNode.ReadMember.guarded(
+            return ProtosBytecodeRootNode.ReadMember.guardedExactReceiver(
                     activation,
                     receiver,
                     name,
@@ -791,7 +814,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     cachedLookup);
         }
 
-        @Specialization(replaces = "guarded")
+        @Specialization(
+                replaces = {
+                    "guardedSharedInherited",
+                    "guardedExactReceiver"
+                })
         public static Object perform(
                 ProtosActivation activation,
                 Object receiver,
@@ -800,6 +827,26 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     activation,
                     receiver,
                     name);
+        }
+
+        static ProtosValueLookup.SharedInheritedLookup createSharedInheritedLookup(
+                Object receiver,
+                String name,
+                ProtosActivation activation) {
+            return ProtosBytecodeRootNode.ReadMember.createSharedInheritedLookup(
+                    receiver,
+                    name,
+                    activation);
+        }
+
+        static boolean matchesSharedInheritedLookup(
+                Object receiver,
+                String name,
+                ProtosValueLookup.SharedInheritedLookup cachedLookup) {
+            return ProtosBytecodeRootNode.ReadMember.matchesSharedInheritedLookup(
+                    receiver,
+                    name,
+                    cachedLookup);
         }
 
         static ProtosValueLookup.GuardedLookup createGuardedLookup(
