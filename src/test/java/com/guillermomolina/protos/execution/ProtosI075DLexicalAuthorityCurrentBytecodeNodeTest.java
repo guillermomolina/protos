@@ -120,6 +120,9 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
      * x}, and finally returns the direct {@code ReadFrameLocal} of {@code x}.
      */
     private static ProtosSemanticBytecodeRootNode installThenTwiceYieldingRoot(ProtosLanguage language) {
+        ProtosFrameLexicalLayout layout =
+                ProtosFrameLexicalLayout.of(new String[] {"x"});
+
         BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
                 ProtosSemanticBytecodeRootNodeGen.create(
                         language,
@@ -130,7 +133,7 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
                             BytecodeLocal x = builder.createLocal("x", null);
                             builder.beginInstallFrameLexicalAuthority(
                                     new BytecodeLocal[] {x},
-                                    ProtosFrameLexicalLayout.of(new String[] {"x"}));
+                                    layout);
                             builder.emitLoadArgument(0);
                             builder.endInstallFrameLexicalAuthority();
 
@@ -143,7 +146,9 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
                             builder.endYield();
 
                             builder.beginReturn();
-                            builder.beginReadFrameLocal(x);
+                            builder.beginReadFrameLocal(
+                                    x,
+                                    layout.presentContinuityAt(0));
                             builder.emitLoadArgument(0);
                             builder.emitLoadConstant("x");
                             builder.endReadFrameLocal();

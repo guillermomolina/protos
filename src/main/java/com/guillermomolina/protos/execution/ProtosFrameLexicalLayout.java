@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.Truffle;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -47,9 +49,26 @@ final class ProtosFrameLexicalLayout {
     private final String[] names;
     private final Map<String, Integer> offsets;
 
+    /*
+     * PERF025-D179-A: one-way, root/name-scoped speculation shared by every
+     * invocation using this lowered layout. This is compiler stability
+     * metadata only: LocalAccessor cleared state remains the semantic presence
+     * authority. A successful PRESENT -> ABSENT transition invalidates the
+     * corresponding token permanently; recreation never renews it.
+     */
+    private final Assumption[] presentContinuity;
+
     private ProtosFrameLexicalLayout(String[] names, Map<String, Integer> offsets) {
         this.names = names;
         this.offsets = offsets;
+        this.presentContinuity = new Assumption[names.length];
+        for (int ordinal = 0; ordinal < names.length; ordinal++) {
+            presentContinuity[ordinal] =
+                    Truffle.getRuntime()
+                            .createAssumption(
+                                    "Protos lexical binding remains present: "
+                                            + names[ordinal]);
+        }
     }
 
     static ProtosFrameLexicalLayout of(String[] frameBackedNames) {
@@ -84,5 +103,46 @@ final class ProtosFrameLexicalLayout {
 
     Integer offsetOf(String name) {
         return offsets.get(name);
+    }
+
+    /**
+     * Defensive replay check for the Bytecode DSL's retained parser. The
+     * canonical scope must reproduce the identical declaration-order layout
+     * on every reparse; a mismatch would make previously emitted local
+     * ordinals and root/name membership assumptions unsafe to reuse.
+     */
+    void requireSameNames(String[] frameBackedNames) {
+        Objects.requireNonNull(frameBackedNames, "frameBackedNames");
+        if (frameBackedNames.length != names.length) {
+            throw new IllegalStateException(
+                    "frame-backed lexical layout changed across Bytecode reparse: expected "
+                            + names.length
+                            + " names but found "
+                            + frameBackedNames.length);
+        }
+
+        for (int ordinal = 0; ordinal < names.length; ordinal++) {
+            String replayed =
+                    Objects.requireNonNull(
+                            frameBackedNames[ordinal],
+                            "frameBackedNames[" + ordinal + "]");
+            if (!names[ordinal].equals(replayed)) {
+                throw new IllegalStateException(
+                        "frame-backed lexical layout changed across Bytecode reparse at ordinal "
+                                + ordinal
+                                + ": expected "
+                                + names[ordinal]
+                                + " but found "
+                                + replayed);
+            }
+        }
+    }
+
+    Assumption presentContinuityAt(int ordinal) {
+        return presentContinuity[ordinal];
+    }
+
+    void invalidatePresentContinuityAt(int ordinal) {
+        presentContinuity[ordinal].invalidate();
     }
 }

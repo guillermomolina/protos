@@ -40,6 +40,7 @@ import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
+import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
@@ -479,16 +480,23 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
     @Operation
     @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    @ConstantOperand(type = Assumption.class, name = "presenceContinuity")
     public static final class ReadFrameLocal {
         @Specialization
         public static Object perform(
                 LocalAccessor accessor,
+                Assumption presenceContinuity,
                 ProtosActivation activation,
                 String name,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
             return ProtosBytecodeRootNode.ReadFrameLocal.perform(
-                    accessor, activation, name, bytecodeNode, frame);
+                    accessor,
+                    presenceContinuity,
+                    activation,
+                    name,
+                    bytecodeNode,
+                    frame);
         }
     }
 
@@ -501,20 +509,32 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      */
     @Operation
     @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    @ConstantOperand(type = Assumption.class, name = "presenceContinuity")
     public static final class ReadRootFrameLocal {
         @Specialization
         public static Object perform(
                 LocalAccessor accessor,
+                Assumption presenceContinuity,
                 String name,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
-            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
-                    && !accessor.isCleared(bytecodeNode, frame)) {
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
+                /*
+                 * The lowerer emitted this operation only for a current
+                 * Resolved binding. While the call is still compact its guest
+                 * Context has never become observable, so no D179 structural
+                 * removal could have made that established binding ABSENT.
+                 */
                 return accessor.getObject(bytecodeNode, frame);
             }
             return ProtosBytecodeRootNode.ReadFrameLocal.perform(
-                    accessor, ProtosFrameArguments.activation(arguments), name, bytecodeNode, frame);
+                    accessor,
+                    presenceContinuity,
+                    ProtosFrameArguments.activation(arguments),
+                    name,
+                    bytecodeNode,
+                    frame);
         }
     }
 

@@ -516,6 +516,16 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                                     bytecodeNode, frame, offset)
                             : null;
 
+            /*
+             * PERF025-D179-A: invalidate before making the local ABSENT so no
+             * compiled Resolved read may still rely on continuity while the
+             * physical local is already cleared. The token is one-way and is
+             * deliberately not renewed by a later legal recreation.
+             */
+            if (present) {
+                frameBackedLayout.invalidatePresentContinuityAt(offset);
+            }
+
             frameBackedLocals.clear(
                     bytecodeNode, frame, offset);
 

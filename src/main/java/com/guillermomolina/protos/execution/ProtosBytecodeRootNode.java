@@ -586,24 +586,28 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     @Operation
     @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    @ConstantOperand(type = Assumption.class, name = "presenceContinuity")
     public static final class ReadFrameLocal {
         @Specialization
         public static Object perform(
                 LocalAccessor accessor,
+                Assumption presenceContinuity,
                 ProtosActivation activation,
                 String name,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
             if (activation.hasGenuineExecutionContextForRuntime()
-                    && !accessor.isCleared(bytecodeNode, frame)) {
+                    && (presenceContinuity.isValid()
+                            || !accessor.isCleared(bytecodeNode, frame))) {
                 return accessor.getObject(bytecodeNode, frame);
             }
 
             /*
-             * A cleared genuine execution-context local is semantically ABSENT
-             * under D179 C0 and therefore resumes exact lexical/receiver
-             * fallback. Legacy/internal activations whose current lexical
-             * context is an ordinary ProtosObjectValue use the same fallback.
+             * Once continuity has been invalidated, D179 C0 remains exactly
+             * presence-aware: a cleared genuine execution-context local is
+             * semantically ABSENT and resumes lexical/receiver fallback.
+             * Legacy/internal activations whose current lexical context is an
+             * ordinary ProtosObjectValue use the same fallback.
              */
             return ProtosLexicalFallback.readByName(activation, name)
                     .orElseThrow(

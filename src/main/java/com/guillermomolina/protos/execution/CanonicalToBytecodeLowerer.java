@@ -178,6 +178,7 @@ final class CanonicalToBytecodeLowerer {
     private CanonicalLexicalScope currentRootTopScope;
     private java.util.Map<String, BytecodeLocal> currentRootFrameLocals =
             java.util.Map.of();
+    private ProtosFrameLexicalLayout currentRootFrameLayout;
 
     /**
      * PERF025 frame-materialization slice: the frame-binding range and layout
@@ -235,6 +236,23 @@ final class CanonicalToBytecodeLowerer {
      */
     private final java.util.IdentityHashMap<CanonicalLexicalScope, java.util.Map<String, BytecodeLocal>>
             frameLocalsByScope = new java.util.IdentityHashMap<>();
+
+    /*
+     * PERF025-D179-A: BytecodeRootNodes may invoke its retained parser again
+     * to materialize source/instrumentation metadata. BytecodeLocal objects
+     * are parse-local and are intentionally refreshed in frameLocalsByScope,
+     * but lexical membership speculation must retain one exact identity for
+     * the lifetime of the logical lowered root. CanonicalLexicalScope identity
+     * is stable across those parser replays because the binding analysis is
+     * retained by this lowerer.
+     *
+     * Reusing the whole immutable layout also guarantees that every reparse
+     * carries the same root/name Assumption constants. Otherwise an escaped
+     * authority created before a reparse could invalidate an obsolete token
+     * while newly generated ReadFrameLocal instructions trusted a fresh one.
+     */
+    private final java.util.IdentityHashMap<CanonicalLexicalScope, ProtosFrameLexicalLayout>
+            frameLayoutsByScope = new java.util.IdentityHashMap<>();
 
     CanonicalToBytecodeLowerer(ProtosLanguage language, Source source) {
         this(language, source, null);
@@ -526,6 +544,7 @@ final class CanonicalToBytecodeLowerer {
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
         BytecodeLocal savedActivationLocal = currentActivationLocal;
+        ProtosFrameLexicalLayout savedFrameLayout = currentRootFrameLayout;
         BytecodeLocal[] savedFrameNativeLocals = currentRootFrameNativeLocals;
         ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
         ProtosFrameLexicalLayout savedIndexedParameterLayout = currentRootIndexedParameterLayout;
@@ -533,6 +552,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootAnalysis = analysisForThisRoot;
             currentRootTopScope = scopeForThisRoot;
             currentRootFrameLocals = java.util.Map.of();
+            currentRootFrameLayout = null;
             currentActivationLocal = null;
             currentRootFrameNativeLocals = null;
             currentRootFrameNativeLayout = null;
@@ -546,6 +566,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootAnalysis = savedAnalysis;
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
+            currentRootFrameLayout = savedFrameLayout;
             currentActivationLocal = savedActivationLocal;
             currentRootFrameNativeLocals = savedFrameNativeLocals;
             currentRootFrameNativeLayout = savedFrameNativeLayout;
@@ -637,7 +658,10 @@ final class CanonicalToBytecodeLowerer {
             String[] frameLocalNames =
                     frameLocals.keySet().toArray(String[]::new);
             frameLocalLayout =
-                    ProtosFrameLexicalLayout.of(frameLocalNames);
+                    frameLexicalLayoutForScope(
+                            scopeForThisRoot,
+                            frameLocalNames);
+            currentRootFrameLayout = frameLocalLayout;
             /*
              * PERF025 frame-materialization slice: declaring a binding no
              * longer implies a persistent materialized frame. Only a root
@@ -876,6 +900,29 @@ final class CanonicalToBytecodeLowerer {
         return resolution.isPresent()
                 && resolution.orElseThrow() instanceof CanonicalBindingResolution.Resolved resolved
                 && resolved.identity().owner() == scope;
+    }
+
+    /**
+     * PERF025-D179-A: returns the one frame layout owned by {@code scope} for
+     * the complete lifetime of this lowerer's retained Bytecode parser.
+     *
+     * <p>The first parse creates it. Later BytecodeRootNodes reparses validate
+     * that declaration order is unchanged and reuse the exact object, so its
+     * root/name one-way membership assumptions cannot be silently renewed.
+     */
+    private ProtosFrameLexicalLayout frameLexicalLayoutForScope(
+            CanonicalLexicalScope scope,
+            String[] frameLocalNames) {
+        ProtosFrameLexicalLayout existing = frameLayoutsByScope.get(scope);
+        if (existing != null) {
+            existing.requireSameNames(frameLocalNames);
+            return existing;
+        }
+
+        ProtosFrameLexicalLayout created =
+                ProtosFrameLexicalLayout.of(frameLocalNames);
+        frameLayoutsByScope.put(scope, created);
+        return created;
     }
 
     /**
@@ -4393,9 +4440,12 @@ final class CanonicalToBytecodeLowerer {
      * deliberately never the raw generated {@code LoadLocal} instruction: a
      * local written only through the dynamic accessor API does not
      * participate in the frame-slot-kind speculation the DSL's own literal
-     * {@code StoreLocal}/{@code LoadLocal} pair relies on. Presence is
-     * guaranteed by the static proof itself, so no runtime presence check is
-     * needed here. {@code Candidate} and {@code Dynamic} resolutions, and any
+     * {@code StoreLocal}/{@code LoadLocal} pair relies on. A
+     * {@code Resolved} classification proves that the binding was established
+     * before this exact program point; PERF025-D179-A combines that proof with
+     * a root/name-scoped one-way Assumption so the ordinary path need not read
+     * cleared state until the first actual D179 removal invalidates it.
+     * {@code Candidate} and {@code Dynamic} resolutions, and any
      * {@code Resolved} binding owned by a different scope (an {@code
      * OBJECT_BODY} or a different root entirely), always fall through to the
      * unchanged generic path.
@@ -4409,18 +4459,29 @@ final class CanonicalToBytecodeLowerer {
             if (resolution.isPresent()
                     && resolution.orElseThrow() instanceof CanonicalBindingResolution.Resolved resolved
                     && resolved.identity().owner() == currentRootTopScope) {
+                String resolvedName = resolved.identity().name();
                 BytecodeLocal local =
-                        currentRootFrameLocals.get(resolved.identity().name());
-                if (local != null && currentActivationLocal == null) {
-                    builder.beginReadRootFrameLocal(local);
-                    builder.emitLoadConstant(resolved.identity().name());
+                        currentRootFrameLocals.get(resolvedName);
+                Integer ordinal =
+                        currentRootFrameLayout == null
+                                ? null
+                                : currentRootFrameLayout.offsetOf(resolvedName);
+                if (local != null
+                        && ordinal != null
+                        && currentActivationLocal == null) {
+                    builder.beginReadRootFrameLocal(
+                            local,
+                            currentRootFrameLayout.presentContinuityAt(ordinal));
+                    builder.emitLoadConstant(resolvedName);
                     builder.endReadRootFrameLocal();
                     return;
                 }
-                if (local != null) {
-                    builder.beginReadFrameLocal(local);
+                if (local != null && ordinal != null) {
+                    builder.beginReadFrameLocal(
+                            local,
+                            currentRootFrameLayout.presentContinuityAt(ordinal));
                     emitCurrentActivation(builder);
-                    builder.emitLoadConstant(resolved.identity().name());
+                    builder.emitLoadConstant(resolvedName);
                     builder.endReadFrameLocal();
                     return;
                 }
