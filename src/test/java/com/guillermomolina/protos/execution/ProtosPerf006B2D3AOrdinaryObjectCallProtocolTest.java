@@ -142,15 +142,19 @@ final class ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest {
                 assertSame(
                         owner,
                         callActivation.methodHome().orElseThrow());
-                assertTrue(
-                        callActivation.returnHome().orElseThrow().isActive());
+                // PERF025: the `() => { null }` plan is proven return-home
+                // unobservable, so the owned home is never materialized and has
+                // no lifecycle across suspension or completion.
+                assertTrue(callActivation.ownsReturnHome());
+                assertFalse(
+                        callActivation.returnHome().orElseThrow().isMaterialized());
 
                 Object completed =
                         parent.continueWith(ProtosNullValue.INSTANCE);
 
                 assertSame(marker, completed);
                 assertFalse(
-                        callActivation.returnHome().orElseThrow().isActive());
+                        callActivation.returnHome().orElseThrow().isMaterialized());
             } finally {
                 context.leave();
             }

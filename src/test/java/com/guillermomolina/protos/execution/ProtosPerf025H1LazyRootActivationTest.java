@@ -124,9 +124,12 @@ final class ProtosPerf025H1LazyRootActivationTest {
                 calls.add(prepared);
             }
             assertNotSame(calls.get(0).targetArguments(), calls.get(1).targetArguments());
-            assertNotSame(
-                    ProtosFrameArguments.compactReturnHome(calls.get(0).targetArguments()),
-                    ProtosFrameArguments.compactReturnHome(calls.get(1).targetArguments()));
+            // PERF025: `(value) => { value }` is proven return-home unobservable,
+            // so no invocation materializes a home of its own.
+            for (ProtosBytecodeRootNode.PreparedClosureCall call : calls) {
+                assertTrue(!ProtosFrameArguments.compactReturnHome(call.targetArguments())
+                        .isMaterialized());
+            }
         });
         System.out.println("REPEATED_COMPACT_INVOCATIONS=PASS");
     }

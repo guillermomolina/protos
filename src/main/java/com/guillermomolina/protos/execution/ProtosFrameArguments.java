@@ -46,6 +46,10 @@ final class ProtosFrameArguments {
      * does. Its task slot carries an explicit owning Task for a Task-owned
      * entry (whose creator is not the Task's own activation); null means the
      * callee inherits the caller's Task or dynamic-control state.
+     *
+     * The returnHome slot always holds a ProtosReturnHome; for an owning call
+     * of a plan proven return-home-unobservable it is the non-materialized
+     * ProtosReturnHome.unobservable() marker (PERF025).
      */
     private static final int CLOSURE_INDEX = 0;
     private static final int RECEIVER_INDEX = 1;
@@ -94,8 +98,7 @@ final class ProtosFrameArguments {
         Objects.requireNonNull(caller, "caller");
         Objects.requireNonNull(supplied, "supplied");
 
-        ProtosReturnHome returnHome =
-                closure.returnHome().orElseGet(ProtosReturnHome::new);
+        ProtosReturnHome returnHome = closure.invocationReturnHomeForRuntime();
         Object[] arguments =
                 new Object[USER_ARGUMENT_OFFSET + supplied.length];
         arguments[CLOSURE_INDEX] = closure;

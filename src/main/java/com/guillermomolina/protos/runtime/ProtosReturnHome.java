@@ -17,8 +17,39 @@
 
 package com.guillermomolina.protos.runtime;
 
+/**
+ * The Smalltalk-style return home an owning invocation establishes.
+ *
+ * <p>PERF025: a home that is statically proven unobservable (no non-local
+ * return can ever target it; see {@code CanonicalReturnHomeAnalysis}) is
+ * represented by the shared {@link #unobservable()} marker instead of a
+ * fresh instance. The marker still carries home provenance (a Closure created
+ * under it shares its owner's home rather than owning one), but it has no
+ * lifecycle: owners never complete it, and a non-local return can never
+ * target it. It is never a guest value, so its identity is not observable.
+ */
 public final class ProtosReturnHome {
-    private boolean active = true;
+    private static final ProtosReturnHome UNOBSERVABLE = new ProtosReturnHome(false);
+
+    private boolean active;
+
+    public ProtosReturnHome() {
+        this(true);
+    }
+
+    private ProtosReturnHome(boolean active) {
+        this.active = active;
+    }
+
+    /** The shared non-materialized representation of a proven-unobservable home. */
+    public static ProtosReturnHome unobservable() {
+        return UNOBSERVABLE;
+    }
+
+    /** False only for the {@link #unobservable()} marker, which has no lifecycle. */
+    public boolean isMaterialized() {
+        return this != UNOBSERVABLE;
+    }
 
     public boolean isActive() {
         return active;

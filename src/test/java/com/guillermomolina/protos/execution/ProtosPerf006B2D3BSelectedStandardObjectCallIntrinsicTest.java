@@ -273,11 +273,15 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                         target.capturedReceiver(),
                         targetActivation.receiver());
                 assertTrue(targetActivation.methodHome().isEmpty());
-                assertTrue(
+                // PERF025: the hand-built yielding target runs under a proven
+                // return-home-unobservable `() => { null }` plan, so its owned
+                // home is never materialized and has no lifecycle.
+                assertTrue(targetActivation.ownsReturnHome());
+                assertFalse(
                         targetActivation
                                 .returnHome()
                                 .orElseThrow()
-                                .isActive());
+                                .isMaterialized());
 
                 Object completed =
                         parent.continueWith(
@@ -288,7 +292,7 @@ final class ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest {
                         targetActivation
                                 .returnHome()
                                 .orElseThrow()
-                                .isActive());
+                                .isMaterialized());
             } finally {
                 context.leave();
             }

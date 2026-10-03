@@ -164,9 +164,10 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 ProtosActivation secondCallee =
                         ProtosFrameArguments.activation(second.targetArguments());
                 assertNotSame(firstCallee, secondCallee);
-                assertNotSame(
-                        firstCallee.returnHome().orElseThrow(),
-                        secondCallee.returnHome().orElseThrow());
+                // PERF025: `(value) => { value }` is proven return-home
+                // unobservable, so neither invocation materializes a home.
+                assertSame(ProtosReturnHome.unobservable(), firstCallee.returnHome().orElseThrow());
+                assertSame(ProtosReturnHome.unobservable(), secondCallee.returnHome().orElseThrow());
                 assertNotSame(firstCallee.context(), secondCallee.context());
                 assertEquals(
                         firstCallee.capturedLexicalContexts(),

@@ -30,4 +30,3 @@ com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapterTest 15
 # application Process, end to end. Budget = 10.558 s x 1.25, rounded up.
 com.guillermomolina.protos.execution.ProtosWorkspacePackageAuthorityIsolationIntegrationTest 14
 com.guillermomolina.protos.execution.ProtosWorkspacePackagePreflightTest 16
-com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapterTest 15

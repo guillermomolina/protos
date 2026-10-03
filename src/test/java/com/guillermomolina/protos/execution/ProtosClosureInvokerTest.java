@@ -46,7 +46,8 @@ class ProtosClosureInvokerTest {
 
     @Test
     void preparedBytecodeInvocationCompletesOwnedReturnHome() {
-        ProtosClosureValue closure = closure("() => null");
+        // PERF025: `^` keeps the owned home observable, hence physical.
+        ProtosClosureValue closure = closure("() => ^null");
 
         ProtosActivation activation =
                 ProtosActivation.forClosureInvocation(closure, List.of());

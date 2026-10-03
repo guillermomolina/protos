@@ -161,6 +161,9 @@ public final class ProtosClosureInvoker {
                                 () ->
                                         new IllegalStateException(
                                                 "Closure invocation requires a return home"));
+        // PERF025: an owned non-materialized home has no lifecycle to close.
+        boolean ownsMaterializedReturnHome =
+                activation.ownsReturnHome() && returnHome.isMaterialized();
 
         try {
             if (closure.nativeBody().isPresent()) {
@@ -227,7 +230,7 @@ public final class ProtosClosureInvoker {
             ProtosCoreErrors.selectHandlerIfNeeded(activation, transfer);
             throw transfer;
         } catch (ProtosNonLocalReturnException transfer) {
-            if (activation.ownsReturnHome()
+            if (ownsMaterializedReturnHome
                     && transfer.target() == returnHome) {
                 return transfer.value();
             }
@@ -235,7 +238,7 @@ public final class ProtosClosureInvoker {
         } catch (ProtosTaskCancellationException transfer) {
             throw transfer;
         } finally {
-            if (activation.ownsReturnHome()
+            if (ownsMaterializedReturnHome
                     && returnHome.isActive()) {
                 returnHome.complete();
             }

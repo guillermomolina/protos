@@ -61,6 +61,8 @@ final class ProtosBytecodeClosureExecutionPlan {
     private final CanonicalBindingAnalysis bindingAnalysis;
     private final ProtosSemanticBytecodeRootNode activationRoot;
     private final RootCallTarget activationTarget;
+    /** PERF025: see {@link CanonicalReturnHomeAnalysis}; fixed per definition. */
+    private final boolean mayObserveReturnHome;
 
     ProtosBytecodeClosureExecutionPlan(
             CanonicalClosure definition,
@@ -177,6 +179,8 @@ final class ProtosBytecodeClosureExecutionPlan {
          * per ordinary source Closure call).
          */
         this.activationTarget = activationRoot.getCallTarget();
+        this.mayObserveReturnHome =
+                CanonicalReturnHomeAnalysis.mayObserveReturnHome(definition);
     }
 
     CanonicalClosure definition() {
@@ -218,6 +222,10 @@ final class ProtosBytecodeClosureExecutionPlan {
 
     RootCallTarget activationTargetForComposition() {
         return activationTarget;
+    }
+
+    boolean mayObserveReturnHome() {
+        return mayObserveReturnHome;
     }
 
     void bind(ProtosActivation activation) {

@@ -113,15 +113,19 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                 assertSame(
                         receiver,
                         methodActivation.methodHome().orElseThrow());
-                assertTrue(
-                        methodActivation.returnHome().orElseThrow().isActive());
+                // PERF025: the `() => { null }` plan is proven return-home
+                // unobservable, so the owned home is never materialized and has
+                // no lifecycle across suspension or completion.
+                assertTrue(methodActivation.ownsReturnHome());
+                assertFalse(
+                        methodActivation.returnHome().orElseThrow().isMaterialized());
 
                 Object completed =
                         parent.continueWith(ProtosNullValue.INSTANCE);
 
                 assertSame(marker, completed);
                 assertFalse(
-                        methodActivation.returnHome().orElseThrow().isActive());
+                        methodActivation.returnHome().orElseThrow().isMaterialized());
             } finally {
                 context.leave();
             }

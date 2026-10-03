@@ -112,6 +112,15 @@ public final class ProtosClosureExecutionPlan {
         return bytecodePlan.activationTargetForComposition();
     }
 
+    /**
+     * PERF025: true only when the source definition is statically proven to
+     * never let a non-local return target the return home an owning
+     * invocation establishes, so that home need not be materialized.
+     */
+    public boolean returnHomeProvenUnobservableForRuntime() {
+        return !bytecodePlan.mayObserveReturnHome();
+    }
+
     ProtosClosureExecutionPlan rebuildBytecodeForLanguage(
             CanonicalClosure definition,
             ProtosLanguage language) {

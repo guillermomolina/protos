@@ -401,7 +401,9 @@ final class ProtosPerf010APreparedTargetSpecializationTest {
         ProtosActivation activation = activationOf(child);
         assertSame(receiver, activation.receiver());
         assertSame(receiver, activation.methodHome().orElseThrow());
-        assertTrue(activation.returnHome().orElseThrow().isActive());
+        // PERF025: the `() => { null }` plan is proven return-home unobservable.
+        assertTrue(activation.ownsReturnHome());
+        assertTrue(!activation.returnHome().orElseThrow().isMaterialized());
         Object completed = parent.continueWith(ProtosNullValue.INSTANCE);
         assertSame(marker, completed);
         return activation;

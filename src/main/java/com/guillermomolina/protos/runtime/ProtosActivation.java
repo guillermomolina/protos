@@ -232,10 +232,8 @@ public final class ProtosActivation {
         if (prelude == null) {
             throw new IllegalStateException("Closure invocation requires an owning Core prelude");
         }
-        ProtosReturnHome capturedHome = closure.returnHome().orElse(null);
-        boolean ownsReturnHome = capturedHome == null;
-        ProtosReturnHome invocationHome =
-                ownsReturnHome ? new ProtosReturnHome() : capturedHome;
+        boolean ownsReturnHome = closure.returnHome().isEmpty();
+        ProtosReturnHome invocationHome = closure.invocationReturnHomeForRuntime();
 
         return new ProtosActivation(
                 prelude.newExecutionContext(),
@@ -271,10 +269,8 @@ public final class ProtosActivation {
         if (prelude == null) {
             throw new IllegalStateException("Closure invocation requires an owning Core prelude");
         }
-        ProtosReturnHome capturedHome = closure.returnHome().orElse(null);
-        boolean ownsReturnHome = capturedHome == null;
-        ProtosReturnHome invocationHome =
-                ownsReturnHome ? new ProtosReturnHome() : capturedHome;
+        boolean ownsReturnHome = closure.returnHome().isEmpty();
+        ProtosReturnHome invocationHome = closure.invocationReturnHomeForRuntime();
 
         return new ProtosActivation(
                 prelude.newExecutionContext(),

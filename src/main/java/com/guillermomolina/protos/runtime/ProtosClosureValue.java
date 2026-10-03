@@ -247,6 +247,27 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return java.util.Optional.ofNullable(returnHome);
     }
 
+    /**
+     * The return home an invocation of this Closure runs under: the captured
+     * home when one is captured; otherwise a home the invocation owns. PERF025:
+     * an owned home of a source-backed Closure whose prepared plan proves it
+     * unobservable is the non-materialized {@link ProtosReturnHome#unobservable()}
+     * marker. Native bodies are opaque to that proof, and a plan that is not
+     * yet prepared is not consulted, so both keep a fresh physical home.
+     */
+    public ProtosReturnHome invocationReturnHomeForRuntime() {
+        if (returnHome != null) {
+            return returnHome;
+        }
+        ProtosClosureExecutionPlan plan = executionPlan;
+        if (nativeBody == null
+                && plan != null
+                && plan.returnHomeProvenUnobservableForRuntime()) {
+            return ProtosReturnHome.unobservable();
+        }
+        return new ProtosReturnHome();
+    }
+
     public java.util.Optional<ProtosPrelude> prelude() {
         return java.util.Optional.ofNullable(prelude);
     }

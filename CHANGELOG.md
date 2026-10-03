@@ -7,6 +7,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.155-SNAPSHOT
+
+- `PERF025` virtualizes statically unobservable Closure return homes. A new
+  `CanonicalReturnHomeAnalysis` proves, once per source Closure execution plan
+  (never per invocation), whether the Closure or any lexical descendant -
+  parameter defaults, nested Closures at any depth, and inline Object bodies -
+  contains `^`. An owning invocation of a source-backed Closure whose plan
+  proves its Smalltalk-style return home unobservable runs under the shared
+  non-materialized `ProtosReturnHome.unobservable()` marker instead of a fresh
+  `ProtosReturnHome`, and skips the home's `isActive`/`complete` lifecycle and
+  non-local-return matching. All owning sites (compact frame ABI, rich
+  activation factories, deferred immediate-method preparation) select the home
+  through `ProtosClosureValue.invocationReturnHomeForRuntime()`. Home
+  ownership and captured-home provenance are unchanged, so PLAT044 inline
+  literal-callback admission is preserved; native bodies and plans not yet
+  prepared keep a fresh physical home. Direct, default, descendant, transitive
+  and Object-body non-local return, escaped and foreign-Task `InvalidReturn`,
+  `ensure` precedence and suspension lifetime of physical homes are preserved;
+  no observable semantic change. New `ProtosPerf025VirtualReturnHomeTest`;
+  return-home lifecycle assertions over proven-unobservable plans in
+  `ProtosClosureInvokerTest`, `ProtosPerf006B2BClosureContinuationCompositionTest`,
+  `ProtosPerf006B2D1OrdinarySendCompositionTest`,
+  `ProtosPerf006B2D3BSelectedStandardObjectCallIntrinsicTest`,
+  `ProtosPerf006B2D3AOrdinaryObjectCallProtocolTest`,
+  `ProtosPerf010APreparedTargetSpecializationTest`,
+  `ProtosPerf025DirectSourceClosureCompactInvocationTest` and
+  `ProtosPerf025H1LazyRootActivationTest` follow the non-materialized home.
+
 ## 0.3.154-SNAPSHOT
 
 - `PERF025` completes compact callee execution on top of `PERF025-H1`: a

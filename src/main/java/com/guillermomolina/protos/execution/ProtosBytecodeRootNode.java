@@ -1371,6 +1371,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object value) {
             ProtosReturnHome target =
                     activation.returnHome().orElse(null);
+            if (target != null && !target.isMaterialized()) {
+                throw new IllegalStateException(
+                        "non-local return reached a return home proven unobservable");
+            }
             if (target == null || !target.isActive()) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newInvalidReturn(activation));
@@ -1769,17 +1773,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      */
     private abstract static class ReturnHomeOwningCall implements PreparedClosureCall {
         private final ProtosReturnHome returnHome;
-        private final boolean ownsReturnHome;
+        /**
+         * PERF025: an owned but non-materialized home has no lifecycle and can
+         * never be a non-local-return target, so it is neither matched nor
+         * completed.
+         */
+        private final boolean ownsMaterializedReturnHome;
 
         ReturnHomeOwningCall(ProtosReturnHome returnHome, boolean ownsReturnHome) {
             this.returnHome = returnHome;
-            this.ownsReturnHome = ownsReturnHome;
+            this.ownsMaterializedReturnHome = ownsReturnHome && returnHome.isMaterialized();
         }
 
         @Override
         public Object handleControlTransfer(ControlFlowException transfer) {
             if (transfer instanceof ProtosNonLocalReturnException nonLocalReturn
-                    && ownsReturnHome
+                    && ownsMaterializedReturnHome
                     && returnHome.isActive()
                     && nonLocalReturn.target() == returnHome) {
                 return nonLocalReturn.value();
@@ -1799,7 +1808,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
         @Override
         public void complete() {
-            if (ownsReturnHome && returnHome.isActive()) {
+            if (ownsMaterializedReturnHome && returnHome.isActive()) {
                 returnHome.complete();
             }
         }
@@ -7748,7 +7757,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         closure, supplied, receiver, methodHome, caller.prelude().orElse(null),
                         caller.actorModuleState(), caller.currentModuleKey().orElse(null),
                         caller.executionDomain(),
-                        closure.returnHome().orElseGet(ProtosReturnHome::new))
+                        closure.invocationReturnHomeForRuntime())
                 : ProtosActivation.forImmediateMethodInvocation(
                         closure, supplied, receiver, methodHome, caller.prelude().orElse(null),
                         caller.actorModuleState(), caller.currentModuleKey().orElse(null),

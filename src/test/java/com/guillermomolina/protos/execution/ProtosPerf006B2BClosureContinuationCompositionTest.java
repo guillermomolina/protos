@@ -88,7 +88,9 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                                 module);
                 module.context().createLocalSlot("child", leaf);
 
-                String middleCharacters = "() => { child() }";
+                // PERF025: `^` keeps the caller-owned home observable, hence physical,
+                // so its lifetime across repeated child suspension stays covered.
+                String middleCharacters = "() => { ^child() }";
                 Source middleSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -154,7 +156,9 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                 ProtosReturnHome leafHome =
                         leafActivation.returnHome().orElseThrow();
                 assertTrue(middleHome.isActive());
-                assertTrue(leafHome.isActive());
+                // PERF025: the hand-built leaf runs under a proven
+                // return-home-unobservable `() => { null }` plan.
+                assertFalse(leafHome.isMaterialized());
 
                 Object second =
                         topContinuation1.continueWith(
@@ -187,7 +191,9 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                         leafActivation,
                         activationOf(leafContinuation2));
                 assertTrue(middleHome.isActive());
-                assertTrue(leafHome.isActive());
+                // PERF025: the hand-built leaf runs under a proven
+                // return-home-unobservable `() => { null }` plan.
+                assertFalse(leafHome.isMaterialized());
 
                 Object completed =
                         topContinuation2.continueWith(
@@ -195,8 +201,8 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
 
                 assertSame(finalValue, completed);
                 assertFalse(
-                        leafHome.isActive(),
-                        "leaf-owned ReturnHome completes only after real completion");
+                        leafHome.isMaterialized(),
+                        "the leaf-owned home is never materialized");
                 assertFalse(
                         middleHome.isActive(),
                         "caller-owned ReturnHome completes only after child completion");
