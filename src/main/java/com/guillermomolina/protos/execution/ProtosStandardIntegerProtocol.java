@@ -185,7 +185,7 @@ public final class ProtosStandardIntegerProtocol {
                 || supplied.length != 1
                 || !(supplied[0] instanceof ProtosIntegerValue argument)
                 || (operation.requiresNonZeroDivisor()
-                        && argument.value().signum() == 0)) {
+                        && argument.signumForRuntime() == 0)) {
             return null;
         }
         return executeValidCanonicalOperation(
@@ -202,7 +202,7 @@ public final class ProtosStandardIntegerProtocol {
         if (supplied.size() != 1
                 || !(supplied.get(0) instanceof ProtosIntegerValue argument)
                 || (operation.requiresNonZeroDivisor()
-                        && argument.value().signum() == 0)) {
+                        && argument.signumForRuntime() == 0)) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(activation));
         }
@@ -217,26 +217,16 @@ public final class ProtosStandardIntegerProtocol {
             ProtosIntegerValue receiver,
             ProtosIntegerValue argument) {
         return switch (operation) {
-            case ADD ->
-                    new ProtosIntegerValue(
-                            receiver.value().add(argument.value()));
-            case SUBTRACT ->
-                    new ProtosIntegerValue(
-                            receiver.value().subtract(argument.value()));
-            case MULTIPLY ->
-                    new ProtosIntegerValue(
-                            receiver.value().multiply(argument.value()));
+            case ADD -> receiver.addForRuntime(argument);
+            case SUBTRACT -> receiver.subtractForRuntime(argument);
+            case MULTIPLY -> receiver.multiplyForRuntime(argument);
             case FLOAT_DIVIDE ->
                     new ProtosFloatValue(
                             ProtosBinary64Rounding.divideExactIntegers(
                                     receiver.value(),
                                     argument.value()));
-            case QUOTIENT ->
-                    new ProtosIntegerValue(
-                            receiver.value().divide(argument.value()));
-            case REMAINDER ->
-                    new ProtosIntegerValue(
-                            receiver.value().remainder(argument.value()));
+            case QUOTIENT -> receiver.divideForRuntime(argument);
+            case REMAINDER -> receiver.remainderForRuntime(argument);
         };
     }
 

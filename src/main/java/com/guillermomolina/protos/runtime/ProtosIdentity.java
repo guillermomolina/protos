@@ -21,7 +21,7 @@ public final class ProtosIdentity {
     private ProtosIdentity() {}
     public static boolean identical(Object left,Object right) {
         if(left==right)return true;
-        if(left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b)return a.value().equals(b.value());
+        if(left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b)return a.sameIntegerForRuntime(b);
         if(left instanceof ProtosFloatValue a && right instanceof ProtosFloatValue b){double av=a.value(),bv=b.value();if(Double.isNaN(av)&&Double.isNaN(bv))return true;return Double.doubleToRawLongBits(av)==Double.doubleToRawLongBits(bv);}
         if(left instanceof ProtosStringValue a && right instanceof ProtosStringValue b)return a.value().equals(b.value());
         if(left instanceof ProtosActorRefValue a && right instanceof ProtosActorRefValue b)return a.denotesSameIncarnation(b);

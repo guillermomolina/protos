@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -129,6 +130,43 @@ class ProtosStandardIntegerArithmeticTest {
             throws IOException {
         ProtosPrelude prelude = corePrelude();
         BigInteger huge = BigInteger.TWO.pow(200).add(BigInteger.ONE);
+
+        ProtosIntegerValue smallAdd =
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        direct(
+                                prelude,
+                                "+",
+                                new ProtosIntegerValue(40L),
+                                new ProtosIntegerValue(2L)));
+        assertTrue(smallAdd.isSmallForRuntime());
+        assertEquals(BigInteger.valueOf(42L), smallAdd.value());
+
+        ProtosIntegerValue promotedAdd =
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        direct(
+                                prelude,
+                                "+",
+                                new ProtosIntegerValue(Long.MAX_VALUE),
+                                new ProtosIntegerValue(1L)));
+        assertFalse(promotedAdd.isSmallForRuntime());
+        assertEquals(
+                BigInteger.valueOf(Long.MAX_VALUE).add(BigInteger.ONE),
+                promotedAdd.value());
+
+        ProtosIntegerValue promotedDivision =
+                assertInstanceOf(
+                        ProtosIntegerValue.class,
+                        direct(
+                                prelude,
+                                "div",
+                                new ProtosIntegerValue(Long.MIN_VALUE),
+                                new ProtosIntegerValue(-1L)));
+        assertFalse(promotedDivision.isSmallForRuntime());
+        assertEquals(
+                BigInteger.valueOf(Long.MIN_VALUE).negate(),
+                promotedDivision.value());
 
         Object add =
                 direct(prelude, "+",

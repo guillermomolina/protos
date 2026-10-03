@@ -24,7 +24,6 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
 import java.util.Objects;
 
 public final class ProtosStandardStringProtocol {
@@ -61,9 +60,8 @@ public final class ProtosStandardStringProtocol {
                             ProtosStringValue receiver = requireStringReceiver(activation);
                             requireArity(activation, supplied.size(), 0);
                             return new ProtosIntegerValue(
-                                    BigInteger.valueOf(
-                                            receiver.value().codePointCount(
-                                                    0, receiver.value().length())));
+                                    receiver.value().codePointCount(
+                                            0, receiver.value().length()));
                         }));
 
         stringPrototype.createLocalSlot(
@@ -72,11 +70,11 @@ public final class ProtosStandardStringProtocol {
                         (activation, supplied) -> {
                             ProtosStringValue receiver = requireStringReceiver(activation);
                             requireArity(activation, supplied.size(), 1);
-                            BigInteger index = requireInteger(activation, supplied.get(0));
-                            if (index.signum() < 0 || index.bitLength() > 31) {
+                            int index = requireIntIndex(activation, supplied.get(0));
+                            if (index < 0) {
                                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                             }
-                            String scalar = scalarAt(receiver.value(), index.intValue());
+                            String scalar = scalarAt(receiver.value(), index);
                             if (scalar == null) {
                                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                             }
@@ -133,11 +131,12 @@ public final class ProtosStandardStringProtocol {
         }
     }
 
-    private static BigInteger requireInteger(
+    private static int requireIntIndex(
             com.guillermomolina.protos.runtime.ProtosActivation activation,
             Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer.value();
+        if (value instanceof ProtosIntegerValue integer
+                && integer.fitsInIntForRuntime()) {
+            return integer.intValueExactForRuntime();
         }
         throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
     }

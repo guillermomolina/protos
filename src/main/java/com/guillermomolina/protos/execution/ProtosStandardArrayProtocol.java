@@ -28,7 +28,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
-import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -123,12 +122,12 @@ public final class ProtosStandardArrayProtocol {
                             if (supplied.size() != 1) {
                                 throw invalid(activation);
                             }
-                            BigInteger value = requireInteger(activation, supplied.get(0));
-                            if (value.signum() < 0
-                                    || value.compareTo(array.indexedSize()) >= 0) {
-                                throw invalid(activation);
-                            }
-                            return array.indexedAt(value);
+                            int index =
+                                    requireExistingIndex(
+                                            activation,
+                                            supplied.get(0),
+                                            array.indexedSizeForRuntime());
+                            return array.indexedAtForRuntime(index);
                         }));
 
         arrayPrototype.createLocalSlot(
@@ -142,12 +141,12 @@ public final class ProtosStandardArrayProtocol {
                             if (supplied.size() != 2) {
                                 throw invalid(activation);
                             }
-                            BigInteger value = requireInteger(activation, supplied.get(0));
-                            if (value.signum() < 0
-                                    || value.compareTo(array.indexedSize()) >= 0) {
-                                throw invalid(activation);
-                            }
-                            return array.indexedPut(value, supplied.get(1));
+                            int index =
+                                    requireExistingIndex(
+                                            activation,
+                                            supplied.get(0),
+                                            array.indexedSizeForRuntime());
+                            return array.indexedPutForRuntime(index, supplied.get(1));
                         }));
 
         arrayPrototype.createLocalSlot(
@@ -158,7 +157,7 @@ public final class ProtosStandardArrayProtocol {
                             if (!supplied.isEmpty()) {
                                 throw invalid(activation);
                             }
-                            return new ProtosIntegerValue(array.indexedSize());
+                            return new ProtosIntegerValue(array.indexedSizeForRuntime());
                         }));
 
         arrayPrototype.createLocalSlot("each", STANDARD_EACH);
@@ -266,13 +265,19 @@ public final class ProtosStandardArrayProtocol {
         }
     }
 
-    private static BigInteger requireInteger(
+    private static int requireExistingIndex(
             ProtosActivation activation,
-            Object value) {
-        if (value instanceof ProtosIntegerValue integer) {
-            return integer.value();
+            Object value,
+            int size) {
+        if (!(value instanceof ProtosIntegerValue integer)
+                || !integer.fitsInIntForRuntime()) {
+            throw invalid(activation);
         }
-        throw invalid(activation);
+        int index = integer.intValueExactForRuntime();
+        if (index < 0 || index >= size) {
+            throw invalid(activation);
+        }
+        return index;
     }
 
     private static ProtosArrayValue requireArrayReceiver(

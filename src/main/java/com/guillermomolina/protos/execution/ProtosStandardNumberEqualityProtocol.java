@@ -64,6 +64,11 @@ public final class ProtosStandardNumberEqualityProtocol {
     }
 
     static boolean numericEquals(Object left, Object right) {
+        if (left instanceof ProtosIntegerValue leftInteger
+                && right instanceof ProtosIntegerValue rightInteger) {
+            return leftInteger.sameIntegerForRuntime(rightInteger);
+        }
+
         if (left instanceof ProtosFloatValue leftFloat) {
             if (right instanceof ProtosFloatValue rightFloat) {
                 return leftFloat.value() == rightFloat.value();

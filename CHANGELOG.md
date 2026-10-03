@@ -7,6 +7,35 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.158-SNAPSHOT
+
+- `PERF027` removes the mandatory `BigInteger` physical representation from
+  ordinary small semantic Integers while preserving the single exact unbounded
+  `Integer` family. `ProtosIntegerValue` now canonicalizes values that fit the
+  full signed `long` range to an internal machine-word representation and keeps
+  arbitrary-precision `BigInteger` storage only when the mathematical value is
+  outside that range. Canonical `+`, binary `-`, `*`, `div` and `mod` operations
+  execute directly on two small operands and transparently promote on overflow;
+  arbitrary-precision results canonicalize back to the small representation
+  whenever they again fit in signed `long`. The `Long.MIN_VALUE / -1` boundary
+  promotes exactly instead of overflowing. Integer/Integer equality, ordering
+  and semantic identity compare the canonical internal representation without
+  requiring `BigInteger` materialization on the small/small path. Integral
+  interop width checks/projections likewise use the machine-word representation
+  directly where possible. Exact Integer `/` to binary64 deliberately retains
+  the existing arbitrary-precision rounding authority, and Integer/Float
+  cross-family semantics, hashes, lookup/delegation, recognition, guarded
+  selection/fallback, Actor transfer, debugger/tooling behavior and Native
+  Image architecture remain unchanged. No SmallInteger/BigInteger family or
+  primitive `long` Bytecode carrier becomes guest-visible. New
+  `ProtosIntegerValueRepresentationTest` covers signed-long canonicalization,
+  overflow promotion, down-normalization, signed quotient/remainder behavior
+  and representation-independent identity/comparison; existing arithmetic,
+  interop, numeric equality/ordering, guarded-Integer and Actor-transfer tests
+  cover the affected integration surface. This is a structural representation
+  optimization only: no observable Protos semantic or specification change and
+  no performance magnitude is claimed.
+
 ## 0.3.157-SNAPSHOT
 
 - `PERF025` removes the residual full native-Closure invocation scaffold from

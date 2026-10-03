@@ -77,6 +77,11 @@ public final class ProtosStandardNumberOrderingProtocol {
             throw new IllegalArgumentException("numeric comparison requires Number values");
         }
 
+        if (left instanceof ProtosIntegerValue leftInteger
+                && right instanceof ProtosIntegerValue rightInteger) {
+            return fromSign(leftInteger.compareToIntegerForRuntime(rightInteger));
+        }
+
         if (left instanceof ProtosFloatValue leftFloat) {
             if (right instanceof ProtosFloatValue rightFloat) {
                 return compareFloats(leftFloat.value(), rightFloat.value());

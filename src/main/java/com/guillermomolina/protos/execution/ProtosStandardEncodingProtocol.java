@@ -18,14 +18,11 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.*;
-import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 
 /** Installs the standard Encoding semantic-family one-shot conversion boundary. */
 public final class ProtosStandardEncodingProtocol {
-    private static final BigInteger MAX_OCTET = BigInteger.valueOf(255);
-
     private ProtosStandardEncodingProtocol() {}
 
     public static void install(
@@ -75,7 +72,7 @@ public final class ProtosStandardEncodingProtocol {
                             ProtosBytesValue result = new ProtosBytesValue(bytesPrototype);
                             for (byte value : converted) {
                                 result.indexedAdd(
-                                        new ProtosIntegerValue(BigInteger.valueOf(value & 0xff)));
+                                        new ProtosIntegerValue(value & 0xff));
                             }
                             return result;
                         }));
@@ -112,18 +109,18 @@ public final class ProtosStandardEncodingProtocol {
         List<Object> values = bytes.indexedSnapshot();
         byte[] result = new byte[values.size()];
         for (int i = 0; i < values.size(); i++) {
-            BigInteger value = exactInteger(values.get(i));
-            if (value == null || value.signum() < 0 || value.compareTo(MAX_OCTET) > 0) {
+            Object candidate = values.get(i);
+            if (!(candidate instanceof ProtosIntegerValue integer)
+                    || !integer.fitsInIntForRuntime()) {
                 throw invalid(activation);
             }
-            result[i] = (byte) value.intValue();
+            int value = integer.intValueExactForRuntime();
+            if (value < 0 || value > 255) {
+                throw invalid(activation);
+            }
+            result[i] = (byte) value;
         }
         return result;
-    }
-
-    private static BigInteger exactInteger(Object value) {
-        if (value instanceof ProtosIntegerValue integer) return integer.value();
-        return null;
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

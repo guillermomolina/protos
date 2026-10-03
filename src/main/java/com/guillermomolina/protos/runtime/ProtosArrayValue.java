@@ -49,8 +49,16 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         return BigInteger.valueOf(elements.size());
     }
 
+    public int indexedSizeForRuntime() {
+        return elements.size();
+    }
+
     public Object indexedAt(BigInteger index) {
         return elements.get(requireExistingIndex(index));
+    }
+
+    public Object indexedAtForRuntime(int index) {
+        return elements.get(requireExistingIndexForRuntime(index));
     }
 
     public Object indexedPut(BigInteger index, Object value) {
@@ -60,6 +68,16 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         }
 
         elements.set(requireExistingIndex(index), value);
+        return value;
+    }
+
+    public Object indexedPutForRuntime(int index, Object value) {
+        Objects.requireNonNull(value, "value");
+        if (isFrozen()) {
+            throw new IllegalStateException("array is frozen");
+        }
+
+        elements.set(requireExistingIndexForRuntime(index), value);
         return value;
     }
 
@@ -74,6 +92,13 @@ public final class ProtosArrayValue extends ProtosObjectValue {
             throw new IndexOutOfBoundsException("array index out of bounds: " + index);
         }
         return index.intValueExact();
+    }
+
+    private int requireExistingIndexForRuntime(int index) {
+        if (index < 0 || index >= elements.size()) {
+            throw new IndexOutOfBoundsException("array index out of bounds: " + index);
+        }
+        return index;
     }
 
     @ExportMessage
