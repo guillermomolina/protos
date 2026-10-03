@@ -63,16 +63,11 @@ test-java:
 	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-serial
 	$(JAVA_SLOW_TEST_GUARD) check --reports $(JAVA_SUREFIRE_REPORTS) --allowlist $(JAVA_SLOW_TEST_ALLOWLIST)
 
-# Streams one test-java phase live to the terminal through tee while appending
-# it to the retained log, and fails with the phase's own exit status (POSIX sh
-# has no pipefail, so the status crosses the pipe through a file).
+# Streams one test-java phase live to the terminal while appending it to the
+# retained log, and fails with the phase's own unchanged exit status.
 java-test-phase:
-	@status_file=$(JAVA_TEST_LOG).status; \
-	{ $(MAKE) --no-print-directory $(JAVA_TEST_PHASE) 2>&1; echo $$? > "$$status_file"; } \
-		| tee -a $(JAVA_TEST_LOG); \
-	status=$$(cat "$$status_file"); \
-	rm -f "$$status_file"; \
-	test "$$status" -eq 0
+	@$(JAVA_SLOW_TEST_GUARD) run --log $(JAVA_TEST_LOG) -- \
+		$(MAKE) --no-print-directory $(JAVA_TEST_PHASE)
 
 test-java-parallel:
 	$(MVN) $(MVN_FLAGS) \

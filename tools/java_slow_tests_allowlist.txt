@@ -12,6 +12,8 @@
 # - '#' starts a comment line; blank lines are ignored;
 # - every entry is an explicit project-owner decision: put a comment above it
 #   naming the owning work item and why the test cannot reasonably be faster;
+#   entries accepted by one decision may share a single comment above the
+#   group (as the TEST008-A baseline below does);
 # - never add entries automatically.
 #
 # Baseline accepted by the project owner on 2026-10-01 (TEST008-A): every
