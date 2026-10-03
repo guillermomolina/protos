@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.153-SNAPSHOT
+
+- `PERF025-H1` (#758) removes the unconditional `ProtosActivation`
+  materialization from compact semantic source roots. The root prologue
+  (`PublishFrameActivation`) is gone; the current activation is loaded through
+  a lazy `CurrentActivation` operation that materializes the exact activation
+  from the compact frame ABI only when an operation, an Error path, root
+  exception interception or tooling needs it, at most once, published into
+  frame argument 0. At root level, supplied-argument presence, loads and the
+  arity upper bound (`HasFrameClosureArgument`, `LoadFrameClosureArgument`,
+  `CheckFrameClosureArgumentUpperBound`), frame-native parameter binding
+  (`BindClosureFrameParameter`) and PRESENT current-frame reads
+  (`ReadRootFrameLocal`) operate directly from compact frame arguments and
+  frame locals, so ordinary zero/simple-argument and default-argument calls
+  run without a rich activation. The rich activation remains an exact lazy
+  projection with unchanged Context, Task, receiver, method-home, capture and
+  return-home provenance. ReturnHome representation, frame materialization and
+  Closure-capture behavior are intentionally unchanged. New
+  `ProtosPerf025H1LazyRootActivationTest`; affected PERF025/I068 tests updated
+  to the new structural shape. No observable Protos semantics change; the
+  specification is unchanged.
+
 ## 0.3.152-SNAPSHOT
 
 - `PERF025` makes Closure-literal lexical capture lazy. A materialized

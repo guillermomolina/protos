@@ -77,7 +77,7 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
 
                     List<String> instructions = instructionNames(root);
 
-                    assertContains(instructions, "ReadFrameLocal");
+                    assertContains(instructions, "ReadRootFrameLocal");
                     assertNotContains(instructions, "Lookup");
 
                     root.getCallTarget().call(module);

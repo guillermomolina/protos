@@ -332,8 +332,14 @@ final class ProtosPerf025LazyLexicalCaptureTest {
                 ProtosBytecodeRootNode.EnterClosureCall.indirect(
                         prepared, IndirectCallNode.create());
         Object result = ProtosBytecodeRootNode.FinishClosureCall.perform(prepared, entry);
+        /*
+         * PERF025-H1: a callee whose body never needs its rich activation
+         * (for example a trivial Closure) leaves it unmaterialized.
+         */
         ProtosActivation callee =
-                assertInstanceOf(ProtosActivation.class, prepared.targetArguments()[0]);
+                prepared.targetArguments()[0] instanceof ProtosActivation materialized
+                        ? materialized
+                        : null;
         assertNotNull(result);
         return new Invocation(callee, result);
     }

@@ -131,8 +131,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             AbstractTruffleException exception,
             VirtualFrame frame) {
         if (exception instanceof ProtosSignalException transfer) {
-            Object[] arguments = frame.getArguments();
-            if (arguments.length > 0 && arguments[0] instanceof ProtosActivation activation) {
+            /*
+             * PERF025-H1: a semantic source root still in compact source-call
+             * form materializes its exact activation here, on the Error path,
+             * exactly as the former eager root prologue would have.
+             */
+            if (ProtosFrameArguments.hasActivation(frame)) {
+                ProtosActivation activation = ProtosFrameArguments.activation(frame);
                 /*
                  * Selection is semantic authority and must happen before the
                  * Bytecode EH table starts crossed TryFinally cleanup. Repeated

@@ -200,6 +200,28 @@ final class ProtosFrameArguments {
         return materialized;
     }
 
+    /**
+     * PERF025-H1: true while {@code arguments} are still in compact
+     * source-call form, i.e. no rich activation has been materialized and
+     * published for this invocation yet. The invocation's execution context
+     * is then necessarily unobserved and has no lexical-binding authority
+     * installed, so the root's frame locals are the only store of its
+     * frame-native bindings.
+     */
+    static boolean isUnmaterializedCompactCall(Object[] arguments) {
+        return isCompactCall(arguments);
+    }
+
+    /** Supplied positional argument count of a compact source call. */
+    static int compactSuppliedArgumentCount(Object[] arguments) {
+        return arguments.length - USER_ARGUMENT_OFFSET;
+    }
+
+    /** Supplied positional argument {@code index} of a compact source call. */
+    static Object compactSuppliedArgument(Object[] arguments, int index) {
+        return arguments[USER_ARGUMENT_OFFSET + index];
+    }
+
     static ProtosReturnHome compactReturnHome(Object[] arguments) {
         requireCompactCall(arguments);
         return (ProtosReturnHome) arguments[RETURN_HOME_INDEX];

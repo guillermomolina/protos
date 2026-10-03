@@ -68,7 +68,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                     List<String> names = instructionNames(activationNode(plan));
                     assertNoInstall(names);
                     assertContains(names, "BindClosureFrameParameter");
-                    assertContains(names, "ReadFrameLocal");
+                    assertContains(names, "ReadRootFrameLocal");
 
                     ProtosObjectValue argument = newObject();
                     ProtosActivation invocation = deferredInvocation(fixture, plan.closure, List.of(argument));

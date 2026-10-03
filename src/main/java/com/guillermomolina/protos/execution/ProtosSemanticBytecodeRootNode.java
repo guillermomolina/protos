@@ -160,20 +160,21 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     /**
-     * Root prologue of every semantic source root. A guarded ordinary send, a stable direct
-     * Closure call, or a Task-owned direct source Closure entry enters the root with a compact
-     * source-call ABI; this materializes its exact activation once and publishes it
-     * into frame argument 0 (see {@link ProtosFrameArguments#activation}), so the body, root
-     * exception interception and debugger scopes all observe one activation identity. Frames that
-     * already carry an activation, or carry no activation ABI at all, are left unchanged.
+     * PERF025-H1 sole operand seam for "the current activation" of a semantic source root (see
+     * {@code CanonicalToBytecodeLowerer#emitCurrentActivation}). A guarded ordinary send, a stable
+     * direct Closure call, or a Task-owned direct source Closure entry enters the root with a
+     * compact source-call ABI and no rich activation. The root has no activation prologue: the
+     * exact activation is materialized only when an operation that actually needs it executes,
+     * at most once, and is published into frame argument 0 (see {@link
+     * ProtosFrameArguments#activation}), so the body, root exception interception and debugger
+     * scopes all observe one activation identity. A frame that already carries an activation
+     * returns it unchanged.
      */
     @Operation
-    public static final class PublishFrameActivation {
+    public static final class CurrentActivation {
         @Specialization
-        public static void perform(@Bind("$frame") VirtualFrame frame) {
-            if (ProtosFrameArguments.hasActivation(frame)) {
-                ProtosFrameArguments.activation(frame);
-            }
+        public static ProtosActivation perform(@Bind("$frame") VirtualFrame frame) {
+            return ProtosFrameArguments.activation(frame);
         }
     }
 
@@ -192,6 +193,62 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         public static Object perform(ProtosActivation activation, int positionalIndex) {
             return ProtosBytecodeRootNode.LoadClosureArgument.perform(activation, positionalIndex);
+        }
+    }
+
+    /*
+     * PERF025-H1 root-level parameter operations. The lowerer emits these
+     * instead of the activation-operand forms whenever the current activation
+     * is the root's own (never inside an inline Object body or inline callback
+     * region). While the frame is still in compact source-call form, the
+     * supplied positional values are read directly from the frame arguments;
+     * an arity Error, like every other path, materializes the exact activation
+     * first and takes the unchanged activation implementation.
+     */
+
+    @Operation
+    public static final class HasFrameClosureArgument {
+        @Specialization
+        public static boolean perform(int positionalIndex, @Bind("$frame") VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
+                return ProtosFrameArguments.compactSuppliedArgumentCount(arguments)
+                        > positionalIndex;
+            }
+            return ProtosBytecodeRootNode.HasClosureArgument.perform(
+                    ProtosFrameArguments.activation(arguments), positionalIndex);
+        }
+    }
+
+    @Operation
+    public static final class LoadFrameClosureArgument {
+        @Specialization
+        public static Object perform(int positionalIndex, @Bind("$frame") VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && positionalIndex
+                            < ProtosFrameArguments.compactSuppliedArgumentCount(arguments)) {
+                return ProtosFrameArguments.compactSuppliedArgument(arguments, positionalIndex);
+            }
+            return ProtosBytecodeRootNode.LoadClosureArgument.perform(
+                    ProtosFrameArguments.activation(arguments), positionalIndex);
+        }
+    }
+
+    @Operation
+    public static final class CheckFrameClosureArgumentUpperBound {
+        @Specialization
+        public static void perform(
+                int maximumPositionalArguments,
+                @Bind("$frame") VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && ProtosFrameArguments.compactSuppliedArgumentCount(arguments)
+                            <= maximumPositionalArguments) {
+                return;
+            }
+            ProtosBytecodeRootNode.CheckClosureArgumentUpperBound.perform(
+                    ProtosFrameArguments.activation(arguments), maximumPositionalArguments);
         }
     }
 
@@ -262,18 +319,31 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
     public static final class BindClosureFrameParameter {
+        /**
+         * PERF025-H1: a frame still in compact source-call form has no
+         * materialized activation, hence an unobserved execution context
+         * without an authority; the frame local is then the binding's only
+         * store, exactly as {@code createCurrentFrameBinding} treats an
+         * unobserved context. Any other state, including a duplicate
+         * creation's Error, takes the unchanged activation path.
+         */
         @Specialization
         public static void perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
                 int ordinal,
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
+                frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
+                return;
+            }
             ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
-                    frameBackedLocals, frameBackedLayout, activation,
+                    frameBackedLocals, frameBackedLayout, ProtosFrameArguments.activation(arguments),
                     ordinal, name, value, bytecodeNode, frame);
         }
     }
@@ -362,6 +432,32 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Bind("$frame") VirtualFrame frame) {
             return ProtosBytecodeRootNode.ReadFrameLocal.perform(
                     accessor, activation, name, bytecodeNode, frame);
+        }
+    }
+
+    /**
+     * PERF025-H1 root-level form of {@link ReadFrameLocal}, emitted when the
+     * current activation is the root's own. A frame still in compact
+     * source-call form denotes a genuine, unobserved execution context, so a
+     * PRESENT local is read directly; an ABSENT one (D179 C0) materializes the
+     * exact activation and resumes the unchanged fallback.
+     */
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    public static final class ReadRootFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalAccessor accessor,
+                String name,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            Object[] arguments = frame.getArguments();
+            if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
+                    && !accessor.isCleared(bytecodeNode, frame)) {
+                return accessor.getObject(bytecodeNode, frame);
+            }
+            return ProtosBytecodeRootNode.ReadFrameLocal.perform(
+                    accessor, ProtosFrameArguments.activation(arguments), name, bytecodeNode, frame);
         }
     }
 

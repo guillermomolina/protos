@@ -586,11 +586,11 @@ final class CanonicalToBytecodeLowerer {
         builder.beginRoot();
 
         /*
-         * PLAT042 B′: this root is entered directly (no wrapper), so it
-         * materializes a compact source-call activation into frame argument 0
-         * before anything reads the current activation.
+         * PLAT042 B′ / PERF025-H1: this root is entered directly (no
+         * wrapper) and has no activation prologue. A compact source-call
+         * frame stays compact until an operation that needs the rich
+         * activation loads it through emitCurrentActivation.
          */
-        builder.emitPublishFrameActivation();
 
         /*
          * PLAT036 Candidate D, I068 Slice 4: every statically
@@ -1092,9 +1092,11 @@ final class CanonicalToBytecodeLowerer {
 
     /**
      * Sole lowering authority for loading the currently executing
-     * {@link com.guillermomolina.protos.runtime.ProtosActivation}. Every
-     * Protos Bytecode root receives that activation as frame argument 0;
-     * inside an inline object-construction body (PLAT041 C′) the current
+     * {@link com.guillermomolina.protos.runtime.ProtosActivation}. A root's
+     * own activation is frame argument 0, or is materialized there on demand
+     * from a compact source-call ABI by the {@code CurrentActivation}
+     * operation (PERF025-H1); inside an inline object-construction body
+     * (PLAT041 C′) the current
      * activation is instead that body's construction activation, held in
      * {@link #currentActivationLocal}. Operations that need "the current
      * activation" must obtain it through this method rather than emitting the
@@ -1103,7 +1105,7 @@ final class CanonicalToBytecodeLowerer {
     private void emitCurrentActivation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder) {
         if (currentActivationLocal == null) {
-            builder.emitLoadArgument(0);
+            builder.emitCurrentActivation();
         } else {
             builder.emitLoadLocal(currentActivationLocal);
         }
@@ -1148,10 +1150,16 @@ final class CanonicalToBytecodeLowerer {
 
                 builder.beginIfThenElse();
 
-                builder.beginHasClosureArgument();
-                emitCurrentActivation(builder);
-                builder.emitLoadConstant(positionalIndex);
-                builder.endHasClosureArgument();
+                if (currentActivationLocal == null) {
+                    builder.beginHasFrameClosureArgument();
+                    builder.emitLoadConstant(positionalIndex);
+                    builder.endHasFrameClosureArgument();
+                } else {
+                    builder.beginHasClosureArgument();
+                    emitCurrentActivation(builder);
+                    builder.emitLoadConstant(positionalIndex);
+                    builder.endHasClosureArgument();
+                }
 
                 builder.beginBlock();
                 emitBindSuppliedClosureParameter(
@@ -1213,10 +1221,16 @@ final class CanonicalToBytecodeLowerer {
         }
 
         if (!hasRest) {
-            builder.beginCheckClosureArgumentUpperBound();
-            emitCurrentActivation(builder);
-            builder.emitLoadConstant(positionalIndex);
-            builder.endCheckClosureArgumentUpperBound();
+            if (currentActivationLocal == null) {
+                builder.beginCheckFrameClosureArgumentUpperBound();
+                builder.emitLoadConstant(positionalIndex);
+                builder.endCheckFrameClosureArgumentUpperBound();
+            } else {
+                builder.beginCheckClosureArgumentUpperBound();
+                emitCurrentActivation(builder);
+                builder.emitLoadConstant(positionalIndex);
+                builder.endCheckClosureArgumentUpperBound();
+            }
         }
     }
 
@@ -1237,7 +1251,10 @@ final class CanonicalToBytecodeLowerer {
      * frame-native {@code BindClosureFrameParameter} for a parameter of a
      * root lowered without a persistent frame authority, otherwise the
      * unchanged {@code BindClosureParameter}. Both then take the value
-     * operand; returns whether the frame-native form was opened.
+     * operand; returns whether the frame-native form was opened. The
+     * frame-native form (only ever opened for the root's own activation)
+     * takes no activation operand, so binding a parameter of a compact
+     * source call does not materialize one (PERF025-H1).
      */
     private boolean beginBindClosureParameter(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -1247,7 +1264,6 @@ final class CanonicalToBytecodeLowerer {
             builder.beginBindClosureFrameParameter(
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout);
-            emitCurrentActivation(builder);
             builder.emitLoadConstant(ordinal);
         } else {
             builder.beginBindClosureParameter();
@@ -4022,10 +4038,16 @@ final class CanonicalToBytecodeLowerer {
             CanonicalParameter parameter,
             int positionalIndex) {
         boolean frameNative = beginBindClosureParameter(builder, parameter.name());
-        builder.beginLoadClosureArgument();
-        emitCurrentActivation(builder);
-        builder.emitLoadConstant(positionalIndex);
-        builder.endLoadClosureArgument();
+        if (currentActivationLocal == null) {
+            builder.beginLoadFrameClosureArgument();
+            builder.emitLoadConstant(positionalIndex);
+            builder.endLoadFrameClosureArgument();
+        } else {
+            builder.beginLoadClosureArgument();
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(positionalIndex);
+            builder.endLoadClosureArgument();
+        }
         endBindClosureParameter(builder, frameNative);
     }
 
@@ -4272,6 +4294,12 @@ final class CanonicalToBytecodeLowerer {
                     && resolved.identity().owner() == currentRootTopScope) {
                 BytecodeLocal local =
                         currentRootFrameLocals.get(resolved.identity().name());
+                if (local != null && currentActivationLocal == null) {
+                    builder.beginReadRootFrameLocal(local);
+                    builder.emitLoadConstant(resolved.identity().name());
+                    builder.endReadRootFrameLocal();
+                    return;
+                }
                 if (local != null) {
                     builder.beginReadFrameLocal(local);
                     emitCurrentActivation(builder);

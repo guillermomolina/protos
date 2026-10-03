@@ -152,8 +152,17 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
                 assertEquals(BigInteger.ONE, integerValue(enter(first)));
                 assertEquals(BigInteger.TWO, integerValue(enter(second)));
 
-                ProtosActivation firstCallee = (ProtosActivation) first.targetArguments()[0];
-                ProtosActivation secondCallee = (ProtosActivation) second.targetArguments()[0];
+                /*
+                 * PERF025-H1: the ordinary parameter path never materializes
+                 * the callee activation; observing it afterwards materializes
+                 * each invocation's own exact activation on demand.
+                 */
+                assertSame(identity, first.targetArguments()[0]);
+                assertSame(identity, second.targetArguments()[0]);
+                ProtosActivation firstCallee =
+                        ProtosFrameArguments.activation(first.targetArguments());
+                ProtosActivation secondCallee =
+                        ProtosFrameArguments.activation(second.targetArguments());
                 assertNotSame(firstCallee, secondCallee);
                 assertNotSame(
                         firstCallee.returnHome().orElseThrow(),
