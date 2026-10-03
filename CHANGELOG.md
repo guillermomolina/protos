@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.165-SNAPSHOT
+
+- `PERF025-G2` reduces fixed physical RootTask/Task bookkeeping cost without
+  changing observable Task, Future, Actor, cancellation or structured-concurrency
+  semantics. The Actor execution domain now tracks live Tasks in an
+  identity-backed set rather than a `LinkedHashSet`, preserving exact live-Task
+  enumeration for Actor termination while avoiding per-entry linked-set nodes
+  and any incidental iteration-order dependency. `ProtosTask` structured-parent
+  provenance is now immutable after construction, and internal terminal
+  bookkeeping reads that parent directly instead of reacquiring the child Task
+  monitor and allocating an `Optional`. Terminal publication also no longer
+  reacquires the Task monitor solely to revalidate the exact terminal state
+  already established by its private callers. The existing
+  `beginDirectDispatch()` plus `runContinuation()` first-execution path is
+  deliberately retained so pre-start cancellation and Actor-termination races
+  keep the established boundary. Focused Task/domain, terminal-lifecycle,
+  Actor-termination and Future regressions remain green. This is an internal
+  runtime bookkeeping optimization only: no observable Protos semantic,
+  specification or platform decision changes, and no performance magnitude is
+  claimed.
+
 ## 0.3.164-SNAPSHOT
 
 - `PERF025` makes hot guest Bytecode Context acquisition node-aware in both

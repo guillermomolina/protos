@@ -19,6 +19,8 @@ package com.guillermomolina.protos.runtime;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 
 import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Objects;
@@ -53,7 +55,13 @@ public final class ProtosActorExecutionDomain {
     private final ArrayDeque<Object> runnable = new ArrayDeque<>();
     private final ArrayDeque<TargetedRuntimeCompletion> targetedRuntimeCompletions =
             new ArrayDeque<>();
-    private final Set<ProtosTask> liveTasks = new LinkedHashSet<>();
+    /*
+     * PERF025-G2: Task is backend-private runtime identity and live-task iteration order is not a
+     * Protos semantic. Avoid one linked-set entry node per live Task while retaining exact Task
+     * enumeration for Actor TERMINATING cancellation.
+     */
+    private final Set<ProtosTask> liveTasks =
+            Collections.newSetFromMap(new IdentityHashMap<>());
     private final Set<ProtosIoOperation> actorIoOperations = new LinkedHashSet<>();
     private final Set<ProtosIoReleaseExecution> actorIoReleases = new LinkedHashSet<>();
     private final Set<ProtosIoLifecycle> actorIoLifecycleCleanup = new LinkedHashSet<>();
@@ -363,7 +371,10 @@ public final class ProtosActorExecutionDomain {
             requireOwned(task);
             liveTasks.remove(task);
             notifyAll();
-            task.parent().ifPresent(parent -> parent.removeChild(task));
+            ProtosTask parent = task.parentForRuntime();
+            if (parent != null) {
+                parent.removeChild(task);
+            }
             actor = ownerActor;
         }
         if (actor != null) {

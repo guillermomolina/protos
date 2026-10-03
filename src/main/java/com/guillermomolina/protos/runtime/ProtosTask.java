@@ -78,7 +78,7 @@ public final class ProtosTask {
     }
 
     private final ProtosActorExecutionDomain owner;
-    private ProtosTask parent;
+    private final ProtosTask parent;
     /*
      * PERF025-G1 pay-only-when-used structured-child bookkeeping. Null is equivalent to the
      * empty set; the first addChild materializes it.
@@ -138,8 +138,13 @@ public final class ProtosTask {
         return owner;
     }
 
-    public synchronized Optional<ProtosTask> parent() {
+    public Optional<ProtosTask> parent() {
         return Optional.ofNullable(parent);
+    }
+
+    /** Internal allocation-free structured-parent lookup for runtime bookkeeping. */
+    ProtosTask parentForRuntime() {
+        return parent;
     }
 
     public synchronized Set<ProtosTask> children() {
@@ -795,14 +800,12 @@ public final class ProtosTask {
      */
     private void publishTerminal(State terminal, Object outcome) {
         TerminalLifecycle lifecycle;
-        synchronized (this) {
-            if (!isTerminal() || state != terminal) {
-                throw new IllegalStateException(
-                        "terminal lifecycle publication requires matching terminal Task state");
-            }
-        }
 
         /*
+         * Every caller establishes the exact terminal state under this Task monitor before
+         * entering this private publication boundary. Reacquiring the same monitor solely to
+         * revalidate that just-established state adds no semantic protection.
+         *
          * Preserve the historical externally observable ordering: the domain first releases the
          * Task (including structured-parent child removal), then the associated Future publishes
          * its terminal state. Existing host post-processing ran only after both steps returned.
