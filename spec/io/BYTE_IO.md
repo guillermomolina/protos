@@ -37,11 +37,6 @@ open/closed/frozen behavior, are governed normatively by
 length-changing operations `add` and `removeAt`. No other operation acquires
 implicit resizing semantics merely because it is indexed.
 
-The concurrency model's P-local `ByteRegion` is an authority capability, not an
-I/O resource and not an ordinary transferable `Bytes` value. I/O APIs do not
-implicitly acquire its parent-region authority merely because they accept byte
-values elsewhere.
-
 No sparse `Bytes` representation is observable.
 
 ---

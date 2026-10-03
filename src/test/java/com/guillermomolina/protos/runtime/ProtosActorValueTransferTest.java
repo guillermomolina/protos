@@ -190,11 +190,6 @@ final class ProtosActorValueTransferTest {
         assertNonTransferable(
                 source, () -> ProtosActorValueTransfer.snapshotValue(source.context(), source));
         assertNonTransferable(
-                source,
-                () ->
-                        ProtosActorValueTransfer.snapshotValue(
-                                new ProtosByteRegionValue(List.of()), source));
-        assertNonTransferable(
                 source, () -> ProtosActorValueTransfer.snapshotValue(new Object(), source));
     }
 

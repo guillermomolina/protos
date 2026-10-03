@@ -1,0 +1,60 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+
+// D161 removed writable byte regions; these names are ordinary missing slots.
+tests: [
+    Test("bytes parallelRange is a missing selector", () => {
+        Assertions.signals(SlotNotFound, () => {
+            bytes: Encoding.UTF8.encode("ab")
+            bytes.parallelRange(0, 1, (region) => { null })
+        })
+    }),
+    Test("bytes remain ordinary after missing parallelRange", () => {
+        bytes: Encoding.UTF8.encode("ab")
+        Assertions.signals(SlotNotFound, () => {
+            bytes.parallelRange(0, 2, (region) => { null })
+        })
+        bytes[0] = 120
+        bytes.add(121)
+        removed: bytes.removeAt(1)
+        Assertions.require(removed === 98)
+        Assertions.require(bytes.size() == 2)
+        Assertions.require(bytes[0] === 120)
+        Assertions.require(bytes[1] === 121)
+    }),
+    Test("missing byteregion binding", () => {
+        Assertions.signals(SlotNotFound, () => {
+            ByteRegion
+        })
+    }),
+    Test("missing parallelregionoverlap binding", () => {
+        Assertions.signals(SlotNotFound, () => {
+            ParallelRegionOverlap
+        })
+    }),
+    Test("missing parallelregioninuse binding", () => {
+        Assertions.signals(SlotNotFound, () => {
+            ParallelRegionInUse
+        })
+    }),
+    Test("missing parallelregionoutsidep binding", () => {
+        Assertions.signals(SlotNotFound, () => {
+            ParallelRegionOutsideP
+        })
+    })
+]
+tests.freeze()

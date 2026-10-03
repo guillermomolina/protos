@@ -111,7 +111,6 @@ public final class ProtosStandardBytesProtocol {
                             BigInteger index =
                                     requireExistingIndex(
                                             supplied.get(0), bytes.indexedSize(), activation);
-                            if(bytes.isIndexReserved(index))throw new ProtosSignalException(ProtosCoreErrors.newOccurrence(activation,ProtosCoreErrors.StandardError.PARALLEL_REGION_IN_USE));
                             return bytes.indexedAt(index);
                         }));
 
@@ -129,7 +128,6 @@ public final class ProtosStandardBytesProtocol {
                             BigInteger index =
                                     requireExistingIndex(
                                             supplied.get(0), bytes.indexedSize(), activation);
-                            if(bytes.isIndexReserved(index))throw new ProtosSignalException(ProtosCoreErrors.newOccurrence(activation,ProtosCoreErrors.StandardError.PARALLEL_REGION_IN_USE));
                             requireOctet(supplied.get(1), activation);
                             return bytes.indexedPut(index, supplied.get(1));
                         }));
@@ -144,7 +142,6 @@ public final class ProtosStandardBytesProtocol {
                             if (!bytes.isOpen()) {
                                 return fail(activation);
                             }
-                            if(bytes.hasReservation())throw new ProtosSignalException(ProtosCoreErrors.newOccurrence(activation,ProtosCoreErrors.StandardError.PARALLEL_REGION_IN_USE));
                             if (supplied.size() != 1) {
                                 return fail(activation);
                             }
@@ -160,7 +157,6 @@ public final class ProtosStandardBytesProtocol {
                             if (!bytes.isOpen()) {
                                 return fail(activation);
                             }
-                            if(bytes.hasReservation())throw new ProtosSignalException(ProtosCoreErrors.newOccurrence(activation,ProtosCoreErrors.StandardError.PARALLEL_REGION_IN_USE));
                             if (supplied.size() != 1) {
                                 return fail(activation);
                             }
@@ -169,7 +165,6 @@ public final class ProtosStandardBytesProtocol {
                                             supplied.get(0), bytes.indexedSize(), activation);
                             return bytes.indexedRemoveAt(index);
                         }));
-        ProtosParallelRuntime.installBytesParallel(bytesFactory);
     }
 
     private static Object each(ProtosActivation activation, List<?> supplied) {

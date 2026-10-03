@@ -126,8 +126,8 @@ cooperative cancellation, and task-scoped structured ownership.
 `DOC001-J` is CLOSED with
 [chapter 09](09-isolated-parallel-execution.md), which explains explicit P
 isolation, Closure projection, argument snapshots, deterministic Array parallel
-operations, cooperative cancellation/structured ownership, and controlled
-Bytes/ByteRegion writable partitioning.
+operations, cooperative cancellation/structured ownership, and the absence of
+shared writable partitioning.
 
 `DOC001-K` is CLOSED with
 [chapter 10](10-actors-actorrefs-and-groups.md), which explains Actor isolation,

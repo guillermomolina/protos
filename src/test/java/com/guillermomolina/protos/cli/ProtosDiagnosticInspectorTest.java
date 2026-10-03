@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosByteRegionValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
@@ -106,11 +105,8 @@ final class ProtosDiagnosticInspectorTest {
         ProtosBytesValue bytes = new ProtosBytesValue(ProtosObjectValue.rootObject());
         bytes.indexedAdd(octet(65));
         bytes.indexedAdd(octet(255));
-        ProtosByteRegionValue region =
-                new ProtosByteRegionValue(List.of(octet(1), octet(2)));
 
         assertEquals("Bytes[65, 255]", inspector.render(bytes));
-        assertEquals("ByteRegion[1, 2]", inspector.render(region));
     }
 
     @Test

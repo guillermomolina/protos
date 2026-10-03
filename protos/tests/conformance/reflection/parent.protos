@@ -36,9 +36,6 @@ tests: [
                 (InvalidPredicateResult.parent() === Error) &&
                 (InvalidComparatorResult.parent() === Error) &&
                 (InvalidComparatorOrder.parent() === Error) &&
-                (ParallelRegionOverlap.parent() === Error) &&
-                (ParallelRegionInUse.parent() === Error) &&
-                (ParallelRegionOutsideP.parent() === Error) &&
                 (IOError.parent() === Error) &&
                 (InvalidIOArgument.parent() === IOError) &&
                 (IOLifecycleError.parent() === IOError) &&

@@ -17,7 +17,6 @@
 package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.runtime.ProtosActorRefValue;
-import com.guillermomolina.protos.runtime.ProtosByteRegionValue;
 import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -83,7 +82,6 @@ final class ProtosDiagnosticInspector {
 
     private static boolean isStructuredValue(Object value) {
         return value instanceof ProtosBytesValue
-                || value instanceof ProtosByteRegionValue
                 || value instanceof ProtosArrayValue
                 || value instanceof ProtosMapValue
                 || value instanceof ProtosIdentityMapValue
@@ -201,10 +199,6 @@ final class ProtosDiagnosticInspector {
         try {
             if (value instanceof ProtosBytesValue bytes) {
                 appendNamedSequence("Bytes", bytes.indexedSnapshot(), state, path, depth, layout);
-                return;
-            }
-            if (value instanceof ProtosByteRegionValue bytes) {
-                appendNamedSequence("ByteRegion", bytes.indexedSnapshot(), state, path, depth, layout);
                 return;
             }
             if (value instanceof ProtosArrayValue array) {

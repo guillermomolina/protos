@@ -23,9 +23,6 @@ NonParallelValue: Error {}
 InvalidPredicateResult: Error {}
 InvalidComparatorResult: Error {}
 InvalidComparatorOrder: Error {}
-ParallelRegionOverlap: Error {}
-ParallelRegionInUse: Error {}
-ParallelRegionOutsideP: Error {}
 IOError: Error {}
 InvalidIOArgument: IOError {}
 IOLifecycleError: IOError {}

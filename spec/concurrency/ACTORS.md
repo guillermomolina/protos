@@ -1115,12 +1115,9 @@ The runtime may specialize Buffer storage aggressively using
 copy-on-write, zero-copy, shared immutable backing, scatter/gather, or
 streaming.
 
-The isolated parallel-execution facility may additionally support
-exclusive mutable partitioning of a Buffer or other suitable value. Such
-partitioning does not create multiple simultaneous mutable aliases to the
-same logical region: each writable logical region has at most one
-parallel owner at a time, even if several disjoint regions share one
-physical backing allocation.
+Core v0.1 standardizes no exclusive mutable partitioning of a Buffer or
+other value for isolated parallel execution; see
+`PARALLEL_EXECUTION.md` §71.5 and §71.5A.
 
 Principle:
 

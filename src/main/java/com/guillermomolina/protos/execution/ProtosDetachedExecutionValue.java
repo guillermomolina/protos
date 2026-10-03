@@ -285,7 +285,6 @@ public final class ProtosDetachedExecutionValue {
                     || value instanceof ProtosFutureValue
                     || value instanceof ProtosTask
                     || value instanceof ProtosActivation
-                    || value instanceof ProtosByteRegionValue
                     || value instanceof ProtosFileValue
                     || value instanceof ProtosFilesystemValue
                     || value instanceof ProtosProcessCapabilityValue

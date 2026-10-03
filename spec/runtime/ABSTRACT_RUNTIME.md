@@ -5282,56 +5282,7 @@ invoked operation's own contract explicitly permits another result semantics.
 When such equivalence cannot be established, scalar or another
 semantics-preserving implementation is required.
 
-### Standard byte-region submission
-
-Conceptually, standard `Bytes.parallelRange(start, length, worker, extras...)`:
-
-1. requires the current execution domain to be P, otherwise signals
-   `ParallelRegionOutsideP`;
-2. validates semantic Integer range bounds and Closure worker;
-3. rejects non-empty overlap on the same logical receiver with
-   `ParallelRegionOverlap`;
-4. validates worker/extra P inputs before publishing any reservation;
-5. reserves the exact half-open interval;
-6. snapshots that interval into a fixed-size child `ByteRegion`;
-7. launches a child P whose projected worker receives the region first, followed
-   by explicit extra arguments.
-
-Parent `Bytes.at`/`atPut` performs ordinary index/value validation and then
-signals `ParallelRegionInUse` before accessing a reserved index. Any standard
-operation that changes byte-sequence length or shifts indexes performs the same
-active-reservation rejection before structural mutation.
-
-On normal child completion, the runtime first validates/transfers the child
-result. It then performs one semantic successful-publication commit against the
-same pending Future that cancellation may otherwise terminalize:
-
-```text
-atomic:
-    if resultFuture.state != pending:
-        // cancellation or another terminal outcome already won
-        release reservation without committing region bytes
-        do not publish region mutation
-        stop
-
-    replace exactly the reserved parent interval with final region bytes
-    release reservation
-    resolve resultFuture with transferredChildResult
-```
-
-The `atomic` region is semantic, not a required lock. It means there is no
-observable state in which committed parent-region bytes coexist with a Future
-that cancellation may still change to `cancelled`.
-
-Therefore cancellation that terminalizes the Future first publishes no region
-mutation; successful publication that commits first resolves the Future and a
-later `cancel()` is the ordinary terminal-Future no-op. Child failure or
-result-transfer failure likewise releases the reservation without committing
-region bytes.
-
-Disjoint reservations have no semantic ordering relative to each other. A
-`ByteRegion.parallelRange` recursively derives authority over a subrange and
-applies the same rules.
+### P-local cooperative execution
 
 At most one cooperative segment in the same P domain executes Protos code at a
 time. Explicit suspension may let another runnable P-local cooperative task run.

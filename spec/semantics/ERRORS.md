@@ -370,9 +370,6 @@ The standard prototypes required by Core v0.1 are:
 | `InvalidPredicateResult` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
 | `InvalidComparatorResult` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
 | `InvalidComparatorOrder` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
-| `ParallelRegionOverlap` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
-| `ParallelRegionInUse` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
-| `ParallelRegionOutsideP` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
 | `IOError` | `Error` | `../io/IO_CORE.md` and the modular I/O documents |
 | `InvalidIOArgument` | `IOError` | `../io/IO_CORE.md` |
 | `IOLifecycleError` | `IOError` | `../io/IO_CORE.md` |

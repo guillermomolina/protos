@@ -117,14 +117,6 @@ public final class ProtosFutureValue extends ProtosObjectValue {
         return transition(State.RESOLVED, result, null);
     }
 
-    public boolean resolveWithCommit(Object result,ProtosActivation activation,Runnable commit) {
-        Objects.requireNonNull(result);Objects.requireNonNull(activation);Objects.requireNonNull(commit);
-        if(result instanceof ProtosFutureValue)throw new IllegalArgumentException("commit result cannot adopt");
-        List<Waiter>wake;List<Observer>notify;
-        synchronized(this){if(state!=State.PENDING)return false;commit.run();state=State.RESOLVED;value=result;error=null;wake=List.copyOf(waiters);waiters.clear();notify=List.copyOf(observers);observers.clear();}
-        boolean soleWaiter=wake.size()==1;for(Waiter w:wake)w.ready(soleWaiter);for(Observer o:notify)o.terminal(this);return true;
-    }
-
     public boolean fail(ProtosObjectValue failure) {
         return transition(State.FAILED, null, Objects.requireNonNull(failure, "failure"));
     }

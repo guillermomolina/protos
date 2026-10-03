@@ -23,6 +23,33 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.439] - 2026-10-03
+
+### I057 / D161 — Remove ByteRegion and writable parallel-range reservations
+- `spec/concurrency/PARALLEL_EXECUTION.md`: the Core P entry surface (section
+  71.1) is now only `Closure.parallel(arguments...)`. Section 71.5 states that
+  Core v0.1 standardizes no writable partitioning facility: there is no
+  `Bytes.parallelRange` and no `ByteRegion` value family, and ordinary `Bytes`
+  carries no parallel reservation state. P work never makes a `Bytes`
+  operation fail, block, or suspend. Byte-indexed state in P uses the ordinary
+  section 71.3 snapshot and result-transfer rules, and physical sharing remains
+  the invisible optimization of section 71.4. Section 71.5A now also excludes
+  writable partitioning for `Bytes`, and no longer reserves `ByteRegion` as a
+  Core facility. Sections 71.18-71.20 (byte-region submission, reservation and
+  overlap, commit/publication and recursive subdivision) are removed, together
+  with the ByteRegion entries in the scheduling-invariant and vectorization
+  lists. P isolation and snapshot/value semantics, and the absence of shared
+  mutable Protos memory, are unchanged.
+- `spec/semantics/ERRORS.md`: removed `ParallelRegionOverlap`,
+  `ParallelRegionInUse`, and `ParallelRegionOutsideP` from the required Core
+  Error prototypes.
+- `spec/io/BYTE_IO.md`: removed the P-local `ByteRegion` authority paragraph.
+- `spec/concurrency/ACTORS.md`: the Buffer section no longer allows exclusive
+  mutable partitioning; it refers to `PARALLEL_EXECUTION.md` sections 71.5 and
+  71.5A.
+- `spec/runtime/ABSTRACT_RUNTIME.md` (informative): removed the standard
+  byte-region submission and publication pseudocode.
+
 ## [0.1.438] - 2026-10-03
 
 ### I063 / D170 — Remove standard File append semantics

@@ -537,18 +537,6 @@ standardErrorPrototype: (name) => {
         result = InvalidComparatorOrder
         known = true
     })
-    (name === "ParallelRegionOverlap").ifTrue(() => {
-        result = ParallelRegionOverlap
-        known = true
-    })
-    (name === "ParallelRegionInUse").ifTrue(() => {
-        result = ParallelRegionInUse
-        known = true
-    })
-    (name === "ParallelRegionOutsideP").ifTrue(() => {
-        result = ParallelRegionOutsideP
-        known = true
-    })
     (name === "IOError").ifTrue(() => {
         result = IOError
         known = true

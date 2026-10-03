@@ -36,9 +36,6 @@ tests: [
             InvalidPredicateResult
             InvalidComparatorResult
             InvalidComparatorOrder
-            ParallelRegionOverlap
-            ParallelRegionInUse
-            ParallelRegionOutsideP
             IOError
             InvalidIOArgument
             IOLifecycleError

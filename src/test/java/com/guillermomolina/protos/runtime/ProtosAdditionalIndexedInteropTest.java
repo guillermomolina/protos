@@ -83,42 +83,11 @@ final class ProtosAdditionalIndexedInteropTest {
     }
 
     @Test
-    void byteRegionProjectsExactLiveIndexedReferencesWithoutMutationInterop()
-            throws Exception {
-        ProtosIntegerValue first = octet(10);
-        ProtosIntegerValue replacement = octet(11);
-        ProtosByteRegionValue region =
-                new ProtosByteRegionValue(List.of(first));
-
-        assertTrue(interop.hasArrayElements(region));
-        assertEquals(1L, interop.getArraySize(region));
-        assertSame(first, interop.readArrayElement(region, 0));
-
-        region.indexedPut(BigInteger.ZERO, replacement);
-        assertSame(replacement, interop.readArrayElement(region, 0));
-
-        assertFalse(interop.isArrayElementWritable(region, 0));
-        assertFalse(interop.isArrayElementInsertable(region, 1));
-        assertFalse(interop.isArrayElementRemovable(region, 0));
-        assertThrows(
-                UnsupportedMessageException.class,
-                () -> interop.writeArrayElement(region, 0, octet(12)));
-        assertFalse(interop.hasIterator(region));
-        assertThrows(
-                UnsupportedMessageException.class,
-                () -> interop.getIterator(region));
-        assertFalse(interop.hasMembers(region));
-        assertEquals("ByteRegion", interop.toDisplayString(region, false));
-    }
-
-    @Test
     void indexedFacetsDoNotAcquireOtherInteropCapabilities() {
         ProtosBytesValue bytes =
                 new ProtosBytesValue(ProtosObjectValue.rootObject());
-        ProtosByteRegionValue region =
-                new ProtosByteRegionValue(List.of(octet(1)));
 
-        for (Object value : List.of(bytes, region)) {
+        for (Object value : List.of(bytes)) {
             assertFalse(interop.isExecutable(value));
             assertFalse(interop.isString(value));
             assertFalse(interop.isBoolean(value));

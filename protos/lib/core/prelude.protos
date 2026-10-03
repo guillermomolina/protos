@@ -36,9 +36,6 @@ _corePreludeBindings: Context {
     InvalidPredicateResult: InvalidPredicateResult
     InvalidComparatorResult: InvalidComparatorResult
     InvalidComparatorOrder: InvalidComparatorOrder
-    ParallelRegionOverlap: ParallelRegionOverlap
-    ParallelRegionInUse: ParallelRegionInUse
-    ParallelRegionOutsideP: ParallelRegionOutsideP
     IOError: IOError
     InvalidIOArgument: InvalidIOArgument
     IOLifecycleError: IOLifecycleError

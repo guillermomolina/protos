@@ -141,7 +141,6 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosSendOperationControl
                     || value instanceof ProtosFutureValue
                     || value instanceof ProtosTask
-                    || value instanceof ProtosByteRegionValue
                     || value instanceof ProtosActivation
                     || value instanceof ProtosFileValue
                     || value instanceof ProtosFilesystemValue

@@ -29,9 +29,6 @@ taxonomyOk:
     (Runner.standardErrorPrototype("InvalidPredicateResult") === InvalidPredicateResult) &&
     (Runner.standardErrorPrototype("InvalidComparatorResult") === InvalidComparatorResult) &&
     (Runner.standardErrorPrototype("InvalidComparatorOrder") === InvalidComparatorOrder) &&
-    (Runner.standardErrorPrototype("ParallelRegionOverlap") === ParallelRegionOverlap) &&
-    (Runner.standardErrorPrototype("ParallelRegionInUse") === ParallelRegionInUse) &&
-    (Runner.standardErrorPrototype("ParallelRegionOutsideP") === ParallelRegionOutsideP) &&
     (Runner.standardErrorPrototype("IOError") === IOError) &&
     (Runner.standardErrorPrototype("InvalidIOArgument") === InvalidIOArgument) &&
     (Runner.standardErrorPrototype("IOLifecycleError") === IOLifecycleError) &&

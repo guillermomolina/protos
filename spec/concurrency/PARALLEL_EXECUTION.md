@@ -90,13 +90,11 @@ The complete Core v0.1 entry surface is ordinary dispatch on existing values:
 
 ```text
 Closure.parallel(arguments...)
-Bytes.parallelRange(start, length, block, arguments...)
-ByteRegion.parallelRange(start, length, block, arguments...)
 ```
 
 No `P(...)`, `P.spawn`, region constructor, worker/join/executor handle, current-P
 accessor, or implicit parallel operator exists. Nested P is another explicit call
-to one of these operations. Process and open I/O/native/resource capabilities have
+to this operation. Process and open I/O/native/resource capabilities have
 no P-transfer contract and fail under `NonParallelValue`; P acquires no ambient
 Actor, Process, I/O, or scheduler authority.
 
@@ -266,70 +264,33 @@ cannot portably distinguish these implementation choices.
 
 ### 71.5 Exclusive Mutable Partitioning
 
-Parallel algorithms may require several CPU cores to modify disjoint
-parts of a large value efficiently. Protos may support this without
-opening arbitrary shared mutable memory.
+Parallel algorithms may wish to modify disjoint parts of a large value
+efficiently. Protos does not open arbitrary shared mutable memory for that
+purpose.
 
 The governing rule is:
 
 > Physical storage may be shared, but two parallel computations must not
 > simultaneously hold mutable authority over the same logical state.
 
-Core v0.1 standardizes this mechanism for byte-indexed state through standard
-`Bytes.parallelRange(...)` and recursive `ByteRegion.parallelRange(...)`.
-Several child P computations may operate simultaneously on disjoint byte ranges
-while the runtime guarantees that writable intervals do not overlap.
-
-Ordinary `Array` is not granted the same Core writable-region authority merely
-because its indexes are disjoint: its elements may alias arbitrary mutable object
-graphs. Future Array/object partition facilities require a stronger semantic
-proof than non-overlapping indexes.
-
-Conceptually:
-
-    one large physical backing
-        |
-        +-- region A -> exclusive parallel writer A
-        +-- region B -> exclusive parallel writer B
-        +-- region C -> exclusive parallel writer C
-
-The programmer is not required to introduce mutexes, atomics, volatile
-state, memory ordering, or general-purpose borrow checking merely to use
-this model.
+Core v0.1 standardizes no writable partitioning facility. Standard `Bytes` has
+no `parallelRange` operation, Core has no `ByteRegion` value family, and ordinary
+`Bytes` carries no parallel reservation state: no `Bytes` operation fails,
+blocks, suspends, or otherwise changes behavior because of P work. A P
+computation that transforms byte-indexed or other mutable state does so on its
+own isolated snapshot under §71.3 and returns a fresh result through the
+ordinary P value-transfer boundary. Physical sharing remains the
+semantically invisible optimization of §71.4.
 
 Disjoint physical ranges, Array indexes, or storage addresses are not by
-themselves sufficient to establish disjoint mutable authority. Partitioning is
-valid only when the abstract mutable state governed by each writable partition
-is logically disjoint from the mutable state governed by every simultaneously
-writable sibling partition.
-
-In particular, two Array regions that contain references to the same mutable
-object do not acquire independent authority over that referenced object merely
-because the Array indexes themselves do not overlap. A partition may provide
-exclusive mutation of its own indexed state without thereby granting mutation
-authority over arbitrary mutable objects reachable through its elements.
-
-Exclusive writable partitioning applies to isolated state owned by the parallel
-computation, not to live mutable state that remains semantically owned by the
-calling Actor. The runtime may physically reuse source storage only when the
-caller continues to observe the original source value exactly as required by the
-Value and Snapshot Semantics rules.
-
-An exclusive mutable authority may be subdivided into child authorities only
-when those child authorities are mutually disjoint. While a child authority is
-live, its parent authority must not be used concurrently to read or mutate the
-same logical mutable state in a way forbidden by that child's exclusivity. When
-all relevant child authorities complete, the parent authority may be
-reconstituted according to the eventual partition API.
-
-For Core byte regions, representation, validation, recomposition, and public
-surface are closed by §§71.18-71.20 below. Generic writable partitioning for Array or arbitrary object graphs is not
-part of Core v0.1, as closed explicitly by §71.5A; the byte mechanism does
-not imply such authority.
+themselves sufficient to establish disjoint mutable authority. Two Array
+indexes that contain references to the same mutable object do not acquire
+independent authority over that referenced object merely because the indexes
+themselves do not overlap.
 
 ### 71.5A No generic writable graph partitioning in Core
 
-Core v0.1 does not standardize a general writable-partition facility for
+Core v0.1 does not standardize a writable-partition facility for `Bytes`,
 `Array`, arbitrary objects, or arbitrary reachable mutable object graphs.
 
 This is a semantic boundary, not an implementation omission.
@@ -349,18 +310,15 @@ simultaneous shared mutable Protos state and would violate the P isolation model
 
 Core therefore provides no standard:
 
-- `Array.parallelRange(...)` writable-region analogue;
+- `Bytes.parallelRange(...)`, `Array.parallelRange(...)`, or other
+  writable-region operation;
+- `ByteRegion` or other writable-region value family;
 - generic `Object.partition(...)` or graph-region capability;
 - runtime alias-analysis API that grants writable P authority;
 - borrow/ownership annotation system;
 - user-visible uniqueness, move-only, affine, or linear reference mode;
 - dynamic "prove disjoint" operation whose success depends on
   implementation-selected heap analysis.
-
-`Bytes`/`ByteRegion` remains the standardized Core writable-partition facility
-because its mutable authority is defined exactly over byte-indexed state and can
-be bounded by explicit non-overlapping intervals without granting authority over
-arbitrary reachable mutable objects.
 
 This does not prohibit parallel algorithms over Arrays or objects. Such
 algorithms may use ordinary P snapshot/value semantics, produce fresh results,
@@ -369,7 +327,7 @@ representation optimizations. What Core does not provide is simultaneous
 writable authority over arbitrary logical object graphs merely because a
 container representation can be physically partitioned.
 
-A future facility may add broader writable partitioning only if it introduces a
+A future facility may add writable partitioning only if it introduces a
 portable semantic proof of disjoint mutable authority. That proof must be
 language/runtime-defined rather than dependent on one implementation's escape,
 alias, GC, pointer, or storage analysis. If broader ownership/capability
@@ -1107,7 +1065,6 @@ observable constraint, including:
 - Actor turn isolation;
 - P process-locality;
 - effect/authority boundaries;
-- ByteRegion reservation/publication rules;
 - the requirement that physical scheduling not become an accidental semantic
   selector.
 
@@ -1411,7 +1368,7 @@ including:
 - slot/index mutations and their observable ordering;
 - explicit suspension/cancellation boundaries;
 - dynamic-handler behavior;
-- P isolation, publication, reservation, and fairness guarantees.
+- P isolation, publication, and fairness guarantees.
 
 A vectorizer may therefore batch or widen operations only when doing so cannot
 change those observations. If legality is uncertain, the implementation must use
@@ -1556,87 +1513,6 @@ that implementation.
 
 This leaves implementations free to exploit immutable representation aggressively
 without adding a second user-visible immutability/ownership system to Protos.
-
-### 71.18 Standard exclusive byte regions
-
-Inside P, standard `Bytes` provides `parallelRange(start, length, worker,
-arguments...) -> Future`. `ByteRegion` values created by this mechanism provide
-the same operation recursively.
-
-The operation is valid only in P. Outside P it signals
-`ParallelRegionOutsideP`. `start` and `length` are semantic Integers and define
-the half-open interval `[start, start + length)`, with non-negative bounds inside
-the receiver. `worker` must be a Closure and executes as a projected child-P
-Closure whose first argument is the fixed-size local `ByteRegion`.
-
-
-After ordinary receiver/argument evaluation has completed left-to-right, the
-standard behavior performs synchronous validation in exactly this order:
-
-1. require that the current execution domain is P, otherwise signal
-   `ParallelRegionOutsideP`;
-2. validate `start` as a semantic Integer and require `start >= 0`;
-3. validate `length` as a semantic Integer and require `length >= 0`;
-4. require `start + length <= receiver.size`;
-5. require `worker` to be a Closure;
-6. reject overlap with an already-active non-empty reservation on the same
-   logical receiver using `ParallelRegionOverlap`;
-7. validate the projected worker and remaining explicit argument graph for the
-   child P boundary.
-
-The first failing check in this sequence determines the synchronous failure.
-No reservation or Future exists before all seven checks succeed. Effects already
-performed while evaluating the receiver or arguments are not rolled back.
-
-### 71.19 Reservation and overlap semantics
-
-A successful non-empty submission creates one exclusive reservation until its
-Future becomes terminal. Two non-empty intervals overlap exactly when each begins
-before the other ends. Overlap signals `ParallelRegionOverlap` synchronously and
-creates no Future/reservation. Zero-length intervals reserve nothing.
-
-While reserved, parent access inside the interval signals
-`ParallelRegionInUse`; access wholly outside active intervals remains ordinary;
-`size` remains readable; operations that can change length or shift indexed
-positions signal `ParallelRegionInUse` while any reservation exists. These rules
-fail rather than block or suspend.
-
-A `ByteRegion` exposes only local zero-based byte indexing, fixed `size`, and
-recursive `parallelRange`. It exposes no parent identity, absolute offset,
-physical backing, address, or sibling authority.
-
-### 71.20 Commit, failure, and recursive subdivision
-
-The child mutates isolated region state. Parent mutation occurs only at successful
-publication, after both normal child completion and successful P-boundary result
-transfer.
-
-Successful publication is one indivisible semantic commitment with respect to
-cancellation and Future terminalization. At that commitment, while the Future is
-still pending, the operation atomically chooses the successful outcome: exactly
-the region's fixed bytes replace the reserved parent interval, the reservation is
-released, and the Future resolves with the already-transferred child result.
-Cancellation cannot win after the parent bytes have become visible, and parent
-bytes cannot become visible if cancellation has already won the Future's terminal
-race.
-
-If cancellation wins before that successful-publication commitment, or if the
-child fails or its result cannot cross the P boundary, the reservation is
-released without publishing region mutation. A cancellation request that arrives
-after successful publication has committed is a terminal-Future no-op under the
-ordinary `Future.cancel()` rule.
-
-This atomicity is only the reserved-byte publication boundary, not a transaction
-over arbitrary P state. Disjoint commits have no added total order. Recursive
-`ByteRegion.parallelRange` subdivides authority with the same rules.
-
-`ByteRegion` is scoped P-local authority, not an ordinary transferable/serializable
-value. It moves only through the dedicated region operation that defines the
-authority transfer.
-
-Core v0.1 deliberately excludes generic writable Array/object partitioning,
-as closed by §71.5A, because disjoint indexes do not prove disjoint mutable
-reachable graphs.
 
 # Failure-transfer integration migrated from legacy §5
 

@@ -128,6 +128,7 @@ text-writer/lifecycle.protos	suite-native	-
 text-writer/write-and-encoding.protos	suite-native	-
 core-surface/required-core-bindings.protos	suite-native	-
 core-surface/removed-fixed-width-bindings.protos	suite-native	-
+core-surface/removed-byte-region-surface.protos	suite-native	-
 core-surface/grammar-and-lexical-surface.protos	suite-native	-
 core-surface/evaluation-order.protos	suite-native	-
 core-surface/closure-and-argument-surface.protos	suite-native	-

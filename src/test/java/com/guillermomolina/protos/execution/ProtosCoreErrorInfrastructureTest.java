@@ -57,9 +57,6 @@ class ProtosCoreErrorInfrastructureTest {
         assertParent(prelude, "InvalidPredicateResult", "Error");
         assertParent(prelude, "InvalidComparatorResult", "Error");
         assertParent(prelude, "InvalidComparatorOrder", "Error");
-        assertParent(prelude, "ParallelRegionOverlap", "Error");
-        assertParent(prelude, "ParallelRegionInUse", "Error");
-        assertParent(prelude, "ParallelRegionOutsideP", "Error");
         assertParent(prelude, "IOError", "Error");
         assertParent(prelude, "InvalidIOArgument", "IOError");
         assertParent(prelude, "IOLifecycleError", "IOError");

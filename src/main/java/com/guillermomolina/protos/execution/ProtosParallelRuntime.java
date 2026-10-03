@@ -59,10 +59,6 @@ public final class ProtosParallelRuntime {
         slot(p,"parallelSort",ProtosParallelRuntime::sort);
     }
 
-    public static void installBytesParallel(ProtosObjectValue p){
-        slot(p,"parallelRange",(a,x)->parallelRange(a.receiver(),a,x));
-    }
-
     /*
      * Standard prelude objects remain owned by the caller runtime.  P transfer
      * never changes their mutation state.  Direct standard identities are only
@@ -216,61 +212,6 @@ public final class ProtosParallelRuntime {
     }
     private static boolean bool(Object v){return v==ProtosBooleanValue.TRUE||v==ProtosBooleanValue.FALSE;}
 
-    private static Object parallelRange(Object receiver,ProtosActivation a,List<?> supplied){
-        if(!P_DOMAINS.containsKey(a.executionDomain()))
-            throw signal(a,ProtosCoreErrors.StandardError.PARALLEL_REGION_OUTSIDE_P);
-        if(supplied.size()<3)throw error(a);
-        BigInteger start=integer(supplied.get(0),a);if(start.signum()<0)throw error(a);
-        BigInteger length=integer(supplied.get(1),a);if(length.signum()<0)throw error(a);
-        BigInteger size=receiver instanceof ProtosBytesValue b?b.indexedSize():
-                receiver instanceof ProtosByteRegionValue r?r.indexedSize():null;
-        if(size==null||start.add(length).compareTo(size)>0)throw error(a);
-        if(!(supplied.get(2) instanceof ProtosClosureValue worker))throw error(a);
-        Object token=new Object();
-        boolean reserved=receiver instanceof ProtosBytesValue b?b.tryReserve(start,length,token):
-                ((ProtosByteRegionValue)receiver).tryReserve(start,length,token);
-        if(!reserved)throw signal(a,ProtosCoreErrors.StandardError.PARALLEL_REGION_OVERLAP);
-        List<Object> bytes=receiver instanceof ProtosBytesValue b?b.rangeSnapshot(start,length):
-                ((ProtosByteRegionValue)receiver).rangeSnapshot(start,length);
-        ProtosByteRegionValue region=new ProtosByteRegionValue(bytes);installRegion(region);
-        ArrayList<Object> args=new ArrayList<>(1 + Math.max(0, supplied.size() - 3));
-            args.add(region);
-            for(int suppliedIndex=3;suppliedIndex<supplied.size();suppliedIndex++){
-                args.add(supplied.get(suppliedIndex));
-            }
-        Snapshot snapshot;
-        try{snapshot=Snapshot.capture(worker,args,a);}
-        catch(RuntimeException e){release(receiver,token);throw e;}
-        return ownedFuture(a,c->{
-            c.onCancelRelease(receiver,token);
-            c.onCommit(()->{
-                if(receiver instanceof ProtosBytesValue b)b.commitReserved(start,region.indexedSnapshot(),token);
-                else ((ProtosByteRegionValue)receiver).commitReserved(start,region.indexedSnapshot(),token);
-            });
-            submit(()->run(snapshot,c));
-        });
-    }
-
-    private static void installRegion(ProtosByteRegionValue r){
-        slot(r,"size",(a,x)->{if(a.receiver()!=r||!x.isEmpty())throw error(a);return new ProtosIntegerValue(r.indexedSize());});
-        slot(r,"at",(a,x)->{
-            if(a.receiver()!=r||x.size()!=1)throw error(a);BigInteger i=integer(x.get(0),a);
-            if(i.signum()<0||i.compareTo(r.indexedSize())>=0)throw error(a);
-            if(r.isIndexReserved(i))throw signal(a,ProtosCoreErrors.StandardError.PARALLEL_REGION_IN_USE);
-            return r.indexedAt(i);});
-        slot(r,"atPut",(a,x)->{
-            if(a.receiver()!=r||x.size()!=2)throw error(a);BigInteger i=integer(x.get(0),a);
-            if(i.signum()<0||i.compareTo(r.indexedSize())>=0)throw error(a);
-            if(r.isIndexReserved(i))throw signal(a,ProtosCoreErrors.StandardError.PARALLEL_REGION_IN_USE);
-            octet(x.get(1),a);return r.indexedPut(i,x.get(1));});
-        slot(r,"parallelRange",(a,x)->parallelRange(r,a,x));
-    }
-
-    private static void release(Object receiver,Object token){
-        if(receiver instanceof ProtosBytesValue b)b.releaseReservation(token);
-        else ((ProtosByteRegionValue)receiver).releaseReservation(token);
-    }
-
     private static ProtosFutureValue ownedFuture(ProtosActivation caller,
             java.util.function.Consumer<Completion> starter){
         ProtosFutureValue f=new ProtosFutureValue(caller.prelude().orElseThrow().futurePrototype(),caller.executionDomain());
@@ -283,8 +224,7 @@ public final class ProtosParallelRuntime {
             if(!completion.isReady()){current.suspend(completion);return;}
             Outcome o=completion.outcome();
             if(o.error!=null){if(f.fail(o.error))current.fail(o.error);else current.complete(ProtosNullValue.INSTANCE);return;}
-            Runnable commit=completion.commit();
-            if(commit==null)f.resolve(o.value,caller);else f.resolveWithCommit(o.value,caller,commit);
+            f.resolve(o.value,caller);
             current.complete(ProtosNullValue.INSTANCE);
         });
         f.attachProducerTask(producer,caller);completion.bind(producer);starter.accept(completion);return f;
@@ -296,10 +236,9 @@ public final class ProtosParallelRuntime {
     }
 
     private static final class Completion implements ProtosTask.WaitDependency {
-        private volatile ProtosTask task;private volatile Outcome outcome;private volatile Runnable commit;
+        private volatile ProtosTask task;private volatile Outcome outcome;
         private volatile int cancelKind;
         private volatile AtomicBoolean cancelAbandoned;
-        private volatile Object cancelReceiver,cancelToken;
         private volatile Completion cancelTarget;
         private volatile java.util.function.Consumer<Outcome> ready;private final AtomicBoolean cancelled=new AtomicBoolean();
         void bind(ProtosTask t){task=t;if(outcome!=null)t.resume(this);}
@@ -310,18 +249,11 @@ public final class ProtosParallelRuntime {
             cancelKind=1;
             if(cancelled.get())runCancelAction();
         }
-        void onCancelRelease(Object receiver,Object token){
-            cancelReceiver=Objects.requireNonNull(receiver);
-            cancelToken=Objects.requireNonNull(token);
+        void onCancelForward(Completion target){
+            cancelTarget=Objects.requireNonNull(target);
             cancelKind=2;
             if(cancelled.get())runCancelAction();
         }
-        void onCancelForward(Completion target){
-            cancelTarget=Objects.requireNonNull(target);
-            cancelKind=3;
-            if(cancelled.get())runCancelAction();
-        }
-        void onCommit(Runnable r){commit=r;}Runnable commit(){return commit;}
         public boolean isReady(){return outcome!=null;}Outcome outcome(){return outcome;}
         void resolve(Object v){complete(Outcome.ok(v));}void fail(ProtosObjectValue e){complete(Outcome.fail(e));}
         synchronized void complete(Outcome o){if(outcome!=null||cancelled.get())return;outcome=o;
@@ -331,8 +263,7 @@ public final class ProtosParallelRuntime {
             switch(cancelKind){
                 case 0 -> {}
                 case 1 -> cancelAbandoned.set(true);
-                case 2 -> release(cancelReceiver,cancelToken);
-                case 3 -> cancelTarget.cancel();
+                case 2 -> cancelTarget.cancel();
                 default -> throw new IllegalStateException("unknown parallel cancellation action");
             }
         }
@@ -426,7 +357,7 @@ public final class ProtosParallelRuntime {
                 if(memo.containsKey(v))return memo.get(v);
                 ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
             }
-            if(v instanceof ProtosFutureValue||v instanceof ProtosByteRegionValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v==null)throw new NonParallel();
+            if(v instanceof ProtosFutureValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosTcpListenerValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v==null)throw new NonParallel();
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;
@@ -526,12 +457,8 @@ public final class ProtosParallelRuntime {
         catch(UnsupportedOperationException e){throw error(a);}
     }
     private static ProtosArrayValue requireArray(ProtosActivation a){if(!(a.receiver() instanceof ProtosArrayValue x))throw error(a);return x;}
-    private static BigInteger integer(Object v,ProtosActivation a){
-        if(v instanceof ProtosIntegerValue x)return x.value();throw error(a);}
-    private static void octet(Object v,ProtosActivation a){BigInteger x=integer(v,a);if(x.signum()<0||x.compareTo(BigInteger.valueOf(255))>0)throw error(a);}
     private static ProtosObjectValue occ(ProtosActivation a,ProtosCoreErrors.StandardError e){return ProtosCoreErrors.newOccurrence(a,e);}
     private static ProtosObjectValue nonParallel(ProtosActivation a){return occ(a,ProtosCoreErrors.StandardError.NON_PARALLEL_VALUE);}
-    private static ProtosSignalException signal(ProtosActivation a,ProtosCoreErrors.StandardError e){return new ProtosSignalException(occ(a,e));}
     private static ProtosSignalException error(ProtosActivation a){return new ProtosSignalException(ProtosCoreErrors.newError(a));}
     private static void slot(ProtosObjectValue p,String n,ProtosNativeClosureBody b){
         if(p.hasLocalSlot(n))throw new IllegalStateException("Core already defines "+n);p.createLocalSlot(n,ProtosClosureValue.nativeClosure(b));}

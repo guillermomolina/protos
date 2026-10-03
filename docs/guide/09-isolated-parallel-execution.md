@@ -76,8 +76,8 @@ The public fundamental submission operation is the ordinary message:
 closure.parallel(arguments...)
 ```
 
-Core also exposes the standard Array parallel algorithms and the controlled
-Bytes/ByteRegion writable-range facility described later in this chapter.
+Core also exposes the standard Array parallel algorithms described later in
+this chapter.
 
 The implementation can use threads, carriers, pools, work stealing, or other
 machinery internally. That machinery is not the programmer-visible model.
@@ -457,85 +457,32 @@ or arbitrary object graph.
 Doing so would require a portable alias/ownership model for overlapping mutable
 graphs.
 
-Core v0.1 deliberately does not define a general:
+Core v0.1 deliberately does not define:
 
 ```text
 Array.parallelRange
+Bytes.parallelRange
 Object.partition
 borrowed mutable object slice
 runtime alias-analysis API
 ```
 
-for arbitrary objects.
+or any other writable-partition facility.
 
 General P inputs use snapshot/value isolation.
 
-## Bytes has one explicit mutable partition mechanism
+## Bytes follows the same snapshot rule
 
-For byte-oriented data, Core does define a specialized operation:
+`Bytes` has no special writable-partition operation either. There is no
+`parallelRange` and no `ByteRegion`.
 
-```protos
-bytes.parallelRange(start, length, worker, arguments...)
-```
+A P worker that receives `Bytes` receives its own isolated snapshot, exactly as
+for any other mutable input. To transform part of a byte sequence in parallel,
+pass the relevant bytes as explicit arguments and return the transformed bytes
+as the Future result; the caller decides how to combine the results.
 
-and recursively on a `ByteRegion`:
-
-```protos
-region.parallelRange(start, length, worker, arguments...)
-```
-
-This facility gives isolated work exclusive authority over a bounded byte range.
-
-Byte ranges have simple numeric overlap semantics, so the language can define
-exclusive writable partitions precisely without solving arbitrary graph aliasing.
-
-## `parallelRange` belongs inside P execution
-
-The range-partition operation is a P-domain facility.
-
-Using the standard `parallelRange` behavior outside the permitted P execution
-context fails with `ParallelRegionOutsideP`.
-
-A valid invocation selects a bounded range and supplies a P-local `ByteRegion` to
-the worker Closure.
-
-That region exposes controlled indexed byte access rather than a general alias to
-the caller's entire object graph.
-
-## Overlapping writable regions are rejected
-
-Two active writable reservations may not overlap.
-
-Attempting to reserve an overlapping interval fails with
-`ParallelRegionOverlap`.
-
-This turns a data race that would otherwise depend on scheduler timing into an
-explicit semantic invariant.
-
-Disjoint regions have no extra semantic ordering merely because they coexist.
-
-## Reserved parent bytes are not concurrently ordinary-accessible
-
-While a child parallel region owns a reserved range, conflicting indexed access
-through the relevant containing region can fail with `ParallelRegionInUse`.
-
-The goal is one clear owner for each active writable byte partition.
-
-The programmer should structure range work so that disjoint workers own disjoint
-ranges until their operations complete.
-
-## ByteRegion publication is controlled
-
-The worker mutates its P-local region.
-
-Successful completion commits the permitted region result back through the
-range-operation contract.
-
-Failure or cancellation does not expose arbitrary partially mutated P-local
-object state as if it were a shared-memory race.
-
-This controlled publication boundary is what makes `parallelRange` different
-from handing workers an ordinary shared mutable Bytes alias.
+Ordinary `Bytes` operations in the caller are never blocked, rejected, or
+otherwise affected by P work that is still running.
 
 ## Physical carrier count is not program semantics
 
@@ -590,9 +537,6 @@ can operate on explicitly transferable inputs.
 Use an Actor when you need persistent isolated mutable state with identity,
 mailbox communication, and lifecycle.
 
-Use `Bytes.parallelRange`/`ByteRegion.parallelRange` when a parallel algorithm
-specifically needs controlled disjoint writable byte partitions.
-
 This choice is semantic, not a performance hint attached to otherwise identical
 execution.
 
@@ -646,15 +590,13 @@ authoritative.
     left-fold callback order.
 15. `parallelSort` is stable and enforces strict canonical-Boolean comparator
     laws.
-16. Arbitrary mutable object graphs do not gain a general shared-write
-    partitioning API.
-17. Bytes/ByteRegion `parallelRange` is the explicit disjoint writable-region
-    mechanism and rejects overlap/in-use/outside-P violations.
-18. Physical carriers, threads, queues, and scheduling order are implementation
+16. No value family, including Arrays, Bytes, and arbitrary mutable object
+    graphs, gains a shared-write partitioning API; P inputs are snapshots.
+17. Physical carriers, threads, queues, and scheduling order are implementation
     details.
-19. P is local isolated computation, not a remote-placement or service-discovery
+18. P is local isolated computation, not a remote-placement or service-discovery
     API.
-20. Choose between call, Future, P, and Actor according to state isolation,
+19. Choose between call, Future, P, and Actor according to state isolation,
     lifetime, and communication semantics rather than syntax familiarity.
 
 ## Normative references
@@ -663,7 +605,7 @@ For exact behavior, consult:
 
 - [`../../spec/concurrency/PARALLEL_EXECUTION.md`](../../spec/concurrency/PARALLEL_EXECUTION.md)
   for P isolation, Closure projection, transferability, Array parallel
-  operations, deterministic failure/result rules, byte-region partitioning,
+  operations, deterministic failure/result rules, the absence of writable partitioning,
   cancellation, and scheduling independence;
 - [`../../spec/concurrency/FUTURES_AND_TASKS.md`](../../spec/concurrency/FUTURES_AND_TASKS.md)
   for the Future result, observation, cancellation, and structured

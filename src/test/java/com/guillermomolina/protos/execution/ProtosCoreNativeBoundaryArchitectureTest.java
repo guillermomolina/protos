@@ -390,7 +390,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Bytes",
                 bytesPrototype,
-                Set.of("call", "size", "at", "atPut", "each", "add", "removeAt", "parallelRange"));
+                Set.of("call", "size", "at", "atPut", "each", "add", "removeAt"));
 
         ProtosObjectValue actorRefPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -421,8 +421,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         String parallel =
                 Files.readString(
                         JAVA_ROOT.resolve("execution").resolve("ProtosParallelRuntime.java"));
-        assertEquals(6, occurrences(parallel, "slot(p,"));
-        assertEquals(4, occurrences(parallel, "slot(r,"));
+        assertEquals(5, occurrences(parallel, "slot(p,"));
+        assertEquals(0, occurrences(parallel, "slot(r,"));
 
         String future =
                 Files.readString(

@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.176-SNAPSHOT
+
+- `I057` implements D161: removes `ByteRegion` and writable parallel-range
+  reservations. Standard `Bytes` no longer installs `parallelRange`, so sending
+  it follows ordinary missing-selector lookup (`SlotNotFound`). The
+  `ProtosByteRegionValue` runtime family is deleted. `ProtosBytesValue` loses
+  all reservation state and checks, and `Bytes.at`/`atPut`/`add`/`removeAt`
+  have no reservation-dependent failure path. `ProtosParallelRuntime` drops
+  region creation, reservation, the commit-on-publication and release-on-cancel
+  hooks, and `ProtosFutureValue.resolveWithCommit`. Ordinary
+  `Closure.parallel`, Array parallel operations, P snapshot/result transfer, and
+  Future cancellation are unchanged. The Core Error prototypes
+  `ParallelRegionOverlap`, `ParallelRegionInUse`, and `ParallelRegionOutsideP`
+  are removed from the taxonomy, the prelude, and the Test Tool error-kind
+  mapping. The ByteRegion-specific Actor/detached transfer exclusions and the
+  diagnostic projection are also removed. The retired reservation unit test is
+  deleted, and a conformance test now guards the removed surface. Implements
+  specification `0.1.439`.
+
 ## 0.3.175-SNAPSHOT
 
 - `PERF025` repairs the slice 3 inline callback consumer evidence. A
