@@ -160,6 +160,24 @@ final class ProtosExternalPackagePlanningPreflightTest {
 
             assertNoFilesystem(rawPlan, new IdentityHashMap<>());
 
+            ProtosPackageExecutionPlanV2 detached =
+                    ProtosPackageExecutionPlanV2Adapter.detach(rawPlan, fixture.projectRoot);
+            assertEquals(4, detached.packages().size());
+            assertEquals(3, detached.dependencies().size());
+            assertEquals(
+                    List.<ProtosExactExternalPackageIdentity>of(
+                            new ProtosExactExternalPackageIdentity.Registry(
+                                    "external-a", "1.0.0", content(A_HEX)),
+                            new ProtosExactExternalPackageIdentity.Registry(
+                                    "external-b", "2.1.0", content(B_HEX)),
+                            new ProtosExactExternalPackageIdentity.Git(
+                                    "external-c", "abc123", content(C_HEX))),
+                    detached.packages().stream()
+                            .filter(ProtosPackageExecutionPlanV2.ExternalPackage.class::isInstance)
+                            .map(ProtosPackageExecutionPlanV2.ExternalPackage.class::cast)
+                            .map(ProtosPackageExecutionPlanV2.ExternalPackage::identity)
+                            .toList());
+
             assertBorrowedCustodiesStillOpen(
                     fixture.aCustody,
                     fixture.bCustody,
@@ -288,6 +306,10 @@ final class ProtosExternalPackagePlanningPreflightTest {
                     backend.secureConfinementAvailable(),
                     "host provider has no SecureDirectoryStream");
         }
+    }
+
+    private static ProtosPackageContentIdentity content(String hex) {
+        return new ProtosPackageContentIdentity(METHOD, ALGORITHM, hex);
     }
 
     private static ProtosStandardLibraryModuleResolver standardLibraryResolver() {

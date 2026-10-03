@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.180-SNAPSHOT
+
+- `TOOL001-F2E4` (first slice) adds the host side of D053/PLAT012 external
+  package identity. `ProtosPackageExecutionPlanV2Adapter` defensively detaches
+  the ordinary-Protos PackageExecutionPlanV2 into the immutable host
+  `ProtosPackageExecutionPlanV2`. The detach requires exact shapes and typed
+  workspace/registry/Git NodeRefs, carries ContentIdentity only on external
+  packages and location only on workspace packages, and keeps nodes unique by
+  exact NodeRef, so several exact versions or revisions of one PackageId may
+  coexist. It also checks root and dependency closure and rejects duplicate
+  `(declaring, alias)` pairs. `ProtosExactExternalPackageIdentity` represents
+  `(kind, PackageId, exact version or revision, ContentIdentity)`.
+  `ProtosExternalPackageModuleKey` is a strict canonical `ProtosModuleKey`
+  codec whose domain is disjoint from workspace keys. It encodes that identity
+  plus the internal logical module and excludes aliases, exports, locators and
+  physical provenance. Generation-1 detach is unchanged. No resolver, custody
+  index, source loading or public-run wiring is added, and no observable
+  semantics change.
+
 ## 0.3.179-SNAPSHOT
 
 - `PERF030` establishes a statically proven target-less creation of a root

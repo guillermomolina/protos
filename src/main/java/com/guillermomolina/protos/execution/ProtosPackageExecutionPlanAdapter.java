@@ -154,7 +154,7 @@ public final class ProtosPackageExecutionPlanAdapter {
                 generation, root, packages, dependencies);
     }
 
-    private static Map<String, String> detachExports(ProtosMapValue map)
+    static Map<String, String> detachExports(ProtosMapValue map)
             throws IOException {
         LinkedHashMap<String, String> result = new LinkedHashMap<>();
         for (ProtosMapValue.Entry entry : map.keyedSnapshot()) {
@@ -180,7 +180,7 @@ public final class ProtosPackageExecutionPlanAdapter {
                 requireString(requireField(ref, "packageId"), "PackageId"));
     }
 
-    private static void validateLocation(Path realRoot, String location)
+    static void validateLocation(Path realRoot, String location)
             throws IOException {
         Path candidate = realRoot;
         if (!location.isEmpty()) {
@@ -202,7 +202,7 @@ public final class ProtosPackageExecutionPlanAdapter {
         }
     }
 
-    private static Object requireField(ProtosObjectValue object, String name)
+    static Object requireField(ProtosObjectValue object, String name)
             throws IOException {
         return object.readLocalSlot(name)
                 .orElseThrow(
@@ -211,7 +211,7 @@ public final class ProtosPackageExecutionPlanAdapter {
                                         "missing PackageExecutionPlan field: " + name));
     }
 
-    private static void requireExactFields(
+    static void requireExactFields(
             ProtosObjectValue object, Set<String> expected, String label)
             throws IOException {
         if (!object.localSlotsSnapshot().keySet().equals(expected)) {
@@ -219,7 +219,7 @@ public final class ProtosPackageExecutionPlanAdapter {
         }
     }
 
-    private static ProtosObjectValue requireObject(Object value, String label)
+    static ProtosObjectValue requireObject(Object value, String label)
             throws IOException {
         if (!(value instanceof ProtosObjectValue object)) {
             throw new IOException(label + " is not an ordinary object");
@@ -227,7 +227,7 @@ public final class ProtosPackageExecutionPlanAdapter {
         return object;
     }
 
-    private static ProtosArrayValue requireArray(Object value, String label)
+    static ProtosArrayValue requireArray(Object value, String label)
             throws IOException {
         if (!(value instanceof ProtosArrayValue array)) {
             throw new IOException(label + " is not an Array");
@@ -235,7 +235,7 @@ public final class ProtosPackageExecutionPlanAdapter {
         return array;
     }
 
-    private static ProtosMapValue requireMap(Object value, String label)
+    static ProtosMapValue requireMap(Object value, String label)
             throws IOException {
         if (!(value instanceof ProtosMapValue map)) {
             throw new IOException(label + " is not a Map");
@@ -243,7 +243,7 @@ public final class ProtosPackageExecutionPlanAdapter {
         return map;
     }
 
-    private static BigInteger requireInteger(ProtosObjectValue object, String name)
+    static BigInteger requireInteger(ProtosObjectValue object, String name)
             throws IOException {
         Object value = requireField(object, name);
         if (!(value instanceof ProtosIntegerValue integer)) {
@@ -252,7 +252,7 @@ public final class ProtosPackageExecutionPlanAdapter {
         return integer.value();
     }
 
-    private static String requireString(Object value, String label)
+    static String requireString(Object value, String label)
             throws IOException {
         if (!(value instanceof ProtosStringValue string)) {
             throw new IOException(label + " is not a String");
