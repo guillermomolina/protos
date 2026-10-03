@@ -76,6 +76,10 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertNone(names, "BindClosureParameter");
             assertContains(names, "BindClosureFrameParameter");
             assertContains(names, "ReadRootFrameLocal");
+            assertEquals(
+                    0,
+                    constantOrdinalOf(identity, "BindClosureFrameParameter"),
+                    "PERF029: the LocalRangeAccessor index is an instruction constant");
 
             ProtosIntegerValue one = integer(1);
             Object[] method =
@@ -429,6 +433,34 @@ final class ProtosPerf025CompactCalleeExecutionTest {
                 .stream()
                 .map(Instruction::getName)
                 .toList();
+    }
+
+    /**
+     * The {@code ordinal} of the single {@code operation} instruction, which
+     * must be encoded as an immediate constant operand rather than a stack
+     * value, so it is a partial-evaluation constant.
+     */
+    private static int constantOrdinalOf(ProtosClosureValue closure, String operation) {
+        List<Instruction> matching =
+                closure.executionPlan()
+                        .orElseThrow()
+                        .bytecodeActivationRootForTesting()
+                        .getBytecodeNode()
+                        .getInstructionsAsList()
+                        .stream()
+                        .filter(instruction -> instruction.getName().contains(operation))
+                        .toList();
+        assertEquals(1, matching.size(), () -> "expected one " + operation);
+        Instruction.Argument ordinal =
+                matching.get(0).getArguments().stream()
+                        .filter(argument -> argument.getName().equals("ordinal"))
+                        .findFirst()
+                        .orElseThrow(() -> new AssertionError("no constant ordinal operand"));
+        return switch (ordinal.getKind()) {
+            case CONSTANT -> (Integer) ordinal.asConstant();
+            case INTEGER -> ordinal.asInteger();
+            default -> throw new AssertionError("ordinal is not a constant: " + ordinal);
+        };
     }
 
     private static void assertContains(List<String> names, String operation) {

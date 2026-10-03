@@ -1608,8 +1608,8 @@ final class CanonicalToBytecodeLowerer {
             }
             builder.beginBindClosureFrameParameter(
                     currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
-            builder.emitLoadConstant(ordinal);
+                    currentRootFrameNativeLayout,
+                    ordinal);
             builder.emitLoadConstant(name);
             return ParameterBindingForm.FRAME_NATIVE;
         }

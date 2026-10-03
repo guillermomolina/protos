@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.172-SNAPSHOT
+
+- `PERF029` removes the two permanent Truffle partial-evaluation bailouts
+  reached by an ordinary source-backed Closure call. The frame-native
+  `BindClosureFrameParameter` operation now receives its local ordinal as a
+  Bytecode DSL constant operand, so every `LocalRangeAccessor` access it
+  performs uses a partial-evaluation constant index. The name-keyed
+  `ProtosFrameLexicalBindingAuthority.putBinding`, whose frame ordinal is
+  resolved from a runtime name (for example while an authority handoff
+  migrates existing bindings), is now a Truffle boundary instead of being
+  partially evaluated. Observable Protos semantics are unchanged.
+
 ## 0.3.171-SNAPSHOT
 
 - `I065` lets a fresh application Process executed on a caller-supplied

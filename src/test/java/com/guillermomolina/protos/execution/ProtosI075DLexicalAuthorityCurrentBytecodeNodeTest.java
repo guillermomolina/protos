@@ -22,17 +22,21 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleLanguage.LanguageReference;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
 import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import com.oracle.truffle.api.bytecode.BytecodeRootNodes;
 import com.oracle.truffle.api.bytecode.BytecodeTier;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
+import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
@@ -112,6 +116,104 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
                 context.leave();
             }
         }
+    }
+
+    /**
+     * PERF029: installing the persistent frame authority over a context that
+     * already holds bindings migrates them through the name-keyed {@link
+     * ProtosFrameLexicalBindingAuthority#putBinding}, whose frame ordinal is
+     * a runtime value and so must stay outside partial evaluation. The handoff
+     * itself must keep its exact semantics: a layout name becomes PRESENT in
+     * its frame local, a dynamic name keeps its value and order, and a layout
+     * name never established stays ABSENT until created.
+     */
+    @Test
+    void installationOverExistingBindingsMigratesThemThroughTheGenericPath() throws Exception {
+        assertTrue(
+                ProtosFrameLexicalBindingAuthority.class
+                        .getMethod("putBinding", String.class, Object.class)
+                        .isAnnotationPresent(TruffleBoundary.class),
+                "a runtime-name frame ordinal is never a partial-evaluation constant");
+
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosSemanticBytecodeRootNode root = installThenReadRoot(LANGUAGE_REF.get(null));
+                ProtosActivation module = moduleActivation();
+                ProtosObjectValue executionContext = module.context();
+
+                ProtosObjectValue dynamic = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue migrated = new ProtosObjectValue(ProtosObjectValue.rootObject());
+                executionContext.createLocalSlot("dynamic", dynamic);
+                executionContext.createLocalSlot("x", migrated);
+
+                // The root's own direct frame read observes the migrated binding.
+                assertSame(migrated, root.getCallTarget().call(module));
+
+                assertEquals(
+                        List.of("dynamic", "x"),
+                        List.copyOf(executionContext.localSlotsSnapshot().keySet()),
+                        "migration preserves establishment order");
+                assertSame(dynamic, executionContext.readLocalSlot("dynamic").orElseThrow());
+                assertFalse(executionContext.hasLocalSlot("y"), "layout allocation is not presence");
+
+                // PRESENT(null) is distinct from ABSENT; duplicate creation is rejected.
+                executionContext.createLocalSlot("y", ProtosNullValue.INSTANCE);
+                assertTrue(executionContext.hasLocalSlot("y"));
+                assertThrows(
+                        IllegalStateException.class,
+                        () -> executionContext.createLocalSlot("y", ProtosNullValue.INSTANCE));
+
+                // Removal then recreation re-establishes the binding last.
+                assertSame(migrated, executionContext.removeLocalSlot("x"));
+                assertFalse(executionContext.hasLocalSlot("x"));
+                executionContext.createLocalSlot("x", dynamic);
+                assertEquals(
+                        List.of("dynamic", "y", "x"),
+                        List.copyOf(executionContext.localSlotsSnapshot().keySet()));
+            } finally {
+                context.leave();
+            }
+        }
+    }
+
+    /**
+     * {@code x} and {@code y} are statically allocated frame-backed locals.
+     * The root installs the frame lexical authority and returns the direct
+     * {@code ReadFrameLocal} of {@code x}.
+     */
+    private static ProtosSemanticBytecodeRootNode installThenReadRoot(ProtosLanguage language) {
+        ProtosFrameLexicalLayout layout =
+                ProtosFrameLexicalLayout.of(new String[] {"x", "y"});
+
+        BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
+                ProtosSemanticBytecodeRootNodeGen.create(
+                        language,
+                        BytecodeConfig.DEFAULT,
+                        builder -> {
+                            builder.beginRoot();
+
+                            BytecodeLocal x = builder.createLocal("x", null);
+                            BytecodeLocal y = builder.createLocal("y", null);
+                            builder.beginInstallFrameLexicalAuthority(
+                                    new BytecodeLocal[] {x, y},
+                                    layout);
+                            builder.emitLoadArgument(0);
+                            builder.endInstallFrameLexicalAuthority();
+
+                            builder.beginReturn();
+                            builder.beginReadFrameLocal(
+                                    x,
+                                    layout.presentContinuityAt(0));
+                            builder.emitLoadArgument(0);
+                            builder.emitLoadConstant("x");
+                            builder.endReadFrameLocal();
+                            builder.endReturn();
+
+                            builder.endRoot();
+                        });
+        return roots.getNode(0);
     }
 
     /**

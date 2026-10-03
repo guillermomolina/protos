@@ -363,6 +363,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
     public static final class BindClosureFrameParameter {
         /**
          * PERF025-H1: a frame still in compact source-call form has no
@@ -371,6 +372,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
          * store, exactly as {@code createCurrentFrameBinding} treats an
          * unobserved context. Any other state, including a duplicate
          * creation's Error, takes the unchanged activation path.
+         *
+         * <p>PERF029: {@code ordinal} is a constant operand, not a stack
+         * operand, because every {@link LocalRangeAccessor} local operation
+         * requires its index to be a partial-evaluation constant.
          */
         @Specialization
         public static void perform(

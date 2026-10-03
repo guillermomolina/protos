@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
@@ -463,6 +464,14 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         }
     }
 
+    /*
+     * PERF029: the frame ordinal here is resolved from a runtime name (for
+     * example while an authority handoff migrates the previous authority's
+     * bindings), so it can never be the partial-evaluation constant that every
+     * LocalRangeAccessor local operation requires. Statically known bindings
+     * use the ordinal-based seams above instead.
+     */
+    @TruffleBoundary
     @Override
     public void putBinding(String name, Object value) {
         Objects.requireNonNull(name, "name");
