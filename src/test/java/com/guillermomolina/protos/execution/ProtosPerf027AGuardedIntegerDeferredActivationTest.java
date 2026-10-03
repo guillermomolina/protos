@@ -45,48 +45,54 @@ import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
 /**
- * PERF027-A: the guarded Integer native send keeps the exact PERF016 selection
- * but prepares the selected method invocation through the PLAT040 deferred
- * activation, so a successful operation leaves the guest execution Context and
- * supplied guest Array unmaterialized while every observer still sees them.
- * Guest-level Integer semantics remain covered by protos/tests/conformance/integer.
+ * PERF027-A established the deferred native path after exact PERF016 guarded
+ * Integer selection. The PERF025 pay-as-you-grow extension covered here executes
+ * successful exact canonical local Integer arithmetic through an immediate
+ * result shape with no rich method Activation. Error-producing, wrong-domain,
+ * inherited and otherwise non-canonical cases retain the PERF027-A deferred
+ * selected-Closure path. Guest-level Integer semantics remain covered by
+ * protos/tests/conformance/integer.
  */
 final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     private static final BigInteger HUGE = BigInteger.TWO.pow(200).add(BigInteger.ONE);
     private static final BigInteger LONG_MAX = BigInteger.valueOf(Long.MAX_VALUE);
 
     @Test
-    void successfulArithmeticKeepsSelectionAndDefersGuestInvocationState() throws Exception {
+    void successfulCanonicalArithmeticExecutesWithoutGeneralNativeInvocationState()
+            throws Exception {
         inEnteredContext(prelude -> {
             ProtosIntegerValue receiver = new ProtosIntegerValue(LONG_MAX);
             PreparedClosureCall prepared = guardedSend(prelude, receiver, "+", integer(1));
 
-            ProtosActivation activation = prepared.activation();
-            ProtosClosureValue selected =
-                    (ProtosClosureValue) ProtosValueLookup.lookup(receiver, "+", prelude)
-                            .orElseThrow().value();
-            assertTrue(prepared.isNative());
-            assertTrue(selected.nativeBody().isPresent());
-            assertSame(receiver, activation.receiver());
+            PrepareSendArguments.GuardedIntegerSend cached =
+                    PrepareSendArguments.createGuardedIntegerSend(
+                            receiver,
+                            "+",
+                            prelude);
+            assertNotNull(cached);
             assertSame(
-                    ProtosValueLookup.lookup(receiver, "+", prelude).orElseThrow().home(),
-                    activation.methodHome().orElseThrow());
-            assertSame(prelude, activation.prelude().orElseThrow());
-            assertTrue(activation.ownsReturnHome());
-            assertTrue(activation.returnHome().orElseThrow().isActive());
-            assertDeferred(activation);
+                    ProtosStandardIntegerProtocol.CanonicalIntegerOperation.ADD,
+                    cached.operation());
 
-            Object result = prepared.finish(prepared.enterNative());
-            assertEquals(LONG_MAX.add(BigInteger.ONE), integerValue(result));
-            assertDeferred(activation);
-            assertTrue(!activation.returnHome().orElseThrow().isActive());
+            ProtosClosureValue selected =
+                    (ProtosClosureValue)
+                            ProtosValueLookup.lookup(receiver, "+", prelude)
+                                    .orElseThrow()
+                                    .value();
+            assertTrue(selected.nativeBody().isPresent());
 
-            ProtosArrayValue arguments = activation.arguments().orElseThrow();
-            assertSame(arguments, activation.arguments().orElseThrow());
-            assertEquals(1, arguments.indexedSnapshot().size());
-            ProtosExecutionContextValue context =
-                    assertInstanceOf(ProtosExecutionContextValue.class, activation.context());
-            assertSame(context, activation.context());
+            assertTrue(prepared.isImmediate());
+            assertTrue(!prepared.isNative());
+            assertThrows(
+                    IllegalStateException.class,
+                    prepared::activation,
+                    "successful canonical Integer hit must not own a rich Activation");
+
+            Object entered = prepared.enterImmediate();
+            Object result = prepared.finish(entered);
+            assertEquals(
+                    LONG_MAX.add(BigInteger.ONE),
+                    integerValue(result));
         });
     }
 
@@ -109,10 +115,61 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     }
 
     @Test
+    void allCanonicalLocalIntegerOperationsCarryDirectCapability()
+            throws Exception {
+        inEnteredContext(prelude -> {
+            for (String selector : new String[] {"+", "-", "*", "/", "div", "mod"}) {
+                PrepareSendArguments.GuardedIntegerSend cached =
+                        PrepareSendArguments.createGuardedIntegerSend(
+                                integer(7),
+                                selector,
+                                prelude);
+                assertNotNull(cached);
+                assertNotNull(
+                        cached.operation(),
+                        selector + " must carry exact canonical operation capability");
+
+                PreparedClosureCall prepared =
+                        guardedSend(
+                                prelude,
+                                integer(7),
+                                selector,
+                                integer(2));
+                assertTrue(
+                        prepared.isImmediate(),
+                        selector + " successful canonical hit must be immediate");
+                assertTrue(!prepared.isNative());
+            }
+
+            PrepareSendArguments.GuardedIntegerSend ordering =
+                    PrepareSendArguments.createGuardedIntegerSend(
+                            integer(7),
+                            ">",
+                            prelude);
+            assertNotNull(ordering);
+            assertNull(
+                    ordering.operation(),
+                    "inherited Number ordering remains outside this bounded slice");
+
+            PreparedClosureCall preparedOrdering =
+                    guardedSend(
+                            prelude,
+                            integer(7),
+                            ">",
+                            integer(2));
+            assertTrue(preparedOrdering.isNative());
+            assertTrue(!preparedOrdering.isImmediate());
+        });
+    }
+
+    @Test
     void zeroDivisionSignalsTheSelectedActivationsError() throws Exception {
         inEnteredContext(prelude -> {
             for (String selector : new String[] {"div", "mod"}) {
-                PreparedClosureCall prepared = guardedSend(prelude, integer(1), selector, integer(0));
+                PreparedClosureCall prepared =
+                        guardedSend(prelude, integer(1), selector, integer(0));
+                assertTrue(prepared.isNative());
+                assertTrue(!prepared.isImmediate());
                 ProtosSignalException signal =
                         assertThrows(ProtosSignalException.class, prepared::enterNative);
                 assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
@@ -129,6 +186,8 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
         inEnteredContext(prelude -> {
             PreparedClosureCall prepared =
                     guardedSend(prelude, integer(1), "+", ProtosBooleanValue.TRUE);
+            assertTrue(prepared.isNative());
+            assertTrue(!prepared.isImmediate());
             ProtosSignalException signal =
                     assertThrows(ProtosSignalException.class, prepared::enterNative);
             assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
@@ -136,18 +195,21 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     }
 
     @Test
-    void separateContextsPrepareIndependentActivations() throws Exception {
+    void separateContextsKeepIndependentDeferredFallbackActivations() throws Exception {
         ProtosActivation[] activations = new ProtosActivation[2];
         for (int index = 0; index < activations.length; index++) {
             int slot = index;
             inEnteredContext(prelude -> {
-                PreparedClosureCall prepared = guardedSend(prelude, integer(5), "-", integer(1));
-                assertEquals(BigInteger.valueOf(4), integerValue(prepared.enterNative()));
+                PreparedClosureCall prepared =
+                        guardedSend(prelude, integer(5), ">", integer(1));
+                assertTrue(prepared.isNative());
+                assertSame(ProtosBooleanValue.TRUE, prepared.enterNative());
                 assertSame(prelude, prepared.activation().prelude().orElseThrow());
                 activations[slot] = prepared.activation();
             });
         }
-        assertNotSame(activations[0].prelude().orElseThrow(),
+        assertNotSame(
+                activations[0].prelude().orElseThrow(),
                 activations[1].prelude().orElseThrow());
     }
 
@@ -170,7 +232,11 @@ final class ProtosPerf027AGuardedIntegerDeferredActivationTest {
     private static Object run(
             ProtosPrelude prelude, Object receiver, String selector, Object argument) {
         PreparedClosureCall prepared = guardedSend(prelude, receiver, selector, argument);
-        return prepared.finish(prepared.enterNative());
+        Object result =
+                prepared.isImmediate()
+                        ? prepared.enterImmediate()
+                        : prepared.enterNative();
+        return prepared.finish(result);
     }
 
     private static PreparedClosureCall guardedSend(

@@ -1567,9 +1567,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      *
      * <p>I072 Phase D (PLAT040 Candidate F′): this is a small dispatch surface
      * shared by every call shape, not a universal physical carrier. Exactly one
-     * of three leaf shapes implements it per call — {@link OrdinarySourceCall},
-     * {@link NativeCall}, or {@link ModuleInitializationCall} — and each leaf
-     * physically carries only the state its own shape actually uses. An
+     * of four leaf shapes implements it per call — {@link OrdinarySourceCall},
+     * {@link NativeCall}, {@link ImmediateResultCall}, or {@link
+     * ModuleInitializationCall} — and each leaf physically carries only the
+     * state its own shape actually uses. An
      * ordinary source-backed call never allocates native-body, structured-
      * control-capability, or module-initialization state; those remain
      * exclusive to the two special shapes that actually need them. Interface
@@ -1590,7 +1591,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         default boolean isImmediate() { return false; }
 
         default Object enterImmediate() {
-            throw new IllegalStateException("prepared call is not an immediate module hit");
+            throw new IllegalStateException("prepared call has no immediate result");
         }
 
         default Object enterNative() {
@@ -1801,6 +1802,10 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             directControlNative,
                             structuredObjectCall,
                             structuredImportRuntime));
+        }
+
+        static PreparedClosureCall immediateResult(Object result) {
+            return new ImmediateResultCall(result);
         }
 
         static PreparedClosureCall moduleInitialization(
@@ -2462,6 +2467,68 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     activation,
                     supplied);
         }
+    }
+
+    /**
+     * PERF027: a result already produced by an exact guarded standard operation.
+     * This shape deliberately owns no semantic method Activation, ReturnHome,
+     * native body, supplied List or source target. Argument evaluation and D013
+     * selection have already happened before it is created; only the physically
+     * specialized implementation of that proven selection has executed.
+     */
+    static final class ImmediateResultCall implements PreparedClosureCall {
+        private final Object result;
+
+        ImmediateResultCall(Object result) {
+            this.result = java.util.Objects.requireNonNull(result, "result");
+        }
+
+        @Override
+        public RootCallTarget bodyTarget() { return null; }
+
+        @Override
+        public ProtosActivation activation() {
+            throw new IllegalStateException(
+                    "immediate guarded operation has no rich Activation");
+        }
+
+        @Override
+        public Object[] targetArguments() {
+            throw new IllegalStateException(
+                    "immediate guarded operation has no source target arguments");
+        }
+
+        @Override
+        public ProtosTask taskForRuntime() { return null; }
+
+        @Override
+        public boolean isImmediate() { return true; }
+
+        @Override
+        public Object enterImmediate() { return result; }
+
+        @Override
+        public Object handleControlTransfer(ControlFlowException transfer) {
+            throw transfer;
+        }
+
+        @Override
+        public void failIfModuleInitialization() {
+            // No module lifecycle belongs to this shape.
+        }
+
+        @Override
+        public RuntimeException mapRuntimeFailure(RuntimeException failure) {
+            return failure;
+        }
+
+        @Override
+        public void complete() {
+            // No ReturnHome or lifecycle state exists.
+        }
+
+        @Override
+        public Object finish(Object result) { return result; }
     }
 
     /**
@@ -6632,6 +6699,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public record GuardedIntegerSend(
                 ProtosClosureValue closure,
                 ProtosObjectValue methodHome,
+                ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation,
                 Assumption stability) {}
 
         @Specialization(
@@ -6658,6 +6726,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Cached("prelude") ProtosPrelude cachedPrelude,
                 @Cached("createGuardedIntegerSend(receiver, selector, prelude)")
                         GuardedIntegerSend cachedInteger) {
+            if (cachedInteger.operation() != null) {
+                Object directResult =
+                        ProtosStandardIntegerProtocol.tryExecuteCanonicalOperation(
+                                cachedInteger.operation(),
+                                receiver,
+                                supplied);
+                if (directResult != null) {
+                    return PreparedClosureCall.immediateResult(directResult);
+                }
+            }
+
+            /*
+             * Non-canonical guarded Integer selections, inherited Number
+             * operations, wrong-domain operands and Error-producing cases keep
+             * the exact PERF027-A path. That preserves the selected Closure,
+             * methodHome and rich semantic invocation whenever it is actually
+             * observable.
+             */
             return prepareDeferredImmediateNativeMethodCall(
                     cachedInteger.closure(),
                     receiver,
@@ -6695,8 +6781,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 lookup.stability().invalidate();
                 return null;
             }
+            ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation =
+                    ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                            closure,
+                            selected.home(),
+                            selector,
+                            prelude);
             return new GuardedIntegerSend(
-                    closure, selected.home(), lookup.stability());
+                    closure,
+                    selected.home(),
+                    operation,
+                    lookup.stability());
         }
 
         static boolean isIntegerReceiver(Object receiver) {

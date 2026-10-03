@@ -16,13 +16,18 @@
  */
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -68,6 +73,131 @@ class ProtosStandardIntegerArithmeticTest {
                         ProtosClosureValue.class,
                         prelude.integerPrototype().readLocalSlot("mod").orElseThrow());
         assertTrue(mod.nativeBody().isPresent());
+    }
+
+    @Test
+    void canonicalNativeArithmeticRequiresExactInstalledClosureAndHome()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        for (String selector : new String[] {"+", "-", "*", "/", "div", "mod"}) {
+            ProtosClosureValue selected =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            prelude.integerPrototype()
+                                    .readLocalSlot(selector)
+                                    .orElseThrow());
+
+            ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation =
+                    ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                            selected,
+                            prelude.integerPrototype(),
+                            selector,
+                            prelude);
+
+            assertNotNull(operation);
+            assertEquals(selector, operation.selector());
+
+            ProtosClosureValue copiedClosure =
+                    ProtosClosureValue.nativeClosure(
+                            selected.nativeBody().orElseThrow());
+            assertNull(
+                    ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                            copiedClosure,
+                            prelude.integerPrototype(),
+                            selector,
+                            prelude),
+                    "sharing the same native body must not prove canonical selection");
+
+            assertNull(
+                    ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                            selected,
+                            prelude.numberPrototype(),
+                            selector,
+                            prelude));
+            assertNull(
+                    ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                            selected,
+                            prelude.integerPrototype(),
+                            selector + "-alias",
+                            prelude));
+        }
+    }
+
+    @Test
+    void directCanonicalExecutorPreservesBigIntegerResultsAndRejectsSlowPaths()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        BigInteger huge = BigInteger.TWO.pow(200).add(BigInteger.ONE);
+
+        Object add =
+                direct(prelude, "+",
+                        new ProtosIntegerValue(huge),
+                        new ProtosIntegerValue(BigInteger.ONE));
+        assertEquals(
+                huge.add(BigInteger.ONE),
+                assertInstanceOf(ProtosIntegerValue.class, add).value());
+
+        Object multiply =
+                direct(prelude, "*",
+                        new ProtosIntegerValue(huge),
+                        new ProtosIntegerValue(huge));
+        assertEquals(
+                huge.multiply(huge),
+                assertInstanceOf(ProtosIntegerValue.class, multiply).value());
+
+        Object quotient =
+                direct(prelude, "div",
+                        new ProtosIntegerValue(huge),
+                        new ProtosIntegerValue(BigInteger.valueOf(7)));
+        assertEquals(
+                huge.divide(BigInteger.valueOf(7)),
+                assertInstanceOf(ProtosIntegerValue.class, quotient).value());
+
+        Object remainder =
+                direct(prelude, "mod",
+                        new ProtosIntegerValue(huge),
+                        new ProtosIntegerValue(BigInteger.valueOf(7)));
+        assertEquals(
+                huge.remainder(BigInteger.valueOf(7)),
+                assertInstanceOf(ProtosIntegerValue.class, remainder).value());
+
+        assertNull(
+                direct(prelude, "+",
+                        new ProtosIntegerValue(BigInteger.ONE),
+                        ProtosBooleanValue.TRUE));
+        assertNull(
+                direct(prelude, "div",
+                        new ProtosIntegerValue(BigInteger.ONE),
+                        new ProtosIntegerValue(BigInteger.ZERO)));
+        assertNull(
+                direct(prelude, "mod",
+                        new ProtosIntegerValue(BigInteger.ONE),
+                        new ProtosIntegerValue(BigInteger.ZERO)));
+    }
+
+    private static Object direct(
+            ProtosPrelude prelude,
+            String selector,
+            Object receiver,
+            Object argument) {
+        ProtosClosureValue selected =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        prelude.integerPrototype()
+                                .readLocalSlot(selector)
+                                .orElseThrow());
+        ProtosStandardIntegerProtocol.CanonicalIntegerOperation operation =
+                ProtosStandardIntegerProtocol.canonicalOperationForSelection(
+                        selected,
+                        prelude.integerPrototype(),
+                        selector,
+                        prelude);
+        assertNotNull(operation);
+        return ProtosStandardIntegerProtocol.tryExecuteCanonicalOperation(
+                operation,
+                receiver,
+                new Object[] {argument});
     }
 
     private static ProtosPrelude corePrelude() throws IOException {

@@ -7,6 +7,37 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.157-SNAPSHOT
+
+- `PERF025` removes the residual full native-Closure invocation scaffold from
+  successful guarded canonical local Integer operations. PERF016/D013 guarded
+  lookup remains the semantic selection authority; after that selection, the
+  runtime additionally proves the exact standard implementation by the
+  installed Closure identity, its private Integer-operation provenance, the
+  exact `Integer` prototype `methodHome`, selector and existing lookup
+  `Assumption`. Proven `+`, binary `-`, `*`, `/`, `div` and `mod` operations
+  with valid Integer operands execute through the same canonical arithmetic
+  authority used by their native Closure bodies and return through a minimal
+  `ImmediateResultCall`, without constructing a rich method `ProtosActivation`,
+  `ProtosReturnHome`, guest argument Array or `PreparedClosureCall.NativeCall`,
+  and without calling `nativeBody.execute`. Wrong-domain arguments,
+  division/remainder by zero, inherited Number operations such as ordering,
+  non-canonical selections and all unsupported cases retain the exact
+  PERF027-A deferred native path, preserving selected Closure/methodHome,
+  Error/control state and generic fallback. `ProtosIntegerValue(BigInteger)`
+  representation and exact arithmetic remain unchanged. The Integer protocol
+  native-provider boundary contracts from four lexical `nativeClosure`
+  construction sites to two because the six arithmetic selectors now share one
+  audited installer/body implementation; the native semantic surface itself is
+  not expanded. `ProtosStandardIntegerArithmeticTest`,
+  `ProtosPerf027AGuardedIntegerDeferredActivationTest`,
+  `ProtosGuardedLookupTest` and
+  `ProtosCoreNativeBoundaryArchitectureTest` cover canonical provenance,
+  exact large-Integer results, immediate successful execution, deferred Error
+  and inherited-operation fallback, Context isolation and the audited native
+  boundary. No observable Protos semantic or specification change; no
+  performance magnitude is claimed.
+
 ## 0.3.156-SNAPSHOT
 
 - `PERF025-H1` establishes statically proven Closure parameters of a root that

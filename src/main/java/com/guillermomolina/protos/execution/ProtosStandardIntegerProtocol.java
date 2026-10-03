@@ -17,13 +17,17 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import java.util.List;
 import java.util.Objects;
 
 public final class ProtosStandardIntegerProtocol {
@@ -50,113 +54,209 @@ public final class ProtosStandardIntegerProtocol {
                                     supplied.get(0) instanceof ProtosIntegerValue);
                         }));
 
-        installBinary(integerPrototype, "+", IntegerBinaryOperation.ADD);
-        installBinary(integerPrototype, "-", IntegerBinaryOperation.SUBTRACT);
-        installBinary(integerPrototype, "*", IntegerBinaryOperation.MULTIPLY);
-        installDivision(integerPrototype);
-        installQuotientRemainder(integerPrototype);
-    }
-
-
-    private enum IntegerBinaryOperation {
-        ADD,
-        SUBTRACT,
-        MULTIPLY,
-        DIVIDE,
-        REMAINDER
-    }
-
-    private static java.math.BigInteger applyIntegerBinary(
-            IntegerBinaryOperation operation,
-            java.math.BigInteger left,
-            java.math.BigInteger right) {
-        return switch (operation) {
-            case ADD -> left.add(right);
-            case SUBTRACT -> left.subtract(right);
-            case MULTIPLY -> left.multiply(right);
-            case DIVIDE -> left.divide(right);
-            case REMAINDER -> left.remainder(right);
-        };
-    }
-
-    private static void installDivision(ProtosObjectValue integerPrototype) {
-        if (integerPrototype.hasLocalSlot("/")) {
-            throw new IllegalStateException("Core Integer already defines a local / slot");
-        }
-        integerPrototype.createLocalSlot(
-                "/",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosIntegerValue receiver = requireIntegerReceiver(activation);
-                            if (supplied.size() != 1
-                                    || !(supplied.get(0) instanceof ProtosIntegerValue argument)
-                                    || argument.value().signum() == 0) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            return new ProtosFloatValue(
-                                    ProtosBinary64Rounding.divideExactIntegers(
-                                            receiver.value(), argument.value()));
-                        }));
-    }
-
-    private static void installQuotientRemainder(ProtosObjectValue integerPrototype) {
-        installExactIntegerBinary(
-                integerPrototype,
-                "div",
-                IntegerBinaryOperation.DIVIDE);
-        installExactIntegerBinary(
-                integerPrototype,
-                "mod",
-                IntegerBinaryOperation.REMAINDER);
+        installCanonical(integerPrototype, CanonicalIntegerOperation.ADD);
+        installCanonical(integerPrototype, CanonicalIntegerOperation.SUBTRACT);
+        installCanonical(integerPrototype, CanonicalIntegerOperation.MULTIPLY);
+        installCanonical(integerPrototype, CanonicalIntegerOperation.FLOAT_DIVIDE);
+        installCanonical(integerPrototype, CanonicalIntegerOperation.QUOTIENT);
+        installCanonical(integerPrototype, CanonicalIntegerOperation.REMAINDER);
         installSourceBackedSelector(integerPrototype, "_coreIntegerPercent", "%");
     }
 
-    private static void installExactIntegerBinary(
-            ProtosObjectValue integerPrototype,
-            String selector,
-            IntegerBinaryOperation operation) {
-        if (integerPrototype.hasLocalSlot(selector)) {
-            throw new IllegalStateException(
-                    "Core Integer already defines a local " + selector + " slot");
+    /**
+     * PERF027 guarded-execution capability for the exact standard Integer
+     * implementations installed by this protocol. Selector spelling is only
+     * one member of the proof: admission additionally requires the exact
+     * installed Closure, its private body provenance, the exact Integer
+     * prototype home and the current Prelude.
+     */
+    enum CanonicalIntegerOperation {
+        ADD("+", false),
+        SUBTRACT("-", false),
+        MULTIPLY("*", false),
+        FLOAT_DIVIDE("/", true),
+        QUOTIENT("div", true),
+        REMAINDER("mod", true);
+
+        private final String selector;
+        private final boolean requiresNonZeroDivisor;
+
+        CanonicalIntegerOperation(
+                String selector,
+                boolean requiresNonZeroDivisor) {
+            this.selector = selector;
+            this.requiresNonZeroDivisor = requiresNonZeroDivisor;
         }
-        integerPrototype.createLocalSlot(
-                selector,
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosIntegerValue receiver = requireIntegerReceiver(activation);
-                            if (supplied.size() != 1
-                                    || !(supplied.get(0) instanceof ProtosIntegerValue argument)
-                                    || argument.value().signum() == 0) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            return new ProtosIntegerValue(
-                                    applyIntegerBinary(operation, receiver.value(), argument.value()));
-                        }));
+
+        String selector() {
+            return selector;
+        }
+
+        boolean requiresNonZeroDivisor() {
+            return requiresNonZeroDivisor;
+        }
     }
 
-    private static void installBinary(
-            ProtosObjectValue integerPrototype,
+    /**
+     * One private implementation object is created for each canonical operation
+     * in each bootstrapped Integer prototype. Retaining the exact Closure that
+     * owns this body lets classification reject a different Closure that merely
+     * wraps the same native body.
+     */
+    private static final class StandardIntegerBody implements ProtosNativeClosureBody {
+        private final ProtosObjectValue home;
+        private final CanonicalIntegerOperation operation;
+        private ProtosClosureValue owner;
+
+        StandardIntegerBody(
+                ProtosObjectValue home,
+                CanonicalIntegerOperation operation) {
+            this.home = Objects.requireNonNull(home, "home");
+            this.operation = Objects.requireNonNull(operation, "operation");
+        }
+
+        void bindOwner(ProtosClosureValue owner) {
+            if (this.owner != null) {
+                throw new IllegalStateException(
+                        "standard Integer body already owns a Closure");
+            }
+            this.owner = Objects.requireNonNull(owner, "owner");
+        }
+
+        boolean isCanonicalSelection(
+                ProtosClosureValue behavior,
+                ProtosObjectValue selectedHome,
+                String selector,
+                ProtosPrelude prelude) {
+            return owner != null
+                    && behavior == owner
+                    && selectedHome == home
+                    && prelude != null
+                    && selectedHome == prelude.integerPrototype()
+                    && operation.selector().equals(selector);
+        }
+
+        @Override
+        public Object execute(
+                ProtosActivation activation,
+                List<?> supplied) {
+            return executeCanonicalWithActivation(
+                    operation,
+                    activation,
+                    supplied);
+        }
+    }
+
+    static CanonicalIntegerOperation canonicalOperationForSelection(
+            ProtosClosureValue behavior,
+            ProtosObjectValue home,
             String selector,
-            IntegerBinaryOperation operation) {
+            ProtosPrelude prelude) {
+        Objects.requireNonNull(behavior, "behavior");
+        Objects.requireNonNull(home, "home");
+        Objects.requireNonNull(selector, "selector");
+
+        ProtosNativeClosureBody body = behavior.nativeBody().orElse(null);
+        if (!(body instanceof StandardIntegerBody standard)
+                || !standard.isCanonicalSelection(
+                        behavior,
+                        home,
+                        selector,
+                        prelude)) {
+            return null;
+        }
+        return standard.operation;
+    }
+
+    /**
+     * Executes only a proven canonical operation whose current operands already
+     * satisfy the standard native body's successful domain. Null means that the
+     * caller must preserve the ordinary native path so Error construction and
+     * invocation state remain exactly authoritative there.
+     */
+    static Object tryExecuteCanonicalOperation(
+            CanonicalIntegerOperation operation,
+            Object receiver,
+            Object[] supplied) {
+        Objects.requireNonNull(operation, "operation");
+        Objects.requireNonNull(supplied, "supplied");
+
+        if (!(receiver instanceof ProtosIntegerValue integer)
+                || supplied.length != 1
+                || !(supplied[0] instanceof ProtosIntegerValue argument)
+                || (operation.requiresNonZeroDivisor()
+                        && argument.value().signum() == 0)) {
+            return null;
+        }
+        return executeValidCanonicalOperation(
+                operation,
+                integer,
+                argument);
+    }
+
+    private static Object executeCanonicalWithActivation(
+            CanonicalIntegerOperation operation,
+            ProtosActivation activation,
+            List<?> supplied) {
+        ProtosIntegerValue receiver = requireIntegerReceiver(activation);
+        if (supplied.size() != 1
+                || !(supplied.get(0) instanceof ProtosIntegerValue argument)
+                || (operation.requiresNonZeroDivisor()
+                        && argument.value().signum() == 0)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+        return executeValidCanonicalOperation(
+                operation,
+                receiver,
+                argument);
+    }
+
+    private static Object executeValidCanonicalOperation(
+            CanonicalIntegerOperation operation,
+            ProtosIntegerValue receiver,
+            ProtosIntegerValue argument) {
+        return switch (operation) {
+            case ADD ->
+                    new ProtosIntegerValue(
+                            receiver.value().add(argument.value()));
+            case SUBTRACT ->
+                    new ProtosIntegerValue(
+                            receiver.value().subtract(argument.value()));
+            case MULTIPLY ->
+                    new ProtosIntegerValue(
+                            receiver.value().multiply(argument.value()));
+            case FLOAT_DIVIDE ->
+                    new ProtosFloatValue(
+                            ProtosBinary64Rounding.divideExactIntegers(
+                                    receiver.value(),
+                                    argument.value()));
+            case QUOTIENT ->
+                    new ProtosIntegerValue(
+                            receiver.value().divide(argument.value()));
+            case REMAINDER ->
+                    new ProtosIntegerValue(
+                            receiver.value().remainder(argument.value()));
+        };
+    }
+
+    private static void installCanonical(
+            ProtosObjectValue integerPrototype,
+            CanonicalIntegerOperation operation) {
+        String selector = operation.selector();
         if (integerPrototype.hasLocalSlot(selector)) {
             throw new IllegalStateException(
                     "Core Integer already defines a local " + selector + " slot");
         }
-        integerPrototype.createLocalSlot(
-                selector,
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosIntegerValue receiver = requireIntegerReceiver(activation);
-                            if (supplied.size() != 1
-                                    || !(supplied.get(0) instanceof ProtosIntegerValue argument)) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            return new ProtosIntegerValue(
-                                    applyIntegerBinary(operation, receiver.value(), argument.value()));
-                        }));
+
+        StandardIntegerBody body =
+                new StandardIntegerBody(
+                        integerPrototype,
+                        operation);
+        ProtosClosureValue closure =
+                ProtosClosureValue.nativeClosure(body);
+        body.bindOwner(closure);
+        integerPrototype.createLocalSlot(selector, closure);
     }
 
     private static void installSourceBackedSelector(
