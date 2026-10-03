@@ -67,6 +67,7 @@ import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
+import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -6274,11 +6275,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     private static ProtosClosureExecutionPlan taskOwnedBytecodePlan(
             ProtosClosureValue closure) {
+        return taskOwnedBytecodePlan(
+                closure,
+                ProtosLanguageContext.currentIfEnteredForRuntime());
+    }
+
+    private static ProtosClosureExecutionPlan taskOwnedBytecodePlan(
+            ProtosClosureValue closure,
+            ProtosLanguageContext enteredContext) {
         ProtosClosureExecutionPlan template =
                 closure.executionPlanForRuntimeInvocation();
 
-        ProtosLanguageContext enteredContext =
-                ProtosLanguageContext.currentIfEnteredForRuntime();
         if (enteredContext != null) {
             boolean foreignContextPlan =
                     template.language().orElseThrow()
@@ -6440,7 +6447,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static PreparedClosureCall guardedDirect(
                 Object receiver,
                 ProtosActivation caller,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
@@ -6467,7 +6474,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosClosureValue closure,
                 @Bind("directClosureCallDefinitionOrNull(closure)")
                         CanonicalClosure closureDefinition,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
@@ -6481,8 +6488,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return prepareClosureCall(receiver, List.of(), caller);
         }
 
-        static ProtosLanguageContext currentEnteredContext() {
-            return ProtosLanguageContext.currentIfEnteredForRuntime();
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
         }
 
         static GuardedDirectClosureCallTarget createGuardedDirectClosureCall(
@@ -6521,7 +6528,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 ProtosActivation caller,
                 @Variadic Object[] supplied,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
@@ -6549,7 +6556,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosClosureValue closure,
                 @Bind("directClosureCallDefinitionOrNull(closure)")
                         CanonicalClosure closureDefinition,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
@@ -6569,8 +6576,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     caller);
         }
 
-        static ProtosLanguageContext currentEnteredContext() {
-            return ProtosLanguageContext.currentIfEnteredForRuntime();
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
         }
 
         static GuardedDirectClosureCallTarget createGuardedDirectClosureCall(
@@ -6751,7 +6758,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 ProtosActivation caller,
                 @Variadic Object[] supplied,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
@@ -6779,7 +6786,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ProtosClosureValue closure,
                 @Bind("directClosureCallDefinitionOrNull(closure)")
                         CanonicalClosure closureDefinition,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
@@ -6799,8 +6806,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     caller);
         }
 
-        static ProtosLanguageContext currentEnteredContext() {
-            return ProtosLanguageContext.currentIfEnteredForRuntime();
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
         }
 
         static GuardedDirectClosureCallTarget createGuardedDirectClosureCall(
@@ -6945,13 +6952,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosActivation caller,
                 @Variadic Object[] supplied,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("callerPrelude(caller)") ProtosPrelude prelude,
                 @Cached("selector") String cachedSelector,
                 @Cached("enteredContext") ProtosLanguageContext cachedContext,
                 @Cached("prelude") ProtosPrelude cachedPrelude,
-                @Cached("createGuardedIntegerSend(receiver, selector, prelude)")
+                @Cached("createGuardedIntegerSend(receiver, selector, prelude, enteredContext)")
                         GuardedIntegerSend cachedInteger) {
             if (cachedInteger.operation() != null) {
                 Object directResult =
@@ -6988,7 +6995,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 String selector,
                 ProtosPrelude prelude) {
-            if (currentEnteredContext() == null) {
+            return createGuardedIntegerSend(
+                    receiver,
+                    selector,
+                    prelude,
+                    ProtosLanguageContext.currentIfEnteredForRuntime());
+        }
+
+        static GuardedIntegerSend createGuardedIntegerSend(
+                Object receiver,
+                String selector,
+                ProtosPrelude prelude,
+                ProtosLanguageContext enteredContext) {
+            if (enteredContext == null) {
                 return null;
             }
             ProtosValueLookup.GuardedLookup lookup;
@@ -7044,7 +7063,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosActivation caller,
                 @Variadic Object[] supplied,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("selector") String cachedSelector,
@@ -7125,7 +7144,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind("selected.home()") ProtosObjectValue methodHome,
                 @Bind("ordinarySendClosureDefinitionOrNull(closure)")
                         CanonicalClosure closureDefinition,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("selector") String cachedSelector,
                 @Cached("closureDefinition") CanonicalClosure cachedClosureDefinition,
@@ -7177,7 +7196,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String selector,
                 ProtosActivation caller,
                 @Variadic Object[] supplied,
-                @Bind("currentEnteredContext()")
+                @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Cached("receiver") Object cachedReceiver,
                 @Cached("selector") String cachedSelector,
@@ -7403,8 +7422,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return closure == null ? null : closure.definition();
         }
 
-        static ProtosLanguageContext currentEnteredContext() {
-            return ProtosLanguageContext.currentIfEnteredForRuntime();
+        static ProtosLanguageContext currentEnteredContext(Node node) {
+            return ProtosLanguageContext.current(node);
         }
 
         /**
@@ -7422,11 +7441,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         static RootCallTarget fastOrdinarySendTarget(
                 ProtosClosureValue closure,
                 ProtosLanguageContext enteredContext) {
-            if (currentEnteredContext() != enteredContext) {
+            if (enteredContext == null) {
                 return null;
             }
             ProtosClosureExecutionPlan plan =
-                    ProtosBytecodeRootNode.taskOwnedBytecodePlan(closure);
+                    ProtosBytecodeRootNode.taskOwnedBytecodePlan(
+                            closure,
+                            enteredContext);
             if (plan == null || !plan.isBytecodeBackendForRuntime()) {
                 return null;
             }

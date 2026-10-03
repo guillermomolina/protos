@@ -22,6 +22,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleFile;
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.source.Source;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -56,6 +57,10 @@ final class ProtosLanguageContext {
 
     static ProtosLanguageContext current() {
         return REFERENCE.get(null);
+    }
+
+    static ProtosLanguageContext current(Node node) {
+        return REFERENCE.get(node);
     }
 
     static ProtosLanguageContext currentIfEnteredForRuntime() {

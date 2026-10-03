@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.164-SNAPSHOT
+
+- `PERF025` makes hot guest Bytecode Context acquisition node-aware in both
+  generated Protos interpreters. Direct Closure-call and send specializations
+  now bind the current `ProtosLanguageContext` through the current Truffle
+  `Node` and `ContextReference.get(node)` instead of routing those hot
+  specializations through the host-level Polyglot current-Context probe plus a
+  node-less Context reference. The already-proven entered Context is also
+  propagated into guarded Integer specialization establishment and
+  Context-owned Bytecode plan derivation instead of being rediscovered from
+  ambient runtime state inside those helpers. The existing
+  `enteredContext == cachedContext` guards, Context-local executable projection,
+  PLAT001 ownership, ordinary fallback paths and host/boundary callers without
+  an adopted guest node remain unchanged. Focused direct-Closure, compact-call,
+  guarded-Integer and structured-send regressions plus Actor, isolated-P and
+  nested-CallTarget multi-Context routing regressions remain green. This is an
+  internal hot-path lookup/propagation optimization only: no observable Protos
+  semantic, specification or Context-policy change is introduced, and no
+  performance magnitude is claimed.
+
 ## 0.3.163-SNAPSHOT
 
 - `PERF025` preserves already-established Unicode-scalar-sequence proof and
