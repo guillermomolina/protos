@@ -230,6 +230,34 @@ final class ProtosFrameArguments {
         return arguments[USER_ARGUMENT_OFFSET + index];
     }
 
+    /** The callee Closure of a compact source call that is still unmaterialized. */
+    static ProtosClosureValue compactClosure(Object[] arguments) {
+        requireCompactCall(arguments);
+        return (ProtosClosureValue) arguments[CLOSURE_INDEX];
+    }
+
+    /**
+     * PERF025 slice 3: the compact caller of a still-unmaterialized direct
+     * Closure call whose callee would inherit every provenance field from it,
+     * or {@code null}. {@link #activation(Object[])} materializes such a call
+     * with exactly this caller's prelude (the Closure has none of its own, or
+     * the same one), actor module state, current module key, execution domain
+     * and Task or dynamic-control state (no explicit Task). A child invocation
+     * prepared with this caller therefore materializes exactly as it would
+     * with the not-yet-materialized callee activation as its caller.
+     */
+    static ProtosActivation compactInheritedProvenanceCaller(Object[] arguments) {
+        if (!isDirectClosureCall(arguments) || arguments[TASK_INDEX] != null) {
+            return null;
+        }
+        ProtosClosureValue closure = (ProtosClosureValue) arguments[CLOSURE_INDEX];
+        ProtosActivation caller = (ProtosActivation) arguments[CALLER_INDEX];
+        Object ownPrelude = closure.prelude().orElse(null);
+        return ownPrelude == null || ownPrelude == caller.preludeOrNullForRuntime()
+                ? caller
+                : null;
+    }
+
     static ProtosReturnHome compactReturnHome(Object[] arguments) {
         requireCompactCall(arguments);
         return (ProtosReturnHome) arguments[RETURN_HOME_INDEX];

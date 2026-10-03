@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.169-SNAPSHOT
+
+- `PERF025` specializes the residual consumers of a frame-native PLAT044 B′
+  inline callback so that their successful path no longer materializes the
+  callback's semantic activation. New carrier-operand operations take the
+  invocation's `PreparedInlineLiteralCall` for statically resolved captured
+  reads, PERF028-A captured write-target selection and assignment, canonical
+  guarded Integer sends, guarded and fast ordinary source sends, direct
+  source-Closure calls, `this`, member reads (both PIC tiers) and fixed-prefix
+  multiple creation. Selection uses the invocation's prelude; a child
+  invocation is prepared with the callback's compact caller only when the
+  callback would inherit every provenance field from it, otherwise the
+  callback activation is materialized. Nearer-binding (D179), absent-binding,
+  non-canonical, structured, generic and Error paths still materialize the
+  activation through the existing durable transfer and run the unchanged
+  operations. `context`, debugger scopes and non-local return remain
+  observers. No observable semantics change.
+
 ## 0.3.168-SNAPSHOT
 
 - `PERF025` lazily materializes the semantic activation of PLAT044 B′ inline

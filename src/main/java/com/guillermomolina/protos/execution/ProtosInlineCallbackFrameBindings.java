@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CapturedLexicalWriteTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ResolvedLexicalWriteTarget;
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -27,6 +28,7 @@ import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
+import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import java.util.List;
 import java.util.Map;
@@ -138,11 +140,16 @@ final class ProtosInlineCallbackFrameBindings {
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
         List<Object> observed =
-                ProtosBytecodeRootNode.observeMultipleCreatePrefix(
-                        durableActivation(
-                                child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
-                        names.length,
-                        source);
+                ProtosBytecodeRootNode.multipleCreatePrefixOrNull(names.length, source);
+        if (observed == null) {
+            // Invalid or insufficient source: the exact Error, from the activation.
+            observed =
+                    ProtosBytecodeRootNode.observeMultipleCreatePrefix(
+                            durableActivation(
+                                    child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
+                            names.length,
+                            source);
+        }
         for (int index = 0; index < names.length; index++) {
             create(
                     child,
@@ -247,6 +254,256 @@ final class ProtosInlineCallbackFrameBindings {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
         return value;
+    }
+
+    /*
+     * PERF025 slice 3: consumers whose successful path observes neither the
+     * callback activation nor its Context. While the activation is
+     * unmaterialized, the callback's current scope holds exactly its PRESENT
+     * block locals (any other binding establishment goes through the
+     * activation), and the activation would adopt the Closure's captures.
+     * Every other case takes the unchanged activation operation through
+     * durableActivation.
+     */
+
+    /** Inline counterpart of {@code ReadCapturedFrameLocal}. */
+    static Object readCaptured(
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            String name,
+            int lexicalDepth,
+            int frameOrdinal,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        if (admitsCapturedAccess(
+                child, frameBackedLocals, frameBackedLayout, name, lexicalDepth,
+                bytecodeNode, frame)) {
+            Object value =
+                    ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(
+                            child.unmaterializedCapturedLexicalEnvironment(),
+                            name,
+                            lexicalDepth,
+                            frameOrdinal);
+            if (value != null) {
+                return value;
+            }
+        }
+        return ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(
+                durableActivation(
+                        child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
+                name,
+                lexicalDepth,
+                frameOrdinal);
+    }
+
+    /** Inline counterpart of {@code ReadCapturedMaterializedLocal}. */
+    static Object readCapturedMaterialized(
+            MaterializedLocalAccessor accessor,
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            String name,
+            int lexicalDepth,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        if (admitsCapturedAccess(
+                child, frameBackedLocals, frameBackedLayout, name, lexicalDepth,
+                bytecodeNode, frame)) {
+            Object value =
+                    ProtosBytecodeRootNode.readCapturedMaterializedBindingOrNull(
+                            accessor,
+                            child.unmaterializedCapturedLexicalEnvironment(),
+                            name,
+                            lexicalDepth,
+                            bytecodeNode);
+            if (value != null) {
+                return value;
+            }
+        }
+        return ProtosBytecodeRootNode.ReadCapturedMaterializedLocal.perform(
+                accessor,
+                durableActivation(
+                        child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
+                name,
+                lexicalDepth,
+                bytecodeNode);
+    }
+
+    /**
+     * Inline counterpart of {@code ResolveCapturedWritableLexicalTarget}
+     * (PERF028-A: runs before RHS evaluation, and its selection is retained).
+     */
+    static CapturedLexicalWriteTarget resolveCapturedWriteTarget(
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            String name,
+            int lexicalDepth,
+            int frameOrdinal,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        if (admitsCapturedAccess(
+                child, frameBackedLocals, frameBackedLayout, name, lexicalDepth,
+                bytecodeNode, frame)) {
+            CapturedLexicalWriteTarget selected =
+                    ProtosBytecodeRootNode.capturedFrameWriteTargetOrNull(
+                            child.unmaterializedCapturedLexicalEnvironment(),
+                            name,
+                            lexicalDepth,
+                            frameOrdinal);
+            if (selected != null) {
+                return selected;
+            }
+        }
+        return ProtosBytecodeRootNode.ResolveCapturedWritableLexicalTarget.perform(
+                durableActivation(
+                        child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
+                name,
+                lexicalDepth,
+                frameOrdinal);
+    }
+
+    /** Inline counterpart of {@code ResolveCapturedMaterializedWritableLexicalTarget}. */
+    static CapturedLexicalWriteTarget resolveCapturedMaterializedWriteTarget(
+            MaterializedLocalAccessor accessor,
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            String name,
+            int lexicalDepth,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        if (admitsCapturedAccess(
+                child, frameBackedLocals, frameBackedLayout, name, lexicalDepth,
+                bytecodeNode, frame)) {
+            CapturedLexicalWriteTarget selected =
+                    ProtosBytecodeRootNode.capturedMaterializedWriteTargetOrNull(
+                            accessor,
+                            child.unmaterializedCapturedLexicalEnvironment(),
+                            name,
+                            lexicalDepth,
+                            bytecodeNode);
+            if (selected != null) {
+                return selected;
+            }
+        }
+        return ProtosBytecodeRootNode.ResolveCapturedMaterializedWritableLexicalTarget.perform(
+                accessor,
+                durableActivation(
+                        child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
+                name,
+                lexicalDepth,
+                bytecodeNode);
+    }
+
+    /**
+     * Inline counterpart of {@code AssignCapturedFrameLocal}: writes exactly
+     * the destination selected before the RHS, whether or not the RHS
+     * materialized the activation; only an invalid mutation needs the
+     * activation, for its Error.
+     */
+    static Object assignCaptured(
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            CapturedLexicalWriteTarget destination,
+            String name,
+            Object value,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        try {
+            ProtosBytecodeRootNode.assignCapturedFrameDestination(destination, name, value);
+        } catch (IllegalStateException invalidMutation) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(
+                            durableActivation(
+                                    child, frameBackedLocals, frameBackedLayout,
+                                    bytecodeNode, frame)));
+        }
+        return value;
+    }
+
+    /** Inline counterpart of {@code AssignCapturedMaterializedLocal}. */
+    static Object assignCapturedMaterialized(
+            MaterializedLocalAccessor accessor,
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            CapturedLexicalWriteTarget destination,
+            String name,
+            Object value,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        try {
+            ProtosBytecodeRootNode.assignCapturedMaterializedDestination(
+                    accessor, destination, name, value, bytecodeNode);
+        } catch (IllegalStateException invalidMutation) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(
+                            durableActivation(
+                                    child, frameBackedLocals, frameBackedLayout,
+                                    bytecodeNode, frame)));
+        }
+        return value;
+    }
+
+    /**
+     * True when a statically resolved captured access may take its direct
+     * path without the activation: the activation is unmaterialized, the
+     * depth is valid, and the callback's own scope does not hold {@code name}
+     * PRESENT (D179 C0 nearer-binding retargeting).
+     */
+    private static boolean admitsCapturedAccess(
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            String name,
+            int lexicalDepth,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        if (child.isActivationMaterialized() || lexicalDepth <= 0) {
+            return false;
+        }
+        Integer ordinal = frameBackedLayout.offsetOf(name);
+        return ordinal == null || frameBackedLocals.isCleared(bytecodeNode, frame, ordinal);
+    }
+
+    /** Inline counterpart of the {@code THIS} intrinsic. */
+    static Object receiver(
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        if (!child.isActivationMaterialized()) {
+            return child.unmaterializedReceiver();
+        }
+        return durableActivation(
+                        child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame)
+                .receiver();
+    }
+
+    /**
+     * The caller of a child invocation prepared on a successful send or
+     * Closure-call path: a provenance-equivalent caller when one exists
+     * ({@link PreparedInlineLiteralCall#provenanceCallerOrNull}), otherwise
+     * the materialized activation.
+     */
+    static ProtosActivation invocationCaller(
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        if (!child.isActivationMaterialized()) {
+            ProtosActivation caller = child.provenanceCallerOrNull();
+            if (caller != null) {
+                return caller;
+            }
+        }
+        return durableActivation(
+                child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
     }
 
     /**
