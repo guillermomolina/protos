@@ -286,6 +286,19 @@ public final class ProtosPrelude {
         return new ProtosExecutionContextValue(contextPrototype);
     }
 
+    /**
+     * Runtime-only direct construction for a deferred execution Context whose
+     * definitive lexical authority already exists.
+     */
+    ProtosExecutionContextValue newExecutionContextForRuntime(
+            ProtosLexicalBindingAuthority lexicalBindingAuthority) {
+        return new ProtosExecutionContextValue(
+                contextPrototype,
+                Objects.requireNonNull(
+                        lexicalBindingAuthority,
+                        "lexicalBindingAuthority"));
+    }
+
     public ProtosActivation newModuleActivation() {
         ProtosObjectValue moduleContext = newExecutionContext();
         return newModuleActivation(new ProtosActorModuleState(), null, moduleContext, new ProtosActorExecutionDomain());

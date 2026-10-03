@@ -40,6 +40,62 @@ public class ProtosObjectValue implements TruffleObject {
         FROZEN
     }
 
+    /**
+     * Shared representation for an ordinary object that has never established
+     * a local binding. It is immutable implementation state: the owning object
+     * promotes to a private map-backed authority before its first binding is
+     * created.
+     */
+    private enum EmptyLexicalBindingAuthority
+            implements ProtosLexicalBindingAuthority {
+        INSTANCE;
+
+        @Override
+        public boolean containsBinding(String name) {
+            Objects.requireNonNull(name, "name");
+            return false;
+        }
+
+        @Override
+        public Optional<Object> readBinding(String name) {
+            Objects.requireNonNull(name, "name");
+            return Optional.empty();
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return true;
+        }
+
+        @Override
+        public Map<String, Object> bindingsSnapshot() {
+            return Map.of();
+        }
+
+        @Override
+        public void appendBindingsTo(
+                java.util.ArrayList<String> names,
+                java.util.ArrayList<Object> values) {
+            Objects.requireNonNull(names, "names");
+            Objects.requireNonNull(values, "values");
+        }
+
+        @Override
+        public void putBinding(String name, Object value) {
+            throw new UnsupportedOperationException(
+                    "shared empty lexical authority is immutable");
+        }
+
+        @Override
+        public Object removeBinding(String name) {
+            Objects.requireNonNull(name, "name");
+            return null;
+        }
+    }
+
+    private static final ProtosLexicalBindingAuthority EMPTY_LEXICAL_BINDINGS =
+            EmptyLexicalBindingAuthority.INSTANCE;
+
     private static final ProtosObjectValue ROOT = new ProtosObjectValue();
 
     private final Object parent;
@@ -73,18 +129,19 @@ public class ProtosObjectValue implements TruffleObject {
 
     private ProtosObjectValue() {
         this.parent = null;
-        this.lexicalBindingAuthority = new ProtosMapBackedLexicalBindingAuthority();
+        this.lexicalBindingAuthority = EMPTY_LEXICAL_BINDINGS;
     }
 
     public ProtosObjectValue(Object parent) {
-        this(parent, new ProtosMapBackedLexicalBindingAuthority());
+        this(parent, EMPTY_LEXICAL_BINDINGS);
     }
 
     /**
      * Installs an explicit lexical-binding authority for this object. Reserved
      * for subclasses that need their own authority attachment (for example
-     * {@link ProtosExecutionContextValue}); ordinary objects always use the
-     * public single-argument constructor and the default map-backed authority.
+     * {@link ProtosExecutionContextValue}); ordinary objects use the shared
+     * empty authority until their first local binding and then promote to a
+     * private map-backed authority.
      */
     protected ProtosObjectValue(Object parent, ProtosLexicalBindingAuthority lexicalBindingAuthority) {
         this.parent = Objects.requireNonNull(parent, "parent");
@@ -215,6 +272,27 @@ public class ProtosObjectValue implements TruffleObject {
         return lexicalBindingAuthority;
     }
 
+    /**
+     * Returns whether this object currently owns any local binding without
+     * allocating a snapshot. Used by runtime representation fast paths only.
+     */
+    final boolean hasLocalBindingsForRuntime() {
+        return !lexicalBindingAuthority.isEmpty();
+    }
+
+    /**
+     * Returns the current writable authority, promoting the shared immutable
+     * empty representation exactly when the first ordinary local binding is
+     * about to be established.
+     */
+    private ProtosLexicalBindingAuthority writableLexicalBindingAuthority() {
+        if (lexicalBindingAuthority == EMPTY_LEXICAL_BINDINGS) {
+            lexicalBindingAuthority =
+                    new ProtosMapBackedLexicalBindingAuthority();
+        }
+        return lexicalBindingAuthority;
+    }
+
     public ProtosObjectValue withoutLocalSlot(String name) {
         Objects.requireNonNull(name, "name");
         if (!lexicalBindingAuthority.containsBinding(name)) {
@@ -311,7 +389,7 @@ public class ProtosObjectValue implements TruffleObject {
         }
 
         for (int index = 0; index < contributionNames.size(); index++) {
-            lexicalBindingAuthority.putBinding(
+            writableLexicalBindingAuthority().putBinding(
                     contributionNames.get(index),
                     contributionValues.get(index));
             invalidateLookupDependencies(contributionNames.get(index));
@@ -371,7 +449,7 @@ public class ProtosObjectValue implements TruffleObject {
             throw new IllegalStateException("local slot already exists: " + name);
         }
 
-        lexicalBindingAuthority.putBinding(name, value);
+        writableLexicalBindingAuthority().putBinding(name, value);
         invalidateLookupDependencies(name);
     }
 

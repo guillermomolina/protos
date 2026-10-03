@@ -516,16 +516,16 @@ public final class ProtosActivation {
 
     public ProtosObjectValue context() {
         if (context == null) {
-            if (deferredContextAuthority != null) {
-                deferredContextAuthority.prepareForContextObservation();
+            ProtosLexicalBindingAuthority authority =
+                    deferredContextAuthority;
+            if (authority != null) {
+                authority.prepareForContextObservation();
+                context =
+                        prelude.newExecutionContextForRuntime(
+                                authority);
+            } else {
+                context = prelude.newExecutionContext();
             }
-            ProtosExecutionContextValue materialized =
-                    (ProtosExecutionContextValue) prelude.newExecutionContext();
-            if (deferredContextAuthority != null) {
-                materialized.installFrameLexicalBindingAuthority(
-                        deferredContextAuthority);
-            }
-            context = materialized;
         }
         return context;
     }

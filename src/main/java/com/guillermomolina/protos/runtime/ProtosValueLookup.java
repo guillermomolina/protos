@@ -249,8 +249,7 @@ public final class ProtosValueLookup {
         return Optional.of(materializeMemberRead(receiver, result.orElseThrow()));
     }
 
-    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
-    private static Object materializeMemberRead(
+    public static Object materializeMemberRead(
             Object receiver,
             ProtosSlotLookupResult result) {
         Object value = result.value();

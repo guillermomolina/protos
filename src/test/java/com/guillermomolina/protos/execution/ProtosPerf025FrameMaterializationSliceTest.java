@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -201,6 +202,74 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                             deferredInvocation(fixture, plan.closure, List.of(newObject())))));
                 });
         System.out.println("CANDIDATE_DYNAMIC_FALLBACK=PASS");
+    }
+
+    @Test
+    void frameAuthorityBookkeepingStaysCompactUntilGeneralHistoryIsNeeded()
+            throws Exception {
+        withFixture(
+                fixture -> {
+                    ClosureUnderTest plan =
+                            closurePlan(
+                                    fixture,
+                                    "(value) => { other: value\n context }");
+                    ProtosObjectValue argument = newObject();
+                    ProtosActivation invocation =
+                            ProtosActivation.forClosureInvocation(
+                                    plan.closure,
+                                    List.of(argument),
+                                    fixture.module.prelude().orElseThrow(),
+                                    fixture.module.actorModuleState(),
+                                    fixture.module.currentModuleKey().orElse(null),
+                                    fixture.module.executionDomain());
+
+                    ProtosObjectValue observed =
+                            assertInstanceOf(
+                                    ProtosObjectValue.class,
+                                    plan.plan.executeBytecodeActivationForTesting(
+                                            invocation));
+                    ProtosFrameLexicalBindingAuthority authority =
+                            assertInstanceOf(
+                                    ProtosFrameLexicalBindingAuthority.class,
+                                    invocation.currentLexicalBindingAuthorityForRuntime());
+
+                    assertSame(
+                            authority,
+                            ((com.guillermomolina.protos.runtime.ProtosExecutionContextValue)
+                                            observed)
+                                    .lexicalBindingAuthorityForRuntime());
+                    assertNull(
+                            privateField(authority, "dynamicOverflow"),
+                            "static-only authority must not allocate dynamic overflow");
+                    assertNull(
+                            privateField(authority, "establishmentOrder"),
+                            "monotonic static establishment stays in compact mode");
+                    assertEquals(
+                            List.of("value", "other"),
+                            List.copyOf(authority.bindingsSnapshot().keySet()));
+
+                    Object dynamicValue = newObject();
+                    observed.createLocalSlot("dynamic", dynamicValue);
+
+                    assertNotNull(privateField(authority, "dynamicOverflow"));
+                    assertNotNull(privateField(authority, "establishmentOrder"));
+                    assertEquals(
+                            List.of("value", "other", "dynamic"),
+                            List.copyOf(authority.bindingsSnapshot().keySet()));
+                    assertSame(
+                            dynamicValue,
+                            observed.readLocalSlot("dynamic").orElseThrow());
+
+                    assertSame(
+                            argument,
+                            observed.removeLocalSlot("value"));
+                    observed.createLocalSlot("value", argument);
+
+                    assertEquals(
+                            List.of("other", "dynamic", "value"),
+                            List.copyOf(authority.bindingsSnapshot().keySet()));
+                });
+        System.out.println("FRAME_AUTHORITY_PAY_AS_YOU_GROW=PASS");
     }
 
     @Test

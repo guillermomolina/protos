@@ -79,8 +79,20 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     private final LocalRangeAccessor frameBackedLocals;
     private final BytecodeRootNode declaringRoot;
     private final MaterializedFrame frame;
-    private final LinkedHashMap<String, Object> dynamicOverflow = new LinkedHashMap<>();
-    private final LinkedHashSet<String> establishmentOrder = new LinkedHashSet<>();
+
+    /*
+     * Both structures are optional. The common case uses only statically
+     * admitted frame locals and therefore carries neither allocation.
+     */
+    private LinkedHashMap<String, Object> dynamicOverflow;
+    private LinkedHashSet<String> establishmentOrder;
+
+    /*
+     * While establishmentOrder is null, current PRESENT frame-backed bindings
+     * are known to have been established in ascending layout order. This
+     * ordinal is the greatest currently PRESENT ordinal in that compact mode.
+     */
+    private int lastCompactFrameOrdinal = -1;
 
     ProtosFrameLexicalBindingAuthority(
             ProtosFrameLexicalLayout frameBackedLayout,
@@ -111,6 +123,72 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
      */
     private BytecodeNode currentBytecodeNode() {
         return declaringRoot.getBytecodeNode();
+    }
+
+    private void ensureGeneralEstablishmentOrder(BytecodeNode bytecodeNode) {
+        if (establishmentOrder != null) {
+            return;
+        }
+
+        LinkedHashSet<String> materialized = new LinkedHashSet<>();
+        for (int ordinal = 0; ordinal < frameBackedLayout.length(); ordinal++) {
+            if (!frameBackedLocals.isCleared(
+                    bytecodeNode, frame, ordinal)) {
+                materialized.add(frameBackedLayout.nameAt(ordinal));
+            }
+        }
+
+        /*
+         * Compact mode never intentionally owns dynamic bindings; retaining
+         * this defensive projection keeps the transition exact if that
+         * invariant is changed by future code.
+         */
+        if (dynamicOverflow != null) {
+            materialized.addAll(dynamicOverflow.keySet());
+        }
+
+        establishmentOrder = materialized;
+    }
+
+    private void recordFrameBackedEstablishment(
+            BytecodeNode bytecodeNode,
+            int ordinal,
+            String name) {
+        if (establishmentOrder != null) {
+            establishmentOrder.add(name);
+            return;
+        }
+
+        if (ordinal > lastCompactFrameOrdinal) {
+            lastCompactFrameOrdinal = ordinal;
+            return;
+        }
+
+        /*
+         * The new binding would no longer be last in layout order. Materialize
+         * the exact history before applying that establishment, then append it
+         * in the same position a LinkedHashSet would have given it.
+         */
+        ensureGeneralEstablishmentOrder(bytecodeNode);
+        establishmentOrder.add(name);
+    }
+
+    private void recomputeLastCompactFrameOrdinal(
+            BytecodeNode bytecodeNode) {
+        if (establishmentOrder != null) {
+            return;
+        }
+
+        for (int ordinal = frameBackedLayout.length() - 1;
+                ordinal >= 0;
+                ordinal--) {
+            if (!frameBackedLocals.isCleared(
+                    bytecodeNode, frame, ordinal)) {
+                lastCompactFrameOrdinal = ordinal;
+                return;
+            }
+        }
+        lastCompactFrameOrdinal = -1;
     }
 
     /**
@@ -207,7 +285,10 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         if (!frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
             throw new IllegalStateException("local slot already exists: " + name);
         }
-        establishmentOrder.add(name);
+        recordFrameBackedEstablishment(
+                bytecodeNode,
+                ordinal,
+                name);
         frameBackedLocals.setObject(bytecodeNode, frame, ordinal, value);
     }
 
@@ -221,11 +302,53 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
      */
     void adoptPresentFrameBackedBindings() {
         BytecodeNode bytecodeNode = currentBytecodeNode();
-        for (int ordinal = 0; ordinal < frameBackedLayout.length(); ordinal++) {
-            if (!frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
-                establishmentOrder.add(frameBackedLayout.nameAt(ordinal));
+
+        if (establishmentOrder != null) {
+            for (int ordinal = 0;
+                    ordinal < frameBackedLayout.length();
+                    ordinal++) {
+                if (!frameBackedLocals.isCleared(
+                        bytecodeNode, frame, ordinal)) {
+                    establishmentOrder.add(
+                            frameBackedLayout.nameAt(ordinal));
+                }
+            }
+            return;
+        }
+
+        /*
+         * This transition is reached only after the owning root established
+         * direct frame locals in its straight-line declaration order. PRESENT
+         * state plus layout order therefore already is the exact history.
+         */
+        int lastPresentOrdinal = -1;
+        for (int ordinal = 0;
+                ordinal < frameBackedLayout.length();
+                ordinal++) {
+            if (!frameBackedLocals.isCleared(
+                    bytecodeNode, frame, ordinal)) {
+                lastPresentOrdinal = ordinal;
             }
         }
+        lastCompactFrameOrdinal = lastPresentOrdinal;
+    }
+
+    @Override
+    public boolean isEmpty() {
+        if (dynamicOverflow != null && !dynamicOverflow.isEmpty()) {
+            return false;
+        }
+
+        BytecodeNode bytecodeNode = currentBytecodeNode();
+        for (int ordinal = 0;
+                ordinal < frameBackedLayout.length();
+                ordinal++) {
+            if (!frameBackedLocals.isCleared(
+                    bytecodeNode, frame, ordinal)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     @Override
@@ -236,7 +359,8 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
             return !frameBackedLocals.isCleared(
                     currentBytecodeNode(), frame, offset);
         }
-        return dynamicOverflow.containsKey(name);
+        return dynamicOverflow != null
+                && dynamicOverflow.containsKey(name);
     }
 
     @Override
@@ -253,7 +377,8 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                     frameBackedLocals.getObject(
                             bytecodeNode, frame, offset));
         }
-        return dynamicOverflow.containsKey(name)
+        return dynamicOverflow != null
+                        && dynamicOverflow.containsKey(name)
                 ? Optional.of(dynamicOverflow.get(name))
                 : Optional.empty();
     }
@@ -262,6 +387,22 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     public Map<String, Object> bindingsSnapshot() {
         Map<String, Object> snapshot = new LinkedHashMap<>();
         BytecodeNode bytecodeNode = currentBytecodeNode();
+
+        if (establishmentOrder == null) {
+            for (int ordinal = 0;
+                    ordinal < frameBackedLayout.length();
+                    ordinal++) {
+                if (!frameBackedLocals.isCleared(
+                        bytecodeNode, frame, ordinal)) {
+                    snapshot.put(
+                            frameBackedLayout.nameAt(ordinal),
+                            frameBackedLocals.getObject(
+                                    bytecodeNode, frame, ordinal));
+                }
+            }
+            return Collections.unmodifiableMap(snapshot);
+        }
+
         for (String name : establishmentOrder) {
             Integer offset = frameBackedLayout.offsetOf(name);
             if (offset != null) {
@@ -272,7 +413,8 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                             frameBackedLocals.getObject(
                                     bytecodeNode, frame, offset));
                 }
-            } else if (dynamicOverflow.containsKey(name)) {
+            } else if (dynamicOverflow != null
+                    && dynamicOverflow.containsKey(name)) {
                 snapshot.put(name, dynamicOverflow.get(name));
             }
         }
@@ -287,6 +429,22 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         Objects.requireNonNull(values, "values");
 
         BytecodeNode bytecodeNode = currentBytecodeNode();
+
+        if (establishmentOrder == null) {
+            for (int ordinal = 0;
+                    ordinal < frameBackedLayout.length();
+                    ordinal++) {
+                if (!frameBackedLocals.isCleared(
+                        bytecodeNode, frame, ordinal)) {
+                    names.add(frameBackedLayout.nameAt(ordinal));
+                    values.add(
+                            frameBackedLocals.getObject(
+                                    bytecodeNode, frame, ordinal));
+                }
+            }
+            return;
+        }
+
         for (String name : establishmentOrder) {
             Integer offset = frameBackedLayout.offsetOf(name);
             if (offset != null) {
@@ -297,7 +455,8 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                             frameBackedLocals.getObject(
                                     bytecodeNode, frame, offset));
                 }
-            } else if (dynamicOverflow.containsKey(name)) {
+            } else if (dynamicOverflow != null
+                    && dynamicOverflow.containsKey(name)) {
                 names.add(name);
                 values.add(dynamicOverflow.get(name));
             }
@@ -308,15 +467,36 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     public void putBinding(String name, Object value) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
-        establishmentOrder.add(name);
 
         Integer offset = frameBackedLayout.offsetOf(name);
         if (offset != null) {
+            BytecodeNode bytecodeNode = currentBytecodeNode();
+            boolean present =
+                    !frameBackedLocals.isCleared(
+                            bytecodeNode, frame, offset);
+            if (!present) {
+                recordFrameBackedEstablishment(
+                        bytecodeNode,
+                        offset,
+                        name);
+            }
             frameBackedLocals.setObject(
-                    currentBytecodeNode(), frame, offset, value);
+                    bytecodeNode, frame, offset, value);
             return;
         }
 
+        BytecodeNode bytecodeNode = currentBytecodeNode();
+        ensureGeneralEstablishmentOrder(bytecodeNode);
+
+        boolean present =
+                dynamicOverflow != null
+                        && dynamicOverflow.containsKey(name);
+        if (dynamicOverflow == null) {
+            dynamicOverflow = new LinkedHashMap<>();
+        }
+        if (!present) {
+            establishmentOrder.add(name);
+        }
         dynamicOverflow.put(name, value);
     }
 
@@ -327,19 +507,38 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         Integer offset = frameBackedLayout.offsetOf(name);
         if (offset != null) {
             BytecodeNode bytecodeNode = currentBytecodeNode();
+            boolean present =
+                    !frameBackedLocals.isCleared(
+                            bytecodeNode, frame, offset);
             Object previous =
-                    frameBackedLocals.isCleared(
+                    present
+                            ? frameBackedLocals.getObject(
                                     bytecodeNode, frame, offset)
-                            ? null
-                            : frameBackedLocals.getObject(
-                                    bytecodeNode, frame, offset);
+                            : null;
+
             frameBackedLocals.clear(
                     bytecodeNode, frame, offset);
-            establishmentOrder.remove(name);
+
+            if (establishmentOrder != null) {
+                establishmentOrder.remove(name);
+            } else if (present
+                    && offset == lastCompactFrameOrdinal) {
+                recomputeLastCompactFrameOrdinal(bytecodeNode);
+            }
             return previous;
         }
 
-        establishmentOrder.remove(name);
-        return dynamicOverflow.remove(name);
+        if (establishmentOrder != null) {
+            establishmentOrder.remove(name);
+        }
+        if (dynamicOverflow == null) {
+            return null;
+        }
+
+        Object previous = dynamicOverflow.remove(name);
+        if (dynamicOverflow.isEmpty()) {
+            dynamicOverflow = null;
+        }
+        return previous;
     }
 }

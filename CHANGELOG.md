@@ -7,6 +7,41 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.160-SNAPSHOT
+
+- `PERF025` makes ordinary object/member and frame-backed lexical storage pay
+  only for the generality actually used. Empty ordinary objects and freshly
+  rebound Closures now share a storage-free lexical-binding authority and
+  promote to map-backed storage only on first local-slot creation; the
+  map-backed authority allocates its `LinkedHashMap` lazily and uses that one
+  ordered map as both value store and establishment-order authority, releasing
+  the backing map again when emptied. Execution Context materialization can now
+  attach its definitive deferred/frame lexical authority directly instead of
+  constructing and then replacing a provisional map-backed authority.
+  Frame-backed lexical state likewise keeps `dynamicOverflow` and explicit
+  `establishmentOrder` absent until dynamic bindings or non-monotonic
+  establishment history require them; Closure frame layouts place parameters
+  before body declarations so the normal parameter-then-local path remains in
+  compact ordinal order without changing lexical identity or PRESENT/ABSENT
+  semantics. `bindMethod` skips local-slot copying when the stored Closure has
+  no local bindings while still producing one fresh receiver-bound Closure
+  identity per member extraction. Ordinary `ReadMember` in both generated
+  Bytecode interpreters now has a three-entry exact-receiver/constant-selector
+  PIC backed by the existing selector-specific D013 lookup `Assumption`;
+  successful hits cache only `ProtosSlotLookupResult`, never the extracted
+  value, so Closure reads still rebind freshly on every access, selector
+  mutation invalidates exactly as before, unsupported representations and
+  megamorphic sites retain the unchanged generic fallback, and scalar member
+  materialization no longer crosses an unnecessary `TruffleBoundary`.
+  `ProtosPerf025ObjectModelPayAsYouGrowTest`, expanded frame-materialization
+  coverage and expanded lazy-capture/member-read coverage freeze storage
+  promotion, remove/recreate order, compact-to-general frame transitions,
+  guarded invalidation, fresh Closure extraction and bounded-PIC fallback.
+  Existing lexical-layout, H1 indexed-parameter, guarded-lookup, debugger,
+  capture, Context and D179 regressions remain green. This slice deliberately
+  does not introduce Graal `DynamicObject`/`Shape` or any observable object
+  model change, and makes no performance-magnitude claim.
+
 ## 0.3.159-SNAPSHOT
 
 - `PERF025` makes PLAT044 B′ immediate literal standard-control callbacks pay

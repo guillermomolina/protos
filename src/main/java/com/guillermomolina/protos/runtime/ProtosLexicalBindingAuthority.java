@@ -44,6 +44,13 @@ public interface ProtosLexicalBindingAuthority {
     Optional<Object> readBinding(String name);
 
     /**
+     * Returns whether this authority currently contains no semantic bindings.
+     * Implementations must not materialize optional backing storage merely to
+     * answer this query.
+     */
+    boolean isEmpty();
+
+    /**
      * Returns an immutable, insertion-ordered snapshot of the current bindings.
      */
     Map<String, Object> bindingsSnapshot();

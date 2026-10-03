@@ -37,6 +37,7 @@ import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.oracle.truffle.api.RootCallTarget;
@@ -764,9 +765,50 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
     @Operation
     public static final class ReadMember {
-        @Specialization
-        public static Object perform(ProtosActivation activation, Object receiver, String name) {
-            return ProtosBytecodeRootNode.ReadMember.perform(activation, receiver, name);
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "name.equals(cachedName)",
+                    "cachedLookup != null"
+                },
+                assumptions = "cachedLookup.stability()",
+                limit = "3")
+        public static Object guarded(
+                ProtosActivation activation,
+                Object receiver,
+                String name,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("name") String cachedName,
+                @Cached("createGuardedLookup(receiver, name, activation)")
+                        ProtosValueLookup.GuardedLookup cachedLookup) {
+            return ProtosBytecodeRootNode.ReadMember.guarded(
+                    activation,
+                    receiver,
+                    name,
+                    cachedReceiver,
+                    cachedName,
+                    cachedLookup);
+        }
+
+        @Specialization(replaces = "guarded")
+        public static Object perform(
+                ProtosActivation activation,
+                Object receiver,
+                String name) {
+            return ProtosBytecodeRootNode.ReadMember.perform(
+                    activation,
+                    receiver,
+                    name);
+        }
+
+        static ProtosValueLookup.GuardedLookup createGuardedLookup(
+                Object receiver,
+                String name,
+                ProtosActivation activation) {
+            return ProtosBytecodeRootNode.ReadMember.createGuardedLookup(
+                    receiver,
+                    name,
+                    activation);
         }
     }
 

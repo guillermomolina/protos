@@ -50,7 +50,18 @@ package com.guillermomolina.protos.runtime;
  */
 public final class ProtosExecutionContextValue extends ProtosObjectValue {
     public ProtosExecutionContextValue(Object parent) {
-        super(parent, new ProtosMapBackedLexicalBindingAuthority());
+        super(parent);
+    }
+
+    /**
+     * Backend-private construction path for a context whose definitive
+     * lexical authority is already known before the semantic Context object
+     * becomes observable.
+     */
+    ProtosExecutionContextValue(
+            Object parent,
+            ProtosLexicalBindingAuthority lexicalBindingAuthority) {
+        super(parent, lexicalBindingAuthority);
     }
 
     /**

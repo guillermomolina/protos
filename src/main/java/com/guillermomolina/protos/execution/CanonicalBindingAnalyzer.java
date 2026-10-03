@@ -320,18 +320,28 @@ final class CanonicalBindingAnalyzer {
     }
 
     private void walkClosure(CanonicalClosure closure, CanonicalLexicalScope enclosing) {
-        CanonicalLexicalScope closureScope = new CanonicalLexicalScope(CanonicalLexicalScope.Kind.CLOSURE, enclosing);
+        CanonicalLexicalScope closureScope =
+                new CanonicalLexicalScope(
+                        CanonicalLexicalScope.Kind.CLOSURE,
+                        enclosing);
         closureScopes.put(closure, closureScope);
-        collectDeclaredNames(closure.body(), closureScope);
 
-        /* Every parameter's identity exists from closure entry (declared upfront), even
-         * though presence is established only at its own sequential binding point below.
-         * This lets a forward/self default reference carry known identity without being
-         * classified PRESENT early. */
+        /*
+         * Every parameter's identity exists from Closure entry. Declare those
+         * identities before discovering body declarations: declaration-set
+         * membership is semantically order-independent, while this insertion
+         * order is also reused as the backend frame layout. Matching the
+         * unavoidable parameter-before-body establishment order lets the
+         * common frame-backed authority remain in its compact representation
+         * without changing any semantic presence rule.
+         */
         for (CanonicalParameter parameter : closure.parameters()) {
-            CanonicalBindingIdentity identity = closureScope.declare(parameter.name());
+            CanonicalBindingIdentity identity =
+                    closureScope.declare(parameter.name());
             parameterIdentities.put(parameter, identity);
         }
+
+        collectDeclaredNames(closure.body(), closureScope);
 
         for (CanonicalParameter parameter : closure.parameters()) {
             /* Sequential/default establishment: a default expression only ever sees

@@ -209,6 +209,139 @@ final class ProtosPerf025LazyLexicalCaptureTest {
     }
 
     @Test
+    void guardedMemberReadPreservesInvalidationFreshnessAndFallback()
+            throws Exception {
+        withCore(module -> {
+            ProtosClosureValue scalarReader =
+                    parsedClosure(
+                            "(object) => object.value",
+                            "perf025-member-read-scalar.protos",
+                            module);
+
+            ProtosObjectValue receiver =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            Object firstValue = integer(1);
+            Object secondValue = integer(2);
+            receiver.createLocalSlot("value", firstValue);
+
+            assertSame(
+                    firstValue,
+                    invokeDirect(
+                                    scalarReader,
+                                    module,
+                                    receiver)
+                            .result());
+
+            receiver.assignLocalSlot("value", secondValue);
+
+            assertSame(
+                    secondValue,
+                    invokeDirect(
+                                    scalarReader,
+                                    module,
+                                    receiver)
+                            .result());
+
+            receiver.createLocalSlot("unrelated", integer(99));
+
+            assertSame(
+                    secondValue,
+                    invokeDirect(
+                                    scalarReader,
+                                    module,
+                                    receiver)
+                            .result());
+
+            ProtosClosureValue storedMethod =
+                    parsedClosure(
+                            "() => 7",
+                            "perf025-member-read-method-value.protos",
+                            module);
+            receiver.createLocalSlot("method", storedMethod);
+
+            ProtosClosureValue methodReader =
+                    parsedClosure(
+                            "(object) => object.method",
+                            "perf025-member-read-method.protos",
+                            module);
+
+            ProtosClosureValue firstExtraction =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            invokeDirect(
+                                            methodReader,
+                                            module,
+                                            receiver)
+                                    .result());
+            ProtosClosureValue secondExtraction =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            invokeDirect(
+                                            methodReader,
+                                            module,
+                                            receiver)
+                                    .result());
+
+            assertNotSame(storedMethod, firstExtraction);
+            assertNotSame(firstExtraction, secondExtraction);
+            assertSame(receiver, firstExtraction.capturedReceiver());
+            assertSame(receiver, secondExtraction.capturedReceiver());
+            assertSame(receiver, firstExtraction.methodHome().orElseThrow());
+            assertSame(receiver, secondExtraction.methodHome().orElseThrow());
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(
+                            invokeDirect(firstExtraction, module).result()));
+            assertEquals(
+                    BigInteger.valueOf(7),
+                    integerValue(
+                            invokeDirect(secondExtraction, module).result()));
+
+            ProtosClosureValue polymorphicReader =
+                    parsedClosure(
+                            "(object) => object.value",
+                            "perf025-member-read-polymorphic.protos",
+                            module);
+
+            java.util.ArrayList<ProtosObjectValue> receivers =
+                    new java.util.ArrayList<>();
+            for (int index = 0; index < 4; index++) {
+                ProtosObjectValue candidate =
+                        new ProtosObjectValue(
+                                ProtosObjectValue.rootObject());
+                candidate.createLocalSlot(
+                        "value",
+                        integer(index + 10));
+                receivers.add(candidate);
+            }
+
+            for (int index = 0; index < receivers.size(); index++) {
+                assertEquals(
+                        BigInteger.valueOf(index + 10L),
+                        integerValue(
+                                invokeDirect(
+                                                polymorphicReader,
+                                                module,
+                                                receivers.get(index))
+                                        .result()));
+            }
+
+            assertEquals(
+                    BigInteger.TEN,
+                    integerValue(
+                            invokeDirect(
+                                            polymorphicReader,
+                                            module,
+                                            receivers.get(0))
+                                    .result()));
+        });
+
+        System.out.println("GUARDED_MEMBER_READ_INVALIDATION=PASS");
+        System.out.println("GUARDED_MEMBER_READ_FRESH_CLOSURE=PASS");
+        System.out.println("GUARDED_MEMBER_READ_GENERIC_FALLBACK=PASS");
+    }
+
+    @Test
     void objectBodyIsNotALexicalCaptureScope() throws Exception {
         withCore(module -> {
             ProtosClosureValue make =

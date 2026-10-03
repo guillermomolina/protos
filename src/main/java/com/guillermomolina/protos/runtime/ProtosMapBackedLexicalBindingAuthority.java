@@ -31,31 +31,42 @@ import java.util.Optional;
  * now, for execution contexts, so no observable behavior changes in this
  * slice.
  */
-final class ProtosMapBackedLexicalBindingAuthority implements ProtosLexicalBindingAuthority {
-    private final LinkedHashMap<String, Object> bindings = new LinkedHashMap<>();
-    private final java.util.ArrayList<String> bindingOrder = new java.util.ArrayList<>();
+final class ProtosMapBackedLexicalBindingAuthority
+        implements ProtosLexicalBindingAuthority {
+    /*
+     * Null is the physical representation of no bindings. LinkedHashMap
+     * insertion order already carries the exact create/remove/recreate order
+     * required by this backend-private authority, so no parallel order list is
+     * needed.
+     */
+    private LinkedHashMap<String, Object> bindings;
 
     @Override
     public boolean containsBinding(String name) {
         Objects.requireNonNull(name, "name");
-        return bindings.containsKey(name);
+        return bindings != null && bindings.containsKey(name);
     }
 
     @Override
     public Optional<Object> readBinding(String name) {
         Objects.requireNonNull(name, "name");
-        return bindings.containsKey(name) ? Optional.of(bindings.get(name)) : Optional.empty();
+        if (bindings == null || !bindings.containsKey(name)) {
+            return Optional.empty();
+        }
+        return Optional.of(bindings.get(name));
+    }
+
+    @Override
+    public boolean isEmpty() {
+        return bindings == null || bindings.isEmpty();
     }
 
     @Override
     public Map<String, Object> bindingsSnapshot() {
-        LinkedHashMap<String, Object> snapshot =
-                new LinkedHashMap<>(bindingOrder.size());
-        for (int index = 0; index < bindingOrder.size(); index++) {
-            String name = bindingOrder.get(index);
-            snapshot.put(name, bindings.get(name));
+        if (bindings == null) {
+            return Collections.emptyMap();
         }
-        return Collections.unmodifiableMap(snapshot);
+        return Collections.unmodifiableMap(new LinkedHashMap<>(bindings));
     }
 
     @Override
@@ -64,10 +75,12 @@ final class ProtosMapBackedLexicalBindingAuthority implements ProtosLexicalBindi
             java.util.ArrayList<Object> values) {
         Objects.requireNonNull(names, "names");
         Objects.requireNonNull(values, "values");
-        for (int index = 0; index < bindingOrder.size(); index++) {
-            String name = bindingOrder.get(index);
-            names.add(name);
-            values.add(bindings.get(name));
+        if (bindings == null) {
+            return;
+        }
+        for (Map.Entry<String, Object> binding : bindings.entrySet()) {
+            names.add(binding.getKey());
+            values.add(binding.getValue());
         }
     }
 
@@ -75,8 +88,8 @@ final class ProtosMapBackedLexicalBindingAuthority implements ProtosLexicalBindi
     public void putBinding(String name, Object value) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
-        if (!bindings.containsKey(name)) {
-            bindingOrder.add(name);
+        if (bindings == null) {
+            bindings = new LinkedHashMap<>();
         }
         bindings.put(name, value);
     }
@@ -84,14 +97,12 @@ final class ProtosMapBackedLexicalBindingAuthority implements ProtosLexicalBindi
     @Override
     public Object removeBinding(String name) {
         Objects.requireNonNull(name, "name");
+        if (bindings == null) {
+            return null;
+        }
         Object previous = bindings.remove(name);
-        if (previous != null) {
-            for (int index = 0; index < bindingOrder.size(); index++) {
-                if (bindingOrder.get(index).equals(name)) {
-                    bindingOrder.remove(index);
-                    break;
-                }
-            }
+        if (bindings.isEmpty()) {
+            bindings = null;
         }
         return previous;
     }

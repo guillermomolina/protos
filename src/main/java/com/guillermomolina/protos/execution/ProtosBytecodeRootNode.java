@@ -1272,7 +1272,34 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     @Operation
     public static final class ReadMember {
-        @Specialization
+        /**
+         * PERF025 ordinary member-read PIC. Selection is cached, never the
+         * semantically observable extracted value. In particular a selected
+         * Closure is rebound through materializeMemberRead on every hit, so
+         * CALLABLES fresh receiver-bound extraction identity remains exact.
+         */
+        @Specialization(
+                guards = {
+                    "receiver == cachedReceiver",
+                    "name.equals(cachedName)",
+                    "cachedLookup != null"
+                },
+                assumptions = "cachedLookup.stability()",
+                limit = "3")
+        public static Object guarded(
+                ProtosActivation activation,
+                Object receiver,
+                String name,
+                @Cached("receiver") Object cachedReceiver,
+                @Cached("name") String cachedName,
+                @Cached("createGuardedLookup(receiver, name, activation)")
+                        ProtosValueLookup.GuardedLookup cachedLookup) {
+            return ProtosValueLookup.materializeMemberRead(
+                    receiver,
+                    cachedLookup.selected());
+        }
+
+        @Specialization(replaces = "guarded")
         public static Object perform(
                 ProtosActivation activation,
                 Object receiver,
@@ -1286,6 +1313,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                                 ProtosCoreErrors.newSlotNotFound(activation)));
             } catch (UnsupportedOperationException unsupportedRepresentation) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            }
+        }
+
+        static ProtosValueLookup.GuardedLookup createGuardedLookup(
+                Object receiver,
+                String name,
+                ProtosActivation activation) {
+            try {
+                return ProtosValueLookup.lookupGuarded(
+                        receiver,
+                        name,
+                        activation.preludeOrNullForRuntime());
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                return null;
             }
         }
     }

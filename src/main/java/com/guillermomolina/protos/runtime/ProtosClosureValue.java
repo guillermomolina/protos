@@ -352,11 +352,17 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         if (contextLocalExecutionProjectionRequired) {
             bound.requireContextLocalExecutionProjectionForRuntime();
         }
-        java.util.ArrayList<String> localNames = new java.util.ArrayList<>();
-        java.util.ArrayList<Object> localValues = new java.util.ArrayList<>();
-        appendLocalBindingsTo(localNames, localValues);
-        for (int index = 0; index < localNames.size(); index++) {
-            bound.createLocalSlot(localNames.get(index), localValues.get(index));
+        if (hasLocalBindingsForRuntime()) {
+            java.util.ArrayList<String> localNames =
+                    new java.util.ArrayList<>();
+            java.util.ArrayList<Object> localValues =
+                    new java.util.ArrayList<>();
+            appendLocalBindingsTo(localNames, localValues);
+            for (int index = 0; index < localNames.size(); index++) {
+                bound.createLocalSlot(
+                        localNames.get(index),
+                        localValues.get(index));
+            }
         }
         if (isFrozen()) {
             bound.freeze();
