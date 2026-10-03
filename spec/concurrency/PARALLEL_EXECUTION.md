@@ -336,28 +336,40 @@ independently rather than being smuggled in as an Array optimization.
 
 ### 71.6 Library-Level Parallel Patterns
 
-High-level parallel algorithms should normally be library facilities built on
-the minimal runtime guarantees rather than separate language primitives or
+High-level parallel algorithms are library facilities built on the minimal
+runtime guarantees rather than separate language primitives, Core selectors, or
 separate fundamental task kinds.
 
-This section is the primary normative owner of the concurrency-domain semantics
-for the Core v0.1 standard parallel Array operations defined in §71.6A–§71.6E:
+Core v0.1 standardizes no parallel collection algorithm. In particular, the
+standard Array prototype has no `parallelMap`, `parallelFilter`,
+`parallelFindIndex`, `parallelReduce`, `parallelSort`, or other parallel
+algorithm selector, and no compatibility alias for such a selector exists.
+Invoking one through ordinary lookup on a standard Array therefore follows the
+ordinary missing-slot rules.
 
--   `Array.parallelMap(...)`
--   `Array.parallelFilter(...)`
--   `Array.parallelFindIndex(...)`
--   `Array.parallelReduce(...)`
--   `Array.parallelSort(...)`
+The Standard Library module `std:collections/Array` provides parallel Array
+algorithms as ordinary module functions. They are Standard Library policy, not
+Core semantics: they are composed only from the public substrate defined by this
+document and `FUTURES_AND_TASKS.md` (`Closure.parallel(...)`, Future observation,
+`Future.all(...)`, and structured ownership/cancellation) and receive no
+privileged runtime helper, batching/chunking authority, scheduler/worker/task
+object, or writable Array/object partition authority. Each isolated callback
+invocation they perform is an ordinary `Closure.parallel(...)` submission and is
+governed by §71.2–§71.5, §71.8, and §71.13–§71.15. Their operation-level
+contracts (argument shape, result ordering, reduction structure, sort
+stability, predicate/comparator validation, failure selection, and
+cancellation) are owned by that Standard Library module's documentation.
 
-Those standardized operations have the exact names and contracts defined below.
-Other high-level parallel patterns, including additional partitioned collection
-processing or parallel pipelines, remain library/API design space unless another
-normative section standardizes them explicitly.
+The standard `InvalidPredicateResult`, `InvalidComparatorResult`, and
+`InvalidComparatorOrder` Error prototypes (`../semantics/ERRORS.md`) remain
+available to such library predicate/comparator contracts. Core attaches no
+parallel-algorithm trigger to them.
 
 A standard or third-party library may choose chunking, reduction trees,
 partition strategy, batching, or algorithm-specific policy only where the
-operation's normative contract leaves that choice unobservable and the runtime
-continues to enforce the underlying isolation and scheduling guarantees.
+operation's contract leaves that choice unobservable or defines it explicitly,
+and the runtime continues to enforce the underlying isolation and scheduling
+guarantees.
 
 Physical scheduling policy must not accidentally become an observable semantic
 choice. If a standard parallel library operation promises a deterministic
@@ -373,408 +385,11 @@ workers. A library may expose intentionally nondeterministic behavior only when
 that nondeterminism is part of the library operation's specified contract rather
 than an accidental consequence of runtime scheduling.
 
-### 71.6A Standard `Array.parallelMap(...)`
-
-Core v0.1 standardizes:
-
-```text
-array.parallelMap(worker, arguments...)
-    -> Future
-```
-
-`parallelMap` is standard Array behavior reached through ordinary message lookup.
-It introduces no syntax, iterator object, stream/pipeline object, Task object, or
-new executable value kind.
-
-The original receiver must satisfy the standard Array receiver-domain contract.
-`worker` must be invokable through the ordinary polymorphic invocation protocol;
-it need not be a Closure. When a Closure occurs in a P input graph, the existing
-Closure-projection rules apply.
-
-The logical operation is indexed by the source Array's ascending indexes. At the
-operation boundary, after ordinary receiver/argument evaluation, Array receiver
-validation, and worker-callability validation, the operation captures the
-source Array's current element-reference sequence in ascending index order.
-
-For a non-empty source, before `parallelMap` successfully returns its Future, it
-must establish all logical P inputs needed by the per-index worker invocations.
-For source index `i`, the worker is invoked in an isolated child P domain as:
-
-```text
-worker(sourceSnapshot[i], arguments...)
-```
-
-Each index is a separate P isolation domain. Mutable worker state, mutable
-element state, and mutable explicit arguments therefore do not become shared
-mutable authority between worker invocations. If the same mutable source object
-appears at several Array indexes, each child receives an isolated logical value
-for its own invocation; no cross-child mutable alias is created.
-
-Within one child invocation graph, ordinary P graph rules preserve cycles and
-aliasing among that element, the worker, and explicit arguments. Across distinct
-child P domains there is no shared mutable Protos identity.
-
-All required non-empty child input graphs are validated before any child becomes
-eligible to execute and before the operation returns its Future. If an input
-needed by any child cannot cross P, the call synchronously signals
-`NonParallelValue`, creates no result Future, and makes no child eligible.
-Validation is conceptually in ascending source-index order when an observable
-choice is required.
-
-For an empty source Array, no worker invocation exists and no P boundary is
-crossed. The worker is still required to be ordinarily invokable, but
-P-transferability of the otherwise-unused worker/explicit arguments is not
-required. The operation returns a Future already resolved with a fresh empty
-standard Array.
-
-For a non-empty source, successful return of the result Future is the complete
-logical input snapshot point. Later caller-domain mutation of the original Array,
-its former elements, the original worker object, or explicit argument objects
-cannot change any child input.
-
-Worker invocations may execute simultaneously and may begin or complete in any
-physical order. The result, however, is deterministic by source index:
-
-```text
-result.size == sourceSnapshot.size
-result[i] == successful result of worker(sourceSnapshot[i], arguments...)
-```
-
-The resolved value is one fresh standard Array. No partial result Array is
-published before successful completion of every logical worker invocation and
-successful P-boundary transfer of every worker result.
-
-A worker's normal result crosses from its child P domain by the ordinary P result
-rules. An untransferable worker result is a failure for that source index with
-caller-domain `NonParallelValue`.
-
-If more than one source index fails, including worker-signaled Error,
-cancellation-originating failure where applicable, or untransferable-result
-failure, the operation's deterministic failure is the failure belonging to the
-lowest failing source index. Scheduler timing, carrier count, chunking, or worker
-completion order must not select a different failure.
-
-The result Future cannot resolve successfully while any logical source-index
-invocation remains incomplete. An implementation may stop/cancel work at indexes
-whose outcomes can no longer affect the specified final result, provided that
-doing so cannot change any Protos-observable behavior.
-
-Cancelling the result Future requests cooperative cancellation of unfinished
-child P work under the ordinary structured-concurrency rules. Cancellation
-publishes no partial result Array. Races between cancellation and an already
-available terminal operation outcome follow the ordinary first-terminal-
-transition Future rule.
-
-`parallelMap` does not promise a particular worker count, chunk size, task count,
-carrier count, SIMD width, or actual overlap. An implementation may batch,
-fuse, inline, vectorize, or sequentialize physical execution when the complete
-observable contract above is preserved.
-
-### 71.6B Standard `Array.parallelFilter(...)`
-
-Core v0.1 standardizes:
-
-```text
-array.parallelFilter(predicate, arguments...)
-    -> Future
-```
-
-`parallelFilter` is standard Array behavior reached through ordinary message
-lookup. It introduces no new syntax, iterator/stream identity, Task identity, or
-writable Array partition authority.
-
-The receiver must satisfy the standard Array receiver-domain contract.
-`predicate` must be invokable through the ordinary polymorphic invocation
-protocol and need not be a Closure. Closure values that cross P follow the
-existing projection rules.
-
-After ordinary receiver/argument evaluation, Array receiver validation, and
-predicate-callability validation, the operation captures the source Array's
-current element-reference sequence in ascending index order.
-
-For every source index `i`, the logical predicate invocation is:
-
-```text
-predicate(sourceSnapshot[i], arguments...)
-```
-
-executed in an isolated child P domain. Each source index is a separate P
-isolation domain exactly as for `Array.parallelMap`; no mutable Protos identity
-is shared between predicate invocations merely because the same source element,
-predicate object, or explicit argument object appeared more than once.
-
-For a non-empty source, all logical child P input graphs must be validated and
-snapshotted before any child becomes eligible and before the operation
-successfully returns its Future. If any required child input cannot cross P, the
-call synchronously signals `NonParallelValue`, creates no result Future, and
-makes no child eligible. When an observable validation choice is required,
-source indexes are considered in ascending order.
-
-For an empty source, no predicate invocation exists and no P boundary is
-crossed. Ordinary receiver and predicate-callability validation still occurs,
-but P-transferability of otherwise-unused predicate/argument values is not
-required. The operation returns a Future already resolved with a fresh empty
-standard Array.
-
-A predicate invocation must complete normally with exactly the canonical
-Boolean object `true` or `false`. Protos has no language-wide truthiness
-conversion. A normal predicate result that is neither canonical `true` nor
-canonical `false` is an indexed `InvalidPredicateResult` failure. The standard
-`InvalidPredicateResult` error delegates directly to `Error`.
-
-A `true` result selects the corresponding snapshotted source element. A `false`
-result rejects it. On successful completion of all predicate invocations, the
-result Future resolves with one fresh standard Array containing exactly the
-selected source elements in ascending original source-index order.
-
-Selection order is therefore stable and independent of predicate start order,
-completion order, carrier count, work stealing, or physical chunking. The
-operation does not return predicate results; it returns the selected source
-values after their ordinary P result/publication crossing needed to construct
-the caller-domain result.
-
-No partial result Array is published. If more than one source index fails —
-whether through a predicate-signaled Error, `InvalidPredicateResult`,
-untransferable selected result, or another indexed P failure — the operation
-fails with the failure belonging to the lowest failing source index. Scheduler
-timing never chooses the reported failure.
-
-A source element rejected by a `false` predicate need not be transferred back as
-a result value. A selected element must be publishable under the ordinary P
-result/value rules; if it is not, that source index fails with caller-domain
-`NonParallelValue`.
-
-Cancelling the result Future requests cooperative cancellation of unfinished
-predicate P work under the ordinary structured-concurrency rules and publishes
-no partial result Array. The normal first-terminal-transition Future rule governs
-races with an already available terminal operation outcome.
-
-`parallelFilter` does not promise a worker count, chunk size, task count,
-carrier count, SIMD width, or actual simultaneous execution. Implementations may
-batch, fuse, inline, vectorize, or sequentialize physical execution only when
-the complete per-index isolation, stable-selection, deterministic-failure, and
-publication contract remains observationally identical.
-
-### 71.6C Standard `Array.parallelFindIndex(...)`
-
-Core v0.1 standardizes:
-
-```text
-array.parallelFindIndex(predicate, arguments...)
-    -> Future
-```
-
-The Future resolves with the semantic Integer index of the first matching source
-element, or with `null` when no source element matches.
-
-Returning an index rather than the selected element keeps `null` unambiguous:
-`null` means absence of a matching index even when an actual Array element is
-itself `null`.
-
-`parallelFindIndex` is standard Array behavior reached through ordinary message
-lookup. The receiver must satisfy the standard Array receiver-domain contract.
-`predicate` must be invokable through the ordinary polymorphic invocation
-protocol and need not be a Closure. Closure values crossing P follow the existing
-projection rules.
-
-After ordinary receiver/argument evaluation, Array receiver validation, and
-predicate-callability validation, the operation captures the source Array's
-current element-reference sequence in ascending index order.
-
-For every source index `i`, the logical predicate invocation is:
-
-```text
-predicate(sourceSnapshot[i], arguments...)
-```
-
-in an isolated child P domain. Per-index input isolation, Closure projection,
-graph preservation within one child, and absence of shared mutable identity
-between distinct child invocations are exactly the same as for
-`Array.parallelMap` and `Array.parallelFilter`.
-
-For a non-empty source, all logical child P input graphs are validated and
-snapshotted before any child becomes eligible and before the operation
-successfully returns its Future. Any required input that cannot cross P causes
-synchronous `NonParallelValue`; no result Future is created and no child becomes
-eligible. Observable validation order is ascending source-index order.
-
-For an empty source, no predicate invocation exists and no P boundary is crossed.
-Ordinary receiver and predicate-callability validation still occurs, but
-P-transferability of otherwise-unused predicate/argument values is not required.
-The operation returns a Future already resolved with `null`.
-
-Predicate results use the same strict Boolean contract as
-`Array.parallelFilter`: only canonical `true` and canonical `false` are valid.
-Any other normal predicate result records `InvalidPredicateResult` for that
-source index.
-
-The logical search order is ascending source index. Physical execution may occur
-in any order, but the operation behaves as if indexes were examined in ascending
-order until the first decisive outcome.
-
-For an index, the outcomes are:
-
-```text
-false
-    -> continue logical search
-
-true
-    -> successful decisive outcome: resolve with that index
-
-failure
-    -> failing decisive outcome: fail with that indexed failure
-```
-
-The terminal result is determined by the lowest source index whose completed
-logical outcome is either `true` or failure, once every lower index is known to
-have completed with `false`.
-
-Therefore:
-
-- a `true` at index `i` cannot resolve the operation while any lower index is
-  still unresolved;
-- a failure at index `j < i` defeats a later `true` at index `i`;
-- a failure at index `j > i` is irrelevant once index `i` is established as the
-  first match;
-- if every index completes with `false`, the Future resolves with `null`;
-- if no earlier `true` exists and failures occur, the lowest failing index is the
-  reported failure.
-
-This rule is deterministic and independent of worker start/completion order,
-carrier count, chunking, work stealing, or scheduler timing.
-
-Once a decisive index is established, an implementation may cancel, abandon, or
-avoid still-unneeded higher-index work when doing so cannot change any
-Protos-observable behavior. Such pruning is an optimization, not a different
-search result or failure rule.
-
-Cancelling the result Future requests cooperative cancellation of unfinished
-predicate P work under the ordinary structured-concurrency rules. The ordinary
-first-terminal-transition Future rule governs races with an already established
-search outcome.
-
-`parallelFindIndex` publishes no partial collection and grants no writable Array
-partition authority. It does not promise any worker count, chunk size, task
-count, carrier count, SIMD width, or actual simultaneous execution. Batching,
-fusion, vectorization, sequential execution, and work stealing are allowed only
-when observationally equivalent to the logical per-index search defined above.
-
-### 71.6D Standard `Array.parallelReduce(...)`
-
-Core v0.1 standardizes:
-
-```text
-array.parallelReduce(reducer, arguments...)
-    -> Future
-```
-
-The Future resolves with the canonical reduction result, or with `null` for an
-empty source Array.
-
-`parallelReduce` is a parallel reduction, not a promise to reproduce an
-unspecified sequential fold. Core does not require the reducer to be associative
-and does not let worker count or scheduler policy choose the parenthesization.
-Instead, Core defines one canonical logical reduction tree.
-
-The receiver must satisfy the standard Array receiver-domain contract. `reducer`
-must be invokable through the ordinary polymorphic invocation protocol and need
-not be a Closure. Closure values crossing P follow the ordinary projection
-rules.
-
-After ordinary receiver/argument evaluation, Array receiver validation, and
-reducer-callability validation, the operation fixes a logical submission
-snapshot of the source element-reference sequence, reducer state, and explicit
-argument state. Any value that must cross a P boundary is governed by the
-ordinary P copy/projection/transfer rules. Later caller-domain mutation cannot
-change any logical reduction input.
-
-For an empty source, no reducer invocation exists and no P boundary is crossed.
-P-transferability of otherwise-unused reducer/argument values is not required.
-The operation returns a Future already resolved with `null`.
-
-For a one-element source, no reducer invocation occurs. The sole source value is
-nevertheless snapshotted through the ordinary P value boundary so the successful
-call fixes its reduction value independently of later caller mutation. If that
-value cannot cross P, the call synchronously signals `NonParallelValue`. On
-success the Future resolves with the corresponding caller-domain transferred
-value.
-
-For two or more source elements, all source values and the reducer/explicit
-argument submission state required to begin the canonical reduction must be
-validated/snapshotted before any reduction child becomes eligible and before the
-operation successfully returns its Future. A required input that cannot cross P
-causes synchronous `NonParallelValue`, creates no result Future, and makes no
-child eligible.
-
-The canonical reduction proceeds in logical rounds. A round consumes its input
-sequence from left to right in adjacent pairs:
-
-```text
-[x0, x1, x2, x3, x4]
-
-round 1:
-    reducer(x0, x1, arguments...)
-    reducer(x2, x3, arguments...)
-    x4
-
-round 2:
-    reducer(r01, r23, arguments...)
-    x4
-
-round 3:
-    reducer(r0123, x4, arguments...)
-```
-
-More generally, pair positions `(0,1)`, `(2,3)`, `(4,5)`, ... are combined.
-When a round has an odd final value, that value is carried unchanged into the
-next logical round. Rounds repeat until exactly one value remains.
-
-Every reducer invocation executes in its own isolated child P domain. Its two
-logical operand values plus the reducer and explicit arguments form that child's
-P input graph. Aliasing and cycles among values that enter the same child are
-preserved by ordinary P graph rules; distinct reducer invocations do not acquire
-shared mutable Protos identity.
-
-A reducer normal result crosses out of its child by ordinary P result rules and
-becomes the logical value supplied to a later canonical node. An untransferable
-normal result records caller-domain `NonParallelValue` as that node's failure.
-
-Logical rounds impose a deterministic failure boundary. A later logical round
-does not exist unless every combine node in the preceding round completed
-successfully. If more than one combine node in one round fails, the failure from
-the leftmost failing pair in that round is the operation failure. Thus scheduler
-timing and worker completion order never select among concurrent failures.
-
-A conforming implementation may pipeline or speculatively execute work from a
-later canonical round only when doing so is observationally invisible. Such
-speculation cannot replace the specified earlier-round failure, publish a value
-that the canonical tree would not reach, or expose mutable state/effects from
-logically nonexistent later work.
-
-On successful completion, the last canonical value crosses to the caller domain
-under the ordinary P result rules and resolves the result Future. No intermediate
-partial reduction state is published.
-
-Because the canonical tree is fixed, non-associative reducers are deterministic.
-For example, subtraction follows the specified adjacent-pair tree rather than an
-implementation-selected chunking tree. An implementation may reassociate only
-when the invoked API's semantics independently make that reassociation
-unobservable.
-
-Cancelling the result Future requests cooperative cancellation of unfinished P
-reduction work under the ordinary structured-concurrency rules and publishes no
-partial result. The ordinary first-terminal-transition Future rule governs races
-with an already established terminal reduction outcome.
-
-`parallelReduce` does not promise a worker count, chunk size, Task count, carrier
-count, SIMD width, or actual simultaneous execution. Physical batching, fusion,
-vectorization, sequential execution, work stealing, and storage reuse are
-allowed only when observationally equivalent to the canonical logical tree.
-
-### 71.6E No standard `Array.parallelEach(...)` in Core
-
-Core v0.1 does not standardize `Array.parallelEach(...)` or another parallel
-iteration operation whose element-worker results are discarded.
+### 71.6E No standard `Array.parallelEach(...)`
+
+Neither Core v0.1 nor the standard library standardizes `Array.parallelEach(...)`
+or another parallel iteration operation whose element-worker results are
+discarded.
 
 This is an API boundary derived from the existing P effect model rather than a
 restriction on physical execution.
@@ -784,27 +399,13 @@ the caller Actor's mutable state, sender identity, mailbox, ambient I/O
 capabilities, Process/Node/Cluster authority, or another standard external-effect
 channel merely because work is eligible to run simultaneously.
 
-Consequently, a generic operation of the form:
-
-```text
-array.parallelEach(worker, arguments...)
-```
-
-would have no additional standard publication channel beyond the same per-index
-P result/failure boundary already provided by `Array.parallelMap(...)`. Discarding
+Consequently, a generic parallel iteration operation would have no additional
+standard publication channel beyond the per-invocation P result/failure boundary
+already available through `Closure.parallel(...)` and through result-producing
+library algorithms such as the `std:collections/Array` parallel map. Discarding
 those normal results would remove information without adding a new semantic
-capability.
-
-Core therefore prefers the existing composable operation:
-
-```text
-array.parallelMap(worker, arguments...)
-    -> Future<Array>
-```
-
-when independent per-element parallel computation is required. A caller may
-ignore the successfully resolved result Array when its values are not needed,
-but Core does not add a second standard operation merely to suppress that result.
+capability. A caller may ignore a successfully resolved result when its values
+are not needed.
 
 This decision also prevents an iteration-shaped API from implying that P workers
 may rely on hidden shared mutation, Actor messaging, I/O, native global state, or
@@ -812,135 +413,11 @@ other externally observable side effects. Those capabilities remain governed by
 their existing P-transfer/effect rules and are not made valid by choosing an
 `each`-like spelling.
 
-An implementation may internally avoid materializing result storage when it can
-prove that doing so is observationally equivalent to the actual standard
-operation being executed. Such dead-result elimination is an optimization, not
-a distinct Core protocol.
-
 A future P-safe effect capability or a future API with independently useful
 completion/failure/resource semantics may justify a parallel iteration facility.
 If introduced, that facility must define its effect authority, result/failure
 meaning, cancellation, ownership, ordering, and P transfer semantics explicitly
 rather than inheriting them from an otherwise result-discarding loop.
-
-### 71.6F Standard `Array.parallelSort(...)`
-
-Core v0.1 standardizes:
-
-```text
-array.parallelSort(less, arguments...)
-    -> Future
-```
-
-The Future resolves with one fresh standard Array containing the source values in
-the canonical stable sorted order defined below. The source Array is not mutated.
-
-`less` must be invokable through the ordinary polymorphic invocation protocol and
-need not be a Closure. Each comparator result must be exactly canonical `true` or
-canonical `false`; another normal result is `InvalidComparatorResult`. The
-standard `InvalidComparatorResult` error delegates directly to `Error`.
-
-Core does not let the implementation choose an observable sorting algorithm.
-`parallelSort` is defined by one canonical logical stable merge-sort tree.
-
-After ordinary receiver/argument evaluation, standard Array receiver validation,
-and comparator-callability validation, the operation captures the source Array's
-element-reference sequence in ascending index order.
-
-For empty input, no comparator invocation or P boundary exists. The operation
-returns a Future already resolved with a fresh empty standard Array.
-
-For singleton input, no comparator invocation occurs. The sole element is
-snapshotted/transferred through the ordinary P value rules before successful
-submission completes. An untransferable singleton causes synchronous
-`NonParallelValue`. On success, the Future resolves with a fresh one-element
-standard Array containing the caller-domain transferred value.
-
-For two or more elements, all source values plus comparator and explicit argument
-state required by the canonical sort are validated/snapshotted before any sort
-child becomes eligible and before the operation successfully returns its Future.
-A required non-transferable input causes synchronous `NonParallelValue`, creates
-no result Future, and makes no child eligible.
-
-The canonical logical split of a sequence of length `n >= 2` is:
-
-```text
-leftLength  = floor(n / 2)
-rightLength = n - leftLength
-
-left  = first leftLength values
-right = remaining rightLength values
-```
-
-Both halves are recursively sorted by the same rule. Their successful sorted
-results are then merged from left to right.
-
-For each current merge pair `(leftValue, rightValue)`, Core evaluates two
-isolated comparator invocations:
-
-```text
-lr = less(leftValue, rightValue, arguments...)
-rl = less(rightValue, leftValue, arguments...)
-```
-
-Each invocation is a separate child P domain governed by the ordinary P
-copy/projection/result rules. Both Boolean outcomes belong to one logical merge
-decision.
-
-The decision table is:
-
-```text
-lr == true  && rl == false
-    -> take leftValue
-
-lr == false && rl == true
-    -> take rightValue
-
-lr == false && rl == false
-    -> values are equivalent for this merge decision
-    -> take leftValue first (stable tie)
-
-lr == true  && rl == true
-    -> fail with InvalidComparatorOrder
-```
-
-`InvalidComparatorOrder` delegates directly to `Error`.
-
-When one side of a merge is exhausted, the remaining values of the other side
-are appended unchanged. Stability is therefore normative: values that compare
-equivalent preserve their original source-index order.
-
-The two recursive child sorts of one logical node may execute simultaneously.
-The merge of that node exists only after both child sorts succeed. For failures
-from the two child sorts, the left child has deterministic precedence over the
-right child. Within one merge decision, `lr` has failure precedence over `rl`.
-Across successive merge decisions, the earlier output position has precedence
-over later positions. Thus scheduler timing never selects the reported failure.
-
-A comparator result that cannot cross its child P boundary is treated as
-caller-domain `NonParallelValue` at that comparator invocation and participates
-in the same canonical failure ordering.
-
-The canonical merge tree and comparison schedule are semantic. A conforming
-implementation may use another physical algorithm, vectorization, chunking,
-sampling, fusion, in-place temporary buffers, or work stealing only when every
-observable result, stable ordering, comparator invocation/failure decision, and
-publication outcome is identical to the canonical definition.
-
-This requirement intentionally favors portable semantics over giving arbitrary
-stateful or inconsistent comparators implementation-dependent behavior. A
-well-behaved strict ordering naturally satisfies the canonical contract, while
-encountered contradictory pair ordering (`a < b` and `b < a`) fails
-deterministically rather than being resolved by sort internals.
-
-On success, every selected output value crosses to the caller domain according
-to ordinary P result/value semantics and the Future resolves with the fresh
-sorted Array. Failure or cancellation publishes no partial Array.
-
-Cancelling the result Future requests cooperative cancellation of unfinished P
-sort/comparator work under ordinary structured-concurrency rules. The ordinary
-first-terminal-transition Future rule governs races with an already established
-terminal sort outcome.
 
 ### 71.7 Scheduling and Oversubscription
 

@@ -2987,16 +2987,12 @@ No dispatch by argument type is implied. These mechanisms support dynamic arity,
 
 ### Parallel Array runtime integration
 
-The normative semantics of the standard parallel Array operations
-`parallelMap`, `parallelFilter`, `parallelFindIndex`, `parallelReduce`, and
-`parallelSort` are owned by `../concurrency/PARALLEL_EXECUTION.md` §71.6A–§71.6E.
-
-A runtime may realize those operations using any internal algorithm, task graph,
-chunking scheme, worker organization, vectorization strategy, or sequential
-fallback permitted by that owning contract. This runtime-semantics document does
-not define a second conceptual algorithm or an additional observable ordering,
-failure, snapshot, transfer, cancellation, or publication rule for those
-operations.
+The runtime provides no parallel Array algorithm. Parallel Array algorithms are
+Standard Library functions of `std:collections/Array` that the runtime executes
+as ordinary Protos code over `Closure.parallel(...)` and Futures; their Core
+placement boundary is owned by `../concurrency/PARALLEL_EXECUTION.md` §71.6.
+This runtime-semantics document defines no algorithm, ordering, failure,
+snapshot, transfer, cancellation, or publication rule for them.
 
 ### Exact call-spread expansion
 

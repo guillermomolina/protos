@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.178-SNAPSHOT
+
+- `I058` implements D160 (Candidate B): the parallel Array algorithms move from
+  Core to the Standard Library. `std:collections/Array` adds the module
+  functions `parallelMap`, `parallelFilter`, `parallelFindIndex`,
+  `parallelReduce`, and `parallelSort`, each taking
+  `(array, callback, ...arguments)` and returning a Future. They are ordinary
+  Protos source composed only from `Closure.parallel`, Futures, `Future.all`,
+  and `ensure`: a synchronous P snapshot of elements, callback, and arguments
+  at call time; one isolated P child per callback invocation; results in
+  source order; lowest-index failure selection; outcome validation
+  (`InvalidPredicateResult`, `InvalidComparatorResult`,
+  `InvalidComparatorOrder`) in the caller in ascending index order; and
+  cancellation of unfinished children when the result Future is cancelled.
+  `parallelReduce` combines adjacent pairs round by round, and `parallelSort`
+  reproduces the stable sequential `sort` with each comparator invocation in
+  its own P domain.
+- The Core Array prototype no longer has `parallelMap`, `parallelFilter`,
+  `parallelFindIndex`, `parallelReduce`, or `parallelSort`, and no
+  compatibility alias exists; calling them on an Array now signals
+  `SlotNotFound`. `ProtosParallelRuntime` drops `installArrayParallel`, the
+  native indexed/reduce/sort algorithms, their staging/transfer helpers, and the
+  Completion forwarding/abandon/cancel-action machinery, leaving only
+  `Closure.parallel`. The native-boundary audit shrinks accordingly.
+- The isolated-parallel example and the canonical `parallel-array-map`
+  benchmark use `Arrays.parallelMap(...)` and the other module functions.
+
 ## 0.3.177-SNAPSHOT
 
 - `PERF030` makes the statically known `CreateCurrentFrameLocal` frame-local

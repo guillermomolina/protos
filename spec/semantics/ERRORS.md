@@ -367,9 +367,9 @@ The standard prototypes required by Core v0.1 are:
 | `RequestOutcomeUncertain` | `Error` | `../concurrency/ACTORS.md` |
 | `NonTransferableValue` | `Error` | `../concurrency/ACTORS.md` |
 | `NonParallelValue` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
-| `InvalidPredicateResult` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
-| `InvalidComparatorResult` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
-| `InvalidComparatorOrder` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
+| `InvalidPredicateResult` | `Error` | Standard Library predicate/comparator contracts (`std:collections/Array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
+| `InvalidComparatorResult` | `Error` | Standard Library predicate/comparator contracts (`std:collections/Array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
+| `InvalidComparatorOrder` | `Error` | Standard Library predicate/comparator contracts (`std:collections/Array`); `../concurrency/PARALLEL_EXECUTION.md` §71.6 |
 | `IOError` | `Error` | `../io/IO_CORE.md` and the modular I/O documents |
 | `InvalidIOArgument` | `IOError` | `../io/IO_CORE.md` |
 | `IOLifecycleError` | `IOError` | `../io/IO_CORE.md` |

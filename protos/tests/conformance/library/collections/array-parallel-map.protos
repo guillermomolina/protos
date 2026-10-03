@@ -1,0 +1,93 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Arrays: import("std:collections/Array")
+
+sameElements: (actual, expected) => {
+    ok: actual.size() == expected.size()
+    ok.ifTrue(() => {
+        index: 0
+        expected.each((element) => {
+            (actual[index] == element).ifFalse(() => { ok = false })
+            index = index + 1
+        })
+    })
+    ok
+}
+
+tests: Array(
+    Test("array parallel map preserves source order", () => {
+        mapped: Arrays.parallelMap(Array(3, 1, 4, 1, 5), (value) => {
+            value * value
+        }).value()
+        Assertions.require(sameElements(mapped, Array(9, 1, 16, 1, 25)))
+    }),
+    Test("array parallel map empty and singleton", () => {
+        empty: Arrays.parallelMap(Array(), (value) => { value }).value()
+        single: Arrays.parallelMap(Array(7), (value) => { value + 1 }).value()
+        Assertions.require(sameElements(empty, Array()))
+        Assertions.require(sameElements(single, Array(8)))
+    }),
+    Test("array parallel map passes explicit arguments", () => {
+        mapped: Arrays.parallelMap(Array(1, 2, 3), (value, factor, offset) => {
+            value * factor + offset
+        }, 10, 1).value()
+        Assertions.require(sameElements(mapped, Array(11, 21, 31)))
+    }),
+    Test("array parallel map snapshots input at call", () => {
+        source: Array(1, 2)
+        future: Arrays.parallelMap(source, (value) => { value * 10 })
+        source[1] = 99
+        Assertions.require(sameElements(future.value(), Array(10, 20)))
+    }),
+    Test("array parallel map isolates element mutation", () => {
+        cell: Array(1)
+        mapped: Arrays.parallelMap(Array(cell, cell), (element) => {
+            element[0] = element[0] + 1
+            element[0]
+        }).value()
+        Assertions.require(sameElements(mapped, Array(2, 2)))
+        Assertions.require(cell[0] == 1)
+    }),
+    Test("array parallel map lowest failing index wins", () => {
+        Assertions.signals(SlotNotFound, () => {
+            Arrays.parallelMap(Array(0, 1, 2, 3), (value) => {
+                (value == 1).ifTrue(() => { SlotNotFound().signal() })
+                (value == 3).ifTrue(() => { InvalidSuper().signal() })
+                value
+            }).value()
+        })
+    }),
+    Test("array parallel map noninvokable worker fails the Future", () => {
+        future: Arrays.parallelMap(Array(1), null)
+        Assertions.signals(Error, () => { future.value() })
+    }),
+    Test("array parallel map nontransferable result fails the Future", () => {
+        future: Arrays.parallelMap(Array(1), (value) => {
+            (() => { value }).future()
+        })
+        Assertions.signals(NonParallelValue, () => { future.value() })
+    }),
+    Test("array parallel map cancellation", () => {
+        future: Arrays.parallelMap(Array(1, 2), (value) => { value })
+        future.cancel()
+        Assertions.signals(Cancelled, () => { future.value() })
+    })
+)
+tests.freeze()

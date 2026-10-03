@@ -81,7 +81,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardFloatProtocol.java", 2),
                     Map.entry("execution/ProtosStandardBooleanProtocol.java", 1),
                     Map.entry("execution/ProtosStandardNumberEqualityProtocol.java", 1),
-                    Map.entry("execution/ProtosParallelRuntime.java", 2),
+                    Map.entry("execution/ProtosParallelRuntime.java", 1),
                     Map.entry("execution/ProtosStandardNumberOrderingProtocol.java", 1),
                     Map.entry("execution/ProtosStandardNumericConversionProtocol.java", 1));
 
@@ -126,7 +126,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(34, actualCore.size());
-        assertEquals(139, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(138, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
     }
@@ -228,11 +228,6 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         "size",
                         "each",
                         "match",
-                        "parallelMap",
-                        "parallelFilter",
-                        "parallelFindIndex",
-                        "parallelReduce",
-                        "parallelSort",
                         "recognizes"));
         assertNativeSelectors(
                 "String",
@@ -421,7 +416,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         String parallel =
                 Files.readString(
                         JAVA_ROOT.resolve("execution").resolve("ProtosParallelRuntime.java"));
-        assertEquals(5, occurrences(parallel, "slot(p,"));
+        assertEquals(0, occurrences(parallel, "slot(p,"));
         assertEquals(0, occurrences(parallel, "slot(r,"));
 
         String future =

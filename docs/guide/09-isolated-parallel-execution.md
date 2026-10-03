@@ -76,8 +76,9 @@ The public fundamental submission operation is the ordinary message:
 closure.parallel(arguments...)
 ```
 
-Core also exposes the standard Array parallel algorithms described later in
-this chapter.
+Parallel Array algorithms are Standard Library functions of
+`std:collections/Array` built on `closure.parallel(...)`; they are described
+later in this chapter.
 
 The implementation can use threads, carriers, pools, work stealing, or other
 machinery internally. That machinery is not the programmer-visible model.
@@ -316,26 +317,32 @@ The runtime is free to schedule or help nested P work in any conforming way.
 The programmer-visible meaning remains explicit isolated computation plus
 deterministic operation semantics.
 
-## Array parallel algorithms are standard Core operations
+## Array parallel algorithms are Standard Library functions
 
-Core v0.1 provides:
+Core v0.1 keeps only the minimal isolated-execution mechanism
+(`closure.parallel(...)` plus ordinary Futures). Parallel collection algorithms
+are Standard Library policy built on it. The `std:collections/Array` module
+provides:
 
 ```protos
-array.parallelMap(worker, arguments...)
-array.parallelFilter(predicate, arguments...)
-array.parallelFindIndex(predicate, arguments...)
-array.parallelReduce(reducer, arguments...)
-array.parallelSort(less, arguments...)
+Arrays: import("std:collections/Array")
+
+Arrays.parallelMap(array, worker, arguments...)
+Arrays.parallelFilter(array, predicate, arguments...)
+Arrays.parallelFindIndex(array, predicate, arguments...)
+Arrays.parallelReduce(array, reducer, arguments...)
+Arrays.parallelSort(array, less, arguments...)
 ```
 
-Every operation returns a Future.
+Every operation returns a Future. Core Arrays have no `parallel...` selectors:
+`array.parallelMap(...)` signals `SlotNotFound`.
 
-They are distinct from the sequential algorithms provided by the Standard
-Library `std:collections/Array` module.
-
-The parallel variants add the P isolation, transfer, failure-selection,
-cancellation, and scheduling-independent result rules owned by the concurrency
-specification.
+They sit beside the sequential `map`, `filter`, `findIndex`, `reduce`, and
+`sort` functions of the same module. The parallel variants run each callback
+invocation in isolated P through `closure.parallel(...)` and combine the
+resulting Futures with deterministic, scheduling-independent result and failure
+rules. Because they are ordinary Protos source, they introduce no privileged
+runtime path; the module source documents each contract.
 
 ## `parallelMap` preserves logical source order
 
@@ -348,7 +355,7 @@ For:
 ```protos
 values: [1, 2, 3]
 
-result: values.parallelMap((value) => {
+result: Arrays.parallelMap(values, (value) => {
     expensiveTransform(value)
 }).value()
 ```
@@ -396,18 +403,20 @@ This is the same design principle seen in `Future.all(...)`:
 > Concurrency may change when work becomes available; scheduler accident should
 > not redefine which logical outcome the program observes.
 
-The runtime test suite specifically guards against a higher-index callback
-finishing first and thereby stealing lower-index logical failure precedence.
+The parallel Array functions inherit this from `Future.all(...)`'s ascending
+index frontier and from examining outcomes in ascending index order, so a
+higher-index callback that finishes first cannot steal lower-index failure
+precedence.
 
-## `parallelReduce` uses a canonical reduction tree
+## `parallelReduce` uses a fixed reduction tree
 
 Parallel reduction cannot preserve an ordinary sequential left-fold callback
 order while also allowing general parallel combination.
 
-Core therefore defines one canonical deterministic reduction structure.
-
-Conceptually, values are combined in deterministic rounds rather than whichever
-pair of workers happens to become ready first.
+`parallelReduce` therefore fixes one deterministic reduction structure: each
+round combines adjacent pairs `(0, 1)`, `(2, 3)`, ... from left to right and
+carries an odd final value unchanged, rather than combining whichever pair of
+workers happens to become ready first.
 
 This means a reducer used with `parallelReduce` must be suitable for that defined
 parallel reduction contract.
@@ -419,8 +428,9 @@ If exact left-fold semantics are required, use the sequential operation.
 
 ## `parallelSort` is deterministic and stable
 
-`parallelSort` uses the standard comparator contract and produces the same
-logical ordering independent of physical comparison scheduling.
+`parallelSort` produces exactly the result, comparison order, and failures of
+the sequential `sort` with the same comparator, while running every comparator
+invocation in its own isolated P domain.
 
 The comparator result must be canonical Boolean in both comparison directions.
 
@@ -434,13 +444,13 @@ the standard operation.
 
 ## Array callbacks receive transferred values
 
-The Array parallel operations snapshot the relevant source state and callback
-inputs before isolated execution.
+The Array parallel functions snapshot the source elements, the callback, and
+the extra arguments when they are called, before returning their Future.
 
 Extra arguments are explicit:
 
 ```protos
-values.parallelMap(worker, scale, offset)
+Arrays.parallelMap(values, worker, scale, offset)
 ```
 
 They cross the same P boundary rather than becoming an excuse to share caller
@@ -581,13 +591,13 @@ authoritative.
 9. Parallel results and failures return through ordinary Futures and structured
    ownership rules.
 10. Cancellation is cooperative and does not roll back committed effects.
-11. Array parallel operations return Futures and produce deterministic logical
+11. `std:collections/Array` parallel functions return Futures and produce deterministic logical
     outcomes independent of physical worker completion order.
 12. `parallelMap` and `parallelFilter` preserve source index/order.
 13. `parallelFindIndex` selects the lowest logical matching index, not the
     fastest worker.
-14. `parallelReduce` uses the defined canonical reduction tree, not sequential
-    left-fold callback order.
+14. `parallelReduce` uses its fixed adjacent-pair reduction tree, not
+    sequential left-fold callback order.
 15. `parallelSort` is stable and enforces strict canonical-Boolean comparator
     laws.
 16. No value family, including Arrays, Bytes, and arbitrary mutable object
@@ -604,9 +614,11 @@ authoritative.
 For exact behavior, consult:
 
 - [`../../spec/concurrency/PARALLEL_EXECUTION.md`](../../spec/concurrency/PARALLEL_EXECUTION.md)
-  for P isolation, Closure projection, transferability, Array parallel
-  operations, deterministic failure/result rules, the absence of writable partitioning,
-  cancellation, and scheduling independence;
+  for P isolation, Closure projection, transferability, deterministic
+  failure/result rules, the absence of writable partitioning, cancellation, and
+  scheduling independence;
+- [`../../protos/lib/collections/Array.protos`](../../protos/lib/collections/Array.protos)
+  for the Standard Library parallel Array function contracts;
 - [`../../spec/concurrency/FUTURES_AND_TASKS.md`](../../spec/concurrency/FUTURES_AND_TASKS.md)
   for the Future result, observation, cancellation, and structured
   ownership model reused by P-produced Futures;
@@ -616,8 +628,7 @@ For exact behavior, consult:
   ordinary `Object.parallel` selector placement and Closure receiver-domain
   behavior;
 - [`../../spec/semantics/VALUES_AND_COLLECTIONS.md`](../../spec/semantics/VALUES_AND_COLLECTIONS.md)
-  for Array/Bytes collection ownership and the cross-reference to concurrency
-  parallel operations;
+  for Array/Bytes collection ownership;
 - [`08-futures-and-structured-concurrency.md`](08-futures-and-structured-concurrency.md)
   for the Future and task-lifetime model used by parallel results.
 

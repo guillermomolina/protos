@@ -1,0 +1,78 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Arrays: import("std:collections/Array")
+
+sameElements: (actual, expected) => {
+    ok: actual.size() == expected.size()
+    ok.ifTrue(() => {
+        index: 0
+        expected.each((element) => {
+            (actual[index] == element).ifFalse(() => { ok = false })
+            index = index + 1
+        })
+    })
+    ok
+}
+
+tests: Array(
+    Test("array parallel filter keeps selected elements in source order", () => {
+        evens: Arrays.parallelFilter(Array(3, 1, 4, 1, 5, 9, 2, 6), (value) => {
+            value.mod(2) == 0
+        }).value()
+        Assertions.require(sameElements(evens, Array(4, 2, 6)))
+    }),
+    Test("array parallel filter empty, singleton and null elements", () => {
+        empty: Arrays.parallelFilter(Array(), (value) => { true }).value()
+        single: Arrays.parallelFilter(Array(5), (value) => { false }).value()
+        nulls: Arrays.parallelFilter(Array(1, null, 2), (value) => {
+            value === null
+        }).value()
+        Assertions.require(sameElements(empty, Array()))
+        Assertions.require(sameElements(single, Array()))
+        Assertions.require(sameElements(nulls, Array(null)))
+    }),
+    Test("array parallel filter passes explicit arguments", () => {
+        large: Arrays.parallelFilter(Array(1, 5, 10, 50), (value, limit) => {
+            value > limit
+        }, 7).value()
+        Assertions.require(sameElements(large, Array(10, 50)))
+    }),
+    Test("array parallel filter invalid predicate result", () => {
+        Assertions.signals(InvalidPredicateResult, () => {
+            Arrays.parallelFilter(Array(1, 2), (value) => { value }).value()
+        })
+    }),
+    Test("array parallel filter lowest failing index wins", () => {
+        Assertions.signals(InvalidPredicateResult, () => {
+            Arrays.parallelFilter(Array(0, 1, 2), (value) => {
+                decision: true
+                (value == 1).ifTrue(() => { decision = 7 })
+                (value == 2).ifTrue(() => { SlotNotFound().signal() })
+                decision
+            }).value()
+        })
+    }),
+    Test("array parallel filter cancellation", () => {
+        future: Arrays.parallelFilter(Array(1, 2), (value) => { true })
+        future.cancel()
+        Assertions.signals(Cancelled, () => { future.value() })
+    })
+)
+tests.freeze()

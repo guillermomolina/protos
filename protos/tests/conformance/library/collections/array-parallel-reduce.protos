@@ -1,0 +1,64 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Arrays: import("std:collections/Array")
+
+tests: Array(
+    Test("array parallel reduce sums", () => {
+        sum: Arrays.parallelReduce(Array(3, 1, 4, 1, 5, 9, 2, 6), (left, right) => {
+            left + right
+        }).value()
+        Assertions.require(sum == 31)
+    }),
+    Test("array parallel reduce empty and singleton", () => {
+        empty: Arrays.parallelReduce(Array(), (left, right) => { left + right }).value()
+        single: Arrays.parallelReduce(Array(7), (left, right) => { 0 }).value()
+        Assertions.require(empty === null)
+        Assertions.require(single == 7)
+    }),
+    Test("array parallel reduce uses the adjacent pair tree", () => {
+        // ((10 - 1) - (2 - 3)) - 4; a sequential left fold would give 0.
+        difference: Arrays.parallelReduce(Array(10, 1, 2, 3, 4), (left, right) => {
+            left - right
+        }).value()
+        Assertions.require(difference == 6)
+    }),
+    Test("array parallel reduce passes explicit arguments", () => {
+        // (1 + 2 + 10) + 3 + 10
+        total: Arrays.parallelReduce(Array(1, 2, 3), (left, right, offset) => {
+            left + right + offset
+        }, 10).value()
+        Assertions.require(total == 26)
+    }),
+    Test("array parallel reduce leftmost failing pair wins", () => {
+        Assertions.signals(SlotNotFound, () => {
+            Arrays.parallelReduce(Array(0, 1, 2, 3), (left, right) => {
+                (left == 0).ifTrue(() => { SlotNotFound().signal() })
+                (left == 2).ifTrue(() => { InvalidSuper().signal() })
+                left + right
+            }).value()
+        })
+    }),
+    Test("array parallel reduce cancellation", () => {
+        future: Arrays.parallelReduce(Array(1, 2), (left, right) => { left + right })
+        future.cancel()
+        Assertions.signals(Cancelled, () => { future.value() })
+    })
+)
+tests.freeze()

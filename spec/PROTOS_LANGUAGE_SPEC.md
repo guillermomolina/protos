@@ -327,7 +327,7 @@ The primary normative contract formerly contained here has moved to `semantics/V
 
 ## Standard Array Parallel Operations
 
-The primary normative owner of standard isolated parallel Array operations is `concurrency/PARALLEL_EXECUTION.md`. This heading remains as a compatibility/navigation anchor and is not an independent normative owner.
+Core defines no parallel Array operations; parallel Array algorithms are Standard Library functions of `std:collections/Array`. The Core placement boundary is owned by `concurrency/PARALLEL_EXECUTION.md` §71.6. This heading remains as a compatibility/navigation anchor and is not an independent normative owner.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 

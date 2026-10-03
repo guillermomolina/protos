@@ -261,7 +261,6 @@ public final class ProtosCoreBootstrap {
                     "Core Array prototype must delegate directly to Object");
         }
         ProtosStandardArrayProtocol.install(arrayPrototype);
-        ProtosParallelRuntime.installArrayParallel(arrayPrototype);
 
         requirePrototype(
                 bootstrapContext, "Any", ProtosObjectValue.rootObject());

@@ -52,6 +52,12 @@ library/collections/array-map.protos	suite-native	-
 library/collections/array-reduce.protos	suite-native	-
 library/collections/array-sort.protos	suite-native	-
 library/collections/array-common-contracts.protos	suite-native	-
+library/collections/array-parallel-filter.protos	suite-native	-
+library/collections/array-parallel-find-index.protos	suite-native	-
+library/collections/array-parallel-map.protos	suite-native	-
+library/collections/array-parallel-placement.protos	suite-native	-
+library/collections/array-parallel-reduce.protos	suite-native	-
+library/collections/array-parallel-sort.protos	suite-native	-
 library/collections/set-core.protos	suite-native	-
 library/collections/set-algebra-and-predicates.protos	suite-native	-
 library/collections/set-iteration.protos	suite-native	-

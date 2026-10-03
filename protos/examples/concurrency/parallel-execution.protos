@@ -33,52 +33,56 @@ scale: (value, factor) => {
 // already-snapshotted P input.
 print(scale.parallel(7, multiplier).value())
 
-// The Array parallel algorithms are conveniences over the same isolation
-// model. Workers may run in any physical order, but every operation below is
-// deterministic across machines and schedulers.
+// The std:collections/Array parallel algorithms are Standard Library
+// conveniences composed from the same isolation model (closure.parallel plus
+// Future.all). Workers may run in any physical order, but every operation below
+// is deterministic across machines and schedulers. Trailing arguments after the
+// worker are passed to it explicitly, because workers cannot capture caller
+// state.
+Arrays: import("std:collections/Array")
 
 source: Array(3, 1, 4, 1, 5, 9, 2, 6)
 
 // parallelMap preserves logical source order.
-squares: source.parallelMap((value) => {
+squares: Arrays.parallelMap(source, (value) => {
     value * value
 })
 print(squares.value())
 
 // parallelFilter preserves source order; the predicate must answer exact
 // canonical true or false.
-evens: source.parallelFilter((value) => {
+evens: Arrays.parallelFilter(source, (value) => {
     value.mod(2) == 0
 })
 print(evens.value())
 
 // parallelFindIndex selects the lowest matching logical index, not the
 // fastest worker, and null means no element matched.
-firstEven: source.parallelFindIndex((value) => {
+firstEven: Arrays.parallelFindIndex(source, (value) => {
     value.mod(2) == 0
 })
 print(firstEven.value())
 
-noMatch: source.parallelFindIndex((value) => {
-    value > 100
-})
+noMatch: Arrays.parallelFindIndex(source, (value, limit) => {
+    value > limit
+}, 100)
 print(noMatch.value())
 
-// parallelReduce uses one canonical logical reduction tree, so scheduling does
-// not choose the parenthesization. Do not assume sequential left-fold semantics;
-// an empty source reduces to null.
-sum: source.parallelReduce((a, b) => {
+// parallelReduce combines adjacent pairs round by round, so scheduling does
+// not choose the parenthesization. Do not assume sequential left-fold
+// semantics; an empty source reduces to null.
+sum: Arrays.parallelReduce(source, (a, b) => {
     a + b
 })
 print(sum.value())
 
-emptySum: Array().parallelReduce((a, b) => {
+emptySum: Arrays.parallelReduce(Array(), (a, b) => {
     a + b
 })
 print(emptySum.value())
 
 // parallelSort is deterministic and stable.
-sorted: source.parallelSort((a, b) => {
+sorted: Arrays.parallelSort(source, (a, b) => {
     a < b
 })
 print(sorted.value())

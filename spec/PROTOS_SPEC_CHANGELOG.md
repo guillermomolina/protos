@@ -23,6 +23,39 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.440] - 2026-10-03
+
+### I058 / D160 — Move parallel Array algorithms from Core to the Standard Library
+- `spec/concurrency/PARALLEL_EXECUTION.md`: section 71.6 now states that Core
+  v0.1 standardizes no parallel collection algorithm. The standard Array
+  prototype has no `parallelMap`, `parallelFilter`, `parallelFindIndex`,
+  `parallelReduce`, or `parallelSort` selector and no compatibility alias.
+  Parallel Array algorithms are Standard Library functions of
+  `std:collections/Array`, composed only from `Closure.parallel(...)`, Future
+  observation, `Future.all(...)`, and structured ownership/cancellation, with
+  no privileged helper, batching authority, scheduler/worker/task object, or
+  writable partition authority. Their operation-level contracts are owned by
+  that module. The general library determinism and failure-selection rules are
+  retained. Sections 71.6A, 71.6B, 71.6C, 71.6D, and 71.6F (the Core
+  `parallelMap`, `parallelFilter`, `parallelFindIndex`, `parallelReduce`, and
+  `parallelSort` contracts, including the canonical reduction and merge-sort
+  trees and atomic child prevalidation) are removed. Section 71.6E keeps the
+  `Array.parallelEach` exclusion, now covering both Core and the Standard
+  Library.
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`: the "Standard Array Parallel
+  Operations" section is replaced by a statement that Core Array defines no
+  parallel algorithm selectors.
+- `spec/semantics/ERRORS.md`: `InvalidPredicateResult`,
+  `InvalidComparatorResult`, and `InvalidComparatorOrder` remain required Core
+  Error prototypes; their triggers are now the Standard Library
+  predicate/comparator contracts.
+- `spec/PROTOS_LANGUAGE_SPEC.md`: the parallel Array navigation anchor points to
+  the Standard Library placement.
+- `spec/runtime/ABSTRACT_RUNTIME.md` (informative): the runtime provides no
+  parallel Array algorithm.
+- `Closure.parallel`, P isolation, projection and transfer, Futures, and
+  `Future.all` are unchanged.
+
 ## [0.1.439] - 2026-10-03
 
 ### I057 / D161 — Remove ByteRegion and writable parallel-range reservations

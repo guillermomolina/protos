@@ -39,7 +39,7 @@ worker: (value) => {
 }
 
 run: () => {
-    mapped: source.parallelMap(worker).value()
+    mapped: Arrays.parallelMap(source, worker).value()
     Arrays.reduce(mapped, (sum, value) => { sum + value }, 0)
 }
 

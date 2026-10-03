@@ -849,30 +849,14 @@ the snapshot. Persistent element storage, versioned views, copy-on-write state,
 or another representation is valid when the observable shallow-snapshot
 behavior is identical. Arrays that are never iterated pay no semantic cost for
 iteration snapshots.
-## Standard Array Parallel Operations
+## No Core Array parallel operations
 
-The standard parallel Array operations are concurrency-domain facilities:
-
-```text
-array.parallelMap(worker, arguments...)          -> Future
-array.parallelFilter(predicate, arguments...)    -> Future
-array.parallelFindIndex(predicate, arguments...) -> Future
-array.parallelReduce(reducer, arguments...)      -> Future
-array.parallelSort(less, arguments...)            -> Future
-```
-
-Their normative isolation, snapshot, transfer, ordering, failure-selection,
-cancellation, publication, and implementation-freedom semantics are owned by
-`concurrency/PARALLEL_EXECUTION.md` §71.6A–§71.6E.
-
-These operations remain ordinary standard Array behaviors reached through
-ordinary message lookup. They introduce no additional syntax or executable value
-kind. The general Array receiver-domain and polymorphic invocation rules defined
-by this language specification continue to apply where referenced by the
-concurrency-domain contract.
-
-Core v0.1 defines no standard `Array.parallelEach(...)`; that concurrency-domain
-boundary is likewise owned by `../docs/design/CONCURRENCY_DESIGN.md`.
+The standard Array prototype defines no parallel algorithm selectors
+(`parallelMap`, `parallelFilter`, `parallelFindIndex`, `parallelReduce`,
+`parallelSort`, `parallelEach`, or similar). Parallel Array algorithms are
+Standard Library facilities of `std:collections/Array` built on the isolated
+parallel substrate; their Core placement boundary is owned by
+`../concurrency/PARALLEL_EXECUTION.md` §71.6 and §71.6E.
 
 # Actor-suspension integration for Map comparison scopes
 

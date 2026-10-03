@@ -872,7 +872,8 @@ std:collections/Array
 ```
 
 provides ordinary Protos algorithms such as mapping, filtering, indexed search,
-reduction, and sorting over Core Arrays.
+reduction, and sorting over Core Arrays, plus isolated-parallel variants of
+them composed from `closure.parallel(...)` and Futures (see chapter 09).
 
 Those algorithms do not replace the Core `Array` family or introduce a second
 runtime Array representation.

@@ -18,7 +18,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.*;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
-import java.math.BigInteger;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.*;
@@ -51,166 +50,12 @@ public final class ProtosParallelRuntime {
         }));
     }
 
-    public static void installArrayParallel(ProtosObjectValue p){
-        slot(p,"parallelMap",(a,x)->indexed(a,x,Kind.MAP));
-        slot(p,"parallelFilter",(a,x)->indexed(a,x,Kind.FILTER));
-        slot(p,"parallelFindIndex",(a,x)->indexed(a,x,Kind.FIND));
-        slot(p,"parallelReduce",ProtosParallelRuntime::reduce);
-        slot(p,"parallelSort",ProtosParallelRuntime::sort);
-    }
-
     /*
      * Standard prelude objects remain owned by the caller runtime.  P transfer
      * never changes their mutation state.  Direct standard identities are only
      * physically shared when already frozen; otherwise ordinary graph copying
      * applies.  This keeps I010 isolation from globally freezing Core prototypes.
      */
-
-    private enum Kind {MAP,FILTER,FIND}
-
-    private static Object indexed(ProtosActivation a,List<?> supplied,Kind kind){
-        ProtosArrayValue source=requireArray(a);
-        if(supplied.isEmpty())throw error(a);
-        Object callback=supplied.get(0);requireInvokable(callback,a);
-        List<?> extra=supplied.subList(1,supplied.size());
-        List<Object> sourceSnapshot=source.indexedSnapshot();
-        if(sourceSnapshot.isEmpty())return resolved(a,
-                kind==Kind.FIND?ProtosNullValue.INSTANCE:a.prelude().orElseThrow().newArray(List.of()));
-
-        ArrayList<Snapshot> children=new ArrayList<>(sourceSnapshot.size());
-        for(Object element:sourceSnapshot){
-            ArrayList<Object> args=new ArrayList<>(1 + extra.size());
-            args.add(element);
-            for(int extraIndex=0;extraIndex<extra.size();extraIndex++){
-                args.add(extra.get(extraIndex));
-            }
-            children.add(Snapshot.capture(callback,args,a));
-        }
-        Completion all=new Completion();
-        ProtosFutureValue future=ownedFuture(a,c->all.forwardTo(c));
-        Outcome[] outcomes=new Outcome[children.size()];
-        AtomicInteger remaining=new AtomicInteger(children.size());
-        AtomicBoolean abandoned=new AtomicBoolean();
-        all.onCancelAbandon(abandoned);
-        for(int i=0;i<children.size();i++){
-            int index=i;Completion child=new Completion();
-            child.onReady(o->{outcomes[index]=o;if(remaining.decrementAndGet()==0&&!abandoned.get())
-                finishIndexed(kind,sourceSnapshot,outcomes,a,all);});
-            submit(()->run(children.get(index),child));
-        }
-        return future;
-    }
-
-    private static void finishIndexed(Kind kind,List<Object> source,Outcome[] outcomes,
-                                      ProtosActivation a,Completion target){
-        for(int i=0;i<outcomes.length;i++){
-            Outcome o=outcomes[i];
-            if(o.error!=null){target.fail(o.error);return;}
-            if(kind!=Kind.MAP&&o.value!=ProtosBooleanValue.TRUE&&o.value!=ProtosBooleanValue.FALSE){
-                target.fail(occ(a,ProtosCoreErrors.StandardError.INVALID_PREDICATE_RESULT));return;
-            }
-            if(kind==Kind.FIND&&o.value==ProtosBooleanValue.TRUE){
-                target.resolve(new ProtosIntegerValue(BigInteger.valueOf(i)));return;
-            }
-        }
-        if(kind==Kind.FIND){target.resolve(ProtosNullValue.INSTANCE);return;}
-        ArrayList<Object> result=new ArrayList<>();
-        for(int i=0;i<outcomes.length;i++){
-            if(kind==Kind.MAP)result.add(outcomes[i].value);
-            else if(outcomes[i].value==ProtosBooleanValue.TRUE){
-                try{result.add(Transfer.back(source.get(i),a));}
-                catch(NonParallel e){target.fail(nonParallel(a));return;}
-            }
-        }
-        target.resolve(a.prelude().orElseThrow().newArray(result));
-    }
-
-    private static Object reduce(ProtosActivation a,List<?> supplied){
-        ProtosArrayValue source=requireArray(a);
-        if(supplied.isEmpty())throw error(a);
-        Object reducer=supplied.get(0);requireInvokable(reducer,a);
-        List<?> extra=supplied.subList(1,supplied.size());
-        List<Object> raw=source.indexedSnapshot();
-        if(raw.isEmpty())return resolved(a,ProtosNullValue.INSTANCE);
-        Staged staged=Staged.capture(raw,reducer,extra,a);
-        if(raw.size()==1)return resolved(a,Transfer.back(staged.values.get(0),a));
-        return ownedFuture(a,c->submit(()->{
-            List<Object> round=new ArrayList<>(staged.values);
-            while(round.size()>1){
-                ArrayList<Object> next=new ArrayList<>();
-                for(int i=0;i<round.size();i+=2){
-                    if(i+1==round.size()){next.add(round.get(i));continue;}
-                    ArrayList<Object> args=new ArrayList<>();
-                    args.add(round.get(i));
-                args.add(round.get(i+1));
-                for(int extraIndex=0;extraIndex<staged.extra.size();extraIndex++){
-                    args.add(staged.extra.get(extraIndex));
-                }
-                    Outcome o=runInline(Snapshot.capture(staged.callable,args,a));
-                    if(o.error!=null){c.fail(o.error);return;}
-                    next.add(o.value);
-                }
-                round=next;
-            }
-            try{c.resolve(Transfer.back(round.get(0),a));}
-            catch(NonParallel e){c.fail(nonParallel(a));}
-        }));
-    }
-
-    private static Object sort(ProtosActivation a,List<?> supplied){
-        ProtosArrayValue source=requireArray(a);
-        if(supplied.isEmpty())throw error(a);
-        Object less=supplied.get(0);requireInvokable(less,a);
-        List<?> extra=supplied.subList(1,supplied.size());
-        List<Object> raw=source.indexedSnapshot();
-        if(raw.isEmpty())return resolved(a,a.prelude().orElseThrow().newArray(List.of()));
-        Staged staged=Staged.capture(raw,less,extra,a);
-        if(raw.size()==1)return resolved(a,a.prelude().orElseThrow().newArray(
-                List.of(Transfer.back(staged.values.get(0),a))));
-        return ownedFuture(a,c->submit(()->{
-            Outcome o=mergeSort(staged.values,staged.callable,staged.extra,a);
-            if(o.error!=null){c.fail(o.error);return;}
-            @SuppressWarnings("unchecked") List<Object> sorted=(List<Object>)o.value;
-            try{
-                ArrayList<Object> result=new ArrayList<>();
-                for(Object v:sorted)result.add(Transfer.back(v,a));
-                c.resolve(a.prelude().orElseThrow().newArray(result));
-            }catch(NonParallel e){c.fail(nonParallel(a));}
-        }));
-    }
-
-    private static Outcome mergeSort(List<Object> values,Object less,List<Object> extra,ProtosActivation a){
-        if(values.size()<=1)return Outcome.ok(new ArrayList<>(values));
-        int mid=values.size()/2;
-        Outcome lo=mergeSort(values.subList(0,mid),less,extra,a);if(lo.error!=null)return lo;
-        Outcome ro=mergeSort(values.subList(mid,values.size()),less,extra,a);if(ro.error!=null)return ro;
-        @SuppressWarnings("unchecked") List<Object> l=(List<Object>)lo.value;
-        @SuppressWarnings("unchecked") List<Object> r=(List<Object>)ro.value;
-        ArrayList<Object> out=new ArrayList<>();int i=0,j=0;
-        while(i<l.size()&&j<r.size()){
-            Object lv=l.get(i),rv=r.get(j);
-            Outcome lr=compare(less,lv,rv,extra,a);if(lr.error!=null)return lr;
-            Outcome rl=compare(less,rv,lv,extra,a);if(rl.error!=null)return rl;
-            if(!bool(lr.value)||!bool(rl.value))
-                return Outcome.fail(occ(a,ProtosCoreErrors.StandardError.INVALID_COMPARATOR_RESULT));
-            boolean ab=lr.value==ProtosBooleanValue.TRUE,ba=rl.value==ProtosBooleanValue.TRUE;
-            if(ab&&ba)return Outcome.fail(occ(a,ProtosCoreErrors.StandardError.INVALID_COMPARATOR_ORDER));
-            if(ab||!ba)out.add(l.get(i++));else out.add(r.get(j++));
-        }
-        while(i<l.size())out.add(l.get(i++));while(j<r.size())out.add(r.get(j++));
-        return Outcome.ok(out);
-    }
-
-    private static Outcome compare(Object less,Object a,Object b,List<Object> extra,ProtosActivation caller){
-        ArrayList<Object> args=new ArrayList<>(2 + extra.size());
-            args.add(a);
-            args.add(b);
-            for(int extraIndex=0;extraIndex<extra.size();extraIndex++){
-                args.add(extra.get(extraIndex));
-            }
-        return runInline(Snapshot.capture(less,args,caller));
-    }
-    private static boolean bool(Object v){return v==ProtosBooleanValue.TRUE||v==ProtosBooleanValue.FALSE;}
 
     private static ProtosFutureValue ownedFuture(ProtosActivation caller,
             java.util.function.Consumer<Completion> starter){
@@ -230,43 +75,15 @@ public final class ProtosParallelRuntime {
         f.attachProducerTask(producer,caller);completion.bind(producer);starter.accept(completion);return f;
     }
 
-    private static ProtosFutureValue resolved(ProtosActivation a,Object v){
-        ProtosFutureValue f=new ProtosFutureValue(a.prelude().orElseThrow().futurePrototype(),a.executionDomain());
-        f.resolve(v,a);return f;
-    }
-
     private static final class Completion implements ProtosTask.WaitDependency {
         private volatile ProtosTask task;private volatile Outcome outcome;
-        private volatile int cancelKind;
-        private volatile AtomicBoolean cancelAbandoned;
-        private volatile Completion cancelTarget;
-        private volatile java.util.function.Consumer<Outcome> ready;private final AtomicBoolean cancelled=new AtomicBoolean();
+        private final AtomicBoolean cancelled=new AtomicBoolean();
         void bind(ProtosTask t){task=t;if(outcome!=null)t.resume(this);}
-        void forwardTo(Completion target){onReady(o->{if(o.error!=null)target.fail(o.error);else target.resolve(o.value);});onCancelForward(target);}
-        void onReady(java.util.function.Consumer<Outcome> c){ready=c;if(outcome!=null)c.accept(outcome);}
-        void onCancelAbandon(AtomicBoolean abandoned){
-            cancelAbandoned=Objects.requireNonNull(abandoned);
-            cancelKind=1;
-            if(cancelled.get())runCancelAction();
-        }
-        void onCancelForward(Completion target){
-            cancelTarget=Objects.requireNonNull(target);
-            cancelKind=2;
-            if(cancelled.get())runCancelAction();
-        }
         public boolean isReady(){return outcome!=null;}Outcome outcome(){return outcome;}
         void resolve(Object v){complete(Outcome.ok(v));}void fail(ProtosObjectValue e){complete(Outcome.fail(e));}
         synchronized void complete(Outcome o){if(outcome!=null||cancelled.get())return;outcome=o;
-            if(ready!=null)ready.accept(o);if(task!=null)task.resume(this);}
-        void cancel(){if(cancelled.compareAndSet(false,true))runCancelAction();}
-        private void runCancelAction(){
-            switch(cancelKind){
-                case 0 -> {}
-                case 1 -> cancelAbandoned.set(true);
-                case 2 -> cancelTarget.cancel();
-                default -> throw new IllegalStateException("unknown parallel cancellation action");
-            }
-        }
+            if(task!=null)task.resume(this);}
+        void cancel(){cancelled.set(true);}
         public void waitingTaskCancelled(ProtosTask ignored){cancel();}
     }
     private static final class Outcome {
@@ -330,17 +147,6 @@ public final class ProtosParallelRuntime {
             return new Snapshot(c,a,caller,executionHost(caller));
         }
     }
-    private static final class Staged {
-        final List<Object> values;final Object callable;final List<Object> extra;
-        Staged(List<Object> v,Object c,List<Object> e){values=v;callable=c;extra=e;}
-        static Staged capture(List<Object> values,Object callable,List<?> extra,ProtosActivation caller){
-            IdentityHashMap<Object,Object> memo=new IdentityHashMap<>();
-            Object c=Transfer.copy(callable,caller,memo);ArrayList<Object> vs=new ArrayList<>(),es=new ArrayList<>();
-            for(Object v:values)vs.add(Transfer.copy(v,caller,memo));for(Object v:extra)es.add(Transfer.copy(v,caller,memo));
-            return new Staged(vs,c,es);
-        }
-    }
-
     private static final class NonParallel extends RuntimeException{NonParallel(){super(null,null,false,false);}}
     private static final class Transfer {
         static Object back(Object v,ProtosActivation a){return copy(v,a,new IdentityHashMap<>());}
@@ -451,15 +257,7 @@ public final class ProtosParallelRuntime {
         }
         if(n<required||(!rest&&n>total))throw error(a);
     }
-    private static void requireInvokable(Object v,ProtosActivation a){
-        try{var s=ProtosValueLookup.lookup(v,"call",a.prelude().orElseThrow()).orElseThrow(()->error(a));
-            if(!(s.value() instanceof ProtosClosureValue))throw error(a);}
-        catch(UnsupportedOperationException e){throw error(a);}
-    }
-    private static ProtosArrayValue requireArray(ProtosActivation a){if(!(a.receiver() instanceof ProtosArrayValue x))throw error(a);return x;}
     private static ProtosObjectValue occ(ProtosActivation a,ProtosCoreErrors.StandardError e){return ProtosCoreErrors.newOccurrence(a,e);}
     private static ProtosObjectValue nonParallel(ProtosActivation a){return occ(a,ProtosCoreErrors.StandardError.NON_PARALLEL_VALUE);}
     private static ProtosSignalException error(ProtosActivation a){return new ProtosSignalException(ProtosCoreErrors.newError(a));}
-    private static void slot(ProtosObjectValue p,String n,ProtosNativeClosureBody b){
-        if(p.hasLocalSlot(n))throw new IllegalStateException("Core already defines "+n);p.createLocalSlot(n,ProtosClosureValue.nativeClosure(b));}
 }

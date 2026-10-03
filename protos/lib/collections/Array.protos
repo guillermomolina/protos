@@ -230,3 +230,240 @@ sort: (array, less) => {
 
     sortRange(0, snapshot.size())
 }
+
+// Parallel algorithms (D160): Standard Library policy composed only from the
+// public isolated-parallel substrate (`Closure.parallel`, `Future`,
+// `Future.all`, `ensure`). Every callback runs in isolated P, so it cannot
+// capture caller state; explicit trailing `arguments` are the supported way to
+// pass data to it, and they cross P exactly like the elements do.
+//
+// A non-empty call first submits P snapshots of the source elements, the
+// callback, and the arguments. That synchronous submission is the input
+// snapshot point and signals `NonParallelValue` before any Future is returned.
+// Each logical callback invocation then runs in its own isolated P child owned
+// by the operation's result Future. Cancelling the result Future cancels
+// unfinished children. Failure selection never depends on worker timing.
+//
+// Arrays, Errors, and other results are always assembled in the caller domain
+// and only cross P: P children run nothing but the user callback, and their
+// raw outcomes are validated in the caller in ascending index order.
+
+/// Answers a Future of a fresh Array whose element `i` is
+/// `worker(array[i], arguments...)`, evaluated in isolated parallel execution.
+/// Results keep source order; the lowest failing index supplies the failure.
+parallelMap: (array, worker, ...arguments) => {
+    snapshot: Array(...array)
+
+    (snapshot.size() == 0).ifTrue(() => {
+        ^(() => { Array() }).future()
+    })
+
+    input: ((bundle) => {
+        bundle
+    }).parallel(Array(snapshot, worker, arguments))
+
+    apply: (element, callback, extra) => {
+        callback(element, ...extra)
+    }
+
+    (() => {
+        children: Array()
+
+        (() => {
+            parts: input.value()
+            children = map(parts[0], (element) => {
+                apply.parallel(element, parts[1], parts[2])
+            })
+            Future.all(...children).value()
+        }).ensure(() => {
+            input.cancel()
+            children.each((child) => {
+                child.cancel()
+            })
+        })
+    }).future()
+}
+
+/// Answers a Future of a fresh Array of the elements for which
+/// `predicate(element, arguments...)`, evaluated in isolated parallel
+/// execution, answers `true`. Selection keeps source order. Outcomes are
+/// examined in ascending index order, so the lowest index whose predicate
+/// fails or answers something other than canonical `true` or `false`
+/// (`InvalidPredicateResult`) supplies the failure.
+parallelFilter: (array, predicate, ...arguments) => {
+    snapshot: Array(...array)
+
+    (snapshot.size() == 0).ifTrue(() => {
+        ^(() => { Array() }).future()
+    })
+
+    input: ((bundle) => {
+        bundle
+    }).parallel(Array(snapshot, predicate, arguments))
+
+    apply: (element, callback, extra) => {
+        callback(element, ...extra)
+    }
+
+    (() => {
+        children: Array()
+
+        (() => {
+            parts: input.value()
+            children = map(parts[0], (element) => {
+                apply.parallel(element, parts[1], parts[2])
+            })
+            index: 0
+            filter(parts[0], (element) => {
+                decision: children[index].value()
+                index = index + 1
+                decision
+            })
+        }).ensure(() => {
+            input.cancel()
+            children.each((child) => {
+                child.cancel()
+            })
+        })
+    }).future()
+}
+
+/// Answers a Future of the lowest index whose element satisfies
+/// `predicate(element, arguments...)`, evaluated in isolated parallel
+/// execution, or `null` when none does. Indexes are decided in ascending
+/// logical order: a failure or non-Boolean result (`InvalidPredicateResult`)
+/// at a lower index defeats a later match, and work at higher indexes is
+/// cancelled once the outcome is decided.
+parallelFindIndex: (array, predicate, ...arguments) => {
+    snapshot: Array(...array)
+
+    (snapshot.size() == 0).ifTrue(() => {
+        ^(() => { null }).future()
+    })
+
+    input: ((bundle) => {
+        bundle
+    }).parallel(Array(snapshot, predicate, arguments))
+
+    apply: (element, callback, extra) => {
+        callback(element, ...extra)
+    }
+
+    (() => {
+        children: Array()
+
+        (() => {
+            parts: input.value()
+            children = map(parts[0], (element) => {
+                apply.parallel(element, parts[1], parts[2])
+            })
+            findIndex(children, (child) => {
+                child.value()
+            })
+        }).ensure(() => {
+            input.cancel()
+            children.each((child) => {
+                child.cancel()
+            })
+        })
+    }).future()
+}
+
+/// Answers a Future of the reduction of the elements with
+/// `reducer(left, right, arguments...)`, or `null` for an empty Array. Each
+/// round combines adjacent pairs (0,1), (2,3), ... left to right in isolated
+/// parallel execution and carries an odd final value unchanged, so the
+/// parenthesization is fixed and a non-associative reducer stays
+/// deterministic. Within a round the leftmost failing pair supplies the
+/// failure, and no later round starts after a failure.
+parallelReduce: (array, reducer, ...arguments) => {
+    snapshot: Array(...array)
+
+    (snapshot.size() == 0).ifTrue(() => {
+        ^(() => { null }).future()
+    })
+
+    // Groups one round's values into adjacent pairs, ending with a singleton
+    // when the round has an odd final value.
+    pairs: (values) => {
+        size: values.size()
+
+        pairRange: (start, end) => {
+            length: end - start
+            result: null
+
+            (length == 1).ifTrue(() => {
+                position: start * 2
+                result = Array(Array(values[position]))
+                (position + 1 < size).ifTrue(() => {
+                    result = Array(Array(values[position], values[position + 1]))
+                })
+            })
+
+            (length > 1).ifTrue(() => {
+                middle: start + length.div(2)
+                result = Array(...pairRange(start, middle), ...pairRange(middle, end))
+            })
+
+            result
+        }
+
+        pairRange(0, size.div(2) + size.mod(2))
+    }
+
+    combine: (pair, callback, ...extra) => {
+        result: pair[0]
+
+        (pair.size() == 2).ifTrue(() => {
+            result = callback(pair[0], pair[1], ...extra)
+        })
+
+        result
+    }
+
+    round: parallelMap(pairs(snapshot), combine, reducer, ...arguments)
+
+    (() => {
+        (() => {
+            values: round.value()
+
+            (() => { values.size() > 1 }).whileTrue() {
+                round = parallelMap(pairs(values), combine, reducer, ...arguments)
+                values = round.value()
+            }
+
+            values[0]
+        }).ensure(() => {
+            round.cancel()
+        })
+    }).future()
+}
+
+/// Answers a Future of a fresh Array with the elements stably sorted by
+/// `less(left, right, arguments...)`. The result, comparator invocation order,
+/// and failures are exactly those of `sort` with the comparator
+/// `(left, right) => less(left, right, arguments...)`, except that every
+/// comparator invocation runs in its own isolated parallel execution. The
+/// source Array is not mutated.
+parallelSort: (array, less, ...arguments) => {
+    snapshot: Array(...array)
+
+    (snapshot.size() == 0).ifTrue(() => {
+        ^(() => { Array() }).future()
+    })
+
+    input: ((bundle) => {
+        bundle
+    }).parallel(Array(snapshot, less, arguments))
+
+    compare: (left, right, comparator, extra) => {
+        comparator(left, right, ...extra)
+    }
+
+    (() => {
+        parts: input.value()
+        sort(parts[0], (left, right) => {
+            compare.parallel(left, right, parts[1], parts[2]).value()
+        })
+    }).future()
+}
