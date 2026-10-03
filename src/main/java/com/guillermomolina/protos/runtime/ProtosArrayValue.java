@@ -27,38 +27,70 @@ import com.oracle.truffle.api.library.ExportMessage;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
 @ExportLibrary(InteropLibrary.class)
 public final class ProtosArrayValue extends ProtosObjectValue {
-    private final List<Object> elements;
+    /*
+     * A published generation must never be mutated again. Snapshot publication
+     * therefore stays O(1): the first snapshot creates only a read-only view of
+     * the current backing, while the first later replacement detaches the Array
+     * to a fresh generation before writing. Old generations remain reachable
+     * exactly as long as their shallow snapshots do.
+     */
+    private static final class IndexedGeneration {
+        private final ArrayList<Object> elements;
+        private List<Object> snapshotView;
+        private boolean published;
+
+        private IndexedGeneration(ArrayList<Object> elements) {
+            this.elements = Objects.requireNonNull(elements, "elements");
+        }
+
+        private List<Object> publishSnapshot() {
+            published = true;
+            if (snapshotView == null) {
+                snapshotView = Collections.unmodifiableList(elements);
+            }
+            return snapshotView;
+        }
+
+        private IndexedGeneration detachedCopy() {
+            return new IndexedGeneration(new ArrayList<>(elements));
+        }
+    }
+
+    private IndexedGeneration indexedGeneration;
 
     public ProtosArrayValue(Object parent, List<?> elements) {
         super(parent);
         Objects.requireNonNull(elements, "elements");
+
         int size = elements.size();
-        this.elements = new ArrayList<>(size);
+        ArrayList<Object> ownedElements = new ArrayList<>(size);
         for (int index = 0; index < size; index++) {
             Object element = elements.get(index);
-            this.elements.add(Objects.requireNonNull(element, "element"));
+            ownedElements.add(Objects.requireNonNull(element, "element"));
         }
+        this.indexedGeneration = new IndexedGeneration(ownedElements);
     }
 
     public BigInteger indexedSize() {
-        return BigInteger.valueOf(elements.size());
+        return BigInteger.valueOf(indexedGeneration.elements.size());
     }
 
     public int indexedSizeForRuntime() {
-        return elements.size();
+        return indexedGeneration.elements.size();
     }
 
     public Object indexedAt(BigInteger index) {
-        return elements.get(requireExistingIndex(index));
+        return indexedGeneration.elements.get(requireExistingIndex(index));
     }
 
     public Object indexedAtForRuntime(int index) {
-        return elements.get(requireExistingIndexForRuntime(index));
+        return indexedGeneration.elements.get(requireExistingIndexForRuntime(index));
     }
 
     public Object indexedPut(BigInteger index, Object value) {
@@ -67,7 +99,8 @@ public final class ProtosArrayValue extends ProtosObjectValue {
             throw new IllegalStateException("array is frozen");
         }
 
-        elements.set(requireExistingIndex(index), value);
+        int existingIndex = requireExistingIndex(index);
+        writableIndexedGeneration().elements.set(existingIndex, value);
         return value;
     }
 
@@ -77,25 +110,36 @@ public final class ProtosArrayValue extends ProtosObjectValue {
             throw new IllegalStateException("array is frozen");
         }
 
-        elements.set(requireExistingIndexForRuntime(index), value);
+        int existingIndex = requireExistingIndexForRuntime(index);
+        writableIndexedGeneration().elements.set(existingIndex, value);
         return value;
     }
 
     public List<Object> indexedSnapshot() {
-        return List.copyOf(elements);
+        return indexedGeneration.publishSnapshot();
+    }
+
+    private IndexedGeneration writableIndexedGeneration() {
+        if (indexedGeneration.published) {
+            indexedGeneration = indexedGeneration.detachedCopy();
+        }
+        return indexedGeneration;
     }
 
     private int requireExistingIndex(BigInteger index) {
         Objects.requireNonNull(index, "index");
         if (index.signum() < 0
-                || index.compareTo(BigInteger.valueOf(elements.size())) >= 0) {
+                || index.compareTo(
+                                BigInteger.valueOf(
+                                        indexedGeneration.elements.size()))
+                        >= 0) {
             throw new IndexOutOfBoundsException("array index out of bounds: " + index);
         }
         return index.intValueExact();
     }
 
     private int requireExistingIndexForRuntime(int index) {
-        if (index < 0 || index >= elements.size()) {
+        if (index < 0 || index >= indexedGeneration.elements.size()) {
             throw new IndexOutOfBoundsException("array index out of bounds: " + index);
         }
         return index;
@@ -109,15 +153,16 @@ public final class ProtosArrayValue extends ProtosObjectValue {
     @ExportMessage
     @TruffleBoundary
     long getArraySize() {
-        return elements.size();
+        return indexedGeneration.elements.size();
     }
 
     @ExportMessage
     boolean isArrayElementReadable(long index) {
-        if (index < 0 || index >= elements.size()) {
+        if (index < 0 || index >= indexedGeneration.elements.size()) {
             return false;
         }
-        return InteropLibrary.isValidValue(elements.get((int) index));
+        return InteropLibrary.isValidValue(
+                indexedGeneration.elements.get((int) index));
     }
 
     @ExportMessage
@@ -125,7 +170,7 @@ public final class ProtosArrayValue extends ProtosObjectValue {
         if (!isArrayElementReadable(index)) {
             throw InvalidArrayIndexException.create(index);
         }
-        return elements.get((int) index);
+        return indexedGeneration.elements.get((int) index);
     }
 
     /*
@@ -149,5 +194,4 @@ public final class ProtosArrayValue extends ProtosObjectValue {
     String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
         return "Array";
     }
-
 }

@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.166-SNAPSHOT
+
+- `PERF025` replaces eager O(n) Array snapshot reference copying with a
+  generation-backed copy-on-write representation while preserving the existing
+  shallow logical snapshot contract. `indexedSnapshot()` now publishes and
+  reuses a read-only view of the current indexed generation without copying the
+  complete element-reference sequence; the first later indexed replacement
+  detaches the live Array to a fresh generation before writing, so previously
+  established snapshots retain their exact captured references and order.
+  Replacement before snapshot publication remains in-place, repeated snapshots
+  of an unchanged generation reuse the same view, constructor input remains
+  defensively owned, and open/closed/frozen mutation behavior plus validation
+  ordering remain unchanged. Existing Array iteration, matching, Actor transfer,
+  isolated-P transfer and interop consumers continue through the same snapshot
+  API. New PERF025 focal coverage freezes generation reuse, detach-on-first-write,
+  old-snapshot stability, read-only snapshot exposure and state-boundary
+  behavior. This is an internal physical-representation optimization only: no
+  observable Protos semantic, specification or platform decision changes, and
+  no performance magnitude is claimed.
+
 ## 0.3.165-SNAPSHOT
 
 - `PERF025-G2` reduces fixed physical RootTask/Task bookkeeping cost without
