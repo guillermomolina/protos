@@ -393,12 +393,81 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
-    /**
-     * PERF025 B-prime inline-callback counterpart of
-     * {@link BindClosureFrameParameter}. Frame argument zero belongs to the
-     * enclosing physical root, so the still-eager callback Activation is an
-     * explicit operand.
+    /*
+     * PERF025 lazy inline callback activation. The B-prime inline-callback
+     * counterparts of the root-level frame-native operations: frame argument
+     * zero belongs to the enclosing physical root, so each takes the
+     * callback invocation's PreparedInlineLiteralCall carrier plus the
+     * callback's block-local range and layout. The callback activation is
+     * materialized only when an operation really needs it, and only through
+     * MaterializeInlineCallbackActivation's durable transfer
+     * (ProtosInlineCallbackFrameBindings).
      */
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class MaterializeInlineCallbackActivation {
+        @Specialization
+        public static ProtosActivation perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosInlineCallbackFrameBindings.durableActivation(
+                    child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
+        }
+    }
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class LoadInlineClosureArgument {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                int positionalIndex,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosInlineCallbackFrameBindings.loadArgument(
+                    child, frameBackedLocals, frameBackedLayout,
+                    positionalIndex, bytecodeNode, frame);
+        }
+    }
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class CheckInlineClosureArgumentUpperBound {
+        @Specialization
+        public static void perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                int maximumPositionalArguments,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            ProtosInlineCallbackFrameBindings.checkArgumentUpperBound(
+                    child, frameBackedLocals, frameBackedLayout,
+                    maximumPositionalArguments, bytecodeNode, frame);
+        }
+    }
+
     @Operation
     @ConstantOperand(
             type = LocalRangeAccessor.class,
@@ -411,16 +480,16 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static void perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
+                PreparedInlineLiteralCall child,
                 int ordinal,
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
-            ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
+            ProtosInlineCallbackFrameBindings.create(
+                    child,
                     frameBackedLocals,
                     frameBackedLayout,
-                    activation,
                     ordinal,
                     name,
                     value,
@@ -490,11 +559,6 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
-    /**
-     * PERF025 B-prime inline-callback counterpart of
-     * {@link CreateCurrentFrameLocal}. The callback Activation is explicit
-     * because the enclosing physical root owns frame argument zero.
-     */
     @Operation
     @ConstantOperand(
             type = LocalRangeAccessor.class,
@@ -507,21 +571,46 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static Object perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
+                PreparedInlineLiteralCall child,
                 int ordinal,
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
-            return ProtosBytecodeRootNode.CreateCurrentFrameLocal.perform(
+            ProtosInlineCallbackFrameBindings.create(
+                    child,
                     frameBackedLocals,
                     frameBackedLayout,
-                    activation,
                     ordinal,
                     name,
                     value,
                     bytecodeNode,
                     frame);
+            return value;
+        }
+    }
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class MultipleCreateInlineFrameLocals {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                int[] ordinals,
+                String[] names,
+                Object source,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosInlineCallbackFrameBindings.multipleCreate(
+                    child, frameBackedLocals, frameBackedLayout,
+                    ordinals, names, source, bytecodeNode, frame);
         }
     }
 
@@ -603,6 +692,39 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     accessor,
                     presenceContinuity,
                     ProtosFrameArguments.activation(arguments),
+                    name,
+                    bytecodeNode,
+                    frame);
+        }
+    }
+
+    /** Inline-callback form of {@link ReadFrameLocal}. */
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    @ConstantOperand(type = Assumption.class, name = "presenceContinuity")
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class ReadInlineFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalAccessor accessor,
+                Assumption presenceContinuity,
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                String name,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosInlineCallbackFrameBindings.read(
+                    child,
+                    accessor,
+                    presenceContinuity,
+                    frameBackedLocals,
+                    frameBackedLayout,
                     name,
                     bytecodeNode,
                     frame);
@@ -801,6 +923,58 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             }
             return ProtosBytecodeRootNode.AssignCurrentFrameLocal.perform(
                     accessor, ProtosFrameArguments.activation(arguments),
+                    destination, name, value, bytecodeNode, frame);
+        }
+    }
+
+    /** Inline-callback form of {@link ResolveCurrentFrameLocalWriteTarget}. */
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class ResolveInlineFrameLocalWriteTarget {
+        @Specialization
+        public static ResolvedLexicalWriteTarget perform(
+                LocalAccessor accessor,
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                String name,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosInlineCallbackFrameBindings.resolveWriteTarget(
+                    child, accessor, frameBackedLocals, frameBackedLayout,
+                    name, bytecodeNode, frame);
+        }
+    }
+
+    /** Inline-callback form of {@link AssignCurrentFrameLocal}. */
+    @Operation
+    @ConstantOperand(type = LocalAccessor.class, name = "accessor")
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class AssignInlineFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalAccessor accessor,
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                ResolvedLexicalWriteTarget destination,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosInlineCallbackFrameBindings.assign(
+                    child, accessor, frameBackedLocals, frameBackedLayout,
                     destination, name, value, bytecodeNode, frame);
         }
     }
@@ -1969,6 +2143,11 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /**
+     * The callback's fresh semantic activation, materialized from the region's
+     * carrier by the first operation that needs it and shared, by identity,
+     * with every later operation and tooling query of the same invocation.
+     */
     @Operation
     public static final class LoadInlineCallbackActivation {
         @Specialization

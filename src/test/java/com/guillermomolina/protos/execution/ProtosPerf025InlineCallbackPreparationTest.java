@@ -61,7 +61,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void admittedInlineCallbackUsesStaticFrameBindingsButKeepsEagerActivation()
+    void admittedInlineCallbackUsesStaticFrameBindingsWithoutEntryActivation()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -92,16 +92,16 @@ final class ProtosPerf025InlineCallbackPreparationTest {
 
                 List<String> names = instructionNames(callbackHost);
 
-                int activation =
+                int argument =
                         indexOfContainingAfter(
                                 names,
-                                "LoadInlineCallbackActivation",
+                                "LoadInlineClosureArgument",
                                 -1);
                 int parameter =
                         indexOfContainingAfter(
                                 names,
                                 "BindInlineClosureFrameParameter",
-                                activation);
+                                argument);
                 int creation =
                         indexOfContainingAfter(
                                 names,
@@ -110,22 +110,35 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                 int read =
                         indexOfContainingAfter(
                                 names,
-                                "ReadFrameLocal",
+                                "ReadInlineFrameLocal",
                                 parameter);
                 int resolveWrite =
                         indexOfContainingAfter(
                                 names,
-                                "ResolveCurrentFrameLocalWriteTarget",
+                                "ResolveInlineFrameLocalWriteTarget",
                                 parameter);
                 int assign =
                         indexOfContainingAfter(
                                 names,
-                                "AssignCurrentFrameLocal",
+                                "AssignInlineFrameLocal",
                                 resolveWrite);
+                int firstActivation =
+                        indexOfContainingAfter(
+                                names,
+                                "MaterializeInlineCallbackActivation",
+                                -1);
 
                 assertTrue(
-                        activation >= 0,
-                        () -> "eager inline callback Activation disappeared: " + names);
+                        argument >= 0,
+                        () -> "callback argument was not read from the carrier: " + names);
+                assertTrue(
+                        firstActivation > parameter,
+                        () -> "the frame-native callback Activation must be "
+                                + "materialized only by the probe send, after "
+                                + "parameter binding: " + names);
+                assertFalse(
+                        names.stream().anyMatch(name -> name.contains("LoadInlineCallbackActivation")),
+                        () -> "frame-native callback must not use the plain entry load: " + names);
                 assertTrue(
                         parameter >= 0,
                         () -> "callback parameter did not use static frame layout: " + names);
@@ -151,7 +164,11 @@ final class ProtosPerf025InlineCallbackPreparationTest {
         System.out.println("PERF025_INLINE_CALLBACK_PARAMETER_FRAME_PATH=YES");
         System.out.println("PERF025_INLINE_CALLBACK_LOCAL_READ_DIRECT=YES");
         System.out.println("PERF025_INLINE_CALLBACK_LOCAL_WRITE_DIRECT=YES");
-        System.out.println("PERF025_INLINE_CALLBACK_EAGER_ACTIVATION_STILL_PRESENT=YES");
+        System.out.println("PERF025_INLINE_CALLBACK_EAGER_ACTIVATION=REMOVED");
+        System.out.println(
+                "PERF025_FRAME_NATIVE_CALLBACK_ENTRY_HAS_LOAD_INLINE_CALLBACK_ACTIVATION=NO");
+        System.out.println(
+                "PERF025_FRAME_NATIVE_CALLBACK_HAS_MATERIALIZE_INLINE_CALLBACK_ACTIVATION=YES");
     }
 
     @Test
@@ -190,7 +207,7 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                                         name ->
                                                 name.contains(
                                                         "LoadInlineCallbackActivation")),
-                        () -> "inline callback Activation must remain eager: " + names);
+                        () -> "context-observing callback must load its Activation: " + names);
 
                 assertFalse(
                         names.stream()
@@ -219,7 +236,6 @@ final class ProtosPerf025InlineCallbackPreparationTest {
         }
 
         System.out.println("PERF025_INLINE_CALLBACK_CONTEXT_OBSERVER_FALLBACK=PASS");
-        System.out.println("PERF025_INLINE_CALLBACK_DURABLE_ESCAPE_TRANSITION=NOT_IMPLEMENTED");
     }
 
     @Test
@@ -313,8 +329,12 @@ final class ProtosPerf025InlineCallbackPreparationTest {
                         names,
                         prepareInline,
                         admission,
-                        "LoadInlineCallbackActivation",
+                        "MaterializeInlineCallbackActivation",
                         "LoadInlineLiteralFallbackCall");
+
+                assertFalse(
+                        names.stream().anyMatch(name -> name.contains("LoadInlineCallbackActivation")),
+                        () -> "frame-native callback must not use the plain entry load: " + names);
 
                 assertFalse(
                         names.stream()

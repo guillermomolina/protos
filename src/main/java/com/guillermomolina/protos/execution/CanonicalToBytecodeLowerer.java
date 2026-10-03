@@ -88,11 +88,14 @@ import java.util.Objects;
  */
 final class CanonicalToBytecodeLowerer {
     /**
-     * Name of the Bytecode local holding the semantic activation of a PLAT044
-     * B′ inline literal callback region; tooling reads it back by name
-     * ({@link ProtosBytecodeTagTreeNodeExports}).
+     * Name of the Bytecode local holding the {@link
+     * ProtosBytecodeRootNode.PreparedInlineLiteralCall} of a PLAT044 B′ inline
+     * literal callback region: the carrier of that invocation's one fresh
+     * semantic activation, materialized lazily by its first semantic or
+     * tooling observer. Tooling reads it back by name ({@link
+     * ProtosBytecodeTagTreeNodeExports}).
      */
-    static final String INLINE_CALLBACK_ACTIVATION_LOCAL = "inlineCallbackActivation";
+    static final String INLINE_CALLBACK_CALL_LOCAL = "inlineCallbackCall";
 
     /**
      * Physical Bytecode-local prefix for statically admitted bindings owned by
@@ -223,11 +226,21 @@ final class CanonicalToBytecodeLowerer {
     private BytecodeLocal currentActivationLocal;
 
     /**
+     * PERF025 lazy inline callback activation. True while {@link
+     * #currentActivationLocal} holds the {@link
+     * ProtosBytecodeRootNode.PreparedInlineLiteralCall} carrier of a PLAT044
+     * B-prime inline callback region rather than an activation; {@link
+     * #emitCurrentActivation} then materializes the callback activation
+     * through that carrier only where an operation needs it.
+     */
+    private boolean currentActivationLocalIsInlineCallbackCall;
+
+    /**
      * PERF025 inline-callback lexical slice. True only while an admitted
      * PLAT044 B-prime callback uses its statically proven bindings directly
-     * from block-local frame storage. currentActivationLocal still holds the
-     * callback's eager semantic Activation; lazy activation belongs to the
-     * following slice.
+     * from block-local frame storage, through the carrier-operand inline
+     * operations that never materialize the callback activation on their
+     * ordinary path.
      */
     private boolean currentInlineCallbackFrameNative;
 
@@ -561,6 +574,8 @@ final class CanonicalToBytecodeLowerer {
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
         BytecodeLocal savedActivationLocal = currentActivationLocal;
+        boolean savedActivationLocalIsInlineCallbackCall =
+                currentActivationLocalIsInlineCallbackCall;
         boolean savedInlineCallbackFrameNative =
                 currentInlineCallbackFrameNative;
         ProtosFrameLexicalLayout savedFrameLayout = currentRootFrameLayout;
@@ -573,6 +588,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameLocals = java.util.Map.of();
             currentRootFrameLayout = null;
             currentActivationLocal = null;
+            currentActivationLocalIsInlineCallbackCall = false;
             currentInlineCallbackFrameNative = false;
             currentRootFrameNativeLocals = null;
             currentRootFrameNativeLayout = null;
@@ -588,6 +604,8 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameLocals = savedFrameLocals;
             currentRootFrameLayout = savedFrameLayout;
             currentActivationLocal = savedActivationLocal;
+            currentActivationLocalIsInlineCallbackCall =
+                    savedActivationLocalIsInlineCallbackCall;
             currentInlineCallbackFrameNative =
                     savedInlineCallbackFrameNative;
             currentRootFrameNativeLocals = savedFrameNativeLocals;
@@ -1208,17 +1226,46 @@ final class CanonicalToBytecodeLowerer {
      * operation (PERF025-H1); inside an inline object-construction body
      * (PLAT041 C′) the current
      * activation is instead that body's construction activation, held in
-     * {@link #currentActivationLocal}. Operations that need "the current
-     * activation" must obtain it through this method rather than emitting the
-     * argument load directly. This is a compile-time choice only.
+     * {@link #currentActivationLocal}. Inside a PLAT044 B′ inline callback
+     * region that local holds the invocation's carrier instead, and the
+     * callback activation is materialized from it on demand, at most once
+     * (PERF025 lazy inline callback activation); in a frame-native region
+     * that materialization first moves the callback's block-local bindings
+     * to a durable authority on the activation. Operations that need "the
+     * current activation" must obtain it through this method rather than
+     * emitting the argument load directly. This is a compile-time choice only.
      */
     private void emitCurrentActivation(
             ProtosSemanticBytecodeRootNodeGen.Builder builder) {
         if (currentActivationLocal == null) {
             builder.emitCurrentActivation();
+        } else if (currentInlineCallbackFrameNative) {
+            builder.beginMaterializeInlineCallbackActivation(
+                    currentRootFrameNativeLocals,
+                    currentRootFrameNativeLayout);
+            builder.emitLoadLocal(currentActivationLocal);
+            builder.endMaterializeInlineCallbackActivation();
+        } else if (currentActivationLocalIsInlineCallbackCall) {
+            builder.beginLoadInlineCallbackActivation();
+            builder.emitLoadLocal(currentActivationLocal);
+            builder.endLoadInlineCallbackActivation();
         } else {
             builder.emitLoadLocal(currentActivationLocal);
         }
+    }
+
+    /**
+     * Loads the {@link ProtosBytecodeRootNode.PreparedInlineLiteralCall}
+     * carrier operand of an inline frame-native operation; only valid while
+     * {@link #currentInlineCallbackFrameNative}.
+     */
+    private void emitCurrentInlineCallbackCall(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder) {
+        if (!currentInlineCallbackFrameNative
+                || !currentActivationLocalIsInlineCallbackCall) {
+            throw new AssertionError("no frame-native inline callback region is active");
+        }
+        builder.emitLoadLocal(currentActivationLocal);
     }
 
     private void emitClosureParameterBindings(
@@ -1344,6 +1391,13 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginCheckFrameClosureArgumentUpperBound();
                 builder.emitLoadConstant(positionalIndex);
                 builder.endCheckFrameClosureArgumentUpperBound();
+            } else if (currentInlineCallbackFrameNative) {
+                builder.beginCheckInlineClosureArgumentUpperBound(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                emitCurrentInlineCallbackCall(builder);
+                builder.emitLoadConstant(positionalIndex);
+                builder.endCheckInlineClosureArgumentUpperBound();
             } else {
                 builder.beginCheckClosureArgumentUpperBound();
                 emitCurrentActivation(builder);
@@ -1394,7 +1448,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginBindInlineClosureFrameParameter(
                         currentRootFrameNativeLocals,
                         currentRootFrameNativeLayout);
-                emitCurrentActivation(builder);
+                emitCurrentInlineCallbackCall(builder);
                 builder.emitLoadConstant(ordinal);
                 builder.emitLoadConstant(name);
                 return ParameterBindingForm.INLINE_FRAME_NATIVE;
@@ -1449,7 +1503,7 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginCreateInlineCurrentFrameLocal(
                         currentRootFrameNativeLocals,
                         currentRootFrameNativeLayout);
-                emitCurrentActivation(builder);
+                emitCurrentInlineCallbackCall(builder);
                 builder.emitLoadConstant(ordinal);
                 builder.emitLoadConstant(name);
                 builder.emitLoadLocal(value);
@@ -1493,6 +1547,17 @@ final class CanonicalToBytecodeLowerer {
         for (int index = 0; index < ordinals.length && frameNative; index++) {
             ordinals[index] = frameNativeOrdinal(names.get(index));
             frameNative = ordinals[index] >= 0;
+        }
+        if (frameNative && currentInlineCallbackFrameNative) {
+            builder.beginMultipleCreateInlineFrameLocals(
+                    currentRootFrameNativeLocals,
+                    currentRootFrameNativeLayout);
+            emitCurrentInlineCallbackCall(builder);
+            builder.emitLoadConstant(ordinals);
+            builder.emitLoadConstant(multipleCreateNamesConstant(names));
+            builder.emitLoadLocal(source);
+            builder.endMultipleCreateInlineFrameLocals();
+            return;
         }
         if (frameNative) {
             builder.beginMultipleCreateFrameLocals(
@@ -2484,11 +2549,17 @@ final class CanonicalToBytecodeLowerer {
             java.util.Map<String, BytecodeLocal> savedFrameLocals =
                     currentRootFrameLocals;
             BytecodeLocal savedActivationLocal = currentActivationLocal;
+            boolean savedActivationLocalIsInlineCallbackCall =
+                    currentActivationLocalIsInlineCallbackCall;
+            boolean savedInlineCallbackFrameNative =
+                    currentInlineCallbackFrameNative;
             try {
                 currentRootAnalysis = null;
                 currentRootTopScope = null;
                 currentRootFrameLocals = java.util.Map.of();
                 currentActivationLocal = constructionActivation;
+                currentActivationLocalIsInlineCallbackCall = false;
+                currentInlineCallbackFrameNative = false;
                 BytecodeLocal bodyResult =
                         builder.createLocal("objectBodyResult", null);
                 emitStatementsToLocal(builder, object.body(), bodyResult);
@@ -2497,6 +2568,10 @@ final class CanonicalToBytecodeLowerer {
                 currentRootTopScope = savedTopScope;
                 currentRootFrameLocals = savedFrameLocals;
                 currentActivationLocal = savedActivationLocal;
+                currentActivationLocalIsInlineCallbackCall =
+                        savedActivationLocalIsInlineCallbackCall;
+                currentInlineCallbackFrameNative =
+                        savedInlineCallbackFrameNative;
             }
         }
 
@@ -2642,6 +2717,14 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginResolveRootFrameLocalWriteTarget(currentFrameLocal);
                 builder.emitLoadConstant(assign.name());
                 builder.endResolveRootFrameLocalWriteTarget();
+            } else if (currentInlineCallbackFrameNative) {
+                builder.beginResolveInlineFrameLocalWriteTarget(
+                        currentFrameLocal,
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                emitCurrentInlineCallbackCall(builder);
+                builder.emitLoadConstant(assign.name());
+                builder.endResolveInlineFrameLocalWriteTarget();
             } else {
                 builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
                 emitCurrentActivation(builder);
@@ -2692,6 +2775,16 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadLocal(value);
                 builder.endAssignRootFrameLocal();
+            } else if (currentInlineCallbackFrameNative) {
+                builder.beginAssignInlineFrameLocal(
+                        currentFrameLocal,
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                emitCurrentInlineCallbackCall(builder);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignInlineFrameLocal();
             } else {
                 builder.beginAssignCurrentFrameLocal(currentFrameLocal);
                 emitCurrentActivation(builder);
@@ -2890,6 +2983,14 @@ final class CanonicalToBytecodeLowerer {
                 builder.beginResolveRootFrameLocalWriteTarget(currentFrameLocal);
                 builder.emitLoadConstant(assign.name());
                 builder.endResolveRootFrameLocalWriteTarget();
+            } else if (currentInlineCallbackFrameNative) {
+                builder.beginResolveInlineFrameLocalWriteTarget(
+                        currentFrameLocal,
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                emitCurrentInlineCallbackCall(builder);
+                builder.emitLoadConstant(assign.name());
+                builder.endResolveInlineFrameLocalWriteTarget();
             } else {
                 builder.beginResolveCurrentFrameLocalWriteTarget(currentFrameLocal);
                 emitCurrentActivation(builder);
@@ -2939,6 +3040,16 @@ final class CanonicalToBytecodeLowerer {
                 builder.emitLoadConstant(assign.name());
                 builder.emitLoadLocal(value);
                 builder.endAssignRootFrameLocal();
+            } else if (currentInlineCallbackFrameNative) {
+                builder.beginAssignInlineFrameLocal(
+                        currentFrameLocal,
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                emitCurrentInlineCallbackCall(builder);
+                builder.emitLoadLocal(mutationTarget);
+                builder.emitLoadConstant(assign.name());
+                builder.emitLoadLocal(value);
+                builder.endAssignInlineFrameLocal();
             } else {
                 builder.beginAssignCurrentFrameLocal(currentFrameLocal);
                 emitCurrentActivation(builder);
@@ -4117,20 +4228,30 @@ final class CanonicalToBytecodeLowerer {
     /**
      * PLAT044 B′ inline callback region for an admitted literal callback.
      *
-     * <p>The callback keeps its eager semantic Activation in
-     * {@link #INLINE_CALLBACK_ACTIVATION_LOCAL}. When whole-tree binding
-     * analysis proves that the callback does not require a persistent frame
-     * authority, its current-scope parameters and locals use block-local
-     * frame storage in the enclosing physical root. Reads use the exact
-     * {@link ProtosFrameLexicalLayout#presentContinuityAt} Assumption owned by
-     * the callback's canonical lexical scope, including across Bytecode parser
+     * <p>The region keeps the invocation's {@link
+     * ProtosBytecodeRootNode.PreparedInlineLiteralCall} in {@link
+     * #INLINE_CALLBACK_CALL_LOCAL}; entering the region materializes no
+     * activation. The callback's fresh semantic activation is materialized
+     * from that carrier, exactly once, by the first operation or tooling
+     * query that needs it ({@link #emitCurrentActivation}), and every later
+     * observer of the invocation shares it. In a frame-native region the
+     * block-local bindings are made durable on the activation before it
+     * reaches that first consumer.
+     *
+     * <p>When whole-tree binding analysis proves that the callback does not
+     * require a persistent frame authority, its current-scope parameters and
+     * locals use block-local frame storage in the enclosing physical root,
+     * through carrier-operand operations ({@link
+     * ProtosInlineCallbackFrameBindings}). Reads use the exact {@link
+     * ProtosFrameLexicalLayout#presentContinuityAt} Assumption owned by the
+     * callback's canonical lexical scope, including across Bytecode parser
      * reparses.
      *
      * <p>A callback requiring observable/escaping current-context authority
-     * keeps the previous named runtime-authority path. This slice deliberately
-     * does not make Activation lazy, retain an authority over ephemeral block
-     * locals, broaden B-prime admission, or fabricate a callback
-     * RootCallTarget/FrameInstance.
+     * keeps the named runtime-authority path, whose first operation
+     * materializes the activation. No authority over ephemeral block locals is
+     * retained, B-prime admission is unchanged, and no callback
+     * RootCallTarget/FrameInstance is fabricated.
      */
     private void emitInlineLiteralCallback(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -4149,8 +4270,8 @@ final class CanonicalToBytecodeLowerer {
                         callbackScope);
 
         builder.beginBlock();
-        BytecodeLocal callbackActivation =
-                builder.createLocal(INLINE_CALLBACK_ACTIVATION_LOCAL, null);
+        BytecodeLocal callbackCall =
+                builder.createLocal(INLINE_CALLBACK_CALL_LOCAL, null);
         BytecodeLocal bodyResult =
                 builder.createLocal("inlineCallbackResult", null);
 
@@ -4159,7 +4280,11 @@ final class CanonicalToBytecodeLowerer {
         BytecodeLocal[] callbackFrameLocalRange = null;
         ProtosFrameLexicalLayout callbackFrameLocalLayout = null;
 
-        if (frameNativeCallback && !callbackScope.declaredNames().isEmpty()) {
+        /*
+         * A frame-native callback always has a (possibly empty) range and
+         * layout: its activation is only ever materialized through them.
+         */
+        if (frameNativeCallback) {
             java.util.LinkedHashMap<String, BytecodeLocal> frameLocals =
                     new java.util.LinkedHashMap<>();
             for (String name : callbackScope.declaredNames()) {
@@ -4179,10 +4304,8 @@ final class CanonicalToBytecodeLowerer {
                             frameLocals.keySet().toArray(String[]::new));
         }
 
-        builder.beginStoreLocal(callbackActivation);
-        builder.beginLoadInlineCallbackActivation();
+        builder.beginStoreLocal(callbackCall);
         builder.emitLoadLocal(child);
-        builder.endLoadInlineCallbackActivation();
         builder.endStoreLocal();
 
         SourceSpan bodySpan = definition.body().span();
@@ -4197,6 +4320,8 @@ final class CanonicalToBytecodeLowerer {
         ProtosFrameLexicalLayout savedFrameLayout =
                 currentRootFrameLayout;
         BytecodeLocal savedActivationLocal = currentActivationLocal;
+        boolean savedActivationLocalIsInlineCallbackCall =
+                currentActivationLocalIsInlineCallbackCall;
         boolean savedInlineCallbackFrameNative =
                 currentInlineCallbackFrameNative;
         BytecodeLocal[] savedFrameNativeLocals =
@@ -4212,7 +4337,8 @@ final class CanonicalToBytecodeLowerer {
                 currentRootTopScope = callbackScope;
                 currentRootFrameLocals = callbackFrameLocals;
                 currentRootFrameLayout = callbackFrameLocalLayout;
-                currentActivationLocal = callbackActivation;
+                currentActivationLocal = callbackCall;
+                currentActivationLocalIsInlineCallbackCall = true;
                 currentInlineCallbackFrameNative = true;
                 currentRootFrameNativeLocals = callbackFrameLocalRange;
                 currentRootFrameNativeLayout = callbackFrameLocalLayout;
@@ -4222,7 +4348,8 @@ final class CanonicalToBytecodeLowerer {
                 currentRootTopScope = null;
                 currentRootFrameLocals = java.util.Map.of();
                 currentRootFrameLayout = null;
-                currentActivationLocal = callbackActivation;
+                currentActivationLocal = callbackCall;
+                currentActivationLocalIsInlineCallbackCall = true;
                 currentInlineCallbackFrameNative = false;
                 currentRootFrameNativeLocals = null;
                 currentRootFrameNativeLayout = null;
@@ -4253,6 +4380,8 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameLocals = savedFrameLocals;
             currentRootFrameLayout = savedFrameLayout;
             currentActivationLocal = savedActivationLocal;
+            currentActivationLocalIsInlineCallbackCall =
+                    savedActivationLocalIsInlineCallbackCall;
             currentInlineCallbackFrameNative =
                     savedInlineCallbackFrameNative;
             currentRootFrameNativeLocals = savedFrameNativeLocals;
@@ -4325,6 +4454,13 @@ final class CanonicalToBytecodeLowerer {
             builder.beginLoadFrameClosureArgument();
             builder.emitLoadConstant(positionalIndex);
             builder.endLoadFrameClosureArgument();
+        } else if (currentInlineCallbackFrameNative) {
+            builder.beginLoadInlineClosureArgument(
+                    currentRootFrameNativeLocals,
+                    currentRootFrameNativeLayout);
+            emitCurrentInlineCallbackCall(builder);
+            builder.emitLoadConstant(positionalIndex);
+            builder.endLoadInlineClosureArgument();
         } else {
             builder.beginLoadClosureArgument();
             emitCurrentActivation(builder);
@@ -4593,6 +4729,19 @@ final class CanonicalToBytecodeLowerer {
                             currentRootFrameLayout.presentContinuityAt(ordinal));
                     builder.emitLoadConstant(resolvedName);
                     builder.endReadRootFrameLocal();
+                    return;
+                }
+                if (local != null
+                        && ordinal != null
+                        && currentInlineCallbackFrameNative) {
+                    builder.beginReadInlineFrameLocal(
+                            local,
+                            currentRootFrameLayout.presentContinuityAt(ordinal),
+                            currentRootFrameNativeLocals,
+                            currentRootFrameNativeLayout);
+                    emitCurrentInlineCallbackCall(builder);
+                    builder.emitLoadConstant(resolvedName);
+                    builder.endReadInlineFrameLocal();
                     return;
                 }
                 if (local != null && ordinal != null) {

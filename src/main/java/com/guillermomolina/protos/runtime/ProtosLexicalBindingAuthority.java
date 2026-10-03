@@ -69,4 +69,14 @@ public interface ProtosLexicalBindingAuthority {
      * ephemeral execution state may make that state escape-safe here.
      */
     default void prepareForContextObservation() {}
+
+    /**
+     * Backend-private factory of a fresh, empty, durable authority with the
+     * ordinary insertion-ordered map storage. Execution backends use it when
+     * bindings held in ephemeral execution state must move to a store that
+     * outlives that state, without exposing the concrete implementation.
+     */
+    static ProtosLexicalBindingAuthority newMapBackedForRuntime() {
+        return new ProtosMapBackedLexicalBindingAuthority();
+    }
 }

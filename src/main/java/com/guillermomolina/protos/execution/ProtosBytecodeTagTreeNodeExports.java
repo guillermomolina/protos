@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PreparedInlineLiteralCall;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
@@ -38,10 +39,14 @@ import com.oracle.truffle.api.library.ExportMessage;
  *
  * <p>PLAT044 B′: inside an inline literal callback region frame argument zero is
  * the enclosing activation, while the semantic current activation is the
- * callback's own, held in the region's {@link
- * CanonicalToBytecodeLowerer#INLINE_CALLBACK_ACTIVATION_LOCAL}. A location whose
- * bytecode index lies in such a region projects that activation instead; no
- * additional frame is fabricated.</p>
+ * callback's own, carried by the region's {@link
+ * CanonicalToBytecodeLowerer#INLINE_CALLBACK_CALL_LOCAL}. A location whose
+ * bytecode index lies in such a region projects that activation instead,
+ * materializing it through the carrier only when a scope is actually
+ * requested, so the guest and every later observer share that one instance.
+ * For a frame-native callback that first materialization moves the
+ * callback's PRESENT block-local bindings to a durable authority on the
+ * activation before it is projected; no additional frame is fabricated.</p>
  */
 @ExportLibrary(value = NodeLibrary.class, receiverType = TagTreeNode.class)
 final class ProtosBytecodeTagTreeNodeExports {
@@ -54,7 +59,7 @@ final class ProtosBytecodeTagTreeNodeExports {
         if (frame == null) {
             return false;
         }
-        return inlineCallbackActivation(node, frame) != null
+        return inlineCallbackCall(node, frame) != null
                 || ProtosFrameArguments.hasActivation(frame);
     }
 
@@ -67,13 +72,16 @@ final class ProtosBytecodeTagTreeNodeExports {
         if (!hasScope(node, frame)) {
             throw UnsupportedMessageException.create();
         }
-        ProtosActivation inline = inlineCallbackActivation(node, frame);
+        PreparedInlineLiteralCall inline = inlineCallbackCall(node, frame);
         if (inline != null) {
             java.util.Map<String, Object> frameBindings =
                     inlineCallbackFrameBindings(node, frame);
-            return frameBindings == null
-                    ? debuggerScope(inline)
-                    : debuggerScope(inline, frameBindings);
+            ProtosActivation activation =
+                    frameBindings == null
+                            ? inline.activation()
+                            : ProtosInlineCallbackFrameBindings.durableActivationForTooling(
+                                    inline, frameBindings);
+            return debuggerScope(activation);
         }
         ProtosActivation activation = ProtosFrameArguments.activation(frame);
         projectFrameNativeBindings(node, frame, activation);
@@ -103,10 +111,12 @@ final class ProtosBytecodeTagTreeNodeExports {
     }
 
     /**
-     * PERF025 inline-callback lexical slice: returns a suspension-scoped
-     * projection of the callback's PRESENT block-local bindings, or
+     * PERF025 inline-callback lexical slice: returns the PRESENT block-local
+     * bindings of a frame-native callback region, in layout order, or
      * {@code null} when this inline callback is using the unchanged
-     * activation/context authority path.
+     * activation/context authority path. They seed the invocation's durable
+     * authority when tooling is its first observer; once the bindings are
+     * durable they are ignored.
      *
      * <p>The prefixed Bytecode locals exist only for the statically admitted
      * frame-native callback path. Their prefix is implementation metadata;
@@ -114,9 +124,7 @@ final class ProtosBytecodeTagTreeNodeExports {
      * therefore omitted. Guest null is {@code ProtosNullValue}, never host
      * {@code null}, so host null remains an unambiguous cleared-local marker.
      *
-     * <p>This is intentionally only a live debugger snapshot. It installs no
-     * authority on the callback Activation and retains no Frame after the
-     * scope object has been constructed.
+     * <p>No Frame is retained after the scope object has been constructed.
      */
     private static java.util.Map<String, Object> inlineCallbackFrameBindings(
             TagTreeNode node,
@@ -172,13 +180,13 @@ final class ProtosBytecodeTagTreeNodeExports {
     }
 
     /**
-     * The activation of the innermost inline callback region live at {@code
-     * node}'s location, or {@code null} outside every such region. Block
-     * scoping makes the region local visible only inside its own region; the
-     * last live match is the innermost one. Only reached from tooling scope
-     * queries, never from guest execution.
+     * The invocation carrier of the innermost inline callback region live at
+     * {@code node}'s location, or {@code null} outside every such region.
+     * Block scoping makes the region local visible only inside its own region;
+     * the last live match is the innermost one. Only reached from tooling
+     * scope queries, never from guest execution.
      */
-    private static ProtosActivation inlineCallbackActivation(TagTreeNode node, Frame frame) {
+    private static PreparedInlineLiteralCall inlineCallbackCall(TagTreeNode node, Frame frame) {
         if (node == null) {
             return null;
         }
@@ -186,10 +194,10 @@ final class ProtosBytecodeTagTreeNodeExports {
         int bytecodeIndex = node.getEnterBytecodeIndex();
         Object[] names = bytecode.getLocalNames(bytecodeIndex);
         for (int offset = names.length - 1; offset >= 0; offset--) {
-            if (CanonicalToBytecodeLowerer.INLINE_CALLBACK_ACTIVATION_LOCAL.equals(names[offset])
+            if (CanonicalToBytecodeLowerer.INLINE_CALLBACK_CALL_LOCAL.equals(names[offset])
                     && bytecode.getLocalValue(bytecodeIndex, frame, offset)
-                            instanceof ProtosActivation activation) {
-                return activation;
+                            instanceof PreparedInlineLiteralCall call) {
+                return call;
             }
         }
         return null;
@@ -201,12 +209,4 @@ final class ProtosBytecodeTagTreeNodeExports {
         return new ProtosDebuggerScope(activation);
     }
 
-    @TruffleBoundary
-    private static ProtosDebuggerScope debuggerScope(
-            ProtosActivation activation,
-            java.util.Map<String, Object> currentFrameBindings) {
-        return new ProtosDebuggerScope(
-                activation,
-                currentFrameBindings);
-    }
 }

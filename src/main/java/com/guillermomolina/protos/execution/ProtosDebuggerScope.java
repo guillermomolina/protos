@@ -33,7 +33,6 @@ import com.oracle.truffle.api.library.ExportMessage;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -47,29 +46,11 @@ import java.util.Optional;
 final class ProtosDebuggerScope implements TruffleObject {
     private final ProtosActivation activation;
 
-    /*
-     * PERF025 inline-callback lexical slice: non-null only for a debugger
-     * scope created while suspended inside a frame-native PLAT044 B-prime
-     * callback. It is an immutable current-scope snapshot, not a semantic
-     * authority and not retained by the Activation.
-     */
-    private final Map<String, Object> currentFrameBindings;
-
     ProtosDebuggerScope(ProtosActivation activation) {
-        this(activation, null);
-    }
-
-    ProtosDebuggerScope(
-            ProtosActivation activation,
-            Map<String, Object> currentFrameBindings) {
         this.activation =
                 Objects.requireNonNull(
                         activation,
                         "activation");
-        this.currentFrameBindings =
-                currentFrameBindings == null
-                        ? null
-                        : Map.copyOf(currentFrameBindings);
     }
 
     @ExportMessage
@@ -132,13 +113,9 @@ final class ProtosDebuggerScope implements TruffleObject {
     private List<String> visibleNamesSnapshot() {
         ArrayList<String> names = new ArrayList<>();
 
-        if (currentFrameBindings != null) {
-            names.addAll(currentFrameBindings.keySet());
-        } else {
-            appendLocalNames(
-                    activation.context(),
-                    names);
-        }
+        appendLocalNames(
+                activation.context(),
+                names);
 
         for (ProtosObjectValue lexical :
                 activation.capturedLexicalContexts()) {
@@ -178,18 +155,11 @@ final class ProtosDebuggerScope implements TruffleObject {
     }
 
     private Optional<Object> rawVisibleValue(String member) {
-        if (currentFrameBindings != null) {
-            if (currentFrameBindings.containsKey(member)) {
-                return Optional.of(
-                        currentFrameBindings.get(member));
-            }
-        } else {
-            Optional<Object> local =
-                    activation.context()
-                            .readLocalSlot(member);
-            if (local.isPresent()) {
-                return local;
-            }
+        Optional<Object> local =
+                activation.context()
+                        .readLocalSlot(member);
+        if (local.isPresent()) {
+            return local;
         }
 
         for (ProtosObjectValue lexical :

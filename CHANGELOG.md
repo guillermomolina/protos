@@ -7,6 +7,34 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.168-SNAPSHOT
+
+- `PERF025` lazily materializes the semantic activation of PLAT044 B′ inline
+  literal callbacks. The inline region now keeps the invocation's
+  `PreparedInlineLiteralCall` carrier instead of an eagerly built
+  `ProtosActivation`; the callback's one fresh activation is materialized
+  from the carrier's compact frame arguments at most once, by the first
+  semantic or tooling observer, and every later observer of the same
+  invocation, including resumption after a yield, receives that same
+  instance. For callbacks whose bindings are frame-native, parameter binding,
+  arity checks, current-local creation, resolved reads and PERF028-A resolved
+  writes operate on the callback's block locals through new carrier-operand
+  operations and never materialize the activation on their ordinary path. The
+  activation of such a callback is only ever handed out through the new
+  `MaterializeInlineCallbackActivation` operation (and its tooling
+  counterpart), which, before returning it, moves the PRESENT block-local
+  bindings in layout order into a fresh durable map-backed authority installed
+  on the activation and relinquishes the block locals; no Context can
+  therefore observe, or keep aliasing, the block locals that the next
+  invocation reuses. The debugger projects that durable activation instead of
+  a suspension-local snapshot. D179 presence semantics, destination selection
+  before RHS evaluation, FROZEN/mutation Errors, arity Errors, non-local
+  return, suspension, B′ admission and the context-observing fallback path are
+  unchanged. New PERF025 focal coverage freezes lazy entry for zero-, one- and
+  two-parameter callbacks, at-most-once and per-invocation identity, durable
+  transfer before the first observer returns, non-aliasing after region reuse,
+  on-demand debugger materialization, suspension and non-local return.
+
 ## 0.3.167-SNAPSHOT
 
 - `PERF025` replaces eager O(n) `IdentityMap` snapshot copying with a

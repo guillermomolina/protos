@@ -1232,7 +1232,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    private static List<Object> observeMultipleCreatePrefix(
+    static List<Object> observeMultipleCreatePrefix(
             ProtosActivation activation,
             int required,
             Object source) {
@@ -3013,6 +3013,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final PreparedClosureCall fallback;
         private final boolean ownsReturnHome;
 
+        /*
+         * One-way: set when this invocation's frame-native bindings moved to
+         * the durable authority installed on its activation, before that
+         * activation reached any consumer (ProtosInlineCallbackFrameBindings).
+         */
+        private boolean frameBindingsTransferred;
+
         private PreparedInlineLiteralCall(
                 RootCallTarget bodyTarget,
                 Object[] compactTargetArguments,
@@ -3066,12 +3073,54 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     compactTargetArguments);
         }
 
+        /**
+         * The invocation's one fresh semantic activation, materialized from the
+         * compact arguments by the first semantic or tooling observer and
+         * published back into them, so every later observer of this same
+         * invocation (guest operations, debugger, resumption after a yield)
+         * receives exactly the same instance. A frame-native callback region
+         * never hands this out directly: it goes through {@code
+         * ProtosInlineCallbackFrameBindings}, which first makes the
+         * invocation's bindings durable.
+         */
         ProtosActivation activation() {
             if (compactTargetArguments == null) {
                 throw new IllegalStateException(
                         "non-direct inline callback invocation has no compact activation");
             }
             return ProtosFrameArguments.activation(compactTargetArguments);
+        }
+
+        /*
+         * PERF025 lazy inline callback activation. The admitted inline region
+         * runs only a direct carrier, so compactTargetArguments is non-null on
+         * every path below.
+         */
+
+        /** True once {@link #activation()} has been materialized. */
+        boolean isActivationMaterialized() {
+            return !ProtosFrameArguments.isUnmaterializedCompactCall(
+                    compactTargetArguments);
+        }
+
+        /** Supplied positional argument count, without materializing. */
+        int suppliedArgumentCount() {
+            return ProtosFrameArguments.compactSuppliedArgumentCount(
+                    compactTargetArguments);
+        }
+
+        /** Supplied positional argument {@code index}, without materializing. */
+        Object suppliedArgument(int index) {
+            return ProtosFrameArguments.compactSuppliedArgument(
+                    compactTargetArguments, index);
+        }
+
+        boolean frameBindingsTransferred() {
+            return frameBindingsTransferred;
+        }
+
+        void markFrameBindingsTransferred() {
+            frameBindingsTransferred = true;
         }
     }
 

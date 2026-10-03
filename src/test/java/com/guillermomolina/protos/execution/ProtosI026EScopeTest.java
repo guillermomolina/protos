@@ -34,7 +34,6 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 final class ProtosI026EScopeTest {
@@ -244,28 +243,16 @@ final class ProtosI026EScopeTest {
                         .toList();
 
         assertEquals(
-                2,
+                1,
                 instanceFields.size(),
-                "scope retains only its Activation plus an optional "
-                        + "suspension-local inline binding snapshot");
+                "scope retains only its Activation");
 
         assertTrue(
                 instanceFields.stream()
-                        .anyMatch(
+                        .allMatch(
                                 field ->
                                         field.getType()
                                                 == ProtosActivation.class));
-
-        assertTrue(
-                instanceFields.stream()
-                        .anyMatch(
-                                field ->
-                                        field.getName()
-                                                        .equals(
-                                                                "currentFrameBindings")
-                                                && Map.class
-                                                        .isAssignableFrom(
-                                                                field.getType())));
     }
 
     private List<String> memberNames(Object scope) throws Exception {
