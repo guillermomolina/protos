@@ -34,6 +34,7 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 final class ProtosI026EScopeTest {
@@ -232,25 +233,39 @@ final class ProtosI026EScopeTest {
                 Arrays.stream(ProtosLanguage.class.getDeclaredMethods())
                         .anyMatch(method -> method.getName().equals("getScope")));
 
-        assertEquals(
-                1,
-                Arrays.stream(ProtosDebuggerScope.class.getDeclaredFields())
+        List<java.lang.reflect.Field> instanceFields =
+                Arrays.stream(
+                                ProtosDebuggerScope.class
+                                        .getDeclaredFields())
                         .filter(
                                 field ->
                                         !Modifier.isStatic(
                                                 field.getModifiers()))
-                        .count());
+                        .toList();
+
+        assertEquals(
+                2,
+                instanceFields.size(),
+                "scope retains only its Activation plus an optional "
+                        + "suspension-local inline binding snapshot");
 
         assertTrue(
-                Arrays.stream(ProtosDebuggerScope.class.getDeclaredFields())
-                        .filter(
-                                field ->
-                                        !Modifier.isStatic(
-                                                field.getModifiers()))
-                        .allMatch(
+                instanceFields.stream()
+                        .anyMatch(
                                 field ->
                                         field.getType()
                                                 == ProtosActivation.class));
+
+        assertTrue(
+                instanceFields.stream()
+                        .anyMatch(
+                                field ->
+                                        field.getName()
+                                                        .equals(
+                                                                "currentFrameBindings")
+                                                && Map.class
+                                                        .isAssignableFrom(
+                                                                field.getType())));
     }
 
     private List<String> memberNames(Object scope) throws Exception {

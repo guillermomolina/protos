@@ -393,6 +393,42 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /**
+     * PERF025 B-prime inline-callback counterpart of
+     * {@link BindClosureFrameParameter}. Frame argument zero belongs to the
+     * enclosing physical root, so the still-eager callback Activation is an
+     * explicit operand.
+     */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class BindInlineClosureFrameParameter {
+        @Specialization
+        public static void perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
+                    frameBackedLocals,
+                    frameBackedLayout,
+                    activation,
+                    ordinal,
+                    name,
+                    value,
+                    bytecodeNode,
+                    frame);
+        }
+    }
+
     @Operation
     @ConstantOperand(
             type = LocalRangeAccessor.class,
@@ -451,6 +487,41 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return ProtosBytecodeRootNode.CreateCurrentFrameLocal.perform(
                     frameBackedLocals, frameBackedLayout, ProtosFrameArguments.activation(arguments),
                     ordinal, name, value, bytecodeNode, frame);
+        }
+    }
+
+    /**
+     * PERF025 B-prime inline-callback counterpart of
+     * {@link CreateCurrentFrameLocal}. The callback Activation is explicit
+     * because the enclosing physical root owns frame argument zero.
+     */
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class CreateInlineCurrentFrameLocal {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                ProtosActivation activation,
+                int ordinal,
+                String name,
+                Object value,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosBytecodeRootNode.CreateCurrentFrameLocal.perform(
+                    frameBackedLocals,
+                    frameBackedLayout,
+                    activation,
+                    ordinal,
+                    name,
+                    value,
+                    bytecodeNode,
+                    frame);
         }
     }
 

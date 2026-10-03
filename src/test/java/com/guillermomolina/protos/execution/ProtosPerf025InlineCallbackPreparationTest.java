@@ -61,6 +61,168 @@ final class ProtosPerf025InlineCallbackPreparationTest {
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
+    void admittedInlineCallbackUsesStaticFrameBindingsButKeepsEagerActivation()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosSemanticBytecodeRootNode root =
+                        lowerRoot(
+                                """
+                                run: () => {
+                                    Array(1).each((element) => {
+                                        local: element
+                                        local = element
+                                        probe(local)
+                                        local
+                                    })
+                                }
+                                run()
+                                """);
+
+                root.getCallTarget().call(probe.module());
+
+                ProtosSemanticBytecodeRootNode callbackHost =
+                        probe.callbackHost.get();
+                assertNotNull(
+                        callbackHost,
+                        "callback must execute in a semantic source root");
+
+                List<String> names = instructionNames(callbackHost);
+
+                int activation =
+                        indexOfContainingAfter(
+                                names,
+                                "LoadInlineCallbackActivation",
+                                -1);
+                int parameter =
+                        indexOfContainingAfter(
+                                names,
+                                "BindInlineClosureFrameParameter",
+                                activation);
+                int creation =
+                        indexOfContainingAfter(
+                                names,
+                                "CreateInlineCurrentFrameLocal",
+                                parameter);
+                int read =
+                        indexOfContainingAfter(
+                                names,
+                                "ReadFrameLocal",
+                                parameter);
+                int resolveWrite =
+                        indexOfContainingAfter(
+                                names,
+                                "ResolveCurrentFrameLocalWriteTarget",
+                                parameter);
+                int assign =
+                        indexOfContainingAfter(
+                                names,
+                                "AssignCurrentFrameLocal",
+                                resolveWrite);
+
+                assertTrue(
+                        activation >= 0,
+                        () -> "eager inline callback Activation disappeared: " + names);
+                assertTrue(
+                        parameter >= 0,
+                        () -> "callback parameter did not use static frame layout: " + names);
+                assertTrue(
+                        creation >= 0,
+                        () -> "callback local creation did not use frame storage: " + names);
+                assertTrue(
+                        read >= 0,
+                        () -> "resolved callback read did not use frame-local access: " + names);
+                assertTrue(
+                        resolveWrite >= 0,
+                        () -> "resolved callback write target was not specialized: " + names);
+                assertTrue(
+                        assign >= 0,
+                        () -> "resolved callback write did not use the frame-local target: " + names);
+            } finally {
+                context.leave();
+            }
+        }
+
+        System.out.println("PERF025_INLINE_CALLBACK_STATIC_BINDING_ANALYSIS=YES");
+        System.out.println("PERF025_INLINE_CALLBACK_STATIC_LAYOUT=YES");
+        System.out.println("PERF025_INLINE_CALLBACK_PARAMETER_FRAME_PATH=YES");
+        System.out.println("PERF025_INLINE_CALLBACK_LOCAL_READ_DIRECT=YES");
+        System.out.println("PERF025_INLINE_CALLBACK_LOCAL_WRITE_DIRECT=YES");
+        System.out.println("PERF025_INLINE_CALLBACK_EAGER_ACTIVATION_STILL_PRESENT=YES");
+    }
+
+    @Test
+    void contextObservingInlineCallbackKeepsNamedAuthorityFallback()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                Probe probe = new Probe();
+                ProtosSemanticBytecodeRootNode root =
+                        lowerRoot(
+                                """
+                                run: () => {
+                                    Array(1).each((element) => {
+                                        probe(context)
+                                        element
+                                    })
+                                }
+                                run()
+                                """);
+
+                root.getCallTarget().call(probe.module());
+
+                ProtosSemanticBytecodeRootNode callbackHost =
+                        probe.callbackHost.get();
+                assertNotNull(
+                        callbackHost,
+                        "callback must execute in a semantic source root");
+
+                List<String> names = instructionNames(callbackHost);
+
+                assertTrue(
+                        names.stream()
+                                .anyMatch(
+                                        name ->
+                                                name.contains(
+                                                        "LoadInlineCallbackActivation")),
+                        () -> "inline callback Activation must remain eager: " + names);
+
+                assertFalse(
+                        names.stream()
+                                .anyMatch(
+                                        name ->
+                                                name.contains(
+                                                        "BindInlineClosureFrameParameter")),
+                        () ->
+                                "context-observing callback must not retain ephemeral "
+                                        + "frame-native parameter authority: "
+                                        + names);
+
+                assertFalse(
+                        names.stream()
+                                .anyMatch(
+                                        name ->
+                                                name.contains(
+                                                        "CreateInlineCurrentFrameLocal")),
+                        () ->
+                                "context-observing callback must not use ephemeral "
+                                        + "frame-native local creation: "
+                                        + names);
+            } finally {
+                context.leave();
+            }
+        }
+
+        System.out.println("PERF025_INLINE_CALLBACK_CONTEXT_OBSERVER_FALLBACK=PASS");
+        System.out.println("PERF025_INLINE_CALLBACK_DURABLE_ESCAPE_TRANSITION=NOT_IMPLEMENTED");
+    }
+
+    @Test
     void booleanLiteralAdmissionPrecedesActivationAndPhysicalFallback() throws Exception {
         assertPreparationOrder(
                 """

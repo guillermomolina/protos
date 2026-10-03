@@ -33,6 +33,7 @@ import com.oracle.truffle.api.library.ExportMessage;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -46,8 +47,29 @@ import java.util.Optional;
 final class ProtosDebuggerScope implements TruffleObject {
     private final ProtosActivation activation;
 
+    /*
+     * PERF025 inline-callback lexical slice: non-null only for a debugger
+     * scope created while suspended inside a frame-native PLAT044 B-prime
+     * callback. It is an immutable current-scope snapshot, not a semantic
+     * authority and not retained by the Activation.
+     */
+    private final Map<String, Object> currentFrameBindings;
+
     ProtosDebuggerScope(ProtosActivation activation) {
-        this.activation = Objects.requireNonNull(activation, "activation");
+        this(activation, null);
+    }
+
+    ProtosDebuggerScope(
+            ProtosActivation activation,
+            Map<String, Object> currentFrameBindings) {
+        this.activation =
+                Objects.requireNonNull(
+                        activation,
+                        "activation");
+        this.currentFrameBindings =
+                currentFrameBindings == null
+                        ? null
+                        : Map.copyOf(currentFrameBindings);
     }
 
     @ExportMessage
@@ -90,11 +112,13 @@ final class ProtosDebuggerScope implements TruffleObject {
         Objects.requireNonNull(member, "member");
         final Optional<Object> value;
         try {
-            value = ProtosLexicalFallback.readByName(activation, member);
+            value = rawVisibleValue(member);
         } catch (UnsupportedOperationException failure) {
             throw UnknownIdentifierException.create(member);
         }
-        if (value.isEmpty() || !InteropLibrary.isValidValue(value.orElseThrow())) {
+        if (value.isEmpty()
+                || !InteropLibrary.isValidValue(
+                        value.orElseThrow())) {
             throw UnknownIdentifierException.create(member);
         }
         return value.orElseThrow();
@@ -107,8 +131,17 @@ final class ProtosDebuggerScope implements TruffleObject {
 
     private List<String> visibleNamesSnapshot() {
         ArrayList<String> names = new ArrayList<>();
-        appendLocalNames(activation.context(), names);
-        for (ProtosObjectValue lexical : activation.capturedLexicalContexts()) {
+
+        if (currentFrameBindings != null) {
+            names.addAll(currentFrameBindings.keySet());
+        } else {
+            appendLocalNames(
+                    activation.context(),
+                    names);
+        }
+
+        for (ProtosObjectValue lexical :
+                activation.capturedLexicalContexts()) {
             appendLocalNames(lexical, names);
         }
         appendReceiverDelegationNames(names);
@@ -145,13 +178,24 @@ final class ProtosDebuggerScope implements TruffleObject {
     }
 
     private Optional<Object> rawVisibleValue(String member) {
-        Optional<Object> local = activation.context().readLocalSlot(member);
-        if (local.isPresent()) {
-            return local;
+        if (currentFrameBindings != null) {
+            if (currentFrameBindings.containsKey(member)) {
+                return Optional.of(
+                        currentFrameBindings.get(member));
+            }
+        } else {
+            Optional<Object> local =
+                    activation.context()
+                            .readLocalSlot(member);
+            if (local.isPresent()) {
+                return local;
+            }
         }
 
-        for (ProtosObjectValue lexical : activation.capturedLexicalContexts()) {
-            Optional<Object> captured = lexical.readLocalSlot(member);
+        for (ProtosObjectValue lexical :
+                activation.capturedLexicalContexts()) {
+            Optional<Object> captured =
+                    lexical.readLocalSlot(member);
             if (captured.isPresent()) {
                 return captured;
             }

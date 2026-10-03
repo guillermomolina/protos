@@ -95,6 +95,14 @@ final class CanonicalToBytecodeLowerer {
     static final String INLINE_CALLBACK_ACTIVATION_LOCAL = "inlineCallbackActivation";
 
     /**
+     * Physical Bytecode-local prefix for statically admitted bindings owned by
+     * a PLAT044 B-prime inline callback. Guest binding identity remains the
+     * CanonicalLexicalScope/name identity; this name is implementation-only.
+     */
+    static final String INLINE_CALLBACK_BINDING_LOCAL_PREFIX =
+            "$inlineCallbackBinding:";
+
+    /**
      * A send site's PLAT044 B′ inline candidate: the literal's definition, its
      * supplied argument position, the argument local holding its materialized
      * value, and its own plan cell.
@@ -213,6 +221,15 @@ final class CanonicalToBytecodeLowerer {
      * each inline object body, so nested object bodies select their own.
      */
     private BytecodeLocal currentActivationLocal;
+
+    /**
+     * PERF025 inline-callback lexical slice. True only while an admitted
+     * PLAT044 B-prime callback uses its statically proven bindings directly
+     * from block-local frame storage. currentActivationLocal still holds the
+     * callback's eager semantic Activation; lazy activation belongs to the
+     * following slice.
+     */
+    private boolean currentInlineCallbackFrameNative;
 
     /**
      * PERF013 Slice B1 backend-private registry of the frame-backed {@link
@@ -544,6 +561,8 @@ final class CanonicalToBytecodeLowerer {
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
         BytecodeLocal savedActivationLocal = currentActivationLocal;
+        boolean savedInlineCallbackFrameNative =
+                currentInlineCallbackFrameNative;
         ProtosFrameLexicalLayout savedFrameLayout = currentRootFrameLayout;
         BytecodeLocal[] savedFrameNativeLocals = currentRootFrameNativeLocals;
         ProtosFrameLexicalLayout savedFrameNativeLayout = currentRootFrameNativeLayout;
@@ -554,6 +573,7 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameLocals = java.util.Map.of();
             currentRootFrameLayout = null;
             currentActivationLocal = null;
+            currentInlineCallbackFrameNative = false;
             currentRootFrameNativeLocals = null;
             currentRootFrameNativeLayout = null;
             currentRootIndexedParameterLayout = null;
@@ -568,6 +588,8 @@ final class CanonicalToBytecodeLowerer {
             currentRootFrameLocals = savedFrameLocals;
             currentRootFrameLayout = savedFrameLayout;
             currentActivationLocal = savedActivationLocal;
+            currentInlineCallbackFrameNative =
+                    savedInlineCallbackFrameNative;
             currentRootFrameNativeLocals = savedFrameNativeLocals;
             currentRootFrameNativeLayout = savedFrameNativeLayout;
             currentRootIndexedParameterLayout = savedIndexedParameterLayout;
@@ -928,13 +950,14 @@ final class CanonicalToBytecodeLowerer {
     /**
      * The frame-layout ordinal through which a statically proven current
      * binding named {@code name} is established frame-natively, or {@code -1}
-     * when the current root installs a persistent frame authority, when the
-     * current activation is not the root's own (inline Object body or inline
-     * callback region), or when the name is not one of the root's bindings.
+     * when no eligible frame-native layout is active. Besides a genuine root,
+     * PERF025 admits the explicit semantic Activation of a PLAT044 B-prime
+     * inline callback. Inline Object bodies remain excluded.
      */
     private int frameNativeOrdinal(String name) {
         if (currentRootFrameNativeLayout == null
-                || currentActivationLocal != null
+                || (currentActivationLocal != null
+                        && !currentInlineCallbackFrameNative)
                 || !currentRootFrameLocals.containsKey(name)) {
             return -1;
         }
@@ -1345,6 +1368,7 @@ final class CanonicalToBytecodeLowerer {
     /** The binding operation opened for one Closure parameter. */
     private enum ParameterBindingForm {
         FRAME_NATIVE,
+        INLINE_FRAME_NATIVE,
         INDEXED,
         NAMED
     }
@@ -1366,6 +1390,15 @@ final class CanonicalToBytecodeLowerer {
         String name = parameter.name();
         int ordinal = frameNativeOrdinal(name);
         if (ordinal >= 0) {
+            if (currentInlineCallbackFrameNative) {
+                builder.beginBindInlineClosureFrameParameter(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                emitCurrentActivation(builder);
+                builder.emitLoadConstant(ordinal);
+                builder.emitLoadConstant(name);
+                return ParameterBindingForm.INLINE_FRAME_NATIVE;
+            }
             builder.beginBindClosureFrameParameter(
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout);
@@ -1393,6 +1426,8 @@ final class CanonicalToBytecodeLowerer {
             ParameterBindingForm form) {
         switch (form) {
             case FRAME_NATIVE -> builder.endBindClosureFrameParameter();
+            case INLINE_FRAME_NATIVE ->
+                    builder.endBindInlineClosureFrameParameter();
             case INDEXED -> builder.endBindClosureIndexedParameter();
             case NAMED -> builder.endBindClosureParameter();
         }
@@ -1410,14 +1445,22 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal value) {
         int ordinal = frameNativeOrdinal(name);
         if (ordinal >= 0) {
-            /*
-             * PERF025: a frame-native root has no inline object body or
-             * inline callback region, so its current activation is always its
-             * own frame argument 0, which the operation reads itself.
-             */
+            if (currentInlineCallbackFrameNative) {
+                builder.beginCreateInlineCurrentFrameLocal(
+                        currentRootFrameNativeLocals,
+                        currentRootFrameNativeLayout);
+                emitCurrentActivation(builder);
+                builder.emitLoadConstant(ordinal);
+                builder.emitLoadConstant(name);
+                builder.emitLoadLocal(value);
+                builder.endCreateInlineCurrentFrameLocal();
+                return;
+            }
             if (currentActivationLocal != null) {
                 throw new AssertionError(
-                        "frame-native creation inside an inline activation region: " + name);
+                        "frame-native creation inside an unsupported inline "
+                                + "activation region: "
+                                + name);
             }
             builder.beginCreateCurrentFrameLocal(
                     currentRootFrameNativeLocals,
@@ -4074,36 +4117,67 @@ final class CanonicalToBytecodeLowerer {
     /**
      * PLAT044 B′ inline callback region for an admitted literal callback.
      *
-     * <p>The region keeps the semantic Closure activation: the lean callback
-     * carrier materializes its own fresh activation only after admission. That
-     * activation is held in {@link #INLINE_CALLBACK_ACTIVATION_LOCAL} and selected by {@link
-     * #emitCurrentActivation} for the whole body, so {@code context}, lookup
-     * and non-local return observe the callback activation exactly as its
-     * physical root would, and the enclosing selection is restored afterwards
-     * (PLAT041 precedent). Like an inline object body, the region takes no
-     * direct-local fast path, so every lexical access goes through the
-     * runtime authority of that activation; nested Closures never occur here
-     * ({@link #inlineLiteralCallbackCandidates}). Suspension inside the body is
-     * captured by this root's own continuation (PLAT014), and no handler,
-     * return home or cancellation boundary is added.
+     * <p>The callback keeps its eager semantic Activation in
+     * {@link #INLINE_CALLBACK_ACTIVATION_LOCAL}. When whole-tree binding
+     * analysis proves that the callback does not require a persistent frame
+     * authority, its current-scope parameters and locals use block-local
+     * frame storage in the enclosing physical root. Reads use the exact
+     * {@link ProtosFrameLexicalLayout#presentContinuityAt} Assumption owned by
+     * the callback's canonical lexical scope, including across Bytecode parser
+     * reparses.
      *
-     * <p>A custom {@link StandardTags.RootTag} over the body's exact source
-     * span stands in for the callback root's automatic RootTag; {@link
-     * ProtosBytecodeTagTreeNodeExports} projects the callback activation for
-     * locations inside it. Admission requires a captured return home, so the
-     * inline invocation owns no return-home lifecycle to complete; its normal
-     * body result is therefore the callback result directly.
+     * <p>A callback requiring observable/escaping current-context authority
+     * keeps the previous named runtime-authority path. This slice deliberately
+     * does not make Activation lazy, retain an authority over ephemeral block
+     * locals, broaden B-prime admission, or fabricate a callback
+     * RootCallTarget/FrameInstance.
      */
     private void emitInlineLiteralCallback(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalClosure definition,
             BytecodeLocal child,
             BytecodeLocal result) {
+        CanonicalBindingAnalysis callbackAnalysis =
+                bindingAnalysisForNestedClosure(definition);
+        CanonicalLexicalScope callbackScope =
+                rootScopeFor(callbackAnalysis, definition);
+        boolean frameNativeCallback =
+                !requiresPersistentFrameAuthority(
+                        definition.body(),
+                        definition,
+                        callbackAnalysis,
+                        callbackScope);
+
         builder.beginBlock();
         BytecodeLocal callbackActivation =
                 builder.createLocal(INLINE_CALLBACK_ACTIVATION_LOCAL, null);
         BytecodeLocal bodyResult =
                 builder.createLocal("inlineCallbackResult", null);
+
+        java.util.Map<String, BytecodeLocal> callbackFrameLocals =
+                java.util.Map.of();
+        BytecodeLocal[] callbackFrameLocalRange = null;
+        ProtosFrameLexicalLayout callbackFrameLocalLayout = null;
+
+        if (frameNativeCallback && !callbackScope.declaredNames().isEmpty()) {
+            java.util.LinkedHashMap<String, BytecodeLocal> frameLocals =
+                    new java.util.LinkedHashMap<>();
+            for (String name : callbackScope.declaredNames()) {
+                frameLocals.put(
+                        name,
+                        builder.createLocal(
+                                INLINE_CALLBACK_BINDING_LOCAL_PREFIX + name,
+                                null));
+            }
+
+            callbackFrameLocals = java.util.Map.copyOf(frameLocals);
+            callbackFrameLocalRange =
+                    frameLocals.values().toArray(BytecodeLocal[]::new);
+            callbackFrameLocalLayout =
+                    frameLexicalLayoutForScope(
+                            callbackScope,
+                            frameLocals.keySet().toArray(String[]::new));
+        }
 
         builder.beginStoreLocal(callbackActivation);
         builder.beginLoadInlineCallbackActivation();
@@ -4120,26 +4194,71 @@ final class CanonicalToBytecodeLowerer {
         CanonicalLexicalScope savedTopScope = currentRootTopScope;
         java.util.Map<String, BytecodeLocal> savedFrameLocals =
                 currentRootFrameLocals;
+        ProtosFrameLexicalLayout savedFrameLayout =
+                currentRootFrameLayout;
         BytecodeLocal savedActivationLocal = currentActivationLocal;
-        try {
-            currentRootAnalysis = null;
-            currentRootTopScope = null;
-            currentRootFrameLocals = java.util.Map.of();
-            currentActivationLocal = callbackActivation;
+        boolean savedInlineCallbackFrameNative =
+                currentInlineCallbackFrameNative;
+        BytecodeLocal[] savedFrameNativeLocals =
+                currentRootFrameNativeLocals;
+        ProtosFrameLexicalLayout savedFrameNativeLayout =
+                currentRootFrameNativeLayout;
+        ProtosFrameLexicalLayout savedIndexedParameterLayout =
+                currentRootIndexedParameterLayout;
 
-            emitClosureParameterBindings(builder, definition, null, null, null, null);
+        try {
+            if (frameNativeCallback) {
+                currentRootAnalysis = callbackAnalysis;
+                currentRootTopScope = callbackScope;
+                currentRootFrameLocals = callbackFrameLocals;
+                currentRootFrameLayout = callbackFrameLocalLayout;
+                currentActivationLocal = callbackActivation;
+                currentInlineCallbackFrameNative = true;
+                currentRootFrameNativeLocals = callbackFrameLocalRange;
+                currentRootFrameNativeLayout = callbackFrameLocalLayout;
+                currentRootIndexedParameterLayout = null;
+            } else {
+                currentRootAnalysis = null;
+                currentRootTopScope = null;
+                currentRootFrameLocals = java.util.Map.of();
+                currentRootFrameLayout = null;
+                currentActivationLocal = callbackActivation;
+                currentInlineCallbackFrameNative = false;
+                currentRootFrameNativeLocals = null;
+                currentRootFrameNativeLayout = null;
+                currentRootIndexedParameterLayout = null;
+            }
+
+            emitClosureParameterBindings(
+                    builder,
+                    definition,
+                    null,
+                    null,
+                    null,
+                    null);
+
             if (definition.body().expressions().isEmpty()) {
                 builder.beginStoreLocal(bodyResult);
                 builder.emitLoadConstant(ProtosNullValue.INSTANCE);
                 builder.endStoreLocal();
             } else {
-                emitStatementsToLocal(builder, definition.body(), bodyResult);
+                emitStatementsToLocal(
+                        builder,
+                        definition.body(),
+                        bodyResult);
             }
         } finally {
             currentRootAnalysis = savedAnalysis;
             currentRootTopScope = savedTopScope;
             currentRootFrameLocals = savedFrameLocals;
+            currentRootFrameLayout = savedFrameLayout;
             currentActivationLocal = savedActivationLocal;
+            currentInlineCallbackFrameNative =
+                    savedInlineCallbackFrameNative;
+            currentRootFrameNativeLocals = savedFrameNativeLocals;
+            currentRootFrameNativeLayout = savedFrameNativeLayout;
+            currentRootIndexedParameterLayout =
+                    savedIndexedParameterLayout;
         }
 
         builder.endBlock();

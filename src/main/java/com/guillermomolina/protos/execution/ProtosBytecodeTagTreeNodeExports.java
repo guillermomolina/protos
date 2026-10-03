@@ -69,7 +69,11 @@ final class ProtosBytecodeTagTreeNodeExports {
         }
         ProtosActivation inline = inlineCallbackActivation(node, frame);
         if (inline != null) {
-            return debuggerScope(inline);
+            java.util.Map<String, Object> frameBindings =
+                    inlineCallbackFrameBindings(node, frame);
+            return frameBindings == null
+                    ? debuggerScope(inline)
+                    : debuggerScope(inline, frameBindings);
         }
         ProtosActivation activation = ProtosFrameArguments.activation(frame);
         projectFrameNativeBindings(node, frame, activation);
@@ -96,6 +100,75 @@ final class ProtosBytecodeTagTreeNodeExports {
         if (bytecode.getBytecodeRootNode() instanceof ProtosSemanticBytecodeRootNode root) {
             root.installFrameNativeAuthorityForTooling(activation, bytecode, frame);
         }
+    }
+
+    /**
+     * PERF025 inline-callback lexical slice: returns a suspension-scoped
+     * projection of the callback's PRESENT block-local bindings, or
+     * {@code null} when this inline callback is using the unchanged
+     * activation/context authority path.
+     *
+     * <p>The prefixed Bytecode locals exist only for the statically admitted
+     * frame-native callback path. Their prefix is implementation metadata;
+     * the guest/debugger name is the suffix. A cleared local is ABSENT and is
+     * therefore omitted. Guest null is {@code ProtosNullValue}, never host
+     * {@code null}, so host null remains an unambiguous cleared-local marker.
+     *
+     * <p>This is intentionally only a live debugger snapshot. It installs no
+     * authority on the callback Activation and retains no Frame after the
+     * scope object has been constructed.
+     */
+    private static java.util.Map<String, Object> inlineCallbackFrameBindings(
+            TagTreeNode node,
+            Frame frame) {
+        if (node == null) {
+            return null;
+        }
+
+        BytecodeNode bytecode = node.getBytecodeNode();
+        int bytecodeIndex = node.getEnterBytecodeIndex();
+        Object[] names = bytecode.getLocalNames(bytecodeIndex);
+
+        java.util.LinkedHashMap<String, Object> bindings = null;
+        boolean frameNativeRegion = false;
+
+        for (int offset = 0; offset < names.length; offset++) {
+            Object rawName = names[offset];
+            if (!(rawName instanceof String localName)
+                    || !localName.startsWith(
+                            CanonicalToBytecodeLowerer
+                                    .INLINE_CALLBACK_BINDING_LOCAL_PREFIX)) {
+                continue;
+            }
+
+            frameNativeRegion = true;
+            Object value =
+                    bytecode.getLocalValue(
+                            bytecodeIndex,
+                            frame,
+                            offset);
+            if (value == null) {
+                continue;
+            }
+
+            if (bindings == null) {
+                bindings = new java.util.LinkedHashMap<>();
+            }
+            bindings.put(
+                    localName.substring(
+                            CanonicalToBytecodeLowerer
+                                    .INLINE_CALLBACK_BINDING_LOCAL_PREFIX
+                                    .length()),
+                    value);
+        }
+
+        if (!frameNativeRegion) {
+            return null;
+        }
+        if (bindings == null) {
+            return java.util.Map.of();
+        }
+        return java.util.Collections.unmodifiableMap(bindings);
     }
 
     /**
@@ -126,5 +199,14 @@ final class ProtosBytecodeTagTreeNodeExports {
     private static ProtosDebuggerScope debuggerScope(
             ProtosActivation activation) {
         return new ProtosDebuggerScope(activation);
+    }
+
+    @TruffleBoundary
+    private static ProtosDebuggerScope debuggerScope(
+            ProtosActivation activation,
+            java.util.Map<String, Object> currentFrameBindings) {
+        return new ProtosDebuggerScope(
+                activation,
+                currentFrameBindings);
     }
 }
