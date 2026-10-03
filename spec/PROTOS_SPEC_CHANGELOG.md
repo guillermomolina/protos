@@ -23,6 +23,48 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.441] - 2026-10-03
+
+### I059 / D166 Candidate C — Narrow mandatory placement, admission, and capacity architecture
+- `spec/concurrency/DISTRIBUTED_RUNTIME.md`: this revision narrows mandatory
+  portable architecture; it removes no implemented public API and introduces
+  no replacement API. No public placement, resource-request, capacity-demand,
+  autoscaler, Infrastructure Controller, or availability-status API is added.
+- Section 45 now specifies placement outcomes only: hard feasibility must be
+  respected, hard constraints and soft preferences are distinct, and scoring or
+  preferences never make an infeasible destination valid. The mandatory
+  two-stage filter+score model, the canonical scoring-input catalogue, and the
+  rule that normal Actors are not expected to declare CPU/memory requests are
+  removed; candidate enumeration, pipeline stages, dynamic scoring, resource
+  accounting, learning, and cost models are implementation freedom.
+- Section 46 keeps outcome semantics only: the runtime may delay admission
+  under pressure, the incarnation stays `INITIALIZING` with an unchanged
+  `ActorRef`, `Actor.spawn(...)` does not synchronously fail, and no fixed
+  portable threshold exists. The mandatory adaptive multidimensional
+  architecture, the placement/capacity-demand/admission pressure taxonomy, and
+  proactive capacity-demand observability are removed.
+- Section 51 is renamed `Capacity and Infrastructure Boundary`. Capacity
+  demand is no longer a mandatory semantic institution, and the Infrastructure
+  Controller and the intent-to-demand pipeline are no longer mandatory. The
+  section keeps that Core does not provision raw infrastructure, that shortage
+  may be observable through implementation-specific feedback, that external
+  infrastructure may add or remove raw capacity but is not Protos semantic
+  authority, that new capacity becomes usable only through normal Protos
+  bootstrap/discovery/membership/lifecycle rules, and that correctness must not
+  depend on graceful draining.
+- Sections 43, 50, and 61 drop the capacity-demand signal and Infrastructure
+  Controller coupling while keeping Actor creation/admission semantics, Group
+  backpressure without provisioning, and the Process-termination and
+  no-resurrection invariants.
+- Section 49 is reduced to generic availability-evidence semantics: claims
+  require demonstrable evidence, unknown availability or failure independence
+  is never reported as satisfied, and HA placement is not persistence,
+  replication, consensus, transactional replication, mutable-state failover,
+  or exactly-once processing. Group-based HA policy and desired cardinality
+  (D164) are explicitly not decided. Section 48 failure-domain semantics and
+  the D165 Process/Node/Cluster/Authority invariants are unchanged. Related
+  future APIs remain listed as open design topics.
+
 ## [0.1.440] - 2026-10-03
 
 ### I058 / D160 — Move parallel Array algorithms from Core to the Standard Library

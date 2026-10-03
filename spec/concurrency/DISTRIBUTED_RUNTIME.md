@@ -475,16 +475,18 @@ Actor capacity does not imply one CPU or other fixed resource reservation per
 Actor. Many Actors may share the same Process. The runtime uses capacity that has
 become available through the normal Process/Node/runtime lifecycle.
 
-Live `INITIALIZING` incarnations waiting for placement/admission may contribute
-to semantic capacity-demand signals. Implementations may represent that demand
-internally with queues, tickets, counters, scheduler records, or other machinery,
-but no such representation is a Protos-visible creation-operation identity.
+Capacity shortage affecting live `INITIALIZING` incarnations may be externally
+observable, and a runtime may use or expose implementation-specific feedback
+about it. Implementations may represent waiting incarnations internally with
+queues, tickets, counters, scheduler records, or other machinery, but no such
+representation is a Protos-visible creation-operation identity, and Core
+mandates no particular demand object, signal, signal timing, or controller.
 
-An external or explicitly integrated Infrastructure Controller may react to
-capacity demand by provisioning additional raw capacity. `Actor.spawn(...)`
-itself does not create Processes, Nodes, Clusters, Pods, VMs, or machines.
-New capacity becomes usable only through the normal bootstrap, discovery, and
-membership rules of this document.
+External infrastructure may independently add raw capacity. `Actor.spawn(...)`
+itself does not provision infrastructure: it does not create Processes, Nodes,
+Clusters, Pods, VMs, or machines. New capacity becomes usable only through the
+normal Protos bootstrap, discovery, membership, and lifecycle rules of this
+document (§51).
 
 ## 44. Hierarchical Runtime Domains
 
@@ -521,32 +523,36 @@ The hierarchy is pay-for-what-you-use: levels unnecessary for the active
 execution domain need not incur distributed-runtime machinery.
 ## 45. Dynamic Actor Capacity and Placement
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Actor capacity is primarily dynamic rather than based on fixed
-declarative resource reservations.
+Actor capacity is primarily dynamic rather than based on fixed declarative
+resource reservations. This section specifies placement outcomes, not a
+placement pipeline.
 
-Normal Actors are not expected to declare Kubernetes-like CPU or memory
-requests.
+Placement must respect hard feasibility. A destination that violates an active
+hard constraint, for example an unavailable Process, a hard memory/resource
+limit, incompatible runtime/code, a missing required special resource, or an
+isolation/placement constraint, is infeasible.
 
-Placement occurs conceptually in two stages:
+Hard constraints and soft placement preferences are distinct. Soft preferences
+may influence which feasible destination is chosen, but an infeasible
+destination never becomes valid through scoring, preferences, optimization, or
+any other ranking.
 
-1.  Hard feasibility filtering.
-2.  Scoring of feasible destinations using dynamic runtime information.
+The following are implementation freedom and are not portable Core
+architecture:
 
-Hard constraints may include unavailable/draining Process, hard
-memory/resource limit, incompatible runtime/code, required special
-resource, or isolation/placement constraint.
+-   candidate enumeration;
+-   whether placement uses filter and score pipelines, and the number and
+    order of scheduler stages;
+-   whether and how dynamic scoring is used, and which runtime observations
+    inform it;
+-   resource-accounting representation;
+-   learning from observed Actor behaviour; and
+-   any optimization or cost model.
 
-Scoring may consider CPU/runnable pressure, memory pressure, scheduler
-latency, mailbox pressure, communication locality, affinity, resource
-locality, and failure domains.
-
-Manual resource requirements and placement constraints may exist when
-genuinely required but are exceptional.
-
-The runtime may learn from observed Actor behaviour instead of requiring
-the programmer to predict resource consumption in advance.
+This section defines no public placement-constraint or resource-request API;
+such facilities remain open design topics.
 ## 46. Adaptive Admission Control
 
 **CLOSED --- REVISED**
@@ -554,30 +560,17 @@ the programmer to predict resource consumption in advance.
 The ability to technically fit another Actor and the desirability of
 admitting more work are distinct concepts.
 
-Soft resource pressure normally affects placement scoring and
-contributes to proactive capacity-demand signals.
+Under pressure, the runtime may delay advancing newly created Actor
+incarnations through admission. Those incarnations remain `INITIALIZING` under
+§43: the delay postpones their initialization progress, does not alter their
+`ActorRef`, and does not synchronously fail `Actor.spawn(...)`.
 
-When pressure becomes sufficiently severe, the runtime may temporarily
-stop advancing newly created Actor incarnations through admission. Those
-incarnations remain `INITIALIZING` under §43, so the backpressure delays their
-initialization progress rather than changing the public result or synchronously
-failing `Actor.spawn(...)`.
-
-Admission decisions are adaptive and multidimensional.
-
-No fixed CPU, memory, or utilization threshold is part of the language
+No fixed portable CPU, memory, or utilization threshold is part of the language
 semantics.
 
-The runtime separates conceptually:
-
-    placement pressure
-    capacity-demand pressure
-    admission pressure
-
-while allowing all three to use common runtime observations.
-
-Capacity demand should be observable before admission is necessarily
-refused, allowing infrastructure mechanisms to react proactively.
+How pressure is measured, classified, combined, or reported, and whether
+shortage is surfaced before admission is delayed, is implementation freedom.
+Core mandates no particular admission architecture or pressure taxonomy.
 ## 48. Failure Domains
 
 **CLOSED**
@@ -615,43 +608,23 @@ topology providers remain open.
 
 **CLOSED --- REVISED**
 
-High-availability placement requirements belong primarily to logical
-groups of Actors representing a common service or responsibility rather
-than to individual Actors.
+Availability claims require demonstrable evidence. The runtime may use known
+topology and failure-domain information (§48) when available to place entities
+and to evaluate availability.
 
-A Group expresses availability intent declaratively, for example:
+The runtime must never report an availability guarantee or failure
+independence as satisfied unless it can demonstrate that guarantee from
+available information. Unknown availability or unknown failure independence
+must not be reported as satisfied.
 
-    desired members = 3
-    tolerate one host failure
-    tolerate one availability-zone failure
-
-Application code normally expresses required redundancy or failure
-tolerance rather than selecting concrete Processes, Nodes, hosts, zones,
-or physical locations.
-
-The scheduler uses known topology/failure-domain information for
-placement.
-
-The Protos capacity-demand model may express additional independent
-capacity required to satisfy availability objectives.
-
-Availability objectives and mandatory availability requirements are
-distinct.
-
-Availability status is conceptually:
-
-    SATISFIED
-    UNSATISFIED
-    UNKNOWN
-
-The runtime must never report an availability guarantee as SATISFIED
-unless it can demonstrate that guarantee from available information.
-
-High-availability placement does not by itself provide replicated Actor
-state, persistence, consensus, transactional replication, failover of
+High-availability placement does not by itself provide persistence,
+replicated Actor state, consensus, transactional replication, failover of
 mutable state, or exactly-once processing.
 
 Actor liveness is ephemeral by default; durability is explicit.
+
+How Groups express availability intent, desired cardinality, and Group-based
+availability policy are not decided by this section (§50).
 ## 50. Runtime Groups
 
 **CLOSED --- REVISED**
@@ -914,7 +887,7 @@ reachability, and Authority availability are distinct.
 
 If a live ActorGroup currently has no eligible member, communication
 applies bounded backpressure and may remain pending according to normal
-timeout, deadline, cancellation, and capacity-demand semantics.
+timeout, deadline, and cancellation semantics.
 
 Temporary inability to reach Group routing/control information does not
 by itself prove that the Group has terminated.
@@ -926,13 +899,12 @@ If a concrete Actor already accepted the operation, subsequent Group
 termination does not revoke ownership of that accepted operation; normal
 Actor semantics apply.
 
-Demand for a live Group with insufficient eligible membership may
-contribute to capacity-demand signals.
+Insufficient eligible membership of a live Group may be externally
+observable.
 
 Sending to a Group does not itself provision infrastructure. Group
 reconciliation may create Actors when policy requires them, and external
-Infrastructure Controllers may separately provision Process/Node
-capacity in response to semantic capacity demand.
+infrastructure may separately add raw Process/Node capacity (§51).
 ## 50A. Core ActorGroup Acquisition
 
 **CLOSED**
@@ -1031,70 +1003,30 @@ discovery worker, Cluster membership, distributed coordinator, network
 transport, or other Group-acquisition machinery. This operation therefore
 preserves the Core pay-only-for-what-you-use boundary.
 
-## 51. Capacity Demand and Infrastructure Integration
+## 51. Capacity and Infrastructure Boundary
 
 **CLOSED --- REVISED**
 
-The core Protos runtime does not provision infrastructure capacity by
-default.
+The core Protos runtime does not provision raw infrastructure capacity by
+default. `Actor.spawn(...)` and Group communication do not provision
+infrastructure.
 
-Protos observes runtime state, performs semantic placement/admission and
-Group-control decisions, and exposes semantic capacity demand.
+Runtime capacity shortage or pressure may be observed internally or
+externally, and a runtime may expose implementation-specific feedback about
+it, for example as metrics. Core does not mandate a capacity-demand object,
+stream, taxonomy, aggregation model, signal cadence, or proactive timing, and
+no such feedback is an imperative provisioning order or a public
+creation-operation handle.
 
-Capacity demand may reflect conditions such as:
+External infrastructure may independently provision or remove raw capacity
+according to the capabilities, policy, cost, timing, and topology of its
+environment. External infrastructure is not Protos semantic authority. The
+appearance of a VM, host, container, Pod, or similar workload does not by
+itself create or define Actor, Process, Node, or Cluster identity, Group
+membership, routing state, membership, failure, or Authority semantics.
 
--   Live Actor incarnations waiting for placement/admission during `INITIALIZING`
--   Group demand with insufficient eligible members
--   Resource pressure
--   Hard placement/resource constraints
--   Unsatisfied availability objectives
--   Missing independent failure-domain capacity
-
-Capacity demand is information, not an imperative provisioning order. It has no
-required one-object-per-demand representation and does not imply a public
-creation-operation handle. A runtime may aggregate, coalesce, split, or otherwise
-represent demand internally provided that doing so does not change Actor
-identity, lifecycle, admission fairness, Group reconciliation, or any other
-portable observable behavior.
-
-An external or explicitly integrated Infrastructure Controller decides
-whether and how to satisfy that demand according to the capabilities,
-policy, cost, timing, and topology of its environment.
-
-Conceptually:
-
-    application/runtime intent
-            |
-            v
-    Protos semantic control
-            |
-            v
-    capacity demand
-            |
-            v
-    external infrastructure
-            |
-            v
-    new raw capacity
-            |
-            v
-    Protos bootstrap/discovery/membership
-            |
-            v
-    available scheduling capacity
-            |
-            v
-    Actors
-
-Metrics are one possible representation of Protos demand. They are not
-the semantic model itself.
-
-Newly provisioned capacity is incorporated into Protos only through the
-runtime's normal bootstrap, discovery, and membership mechanisms.
-
-The Infrastructure Controller does not directly mutate Protos logical
-topology or define Actor, Group, Process, Node, Cluster, routing,
-membership, failure, or Authority semantics.
+Newly provisioned raw capacity becomes usable only through the runtime's
+normal Protos bootstrap, discovery, membership, and lifecycle rules.
 
 A Kubernetes Deployment replica is not a Protos ActorGroup member merely
 because the workload may host Protos runtime capacity. One Process may
@@ -1105,12 +1037,12 @@ Processes and Nodes may disappear at any time.
 
 Correctness must not depend on graceful removal.
 
-Draining is advisory and opportunistic: it may reduce disruption during
-planned removal, but the runtime must remain correct if a Process or Node
-disappears immediately without draining.
+Draining may exist as implementation or policy machinery and may reduce
+disruption during planned removal, but the runtime must remain correct if a
+Process or Node disappears immediately without draining.
 
-Exact Capacity Demand APIs, infrastructure adapters, scale-up/down policy,
-and draining mechanics remain open.
+Infrastructure adapters, scale-up/down policy, draining mechanics, and any
+future capacity-feedback API remain open design topics.
 ## 52. Ephemeral Actor Liveness and Explicit Durability
 
 **CLOSED --- REVISED**
@@ -1433,8 +1365,7 @@ Higher-level mechanisms react independently:
 
 -   Group Controllers may restore desired membership
 -   Failure authorities may apply policy
--   Capacity-demand signals may increase
--   External Infrastructure Controllers may provision additional capacity
+-   External mechanisms may observe the loss and add raw capacity
 
 A newly created Process is new capacity.
 
