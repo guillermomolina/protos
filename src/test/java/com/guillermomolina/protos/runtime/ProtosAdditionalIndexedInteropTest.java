@@ -39,7 +39,7 @@ final class ProtosAdditionalIndexedInteropTest {
     }
 
     @Test
-    void bytesProjectsCurrentSynchronizedIndexedStateReadOnly() throws Exception {
+    void bytesProjectsCurrentIndexedStateReadOnly() throws Exception {
         ProtosBytesValue bytes =
                 new ProtosBytesValue(ProtosObjectValue.rootObject());
         ProtosIntegerValue first = octet(1);

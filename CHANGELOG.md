@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.162-SNAPSHOT
+
+- `PERF025` makes `Bytes` and recursive `ByteRegion` reservation coordination
+  pay only while isolated-parallel byte regions are actually live. Ordinary
+  indexed size/read/write/add/remove and snapshot operations no longer acquire a
+  Java monitor merely because `parallelRange` exists, and fresh values no
+  longer allocate an empty reservation list. The first non-empty reservation
+  lazily publishes an immutable reservation snapshot; zero-length ranges remain
+  allocation-free, disjoint reservations coexist, overlap checks retain the
+  existing half-open interval semantics, and releasing or committing the last
+  reservation returns the value to the storage-only representation. Snapshot
+  reads take the coordinated slow path only while reservation state is active,
+  preserving publication visibility and the existing `Bytes.each`,
+  Actor-transfer and nested-P snapshot behavior. Successful commit, cancellation
+  and failure continue to use the existing Future commitment boundary; parent
+  reserved-index access, structural-mutation rejection, readable `size`, P
+  ownership and all public errors/protocols are unchanged.
+  `ProtosBytesReservationPayAsYouGrowTest` freezes lazy reservation lifetime,
+  zero-length behavior, disjoint/overlap handling, commit publication and the
+  absence of monitor modifiers on the ordinary fast path, while existing
+  indexed-interop, P execution/context routing, Actor-transfer and PERF006/
+  PERF026 `Bytes.each` regressions remain green. This is an internal
+  representation/synchronization optimization only: no observable Protos
+  semantic or specification change, and no performance magnitude is claimed.
+
 ## 0.3.161-SNAPSHOT
 
 - `PERF025` replaces whole-collection keyed search in `Map` and `IdentityMap`
