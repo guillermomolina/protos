@@ -23,6 +23,32 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.437] - 2026-10-03
+
+### D180 — Rename the standard Closure loop selector to `whileTrue`
+- `spec/semantics/EXECUTION_AND_CONTROL.md` (Standard Closure `whileTrue`
+  operation; control transfer, suspension and cancellation): the standard
+  Closure pre-test loop is `condition.whileTrue(body)`. It is the only standard
+  pre-test loop selector. The standard `while(body)` selector is removed with
+  no compatibility alias, and no standard inverse `whileFalse(body)` selector
+  is added. All non-name D044 semantics are unchanged.
+- `spec/semantics/CALLABLES.md`: the ordinary local Closure-valued slot of
+  `Object` is `whileTrue` in place of `while`; ordinary lookup, shadowing,
+  extraction, override and invocation-role rules are unchanged.
+- `spec/PROTOS_GRAMMAR.md` (Standard Closure `whileTrue` Syntax Note): no
+  `while` or `whileTrue` keyword, statement form or dedicated production is
+  introduced; the loop uses ordinary message and trailing-Closure syntax.
+- `spec/concurrency/FUTURES_AND_TASKS.md`: structured-ownership reference
+  renamed to `whileTrue` condition/body activations; semantics unchanged.
+- No truthiness, coercion, selector intrinsic or sealing is introduced. `while`
+  (and `whileFalse`) remain ordinary non-reserved member names that programs
+  may define themselves without acquiring the standard loop behavior.
+
+### Compatibility and implementation state
+- Portable code must use `whileTrue(body)`; `while(body)` no longer reaches a
+  standard loop.
+- Implementation is owned by I078.
+
 ## [0.1.436] - 2026-09-30
 
 ### D169 — Simplify Core Path to relative downward components

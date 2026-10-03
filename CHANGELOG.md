@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.170-SNAPSHOT
+
+- `I078` records the D180 Candidate B rename of the standard Closure pre-test
+  loop selector from `while` to `whileTrue`, as already represented by the
+  current product state. `condition.whileTrue(body)` is the only standard
+  pre-test loop selector: the standard `while` selector is removed with no
+  compatibility alias, and no standard inverse `whileFalse` selector is
+  introduced. The rename preserves every non-name D044 semantic (receiver and
+  argument validation, exact canonical Boolean condition results, pre-test
+  order, `null` result, Error/non-local-return/suspension/cancellation
+  propagation, and no implicit Future adoption). Ordinary lookup, shadowing,
+  extraction and override of the `Object.whileTrue` slot are unchanged, and
+  user-defined selectors named `while` remain ordinary members. No dedicated
+  loop syntax, truthiness or selector intrinsic is introduced. Repository-owned
+  standard-loop call sites, the normative specification, runtime protocol
+  publication, conformance and Java tests, and documentation were migrated
+  coherently.
+
 ## 0.3.169-SNAPSHOT
 
 - `PERF025` specializes the residual consumers of a frame-native PLAT044 B′
