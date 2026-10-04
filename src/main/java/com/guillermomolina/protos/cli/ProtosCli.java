@@ -283,7 +283,7 @@ public final class ProtosCli {
             result =
                     ProtosWholeDocumentFormatter.format(
                             core,
-                            core.getParent().getParent().resolve("tools").resolve("formatter"),
+                            ProtosToolchainRoots.formatterTool(core),
                             new ProtosStandardLibraryModuleResolver(core.getParent()),
                             new ProtosDocumentSnapshot(documentId, 0L, sourceText),
                             ignored -> {},
@@ -1600,17 +1600,7 @@ public final class ProtosCli {
     }
 
     private static Path core() throws IOException {
-        String home = System.getenv("PROTOS_HOME");
-        Path base =
-                home == null || home.isBlank()
-                        ? Path.of("").toAbsolutePath()
-                        : Path.of(home);
-        Path core = base.resolve("protos/lib/core");
-        if (!Files.isDirectory(core)) {
-            throw new IOException(
-                    "cannot locate protos/lib/core; run via bin/protos or set PROTOS_HOME");
-        }
-        return core;
+        return ProtosToolchainRoots.core();
     }
 
     private static int usage(PrintStream err, String message) {

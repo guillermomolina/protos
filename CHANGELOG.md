@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.200-SNAPSHOT
+
+- `LM011-D1` (issue #670; D183, PLAT050 Candidate F, PLAT024) exposes the
+  canonical formatter over standard LSP `textDocument/formatting`; the server
+  now advertises `documentFormattingProvider`. A request formats the current
+  open immutable document snapshot, including unsaved edits, through the same
+  `ProtosWholeDocumentFormatter` / TOOL010 authority as `protos format`.
+  `FormattingOptions` (tab size, spaces, newline preferences) never change the
+  canonical style. Success yields zero edits for already-canonical source or
+  exactly one full-document `TextEdit`. Invalid or incomplete source, a
+  snapshot superseded while formatting, and an unopened URI all yield no
+  edits; internal formatter/bootstrap failures still fail the LSP request.
+  There is no disk fallback and no user-module execution. The formatter
+  runtime host is request-scoped, never persistent. The `PROTOS_HOME`
+  toolchain-root lookup is shared between the CLI and the LSP. Range and
+  on-type formatting are not advertised and there is no TypeScript formatter.
+  No Protos semantic or specification change.
+
 ## 0.3.199-SNAPSHOT
 
 - `LM011-C` (issue #670; D184/#796 Candidate B) exposes the public canonical

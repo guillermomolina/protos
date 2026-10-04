@@ -24,6 +24,7 @@ import com.guillermomolina.protos.analysis.ProtosStaticAnalysisSession;
 import com.guillermomolina.protos.analysis.ProtosStaticDefinitionResult;
 import com.guillermomolina.protos.analysis.ProtosStaticParseResult;
 import com.guillermomolina.protos.analysis.ProtosStaticReferenceResult;
+import com.guillermomolina.protos.execution.ProtosWholeDocumentFormatter;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -39,16 +40,20 @@ import org.eclipse.lsp4j.DidSaveTextDocumentParams;
 import org.eclipse.lsp4j.Diagnostic;
 import org.eclipse.lsp4j.DiagnosticSeverity;
 import org.eclipse.lsp4j.DefinitionParams;
+import org.eclipse.lsp4j.DocumentFormattingParams;
 import org.eclipse.lsp4j.DocumentSymbol;
 import org.eclipse.lsp4j.DocumentSymbolParams;
 import org.eclipse.lsp4j.Location;
 import org.eclipse.lsp4j.LocationLink;
+import org.eclipse.lsp4j.Position;
 import org.eclipse.lsp4j.PublishDiagnosticsParams;
+import org.eclipse.lsp4j.Range;
 import org.eclipse.lsp4j.ReferenceParams;
 import org.eclipse.lsp4j.SymbolInformation;
 import org.eclipse.lsp4j.SymbolKind;
 import org.eclipse.lsp4j.TextDocumentContentChangeEvent;
 import org.eclipse.lsp4j.TextDocumentItem;
+import org.eclipse.lsp4j.TextEdit;
 import org.eclipse.lsp4j.VersionedTextDocumentIdentifier;
 import org.eclipse.lsp4j.jsonrpc.messages.Either;
 import org.eclipse.lsp4j.services.LanguageClient;
@@ -64,18 +69,29 @@ import org.eclipse.lsp4j.services.TextDocumentService;
  * D110 proof results after the workspace edge confirms exact canonical
  * ProjectBinding source ownership. H1 adds D124 references by inverting only
  * those D110-proven identities; the open-document domain itself never becomes
- * project/package/module authority.</p>
+ * project/package/module authority. LM011-D1 formats the exact current open
+ * snapshot through the TOOL010 whole-document authority and returns at most
+ * one full-document edit; editor formatting options never select style.</p>
  */
 final class ProtosTextDocumentService implements TextDocumentService {
     static final String OPEN_DOCUMENTS_DOMAIN = "lsp:open-documents";
 
     private final ProtosStaticAnalysisSession session;
+    private final ProtosLspDocumentFormatter documentFormatter;
     private volatile LanguageClient client;
     private volatile boolean hierarchicalDocumentSymbolsEnabled;
     private volatile Predicate<String> navigationSourceAuthority = ignored -> false;
 
     ProtosTextDocumentService(ProtosStaticAnalysisSession session) {
+        this(session, ProtosLspDocumentFormatter.toolchain());
+    }
+
+    ProtosTextDocumentService(
+            ProtosStaticAnalysisSession session,
+            ProtosLspDocumentFormatter documentFormatter) {
         this.session = Objects.requireNonNull(session, "session");
+        this.documentFormatter =
+                Objects.requireNonNull(documentFormatter, "documentFormatter");
         this.session.openWorkspace(OPEN_DOCUMENTS_DOMAIN);
     }
 
@@ -166,6 +182,41 @@ final class ProtosTextDocumentService implements TextDocumentService {
                 .toList());
     }
 
+    @Override
+    public CompletableFuture<List<? extends TextEdit>> formatting(
+            DocumentFormattingParams params) {
+        Objects.requireNonNull(params, "params");
+        String uri = Objects.requireNonNull(
+                Objects.requireNonNull(params.getTextDocument(), "textDocument").getUri(),
+                "textDocument.uri");
+
+        // D183: params.getOptions() is accepted but never style authority.
+        Optional<ProtosDocumentSnapshot> captured =
+                session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri);
+        if (captured.isEmpty()) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+
+        ProtosWholeDocumentFormatter.Result result;
+        try {
+            result = documentFormatter.format(captured.get());
+        } catch (Exception failure) {
+            return CompletableFuture.failedFuture(failure);
+        }
+
+        String original = captured.get().characters();
+        if (result.status() != ProtosWholeDocumentFormatter.Status.SUCCESS
+                || result.source().equals(original)
+                || !captured.equals(session.currentSnapshot(OPEN_DOCUMENTS_DOMAIN, uri))) {
+            return CompletableFuture.completedFuture(List.of());
+        }
+
+        Range wholeDocument = new Range(
+                new Position(0, 0),
+                ProtosLspSourcePositions.position(original, original.length()));
+        return CompletableFuture.completedFuture(
+                List.of(new TextEdit(wholeDocument, result.source())));
+    }
 
     @Override
     public CompletableFuture<
