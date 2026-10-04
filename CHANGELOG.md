@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.183-SNAPSHOT
+
+- `TOOL001-F2E5` (exact external requirements preflight, PLAT048 B′) adds the
+  bundled Package Tool operation `ExecutionPlan.exactExternalRequirements`. It
+  validates the current lock against the current ResolutionRoot (header, root,
+  workspace membership and workspace-declared dependencies) and returns one
+  `{ref, content}` per locked registry/Git node, before any external package
+  is captured. Exports and external-declared dependencies stay with the later
+  F2E3 planning over the same verified captures. The current-lock, external-node
+  index and workspace-dependency checks move into shared helpers used by
+  `buildV2FromVerifiedCaptures` as well; the V2 planner's behavior is unchanged.
+  The host-side `ProtosExactExternalRequirementsPreflight` runs that operation in
+  a fresh Package Tool Process over a read-only confined project Filesystem. It
+  detaches the result into a list of `ProtosExactExternalPackageIdentity` values,
+  using the exact V2 ref/content shape checks, and rejects duplicates only by
+  complete exact identity. The process is terminated before the call returns,
+  and the result holds no Path, locator, Filesystem, custody or guest value.
+  No materialization provider, public-run wiring, CLI or specification change.
+
 ## 0.3.182-SNAPSHOT
 
 - `TOOL001-F2E4` (mixed V2 resolver and lazy external source loading) adds

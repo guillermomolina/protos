@@ -712,13 +712,10 @@ buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => 
     }
 }
 
-// F2E3B constructor: derive external package policy exclusively from each same-
-// capture verified Filesystem. Input Filesystems are consumed during preflight
-// but never enter PackageExecutionPlanV2.
-buildV2FromVerifiedCaptures: (
-    projectTreeFilesystem,
-    verifiedExternalPackages
-) => {
+// Current-project lock authority shared by generation-2 planning and the F2E5
+// exact external requirements preflight: the lock must match the current
+// ResolutionRoot header, root and workspace membership.
+loadCurrentV2Lock: (projectTreeFilesystem) => {
     state: Root.assembleState(projectTreeFilesystem)
     resolutionRoot: state.resolutionRoot
     lock: LockFile.load(projectTreeFilesystem)
@@ -753,6 +750,14 @@ buildV2FromVerifiedCaptures: (
         })
     })
 
+    {
+        state: state
+        resolutionRoot: resolutionRoot
+        lock: lock
+    }
+}
+
+indexLockedExternalNodes: (lock) => {
     lockedExternal: Map()
 
     lock.registryNodes.each((node) => {
@@ -770,6 +775,80 @@ buildV2FromVerifiedCaptures: (
         })
         lockedExternal[key] = node
     })
+
+    lockedExternal
+}
+
+collectV2WorkspaceDependencies: (lock, state) => {
+    result: Array()
+
+    state.packages.each((package) => {
+        packageDependencies:
+            validateV2WorkspaceDependencies(
+                lock,
+                package
+            )
+
+        packageDependencies.each((dependency) => {
+            result =
+                Array(
+                    ...result,
+                    dependency
+                )
+        })
+    })
+
+    result
+}
+
+// F2E5 requirements-first preflight: derive the complete exact external
+// requirements from current project/lock authority before any external package
+// is captured. Each requirement is only an exact NodeRef plus its locked
+// ContentIdentity. Exports and dependencies declared by external manifests are
+// not consulted here; buildV2FromVerifiedCaptures validates them later over the
+// same verified captures.
+exactExternalRequirements: (projectTreeFilesystem) => {
+    current: loadCurrentV2Lock(projectTreeFilesystem)
+    lock: current.lock
+
+    indexLockedExternalNodes(lock)
+    collectV2WorkspaceDependencies(lock, current.state)
+
+    requirements: Array()
+
+    appendRequirement: (lockedNode) => {
+        requirements =
+            Array(
+                ...requirements,
+                {
+                    ref: copyNodeRef(lockedNode.ref)
+                    content: copyContentIdentity(lockedNode.content)
+                }
+            )
+    }
+
+    lock.registryNodes.each((node) => {
+        appendRequirement(node)
+    })
+    lock.gitNodes.each((node) => {
+        appendRequirement(node)
+    })
+
+    requirements
+}
+
+// F2E3B constructor: derive external package policy exclusively from each same-
+// capture verified Filesystem. Input Filesystems are consumed during preflight
+// but never enter PackageExecutionPlanV2.
+buildV2FromVerifiedCaptures: (
+    projectTreeFilesystem,
+    verifiedExternalPackages
+) => {
+    current: loadCurrentV2Lock(projectTreeFilesystem)
+    state: current.state
+    resolutionRoot: current.resolutionRoot
+    lock: current.lock
+    lockedExternal: indexLockedExternalNodes(lock)
 
     preparedByRef: Map()
 
@@ -855,23 +934,7 @@ buildV2FromVerifiedCaptures: (
         appendExternal(node)
     })
 
-    planDependencies: Array()
-
-    state.packages.each((package) => {
-        packageDependencies:
-            validateV2WorkspaceDependencies(
-                lock,
-                package
-            )
-
-        packageDependencies.each((dependency) => {
-            planDependencies =
-                Array(
-                    ...planDependencies,
-                    dependency
-                )
-        })
-    })
+    planDependencies: collectV2WorkspaceDependencies(lock, state)
 
     lock.registryNodes.each((node) => {
         prepared: preparedByRef[nodeRefKey(node.ref)]

@@ -175,7 +175,7 @@ public final class ProtosPackageExecutionPlanV2Adapter {
         return detachExports(requireMap(requireField(packageValue, "exports"), "exports"));
     }
 
-    private static ProtosPackageExecutionPlanV2.NodeRef detachRef(Object value)
+    static ProtosPackageExecutionPlanV2.NodeRef detachRef(Object value)
             throws IOException {
         ProtosObjectValue ref = requireObject(value, "node ref");
         String kind = requireString(requireField(ref, "kind"), "ref kind");
@@ -270,7 +270,7 @@ public final class ProtosPackageExecutionPlanV2Adapter {
         return new ProtosPackageExecutionPlanV2.PrereleaseIdentifier(numeric, text);
     }
 
-    private static ProtosPackageContentIdentity detachContent(Object value) throws IOException {
+    static ProtosPackageContentIdentity detachContent(Object value) throws IOException {
         ProtosObjectValue content = requireObject(value, "ContentIdentity");
         requireExactFields(content, CONTENT_FIELDS, "ContentIdentity");
         return new ProtosPackageContentIdentity(
