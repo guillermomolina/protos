@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.194-SNAPSHOT
+
+- `BUG015` (issue #794) fixes a ready-before-suspend lost wakeup in
+  `ProtosParallelRuntime.ownedFuture()`. When the P outcome became ready after
+  the producer Task's pending check but before `suspend()`, `suspend()` returned
+  `false` and left the Task `RUNNING`, yet the continuation returned anyway; the
+  Task was then neither running, suspended, runnable nor terminal, and
+  `dispatchUntilTerminal()` could wait forever (observed as an intermittent
+  `array-parallel-sort.protos` stall under `--jobs 8`). The producer now returns
+  only on a true suspension, consumes the ready outcome while still `RUNNING`,
+  and returns without consuming it when cancellation won and the Task was
+  re-enqueued, matching the existing `Future.then()` contract. Deterministic
+  Java regressions cover both the ready and the cancellation-wins paths through
+  a package-private test seam. No observable language semantic or
+  specification change.
+
 ## 0.3.193-SNAPSHOT
 
 - `PERF030-N` (issue #784, `F3_GENERIC_NAME_TO_RANGE_INDEX`) cuts the remaining

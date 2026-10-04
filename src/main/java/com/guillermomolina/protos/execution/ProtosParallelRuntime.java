@@ -59,6 +59,24 @@ public final class ProtosParallelRuntime {
 
     private static ProtosFutureValue ownedFuture(ProtosActivation caller,
             java.util.function.Consumer<Completion> starter){
+        return ownedFuture(caller,starter,null);
+    }
+
+    /**
+     * BUG015 deterministic test seam. The Completion is never started on a P carrier;
+     * {@code afterPendingCheck} runs inside the producer Task after its pending observation and
+     * before {@code suspend()}, and may resolve the Completion through the supplied sink.
+     */
+    static ProtosFutureValue ownedFutureForTesting(ProtosActivation caller,
+            java.util.function.BiConsumer<ProtosTask,java.util.function.Consumer<Object>> afterPendingCheck){
+        Completion[] started=new Completion[1];
+        return ownedFuture(caller,c->started[0]=c,
+                current->afterPendingCheck.accept(current,v->started[0].resolve(v)));
+    }
+
+    private static ProtosFutureValue ownedFuture(ProtosActivation caller,
+            java.util.function.Consumer<Completion> starter,
+            java.util.function.Consumer<ProtosTask> afterPendingCheck){
         ProtosFutureValue f=new ProtosFutureValue(caller.prelude().orElseThrow().futurePrototype(),caller.executionDomain());
         Completion completion=new Completion();
         ProtosTask parent=caller.task().orElse(null);
@@ -66,7 +84,17 @@ public final class ProtosParallelRuntime {
             if(current.cancellationRequested()){
                 completion.cancel();f.cancelTerminal();current.observeCancellation();return;
             }
-            if(!completion.isReady()){current.suspend(completion);return;}
+            if(!completion.isReady()){
+                if(afterPendingCheck!=null)afterPendingCheck.accept(current);
+                /*
+                 * BUG015: the P outcome may become ready after the pending check but before
+                 * suspend(). suspend() then returns false and leaves the Task RUNNING, so the
+                 * outcome must be consumed now. A false return caused by cancellation leaves
+                 * the Task RUNNABLE and re-enqueued; only a still-RUNNING Task may continue.
+                 */
+                if(current.suspend(completion))return;
+                if(current.state()!=ProtosTask.State.RUNNING)return;
+            }
             Outcome o=completion.outcome();
             if(o.error!=null){if(f.fail(o.error))current.fail(o.error);else current.complete(ProtosNullValue.INSTANCE);return;}
             f.resolve(o.value,caller);

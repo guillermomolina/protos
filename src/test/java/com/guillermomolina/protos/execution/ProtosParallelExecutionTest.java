@@ -77,4 +77,54 @@ class ProtosParallelExecutionTest{
    assertEquals(0,d.liveTaskCount());
   }
  }
+
+ /*
+  * BUG015: the P outcome becomes ready after the producer's pending check but before suspend().
+  * suspend() returns false and the producer stays RUNNING; it must consume the outcome rather than
+  * return as though it had suspended.
+  */
+ @Test void readyBeforeSuspendCompletionIsConsumedWithoutLostWakeup()throws Exception{
+  var p=core();
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   var d=h.activation().executionDomain();
+   int[] observedPending={0};
+   var f=h.callEntered(()->ProtosParallelRuntime.ownedFutureForTesting(h.activation(),(current,resolve)->{
+    observedPending[0]++;
+    assertEquals(ProtosTask.State.RUNNING,current.state());
+    resolve.accept(new ProtosIntegerValue(BigInteger.valueOf(42)));
+    assertEquals(ProtosTask.State.RUNNING,current.state());
+   }));
+   var producer=f.producerTask().orElseThrow();
+   dispatchHosted(h,d);
+   assertEquals(1,observedPending[0]);
+   assertEquals(ProtosFutureValue.State.RESOLVED,f.state());
+   assertEquals(BigInteger.valueOf(42),((ProtosIntegerValue)f.resolvedValue().orElseThrow()).value());
+   assertEquals(ProtosTask.State.COMPLETED,producer.state());
+   assertEquals(0,d.liveTaskCount());
+  }
+ }
+
+ /*
+  * BUG015: when cancellation wins the same window, suspend() also returns false but the producer
+  * is RUNNABLE; the ready outcome must not be consumed and the Future is cancelled.
+  */
+ @Test void readyBeforeSuspendCancellationWinsWithoutConsumingOutcome()throws Exception{
+  var p=core();
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   var d=h.activation().executionDomain();
+   int[] observedPending={0};
+   var f=h.callEntered(()->ProtosParallelRuntime.ownedFutureForTesting(h.activation(),(current,resolve)->{
+    observedPending[0]++;
+    assertTrue(current.requestCancellation());
+    resolve.accept(new ProtosIntegerValue(BigInteger.valueOf(42)));
+   }));
+   var producer=f.producerTask().orElseThrow();
+   dispatchHosted(h,d);
+   assertEquals(1,observedPending[0]);
+   assertEquals(ProtosFutureValue.State.CANCELLED,f.state());
+   assertTrue(f.resolvedValue().isEmpty());
+   assertEquals(ProtosTask.State.CANCELLED,producer.state());
+   assertEquals(0,d.liveTaskCount());
+  }
+ }
 }
