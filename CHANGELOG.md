@@ -7,6 +7,33 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.197-SNAPSHOT
+
+- `LM011-B2` / `TOOL010` (issue #670; D183/#791; PLAT050/#792) adds
+  the first canonical whole-document Protos formatter authority. The exact
+  bundled formatter under `protos/tools/formatter/` owns D183's fixed
+  structural formatting policy in Protos, including 4-space structural and
+  continuation indentation, canonical token/delimiter spacing, deterministic
+  soft-100 wrapping, brace and sequence layout, Array/Map/Closure and trailing
+  Closure forms, and canonical ordinary blank-line/final-LF handling. The B1
+  source-layout bridge supplies the required structural, separator, comment and
+  exact raw-spelling facts without introducing a CST, second parser/grammar or
+  host-side formatter policy. Comments preserve exact raw text, ordering,
+  attachment and grammar-significant boundaries; String, numeric and Unicode
+  spellings remain exact, including locked triple-double lexical payload
+  newlines and horizontal whitespace. The editor-neutral
+  `ProtosWholeDocumentFormatter` fails closed for invalid or incomplete source,
+  returning the exact original source unchanged without starting TOOL010, while
+  genuine bundled-formatter failures remain host failures rather than being
+  misclassified as invalid source. Focal correctness gates cover successful
+  reparse, deterministic output, exact idempotence, D183 preservation
+  invariants and non-executing canonical semantic-AST equivalence; the
+  maintainer-reported full suite is 1328 passed, 0 failed. Public CLI spelling,
+  LSP `textDocument/formatting`, VS Code integration, range/check/on-type
+  formatting, recovery/partial formatting and configurable style remain
+  deferred to later LM011 slices. No observable Protos language semantic or
+  specification change.
+
 ## 0.3.196-SNAPSHOT
 
 - `TEST009-A` (issue #795) adds the static

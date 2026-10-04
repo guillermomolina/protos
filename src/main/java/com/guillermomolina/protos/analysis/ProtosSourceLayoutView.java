@@ -199,7 +199,9 @@ public final class ProtosSourceLayoutView {
             Optional<StructuralPath> preceding,
             Optional<StructuralPath> following,
             CommentBoundaryKind boundaryKind,
-            Optional<SequenceSeparatorKind> sequenceSeparatorKind) {
+            Optional<SequenceSeparatorKind> sequenceSeparatorKind,
+            boolean blankLineBefore,
+            boolean blankLineAfter) {
         public CommentProjection {
             Objects.requireNonNull(kind, "kind");
             Objects.requireNonNull(rawText, "rawText");
@@ -226,6 +228,7 @@ public final class ProtosSourceLayoutView {
             ProtosParserSourceFacts.SequenceContext context,
             StructuralPath preceding,
             SequenceSeparatorKind kind,
+            boolean blankLine,
             StructuralPath following) {
         public SequenceSeparatorProjection {
             Objects.requireNonNull(context, "context");
@@ -391,7 +394,15 @@ public final class ProtosSourceLayoutView {
         return structuralIndex.pathOf(expression);
     }
 
-    Optional<StructuralPath> pathOfNode(Object node) {
+    /**
+     * Returns the structural path of a canonical Surface/parser node retained
+     * by this tooling view.
+     *
+     * <p>This tool-neutral access includes non-expression sequence elements
+     * such as Map entries and Object items. It exposes only the path already
+     * owned by the B1 structural index and introduces no formatting policy.
+     */
+    public Optional<StructuralPath> pathOfNode(Object node) {
         Objects.requireNonNull(node, "node");
         return structuralIndex.pathOf(node);
     }
@@ -426,7 +437,15 @@ public final class ProtosSourceLayoutView {
                                                 attachment.following(),
                                                 attachment.boundaryKind(),
                                                 attachment
-                                                        .sequenceSeparatorKind()))
+                                                        .sequenceSeparatorKind(),
+                                                adjacentBlankLineBefore(
+                                                        attachment
+                                                                .comment()
+                                                                .span()),
+                                                adjacentBlankLineAfter(
+                                                        attachment
+                                                                .comment()
+                                                                .span())))
                         .toList();
 
         List<StructuralFormProjection> projectedForms =
@@ -493,6 +512,8 @@ public final class ProtosSourceLayoutView {
                             fact.context(),
                             preceding.orElseThrow(),
                             fact.kind(),
+                            separatorHasBlankLine(
+                                    fact.separatorSpan()),
                             following.orElseThrow()));
         }
 
@@ -556,6 +577,121 @@ public final class ProtosSourceLayoutView {
                 projectedSeparators,
                 projectedClosureForms,
                 projectedTrailingClosures);
+    }
+
+    private boolean separatorHasBlankLine(
+            SourceSpan separatorSpan) {
+        TokenOccurrence previousNewline = null;
+
+        for (TokenOccurrence occurrence : tokenOccurrences) {
+            if (occurrence.token().type() != TokenType.NEWLINE) {
+                continue;
+            }
+
+            if (occurrence.span().startOffset()
+                    < separatorSpan.startOffset()) {
+                continue;
+            }
+
+            if (occurrence.span().endOffset()
+                    > separatorSpan.endOffset()) {
+                break;
+            }
+
+            if (previousNewline != null
+                    && horizontalWhitespaceOnly(
+                            snapshot.characters(),
+                            previousNewline.span().endOffset(),
+                            occurrence.span().startOffset())) {
+                return true;
+            }
+
+            previousNewline = occurrence;
+        }
+
+        return false;
+    }
+
+    private boolean adjacentBlankLineBefore(
+            SourceSpan commentSpan) {
+        String source = snapshot.characters();
+        int commentLineStart =
+                logicalLineStart(
+                        source,
+                        commentSpan.startOffset());
+
+        if (commentLineStart == 0) {
+            return false;
+        }
+
+        int previousLineEnd = commentLineStart;
+        char last =
+                source.charAt(
+                        previousLineEnd - 1);
+
+        if (last == '\n'
+                && previousLineEnd >= 2
+                && source.charAt(previousLineEnd - 2) == '\r') {
+            previousLineEnd -= 2;
+        } else if (last == '\n'
+                || last == '\r') {
+            previousLineEnd -= 1;
+        } else {
+            return false;
+        }
+
+        int previousLineStart =
+                logicalLineStart(
+                        source,
+                        previousLineEnd);
+
+        return horizontalWhitespaceOnly(
+                source,
+                previousLineStart,
+                previousLineEnd);
+    }
+
+    private boolean adjacentBlankLineAfter(
+            SourceSpan commentSpan) {
+        String source = snapshot.characters();
+        int commentLineEnd =
+                logicalLineEnd(
+                        source,
+                        commentSpan.endOffset());
+
+        if (commentLineEnd >= source.length()) {
+            return false;
+        }
+
+        int nextLineStart = commentLineEnd;
+        char first =
+                source.charAt(
+                        nextLineStart);
+
+        if (first == '\r'
+                && nextLineStart + 1 < source.length()
+                && source.charAt(nextLineStart + 1) == '\n') {
+            nextLineStart += 2;
+        } else if (first == '\n'
+                || first == '\r') {
+            nextLineStart += 1;
+        } else {
+            return false;
+        }
+
+        if (nextLineStart >= source.length()) {
+            return false;
+        }
+
+        int nextLineEnd =
+                logicalLineEnd(
+                        source,
+                        nextLineStart);
+
+        return horizontalWhitespaceOnly(
+                source,
+                nextLineStart,
+                nextLineEnd);
     }
 
     public String sourceText(SourceSpan span) {

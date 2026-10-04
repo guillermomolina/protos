@@ -250,6 +250,88 @@ class ProtosSourceLayoutViewTest {
     }
 
     @Test
+    void projectsBlankLinePresenceWithoutTreatingCommentLinesAsBlank() {
+        ProtosSourceLayoutView.SourcePreservationProjection projection =
+                core.sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:blank-lines",
+                                        7L,
+                                        "a\n"
+                                                + "b\n"
+                                                + "\n"
+                                                + "c\n"
+                                                + "   \n"
+                                                + "d\n"
+                                                + "// note\n"
+                                                + "e"))
+                        .preservationProjection();
+
+        assertEquals(
+                List.of(
+                        false,
+                        true,
+                        true,
+                        false),
+                projection.sequenceSeparators()
+                        .stream()
+                        .map(
+                                ProtosSourceLayoutView
+                                        .SequenceSeparatorProjection
+                                        ::blankLine)
+                        .toList());
+    }
+
+    @Test
+    void projectsOwnLineCommentAdjacentBlankLines() {
+        String source =
+                "a\n"
+                        + "\n"
+                        + "// before\n"
+                        + "b\n"
+                        + "// after\n"
+                        + "\n"
+                        + "c\n"
+                        + "\n"
+                        + "// both\n"
+                        + "\n"
+                        + "d";
+
+        ProtosSourceLayoutView.SourcePreservationProjection projection =
+                core.sourceLayout(
+                                new ProtosDocumentSnapshot(
+                                        "memory:comment-blank-lines",
+                                        8L,
+                                        source))
+                        .preservationProjection();
+
+        assertEquals(
+                List.of(
+                        true,
+                        false,
+                        true),
+                projection.comments()
+                        .stream()
+                        .map(
+                                ProtosSourceLayoutView
+                                        .CommentProjection
+                                        ::blankLineBefore)
+                        .toList());
+
+        assertEquals(
+                List.of(
+                        false,
+                        true,
+                        true),
+                projection.comments()
+                        .stream()
+                        .map(
+                                ProtosSourceLayoutView
+                                        .CommentProjection
+                                        ::blankLineAfter)
+                        .toList());
+    }
+
+    @Test
     void preservationProjectionUsesRawSpellingAndStructuralAuthorities() {
         String source =
                 "(café); [1_000]\n"

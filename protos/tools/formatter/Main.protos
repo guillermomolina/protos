@@ -1,0 +1,81 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+// TOOL010 bootstrap identity and B1 source-layout bridge.
+//
+// This increment owns no D183 formatting decisions. The bridge only validates
+// and exposes the exact mechanical source-layout projection supplied by the
+// host. Structural formatting policy is added in the following increment.
+
+toolId: "TOOL010"
+
+Structural: import("self:Structural")
+
+acceptSourceLayout: (layout) => {
+    layout.exactSource
+
+    layout.program.kind
+    layout.program.path.root
+    layout.program.expressions.each((expression) => {
+        expression.kind
+        expression.path.root
+    })
+
+    layout.tokens.each((token) => {
+        token.type
+        token.rawText
+    })
+
+    layout.comments.each((comment) => {
+        comment.kind
+        comment.rawText
+        comment.placement
+        comment.preceding
+        comment.following
+        comment.boundaryKind
+        comment.sequenceSeparatorKind
+    })
+
+    layout.structuralForms.each((form) => {
+        form.path.root
+        form.path.steps
+        form.kind
+    })
+
+    layout.sequenceSeparators.each((separator) => {
+        separator.context
+        separator.preceding
+        separator.kind
+        separator.following
+    })
+
+    layout.closureForms.each((closureForm) => {
+        closureForm.closure
+        closureForm.form
+    })
+
+    layout.trailingClosures.each((trailingClosure) => {
+        trailingClosure.call
+        trailingClosure.closure
+    })
+
+    layout
+}
+
+formatStructural: (layout) => {
+    Structural.format(layout)
+}
+
+toolId
