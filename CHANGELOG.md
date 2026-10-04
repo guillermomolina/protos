@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.182-SNAPSHOT
+
+- `TOOL001-F2E4` (mixed V2 resolver and lazy external source loading) adds
+  `ProtosPackageExecutionPlanV2ModuleResolver`. It routes `self:`, `dep:` and
+  `std:` over one detached mixed workspace/registry/Git PackageExecutionPlanV2
+  graph using immutable exact-NodeRef, exact-external-identity and
+  `declaring NodeRef + alias -> target NodeRef` indexes, so distinct versions,
+  revisions, registry/Git kinds and same-content identities never collapse.
+  Importers are identified only from canonical workspace or external
+  ModuleKeys; `dep:` always goes through the exact edge and target exports.
+  Workspace sources keep the unchanged generation-1 physical rules. External
+  sources are read lazily per load from the borrowed
+  `ProtosExternalPackageResourceScope`, decoded as strict UTF-8 and returned
+  without a physical path; no source/store Path is reopened and nothing is
+  cached. The resolver never closes the scope; loads fail after its owner
+  closes it. No public-run wiring, CLI or specification change.
+
 ## 0.3.181-SNAPSHOT
 
 - `TOOL001-F2E4` (verified-custody resource scope) implements the PLAT012
