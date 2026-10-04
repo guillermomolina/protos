@@ -32,9 +32,9 @@ Subcommands:
            --confirm-command CMD
       Measure the post-phase control sample, run exactly one confirmation
       for all suspects, and decide PASS (0), WARN (0), FAIL (1) or ERROR (2).
-      With --advisory the verdict is reported identically but always exits
-      0 (project-owner decision: the guard never fails CI; the local
-      `make test` is the authoritative gate before pushing).
+      With --warn-regressions a slow-test FAIL verdict is surfaced as WARN
+      and exits 0, while guard ERROR remains fail-closed. With --advisory every
+      non-PASS verdict is reported but exits 0 for CI.
 
 Decision math and the baseline format live in java_slow_test_policy.py.
 Java-test policy (phases, parallelism, exclusions) stays in the Makefile.
@@ -422,6 +422,39 @@ def check(reports: Path, baseline_path: Path, state: Path, jobs: int,
     return {"PASS": 0, "WARN": 0, "FAIL": 1, "ERROR": 2}[status_word], lines
 
 
+def warn_regressions(status: int, lines: List[str]) -> Tuple[int, List[str]]:
+    """Downgrade pure slow-test regression failures to a non-failing warning.
+
+    Guard/infrastructure errors remain fail-closed, including when they coexist
+    with a proven slow-test regression.
+    """
+    if status != 1:
+        return status, lines
+
+    classification_line = next(
+        (line for line in lines if line.startswith("CLASSIFICATION=")),
+        None,
+    )
+    if classification_line is None:
+        return status, lines
+
+    classifications = set(classification_line.split("=", 1)[1].split(","))
+    guard_errors = {
+        policy.ENVIRONMENT_NOT_COMPARABLE,
+        policy.BASELINE_PENDING,
+        policy.CONFIGURATION_ERROR,
+    }
+    if classifications & guard_errors:
+        return status, lines
+
+    shown = [
+        "JAVA_SLOW_TEST_GUARD=WARN",
+        "JAVA_SLOW_TEST_WARNING=slow-test regression detected; validation continues",
+        "JAVA_SLOW_TEST_POLICY_VERDICT=FAIL",
+    ]
+    return 0, shown + lines[1:]
+
+
 def advisory(status: int, lines: List[str]) -> Tuple[int, List[str]]:
     """Report a non-PASS verdict as a warning without failing."""
     if status == 0:
@@ -457,7 +490,9 @@ def main(argv: List[str]) -> int:
     p_check.add_argument("--jobs", required=True, type=int)
     p_check.add_argument("--log", required=True, type=Path)
     p_check.add_argument("--confirm-command", required=True)
-    p_check.add_argument("--advisory", action="store_true")
+    mode = p_check.add_mutually_exclusive_group()
+    mode.add_argument("--warn-regressions", action="store_true")
+    mode.add_argument("--advisory", action="store_true")
     args = parser.parse_args(argv)
 
     if args.self_test:
@@ -490,7 +525,9 @@ def main(argv: List[str]) -> int:
             return measure_controls(state, jobs)
         status, lines = check(args.reports, args.baseline, args.state, args.jobs,
                               measure, confirm_with_make(args.confirm_command, args.log))
-        if args.advisory:
+        if args.warn_regressions:
+            status, lines = warn_regressions(status, lines)
+        elif args.advisory:
             status, lines = advisory(status, lines)
         print("\n".join(lines))
         return status

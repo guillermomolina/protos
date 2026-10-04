@@ -22,9 +22,11 @@ JAVA_SLOW_TEST_GUARD := $(PYTHON) tools/java_slow_test_guard.py
 JAVA_SLOW_TEST_BASELINE := tools/java_slow_test_baseline.txt
 JAVA_SLOW_TEST_STATE := target/java-slow-test
 JAVA_CONFIRM_TESTS ?=
-# Project-owner decision (TEST008-B): the local run is the authoritative
-# slow-test gate; under CI (CI=true) the guard only warns, never fails.
-JAVA_SLOW_TEST_ADVISORY ?= $(if $(filter true,$(CI)),--advisory,)
+# Project-owner decision (TEST008 follow-up): slow-test regression verdicts
+# warn instead of failing local validation. Guard configuration/environment
+# errors remain fail-closed locally; under CI (CI=true) every guard verdict
+# remains advisory.
+JAVA_SLOW_TEST_MODE ?= $(if $(filter true,$(CI)),--advisory,--warn-regressions)
 JAVA_CONFIRM_REPORTS ?= $(JAVA_SLOW_TEST_STATE)/confirmation-reports
 # PERF030-F: opt-in static LocalRangeAccessor PE-index guard. Never a
 # prerequisite of test, test-java, test-protos, check, or verify.
@@ -81,7 +83,7 @@ test-java:
 	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-serial
 	$(JAVA_SLOW_TEST_GUARD) check --reports $(JAVA_SUREFIRE_REPORTS) --baseline $(JAVA_SLOW_TEST_BASELINE) \
 		--state $(JAVA_SLOW_TEST_STATE) --jobs $(JAVA_TEST_JOBS) --log $(JAVA_TEST_LOG) \
-		--confirm-command "$(MAKE) --no-print-directory test-java-confirm" $(JAVA_SLOW_TEST_ADVISORY)
+		--confirm-command "$(MAKE) --no-print-directory test-java-confirm" $(JAVA_SLOW_TEST_MODE)
 
 # Streams one test-java phase live to the terminal while appending it to the
 # retained log, records its wall time, and fails with the phase's own

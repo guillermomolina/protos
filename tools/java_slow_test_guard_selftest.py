@@ -263,6 +263,38 @@ class GuardSelfTest(unittest.TestCase):
             self.assertIn("JAVA_SLOW_TEST_GUARD=FAIL", lines)
         self.assertEqual((0, ["ok"]), guard.advisory(0, ["ok"]))
 
+    def test_warning_mode_downgrades_only_slow_test_failures(self) -> None:
+        fail_lines = [
+            "JAVA_SLOW_TEST_GUARD=FAIL",
+            "CLASSIFICATION=ISOLATED_TEST_REGRESSION",
+        ]
+        code, lines = guard.warn_regressions(1, fail_lines)
+        self.assertEqual(0, code)
+        self.assertEqual("JAVA_SLOW_TEST_GUARD=WARN", lines[0])
+        self.assertIn(
+            "JAVA_SLOW_TEST_WARNING=slow-test regression detected; validation continues",
+            lines,
+        )
+        self.assertIn("JAVA_SLOW_TEST_POLICY_VERDICT=FAIL", lines)
+        self.assertIn("CLASSIFICATION=ISOLATED_TEST_REGRESSION", lines)
+
+        error_lines = [
+            "JAVA_SLOW_TEST_GUARD=ERROR",
+            "CLASSIFICATION=CONFIGURATION_ERROR",
+        ]
+        self.assertEqual((2, error_lines), guard.warn_regressions(2, error_lines))
+
+        mixed_lines = [
+            "JAVA_SLOW_TEST_GUARD=FAIL",
+            "CLASSIFICATION=CONFIGURATION_ERROR,ISOLATED_TEST_REGRESSION",
+        ]
+        self.assertEqual((1, mixed_lines), guard.warn_regressions(1, mixed_lines))
+
+        malformed_lines = ["JAVA_SLOW_TEST_GUARD=FAIL"]
+        self.assertEqual((1, malformed_lines), guard.warn_regressions(1, malformed_lines))
+
+        self.assertEqual((0, ["ok"]), guard.warn_regressions(0, ["ok"]))
+
     # Baseline parsing.
 
     def test_explicit_baseline_parsing_is_exact(self) -> None:

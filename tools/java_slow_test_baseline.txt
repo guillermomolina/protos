@@ -27,8 +27,9 @@
 # owner's reference development machine (16 cores, JAVA_TEST_JOBS=6) from
 # four local `make test-java` runs plus one serial run of the classes below:
 # references and expectations are medians of those observations. Per the
-# owner's decision the local run is the authoritative gate; under CI the
-# guard is advisory (see Makefile JAVA_SLOW_TEST_ADVISORY).
+# owner's current decision slow-test regression verdicts are warnings in
+# local validation; guard errors remain fail-closed locally while CI is fully
+# advisory (see Makefile JAVA_SLOW_TEST_MODE).
 # - FACTOR_MIN/MAX 0.5/4: a host 2x faster up to a heavily loaded one.
 # - COHERENCE_LIMIT 1.5: local controls agreed within 1.08.
 # - CLASS_REGRESSION_FACTOR 2.5: worst confirmation noise (9.24 s against
