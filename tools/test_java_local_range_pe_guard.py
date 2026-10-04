@@ -14,7 +14,7 @@
 # WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 # the specific language governing rights and limitations under the License.
 
-"""PERF030-F self-tests for tools/java_local_range_pe_guard.py (synthetic snippets only)."""
+"""PERF030-F/G self-tests for tools/java_local_range_pe_guard.py (synthetic snippets only)."""
 
 from __future__ import print_function
 
@@ -318,6 +318,428 @@ class BaselineTest(unittest.TestCase):
 
     def test_unanalyzable_source_fails(self):
         status, output, _ = self.run_check(self.SOURCE + "\n}", self.current_entries())
+        self.assertEqual(1, status)
+        self.assertIn("ANALYSIS_FAILED", output)
+
+
+
+# --------------------------------------------------------------------------
+# PERF030-G: PE reachability
+# --------------------------------------------------------------------------
+
+BIND = '@Bind("$bytecodeNode") BytecodeNode node, @Bind("$frame") VirtualFrame frame'
+CONSTANT_ORDINAL = """
+    @Operation
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "locals")
+    @ConstantOperand(type = int.class, name = "ordinal")
+"""
+RUNTIME_ORDINAL = """
+    @Operation
+    @ConstantOperand(type = LocalRangeAccessor.class, name = "locals")
+"""
+HELPER_SIG = "Root.helper(LocalRangeAccessor,BytecodeNode,VirtualFrame,int)"
+
+
+def operation(name, annotations, body, extra_params=""):
+    return """%s
+    public static final class %s {
+        @Specialization
+        public static Object perform(LocalRangeAccessor locals, int ordinal%s, %s) {
+            %s
+        }
+    }
+""" % (annotations, name, extra_params, BIND, body)
+
+
+def root_key(name, extra=""):
+    return "Root.%s.perform(LocalRangeAccessor,int%s,BytecodeNode,VirtualFrame)" % (name, extra)
+
+
+def reach(source, label="p/Root.java"):
+    sinks, parsed = guard.parse_sources([(label, HEADER + source)])
+    guard.analyze_reachability(sinks, parsed)
+    return sinks
+
+
+def sink_in(sinks, method_prefix):
+    found = [sink for sink in sinks if sink.method.startswith(method_prefix + "(")]
+    assert len(found) == 1, [(sink.type_name, sink.method) for sink in sinks]
+    return found[0]
+
+
+HELPER_METHOD = """
+    static Object helper(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, int index) {
+        return locals.getObject(node, frame, index);
+    }
+"""
+
+
+class ReachabilityTest(unittest.TestCase):
+    def test_01_direct_constant_operand_root(self):
+        sinks = reach("final class Root {%s}" % operation(
+            "Read", CONSTANT_ORDINAL, "return locals.getObject(node, frame, ordinal);"))
+        sink = only(sinks)
+        self.assertEqual(guard.PROVEN_CONSTANT_OPERAND, sink.classification)
+        self.assertEqual(guard.PE_REACHABLE_PROVEN_CONSTANT, sink.pe_reachability)
+        self.assertEqual([guard.PROV_OPERATION_CONSTANT], sink.pe_provenance)
+        self.assertEqual([root_key("Read")], sink.pe_call_chain)
+
+    def test_02_constant_through_one_helper(self):
+        sinks = reach("final class Root {%s%s}" % (HELPER_METHOD, operation(
+            "Read", CONSTANT_ORDINAL, "return helper(locals, node, frame, ordinal);")))
+        sink = only(sinks)
+        self.assertEqual(guard.METHOD_PARAMETER, sink.classification)
+        self.assertEqual(guard.PE_REACHABLE_PROVEN_CONSTANT, sink.pe_reachability)
+        self.assertEqual([guard.PROV_OPERATION_CONSTANT], sink.pe_provenance)
+        self.assertEqual([root_key("Read"), HELPER_SIG], sink.pe_call_chain)
+
+    def test_03_constant_through_two_helpers(self):
+        sinks = reach("""final class Root {
+    static Object outer(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, int slot) {
+        int alias = slot;
+        return Root.helper(locals, node, frame, alias);
+    }
+%s%s}""" % (HELPER_METHOD, operation("Read", CONSTANT_ORDINAL, "return outer(locals, node, frame, ordinal);")))
+        sink = only(sinks)
+        self.assertEqual(guard.PE_REACHABLE_PROVEN_CONSTANT, sink.pe_reachability)
+        self.assertEqual(
+            [root_key("Read"), "Root.outer(LocalRangeAccessor,BytecodeNode,VirtualFrame,int)", HELPER_SIG],
+            sink.pe_call_chain)
+
+    def test_04_runtime_name_derived_from_root(self):
+        sinks = reach("""final class Root {
+    static boolean contains(LocalRangeAccessor locals, Layout layout, BytecodeNode node, VirtualFrame frame, String name) {
+        Integer offset = layout.offsetOf(name);
+        return !locals.isCleared(node, frame, offset);
+    }
+%s}""" % operation("Contains", CONSTANT_ORDINAL, "return contains(locals, layout, node, frame, name);",
+                   ", Layout layout, String name"))
+        sink = only(sinks)
+        self.assertEqual(guard.RUNTIME_NAME_DERIVED, sink.classification)
+        self.assertEqual(guard.PE_REACHABLE_RISK, sink.pe_reachability)
+        self.assertEqual([guard.RUNTIME_NAME_DERIVED], sink.pe_provenance)
+        self.assertEqual(
+            [root_key("Contains", ",Layout,String"),
+             "Root.contains(LocalRangeAccessor,Layout,BytecodeNode,VirtualFrame,String)"],
+            sink.pe_call_chain)
+
+    def test_05_runtime_operand_from_root(self):
+        sinks = reach("final class Root {%s%s}" % (HELPER_METHOD, operation(
+            "Read", RUNTIME_ORDINAL, "return helper(locals, node, frame, ordinal);")))
+        sink = only(sinks)
+        self.assertEqual(guard.PE_REACHABLE_RISK, sink.pe_reachability)
+        self.assertEqual([guard.PROV_RUNTIME_OPERAND], sink.pe_provenance)
+        self.assertEqual([root_key("Read"), HELPER_SIG], sink.pe_call_chain)
+        # Directly inside a root, a runtime operand is a one-element risk chain.
+        direct = only(reach("final class Root {%s}" % operation(
+            "Direct", RUNTIME_ORDINAL, "return locals.getObject(node, frame, ordinal);")))
+        self.assertEqual(guard.METHOD_PARAMETER, direct.classification)
+        self.assertEqual(guard.PE_REACHABLE_RISK, direct.pe_reachability)
+        self.assertEqual([root_key("Direct")], direct.pe_call_chain)
+
+    def test_06_same_helper_constant_and_runtime_paths(self):
+        sinks = reach("final class Root {%s%s%s}" % (
+            HELPER_METHOD,
+            operation("Constant", CONSTANT_ORDINAL, "return helper(locals, node, frame, ordinal);"),
+            operation("Runtime", RUNTIME_ORDINAL, "return helper(locals, node, frame, ordinal);")))
+        sink = only(sinks)
+        self.assertEqual(guard.PE_REACHABLE_RISK, sink.pe_reachability)
+        self.assertEqual([guard.PROV_OPERATION_CONSTANT, guard.PROV_RUNTIME_OPERAND], sink.pe_provenance)
+        self.assertEqual([root_key("Runtime"), HELPER_SIG], sink.pe_call_chain)
+        self.assertEqual(2, len(sink.pe_paths))
+
+    def test_07_reachable_only_through_truffle_boundary(self):
+        sinks = reach("""final class Root {
+    @TruffleBoundary
+    static Object slow(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, int index) {
+        return helper(locals, node, frame, index);
+    }
+%s%s}""" % (HELPER_METHOD, operation("Read", RUNTIME_ORDINAL, "return slow(locals, node, frame, ordinal);")))
+        sink = only(sinks)
+        self.assertEqual(guard.METHOD_PARAMETER, sink.classification)
+        self.assertEqual(guard.BOUNDARY_CUT, sink.pe_reachability)
+        self.assertEqual(["Root.slow(LocalRangeAccessor,BytecodeNode,VirtualFrame,int)", HELPER_SIG],
+                         sink.pe_call_chain)
+        self.assertEqual([], sink.pe_provenance)
+
+    def test_08_not_reachable_from_any_root(self):
+        sinks = reach("""final class Root {
+    static Object unused(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame) {
+        return helper(locals, node, frame, 4);
+    }
+%s%s}""" % (HELPER_METHOD, operation("Other", RUNTIME_ORDINAL, "return null;")))
+        sink = only(sinks)
+        self.assertEqual(guard.NOT_PE_REACHABLE, sink.pe_reachability)
+        self.assertEqual([], sink.pe_call_chain)
+        self.assertEqual([], sink.pe_unknown)
+
+    def test_09_ambiguous_overload_is_unknown(self):
+        sinks = reach("""final class Root {
+    static Object helper(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, Object index) {
+        return null;
+    }
+%s%s}""" % (HELPER_METHOD, operation("Read", RUNTIME_ORDINAL,
+                                     "return helper(locals, node, frame, compute(value));", ", Object value")))
+        sink = only(sinks)
+        self.assertEqual(guard.PE_REACHABILITY_UNKNOWN, sink.pe_reachability)
+        self.assertIn("ambiguous overload", sink.pe_unknown[0])
+        # A statically typed argument disambiguates the same overload pair.
+        resolved = only(reach("""final class Root {
+    static Object helper(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, Object index) {
+        return null;
+    }
+%s%s}""" % (HELPER_METHOD, operation("Read", RUNTIME_ORDINAL, "return helper(locals, node, frame, ordinal);"))))
+        self.assertEqual(guard.PE_REACHABLE_RISK, resolved.pe_reachability)
+
+    def test_10_unknown_receiver_reaching_a_sink_is_unknown(self):
+        source = """final class Helper {
+    Object read(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, int index) {
+        return locals.getObject(node, frame, index);
+    }
+}
+final class Unrelated {
+    Object read(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, int index) {
+        return null;
+    }
+}
+final class Root {%s}"""
+        sinks = reach(source % operation("Read", RUNTIME_ORDINAL, "return mystery.read(locals, node, frame, 1);"))
+        sink = only(sinks)
+        self.assertEqual(guard.PE_REACHABILITY_UNKNOWN, sink.pe_reachability)
+        self.assertIn("mystery", sink.pe_unknown[0])
+        self.assertIn("reaches PE root", sink.pe_unknown[0])
+        # A statically known unrelated receiver is not an edge at all.
+        sinks = reach(source % operation(
+            "Read", RUNTIME_ORDINAL, "return unrelated.read(locals, node, frame, 1);", ", Unrelated unrelated"))
+        self.assertEqual(guard.NOT_PE_REACHABLE, only(sinks).pe_reachability)
+        # An unresolved receiver in a method no PE root reaches is immaterial.
+        sinks = reach((source % operation("Read", RUNTIME_ORDINAL, "return null;")).replace(
+            "final class Root {", "final class Offline {\n    Object go(LocalRangeAccessor locals, BytecodeNode node, "
+            "VirtualFrame frame) { return mystery.read(locals, node, frame, 1); }\n}\nfinal class Root {"))
+        self.assertEqual(guard.NOT_PE_REACHABLE, only(sinks).pe_reachability)
+
+    def test_11_recursive_call_graph_terminates_deterministically(self):
+        source = """final class Root {
+    static Object a(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, int index, int depth) {
+        return depth > 0 ? b(locals, node, frame, index, depth - 1) : null;
+    }
+    static Object b(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, int index, int depth) {
+        if (depth > 1) {
+            return a(locals, node, frame, index, depth);
+        }
+        return locals.getObject(node, frame, index);
+    }
+%s}""" % operation("Read", RUNTIME_ORDINAL, "return a(locals, node, frame, ordinal, 3);")
+        first = only(reach(source))
+        self.assertEqual(guard.PE_REACHABLE_RISK, first.pe_reachability)
+        self.assertEqual(
+            [root_key("Read"),
+             "Root.a(LocalRangeAccessor,BytecodeNode,VirtualFrame,int,int)",
+             "Root.b(LocalRangeAccessor,BytecodeNode,VirtualFrame,int,int)"],
+            first.pe_call_chain)
+        self.assertEqual(first.to_json(), only(reach(source)).to_json())
+
+    def test_interface_dispatch_reaches_implementation(self):
+        sinks = reach("""interface Authority {
+    boolean isEmpty();
+}
+final class FrameAuthority implements Authority {
+    private final LocalRangeAccessor locals;
+    private final BytecodeNode node;
+    private final VirtualFrame frame;
+    @Override
+    public boolean isEmpty() {
+        for (int ordinal = 0; ordinal < 3; ordinal++) {
+            if (!locals.isCleared(node, frame, ordinal)) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+final class Root {%s%s}""" % (
+            operation("Names", RUNTIME_ORDINAL, "return names.isEmpty() || names.get(0).isEmpty();",
+                      ", java.util.List<String> names"),
+            operation("Dispatch", RUNTIME_ORDINAL, "return holder.authority().isEmpty();", ", Holder holder"),
+        ) + """
+final class Holder {
+    Authority authority() { return null; }
+}""")
+        sink = only(sinks)
+        self.assertEqual(guard.LOOP_INDEX, sink.classification)
+        self.assertEqual(guard.PE_REACHABLE_RISK, sink.pe_reachability)
+        self.assertEqual([guard.LOOP_INDEX], sink.pe_provenance)
+        self.assertEqual([root_key("Dispatch", ",Holder"), "FrameAuthority.isEmpty()"], sink.pe_call_chain)
+        self.assertEqual(1, sink.pe_paths[0]["roots"])  # List<String>.isEmpty() is not an edge
+
+    def test_pattern_bindings_and_contextual_names_resolve_receivers(self):
+        source = """interface Authority {
+    boolean isEmpty();
+}
+final class FrameAuthority implements Authority {
+    private final LocalRangeAccessor locals;
+    private final BytecodeNode node;
+    private final VirtualFrame frame;
+    Object readAt(int ordinal) {
+        return locals.getObject(node, frame, ordinal);
+    }
+    @Override
+    public boolean isEmpty() {
+        for (int ordinal = 0; ordinal < 3; ordinal++) {
+            if (!locals.isCleared(node, frame, ordinal)) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+final class Module {
+    void markReady() {}
+    void compose(FrameAuthority source, java.util.List<String> names) { source.isEmpty(); }
+    void compose(FrameAuthority source, java.util.Set<String> names) {}
+}
+final class Root {%s%s%s}""" % (
+            operation("Positive", RUNTIME_ORDINAL,
+                      "if (value instanceof FrameAuthority authority && authority.isEmpty()) { "
+                      "return authority.readAt(ordinal); } return null;", ", Object value"),
+            operation("Negated", RUNTIME_ORDINAL,
+                      "if (!(value instanceof java.util.Optional<?> body)) { return null; } "
+                      "Module record = new Module(); record.markReady(); return body.isEmpty();",
+                      ", Object value"),
+            operation("Overload", RUNTIME_ORDINAL,
+                      "if (!(value instanceof FrameAuthority source)) { return null; } "
+                      "new Module().compose(source, names); return null;",
+                      ", Object value, java.util.List<String> names"))
+        sinks = reach(source)
+        self.assertEqual([], [sink.pe_unknown for sink in sinks if sink.pe_unknown])
+        read = sink_in(sinks, "readAt")
+        self.assertEqual(guard.PE_REACHABLE_RISK, read.pe_reachability)
+        self.assertEqual([guard.PROV_RUNTIME_OPERAND], read.pe_provenance)
+        self.assertEqual([root_key("Positive", ",Object"), "FrameAuthority.readAt(int)"], read.pe_call_chain)
+        empty = sink_in(sinks, "isEmpty")
+        self.assertEqual(guard.PE_REACHABLE_RISK, empty.pe_reachability)
+        # Positive (direct) and Overload (via the exact List overload); the
+        # Optional pattern binding in Negated is not an edge.
+        self.assertEqual(2, empty.pe_paths[0]["roots"])
+
+    def test_15_representative_path_is_deterministic(self):
+        source = "final class Root {%s%s%s}" % (
+            HELPER_METHOD,
+            operation("Beta", RUNTIME_ORDINAL, "return helper(locals, node, frame, ordinal);"),
+            operation("Alpha", RUNTIME_ORDINAL, "return helper(locals, node, frame, ordinal);"))
+        runs = [json.dumps([sink.to_json() for sink in reach(source)], sort_keys=True) for _ in range(3)]
+        self.assertEqual(1, len(set(runs)))
+        self.assertEqual(2, only(reach(source)).pe_paths[0]["roots"])
+
+
+class ReachabilityBaselineTest(unittest.TestCase):
+    SOURCE = HEADER + "final class Root {%s%s%s}" % (
+        HELPER_METHOD,
+        operation("Read", RUNTIME_ORDINAL, "return helper(locals, node, frame, ordinal);"),
+        """
+    static Object offline(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, int index) {
+        return locals.getObject(node, frame, index);
+    }
+""")
+
+    def run_check(self, source, reachability_entries):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            java = root / "src" / "p" / "Root.java"
+            java.parent.mkdir(parents=True)
+            java.write_text(source, encoding="utf-8")
+            sinks, _ = guard.scan_tree(root / "src", root)
+            baseline = root / "baseline.json"
+            baseline.write_text(json.dumps(baseline_document(
+                [entry_for(sink) for sink in sinks if sink.classification in guard.RISK_CLASSIFICATIONS])),
+                encoding="utf-8")
+            reachability = root / "reachability.json"
+            reachability.write_text(json.dumps(
+                {"schema": guard.REACHABILITY_BASELINE_SCHEMA, "entries": reachability_entries}), encoding="utf-8")
+            report = root / "target" / "report.json"
+            out = io.StringIO()
+            status = guard.check(root / "src", baseline, report, root, out, reachability_baseline=reachability)
+            document = json.loads(report.read_text(encoding="utf-8")) if report.exists() else None
+            candidate_path = report.parent / guard.REACHABILITY_CANDIDATE_NAME
+            candidate = json.loads(candidate_path.read_text(encoding="utf-8")) if candidate_path.exists() else None
+            return status, out.getvalue(), document, candidate
+
+    def current_entries(self, source=None):
+        return self.run_check(source or self.SOURCE, [])[3]["entries"]
+
+    def test_exact_reachability_baseline_passes(self):
+        entries = self.current_entries()
+        self.assertEqual(
+            [guard.PE_REACHABLE_RISK, guard.NOT_PE_REACHABLE], [entry["pe_reachability"] for entry in entries])
+        status, output, document, _ = self.run_check(self.SOURCE, entries)
+        self.assertEqual(0, status, output)
+        self.assertEqual(1, document["totals"][guard.PE_REACHABLE_RISK])
+        self.assertEqual(1, document["totals"][guard.NOT_PE_REACHABLE])
+        self.assertEqual(0, document["totals"][guard.PE_REACHABILITY_UNKNOWN])
+        self.assertIn("PE reachability analysis complete", output)
+        self.assertIn("PE_REACHABLE_RISK=1 site(s) remain and are NOT proven safe", output)
+        self.assertIn("-> Root.helper", output)
+
+    def test_12_stale_reachability_entry_fails(self):
+        entries = self.current_entries()
+        stale = dict(entries[0])
+        stale["method"] = "removed(LocalRangeAccessor,BytecodeNode,VirtualFrame,int)"
+        status, output, document, _ = self.run_check(self.SOURCE, entries + [stale])
+        self.assertEqual(1, status)
+        self.assertIn("STALE_REACHABILITY_ENTRY", output)
+        self.assertEqual(1, document["totals"]["STALE_REACHABILITY_ENTRIES"])
+
+    def test_13_newly_pe_reachable_risk_fails(self):
+        entries = self.current_entries()
+        source = self.SOURCE.replace("return helper(locals, node, frame, ordinal);",
+                                     "offline(locals, node, frame, ordinal);\n            "
+                                     "return helper(locals, node, frame, ordinal);")
+        status, output, _, _ = self.run_check(source, entries)
+        self.assertEqual(1, status)
+        self.assertIn("REACHABILITY_DRIFT", output)
+        self.assertIn('expected "NOT_PE_REACHABLE" actual "PE_REACHABLE_RISK"', output)
+        # A sink absent from the reachability baseline is reported as new.
+        status, output, document, _ = self.run_check(self.SOURCE, entries[:1])
+        self.assertEqual(1, status)
+        self.assertIn("NEW_UNBASELINED_REACHABILITY", output)
+        self.assertEqual(1, document["totals"]["NEW_UNBASELINED_REACHABILITY"])
+
+    def test_14_removed_pe_reachable_risk_makes_entry_stale(self):
+        entries = self.current_entries()
+        source = self.SOURCE.replace("return helper(locals, node, frame, ordinal);", "return null;")
+        source = source.replace(HELPER_METHOD, "")
+        status, output, _, _ = self.run_check(source, [entries[1]] + entries[:1])
+        self.assertEqual(1, status)
+        self.assertIn("STALE_REACHABILITY_ENTRY", output)
+
+    def test_chain_and_boundary_drift_fail(self):
+        entries = self.current_entries()
+        slow = """
+    @TruffleBoundary
+    static Object slow(LocalRangeAccessor locals, BytecodeNode node, VirtualFrame frame, int index) {
+        return helper(locals, node, frame, index);
+    }
+"""
+        bounded = self.SOURCE.replace(HELPER_METHOD, HELPER_METHOD + slow).replace(
+            "return helper(locals, node, frame, ordinal);", "return slow(locals, node, frame, ordinal);")
+        bounded_entries = self.current_entries(bounded)
+        self.assertEqual(guard.BOUNDARY_CUT, bounded_entries[0]["pe_reachability"])
+        status, output, _, _ = self.run_check(bounded, bounded_entries)
+        self.assertEqual(0, status, output)
+        status, output, _, _ = self.run_check(bounded.replace("    @TruffleBoundary\n", ""), bounded_entries)
+        self.assertEqual(1, status)
+        self.assertIn('pe_reachability expected "BOUNDARY_CUT" actual "PE_REACHABLE_RISK"', output)
+        changed = [dict(entry) for entry in entries]
+        changed[0]["pe_call_chain"] = list(reversed(changed[0]["pe_call_chain"]))
+        status, output, _, _ = self.run_check(self.SOURCE, changed)
+        self.assertEqual(1, status)
+        self.assertIn("pe_call_chain expected", output)
+
+    def test_unknown_reachability_is_never_baselineable(self):
+        entries = self.current_entries()
+        unknown = dict(entries[0])
+        unknown["pe_reachability"] = guard.PE_REACHABILITY_UNKNOWN
+        status, output, _, _ = self.run_check(self.SOURCE, [unknown] + entries[1:])
         self.assertEqual(1, status)
         self.assertIn("ANALYSIS_FAILED", output)
 

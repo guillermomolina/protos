@@ -29,6 +29,8 @@ JAVA_CONFIRM_REPORTS ?= $(JAVA_SLOW_TEST_STATE)/confirmation-reports
 # PERF030-F: opt-in static LocalRangeAccessor PE-index guard. Never a
 # prerequisite of test, test-java, test-protos, check, or verify.
 LOCAL_RANGE_PE_GUARD_BASELINE := tools/java_local_range_pe_guard_baseline.json
+# PERF030-G: exact expected PE reachability of every determinate sink.
+LOCAL_RANGE_PE_REACHABILITY_BASELINE := tools/java_local_range_pe_reachability_baseline.json
 LOCAL_RANGE_PE_GUARD_REPORT := target/local-range-pe-guard-report.json
 
 .PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
@@ -43,7 +45,8 @@ help:
 		'  make test-java      Run the ordinary Java/JUnit test suite' \
 		'  make test-java-stress  Run explicit Java stress validation' \
 		'  make test-local-range-pe-guard  Opt-in static LocalRangeAccessor PE-index' \
-		'                      guard: self-tests, baseline check, target/ report' \
+		'                      guard: self-tests, baseline and PE-reachability' \
+		'                      checks, target/ report' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
 		'  make check          Verify the toolchain, then run both test suites' \
 		'  make verify         Run a clean Maven verify lifecycle' \
@@ -120,6 +123,7 @@ test-local-range-pe-guard:
 	$(PYTHON) tools/java_local_range_pe_guard.py check \
 		--source src/main/java \
 		--baseline $(LOCAL_RANGE_PE_GUARD_BASELINE) \
+		--reachability-baseline $(LOCAL_RANGE_PE_REACHABILITY_BASELINE) \
 		--report $(LOCAL_RANGE_PE_GUARD_REPORT)
 
 test-protos:

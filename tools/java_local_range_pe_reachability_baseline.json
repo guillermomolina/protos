@@ -1,0 +1,689 @@
+{
+  "schema": "protos-local-range-pe-reachability-baseline-v1",
+  "description": "PERF030-G exact expected PE reachability of every determinate indexed LocalRangeAccessor sink, keyed by the PERF030-F sink identity. PE_REACHABLE_RISK entries are KNOWN PE-reachable risks, not PE-safe sites. PE_REACHABILITY_UNKNOWN is never baselineable.",
+  "entries": [
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode",
+      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "OPERATION_RUNTIME_OPERAND",
+        "UNPROVEN_ARGUMENT"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND, UNPROVEN_ARGUMENT): ordinary (non-@ConstantOperand) runtime operand of the root operation; call argument whose constancy cannot be proven"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode",
+      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "OPERATION_RUNTIME_OPERAND",
+        "UNPROVEN_ARGUMENT"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND, UNPROVEN_ARGUMENT): ordinary (non-@ConstantOperand) runtime operand of the root operation; call argument whose constancy cannot be proven"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "ensureGeneralEstablishmentOrder(BytecodeNode)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "LOOP_INDEX"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
+        "ProtosBytecodeRootNode.bindIndexedClosureParameter(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
+        "ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt(int,Object)",
+        "ProtosFrameLexicalBindingAuthority.recordFrameBackedEstablishment(BytecodeNode,int,String)",
+        "ProtosFrameLexicalBindingAuthority.ensureGeneralEstablishmentOrder(BytecodeNode)"
+      ],
+      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "recomputeLastCompactFrameOrdinal(BytecodeNode)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "NOT_PE_REACHABLE",
+      "pe_provenance": [],
+      "pe_call_chain": [],
+      "rationale": "no call path from a Bytecode DSL operation root"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "hasFrameBackedBindingAt(BytecodeNode,String,int)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "OPERATION_RUNTIME_OPERAND",
+        "UNPROVEN_ARGUMENT"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(ProtosActivation,String,int,int)",
+        "ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(ProtosLexicalEnvironment,String,int,int)",
+        "ProtosFrameLexicalBindingAuthority.hasFrameBackedBindingAt(String,int)",
+        "ProtosFrameLexicalBindingAuthority.hasFrameBackedBindingAt(BytecodeNode,String,int)"
+      ],
+      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND, UNPROVEN_ARGUMENT): ordinary (non-@ConstantOperand) runtime operand of the root operation; call argument whose constancy cannot be proven"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "readFrameBackedBindingAt(String,int)",
+      "operation": "getObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "OPERATION_RUNTIME_OPERAND"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(ProtosActivation,String,int,int)",
+        "ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(ProtosLexicalEnvironment,String,int,int)",
+        "ProtosFrameLexicalBindingAuthority.readFrameBackedBindingAt(String,int)"
+      ],
+      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND): ordinary (non-@ConstantOperand) runtime operand of the root operation"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "assignFrameBackedBindingAt(String,int,Object)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "UNPROVEN_ARGUMENT"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.AssignCapturedFrameLocal.perform(ProtosActivation,CapturedLexicalWriteTarget,String,Object)",
+        "ProtosBytecodeRootNode.assignCapturedFrameDestination(CapturedLexicalWriteTarget,String,Object)",
+        "ProtosFrameLexicalBindingAuthority.assignFrameBackedBindingAt(String,int,Object)"
+      ],
+      "rationale": "PE-reachable with non-constant index (UNPROVEN_ARGUMENT): call argument whose constancy cannot be proven"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "createFrameBackedBindingAt(int,Object)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION",
+        "OPERATION_RUNTIME_OPERAND"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
+        "ProtosBytecodeRootNode.bindIndexedClosureParameter(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
+        "ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt(int,Object)"
+      ],
+      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND): ordinary (non-@ConstantOperand) runtime operand of the root operation"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "createFrameBackedBindingAt(int,Object)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION",
+        "OPERATION_RUNTIME_OPERAND"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
+        "ProtosBytecodeRootNode.bindIndexedClosureParameter(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
+        "ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt(int,Object)"
+      ],
+      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND): ordinary (non-@ConstantOperand) runtime operand of the root operation"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "adoptPresentFrameBackedBindings()",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "LOOP_INDEX"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.installFrameLexicalAuthorityOnTransition(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,MaterializedFrame)",
+        "ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindings()"
+      ],
+      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "adoptPresentFrameBackedBindings()",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 1,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "LOOP_INDEX"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.installFrameLexicalAuthorityOnTransition(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,MaterializedFrame)",
+        "ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindings()"
+      ],
+      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "isEmpty()",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "LOOP_INDEX"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.ReadMember.guardedSharedInherited(ProtosActivation,Object,String,String,SharedInheritedLookup)",
+        "ProtosValueLookup.materializeMemberRead(Object,ProtosSlotLookupResult)",
+        "ProtosClosureValue.bindMethod(Object,ProtosObjectValue)",
+        "ProtosObjectValue.hasLocalBindingsForRuntime()",
+        "ProtosFrameLexicalBindingAuthority.isEmpty()"
+      ],
+      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "containsBinding(String)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "RUNTIME_NAME_DERIVED"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(ProtosActivation,String,int,int)",
+        "ProtosActivation.currentContextHasLocalSlotForRuntime(String)",
+        "ProtosFrameLexicalBindingAuthority.containsBinding(String)"
+      ],
+      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "readBinding(String)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "RUNTIME_NAME_DERIVED"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.Lookup.perform(ProtosActivation,String)",
+        "ProtosLexicalFallback.readByName(ProtosActivation,String)",
+        "ProtosActivation.readCurrentLocalSlotForRuntime(String)",
+        "ProtosFrameLexicalBindingAuthority.readBinding(String)"
+      ],
+      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "readBinding(String)",
+      "operation": "getObject",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "RUNTIME_NAME_DERIVED"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.Lookup.perform(ProtosActivation,String)",
+        "ProtosLexicalFallback.readByName(ProtosActivation,String)",
+        "ProtosActivation.readCurrentLocalSlotForRuntime(String)",
+        "ProtosFrameLexicalBindingAuthority.readBinding(String)"
+      ],
+      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "bindingsSnapshot()",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
+      "pe_call_chain": [
+        "ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost(ProtosObjectValue)",
+        "ProtosObjectValue.localSlotsSnapshot()",
+        "ProtosFrameLexicalBindingAuthority.bindingsSnapshot()"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "bindingsSnapshot()",
+      "operation": "getObject",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
+      "pe_call_chain": [
+        "ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost(ProtosObjectValue)",
+        "ProtosObjectValue.localSlotsSnapshot()",
+        "ProtosFrameLexicalBindingAuthority.bindingsSnapshot()"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "bindingsSnapshot()",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
+      "pe_call_chain": [
+        "ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost(ProtosObjectValue)",
+        "ProtosObjectValue.localSlotsSnapshot()",
+        "ProtosFrameLexicalBindingAuthority.bindingsSnapshot()"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "bindingsSnapshot()",
+      "operation": "getObject",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
+      "pe_call_chain": [
+        "ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost(ProtosObjectValue)",
+        "ProtosObjectValue.localSlotsSnapshot()",
+        "ProtosFrameLexicalBindingAuthority.bindingsSnapshot()"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "LOOP_INDEX"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,VirtualFrame)",
+        "ProtosActivation.installFrameLexicalBindingAuthorityForRuntime(ProtosLexicalBindingAuthority)",
+        "ProtosFrameLexicalBindingAuthority.appendBindingsTo(ArrayList,ArrayList)"
+      ],
+      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "operation": "getObject",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "LOOP_INDEX"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,VirtualFrame)",
+        "ProtosActivation.installFrameLexicalBindingAuthorityForRuntime(ProtosLexicalBindingAuthority)",
+        "ProtosFrameLexicalBindingAuthority.appendBindingsTo(ArrayList,ArrayList)"
+      ],
+      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "RUNTIME_NAME_DERIVED"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,VirtualFrame)",
+        "ProtosActivation.installFrameLexicalBindingAuthorityForRuntime(ProtosLexicalBindingAuthority)",
+        "ProtosFrameLexicalBindingAuthority.appendBindingsTo(ArrayList,ArrayList)"
+      ],
+      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "operation": "getObject",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "RUNTIME_NAME_DERIVED"
+      ],
+      "pe_call_chain": [
+        "ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,VirtualFrame)",
+        "ProtosActivation.installFrameLexicalBindingAuthorityForRuntime(ProtosLexicalBindingAuthority)",
+        "ProtosFrameLexicalBindingAuthority.appendBindingsTo(ArrayList,ArrayList)"
+      ],
+      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "putBinding(String,Object)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "TRUFFLE_BOUNDARY",
+      "occurrence": 0,
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
+      "pe_call_chain": [
+        "ProtosFrameLexicalBindingAuthority.putBinding(String,Object)"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.putBinding"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "putBinding(String,Object)",
+      "operation": "setObject",
+      "index": "offset",
+      "classification": "TRUFFLE_BOUNDARY",
+      "occurrence": 0,
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
+      "pe_call_chain": [
+        "ProtosFrameLexicalBindingAuthority.putBinding(String,Object)"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.putBinding"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "removeBinding(String)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "NOT_PE_REACHABLE",
+      "pe_provenance": [],
+      "pe_call_chain": [],
+      "rationale": "no call path from a Bytecode DSL operation root"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "removeBinding(String)",
+      "operation": "getObject",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "NOT_PE_REACHABLE",
+      "pe_provenance": [],
+      "pe_call_chain": [],
+      "rationale": "no call path from a Bytecode DSL operation root"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "removeBinding(String)",
+      "operation": "clear",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "NOT_PE_REACHABLE",
+      "pe_provenance": [],
+      "pe_call_chain": [],
+      "rationale": "no call path from a Bytecode DSL operation root"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "OPERATION_RUNTIME_OPERAND",
+        "UNPROVEN_ARGUMENT"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindInlineClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosInlineCallbackFrameBindings.create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND, UNPROVEN_ARGUMENT): ordinary (non-@ConstantOperand) runtime operand of the root operation; call argument whose constancy cannot be proven"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "OPERATION_RUNTIME_OPERAND",
+        "UNPROVEN_ARGUMENT"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindInlineClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosInlineCallbackFrameBindings.create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND, UNPROVEN_ARGUMENT): ordinary (non-@ConstantOperand) runtime operand of the root operation; call argument whose constancy cannot be proven"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "admitsCapturedAccess(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,String,int,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "RUNTIME_NAME_DERIVED"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.ReadInlineCapturedFrameLocal.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,String,int,int,BytecodeNode,VirtualFrame)",
+        "ProtosInlineCallbackFrameBindings.readCaptured(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,String,int,int,BytecodeNode,VirtualFrame)",
+        "ProtosInlineCallbackFrameBindings.admitsCapturedAccess(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,String,int,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "LOOP_INDEX"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.MaterializeInlineCallbackActivation.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,BytecodeNode,VirtualFrame)",
+        "ProtosInlineCallbackFrameBindings.durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
+      "operation": "getObject",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "LOOP_INDEX"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.MaterializeInlineCallbackActivation.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,BytecodeNode,VirtualFrame)",
+        "ProtosInlineCallbackFrameBindings.durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
+      "operation": "clear",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_provenance": [
+        "LOOP_INDEX"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.MaterializeInlineCallbackActivation.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,BytecodeNode,VirtualFrame)",
+        "ProtosInlineCallbackFrameBindings.durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "PROVEN_CONSTANT_OPERAND",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "PROVEN_CONSTANT_OPERAND",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "class": "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "PROVEN_CONSTANT_OPERAND",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
+      "class": "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "PROVEN_CONSTANT_OPERAND",
+      "occurrence": 0,
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
+      "pe_provenance": [
+        "PE_CONSTANT_FROM_OPERATION"
+      ],
+      "pe_call_chain": [
+        "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+      ],
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+    }
+  ]
+}
