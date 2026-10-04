@@ -95,16 +95,6 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "isEmpty()",
-      "operation": "isCleared",
-      "index": "ordinal",
-      "classification": "LOOP_INDEX",
-      "occurrence": 0,
-      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
       "method": "containsBinding(String)",
       "operation": "isCleared",
       "index": "offset",

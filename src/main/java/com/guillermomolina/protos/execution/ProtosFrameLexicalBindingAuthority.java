@@ -342,17 +342,10 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         if (dynamicOverflow != null && !dynamicOverflow.isEmpty()) {
             return false;
         }
-
-        BytecodeNode bytecodeNode = currentBytecodeNode();
-        for (int ordinal = 0;
-                ordinal < frameBackedLayout.length();
-                ordinal++) {
-            if (!frameBackedLocals.isCleared(
-                    bytecodeNode, frame, ordinal)) {
-                return false;
-            }
+        if (establishmentOrder != null) {
+            return establishmentOrder.isEmpty();
         }
-        return true;
+        return lastCompactFrameOrdinal < 0;
     }
 
     @Override

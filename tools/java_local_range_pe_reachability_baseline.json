@@ -211,27 +211,6 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "isEmpty()",
-      "operation": "isCleared",
-      "index": "ordinal",
-      "classification": "LOOP_INDEX",
-      "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "LOOP_INDEX"
-      ],
-      "pe_call_chain": [
-        "ProtosBytecodeRootNode.ReadMember.guardedSharedInherited(ProtosActivation,Object,String,String,SharedInheritedLookup)",
-        "ProtosValueLookup.materializeMemberRead(Object,ProtosSlotLookupResult)",
-        "ProtosClosureValue.bindMethod(Object,ProtosObjectValue)",
-        "ProtosObjectValue.hasLocalBindingsForRuntime()",
-        "ProtosFrameLexicalBindingAuthority.isEmpty()"
-      ],
-      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
       "method": "containsBinding(String)",
       "operation": "isCleared",
       "index": "offset",

@@ -247,6 +247,33 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                     assertEquals(
                             List.of("value", "other"),
                             List.copyOf(authority.bindingsSnapshot().keySet()));
+                    assertFalse(authority.isEmpty());
+
+                    assertSame(
+                            argument,
+                            observed.removeLocalSlot("other"));
+                    assertFalse(authority.isEmpty());
+                    assertSame(
+                            argument,
+                            observed.removeLocalSlot("value"));
+                    assertTrue(authority.isEmpty());
+                    assertNull(
+                            privateField(authority, "establishmentOrder"),
+                            "empty compact authority must stay compact");
+                    assertEquals(
+                            -1,
+                            privateField(authority, "lastCompactFrameOrdinal"));
+
+                    observed.createLocalSlot("value", argument);
+                    assertFalse(authority.isEmpty());
+                    observed.createLocalSlot("other", argument);
+                    assertFalse(authority.isEmpty());
+                    assertNull(
+                            privateField(authority, "establishmentOrder"),
+                            "ascending compact recreation must stay compact");
+                    assertEquals(
+                            List.of("value", "other"),
+                            List.copyOf(authority.bindingsSnapshot().keySet()));
 
                     Object dynamicValue = newObject();
                     observed.createLocalSlot("dynamic", dynamicValue);
@@ -259,6 +286,7 @@ final class ProtosPerf025FrameMaterializationSliceTest {
                     assertSame(
                             dynamicValue,
                             observed.readLocalSlot("dynamic").orElseThrow());
+                    assertFalse(authority.isEmpty());
 
                     assertSame(
                             argument,
@@ -267,6 +295,29 @@ final class ProtosPerf025FrameMaterializationSliceTest {
 
                     assertEquals(
                             List.of("other", "dynamic", "value"),
+                            List.copyOf(authority.bindingsSnapshot().keySet()));
+
+                    assertSame(
+                            argument,
+                            observed.removeLocalSlot("other"));
+                    assertSame(
+                            dynamicValue,
+                            observed.removeLocalSlot("dynamic"));
+                    assertSame(
+                            argument,
+                            observed.removeLocalSlot("value"));
+                    assertTrue(authority.isEmpty());
+                    assertNotNull(
+                            privateField(authority, "establishmentOrder"),
+                            "general authority must remain in general mode when empty");
+                    assertNull(
+                            privateField(authority, "dynamicOverflow"),
+                            "removing the final dynamic binding must release overflow");
+
+                    observed.createLocalSlot("value", argument);
+                    assertFalse(authority.isEmpty());
+                    assertEquals(
+                            List.of("value"),
                             List.copyOf(authority.bindingsSnapshot().keySet()));
                 });
         System.out.println("FRAME_AUTHORITY_PAY_AS_YOU_GROW=PASS");

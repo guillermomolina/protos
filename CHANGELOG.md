@@ -7,6 +7,20 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.189-SNAPSHOT
+
+- `PERF030-L` (issue #784) removes the PE-visible frame-local rescan from
+  `ProtosFrameLexicalBindingAuthority.isEmpty()`. Empty-state queries now use
+  the authority's existing establishment metadata in O(1): general mode reads
+  `establishmentOrder`, while compact mode reads `lastCompactFrameOrdinal`;
+  the defensive dynamic-overflow check is retained. Focused regression
+  coverage verifies non-empty, empty and recreate transitions in both compact
+  and general modes, including remove/recreate ordering. The LocalRange PE
+  guard removes exactly the F5 `isEmpty()` sink from both baselines, leaving
+  36 sinks: 13 PE-reachable proven constant, 13 PE-reachable risks, 6 boundary
+  cuts, 4 non-PE-reachable and 0 unknown. Observable language semantics,
+  specification behavior and benchmarks remain unchanged.
+
 ## 0.3.188-SNAPSHOT
 
 - `PERF030-K` (issue #784) removes the structurally unreachable inline
