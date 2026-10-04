@@ -25,10 +25,12 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.LocalAccessor;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
 import com.oracle.truffle.api.bytecode.MaterializedLocalAccessor;
+import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import java.util.List;
 import java.util.Map;
@@ -507,6 +509,21 @@ final class ProtosInlineCallbackFrameBindings {
         if (child.frameBindingsTransferred()) {
             return child.activation();
         }
+        return transferFrameBindingsToDurableActivation(
+                child,
+                frameBackedLocals,
+                frameBackedLayout,
+                bytecodeNode,
+                frame.materialize());
+    }
+
+    @TruffleBoundary
+    private static ProtosActivation transferFrameBindingsToDurableActivation(
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            BytecodeNode bytecodeNode,
+            MaterializedFrame frame) {
         ProtosLexicalBindingAuthority durable =
                 ProtosLexicalBindingAuthority.newMapBackedForRuntime();
         for (int ordinal = 0; ordinal < frameBackedLayout.length(); ordinal++) {

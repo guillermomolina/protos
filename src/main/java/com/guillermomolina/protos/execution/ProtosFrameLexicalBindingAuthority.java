@@ -130,7 +130,11 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         if (establishmentOrder != null) {
             return;
         }
+        materializeGeneralEstablishmentOrder(bytecodeNode);
+    }
 
+    @TruffleBoundary
+    private void materializeGeneralEstablishmentOrder(BytecodeNode bytecodeNode) {
         LinkedHashSet<String> materialized = new LinkedHashSet<>();
         for (int ordinal = 0; ordinal < frameBackedLayout.length(); ordinal++) {
             if (!frameBackedLocals.isCleared(
@@ -306,7 +310,12 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
      */
     void adoptPresentFrameBackedBindings() {
         BytecodeNode bytecodeNode = currentBytecodeNode();
+        adoptPresentFrameBackedBindingsSlow(bytecodeNode);
+    }
 
+    @TruffleBoundary
+    private void adoptPresentFrameBackedBindingsSlow(
+            BytecodeNode bytecodeNode) {
         if (establishmentOrder != null) {
             for (int ordinal = 0;
                     ordinal < frameBackedLayout.length();
@@ -426,7 +435,14 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         Objects.requireNonNull(values, "values");
 
         BytecodeNode bytecodeNode = currentBytecodeNode();
+        appendBindingsToSlow(bytecodeNode, names, values);
+    }
 
+    @TruffleBoundary
+    private void appendBindingsToSlow(
+            BytecodeNode bytecodeNode,
+            java.util.ArrayList<String> names,
+            java.util.ArrayList<Object> values) {
         if (establishmentOrder == null) {
             for (int ordinal = 0;
                     ordinal < frameBackedLayout.length();

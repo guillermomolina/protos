@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.191-SNAPSHOT
+
+- `PERF030-M` (issue #784, `F4_PE_VISIBLE_LIFECYCLE_RANGE_SCANS`) moves the
+  10 PE-visible lifecycle `LocalRangeAccessor` scans in
+  `ProtosFrameLexicalBindingAuthority` and
+  `ProtosInlineCallbackFrameBindings` behind dedicated `@TruffleBoundary`
+  helpers. General establishment-order materialization, adoption of already
+  PRESENT frame-backed bindings, and authority handoff now perform their full
+  range scans outside partial evaluation while preserving the existing cheap
+  guards and current-`BytecodeNode` resolution where applicable. Inline
+  durable activation keeps the `frameBindingsTransferred()` fast guard outside
+  the boundary and materializes the frame only for the first transfer so the
+  slow helper receives a `MaterializedFrame`. No `@ExplodeLoop` is introduced.
+  The final LocalRange PE inventory remains 36 sinks: 13 PE-reachable proven
+  constant, 3 PE-reachable risks, 16 boundary cuts, 4 non-PE-reachable and 0
+  unknown; only `F3_GENERIC_NAME_TO_RANGE_INDEX` remains PE-reachable risk.
+  Establishment order, compact/general transition, `PRESENT(null)` versus
+  `ABSENT`, remove/recreate order, authority handoff, inline activation
+  laziness and first-observer transfer, and debugger/tooling observation are
+  preserved. No observable language semantic, specification or benchmark
+  change.
+
 ## 0.3.190-SNAPSHOT
 
 - `LM011-B1` (issue #670, D183 Candidate B, PLAT050 Candidate F) adds the

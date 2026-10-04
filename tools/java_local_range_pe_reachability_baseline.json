@@ -41,23 +41,17 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "ensureGeneralEstablishmentOrder(BytecodeNode)",
+      "method": "materializeGeneralEstablishmentOrder(BytecodeNode)",
       "operation": "isCleared",
       "index": "ordinal",
-      "classification": "LOOP_INDEX",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "LOOP_INDEX"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,int,ProtosActivation,String,Object)",
-        "ProtosBytecodeRootNode.bindIndexedClosureParameter(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
-        "ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt(int,Object)",
-        "ProtosFrameLexicalBindingAuthority.recordFrameBackedEstablishment(BytecodeNode,int,String)",
-        "ProtosFrameLexicalBindingAuthority.ensureGeneralEstablishmentOrder(BytecodeNode)"
+        "ProtosFrameLexicalBindingAuthority.materializeGeneralEstablishmentOrder(BytecodeNode)"
       ],
-      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.materializeGeneralEstablishmentOrder"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -171,42 +165,32 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "adoptPresentFrameBackedBindings()",
+      "method": "adoptPresentFrameBackedBindingsSlow(BytecodeNode)",
       "operation": "isCleared",
       "index": "ordinal",
-      "classification": "LOOP_INDEX",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "LOOP_INDEX"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,VirtualFrame)",
-        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
-        "ProtosBytecodeRootNode.installFrameLexicalAuthorityOnTransition(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,MaterializedFrame)",
-        "ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindings()"
+        "ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindingsSlow(BytecodeNode)"
       ],
-      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindingsSlow"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "adoptPresentFrameBackedBindings()",
+      "method": "adoptPresentFrameBackedBindingsSlow(BytecodeNode)",
       "operation": "isCleared",
       "index": "ordinal",
-      "classification": "LOOP_INDEX",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 1,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "LOOP_INDEX"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,VirtualFrame)",
-        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
-        "ProtosBytecodeRootNode.installFrameLexicalAuthorityOnTransition(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,MaterializedFrame)",
-        "ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindings()"
+        "ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindingsSlow(BytecodeNode)"
       ],
-      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindingsSlow"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -338,78 +322,62 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
       "operation": "isCleared",
       "index": "ordinal",
-      "classification": "LOOP_INDEX",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "LOOP_INDEX"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,VirtualFrame)",
-        "ProtosActivation.installFrameLexicalBindingAuthorityForRuntime(ProtosLexicalBindingAuthority)",
-        "ProtosFrameLexicalBindingAuthority.appendBindingsTo(ArrayList,ArrayList)"
+        "ProtosFrameLexicalBindingAuthority.appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)"
       ],
-      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.appendBindingsToSlow"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
       "operation": "getObject",
       "index": "ordinal",
-      "classification": "LOOP_INDEX",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "LOOP_INDEX"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,VirtualFrame)",
-        "ProtosActivation.installFrameLexicalBindingAuthorityForRuntime(ProtosLexicalBindingAuthority)",
-        "ProtosFrameLexicalBindingAuthority.appendBindingsTo(ArrayList,ArrayList)"
+        "ProtosFrameLexicalBindingAuthority.appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)"
       ],
-      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.appendBindingsToSlow"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
       "operation": "isCleared",
       "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "RUNTIME_NAME_DERIVED"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,VirtualFrame)",
-        "ProtosActivation.installFrameLexicalBindingAuthorityForRuntime(ProtosLexicalBindingAuthority)",
-        "ProtosFrameLexicalBindingAuthority.appendBindingsTo(ArrayList,ArrayList)"
+        "ProtosFrameLexicalBindingAuthority.appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)"
       ],
-      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.appendBindingsToSlow"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
       "operation": "getObject",
       "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "RUNTIME_NAME_DERIVED"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,VirtualFrame)",
-        "ProtosActivation.installFrameLexicalBindingAuthorityForRuntime(ProtosLexicalBindingAuthority)",
-        "ProtosFrameLexicalBindingAuthority.appendBindingsTo(ArrayList,ArrayList)"
+        "ProtosFrameLexicalBindingAuthority.appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)"
       ],
-      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.appendBindingsToSlow"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -519,56 +487,47 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
-      "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
+      "method": "transferFrameBindingsToDurableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,MaterializedFrame)",
       "operation": "isCleared",
       "index": "ordinal",
-      "classification": "LOOP_INDEX",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "LOOP_INDEX"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.MaterializeInlineCallbackActivation.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,BytecodeNode,VirtualFrame)",
-        "ProtosInlineCallbackFrameBindings.durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)"
+        "ProtosInlineCallbackFrameBindings.transferFrameBindingsToDurableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,MaterializedFrame)"
       ],
-      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosInlineCallbackFrameBindings.transferFrameBindingsToDurableActivation"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
-      "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
+      "method": "transferFrameBindingsToDurableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,MaterializedFrame)",
       "operation": "getObject",
       "index": "ordinal",
-      "classification": "LOOP_INDEX",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "LOOP_INDEX"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.MaterializeInlineCallbackActivation.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,BytecodeNode,VirtualFrame)",
-        "ProtosInlineCallbackFrameBindings.durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)"
+        "ProtosInlineCallbackFrameBindings.transferFrameBindingsToDurableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,MaterializedFrame)"
       ],
-      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosInlineCallbackFrameBindings.transferFrameBindingsToDurableActivation"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
-      "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
+      "method": "transferFrameBindingsToDurableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,MaterializedFrame)",
       "operation": "clear",
       "index": "ordinal",
-      "classification": "LOOP_INDEX",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "LOOP_INDEX"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.MaterializeInlineCallbackActivation.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,BytecodeNode,VirtualFrame)",
-        "ProtosInlineCallbackFrameBindings.durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)"
+        "ProtosInlineCallbackFrameBindings.transferFrameBindingsToDurableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,MaterializedFrame)"
       ],
-      "rationale": "PE-reachable with non-constant index (LOOP_INDEX): loop induction variable; not proven PE-unrolled"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosInlineCallbackFrameBindings.transferFrameBindingsToDurableActivation"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
