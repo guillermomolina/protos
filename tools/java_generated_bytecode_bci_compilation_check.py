@@ -50,14 +50,15 @@ from __future__ import print_function
 
 import argparse
 import json
-import os
-import re
 import subprocess
 import sys
-import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import List, Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from truffle_jvm_launch import CheckError, cli_command, compilations_done, failure_records, run_cli, select_java  # noqa: E402,F401
 
 ENGINE_OPTIONS = (
     "-Dpolyglot.engine.AllowExperimentalOptions=true",
@@ -66,8 +67,6 @@ ENGINE_OPTIONS = (
     "-Dpolyglot.engine.CompilationFailureAction=Print",
     "-Dpolyglot.engine.TraceCompilation=true",
 )
-JVM_OPTIONS = ("--enable-native-access=ALL-UNNAMED", "--sun-misc-unsafe-memory-access=allow")
-MAIN_CLASS = "com.guillermomolina.protos.cli.ProtosCli"
 
 PROGRAM = """\
 count: 0
@@ -120,10 +119,6 @@ OTHER_PE_CONSTANT = "OTHER_PE_CONSTANT"
 OTHER_PERMANENT = "OTHER_PERMANENT_FAILURE"
 
 
-class CheckError(Exception):
-    pass
-
-
 def classify_failure(record: str) -> str:
     lowered = record.lower()
     if any(marker in lowered for marker in PE_CONSTANT_MARKERS):
@@ -133,30 +128,10 @@ def classify_failure(record: str) -> str:
     return OTHER_PERMANENT
 
 
-def failure_records(output: str) -> List[str]:
-    """Each permanent failure printed by CompilationFailureAction=Print, with its trace."""
-    lines = output.splitlines()
-    records, current = [], None
-    for line in lines:
-        if "opt failed" in line:
-            if current is not None:
-                records.append("\n".join(current))
-            current = [line]
-        elif current is not None:
-            if line.startswith("[engine]") or len(current) >= 400:
-                records.append("\n".join(current))
-                current = None
-            else:
-                current.append(line)
-    if current is not None:
-        records.append("\n".join(current))
-    return records
-
-
 def evaluate(output: str, exit_code: int) -> "OrderedDict[str, object]":
     records = failure_records(output)
     kinds = [classify_failure(record) for record in records]
-    compilations = sum(1 for line in output.splitlines() if "opt done" in line)
+    compilations = compilations_done(output)
     printed = [line.strip() for line in output.splitlines() if line.strip() in EXPECTED_OUTPUT]
     failures = []
     if exit_code != 0:
@@ -188,19 +163,7 @@ def evaluate(output: str, exit_code: int) -> "OrderedDict[str, object]":
 
 
 def launcher_command(root: Path, java: str) -> List[str]:
-    properties = root / "target" / "maven-archiver" / "pom.properties"
-    if not properties.is_file():
-        raise CheckError("Maven build metadata %s not found (run mvn package)" % properties)
-    values = dict(line.split("=", 1) for line in properties.read_text(encoding="utf-8").splitlines()
-                  if "=" in line and not line.startswith("#"))
-    jar = root / "target" / ("%s-%s.jar" % (values.get("artifactId", ""), values.get("version", "")))
-    if not jar.is_file():
-        raise CheckError("packaged jar %s not found (run mvn package)" % jar)
-    runtime = root / "target" / "runtime"
-    if not list(runtime.glob("*truffle-runtime-*.jar")) or not list(runtime.glob("*truffle-compiler-*.jar")):
-        raise CheckError("runtime plane %s lacks the Truffle runtime/compiler jars (run mvn package)" % runtime)
-    return [java] + list(JVM_OPTIONS) + list(ENGINE_OPTIONS) + [
-        "-cp", "%s%s%s" % (jar, os.pathsep, runtime / "*"), MAIN_CLASS, "-e", PROGRAM]
+    return cli_command(root, java, ENGINE_OPTIONS, ["-e", PROGRAM])
 
 
 def run(root: Path, java: str, timeout: int, report: Optional[Path], out=sys.stdout) -> int:
@@ -209,18 +172,12 @@ def run(root: Path, java: str, timeout: int, report: Optional[Path], out=sys.std
     except CheckError as error:
         print("generated-bytecode-bci-compilation-check: ERROR: %s" % error, file=out)
         return 1
-    environment = dict(os.environ)
-    environment["PROTOS_HOME"] = str(root)
-    started = time.monotonic()
     try:
-        completed = subprocess.run(command, cwd=str(root), env=environment, stdout=subprocess.PIPE,
-                                   stderr=subprocess.STDOUT, timeout=timeout, check=False)
+        returncode, output, elapsed = run_cli(root, command, timeout)
     except subprocess.TimeoutExpired:
         print("generated-bytecode-bci-compilation-check: FAIL: timed out after %d s" % timeout, file=out)
         return 1
-    elapsed = time.monotonic() - started
-    output = completed.stdout.decode("utf-8", errors="replace")
-    result = evaluate(output, completed.returncode)
+    result = evaluate(output, returncode)
     if report is not None:
         report.parent.mkdir(parents=True, exist_ok=True)
         report.write_text(json.dumps(OrderedDict([("elapsed_seconds", round(elapsed, 1)),
@@ -242,7 +199,7 @@ def run(root: Path, java: str, timeout: int, report: Optional[Path], out=sys.std
         for record, kind in ((record, classify_failure(record)) for record in result["records"]):
             if kind != OTHER_PERMANENT:
                 print(record, file=out)
-        if completed.returncode != 0 or not result["records"]:
+        if returncode != 0 or not result["records"]:
             print("--- program output (tail) ---", file=out)
             print("\n".join(output.splitlines()[-60:]), file=out)
         return 1
@@ -257,9 +214,7 @@ def main(argv=None) -> int:
     parser.add_argument("--timeout", type=int, default=900)
     parser.add_argument("--report", type=Path)
     args = parser.parse_args(argv)
-    java = args.java or os.environ.get("PROTOS_JAVA") or (
-        str(Path(os.environ["JAVA_HOME"]) / "bin" / "java") if os.environ.get("JAVA_HOME") else "java")
-    return run(args.root.resolve(), java, args.timeout, args.report)
+    return run(args.root.resolve(), select_java(args.java), args.timeout, args.report)
 
 
 if __name__ == "__main__":

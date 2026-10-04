@@ -48,8 +48,15 @@ GENERATED_BYTECODE_BCI_PE_BASELINE := tools/java_generated_bytecode_bci_pe_basel
 GENERATED_BYTECODE_BCI_PE_REPORT := target/generated-bytecode-bci-pe-guard-report.json
 GENERATED_BYTECODE_BCI_PE_CANDIDATE := target/generated-bytecode-bci-pe-candidate-baseline.json
 GENERATED_BYTECODE_BCI_COMPILATION_REPORT := target/generated-bytecode-bci-compilation-report.json
+# TEST009-F: strict Truffle compilation gate over the real Test Tool corpus
+# (SYNC and BACKGROUND modes) and its manual textual diagnostic surface.
+TRUFFLE_COMPILATION_DIR := target/truffle-compilation
+TRUFFLE_COMPILATION_REPORT := $(TRUFFLE_COMPILATION_DIR)/gate-report.json
+TRUFFLE_COMPILATION_DIAGNOSE_REPORT := $(TRUFFLE_COMPILATION_DIR)/diagnose-report.json
+TRUFFLE_COMPILATION_TEST_ARGS ?= --jobs $(PROTOS_TEST_JOBS)
+TRUFFLE_COMPILATION_TIMEOUT ?= 3600
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -71,6 +78,13 @@ help:
 		'  make check-generated-bytecode-bci-pe  Generated cached-dispatch BCI PE guard:' \
 		'                      package, static generated-Java topology check and' \
 		'                      real-compilation check of the exception-handler path' \
+		'  make check-truffle-compilation  Strict Truffle compilation gate: package, then run' \
+		'                      the Test Tool corpus on the JVM with CompileImmediately,' \
+		'                      ExitVM and performance warnings as errors, in SYNC and' \
+		'                      BACKGROUND compilation modes (not part of make check)' \
+		'  make diagnose-truffle-compilation  Manual textual compilation diagnostics' \
+		'                      (expansion, inlining, performance-warning traces) retained' \
+		'                      under target/truffle-compilation; never changes product code' \
 		'  make test-local-range-pe-guard  Compatibility alias of check-local-range-index-pe' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
 		'  make check          Verify the toolchain, run the static LocalRange,' \
@@ -86,7 +100,8 @@ help:
 		'  make dist           Build only the portable JVM distribution' \
 		'  make dist-validate  Build and validate the portable distribution' \
 		'' \
-		'Overrides: MVN=... PYTHON=... SH=... MVN_FLAGS=... JAVA_TEST_JOBS=... PROTOS_TEST_JOBS=... DIST_VALIDATE_FLAGS=...'
+		'Overrides: MVN=... PYTHON=... SH=... MVN_FLAGS=... JAVA_TEST_JOBS=... PROTOS_TEST_JOBS=... DIST_VALIDATE_FLAGS=...' \
+		'           TRUFFLE_COMPILATION_TEST_ARGS=... TRUFFLE_COMPILATION_TIMEOUT=...'
 
 toolchain:
 	$(PYTHON) tools/verify_toolchain.py --mode check --scope development
@@ -187,6 +202,26 @@ check-generated-bytecode-bci-pe:
 		--candidate $(GENERATED_BYTECODE_BCI_PE_CANDIDATE)
 	$(PYTHON) tools/java_generated_bytecode_bci_compilation_check.py \
 		--report $(GENERATED_BYTECODE_BCI_COMPILATION_REPORT)
+
+# TEST009-F: packages once, then runs both strict modes; fail-closed.
+check-truffle-compilation:
+	$(MVN) $(MVN_FLAGS) package -DskipTests
+	$(PYTHON) tools/test_truffle_compilation_gate.py
+	$(PYTHON) tools/truffle_compilation_gate.py check \
+		--timeout $(TRUFFLE_COMPILATION_TIMEOUT) \
+		--artifacts $(TRUFFLE_COMPILATION_DIR) \
+		--report $(TRUFFLE_COMPILATION_REPORT) \
+		-- $(TRUFFLE_COMPILATION_TEST_ARGS)
+
+# TEST009-F: manual escalation only; narrow TRUFFLE_COMPILATION_TEST_ARGS to the
+# failing selection, the traces are large.
+diagnose-truffle-compilation:
+	$(MVN) $(MVN_FLAGS) package -DskipTests
+	$(PYTHON) tools/truffle_compilation_gate.py diagnose \
+		--timeout $(TRUFFLE_COMPILATION_TIMEOUT) \
+		--artifacts $(TRUFFLE_COMPILATION_DIR) \
+		--report $(TRUFFLE_COMPILATION_DIAGNOSE_REPORT) \
+		-- $(TRUFFLE_COMPILATION_TEST_ARGS)
 
 # Historical PERF030-F name, kept for compatibility.
 test-local-range-pe-guard: check-local-range-index-pe
