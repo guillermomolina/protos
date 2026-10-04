@@ -281,11 +281,11 @@ final class ProtosInlineCallbackFrameBindings {
             }
         }
         return ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(
+                frameOrdinal,
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                 name,
-                lexicalDepth,
-                frameOrdinal);
+                lexicalDepth);
     }
 
     /** Inline counterpart of {@code ReadCapturedMaterializedLocal}. */
@@ -348,11 +348,11 @@ final class ProtosInlineCallbackFrameBindings {
             }
         }
         return ProtosBytecodeRootNode.ResolveCapturedWritableLexicalTarget.perform(
+                frameOrdinal,
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                 name,
-                lexicalDepth,
-                frameOrdinal);
+                lexicalDepth);
     }
 
     /** Inline counterpart of {@code ResolveCapturedMaterializedWritableLexicalTarget}. */
@@ -398,13 +398,15 @@ final class ProtosInlineCallbackFrameBindings {
             PreparedInlineLiteralCall child,
             LocalRangeAccessor frameBackedLocals,
             ProtosFrameLexicalLayout frameBackedLayout,
+            int frameOrdinal,
             CapturedLexicalWriteTarget destination,
             String name,
             Object value,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
         try {
-            ProtosBytecodeRootNode.assignCapturedFrameDestination(destination, name, value);
+            ProtosBytecodeRootNode.assignCapturedFrameDestination(
+                    destination, name, frameOrdinal, value);
         } catch (IllegalStateException invalidMutation) {
             throw new ProtosSignalException(
                     ProtosCoreErrors.newError(

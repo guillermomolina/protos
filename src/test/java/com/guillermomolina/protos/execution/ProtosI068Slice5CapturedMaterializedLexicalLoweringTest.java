@@ -371,15 +371,16 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                         ProtosSemanticBytecodeRootNode
                                 .ResolveCapturedWritableLexicalTarget
                                 .perform(
+                                        ordinal,
                                         invocation,
                                         "x",
-                                        resolution.lexicalDepth(),
-                                        ordinal);
+                                        resolution.lexicalDepth());
 
                 invocation.context().createLocalSlot("x", nearer);
 
                 Object result =
                         ProtosBytecodeRootNode.AssignCapturedFrameLocal.perform(
+                                ordinal,
                                 invocation,
                                 destination,
                                 "x",
@@ -1258,10 +1259,10 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                         ProtosSemanticBytecodeRootNode
                                 .ResolveCapturedWritableLexicalTarget
                                 .perform(
+                                        ordinal,
                                         invocation,
                                         "x",
-                                        resolution.lexicalDepth(),
-                                        ordinal);
+                                        resolution.lexicalDepth());
 
                 /*
                  * Simulate RHS effects after destination selection:
@@ -1278,6 +1279,7 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 ProtosSemanticBytecodeRootNode
                                         .AssignCapturedFrameLocal
                                         .perform(
+                                                ordinal,
                                                 invocation,
                                                 destination,
                                                 "x",

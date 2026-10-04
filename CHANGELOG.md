@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.186-SNAPSHOT
+
+- `PERF030-J` (captured-owner constant ordinal pipeline, issue #784) carries
+  the statically proven frame-layout ordinal for captured frame-native reads,
+  captured writable-destination resolution, and post-RHS captured assignment
+  as an `int` `@ConstantOperand` on both ordinary and inline Bytecode
+  operations. `CapturedLexicalWriteTarget` now retains the exact owner and
+  authority selected before RHS evaluation without retaining the ordinal, so
+  assignment still mutates exactly that preselected destination and never
+  re-resolves after RHS effects while the `LocalRangeAccessor` index comes
+  from operation-constant structure. The static PE reachability guard
+  reclassifies the three F2 sinks (`hasFrameBackedBindingAt`,
+  `readFrameBackedBindingAt`, and `assignFrameBackedBindingAt`) from
+  `PE_REACHABLE_RISK` to `PE_REACHABLE_PROVEN_CONSTANT`, leaving 13 proven
+  constant sinks, 15 PE-reachable risks, 6 boundary cuts, and 4 non-PE-
+  reachable sinks. Captured-by-reference behavior, late-nearer retargeting at
+  resolution time, selected-owner removal failure, CLOSED/FROZEN mutation
+  rules, and inline activation laziness are unchanged. No semantic or
+  specification change.
+
 ## 0.3.185-SNAPSHOT
 
 - `TOOL001-F2E5` (issue #93, PLAT048 B′) adds the CLI-neutral

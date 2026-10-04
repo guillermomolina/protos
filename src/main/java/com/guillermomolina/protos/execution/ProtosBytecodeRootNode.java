@@ -627,13 +627,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * falls back to the exact existing String-keyed lookup path.
      */
     @Operation
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class ReadCapturedFrameLocal {
         @Specialization
         public static Object perform(
+                int frameOrdinal,
                 ProtosActivation activation,
                 String name,
-                int lexicalDepth,
-                int frameOrdinal) {
+                int lexicalDepth) {
             if (lexicalDepth > 0
                     && !activation.currentContextHasLocalSlotForRuntime(name)) {
                 Object value =
@@ -781,11 +782,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * executing activation; it is never stored in a semantic Closure value.
      *
      * <p>For a proven captured frame binding, {@code frameAuthority} and
-     * {@code frameOrdinal} identify the same single authoritative outer local.
-     * For a PERF013 Slice B2 proven same-group captured binding, {@code
-     * materializedOwnerFrame} identifies the exact owner {@link
-     * MaterializedFrame} already selected before RHS evaluation, to be
-     * revalidated and written through the assignment site's own {@link
+     * {@code frameOwner} identify the exact outer destination selected before
+     * RHS evaluation. The statically proven frame ordinal is deliberately not
+     * retained here: PERF030-J supplies it again as the assignment operation's
+     * constant operand, so the {@link LocalRangeAccessor} index never comes
+     * from runtime destination state. For a PERF013 Slice B2 proven same-group
+     * captured binding, {@code materializedOwnerFrame} identifies the exact
+     * owner {@link MaterializedFrame} already selected before RHS evaluation,
+     * to be revalidated and written through the assignment site's own {@link
      * MaterializedLocalAccessor} constant operand rather than re-resolved.
      * Otherwise {@code target} preserves the exact generic destination chosen
      * before RHS evaluation.
@@ -794,19 +798,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         private final ProtosObjectValue target;
         private final ProtosLexicalEnvironment frameOwner;
         private final ProtosFrameLexicalBindingAuthority frameAuthority;
-        private final int frameOrdinal;
         private final MaterializedFrame materializedOwnerFrame;
 
         private CapturedLexicalWriteTarget(
                 ProtosObjectValue target,
                 ProtosLexicalEnvironment frameOwner,
                 ProtosFrameLexicalBindingAuthority frameAuthority,
-                int frameOrdinal,
                 MaterializedFrame materializedOwnerFrame) {
             this.target = target;
             this.frameOwner = frameOwner;
             this.frameAuthority = frameAuthority;
-            this.frameOrdinal = frameOrdinal;
             this.materializedOwnerFrame = materializedOwnerFrame;
         }
 
@@ -816,19 +817,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     java.util.Objects.requireNonNull(target, "target"),
                     null,
                     null,
-                    -1,
                     null);
         }
 
         static CapturedLexicalWriteTarget frameBacked(
                 ProtosLexicalEnvironment owner,
-                ProtosFrameLexicalBindingAuthority authority,
-                int frameOrdinal) {
+                ProtosFrameLexicalBindingAuthority authority) {
             return new CapturedLexicalWriteTarget(
                     null,
                     java.util.Objects.requireNonNull(owner, "owner"),
                     java.util.Objects.requireNonNull(authority, "authority"),
-                    frameOrdinal,
                     null);
         }
 
@@ -839,19 +837,19 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     null,
                     java.util.Objects.requireNonNull(owner, "owner"),
                     null,
-                    -1,
                     java.util.Objects.requireNonNull(ownerFrame, "ownerFrame"));
         }
     }
 
     @Operation
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class ResolveCapturedWritableLexicalTarget {
         @Specialization
         public static CapturedLexicalWriteTarget perform(
+                int frameOrdinal,
                 ProtosActivation activation,
                 String name,
-                int lexicalDepth,
-                int frameOrdinal) {
+                int lexicalDepth) {
             if (lexicalDepth > 0) {
                 if (activation.currentContextHasLocalSlotForRuntime(name)) {
                     return CapturedLexicalWriteTarget.generic(
@@ -881,15 +879,17 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class AssignCapturedFrameLocal {
         @Specialization
         public static Object perform(
+                int frameOrdinal,
                 ProtosActivation activation,
                 CapturedLexicalWriteTarget destination,
                 String name,
                 Object value) {
             try {
-                assignCapturedFrameDestination(destination, name, value);
+                assignCapturedFrameDestination(destination, name, frameOrdinal, value);
             } catch (IllegalStateException invalidMutation) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
@@ -916,7 +916,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 && owner.lexicalBindingAuthorityForRuntime()
                         instanceof ProtosFrameLexicalBindingAuthority authority
                 && authority.hasFrameBackedBindingAt(name, frameOrdinal)) {
-            return CapturedLexicalWriteTarget.frameBacked(owner, authority, frameOrdinal);
+            return CapturedLexicalWriteTarget.frameBacked(owner, authority);
         }
         return null;
     }
@@ -929,6 +929,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     static void assignCapturedFrameDestination(
             CapturedLexicalWriteTarget destination,
             String name,
+            int frameOrdinal,
             Object value) {
         if (destination.frameAuthority != null) {
             /*
@@ -941,7 +942,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
             destination.frameAuthority.assignFrameBackedBindingAt(
                     name,
-                    destination.frameOrdinal,
+                    frameOrdinal,
                     value);
         } else {
             destination.target.assignLocalSlot(name, value);

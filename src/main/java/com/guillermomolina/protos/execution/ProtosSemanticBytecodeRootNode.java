@@ -760,15 +760,16 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     @Operation
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class ReadCapturedFrameLocal {
         @Specialization
         public static Object perform(
+                int frameOrdinal,
                 ProtosActivation activation,
                 String name,
-                int lexicalDepth,
-                int frameOrdinal) {
+                int lexicalDepth) {
             return ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(
-                    activation, name, lexicalDepth, frameOrdinal);
+                    frameOrdinal, activation, name, lexicalDepth);
         }
     }
 
@@ -788,28 +789,31 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     }
 
     @Operation
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class ResolveCapturedWritableLexicalTarget {
         @Specialization
         public static CapturedLexicalWriteTarget perform(
+                int frameOrdinal,
                 ProtosActivation activation,
                 String name,
-                int lexicalDepth,
-                int frameOrdinal) {
+                int lexicalDepth) {
             return ProtosBytecodeRootNode.ResolveCapturedWritableLexicalTarget.perform(
-                    activation, name, lexicalDepth, frameOrdinal);
+                    frameOrdinal, activation, name, lexicalDepth);
         }
     }
 
     @Operation
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class AssignCapturedFrameLocal {
         @Specialization
         public static Object perform(
+                int frameOrdinal,
                 ProtosActivation activation,
                 CapturedLexicalWriteTarget destination,
                 String name,
                 Object value) {
             return ProtosBytecodeRootNode.AssignCapturedFrameLocal.perform(
-                    activation, destination, name, value);
+                    frameOrdinal, activation, destination, name, value);
         }
     }
 
@@ -860,15 +864,16 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class ReadInlineCapturedFrameLocal {
         @Specialization
         public static Object perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
+                int frameOrdinal,
                 PreparedInlineLiteralCall child,
                 String name,
                 int lexicalDepth,
-                int frameOrdinal,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.readCaptured(
@@ -909,15 +914,16 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class ResolveInlineCapturedWritableLexicalTarget {
         @Specialization
         public static CapturedLexicalWriteTarget perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
+                int frameOrdinal,
                 PreparedInlineLiteralCall child,
                 String name,
                 int lexicalDepth,
-                int frameOrdinal,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.resolveCapturedWriteTarget(
@@ -933,11 +939,13 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "frameOrdinal")
     public static final class AssignInlineCapturedFrameLocal {
         @Specialization
         public static Object perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
+                int frameOrdinal,
                 PreparedInlineLiteralCall child,
                 CapturedLexicalWriteTarget destination,
                 String name,
@@ -946,7 +954,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 @Bind("$frame") VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.assignCaptured(
                     child, frameBackedLocals, frameBackedLayout,
-                    destination, name, value, bytecodeNode, frame);
+                    frameOrdinal, destination, name, value, bytecodeNode, frame);
         }
     }
 

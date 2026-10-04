@@ -1379,18 +1379,19 @@ final class CanonicalToBytecodeLowerer {
             }
             return;
         }
+        int frameOrdinal = frameBackedOrdinal(captured.identity());
         if (currentInlineCallbackFrameNative) {
             builder.beginResolveInlineCapturedWritableLexicalTarget(
                     currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
+                    currentRootFrameNativeLayout,
+                    frameOrdinal);
             emitCurrentInlineCallbackCall(builder);
         } else {
-            builder.beginResolveCapturedWritableLexicalTarget();
+            builder.beginResolveCapturedWritableLexicalTarget(frameOrdinal);
             emitCurrentActivation(builder);
         }
         builder.emitLoadConstant(assign.name());
         builder.emitLoadConstant(captured.lexicalDepth());
-        builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
         if (currentInlineCallbackFrameNative) {
             builder.endResolveInlineCapturedWritableLexicalTarget();
         } else {
@@ -1405,6 +1406,7 @@ final class CanonicalToBytecodeLowerer {
     private void emitAssignCaptured(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
             CanonicalAssign assign,
+            CanonicalBindingResolution.CapturedResolved captured,
             BytecodeLocal capturedOwnerLocal,
             BytecodeLocal mutationTarget,
             BytecodeLocal value) {
@@ -1422,10 +1424,12 @@ final class CanonicalToBytecodeLowerer {
         } else if (currentInlineCallbackFrameNative) {
             builder.beginAssignInlineCapturedFrameLocal(
                     currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
+                    currentRootFrameNativeLayout,
+                    frameBackedOrdinal(captured.identity()));
             emitCurrentInlineCallbackCall(builder);
         } else {
-            builder.beginAssignCapturedFrameLocal();
+            builder.beginAssignCapturedFrameLocal(
+                    frameBackedOrdinal(captured.identity()));
             emitCurrentActivation(builder);
         }
         builder.emitLoadLocal(mutationTarget);
@@ -2967,7 +2971,13 @@ final class CanonicalToBytecodeLowerer {
                 builder, assign.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
         if (capturedResolution.isPresent()) {
-            emitAssignCaptured(builder, assign, capturedOwnerLocal, mutationTarget, value);
+            emitAssignCaptured(
+                    builder,
+                    assign,
+                    capturedResolution.orElseThrow(),
+                    capturedOwnerLocal,
+                    mutationTarget,
+                    value);
         } else if (assign.target().isPresent()) {
             builder.beginAssignLocalSlot();
             emitCurrentActivation(builder);
@@ -3204,7 +3214,13 @@ final class CanonicalToBytecodeLowerer {
                 builder, assign.value(), value, preparedCall, childResult, resumeValue);
         builder.beginStoreLocal(result);
         if (capturedResolution.isPresent()) {
-            emitAssignCaptured(builder, assign, capturedOwnerLocal, mutationTarget, value);
+            emitAssignCaptured(
+                    builder,
+                    assign,
+                    capturedResolution.orElseThrow(),
+                    capturedOwnerLocal,
+                    mutationTarget,
+                    value);
         } else if (assign.target().isPresent()) {
             builder.beginAssignLocalSlot();
             emitCurrentActivation(builder);
@@ -4961,11 +4977,11 @@ final class CanonicalToBytecodeLowerer {
                 if (currentInlineCallbackFrameNative) {
                     builder.beginReadInlineCapturedFrameLocal(
                             currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout);
+                            currentRootFrameNativeLayout,
+                            frameBackedOrdinal(captured.identity()));
                     emitCurrentInlineCallbackCall(builder);
                     builder.emitLoadConstant(captured.identity().name());
                     builder.emitLoadConstant(captured.lexicalDepth());
-                    builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
                     builder.endReadInlineCapturedFrameLocal();
                     return;
                 }
@@ -4978,11 +4994,11 @@ final class CanonicalToBytecodeLowerer {
                     return;
                 }
 
-                builder.beginReadCapturedFrameLocal();
+                builder.beginReadCapturedFrameLocal(
+                        frameBackedOrdinal(captured.identity()));
                 emitCurrentActivation(builder);
                 builder.emitLoadConstant(captured.identity().name());
                 builder.emitLoadConstant(captured.lexicalDepth());
-                builder.emitLoadConstant(frameBackedOrdinal(captured.identity()));
                 builder.endReadCapturedFrameLocal();
                 return;
             }
