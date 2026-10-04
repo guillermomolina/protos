@@ -28,6 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
@@ -51,6 +52,53 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
         assertNotEquals(
                 ProtosBytecodeRootNode.OrdinarySourceCall.class,
                 ProtosBytecodeRootNode.ModuleInitializationCall.class);
+    }
+
+    /**
+     * TEST009-H: the terminal lifecycle operations must preserve the concrete
+     * prepared-call representation instead of erasing it to a single
+     * {@link ProtosBytecodeRootNode.PreparedClosureCall} specialization, in both
+     * generated interpreters that declare them.
+     */
+    @Test
+    void terminalLifecycleOperationsSpecializeOnConcreteRepresentations() {
+        Set<Class<?>> representations =
+                Set.of(
+                        ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                        ProtosBytecodeRootNode.NativeCall.class,
+                        ProtosBytecodeRootNode.ImmediateResultCall.class,
+                        ProtosBytecodeRootNode.ModuleInitializationCall.class);
+        for (Class<?> representation : representations) {
+            assertTrue(Modifier.isFinal(representation.getModifiers()), representation.getName());
+            assertTrue(
+                    ProtosBytecodeRootNode.PreparedClosureCall.class.isAssignableFrom(
+                            representation),
+                    representation.getName());
+        }
+
+        for (Class<?> operation :
+                List.of(
+                        ProtosBytecodeRootNode.CompleteClosureCall.class,
+                        ProtosBytecodeRootNode.FinishClosureCall.class,
+                        ProtosSemanticBytecodeRootNode.CompleteClosureCall.class,
+                        ProtosSemanticBytecodeRootNode.FinishClosureCall.class)) {
+            List<Class<?>> receivers =
+                    Arrays.stream(operation.getDeclaredMethods())
+                            .filter(method -> Modifier.isStatic(method.getModifiers()))
+                            .filter(method -> Modifier.isPublic(method.getModifiers()))
+                            .map(method -> method.getParameterTypes()[0])
+                            .collect(java.util.stream.Collectors.toList());
+
+            assertFalse(
+                    receivers.contains(ProtosBytecodeRootNode.PreparedClosureCall.class),
+                    operation.getName()
+                            + " must not specialize on the PreparedClosureCall interface");
+            assertEquals(
+                    representations.size(),
+                    receivers.size(),
+                    operation.getName() + " specializations: " + receivers);
+            assertEquals(representations, Set.copyOf(receivers), operation.getName());
+        }
     }
 
     @Test

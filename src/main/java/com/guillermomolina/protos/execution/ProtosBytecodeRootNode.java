@@ -6282,10 +6282,31 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * TEST009-H: the terminal lifecycle operations specialize on each concrete
+     * {@link PreparedClosureCall} representation so partial evaluation binds the
+     * lifecycle call statically instead of retaining an interface dispatch. The
+     * behavior itself stays owned by each representation.
+     */
     @Operation
     public static final class CompleteClosureCall {
         @Specialization
-        public static void perform(PreparedClosureCall prepared) {
+        public static void ordinary(OrdinarySourceCall prepared) {
+            prepared.complete();
+        }
+
+        @Specialization
+        public static void nativeCall(NativeCall prepared) {
+            prepared.complete();
+        }
+
+        @Specialization
+        public static void immediate(ImmediateResultCall prepared) {
+            prepared.complete();
+        }
+
+        @Specialization
+        public static void moduleInitialization(ModuleInitializationCall prepared) {
             prepared.complete();
         }
     }
@@ -8870,11 +8891,27 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /** TEST009-H: see {@link CompleteClosureCall}. */
     @Operation
     public static final class FinishClosureCall {
         @Specialization
-        public static Object perform(
-                PreparedClosureCall prepared,
+        public static Object ordinary(OrdinarySourceCall prepared, Object result) {
+            return prepared.finish(result);
+        }
+
+        @Specialization
+        public static Object nativeCall(NativeCall prepared, Object result) {
+            return prepared.finish(result);
+        }
+
+        @Specialization
+        public static Object immediate(ImmediateResultCall prepared, Object result) {
+            return prepared.finish(result);
+        }
+
+        @Specialization
+        public static Object moduleInitialization(
+                ModuleInitializationCall prepared,
                 Object result) {
             return prepared.finish(result);
         }

@@ -68,9 +68,7 @@ class ProtosClosureInvokerTest {
                                     prepared,
                                     com.oracle.truffle.api.nodes.IndirectCallNode.create());
 
-                    return ProtosBytecodeRootNode.FinishClosureCall.perform(
-                            prepared,
-                            entered);
+                    return prepared.finish(entered);
                 });
 
         assertFalse(home.isActive());

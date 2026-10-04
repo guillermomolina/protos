@@ -312,7 +312,7 @@ final class ProtosPerf025VirtualReturnHomeTest {
         Object entered =
                 ProtosBytecodeRootNode.EnterClosureCall.indirect(
                         prepared, IndirectCallNode.create());
-        return ProtosBytecodeRootNode.FinishClosureCall.perform(prepared, entered);
+        return prepared.finish(entered);
     }
 
     private static ProtosActivation coreModule() throws Exception {

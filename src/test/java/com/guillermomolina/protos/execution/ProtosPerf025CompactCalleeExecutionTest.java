@@ -545,7 +545,7 @@ final class ProtosPerf025CompactCalleeExecutionTest {
         Object entered =
                 ProtosBytecodeRootNode.EnterClosureCall.indirect(
                         prepared, IndirectCallNode.create());
-        return ProtosBytecodeRootNode.FinishClosureCall.perform(prepared, entered);
+        return prepared.finish(entered);
     }
 
     private static List<String> instructionNames(ProtosClosureValue closure) {

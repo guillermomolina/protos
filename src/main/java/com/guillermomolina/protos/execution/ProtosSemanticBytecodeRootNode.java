@@ -19,6 +19,10 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.CapturedLexicalWriteTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.GuardedDirectClosureCallTarget;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ImmediateResultCall;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.ModuleInitializationCall;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.NativeCall;
+import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.OrdinarySourceCall;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedIntegerSend;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedSendTarget;
 import com.guillermomolina.protos.execution.ProtosBytecodeRootNode.PrepareSendArguments.GuardedStructuredSend;
@@ -3018,8 +3022,23 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class CompleteClosureCall {
         @Specialization
-        public static void perform(PreparedClosureCall prepared) {
-            ProtosBytecodeRootNode.CompleteClosureCall.perform(prepared);
+        public static void ordinary(OrdinarySourceCall prepared) {
+            ProtosBytecodeRootNode.CompleteClosureCall.ordinary(prepared);
+        }
+
+        @Specialization
+        public static void nativeCall(NativeCall prepared) {
+            ProtosBytecodeRootNode.CompleteClosureCall.nativeCall(prepared);
+        }
+
+        @Specialization
+        public static void immediate(ImmediateResultCall prepared) {
+            ProtosBytecodeRootNode.CompleteClosureCall.immediate(prepared);
+        }
+
+        @Specialization
+        public static void moduleInitialization(ModuleInitializationCall prepared) {
+            ProtosBytecodeRootNode.CompleteClosureCall.moduleInitialization(prepared);
         }
     }
 
@@ -3157,8 +3176,26 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class FinishClosureCall {
         @Specialization
-        public static Object perform(PreparedClosureCall prepared, Object result) {
-            return ProtosBytecodeRootNode.FinishClosureCall.perform(prepared, result);
+        public static Object ordinary(OrdinarySourceCall prepared, Object result) {
+            return ProtosBytecodeRootNode.FinishClosureCall.ordinary(prepared, result);
+        }
+
+        @Specialization
+        public static Object nativeCall(NativeCall prepared, Object result) {
+            return ProtosBytecodeRootNode.FinishClosureCall.nativeCall(prepared, result);
+        }
+
+        @Specialization
+        public static Object immediate(ImmediateResultCall prepared, Object result) {
+            return ProtosBytecodeRootNode.FinishClosureCall.immediate(prepared, result);
+        }
+
+        @Specialization
+        public static Object moduleInitialization(
+                ModuleInitializationCall prepared,
+                Object result) {
+            return ProtosBytecodeRootNode.FinishClosureCall.moduleInitialization(
+                    prepared, result);
         }
     }
 }

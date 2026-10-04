@@ -260,8 +260,6 @@ public final class ProtosClosureInvoker {
                         prepared,
                         IndirectCallNode.create());
 
-        return ProtosBytecodeRootNode.FinishClosureCall.perform(
-                prepared,
-                entered);
+        return prepared.finish(entered);
     }
 }

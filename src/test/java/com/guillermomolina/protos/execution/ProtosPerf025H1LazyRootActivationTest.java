@@ -370,7 +370,7 @@ final class ProtosPerf025H1LazyRootActivationTest {
         Object entered =
                 ProtosBytecodeRootNode.EnterClosureCall.indirect(
                         prepared, IndirectCallNode.create());
-        return ProtosBytecodeRootNode.FinishClosureCall.perform(prepared, entered);
+        return prepared.finish(entered);
     }
 
     private static Object evaluate(String characters, String name, ProtosActivation activation) {
