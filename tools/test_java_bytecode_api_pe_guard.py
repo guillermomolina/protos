@@ -404,7 +404,6 @@ class ReachabilityTest(unittest.TestCase):
         map.get("key");
         updater.update(tag.getEnterBytecodeIndex());
         bytecode.getLocalNames();
-        bytecode.getLocalValue(tag.getEnterBytecodeIndex(), null, 0);
     }
     static final class Updater {
         void update(int value) {}
