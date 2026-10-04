@@ -182,6 +182,22 @@ final class ProtosExternalPackagePlanningPreflightTest {
                     fixture.aCustody,
                     fixture.bCustody,
                     fixture.cCustody);
+
+            ProtosExternalPackageResourceScope scope =
+                    ProtosExternalPackageResourceScope.reconcile(detached, fixture.inputs());
+            try (scope) {
+                assertEquals(
+                        A_MANIFEST,
+                        new String(
+                                scope.readResource(
+                                        fixture.inputs().get(0).identity(),
+                                        ProtosPackageResourceName.parse("protos.toml")),
+                                StandardCharsets.UTF_8));
+            }
+            assertThrows(
+                    IllegalStateException.class,
+                    () -> fixture.aCustody.readResource(
+                            ProtosPackageResourceName.parse("protos.toml")));
         }
     }
 

@@ -86,6 +86,16 @@ final class ProtosExternalPackagePlanningPreflight {
             }
         }
 
+        /** Exact external identity of this verified input; never consults the custody. */
+        ProtosExactExternalPackageIdentity identity() {
+            ProtosPackageContentIdentity content =
+                    new ProtosPackageContentIdentity(
+                            contentMethod, contentAlgorithm, contentHex);
+            return kind.equals("registry")
+                    ? new ProtosExactExternalPackageIdentity.Registry(packageId, exact, content)
+                    : new ProtosExactExternalPackageIdentity.Git(packageId, exact, content);
+        }
+
         static VerifiedExternalPackage registry(
                 String packageId,
                 String exactVersion,

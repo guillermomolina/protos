@@ -31,6 +31,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -82,7 +83,23 @@ public final class ProtosStandardFilesystemProtocol {
      * never delegates and write/create/truncate opens fail before this backend is exercised.
      */
     public interface CapturedBackend
-            extends Backend, ProtosFilesystemTreeObservationFlow.CapturedTree {}
+            extends Backend, ProtosFilesystemTreeObservationFlow.CapturedTree {
+        /**
+         * Host-only immutable read of one exact regular resource (PLAT012).
+         *
+         * <p>This projection needs no Activation, Filesystem capability, Process, Actor or
+         * Context, never follows links and never exposes backing representation. Each call
+         * returns a fresh detached copy and holds no shared cursor, so independent reads may
+         * proceed concurrently. A backend without host read support fails closed.
+         *
+         * @throws IOException when the backing is released or the name does not denote an exact
+         *     captured regular resource
+         */
+        default byte[] readRegularResource(ProtosPackageResourceName name) throws IOException {
+            Objects.requireNonNull(name, "name");
+            throw new IOException("captured backend has no host-only resource read projection");
+        }
+    }
 
     @FunctionalInterface
     public interface Backend {

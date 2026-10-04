@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.181-SNAPSHOT
+
+- `TOOL001-F2E4` (verified-custody resource scope) implements the PLAT012
+  authority/lifetime layer for external packages. `CapturedBackend` gains a
+  host-only `readRegularResource` projection, and the captured-tree backend
+  implements it over its existing tree, blobs and leases. It reads exact
+  regular resources by a package-relative `ProtosPackageResourceName` without
+  Activation, guest Filesystem, Process, Actor, Context or any source/backing
+  Path. Absolute, `.`/`..`, empty and NUL names are rejected, and links,
+  other entries, directories and missing entries fail closed. Each read
+  returns a detached copy and uses its own channel, so independent reads run
+  concurrently. `ProtosCapturedFilesystemCustody.readResource` fails after
+  close. `ProtosExternalPackageResourceScope.reconcile` reconciles the detached
+  PackageExecutionPlanV2 external identities exactly 1:1 with verified
+  custodies (via the new `VerifiedExternalPackage.identity()`), keyed by the
+  full exact identity. Missing, extra, duplicate or mismatched identities and
+  reused custodies fail closed with no partial scope. A successful scope owns
+  its custodies and closes each exactly once, idempotently. Planning remains a
+  borrower. No resolver, source decoding, cache or public-run wiring is added,
+  and no observable semantics change.
+
 ## 0.3.180-SNAPSHOT
 
 - `TOOL001-F2E4` (first slice) adds the host side of D053/PLAT012 external

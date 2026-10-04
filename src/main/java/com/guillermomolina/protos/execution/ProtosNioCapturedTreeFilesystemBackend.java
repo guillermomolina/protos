@@ -404,11 +404,67 @@ final class ProtosNioCapturedTreeFilesystemBackend
         return current;
     }
 
+    /**
+     * Reads the exact captured regular blob through a transient lease on the same shared backing.
+     * The per-call channel keeps reads independent; no backend-wide lock or cursor is involved.
+     */
+    @Override
+    public byte[] readRegularResource(ProtosPackageResourceName name) throws IOException {
+        Objects.requireNonNull(name, "name");
+        EntryNode selected = resolveEntry(name.components());
+        if (selected == null
+                || selected.kind() != ProtosFilesystemTreeObservationFlow.EntryKind.REGULAR) {
+            throw new IOException("package resource is not an exact captured regular resource");
+        }
+
+        Lease readLease;
+        try {
+            if (!backendLease.active()) {
+                throw new IllegalStateException("captured backend released");
+            }
+            readLease = backing.retain();
+        } catch (IllegalStateException released) {
+            throw new IOException("captured package backing is released", released);
+        }
+        try {
+            if (!backendLease.active()) {
+                throw new IOException("captured package backing is released");
+            }
+            try (SeekableByteChannel channel =
+                    Files.newByteChannel(
+                            backing.blob(selected.blobId()), Set.of(StandardOpenOption.READ))) {
+                return readExactly(channel);
+            }
+        } catch (IllegalStateException released) {
+            throw new IOException("captured package backing is released", released);
+        } finally {
+            readLease.run();
+        }
+    }
+
+    private static byte[] readExactly(SeekableByteChannel channel) throws IOException {
+        long size = channel.size();
+        if (size < 0 || size > Integer.MAX_VALUE - 8) {
+            throw new IOException("captured package resource is too large for a host read");
+        }
+        ByteBuffer buffer = ByteBuffer.allocate((int) size);
+        while (buffer.hasRemaining()) {
+            if (channel.read(buffer) <= 0) {
+                throw new IOException("captured package resource ended before its extent");
+            }
+        }
+        return buffer.array();
+    }
+
     private EntryNode resolveEntry(ProtosPathValue path) {
         List<String> components = normalRelativeComponents(path, false);
         if (components == null) {
             return null;
         }
+        return resolveEntry(components);
+    }
+
+    private EntryNode resolveEntry(List<String> components) {
         DirectoryNode current = root;
         for (int index = 0; index < components.size(); index++) {
             EntryNode entry = current.children().get(components.get(index));

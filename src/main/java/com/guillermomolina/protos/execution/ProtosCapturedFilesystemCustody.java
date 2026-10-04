@@ -14,7 +14,8 @@ import java.util.Objects;
  * {@link ProtosPackageExecutionPlan}. It owns the exact captured backend independently of any
  * Package Tool or application Actor domain. Each {@link #materialize(ProtosActivation)} call
  * creates a fresh standard read-only Filesystem capability bound to the supplied activation's
- * domain while delegating to the same captured backend.
+ * domain while delegating to the same captured backend; {@link #readResource} is the narrow
+ * host-only read projection over that same backend.
  *
  * <p>The selected source root is used only by {@link #captureSelectedRoot(Path)}. Once capture
  * succeeds the source backend is closed and this object retains no source Path authority. The
@@ -68,6 +69,28 @@ final class ProtosCapturedFilesystemCustody implements AutoCloseable {
         }
         return ProtosStandardFilesystemProtocol.createCapturedCapability(
                 activation, capturedBackend);
+    }
+
+    /**
+     * Host-only PLAT012 read of one exact immutable regular resource from the same verified
+     * captured backing, without Activation, guest Filesystem, Process, Actor or Context.
+     *
+     * <p>The custody lock guards only the closed check; the read itself is lock-free here so
+     * independent reads progress concurrently. A close racing with a read is fenced by the
+     * backend's own lease, so no read succeeds against released backing.
+     *
+     * @return a fresh detached copy of the resource bytes
+     * @throws IllegalStateException when this custody is closed
+     * @throws IOException when the name does not denote an exact captured regular resource
+     */
+    byte[] readResource(ProtosPackageResourceName name) throws IOException {
+        Objects.requireNonNull(name, "name");
+        synchronized (this) {
+            if (closed) {
+                throw new IllegalStateException("captured Filesystem custody is closed");
+            }
+        }
+        return capturedBackend.readRegularResource(name);
     }
 
     /** Releases the run-owned captured backing exactly once. */
