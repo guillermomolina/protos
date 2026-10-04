@@ -183,6 +183,13 @@ public final class ProtosModuleRuntime {
                 task);
     }
 
+    /*
+     * TEST009-E: import preparation (specifier resolution, Actor module-state lookup/insertion,
+     * module activation creation) is host-side work with no partial-evaluation value. Without
+     * this boundary the generic send operation's native-method dispatch inlines the resolver
+     * and the JDK beneath it into every compiled send site (TooDeepInlining in JDK reflection).
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     private PreparedModuleInitialization prepareBytecodeImportWithTask(
             List<?> supplied,
             ProtosActivation caller,
@@ -272,6 +279,7 @@ public final class ProtosModuleRuntime {
     }
 
     /** Resolves one exact semantic String in the caller's module-resolution environment. */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     public ProtosModuleKey resolveModuleKey(Object specifier, ProtosActivation caller) {
         Objects.requireNonNull(caller, "caller");
         if (!(specifier instanceof ProtosStringValue semanticString)) {

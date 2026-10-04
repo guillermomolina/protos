@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -41,7 +42,12 @@ public final class ProtosLexicalFallback {
     /**
      * Exact residual bare-name read: lexical local slots first, then ordinary
      * receiver lookup.
+     *
+     * <p>TEST009-E: a host boundary. This String-keyed walk is the residual
+     * path that statically proven reads bypass; inlined, its loops and the
+     * receiver delegation lookup were expanded into every compiled read site.
      */
+    @TruffleBoundary
     public static Optional<Object> readByName(
             ProtosActivation activation,
             String name) {

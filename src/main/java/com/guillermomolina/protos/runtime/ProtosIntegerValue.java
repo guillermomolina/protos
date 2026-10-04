@@ -109,11 +109,10 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
             try {
                 return new ProtosIntegerValue(Math.addExact(smallValue, other.smallValue));
             } catch (ArithmeticException overflow) {
-                return new ProtosIntegerValue(
-                        BigInteger.valueOf(smallValue).add(BigInteger.valueOf(other.smallValue)));
+                return addBig(this, other);
             }
         }
-        return new ProtosIntegerValue(value().add(other.value()));
+        return addBig(this, other);
     }
 
     public ProtosIntegerValue subtractForRuntime(ProtosIntegerValue other) {
@@ -122,11 +121,10 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
             try {
                 return new ProtosIntegerValue(Math.subtractExact(smallValue, other.smallValue));
             } catch (ArithmeticException overflow) {
-                return new ProtosIntegerValue(
-                        BigInteger.valueOf(smallValue).subtract(BigInteger.valueOf(other.smallValue)));
+                return subtractBig(this, other);
             }
         }
-        return new ProtosIntegerValue(value().subtract(other.value()));
+        return subtractBig(this, other);
     }
 
     public ProtosIntegerValue multiplyForRuntime(ProtosIntegerValue other) {
@@ -135,11 +133,10 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
             try {
                 return new ProtosIntegerValue(Math.multiplyExact(smallValue, other.smallValue));
             } catch (ArithmeticException overflow) {
-                return new ProtosIntegerValue(
-                        BigInteger.valueOf(smallValue).multiply(BigInteger.valueOf(other.smallValue)));
+                return multiplyBig(this, other);
             }
         }
-        return new ProtosIntegerValue(value().multiply(other.value()));
+        return multiplyBig(this, other);
     }
 
     public ProtosIntegerValue divideForRuntime(ProtosIntegerValue other) {
@@ -149,11 +146,11 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
                 throw new ArithmeticException("BigInteger divide by zero");
             }
             if (smallValue == Long.MIN_VALUE && other.smallValue == -1L) {
-                return new ProtosIntegerValue(BigInteger.valueOf(Long.MIN_VALUE).negate());
+                return divideBig(this, other);
             }
             return new ProtosIntegerValue(smallValue / other.smallValue);
         }
-        return new ProtosIntegerValue(value().divide(other.value()));
+        return divideBig(this, other);
     }
 
     public ProtosIntegerValue remainderForRuntime(ProtosIntegerValue other) {
@@ -164,7 +161,37 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
             }
             return new ProtosIntegerValue(smallValue % other.smallValue);
         }
-        return new ProtosIntegerValue(value().remainder(other.value()));
+        return remainderBig(this, other);
+    }
+
+    /*
+     * TEST009-E: the arbitrary-precision results (long overflow or a big operand)
+     * are rare and BigInteger arithmetic has no partial-evaluation value; inlined,
+     * they were expanded into every compiled Integer operation site.
+     */
+    @TruffleBoundary
+    private static ProtosIntegerValue addBig(ProtosIntegerValue left, ProtosIntegerValue right) {
+        return new ProtosIntegerValue(left.value().add(right.value()));
+    }
+
+    @TruffleBoundary
+    private static ProtosIntegerValue subtractBig(ProtosIntegerValue left, ProtosIntegerValue right) {
+        return new ProtosIntegerValue(left.value().subtract(right.value()));
+    }
+
+    @TruffleBoundary
+    private static ProtosIntegerValue multiplyBig(ProtosIntegerValue left, ProtosIntegerValue right) {
+        return new ProtosIntegerValue(left.value().multiply(right.value()));
+    }
+
+    @TruffleBoundary
+    private static ProtosIntegerValue divideBig(ProtosIntegerValue left, ProtosIntegerValue right) {
+        return new ProtosIntegerValue(left.value().divide(right.value()));
+    }
+
+    @TruffleBoundary
+    private static ProtosIntegerValue remainderBig(ProtosIntegerValue left, ProtosIntegerValue right) {
+        return new ProtosIntegerValue(left.value().remainder(right.value()));
     }
 
     private static boolean fitsSignedLong(BigInteger value) {

@@ -804,6 +804,12 @@ public final class ProtosActivation {
         return Optional.ofNullable(directDynamicControlState);
     }
 
+    /*
+     * TEST009-E: host boundary. Inheriting the enclosing dynamic control state reads
+     * monitor-guarded Task/I-O state; it has no partial-evaluation value and, inlined,
+     * its synchronized reads were expanded into every compiled call preparation.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     public void inheritDynamicControlState(ProtosActivation enclosing) {
         Objects.requireNonNull(enclosing, "enclosing");
         Optional<ProtosIoReleaseExecution> inheritedRelease =

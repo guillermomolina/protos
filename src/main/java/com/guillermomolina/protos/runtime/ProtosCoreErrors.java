@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.util.Objects;
 
 /** Typed construction/signaling API for the closed standard Core Error taxonomy. */
@@ -120,10 +121,22 @@ public final class ProtosCoreErrors {
         if (transfer.selectedHandlerFrame().isPresent()) {
             return transfer;
         }
+        selectMatchingHandlerFrame(activation, transfer);
+        return transfer;
+    }
+
+    /*
+     * TEST009-E: handler selection reads the monitor-guarded dynamic control state
+     * and scans its handlers; it runs only while an Error is being signaled and has
+     * no partial-evaluation value. Inlined, the synchronized state reads were
+     * expanded into the exception path of every compiled handler site.
+     */
+    @TruffleBoundary
+    private static void selectMatchingHandlerFrame(
+            ProtosActivation activation, ProtosSignalException transfer) {
         activation.dynamicControlStateIfPresent()
                 .flatMap(state -> state.selectMatchingHandler(transfer.error()))
                 .ifPresent(transfer::selectHandlerFrame);
-        return transfer;
     }
 
 }

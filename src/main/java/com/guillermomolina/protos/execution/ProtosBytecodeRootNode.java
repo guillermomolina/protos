@@ -132,23 +132,36 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             AbstractTruffleException exception,
             VirtualFrame frame) {
         if (exception instanceof ProtosSignalException transfer) {
-            /*
-             * PERF025-H1: a semantic source root still in compact source-call
-             * form materializes its exact activation here, on the Error path,
-             * exactly as the former eager root prologue would have.
-             */
-            if (ProtosFrameArguments.hasActivation(frame)) {
-                ProtosActivation activation = ProtosFrameArguments.activation(frame);
-                /*
-                 * Selection is semantic authority and must happen before the
-                 * Bytecode EH table starts crossed TryFinally cleanup. Repeated
-                 * root crossings are idempotent because the exact transfer
-                 * remembers the one selected handler token.
-                 */
-                ProtosCoreErrors.selectHandlerIfNeeded(activation, transfer);
-            }
+            selectGuestHandlerOnRootCrossing(transfer, frame == null ? null : frame.getArguments());
         }
         return exception;
+    }
+
+    /*
+     * TEST009-E: the Error-path work of interceptGuestException, behind a host
+     * boundary (it receives the frame-argument array, never the frame). Inlined,
+     * the activation probing/materialization and handler selection were expanded
+     * into the exception path of every compiled handler site.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static void selectGuestHandlerOnRootCrossing(
+            ProtosSignalException transfer,
+            Object[] frameArguments) {
+        /*
+         * PERF025-H1: a semantic source root still in compact source-call
+         * form materializes its exact activation here, on the Error path,
+         * exactly as the former eager root prologue would have.
+         */
+        if (frameArguments != null && ProtosFrameArguments.hasActivation(frameArguments)) {
+            ProtosActivation activation = ProtosFrameArguments.activation(frameArguments);
+            /*
+             * Selection is semantic authority and must happen before the
+             * Bytecode EH table starts crossed TryFinally cleanup. Repeated
+             * root crossings are idempotent because the exact transfer
+             * remembers the one selected handler token.
+             */
+            ProtosCoreErrors.selectHandlerIfNeeded(activation, transfer);
+        }
     }
 
     /**

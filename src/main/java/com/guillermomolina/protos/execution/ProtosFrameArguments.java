@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosTask;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.frame.Frame;
 import java.util.List;
 import java.util.Objects;
@@ -119,7 +120,10 @@ final class ProtosFrameArguments {
         if (frame == null) {
             return false;
         }
-        Object[] arguments = frame.getArguments();
+        return hasActivation(frame.getArguments());
+    }
+
+    static boolean hasActivation(Object[] arguments) {
         return arguments.length > 0
                 && (arguments[0] instanceof ProtosActivation
                         || isCompactCall(arguments));
@@ -142,6 +146,17 @@ final class ProtosFrameArguments {
                 && arguments[0] instanceof ProtosActivation activation) {
             return activation;
         }
+        return materializeCompactActivation(arguments);
+    }
+
+    /*
+     * TEST009-E: materializing a compact call's activation is the rare path of
+     * activation(Object[]) and is host-side object construction with no
+     * partial-evaluation value; inlined, it was expanded into every operation
+     * that may consult the current activation (several hundred nodes per site).
+     */
+    @TruffleBoundary
+    private static ProtosActivation materializeCompactActivation(Object[] arguments) {
         if (!isCompactCall(arguments)) {
             throw new IllegalStateException(
                     "Execution node requires a Protos activation or compact source-call ABI");

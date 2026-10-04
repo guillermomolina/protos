@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.201-SNAPSHOT
+
+- `TEST009-E` (parent TEST009/#795; trigger PERF030/#784) moves cold host-side
+  work out of partial evaluation behind `@TruffleBoundary`, after real
+  synchronous Truffle compilation of the Test Tool corpus showed it expanded
+  into every compiled operation (`TooDeepInlining` through JDK reflection and
+  HotSpot "code is too large" installation failures): module import
+  preparation and specifier resolution (`ProtosModuleRuntime`), compact-call
+  activation materialization (`ProtosFrameArguments`, the already-materialized
+  fast path stays inline), the residual String-keyed lexical read
+  (`ProtosLexicalFallback.readByName`), arbitrary-precision Integer arithmetic
+  (`ProtosIntegerValue`, the `long` fast paths stay inline), Error handler
+  selection on root crossing (`ProtosCoreErrors`, `ProtosBytecodeRootNode`),
+  and dynamic-control-state inheritance (`ProtosActivation`). Evaluation
+  order, Error precedence, activation identity and handler selection are
+  unchanged. No Protos semantic or specification change.
+
 ## 0.3.200-SNAPSHOT
 
 - `LM011-D1` (issue #670; D183, PLAT050 Candidate F, PLAT024) exposes the
