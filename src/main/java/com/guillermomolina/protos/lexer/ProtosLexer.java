@@ -81,6 +81,30 @@ public final class ProtosLexer {
         }
     }
 
+    /**
+     * Tooling-only trivia categories absent from the ordinary token stream.
+     */
+    public enum TriviaKind {
+        HORIZONTAL_WHITESPACE,
+        LINE_COMMENT,
+        BLOCK_COMMENT
+    }
+
+    /**
+     * One tooling-only trivia occurrence in the immutable source input.
+     *
+     * <p>The span is the sole raw-source authority. The occurrence deliberately
+     * does not copy the source spelling.</p>
+     */
+    public record TriviaOccurrence(
+            TriviaKind kind,
+            com.guillermomolina.protos.source.SourceSpan span) {
+        public TriviaOccurrence {
+            java.util.Objects.requireNonNull(kind, "kind");
+            java.util.Objects.requireNonNull(span, "span");
+        }
+    }
+
     public ProtosLexer(String source) {
         this.source = source == null ? "" : source;
     }
@@ -103,7 +127,7 @@ public final class ProtosLexer {
      * @return token occurrences in source order, including EOF
      */
     public List<TokenOccurrence> tokenizeOccurrences() {
-        return tokenizeOccurrences(null);
+        return tokenizeOccurrences(null, null);
     }
 
     /**
@@ -114,13 +138,33 @@ public final class ProtosLexer {
      */
     public List<TokenOccurrence> tokenizeOccurrences(
             java.util.function.Consumer<LineCommentOccurrence> lineCommentSink) {
+        return tokenizeOccurrences(lineCommentSink, null);
+    }
+
+    /**
+     * Tokenizes source while observing all formatter-relevant trivia.
+     *
+     * <p>This path is explicitly opt-in. Parser-visible logical newlines remain
+     * ordinary token occurrences and are never duplicated as trivia.</p>
+     */
+    public List<TokenOccurrence> tokenizeOccurrencesWithTrivia(
+            java.util.function.Consumer<TriviaOccurrence> triviaSink) {
+        java.util.Objects.requireNonNull(triviaSink, "triviaSink");
+        return tokenizeOccurrences(null, triviaSink);
+    }
+
+    private List<TokenOccurrence> tokenizeOccurrences(
+            java.util.function.Consumer<LineCommentOccurrence> lineCommentSink,
+            java.util.function.Consumer<TriviaOccurrence> triviaSink) {
         List<TokenOccurrence> tokens = new ArrayList<>();
 
         while (!atEnd()) {
             int codePoint = codePointAt(pos);
 
             if (isHorizontalWhitespace(codePoint)) {
+                int start = pos;
                 skipHorizontalWhitespace();
+                observeTrivia(TriviaKind.HORIZONTAL_WHITESPACE, start, triviaSink);
                 continue;
             }
 
@@ -132,12 +176,12 @@ public final class ProtosLexer {
             }
 
             if (startsWith("//")) {
-                skipLineComment(lineCommentSink);
+                skipLineComment(lineCommentSink, triviaSink);
                 continue;
             }
 
             if (startsWith("/*")) {
-                skipBlockComment();
+                skipBlockComment(triviaSink);
                 continue;
             }
 
@@ -585,7 +629,8 @@ public final class ProtosLexer {
     }
 
     private void skipLineComment(
-            java.util.function.Consumer<LineCommentOccurrence> lineCommentSink) {
+            java.util.function.Consumer<LineCommentOccurrence> lineCommentSink,
+            java.util.function.Consumer<TriviaOccurrence> triviaSink) {
         int start = pos;
         pos += 2;
         int contentStart = pos;
@@ -598,9 +643,11 @@ public final class ProtosLexer {
                             source.substring(contentStart, pos),
                             new com.guillermomolina.protos.source.SourceSpan(start, pos)));
         }
+        observeTrivia(TriviaKind.LINE_COMMENT, start, triviaSink);
     }
 
-    private void skipBlockComment() {
+    private void skipBlockComment(
+            java.util.function.Consumer<TriviaOccurrence> triviaSink) {
         int start = pos;
         pos += 2;
         int end = source.indexOf("*/", pos);
@@ -608,6 +655,19 @@ public final class ProtosLexer {
             throw error("Unterminated block comment", start);
         }
         pos = end + 2;
+        observeTrivia(TriviaKind.BLOCK_COMMENT, start, triviaSink);
+    }
+
+    private void observeTrivia(
+            TriviaKind kind,
+            int start,
+            java.util.function.Consumer<TriviaOccurrence> triviaSink) {
+        if (triviaSink != null) {
+            triviaSink.accept(
+                    new TriviaOccurrence(
+                            kind,
+                            new com.guillermomolina.protos.source.SourceSpan(start, pos)));
+        }
     }
 
     private void consumeLogicalNewline() {

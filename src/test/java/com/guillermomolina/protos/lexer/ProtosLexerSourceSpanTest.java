@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -49,6 +50,38 @@ class ProtosLexerSourceSpanTest {
         List<Token> projected = occurrences.stream().map(TokenOccurrence::token).toList();
 
         assertEquals(new ProtosLexer(source).tokenize(), projected);
+    }
+
+    @Test
+    void toolingTriviaObservationPreservesTokensAndPhysicalCommentNewlines() {
+        String source = "a \t// note\r\nb /* one\n two */ c";
+
+        List<TokenOccurrence> ordinary = new ProtosLexer(source).tokenizeOccurrences();
+        List<ProtosLexer.TriviaOccurrence> trivia = new ArrayList<>();
+        List<TokenOccurrence> observed =
+                new ProtosLexer(source).tokenizeOccurrencesWithTrivia(trivia::add);
+
+        assertEquals(ordinary, observed);
+        assertEquals(
+                List.of(
+                        ProtosLexer.TriviaKind.HORIZONTAL_WHITESPACE,
+                        ProtosLexer.TriviaKind.LINE_COMMENT,
+                        ProtosLexer.TriviaKind.HORIZONTAL_WHITESPACE,
+                        ProtosLexer.TriviaKind.BLOCK_COMMENT,
+                        ProtosLexer.TriviaKind.HORIZONTAL_WHITESPACE),
+                trivia.stream().map(ProtosLexer.TriviaOccurrence::kind).toList());
+        assertEquals(
+                List.of(" \t", "// note", " ", "/* one\n two */", " "),
+                trivia.stream()
+                        .map(occurrence -> source.substring(
+                                occurrence.span().startOffset(),
+                                occurrence.span().endOffset()))
+                        .toList());
+        assertEquals(
+                1L,
+                observed.stream()
+                        .filter(occurrence -> occurrence.token().type() == TokenType.NEWLINE)
+                        .count());
     }
 
     @Test

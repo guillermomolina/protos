@@ -48,6 +48,18 @@ public final class ProtosStaticAnalysisCore {
     }
 
     /**
+     * Builds source-layout metadata only on explicit tooling demand.
+     *
+     * <p>The ordinary static parse path remains unchanged and retains no
+     * trivia or parser source facts.</p>
+     */
+    public ProtosSourceLayoutView sourceLayout(
+            ProtosDocumentSnapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot");
+        return ProtosSourceLayoutView.create(snapshot);
+    }
+
+    /**
      * Resolves the complete generation-1 D110 definition proof for one source
      * offset in the supplied immutable snapshot.
      *

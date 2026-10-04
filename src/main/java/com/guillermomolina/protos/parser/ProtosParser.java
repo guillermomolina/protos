@@ -52,13 +52,29 @@ import java.util.Set;
 
 public final class ProtosParser {
     private final TokenCursor cursor;
+    private final ProtosParserSourceFacts.Builder sourceFacts;
 
     public ProtosParser(String source) {
-        this(new ProtosLexer(source).tokenizeOccurrences());
+        this(new ProtosLexer(source).tokenizeOccurrences(), null);
     }
 
     ProtosParser(List<TokenOccurrence> tokens) {
+        this(tokens, null);
+    }
+
+    public static ProtosParser forTooling(
+            List<TokenOccurrence> tokens,
+            ProtosParserSourceFacts.Builder sourceFacts) {
+        return new ProtosParser(
+                java.util.Objects.requireNonNull(tokens, "tokens"),
+                java.util.Objects.requireNonNull(sourceFacts, "sourceFacts"));
+    }
+
+    private ProtosParser(
+            List<TokenOccurrence> tokens,
+            ProtosParserSourceFacts.Builder sourceFacts) {
         cursor = new TokenCursor(tokens);
+        this.sourceFacts = sourceFacts;
     }
 
     public SurfaceSequence parseProgram() {
@@ -66,12 +82,25 @@ public final class ProtosParser {
         consumeNewlines();
 
         if (!cursor.at(TokenType.EOF)) {
-            parseExpressionLine(expressions);
+            parseExpressionLine(
+                    expressions,
+                    ProtosParserSourceFacts.SequenceContext.PROGRAM);
 
             while (cursor.at(TokenType.NEWLINE)) {
-                consumeNewlines();
+                SurfaceExpression preceding =
+                        expressions.get(expressions.size() - 1);
+                SourceSpan separatorSpan = consumeSequenceNewlines();
                 if (!cursor.at(TokenType.EOF)) {
-                    parseExpressionLine(expressions);
+                    int followingIndex = expressions.size();
+                    parseExpressionLine(
+                            expressions,
+                            ProtosParserSourceFacts.SequenceContext.PROGRAM);
+                    recordExpressionSeparator(
+                            ProtosParserSourceFacts.SequenceContext.PROGRAM,
+                            preceding,
+                            ProtosParserSourceFacts.SequenceSeparatorKind.LOGICAL_NEWLINE,
+                            separatorSpan,
+                            expressions.get(followingIndex));
                 }
             }
         }
@@ -80,12 +109,23 @@ public final class ProtosParser {
         return new SurfaceSequence(expressions, sequenceSpan(expressions));
     }
 
-    private void parseExpressionLine(List<SurfaceExpression> expressions) {
+    private void parseExpressionLine(
+            List<SurfaceExpression> expressions,
+            ProtosParserSourceFacts.SequenceContext context) {
         expressions.add(parseExpressionFoundation());
 
         while (cursor.at(TokenType.SEMICOLON)) {
-            cursor.advance();
-            expressions.add(parseExpressionFoundation());
+            SurfaceExpression preceding =
+                    expressions.get(expressions.size() - 1);
+            TokenOccurrence separator = cursor.advance();
+            SurfaceExpression following = parseExpressionFoundation();
+            expressions.add(following);
+            recordExpressionSeparator(
+                    context,
+                    preceding,
+                    ProtosParserSourceFacts.SequenceSeparatorKind.SEMICOLON,
+                    separator.span(),
+                    following);
         }
     }
 
@@ -348,9 +388,17 @@ public final class ProtosParser {
             parseMapConstructionLine(entries);
 
             while (cursor.at(TokenType.NEWLINE)) {
-                consumeNewlines();
+                SurfaceMapConstruction.Entry preceding =
+                        entries.get(entries.size() - 1);
+                SourceSpan separatorSpan = consumeSequenceNewlines();
                 if (!cursor.at(TokenType.RBRACE)) {
+                    int followingIndex = entries.size();
                     parseMapConstructionLine(entries);
+                    recordMapEntrySeparator(
+                            preceding,
+                            ProtosParserSourceFacts.SequenceSeparatorKind.LOGICAL_NEWLINE,
+                            separatorSpan,
+                            entries.get(followingIndex));
                 }
             }
         }
@@ -368,8 +416,17 @@ public final class ProtosParser {
         entries.add(parseMapConstructionEntry());
 
         while (cursor.at(TokenType.SEMICOLON)) {
-            cursor.advance();
-            entries.add(parseMapConstructionEntry());
+            SurfaceMapConstruction.Entry preceding =
+                    entries.get(entries.size() - 1);
+            TokenOccurrence separator = cursor.advance();
+            SurfaceMapConstruction.Entry following =
+                    parseMapConstructionEntry();
+            entries.add(following);
+            recordMapEntrySeparator(
+                    preceding,
+                    ProtosParserSourceFacts.SequenceSeparatorKind.SEMICOLON,
+                    separator.span(),
+                    following);
         }
     }
 
@@ -387,14 +444,22 @@ public final class ProtosParser {
     }
 
     private SurfaceExpression parseBareParameterClosure() {
-        TokenOccurrence parameter = cursor.consume(TokenType.IDENTIFIER, "a closure parameter");
+        TokenOccurrence parameter =
+                cursor.consume(TokenType.IDENTIFIER, "a closure parameter");
         SurfaceParameter surfaceParameter = new SurfaceParameter(
                 parameter.token().lexeme(),
                 Optional.empty(),
                 false,
                 parameter.span());
         cursor.consume(TokenType.FAT_ARROW, "'=>'");
-        return parseClosureBody(List.of(surfaceParameter), parameter.span().startOffset());
+        SurfaceClosure closure =
+                (SurfaceClosure) parseClosureBody(
+                        List.of(surfaceParameter),
+                        parameter.span().startOffset());
+        recordSingleParameterClosureForm(
+                closure,
+                ProtosParserSourceFacts.SingleParameterClosureForm.BARE);
+        return closure;
     }
 
     private SurfaceExpression parseParameterListClosure() {
@@ -442,7 +507,16 @@ public final class ProtosParser {
 
         cursor.consume(TokenType.RPAREN, "')'");
         cursor.consume(TokenType.FAT_ARROW, "'=>'");
-        return parseClosureBody(parameters, open.span().startOffset());
+        SurfaceClosure closure =
+                (SurfaceClosure) parseClosureBody(
+                        parameters,
+                        open.span().startOffset());
+        if (parameters.size() == 1) {
+            recordSingleParameterClosureForm(
+                    closure,
+                    ProtosParserSourceFacts.SingleParameterClosureForm.PARENTHESIZED);
+        }
+        return closure;
     }
 
     private SurfaceParameter parseParameter() {
@@ -497,12 +571,25 @@ public final class ProtosParser {
             List<SurfaceExpression> expressions = new ArrayList<>();
 
             if (!cursor.at(TokenType.RBRACE)) {
-                parseExpressionLine(expressions);
+                parseExpressionLine(
+                        expressions,
+                        ProtosParserSourceFacts.SequenceContext.CLOSURE_BODY);
 
                 while (cursor.at(TokenType.NEWLINE)) {
-                    consumeNewlines();
+                    SurfaceExpression preceding =
+                            expressions.get(expressions.size() - 1);
+                    SourceSpan separatorSpan = consumeSequenceNewlines();
                     if (!cursor.at(TokenType.RBRACE)) {
-                        parseExpressionLine(expressions);
+                        int followingIndex = expressions.size();
+                        parseExpressionLine(
+                                expressions,
+                                ProtosParserSourceFacts.SequenceContext.CLOSURE_BODY);
+                        recordExpressionSeparator(
+                                ProtosParserSourceFacts.SequenceContext.CLOSURE_BODY,
+                                preceding,
+                                ProtosParserSourceFacts.SequenceSeparatorKind.LOGICAL_NEWLINE,
+                                separatorSpan,
+                                expressions.get(followingIndex));
                     }
                 }
             }
@@ -542,9 +629,17 @@ public final class ProtosParser {
             parseObjectBodyLine(items);
 
             while (cursor.at(TokenType.NEWLINE)) {
-                consumeNewlines();
+                SurfaceObjectItem preceding =
+                        items.get(items.size() - 1);
+                SourceSpan separatorSpan = consumeSequenceNewlines();
                 if (!cursor.at(TokenType.RBRACE)) {
+                    int followingIndex = items.size();
                     parseObjectBodyLine(items);
+                    recordObjectItemSeparator(
+                            preceding,
+                            ProtosParserSourceFacts.SequenceSeparatorKind.LOGICAL_NEWLINE,
+                            separatorSpan,
+                            items.get(followingIndex));
                 }
             }
         }
@@ -560,8 +655,16 @@ public final class ProtosParser {
         items.add(parseObjectBodyItem());
 
         while (cursor.at(TokenType.SEMICOLON)) {
-            cursor.advance();
-            items.add(parseObjectBodyItem());
+            SurfaceObjectItem preceding =
+                    items.get(items.size() - 1);
+            TokenOccurrence separator = cursor.advance();
+            SurfaceObjectItem following = parseObjectBodyItem();
+            items.add(following);
+            recordObjectItemSeparator(
+                    preceding,
+                    ProtosParserSourceFacts.SequenceSeparatorKind.SEMICOLON,
+                    separator.span(),
+                    following);
         }
     }
 
@@ -667,11 +770,13 @@ public final class ProtosParser {
 
         TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
         int endOffset = close.span().endOffset();
+        SurfaceClosure trailingClosure = null;
 
         if (cursor.at(TokenType.LBRACE)) {
-            SurfaceClosure trailingClosure = (SurfaceClosure) parseClosureBody(
-                    List.of(),
-                    cursor.current().span().startOffset());
+            trailingClosure =
+                    (SurfaceClosure) parseClosureBody(
+                            List.of(),
+                            cursor.current().span().startOffset());
             arguments.add(new SurfaceArgument(
                     false,
                     trailingClosure,
@@ -679,10 +784,14 @@ public final class ProtosParser {
             endOffset = trailingClosure.span().endOffset();
         }
 
-        return new SurfaceCall(
+        SurfaceCall call = new SurfaceCall(
                 receiver,
                 arguments,
                 new SourceSpan(receiver.span().startOffset(), endOffset));
+        if (trailingClosure != null) {
+            recordTrailingClosureOrigin(call, trailingClosure);
+        }
+        return call;
     }
 
     private SurfaceArgument parseArgument() {
@@ -727,6 +836,87 @@ public final class ProtosParser {
     private void consumeNewlines() {
         while (cursor.at(TokenType.NEWLINE)) {
             cursor.advance();
+        }
+    }
+
+    private SourceSpan consumeSequenceNewlines() {
+        if (sourceFacts == null) {
+            consumeNewlines();
+            return null;
+        }
+
+        TokenOccurrence first =
+                cursor.consume(TokenType.NEWLINE, "a logical newline");
+        int endOffset = first.span().endOffset();
+
+        while (cursor.at(TokenType.NEWLINE)) {
+            endOffset = cursor.advance().span().endOffset();
+        }
+
+        return new SourceSpan(first.span().startOffset(), endOffset);
+    }
+
+    private void recordExpressionSeparator(
+            ProtosParserSourceFacts.SequenceContext context,
+            SurfaceExpression preceding,
+            ProtosParserSourceFacts.SequenceSeparatorKind kind,
+            SourceSpan separatorSpan,
+            SurfaceExpression following) {
+        if (sourceFacts != null) {
+            sourceFacts.recordExpressionSeparator(
+                    context,
+                    preceding,
+                    kind,
+                    separatorSpan,
+                    following);
+        }
+    }
+
+    private void recordObjectItemSeparator(
+            SurfaceObjectItem preceding,
+            ProtosParserSourceFacts.SequenceSeparatorKind kind,
+            SourceSpan separatorSpan,
+            SurfaceObjectItem following) {
+        if (sourceFacts != null) {
+            sourceFacts.recordObjectItemSeparator(
+                    preceding,
+                    kind,
+                    separatorSpan,
+                    following);
+        }
+    }
+
+    private void recordMapEntrySeparator(
+            SurfaceMapConstruction.Entry preceding,
+            ProtosParserSourceFacts.SequenceSeparatorKind kind,
+            SourceSpan separatorSpan,
+            SurfaceMapConstruction.Entry following) {
+        if (sourceFacts != null) {
+            sourceFacts.recordMapEntrySeparator(
+                    preceding,
+                    kind,
+                    separatorSpan,
+                    following);
+        }
+    }
+
+    private void recordSingleParameterClosureForm(
+            SurfaceClosure closure,
+            ProtosParserSourceFacts.SingleParameterClosureForm form) {
+        if (sourceFacts != null) {
+            sourceFacts.recordSingleParameterClosureForm(
+                    closure,
+                    form);
+        }
+    }
+
+    private void recordTrailingClosureOrigin(
+            SurfaceCall call,
+            SurfaceClosure closure) {
+        if (sourceFacts != null) {
+            sourceFacts.recordTrailingClosureOrigin(
+                    call,
+                    closure);
         }
     }
 

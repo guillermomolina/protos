@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.190-SNAPSHOT
+
+- `LM011-B1` (issue #670, D183 Candidate B, PLAT050 Candidate F) adds the
+  on-demand editor-neutral source-layout and source-preservation foundation for
+  the future canonical Protos formatter. Exact immutable source remains the raw
+  spelling authority while tooling-only demand can retain horizontal
+  whitespace, line comments and block comments without changing the ordinary
+  token stream; logical newlines remain parser tokens and block-comment
+  internal newlines remain non-parser newlines. The canonical parser can
+  additionally expose source-only sequence separator kind, bare versus
+  parenthesized single-parameter Closure form and trailing-Closure origin.
+  `ProtosSourceLayoutView` groups the exact snapshot, canonical
+  `TokenOccurrence`s and existing Surface AST with immutable trivia/source
+  facts, source-position-independent structural paths and deterministic
+  `OWN_LINE`, `END_OF_LINE` and `EMBEDDED_BETWEEN_TOKENS` comment
+  attachments. Its D183 preservation projection retains raw token/comment
+  spellings, structural/grouping/Array/Map forms, separator kinds, Closure
+  forms and trailing-Closure relationships without using source offsets as
+  structural identity. The ordinary lexer/parser/static-analysis path retains
+  no formatter-only metadata and allocates no sequence-separator `SourceSpan`
+  when source facts are not requested. No formatter transformation, CLI/LSP
+  integration, style configuration, CST/lossless syntax layer, language
+  semantic change or specification change is introduced.
+
 ## 0.3.189-SNAPSHOT
 
 - `PERF030-L` (issue #784) removes the PE-visible frame-local rescan from
