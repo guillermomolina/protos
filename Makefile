@@ -36,8 +36,11 @@ LOCAL_RANGE_PE_GUARD_REPORT := target/local-range-pe-guard-report.json
 # TEST009-A: static LocalRangeAccessor receiver/BytecodeNode PE guard.
 LOCAL_RANGE_OPERAND_PE_BASELINE := tools/java_local_range_operand_pe_baseline.json
 LOCAL_RANGE_OPERAND_PE_REPORT := target/local-range-operand-pe-guard-report.json
+# TEST009-B: static LocalAccessor/MaterializedLocalAccessor PE guard.
+LOCAL_ACCESSOR_PE_BASELINE := tools/java_local_accessor_pe_baseline.json
+LOCAL_ACCESSOR_PE_REPORT := target/local-accessor-pe-guard-report.json
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -52,10 +55,12 @@ help:
 		'                      self-tests, baseline and PE-reachability checks' \
 		'  make check-local-range-operands-pe  Static LocalRangeAccessor receiver and' \
 		'                      BytecodeNode PE guard: self-tests and topology check' \
+		'  make check-local-accessor-pe  Static LocalAccessor/MaterializedLocalAccessor' \
+		'                      receiver/BytecodeNode/declaring-node PE guard' \
 		'  make test-local-range-pe-guard  Compatibility alias of check-local-range-index-pe' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
-		'  make check          Verify the toolchain, run the static LocalRange PE' \
-		'                      guards, then run both test suites' \
+		'  make check          Verify the toolchain, run the static LocalRange and' \
+		'                      LocalAccessor PE guards, then run both test suites' \
 		'  make verify         Run a clean Maven verify lifecycle' \
 		'  make clean          Remove Maven build output' \
 		'  make artifacts      Build the canonical exact-revision artifact set' \
@@ -140,6 +145,13 @@ check-local-range-operands-pe:
 		--baseline $(LOCAL_RANGE_OPERAND_PE_BASELINE) \
 		--report $(LOCAL_RANGE_OPERAND_PE_REPORT)
 
+check-local-accessor-pe:
+	$(PYTHON) tools/test_java_local_accessor_pe_guard.py
+	$(PYTHON) tools/java_local_accessor_pe_guard.py check \
+		--source src/main/java \
+		--baseline $(LOCAL_ACCESSOR_PE_BASELINE) \
+		--report $(LOCAL_ACCESSOR_PE_REPORT)
+
 # Historical PERF030-F name, kept for compatibility.
 test-local-range-pe-guard: check-local-range-index-pe
 
@@ -153,7 +165,7 @@ test-protos:
 	exit $$status
 
 # TEST009: deterministic static guards measured well below 60 s run first.
-check: toolchain check-local-range-index-pe check-local-range-operands-pe test
+check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe test
 
 verify:
 	$(MVN) $(MVN_FLAGS) clean verify
