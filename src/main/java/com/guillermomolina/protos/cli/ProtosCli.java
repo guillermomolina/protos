@@ -42,8 +42,26 @@ public final class ProtosCli {
     private static final Set<String> PACKAGE_METADATA_MUTABLE_FILES =
             Set.of("protos.toml", "protos.lock", ".protos.toml.stage", ".protos.lock.stage");
 
+    private final ExactPackageMaterializationProviderFactory
+            exactPackageMaterializationProviderFactory;
     private final ProtosValueRenderer renderer = new ProtosValueRenderer();
     private final ProtosDiagnosticInspector diagnosticInspector = new ProtosDiagnosticInspector();
+
+    public ProtosCli() {
+        this(ProtosLocalExactPackageMaterializationProvider::forDistributionRoot);
+    }
+
+    ProtosCli(ExactPackageMaterializationProviderFactory exactPackageMaterializationProviderFactory) {
+        this.exactPackageMaterializationProviderFactory =
+                Objects.requireNonNull(
+                        exactPackageMaterializationProviderFactory,
+                        "exactPackageMaterializationProviderFactory");
+    }
+
+    @FunctionalInterface
+    interface ExactPackageMaterializationProviderFactory {
+        ProtosExactPackageMaterializationProvider create(Path distributionRoot);
+    }
 
     /**
      * Stack budget of the dedicated guest carrier thread (BUG008); the value and its rationale
@@ -237,23 +255,25 @@ public final class ProtosCli {
         try {
             Path core = core();
             Path distributionRoot = core.getParent().getParent();
-            ProtosExecutionOutcome outcome =
-                    ProtosWorkspaceRunDriver.execute(
-                            new ProtosWorkspaceRunDriver.Request(
-                                    core,
-                                    distributionRoot.resolve("tools").resolve("package"),
-                                    projectRoot,
-                                    new ProtosStandardLibraryModuleResolver(core.getParent()),
-                                    entryLogicalModule,
-                                    applicationArguments,
-                                    ProtosStandaloneHostedExecution.HOST_ENVIRONMENT_NAME_DOMAIN,
-                                    ProtosStandaloneHostedExecution.hostEnvironmentEntries(),
-                                    ProtosStandaloneHostedExecution.readableBackend(in),
-                                    ProtosStandaloneHostedExecution.writableBackend(out),
-                                    ProtosStandaloneHostedExecution.writableBackend(err),
-                                    "UTF8",
-                                    "UTF8",
-                                    "UTF8"));
+            ProtosWorkspaceRunDriver.Request request =
+                    new ProtosWorkspaceRunDriver.Request(
+                            core,
+                            distributionRoot.resolve("tools").resolve("package"),
+                            projectRoot,
+                            new ProtosStandardLibraryModuleResolver(core.getParent()),
+                            entryLogicalModule,
+                            applicationArguments,
+                            ProtosStandaloneHostedExecution.HOST_ENVIRONMENT_NAME_DOMAIN,
+                            ProtosStandaloneHostedExecution.hostEnvironmentEntries(),
+                            ProtosStandaloneHostedExecution.readableBackend(in),
+                            ProtosStandaloneHostedExecution.writableBackend(out),
+                            ProtosStandaloneHostedExecution.writableBackend(err),
+                            "UTF8",
+                            "UTF8",
+                            "UTF8");
+            ProtosExactPackageMaterializationProvider provider =
+                    exactPackageMaterializationProviderFactory.create(distributionRoot);
+            ProtosExecutionOutcome outcome = ProtosPackageRunDriver.execute(request, provider);
 
             return workspaceOutcomeExitCode(outcome, err);
         } catch (IOException failure) {

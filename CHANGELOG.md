@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.187-SNAPSHOT
+
+- `TOOL001-F2E5` (issue #93, PLAT048 B′) completes the current bounded
+  external immutable-package run closure by adding an implementation-private,
+  read-only exact local materialization backend and routing public
+  `protos run <entry> [args...]` through `ProtosPackageRunDriver`. The backend
+  derives one deterministic opaque private path from the complete typed exact
+  identity (registry/Git kind, PackageId, exact version/revision and
+  ContentIdentity), performs no directory enumeration, alternative lookup,
+  fetch, network access, lock mutation, package-store writes, repair or
+  garbage collection, and fails closed when the exact already-present root is
+  missing. The selected root still passes unchanged through the existing F2E2
+  capture+ContentIdentity verification, F2E3 planning and F2E4
+  detach/reconciliation before application execution. Workspace-only public
+  runs remain on the generation-1 path and do not consult the materialization
+  provider. The physical materialization root/key layout is implementation
+  private and introduces no CLI option, environment variable, public
+  configuration or canonical package-store contract. Focused coverage verifies
+  complete-identity separation, fail-closed missing materializations,
+  workspace-only zero lookup and a public mixed run that imports and executes
+  source from an exact verified external package. No language or specification
+  semantic change.
+
 ## 0.3.186-SNAPSHOT
 
 - `PERF030-J` (captured-owner constant ordinal pipeline, issue #784) carries
