@@ -16,8 +16,10 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosDiagnosticTrace;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.Objects;
+import java.util.Optional;
 
 /**
  * Inert terminal result of one exact Protos execution boundary.
@@ -26,11 +28,16 @@ import java.util.Objects;
  * or reporting identity. Higher-level tooling may interpret a terminal semantic result, while
  * infrastructure/runtime failures outside Protos execution remain ordinary host failures rather
  * than fabricated Protos Errors.
+ *
+ * <p>CLI008-C1: a FAILED outcome may also carry the inert {@link ProtosDiagnosticTrace} of the
+ * terminal occurrence. It is metadata beside the exact {@link #error()}, never a replacement for
+ * it, and is absent when the boundary had no occurrence to project.
  */
 public record ProtosExecutionOutcome(
         State state,
         Object value,
-        ProtosObjectValue error) {
+        ProtosObjectValue error,
+        ProtosDiagnosticTrace diagnosticTrace) {
 
     public enum State {
         COMPLETED,
@@ -43,7 +50,7 @@ public record ProtosExecutionOutcome(
         switch (state) {
             case COMPLETED -> {
                 Objects.requireNonNull(value, "completed execution value");
-                if (error != null) {
+                if (error != null || diagnosticTrace != null) {
                     throw new IllegalArgumentException(
                             "completed execution cannot carry an error");
                 }
@@ -56,7 +63,7 @@ public record ProtosExecutionOutcome(
                 Objects.requireNonNull(error, "failed execution error");
             }
             case CANCELLED -> {
-                if (value != null || error != null) {
+                if (value != null || error != null || diagnosticTrace != null) {
                     throw new IllegalArgumentException(
                             "cancelled execution cannot carry value/error data");
                 }
@@ -68,17 +75,29 @@ public record ProtosExecutionOutcome(
         return new ProtosExecutionOutcome(
                 State.COMPLETED,
                 Objects.requireNonNull(value, "value"),
+                null,
                 null);
     }
 
     public static ProtosExecutionOutcome failed(ProtosObjectValue error) {
+        return failed(error, null);
+    }
+
+    public static ProtosExecutionOutcome failed(
+            ProtosObjectValue error,
+            ProtosDiagnosticTrace diagnosticTrace) {
         return new ProtosExecutionOutcome(
                 State.FAILED,
                 null,
-                Objects.requireNonNull(error, "error"));
+                Objects.requireNonNull(error, "error"),
+                diagnosticTrace);
     }
 
     public static ProtosExecutionOutcome cancelled() {
-        return new ProtosExecutionOutcome(State.CANCELLED, null, null);
+        return new ProtosExecutionOutcome(State.CANCELLED, null, null, null);
+    }
+
+    public Optional<ProtosDiagnosticTrace> failureDiagnosticTrace() {
+        return Optional.ofNullable(diagnosticTrace);
     }
 }

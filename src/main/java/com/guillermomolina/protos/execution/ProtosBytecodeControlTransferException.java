@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.Objects;
@@ -31,22 +32,50 @@ final class ProtosBytecodeControlTransferException extends AbstractTruffleExcept
     private static final long serialVersionUID = 1L;
 
     private final ControlFlowException transfer;
+    /*
+     * CLI008-C1: the semantic bytecode position where the transfer was bridged, so a Task failure
+     * fabricated from it (D177 InvalidReturn) can project its innermost frame. Stored at
+     * construction only: a bridge stays an ordinary allocation on non-local-return paths.
+     */
+    private final BytecodeNode originBytecode;
+    private final int originBytecodeIndex;
 
-    private ProtosBytecodeControlTransferException(ControlFlowException transfer) {
+    private ProtosBytecodeControlTransferException(
+            ControlFlowException transfer,
+            BytecodeNode originBytecode,
+            int originBytecodeIndex) {
         super();
         this.transfer = Objects.requireNonNull(transfer, "transfer");
+        this.originBytecode = originBytecode;
+        this.originBytecodeIndex = originBytecodeIndex;
     }
 
     static ProtosBytecodeControlTransferException bridge(ControlFlowException transfer) {
+        return bridge(transfer, null, -1);
+    }
+
+    static ProtosBytecodeControlTransferException bridge(
+            ControlFlowException transfer,
+            BytecodeNode originBytecode,
+            int originBytecodeIndex) {
         Objects.requireNonNull(transfer, "transfer");
         if (!(transfer instanceof ProtosNonLocalReturnException)
                 && !(transfer instanceof ProtosTaskCancellationException)) {
             throw transfer;
         }
-        return new ProtosBytecodeControlTransferException(transfer);
+        return new ProtosBytecodeControlTransferException(
+                transfer, originBytecode, originBytecodeIndex);
     }
 
     ControlFlowException transfer() {
         return transfer;
+    }
+
+    BytecodeNode originBytecode() {
+        return originBytecode;
+    }
+
+    int originBytecodeIndex() {
+        return originBytecodeIndex;
     }
 }

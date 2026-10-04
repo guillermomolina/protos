@@ -19,6 +19,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.io.InputStream;
@@ -171,7 +172,17 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         return callEntered(
                 () -> {
                     CallTarget target = ProtosLanguageContext.current().parsePublic(source);
-                    return target.call(activation);
+                    try {
+                        return target.call(activation);
+                    } catch (ProtosSignalException escaped) {
+                        /*
+                         * CLI008-C1: this unit has no Task, so the escaping occurrence is its
+                         * terminal failure. Project it while the Context is still entered.
+                         */
+                        escaped.attachTerminalDiagnosticTraceForRuntime(
+                                ProtosDiagnosticTraceCapture.capture(escaped));
+                        throw escaped;
+                    }
                 });
     }
 

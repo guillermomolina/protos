@@ -100,7 +100,7 @@ public final class ProtosInvocation {
             task.fail(ProtosCoreErrors.newError(caller));
             return;
         } catch (ProtosSignalException signalled) {
-            task.fail(signalled.error());
+            task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
             return;
         }
         executeSelectedInTaskForRuntime(receiver, selected, supplied, caller, task);
@@ -158,7 +158,7 @@ public final class ProtosInvocation {
             task.fail(ProtosCoreErrors.newError(caller));
             return false;
         } catch (ProtosSignalException signalled) {
-            task.fail(signalled.error());
+            task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
             return false;
         }
         return executeSelectedInTaskForRuntime(
@@ -236,7 +236,7 @@ public final class ProtosInvocation {
                             caller,
                             task);
         } catch (ProtosSignalException signalled) {
-            task.fail(signalled.error());
+            task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
             return false;
         }
 

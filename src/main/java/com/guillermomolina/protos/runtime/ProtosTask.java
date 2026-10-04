@@ -111,6 +111,12 @@ public final class ProtosTask {
 
     private Object result;
     private Object failure;
+    /*
+     * CLI008-C1: inert guest-stack snapshot of the occurrence that failed this Task, captured at
+     * the first failure commit while that occurrence still existed. It is never forwarded to the
+     * associated Future (a consumer re-signal is a new, consumer-local occurrence).
+     */
+    private ProtosDiagnosticTrace failureDiagnosticTrace;
 
 
     private WaitDependency resumedDependency;
@@ -184,6 +190,11 @@ public final class ProtosTask {
 
     public synchronized Optional<Object> failure() {
         return Optional.ofNullable(failure);
+    }
+
+    /** The terminal failure's diagnostic trace, absent when the failure site had no occurrence. */
+    public synchronized Optional<ProtosDiagnosticTrace> failureDiagnosticTraceForRuntime() {
+        return Optional.ofNullable(failureDiagnosticTrace);
     }
 
     /**
@@ -759,10 +770,20 @@ public final class ProtosTask {
     }
 
     public void fail(Object error) {
+        fail(error, null);
+    }
+
+    /**
+     * Fails this Task with {@code error}, retaining {@code diagnosticTrace} (nullable) as inert
+     * metadata of the failing occurrence. The trace is recorded here, at the first commit, so a
+     * failure deferred behind structured child drain keeps the stack of the original occurrence.
+     */
+    public void fail(Object error, ProtosDiagnosticTrace diagnosticTrace) {
         Object checked = Objects.requireNonNull(error, "error");
         java.util.Set<ProtosTask> cancelChildren;
         synchronized (this) {
             requireState(State.RUNNING, "fail");
+            failureDiagnosticTrace = diagnosticTrace;
             cancelChildren = childrenSnapshot();
             if (!cancelChildren.isEmpty()) {
                 failure = checked;

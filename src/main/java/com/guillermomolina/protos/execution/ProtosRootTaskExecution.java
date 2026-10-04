@@ -99,7 +99,9 @@ public final class ProtosRootTaskExecution {
                     throw new IllegalStateException(
                             "root task failed with a non-Protos error value");
                 }
-                yield ProtosExecutionOutcome.failed(error);
+                yield ProtosExecutionOutcome.failed(
+                        error,
+                        rootTask.failureDiagnosticTraceForRuntime().orElse(null));
             }
             case CANCELLED -> ProtosExecutionOutcome.cancelled();
             default ->

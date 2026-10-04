@@ -7,6 +7,28 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.192-SNAPSHOT
+
+- `CLI008-C1` (issue #416, PLAT049 Candidate C) adds an occurrence-carried,
+  bounded guest diagnostic trace for terminal Errors. When an Error
+  occurrence fails a Task (or escapes a REPL unit), its Truffle guest stack
+  is projected once, before the throwable is discarded, into an inert
+  `ProtosDiagnosticTrace` of at most 64 semantic guest frames (innermost
+  kept, `truncated` flag). Only `ProtosSemanticBytecodeRootNode` frames are
+  projected; continuation roots normalize to their semantic source root,
+  structured-dispatch/C-prime, host and scheduler frames are excluded, and
+  frames live at the capture point (the Task's host) are cut off. PLAT044 B′
+  inline callbacks contribute exactly one frame each through their nested
+  `RootTag` (source information plus `RootTag` are materialized lazily only
+  for a root failing inside a live inline region). The trace is stored on
+  the failing Task at its first failure commit (surviving child drain), is
+  never forwarded to the associated Future, and travels as optional metadata
+  on FAILED `ProtosExecutionOutcome` without changing `error()` identity.
+  The CLI (`-e`, file run, workspace `run`, REPL) prints `  at
+  <source>:line:column` lines after the existing `Error:` summary on stderr.
+  Success paths do no new diagnostic bookkeeping; the Error value is never
+  mutated. No observable language semantic or specification change.
+
 ## 0.3.191-SNAPSHOT
 
 - `PERF030-M` (issue #784, `F4_PE_VISIBLE_LIFECYCLE_RANGE_SCANS`) moves the

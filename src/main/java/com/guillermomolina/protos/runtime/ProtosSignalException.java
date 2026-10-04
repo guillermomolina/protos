@@ -17,13 +17,34 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.bytecode.BytecodeLocation;
+import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import java.util.Objects;
 import java.util.Optional;
 
+/**
+ * One Error transfer occurrence.
+ *
+ * <p>CLI008-C1: the occurrence, not the Error value, owns diagnostic provenance. The exception
+ * carries no location node, so the first semantic Bytecode root it crosses records its exact
+ * bytecode position here (failure path only); a terminal boundary projects it, together with the
+ * Truffle guest stack, into an inert {@link ProtosDiagnosticTrace} before discarding the exception.
+ */
 public final class ProtosSignalException extends AbstractTruffleException {
     private final ProtosObjectValue error;
     private ProtosDynamicControlState.Frame selectedHandlerFrame;
+    private BytecodeNode originBytecode;
+    private int originBytecodeIndex = -1;
+    private ProtosDiagnosticTrace terminalDiagnosticTrace;
+    /*
+     * Uncached-interpreter frames keep their bytecode index only in a frame slot that later
+     * cleanup in the same frame may overwrite before the stack trace is read, so the exact
+     * position of each such frame is recorded at its first crossing. Interpreter-only, failure
+     * path only; keyed by the physical frame identity.
+     */
+    private java.util.IdentityHashMap<Object, BytecodeLocation> interpreterPositions;
 
     public ProtosSignalException(ProtosObjectValue error) {
         super();
@@ -32,6 +53,65 @@ public final class ProtosSignalException extends AbstractTruffleException {
 
     public ProtosObjectValue error() {
         return error;
+    }
+
+    /**
+     * Records the bytecode position where this occurrence first crossed a semantic Bytecode root.
+     * Later crossings (outer roots, or a rethrow of this same transfer after ensure cleanup) keep
+     * the first, innermost position.
+     */
+    public void recordOriginIfAbsentForRuntime(BytecodeNode bytecode, int bytecodeIndex) {
+        if (originBytecode == null && bytecode != null && bytecodeIndex >= 0) {
+            originBytecode = bytecode;
+            originBytecodeIndex = bytecodeIndex;
+        }
+    }
+
+    /**
+     * Records the exact position of an uncached-interpreter frame the first time this occurrence
+     * crosses it.
+     */
+    @TruffleBoundary
+    public void recordInterpreterPositionIfAbsentForRuntime(
+            Object frame, BytecodeNode bytecode, int bytecodeIndex) {
+        if (frame == null || bytecode == null || bytecodeIndex < 0) {
+            return;
+        }
+        if (interpreterPositions == null) {
+            interpreterPositions = new java.util.IdentityHashMap<>();
+        }
+        interpreterPositions.computeIfAbsent(
+                frame, ignored -> bytecode.getBytecodeLocation(bytecodeIndex));
+    }
+
+    /** Transient capture input: the recorded position of {@code frame}, or {@code null}. */
+    public BytecodeLocation interpreterPositionForRuntime(Object frame) {
+        return interpreterPositions == null || frame == null
+                ? null
+                : interpreterPositions.get(frame);
+    }
+
+    /** Transient capture input; never retained beyond this exception. */
+    public BytecodeNode originBytecodeForRuntime() {
+        return originBytecode;
+    }
+
+    public int originBytecodeIndexForRuntime() {
+        return originBytecodeIndex;
+    }
+
+    /**
+     * Attaches the inert trace captured when this occurrence escaped a presenting boundary that has
+     * no Task (the persistent REPL unit). Write-once: a later attachment is ignored.
+     */
+    public void attachTerminalDiagnosticTraceForRuntime(ProtosDiagnosticTrace trace) {
+        if (terminalDiagnosticTrace == null) {
+            terminalDiagnosticTrace = trace;
+        }
+    }
+
+    public Optional<ProtosDiagnosticTrace> terminalDiagnosticTrace() {
+        return Optional.ofNullable(terminalDiagnosticTrace);
     }
 
     public Optional<ProtosDynamicControlState.Frame> selectedHandlerFrame() {

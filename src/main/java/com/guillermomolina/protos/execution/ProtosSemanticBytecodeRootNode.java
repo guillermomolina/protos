@@ -151,7 +151,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             BytecodeNode bytecodeNode,
             int bytecodeIndex)
             throws Throwable {
-        throw ProtosBytecodeControlTransferException.bridge(transfer);
+        throw ProtosBytecodeControlTransferException.bridge(transfer, bytecodeNode, bytecodeIndex);
     }
 
     @Override
@@ -160,6 +160,12 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             VirtualFrame frame,
             BytecodeNode bytecodeNode,
             int bytecodeIndex) {
+        /*
+         * CLI008-C1: Protos exceptions carry no location node, so the guest stack trace has no
+         * bytecode index for the frame they are raised in. Record the first semantic crossing on
+         * the occurrence itself; this runs only while an exception is already unwinding.
+         */
+        ProtosDiagnosticTraceCapture.recordOrigin(exception, frame, bytecodeNode, bytecodeIndex);
         return ProtosBytecodeRootNode.interceptGuestException(exception, frame);
     }
 

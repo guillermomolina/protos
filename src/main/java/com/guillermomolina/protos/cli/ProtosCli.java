@@ -290,7 +290,7 @@ public final class ProtosCli {
         return switch (outcome.state()) {
             case COMPLETED -> 0;
             case FAILED -> {
-                err.println("Error: " + diagnosticInspector.render(outcome.error()));
+                reportUncaughtError(outcome, err);
                 yield 1;
             }
             case CANCELLED -> {
@@ -1210,6 +1210,7 @@ public final class ProtosCli {
             return ReplInputResult.COMPLETE;
         } catch (ProtosSignalException e) {
             err.println("Error: " + diagnosticInspector.render(e.error()));
+            ProtosGuestStackRenderer.render(e.terminalDiagnosticTrace().orElse(null), err);
             return ReplInputResult.COMPLETE;
         } catch (RuntimeException e) {
             err.println("Runtime error: " + e.getMessage());
@@ -1371,7 +1372,12 @@ public final class ProtosCli {
 
     private int eval(Source source, Session s, PrintStream err) {
         try {
-            executeStandaloneRootTask(s.execute(source));
+            ProtosExecutionOutcome outcome = s.execute(source);
+            if (outcome.state() == ProtosExecutionOutcome.State.FAILED) {
+                reportUncaughtError(outcome, err);
+                return 1;
+            }
+            executeStandaloneRootTask(outcome);
             return 0;
         } catch (ParseError e) {
             err.println("Syntax error: " + e.getMessage());
@@ -1390,9 +1396,14 @@ public final class ProtosCli {
             Session s,
             PrintStream err) {
         try {
-            executeStandaloneRootTask(
+            ProtosExecutionOutcome outcome =
                     ProtosStandaloneHostedExecution.executeDirectFile(
-                            resolver, s.activation()));
+                            resolver, s.activation());
+            if (outcome.state() == ProtosExecutionOutcome.State.FAILED) {
+                reportUncaughtError(outcome, err);
+                return 1;
+            }
+            executeStandaloneRootTask(outcome);
             return 0;
         } catch (IOException e) {
             Throwable cause = e.getCause();
@@ -1422,6 +1433,15 @@ public final class ProtosCli {
      * ProtosRootTaskExecution so test/tool consumers do not need a CLI-specific executor.
      */
 
+
+    /*
+     * CLI008-C1: a FAILED outcome is presented directly, so the inert trace of its terminal
+     * occurrence is not lost behind a late, freshly constructed ProtosSignalException.
+     */
+    private void reportUncaughtError(ProtosExecutionOutcome outcome, PrintStream err) {
+        err.println("Error: " + diagnosticInspector.render(outcome.error()));
+        ProtosGuestStackRenderer.render(outcome.failureDiagnosticTrace().orElse(null), err);
+    }
 
     private static Object executeStandaloneRootTask(ProtosExecutionOutcome outcome) {
         return switch (outcome.state()) {

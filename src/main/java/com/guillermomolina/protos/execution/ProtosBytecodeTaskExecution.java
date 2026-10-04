@@ -151,15 +151,17 @@ final class ProtosBytecodeTaskExecution {
                  * the callee's own (published, or materialized here) activation
                  * supplies the same Prelude the eager shape did.
                  */
-                task.fail(ProtosCoreErrors.newInvalidReturn(
-                        ProtosFrameArguments.activation(prepared.targetArguments())));
+                task.fail(
+                        ProtosCoreErrors.newInvalidReturn(
+                                ProtosFrameArguments.activation(prepared.targetArguments())),
+                        ProtosDiagnosticTraceCapture.capture(bridged));
             }
         } catch (ProtosTaskCancellationException cancelled) {
             prepared.complete();
             finishCancellationUnwind(task);
         } catch (ProtosSignalException signalled) {
             prepared.complete();
-            task.fail(signalled.error());
+            task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
         } catch (RuntimeException failure) {
             prepared.complete();
             throw failure;
@@ -261,16 +263,23 @@ final class ProtosBytecodeTaskExecution {
                  * CALLABLES.md §14: signal InvalidReturn as an ordinary Task failure
                  * instead of letting the raw escape propagate uncaught.
                  */
-                task.fail(ProtosCoreErrors.newInvalidReturn(activation));
+                task.fail(
+                        ProtosCoreErrors.newInvalidReturn(activation),
+                        ProtosDiagnosticTraceCapture.capture(bridged));
                 return;
             }
             throw bridged;
         } catch (ProtosTaskCancellationException cancelled) {
             finishCancellationUnwind(task);
         } catch (ProtosNonLocalReturnException escaped) {
+            /*
+             * CLI008-C1: a raw ControlFlowException carries no guest stack and its frames have
+             * already unwound; the frames still live here belong to the Task's host, so no trace
+             * is attributed to this occurrence.
+             */
             task.fail(ProtosCoreErrors.newInvalidReturn(activation));
         } catch (ProtosSignalException signalled) {
-            task.fail(signalled.error());
+            task.fail(signalled.error(), ProtosDiagnosticTraceCapture.capture(signalled));
         }
     }
 
