@@ -24,6 +24,7 @@ import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.TagTreeNode;
 import com.oracle.truffle.api.frame.Frame;
+import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.interop.NodeLibrary;
 import com.oracle.truffle.api.interop.UnsupportedMessageException;
 import com.oracle.truffle.api.library.ExportLibrary;
@@ -59,7 +60,7 @@ final class ProtosBytecodeTagTreeNodeExports {
         if (frame == null) {
             return false;
         }
-        return inlineCallbackCall(node, frame) != null
+        return inlineCallbackCall(node, frame.materialize()) != null
                 || ProtosFrameArguments.hasActivation(frame);
     }
 
@@ -72,10 +73,10 @@ final class ProtosBytecodeTagTreeNodeExports {
         if (!hasScope(node, frame)) {
             throw UnsupportedMessageException.create();
         }
-        PreparedInlineLiteralCall inline = inlineCallbackCall(node, frame);
+        PreparedInlineLiteralCall inline = inlineCallbackCall(node, frame.materialize());
         if (inline != null) {
             java.util.Map<String, Object> frameBindings =
-                    inlineCallbackFrameBindings(node, frame);
+                    inlineCallbackFrameBindings(node, frame.materialize());
             ProtosActivation activation =
                     frameBindings == null
                             ? inline.activation()
@@ -125,10 +126,14 @@ final class ProtosBytecodeTagTreeNodeExports {
      * {@code null}, so host null remains an unambiguous cleared-local marker.
      *
      * <p>No Frame is retained after the scope object has been constructed.
+     *
+     * <p>TEST009-C: a tooling-only local-table read at a runtime tag-tree
+     * bytecode index, so it never takes part in partial evaluation.
      */
+    @TruffleBoundary
     private static java.util.Map<String, Object> inlineCallbackFrameBindings(
             TagTreeNode node,
-            Frame frame) {
+            MaterializedFrame frame) {
         if (node == null) {
             return null;
         }
@@ -185,8 +190,12 @@ final class ProtosBytecodeTagTreeNodeExports {
      * Block scoping makes the region local visible only inside its own region;
      * the last live match is the innermost one. Only reached from tooling
      * scope queries, never from guest execution.
+     *
+     * <p>TEST009-C: a tooling-only local-table read at a runtime tag-tree
+     * bytecode index, so it never takes part in partial evaluation.
      */
-    private static PreparedInlineLiteralCall inlineCallbackCall(TagTreeNode node, Frame frame) {
+    @TruffleBoundary
+    private static PreparedInlineLiteralCall inlineCallbackCall(TagTreeNode node, MaterializedFrame frame) {
         if (node == null) {
             return null;
         }

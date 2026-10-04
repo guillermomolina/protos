@@ -1,0 +1,66 @@
+{
+  "schema": "protos-bytecode-api-pe-baseline-v1",
+  "description": "Exact topology of every determinate PE-safe Bytecode API PE-argument sink. Risks are never baselined.",
+  "entries": [
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "class": "ProtosBytecodeTagTreeNodeExports",
+      "method": "inlineCallbackFrameBindings(TagTreeNode,MaterializedFrame)",
+      "family": "BytecodeNode",
+      "operation": "getLocalNames",
+      "arity": 1,
+      "arguments": "BYTECODE_INDEX=bytecodeIndex",
+      "occurrence": 0,
+      "provenance": "BYTECODE_INDEX=RUNTIME_VALUE",
+      "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeTagTreeNodeExports.java",
+      "class": "ProtosBytecodeTagTreeNodeExports",
+      "method": "inlineCallbackCall(TagTreeNode,MaterializedFrame)",
+      "family": "BytecodeNode",
+      "operation": "getLocalNames",
+      "arity": 1,
+      "arguments": "BYTECODE_INDEX=bytecodeIndex",
+      "occurrence": 0,
+      "provenance": "BYTECODE_INDEX=RUNTIME_VALUE",
+      "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosDiagnosticTraceCapture.java",
+      "class": "ProtosDiagnosticTraceCapture",
+      "method": "elementLocation(TruffleStackTraceElement)",
+      "family": "BytecodeLocation",
+      "operation": "get",
+      "arity": 1,
+      "arguments": "NODE_ARGUMENT=element",
+      "occurrence": 0,
+      "provenance": "NODE_ARGUMENT=STACK_TRACE_DERIVED",
+      "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosDiagnosticTraceCapture.java",
+      "class": "ProtosDiagnosticTraceCapture",
+      "method": "projectSemanticFrame(ProtosSemanticBytecodeRootNode,BytecodeLocation,Collector)",
+      "family": "BytecodeRootNodes",
+      "operation": "update",
+      "arity": 1,
+      "arguments": "BYTECODE_CONFIG=INLINE_CALLBACK_DIAGNOSTIC_CONFIG",
+      "occurrence": 0,
+      "provenance": "BYTECODE_CONFIG=STATIC_FINAL_FIELD",
+      "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosDiagnosticTraceCapture.java",
+      "class": "ProtosDiagnosticTraceCapture",
+      "method": "hasLiveInlineCallbackCarrier(BytecodeNode,int)",
+      "family": "BytecodeNode",
+      "operation": "getLocalNames",
+      "arity": 1,
+      "arguments": "BYTECODE_INDEX=bytecodeIndex",
+      "occurrence": 0,
+      "provenance": "BYTECODE_INDEX=HELPER_PARAMETER",
+      "pe_reachability": "BOUNDARY_CUT"
+    }
+  ]
+}

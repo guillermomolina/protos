@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.198-SNAPSHOT
+
+- `TEST009-C` (TEST009/#795; PERF030/#784) adds the static Bytecode API
+  PE-argument guard (`make check-bytecode-api-pe`, part of `make check`). It
+  checks the arguments that `BytecodeNode` local-table operations
+  (`getLocalValues`/`getLocalNames`/`getLocalInfos`/`setLocalValues`/
+  `copyLocalValues`), `BytecodeNode.get(Node)`,
+  `BytecodeRootNodes.update(BytecodeConfig)` and `BytecodeLocation.get`
+  require to be partial-evaluation constants. Sinks are found by receiver
+  type and arity and followed through helpers to Bytecode DSL operations,
+  Truffle DSL specializations, library exports and externally invoked node
+  overrides. A boundary cut is accepted as the only safe outcome for runtime
+  values, and an unproven or unresolved PE-reachable argument fails. The
+  NodeLibrary tag-tree exports read the local table at a runtime tag-tree
+  bytecode index, so the two tooling-only helpers that do this are now
+  `@TruffleBoundary` and receive the materialized frame. Debugger-visible
+  scopes, bindings and local metadata are unchanged.
+
 ## 0.3.197-SNAPSHOT
 
 - `LM011-B2` / `TOOL010` (issue #670; D183/#791; PLAT050/#792) adds
