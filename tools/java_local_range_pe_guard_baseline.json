@@ -25,46 +25,6 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "readFrameBackedBindingAt(String,int)",
-      "operation": "getObject",
-      "index": "ordinal",
-      "classification": "METHOD_PARAMETER",
-      "occurrence": 0,
-      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "assignFrameBackedBindingAt(String,int,Object)",
-      "operation": "setObject",
-      "index": "ordinal",
-      "classification": "METHOD_PARAMETER",
-      "occurrence": 0,
-      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "createFrameBackedBindingAt(int,Object)",
-      "operation": "isCleared",
-      "index": "ordinal",
-      "classification": "METHOD_PARAMETER",
-      "occurrence": 0,
-      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "createFrameBackedBindingAt(int,Object)",
-      "operation": "setObject",
-      "index": "ordinal",
-      "classification": "METHOD_PARAMETER",
-      "occurrence": 0,
-      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
       "method": "bindingsSnapshot()",
       "operation": "isCleared",
       "index": "ordinal",

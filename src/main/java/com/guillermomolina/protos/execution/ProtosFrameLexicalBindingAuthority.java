@@ -201,7 +201,14 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
      * same CanonicalLexicalScope declaration order used to create this
      * authority's LocalRangeAccessor layout. The expected name is checked as a
      * defensive guard against stale or mismatched lowering metadata.
+     *
+     * <p>TEST009-A: partially evaluated {@link LocalRangeAccessor} accesses
+     * require the accessor and its {@link BytecodeNode} to be PE constants.
+     * Here both come from this per-invocation authority (its field and its
+     * declaring root's current node), never from an operation operand, so
+     * this seam is a {@link TruffleBoundary}.
      */
+    @TruffleBoundary
     boolean hasFrameBackedBindingAt(String expectedName, int ordinal) {
         return hasFrameBackedBindingAt(
                 currentBytecodeNode(), expectedName, ordinal);
@@ -219,12 +226,14 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         return !frameBackedLocals.isCleared(bytecodeNode, frame, ordinal);
     }
 
+    @TruffleBoundary
     Object readFrameBackedBindingAt(String expectedName, int ordinal) {
         BytecodeNode bytecodeNode = currentBytecodeNode();
         requirePresentFrameBackedBinding(bytecodeNode, expectedName, ordinal);
         return frameBackedLocals.getObject(bytecodeNode, frame, ordinal);
     }
 
+    @TruffleBoundary
     void assignFrameBackedBindingAt(
             String expectedName,
             int ordinal,
@@ -285,7 +294,14 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
      * That ordinal is always an {@code int} constant operand of the calling
      * operation (PERF030-I), as the {@code LocalRangeAccessor} accesses
      * require.
+     *
+     * <p>TEST009-A: partially evaluated {@link LocalRangeAccessor} accesses
+     * require the accessor and its {@link BytecodeNode} to be PE constants.
+     * Here both come from this per-invocation authority (its field and its
+     * declaring root's current node), never from an operation operand, so
+     * this seam is a {@link TruffleBoundary}.
      */
+    @TruffleBoundary
     void createFrameBackedBindingAt(int ordinal, Object value) {
         Objects.requireNonNull(value, "value");
         BytecodeNode bytecodeNode = currentBytecodeNode();

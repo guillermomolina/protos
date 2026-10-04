@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.196-SNAPSHOT
+
+- `TEST009-A` (issue #795) adds the static
+  `tools/java_local_range_operand_pe_guard.py` (with focal self-tests and an
+  exact topology baseline). It proves, per indexed `LocalRangeAccessor`
+  operation, that the accessor receiver and the `BytecodeNode` argument are
+  partial-evaluation constants (a `LocalRangeAccessor` `@ConstantOperand` and
+  a `@Bind("$bytecodeNode")` of the Bytecode DSL operation, propagated
+  losslessly through helpers) on every PE-reachable path. It complements the
+  PERF030 index guard, whose target is now `make check-local-range-index-pe`
+  (`make test-local-range-pe-guard` remains an alias). The new guard runs
+  as `make check-local-range-operands-pe`, and both deterministic guards
+  (about 2 s each) now run in `make check`. The guard found five
+  PE-reachable sinks whose accessor and node came from the per-invocation
+  `ProtosFrameLexicalBindingAuthority` (a field and the declaring root's
+  current node); its captured-read/assign and indexed-creation seams are now
+  `@TruffleBoundary`. No observable language semantic or specification change.
+
 ## 0.3.195-SNAPSHOT
 
 - `CLI008-D` (issue #312) reconciles terminal Error presentation across the

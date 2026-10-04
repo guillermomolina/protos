@@ -74,17 +74,13 @@
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
-      "pe_provenance": [
-        "PE_CONSTANT_FROM_OPERATION"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(int,ProtosActivation,String,int)",
-        "ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(ProtosLexicalEnvironment,String,int,int)",
         "ProtosFrameLexicalBindingAuthority.hasFrameBackedBindingAt(String,int)",
         "ProtosFrameLexicalBindingAuthority.hasFrameBackedBindingAt(BytecodeNode,String,int)"
       ],
-      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.hasFrameBackedBindingAt"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -92,18 +88,14 @@
       "method": "readFrameBackedBindingAt(String,int)",
       "operation": "getObject",
       "index": "ordinal",
-      "classification": "METHOD_PARAMETER",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
-      "pe_provenance": [
-        "PE_CONSTANT_FROM_OPERATION"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(int,ProtosActivation,String,int)",
-        "ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(ProtosLexicalEnvironment,String,int,int)",
         "ProtosFrameLexicalBindingAuthority.readFrameBackedBindingAt(String,int)"
       ],
-      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.readFrameBackedBindingAt"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -111,18 +103,14 @@
       "method": "assignFrameBackedBindingAt(String,int,Object)",
       "operation": "setObject",
       "index": "ordinal",
-      "classification": "METHOD_PARAMETER",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
-      "pe_provenance": [
-        "PE_CONSTANT_FROM_OPERATION"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.AssignCapturedFrameLocal.perform(int,ProtosActivation,CapturedLexicalWriteTarget,String,Object)",
-        "ProtosBytecodeRootNode.assignCapturedFrameDestination(CapturedLexicalWriteTarget,String,int,Object)",
         "ProtosFrameLexicalBindingAuthority.assignFrameBackedBindingAt(String,int,Object)"
       ],
-      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.assignFrameBackedBindingAt"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -130,18 +118,14 @@
       "method": "createFrameBackedBindingAt(int,Object)",
       "operation": "isCleared",
       "index": "ordinal",
-      "classification": "METHOD_PARAMETER",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
-      "pe_provenance": [
-        "PE_CONSTANT_FROM_OPERATION"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,int,ProtosActivation,String,Object)",
-        "ProtosBytecodeRootNode.bindIndexedClosureParameter(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
         "ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt(int,Object)"
       ],
-      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -149,18 +133,14 @@
       "method": "createFrameBackedBindingAt(int,Object)",
       "operation": "setObject",
       "index": "ordinal",
-      "classification": "METHOD_PARAMETER",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
-      "pe_provenance": [
-        "PE_CONSTANT_FROM_OPERATION"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,int,ProtosActivation,String,Object)",
-        "ProtosBytecodeRootNode.bindIndexedClosureParameter(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
         "ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt(int,Object)"
       ],
-      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
