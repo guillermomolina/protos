@@ -342,7 +342,8 @@ final class ProtosPerf025CallbackConsumerSpecializationTest {
         stop.assertLazy();
         assertInteger(4, stop.binding("first"));
         assertInteger(5, stop.binding("second"));
-        stop.assertInstruction("MultipleCreateInlineFrameLocals");
+        stop.assertInstruction("ObserveInlineMultipleCreatePrefix");
+        stop.assertInstruction("CreateInlineCurrentFrameLocal");
         System.out.println("PERF025_S3_MULTIPLE_CREATE_WITHOUT_ACTIVATION=YES");
     }
 

@@ -211,6 +211,76 @@ final class ProtosPerf025CompactCalleeExecutionTest {
     }
 
     @Test
+    void frameNativeRestAndMultipleCreationUseConstantOrdinals() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue rest = closure("(head, ...tail) => { tail }", module);
+            assertNone(instructionNames(rest), "InstallFrameLexicalAuthority");
+            ProtosFrameLexicalLayout restLayout = layoutOf(rest, "BindClosureFrameRest");
+            assertEquals(
+                    List.of(restLayout.offsetOf("tail")),
+                    constantOrdinalsOf(rest, "BindClosureFrameRest"),
+                    "PERF030-I: the rest index is an instruction constant");
+
+            ProtosClosureValue multiple =
+                    closure("(source) => { (b, c, d): source\n[b, c, d] }", module);
+            List<String> names = instructionNames(multiple);
+            assertNone(names, "InstallFrameLexicalAuthority");
+            assertNone(names, "MultipleCreateLocalSlots");
+            ProtosFrameLexicalLayout layout = layoutOf(multiple, "CreateCurrentFrameLocal");
+            assertEquals(
+                    List.of(layout.offsetOf("b"), layout.offsetOf("c"), layout.offsetOf("d")),
+                    constantOrdinalsOf(multiple, "CreateCurrentFrameLocal"),
+                    "PERF030-I: one scalar creation per name, in source order, "
+                            + "each owning its constant ordinal");
+            int observation = firstIndexOf(names, "ObserveMultipleCreatePrefix");
+            assertTrue(
+                    observation >= 0 && observation < firstIndexOf(names, "CreateCurrentFrameLocal"),
+                    () -> "the complete prefix is observed before the first creation: " + names);
+            int lastCreation = names.size() - 1
+                    - firstIndexOf(names.reversed(), "CreateCurrentFrameLocal");
+            assertTrue(
+                    names.subList(observation, lastCreation + 1).stream()
+                            .noneMatch(name -> name.contains("CurrentActivation")),
+                    () -> "the scalar creations obtain no activation of their own: " + names);
+
+            List<Object> results =
+                    assertInstanceOf(
+                                    ProtosArrayValue.class,
+                                    evaluate(
+                                            "m: (source) => { (b, c, d): source\n[b, c, d] }\n"
+                                                    + "[m(Array(1, 2, 3, 4)), m(Array(5, null, 7))]\n",
+                                            module))
+                            .indexedSnapshot();
+            List<Object> first =
+                    assertInstanceOf(ProtosArrayValue.class, results.get(0)).indexedSnapshot();
+            assertEquals(
+                    List.of(BigInteger.ONE, BigInteger.TWO, BigInteger.valueOf(3)),
+                    first.stream().map(ProtosPerf025CompactCalleeExecutionTest::integerValue).toList());
+            List<Object> withNull =
+                    assertInstanceOf(ProtosArrayValue.class, results.get(1)).indexedSnapshot();
+            assertSame(ProtosNullValue.INSTANCE, withNull.get(1), "PRESENT(null) is not ABSENT");
+
+            assertEquals(
+                    BigInteger.valueOf(42),
+                    integerValue(evaluate(
+                            "few: (source) => { (b, c): source\nb }\n"
+                                    + "Error.handle(() => { few(Array(1)) }, (caught) => 42)\n",
+                            module)),
+                    "an insufficient source is the multiple-creation Error");
+            assertEquals(
+                    BigInteger.valueOf(43),
+                    integerValue(evaluate(
+                            "twice: (source) => { (b, c, b): source\nb }\n"
+                                    + "Error.handle(() => { twice(Array(1, 2, 3)) }, (caught) => 43)\n",
+                            module)),
+                    "a later duplicate creation is the creation Error");
+        });
+        System.out.println("PERF030_I_FRAME_REST_CONSTANT_ORDINAL=YES");
+        System.out.println("PERF030_I_MULTIPLE_CREATE_RUNTIME_ORDINAL_ARRAY=NO");
+        System.out.println("PERF030_I_MULTIPLE_CREATE_PREFIX_BEFORE_FIRST_CREATION=YES");
+    }
+
+    @Test
     void defaultsSeeOnlyEarlierParametersAndOrdinaryLookup() throws Exception {
         withCore(module -> {
             ProtosClosureValue earlier = closure("(a, b = a) => { b }", module);
@@ -495,26 +565,62 @@ final class ProtosPerf025CompactCalleeExecutionTest {
      * value, so it is a partial-evaluation constant.
      */
     private static int constantOrdinalOf(ProtosClosureValue closure, String operation) {
-        List<Instruction> matching =
-                closure.executionPlan()
-                        .orElseThrow()
-                        .bytecodeActivationRootForTesting()
-                        .getBytecodeNode()
-                        .getInstructionsAsList()
-                        .stream()
-                        .filter(instruction -> instruction.getName().contains(operation))
+        List<Integer> ordinals = constantOrdinalsOf(closure, operation);
+        assertEquals(1, ordinals.size(), () -> "expected one " + operation);
+        return ordinals.get(0);
+    }
+
+    /** The immediate constant {@code ordinal} of every {@code operation} instruction, in order. */
+    private static List<Integer> constantOrdinalsOf(ProtosClosureValue closure, String operation) {
+        return instructionsOf(closure, operation).stream()
+                .map(instruction -> {
+                    Instruction.Argument ordinal =
+                            instruction.getArguments().stream()
+                                    .filter(argument -> argument.getName().equals("ordinal"))
+                                    .findFirst()
+                                    .orElseThrow(() -> new AssertionError("no constant ordinal operand"));
+                    return switch (ordinal.getKind()) {
+                        case CONSTANT -> (Integer) ordinal.asConstant();
+                        case INTEGER -> ordinal.asInteger();
+                        default -> throw new AssertionError("ordinal is not a constant: " + ordinal);
+                    };
+                })
+                .toList();
+    }
+
+    /** The one {@code frameBackedLayout} constant shared by every {@code operation} instruction. */
+    private static ProtosFrameLexicalLayout layoutOf(ProtosClosureValue closure, String operation) {
+        List<Object> layouts =
+                instructionsOf(closure, operation).stream()
+                        .map(instruction -> instruction.getArguments().stream()
+                                .filter(argument -> argument.getName().equals("frameBackedLayout"))
+                                .findFirst()
+                                .orElseThrow(() -> new AssertionError("no constant layout operand"))
+                                .asConstant())
+                        .distinct()
                         .toList();
-        assertEquals(1, matching.size(), () -> "expected one " + operation);
-        Instruction.Argument ordinal =
-                matching.get(0).getArguments().stream()
-                        .filter(argument -> argument.getName().equals("ordinal"))
-                        .findFirst()
-                        .orElseThrow(() -> new AssertionError("no constant ordinal operand"));
-        return switch (ordinal.getKind()) {
-            case CONSTANT -> (Integer) ordinal.asConstant();
-            case INTEGER -> ordinal.asInteger();
-            default -> throw new AssertionError("ordinal is not a constant: " + ordinal);
-        };
+        assertEquals(1, layouts.size(), () -> "expected one layout for " + operation);
+        return assertInstanceOf(ProtosFrameLexicalLayout.class, layouts.get(0));
+    }
+
+    private static List<Instruction> instructionsOf(ProtosClosureValue closure, String operation) {
+        return closure.executionPlan()
+                .orElseThrow()
+                .bytecodeActivationRootForTesting()
+                .getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .filter(instruction -> instruction.getName().contains(operation))
+                .toList();
+    }
+
+    private static int firstIndexOf(List<String> names, String operation) {
+        for (int index = 0; index < names.size(); index++) {
+            if (names.get(index).contains(operation)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     /** The object constant operand {@code argument} of the single {@code operation} instruction. */

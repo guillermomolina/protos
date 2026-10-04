@@ -103,6 +103,28 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
     }
 
     @Test
+    void indexedParameterAndRestOrdinalsAreInstructionConstants() throws Exception {
+        withCore(module -> {
+            ProtosClosureValue rest =
+                    closure("(head, ...tail) => { here: context\ntail }", module);
+            ProtosFrameLexicalLayout layout =
+                    assertInstanceOf(
+                            ProtosFrameLexicalLayout.class,
+                            constantArguments(rest, INSTALL, "frameBackedLayout").get(0));
+            assertEquals(List.of(layout), constantArguments(rest, INDEXED, "frameBackedLayout"));
+            assertEquals(
+                    List.<Object>of(layout.offsetOf("head")),
+                    constantArguments(rest, INDEXED, "ordinal"),
+                    "PERF030-I: the indexed parameter ordinal is an instruction constant");
+            assertEquals(
+                    List.<Object>of(layout.offsetOf("tail")),
+                    constantArguments(rest, INDEXED_REST, "ordinal"),
+                    "PERF030-I: the indexed rest ordinal is an instruction constant");
+        });
+        System.out.println("PERF030_I_INDEXED_PARAMETER_CONSTANT_ORDINAL=YES");
+    }
+
+    @Test
     void sequentialDefaultsKeepCurrentAndLaterParametersAbsent() throws Exception {
         withCore(module -> {
             List<Object> results =
@@ -368,6 +390,34 @@ final class ProtosPerf025H1IndexedParameterEstablishmentTest {
                 .getInstructionsAsList()
                 .stream()
                 .map(Instruction::getName)
+                .toList();
+    }
+
+    /**
+     * The immediate constant operand {@code argument} of every {@code
+     * operation} instruction, in order; a stack operand fails the lookup.
+     */
+    private static List<Object> constantArguments(
+            ProtosClosureValue closure, String operation, String argument) {
+        return plan(closure)
+                .bytecodeActivationRootForTesting()
+                .getBytecodeNode()
+                .getInstructionsAsList()
+                .stream()
+                .filter(instruction -> instruction.getName().contains(operation))
+                .map(instruction -> {
+                    Instruction.Argument constant =
+                            instruction.getArguments().stream()
+                                    .filter(candidate -> candidate.getName().equals(argument))
+                                    .findFirst()
+                                    .orElseThrow(() -> new AssertionError(
+                                            "no constant " + argument + " operand of " + operation));
+                    return switch (constant.getKind()) {
+                        case CONSTANT -> constant.asConstant();
+                        case INTEGER -> (Object) constant.asInteger();
+                        default -> throw new AssertionError(argument + " is not a constant: " + constant);
+                    };
+                })
                 .toList();
     }
 

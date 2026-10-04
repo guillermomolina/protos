@@ -10,16 +10,15 @@
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
       "pe_provenance": [
-        "OPERATION_RUNTIME_OPERAND",
-        "UNPROVEN_ARGUMENT"
+        "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,VirtualFrame)",
         "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)"
       ],
-      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND, UNPROVEN_ARGUMENT): ordinary (non-@ConstantOperand) runtime operand of the root operation; call argument whose constancy cannot be proven"
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
@@ -29,16 +28,15 @@
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
       "pe_provenance": [
-        "OPERATION_RUNTIME_OPERAND",
-        "UNPROVEN_ARGUMENT"
+        "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,VirtualFrame)",
         "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)"
       ],
-      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND, UNPROVEN_ARGUMENT): ordinary (non-@ConstantOperand) runtime operand of the root operation; call argument whose constancy cannot be proven"
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -53,7 +51,7 @@
         "LOOP_INDEX"
       ],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
+        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,int,ProtosActivation,String,Object)",
         "ProtosBytecodeRootNode.bindIndexedClosureParameter(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
         "ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt(int,Object)",
         "ProtosFrameLexicalBindingAuthority.recordFrameBackedEstablishment(BytecodeNode,int,String)",
@@ -141,17 +139,16 @@
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
       "pe_provenance": [
-        "PE_CONSTANT_FROM_OPERATION",
-        "OPERATION_RUNTIME_OPERAND"
+        "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
+        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,int,ProtosActivation,String,Object)",
         "ProtosBytecodeRootNode.bindIndexedClosureParameter(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
         "ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt(int,Object)"
       ],
-      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND): ordinary (non-@ConstantOperand) runtime operand of the root operation"
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -161,17 +158,16 @@
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
       "pe_provenance": [
-        "PE_CONSTANT_FROM_OPERATION",
-        "OPERATION_RUNTIME_OPERAND"
+        "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
+        "ProtosSemanticBytecodeRootNode.BindClosureIndexedParameter.perform(ProtosFrameLexicalLayout,int,ProtosActivation,String,Object)",
         "ProtosBytecodeRootNode.bindIndexedClosureParameter(ProtosFrameLexicalLayout,ProtosActivation,int,String,Object)",
         "ProtosFrameLexicalBindingAuthority.createFrameBackedBindingAt(int,Object)"
       ],
-      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND): ordinary (non-@ConstantOperand) runtime operand of the root operation"
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -186,7 +182,7 @@
         "LOOP_INDEX"
       ],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,VirtualFrame)",
         "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
         "ProtosBytecodeRootNode.installFrameLexicalAuthorityOnTransition(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,MaterializedFrame)",
         "ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindings()"
@@ -206,7 +202,7 @@
         "LOOP_INDEX"
       ],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,VirtualFrame)",
         "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
         "ProtosBytecodeRootNode.installFrameLexicalAuthorityOnTransition(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,BytecodeNode,MaterializedFrame)",
         "ProtosFrameLexicalBindingAuthority.adoptPresentFrameBackedBindings()"
@@ -514,16 +510,15 @@
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
       "pe_provenance": [
-        "OPERATION_RUNTIME_OPERAND",
-        "UNPROVEN_ARGUMENT"
+        "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindInlineClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosSemanticBytecodeRootNode.BindInlineClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,PreparedInlineLiteralCall,String,Object,BytecodeNode,VirtualFrame)",
         "ProtosInlineCallbackFrameBindings.create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
       ],
-      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND, UNPROVEN_ARGUMENT): ordinary (non-@ConstantOperand) runtime operand of the root operation; call argument whose constancy cannot be proven"
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
@@ -533,16 +528,15 @@
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
+      "pe_reachability": "PE_REACHABLE_PROVEN_CONSTANT",
       "pe_provenance": [
-        "OPERATION_RUNTIME_OPERAND",
-        "UNPROVEN_ARGUMENT"
+        "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindInlineClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,PreparedInlineLiteralCall,int,String,Object,BytecodeNode,VirtualFrame)",
+        "ProtosSemanticBytecodeRootNode.BindInlineClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,PreparedInlineLiteralCall,String,Object,BytecodeNode,VirtualFrame)",
         "ProtosInlineCallbackFrameBindings.create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
       ],
-      "rationale": "PE-reachable with non-constant index (OPERATION_RUNTIME_OPERAND, UNPROVEN_ARGUMENT): ordinary (non-@ConstantOperand) runtime operand of the root operation; call argument whose constancy cannot be proven"
+      "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",

@@ -281,17 +281,23 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * its persistent frame authority, at the ordinal the lowerer took from
      * {@code frameBackedLayout} instead of re-resolving {@code name}, which
      * only the unchanged named fallback uses.
+     *
+     * <p>PERF030-I: {@code ordinal} is a constant operand because the
+     * frame-local accesses of {@link
+     * ProtosFrameLexicalBindingAuthority#createFrameBackedBindingAt} require a
+     * partial-evaluation constant index.
      */
     @Operation
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
     public static final class BindClosureIndexedParameter {
         @Specialization
         public static void perform(
                 ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
                 int ordinal,
+                ProtosActivation activation,
                 String name,
                 Object value) {
             ProtosBytecodeRootNode.bindIndexedClosureParameter(
@@ -304,12 +310,13 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
     public static final class BindClosureIndexedRest {
         @Specialization
         public static void perform(
                 ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
                 int ordinal,
+                ProtosActivation activation,
                 String name,
                 int positionalParametersBeforeRest) {
             ProtosBytecodeRootNode.bindIndexedClosureRest(
@@ -393,8 +400,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 return;
             }
             ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
-                    frameBackedLocals, frameBackedLayout, ProtosFrameArguments.activation(arguments),
-                    ordinal, name, value, bytecodeNode, frame);
+                    frameBackedLocals, frameBackedLayout, ordinal,
+                    ProtosFrameArguments.activation(arguments), name, value, bytecodeNode, frame);
         }
     }
 
@@ -480,13 +487,14 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
     public static final class BindInlineClosureFrameParameter {
         @Specialization
         public static void perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
-                PreparedInlineLiteralCall child,
                 int ordinal,
+                PreparedInlineLiteralCall child,
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
@@ -510,20 +518,21 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
     public static final class BindClosureFrameRest {
         @Specialization
         public static void perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
                 int ordinal,
+                ProtosActivation activation,
                 String name,
                 int positionalParametersBeforeRest,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
             ProtosBytecodeRootNode.BindClosureFrameRest.perform(
-                    frameBackedLocals, frameBackedLayout, activation,
-                    ordinal, name, positionalParametersBeforeRest, bytecodeNode, frame);
+                    frameBackedLocals, frameBackedLayout, ordinal,
+                    activation, name, positionalParametersBeforeRest, bytecodeNode, frame);
         }
     }
 
@@ -563,8 +572,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 return value;
             }
             return ProtosBytecodeRootNode.CreateCurrentFrameLocal.perform(
-                    frameBackedLocals, frameBackedLayout, ProtosFrameArguments.activation(arguments),
-                    ordinal, name, value, bytecodeNode, frame);
+                    frameBackedLocals, frameBackedLayout, ordinal,
+                    ProtosFrameArguments.activation(arguments), name, value, bytecodeNode, frame);
         }
     }
 
@@ -575,13 +584,14 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
+    @ConstantOperand(type = int.class, name = "ordinal")
     public static final class CreateInlineCurrentFrameLocal {
         @Specialization
         public static Object perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
-                PreparedInlineLiteralCall child,
                 int ordinal,
+                PreparedInlineLiteralCall child,
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
@@ -599,30 +609,31 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /*
+     * PERF030-I frame-native multiple creation. The lowerer splits it into one
+     * prefix observation, which observes the complete fixed source prefix
+     * before any binding is created, followed by one scalar
+     * CreateCurrentFrameLocal or CreateInlineCurrentFrameLocal per name, in
+     * source order, each owning its ordinal as a constant operand. A failing
+     * creation leaves the earlier ones in place (no rollback), exactly as
+     * MultipleCreateLocalSlots. No ordinal array is ever indexed at run time.
+     */
+
+    /** The observed prefix of a frame-native root multiple creation. */
     @Operation
-    @ConstantOperand(
-            type = LocalRangeAccessor.class,
-            name = "frameBackedLocals")
-    @ConstantOperand(
-            type = ProtosFrameLexicalLayout.class,
-            name = "frameBackedLayout")
-    public static final class MultipleCreateInlineFrameLocals {
+    public static final class ObserveMultipleCreatePrefix {
         @Specialization
-        public static Object perform(
-                LocalRangeAccessor frameBackedLocals,
-                ProtosFrameLexicalLayout frameBackedLayout,
-                PreparedInlineLiteralCall child,
-                int[] ordinals,
-                String[] names,
-                Object source,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
-            return ProtosInlineCallbackFrameBindings.multipleCreate(
-                    child, frameBackedLocals, frameBackedLayout,
-                    ordinals, names, source, bytecodeNode, frame);
+        public static Object[] perform(ProtosActivation activation, int required, Object source) {
+            return ProtosBytecodeRootNode.observeMultipleCreatePrefix(activation, required, source)
+                    .toArray();
         }
     }
 
+    /**
+     * The observed prefix of an inline-callback multiple creation; the
+     * callback activation is materialized only for the Error of an invalid or
+     * insufficient source.
+     */
     @Operation
     @ConstantOperand(
             type = LocalRangeAccessor.class,
@@ -630,20 +641,28 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
-    public static final class MultipleCreateFrameLocals {
+    public static final class ObserveInlineMultipleCreatePrefix {
         @Specialization
-        public static Object perform(
+        public static Object[] perform(
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
-                ProtosActivation activation,
-                int[] ordinals,
-                String[] names,
+                PreparedInlineLiteralCall child,
+                int required,
                 Object source,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
-            return ProtosBytecodeRootNode.MultipleCreateFrameLocals.perform(
-                    frameBackedLocals, frameBackedLayout, activation,
-                    ordinals, names, source, bytecodeNode, frame);
+            return ProtosInlineCallbackFrameBindings.observeMultipleCreatePrefix(
+                    child, frameBackedLocals, frameBackedLayout,
+                    required, source, bytecodeNode, frame);
+        }
+    }
+
+    /** Element {@code index} of an observed multiple-creation prefix. */
+    @Operation
+    public static final class ObservedMultipleCreateValue {
+        @Specialization
+        public static Object perform(Object[] observed, int index) {
+            return observed[index];
         }
     }
 

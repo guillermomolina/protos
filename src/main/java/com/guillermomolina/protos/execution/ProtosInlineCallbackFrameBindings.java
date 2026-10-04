@@ -99,7 +99,9 @@ final class ProtosInlineCallbackFrameBindings {
     /**
      * Establishes a current binding (parameter or target-less creation) with
      * the exact OPEN-context creation rule: a PRESENT binding is a duplicate
-     * creation Error.
+     * creation Error. Every caller passes an {@code ordinal} that is an
+     * {@code int} constant operand of its operation (PERF030-I), as the
+     * {@link LocalRangeAccessor} accesses require.
      */
     static void create(
             PreparedInlineLiteralCall child,
@@ -126,42 +128,31 @@ final class ProtosInlineCallbackFrameBindings {
     }
 
     /**
-     * Multiple creation: the complete fixed prefix is observed before the
-     * first binding is created, then each binding is created in order with no
-     * rollback, as {@code MultipleCreateFrameLocals}.
+     * The prefix observation of a multiple creation (PERF030-I): the complete
+     * fixed prefix is observed before the first binding is created; the
+     * lowerer then creates each binding in order through {@link #create},
+     * with no rollback. Only an invalid or insufficient source materializes
+     * the activation, for the exact Error.
      */
-    static Object multipleCreate(
+    static Object[] observeMultipleCreatePrefix(
             PreparedInlineLiteralCall child,
             LocalRangeAccessor frameBackedLocals,
             ProtosFrameLexicalLayout frameBackedLayout,
-            int[] ordinals,
-            String[] names,
+            int required,
             Object source,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
         List<Object> observed =
-                ProtosBytecodeRootNode.multipleCreatePrefixOrNull(names.length, source);
+                ProtosBytecodeRootNode.multipleCreatePrefixOrNull(required, source);
         if (observed == null) {
-            // Invalid or insufficient source: the exact Error, from the activation.
             observed =
                     ProtosBytecodeRootNode.observeMultipleCreatePrefix(
                             durableActivation(
                                     child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
-                            names.length,
+                            required,
                             source);
         }
-        for (int index = 0; index < names.length; index++) {
-            create(
-                    child,
-                    frameBackedLocals,
-                    frameBackedLayout,
-                    ordinals[index],
-                    names[index],
-                    observed.get(index),
-                    bytecodeNode,
-                    frame);
-        }
-        return source;
+        return observed.toArray();
     }
 
     /**

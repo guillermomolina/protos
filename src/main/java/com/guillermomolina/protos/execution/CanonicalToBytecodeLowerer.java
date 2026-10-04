@@ -1461,17 +1461,17 @@ final class CanonicalToBytecodeLowerer {
                 if (restOrdinal >= 0) {
                     builder.beginBindClosureFrameRest(
                             currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout);
+                            currentRootFrameNativeLayout,
+                            restOrdinal);
                     emitCurrentActivation(builder);
-                    builder.emitLoadConstant(restOrdinal);
                     builder.emitLoadConstant(parameter.name());
                     builder.emitLoadConstant(positionalIndex);
                     builder.endBindClosureFrameRest();
                 } else if (indexedRestOrdinal >= 0) {
                     builder.beginBindClosureIndexedRest(
-                            currentRootIndexedParameterLayout);
+                            currentRootIndexedParameterLayout,
+                            indexedRestOrdinal);
                     emitCurrentActivation(builder);
-                    builder.emitLoadConstant(indexedRestOrdinal);
                     builder.emitLoadConstant(parameter.name());
                     builder.emitLoadConstant(positionalIndex);
                     builder.endBindClosureIndexedRest();
@@ -1623,9 +1623,9 @@ final class CanonicalToBytecodeLowerer {
             if (currentInlineCallbackFrameNative) {
                 builder.beginBindInlineClosureFrameParameter(
                         currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
+                        currentRootFrameNativeLayout,
+                        ordinal);
                 emitCurrentInlineCallbackCall(builder);
-                builder.emitLoadConstant(ordinal);
                 builder.emitLoadConstant(name);
                 return ParameterBindingForm.INLINE_FRAME_NATIVE;
             }
@@ -1639,9 +1639,9 @@ final class CanonicalToBytecodeLowerer {
         ordinal = indexedParameterOrdinal(parameter);
         if (ordinal >= 0) {
             builder.beginBindClosureIndexedParameter(
-                    currentRootIndexedParameterLayout);
+                    currentRootIndexedParameterLayout,
+                    ordinal);
             emitCurrentActivation(builder);
-            builder.emitLoadConstant(ordinal);
             builder.emitLoadConstant(name);
             return ParameterBindingForm.INDEXED;
         }
@@ -1679,27 +1679,12 @@ final class CanonicalToBytecodeLowerer {
         int ordinal = frameNativeOrdinal(name);
         if (ordinal >= 0) {
             if (currentInlineCallbackFrameNative) {
-                builder.beginCreateInlineCurrentFrameLocal(
-                        currentRootFrameNativeLocals,
-                        currentRootFrameNativeLayout);
-                emitCurrentInlineCallbackCall(builder);
-                builder.emitLoadConstant(ordinal);
-                builder.emitLoadConstant(name);
+                emitCreateInlineCurrentFrameLocal(builder, ordinal, name);
                 builder.emitLoadLocal(value);
                 builder.endCreateInlineCurrentFrameLocal();
                 return;
             }
-            if (currentActivationLocal != null) {
-                throw new AssertionError(
-                        "frame-native creation inside an unsupported inline "
-                                + "activation region: "
-                                + name);
-            }
-            builder.beginCreateCurrentFrameLocal(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout,
-                    ordinal);
-            builder.emitLoadConstant(name);
+            emitCreateCurrentFrameLocal(builder, ordinal, name);
             builder.emitLoadLocal(value);
             builder.endCreateCurrentFrameLocal();
             return;
@@ -1723,10 +1708,52 @@ final class CanonicalToBytecodeLowerer {
     }
 
     /**
-     * Emits a multiple creation from {@code source}: the PERF025 frame-native
-     * {@code MultipleCreateFrameLocals} when every name is a binding of a root
-     * lowered without a persistent frame authority, otherwise the unchanged
-     * {@code MultipleCreateLocalSlots}.
+     * Opens a frame-native {@code CreateInlineCurrentFrameLocal} of {@code
+     * name} at {@code ordinal}, a constant operand, leaving only its value
+     * operand to emit.
+     */
+    private void emitCreateInlineCurrentFrameLocal(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            int ordinal,
+            String name) {
+        builder.beginCreateInlineCurrentFrameLocal(
+                currentRootFrameNativeLocals,
+                currentRootFrameNativeLayout,
+                ordinal);
+        emitCurrentInlineCallbackCall(builder);
+        builder.emitLoadConstant(name);
+    }
+
+    /**
+     * Opens a frame-native {@code CreateCurrentFrameLocal} of {@code name} at
+     * {@code ordinal}, a constant operand, leaving only its value operand to
+     * emit.
+     */
+    private void emitCreateCurrentFrameLocal(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            int ordinal,
+            String name) {
+        if (currentActivationLocal != null) {
+            throw new AssertionError(
+                    "frame-native creation inside an unsupported inline "
+                            + "activation region: "
+                            + name);
+        }
+        builder.beginCreateCurrentFrameLocal(
+                currentRootFrameNativeLocals,
+                currentRootFrameNativeLayout,
+                ordinal);
+        builder.emitLoadConstant(name);
+    }
+
+    /**
+     * Emits a multiple creation from {@code source}. When every name is a
+     * frame-native binding (PERF025), PERF030-I lowers it to one observation
+     * of the complete fixed prefix, retained in a local, followed by one
+     * scalar frame-native creation per name in source order, each owning its
+     * ordinal as a constant operand; a failing creation leaves the earlier
+     * ones in place, and the whole expression yields {@code source}.
+     * Otherwise the unchanged {@code MultipleCreateLocalSlots}.
      */
     private void emitMultipleCreateCurrentBindings(
             ProtosSemanticBytecodeRootNodeGen.Builder builder,
@@ -1738,33 +1765,53 @@ final class CanonicalToBytecodeLowerer {
             ordinals[index] = frameNativeOrdinal(names.get(index));
             frameNative = ordinals[index] >= 0;
         }
-        if (frameNative && currentInlineCallbackFrameNative) {
-            builder.beginMultipleCreateInlineFrameLocals(
+        if (!frameNative) {
+            builder.beginMultipleCreateLocalSlots();
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(multipleCreateNamesConstant(names));
+            builder.emitLoadLocal(source);
+            builder.endMultipleCreateLocalSlots();
+            return;
+        }
+        boolean inline = currentInlineCallbackFrameNative;
+        builder.beginBlock();
+        BytecodeLocal observed = builder.createLocal("multipleCreateObserved", null);
+        builder.beginStoreLocal(observed);
+        if (inline) {
+            builder.beginObserveInlineMultipleCreatePrefix(
                     currentRootFrameNativeLocals,
                     currentRootFrameNativeLayout);
             emitCurrentInlineCallbackCall(builder);
-            builder.emitLoadConstant(ordinals);
-            builder.emitLoadConstant(multipleCreateNamesConstant(names));
-            builder.emitLoadLocal(source);
-            builder.endMultipleCreateInlineFrameLocals();
-            return;
-        }
-        if (frameNative) {
-            builder.beginMultipleCreateFrameLocals(
-                    currentRootFrameNativeLocals,
-                    currentRootFrameNativeLayout);
+        } else {
+            builder.beginObserveMultipleCreatePrefix();
             emitCurrentActivation(builder);
-            builder.emitLoadConstant(ordinals);
-            builder.emitLoadConstant(multipleCreateNamesConstant(names));
-            builder.emitLoadLocal(source);
-            builder.endMultipleCreateFrameLocals();
-            return;
         }
-        builder.beginMultipleCreateLocalSlots();
-        emitCurrentActivation(builder);
-        builder.emitLoadConstant(multipleCreateNamesConstant(names));
+        builder.emitLoadConstant(ordinals.length);
         builder.emitLoadLocal(source);
-        builder.endMultipleCreateLocalSlots();
+        if (inline) {
+            builder.endObserveInlineMultipleCreatePrefix();
+        } else {
+            builder.endObserveMultipleCreatePrefix();
+        }
+        builder.endStoreLocal();
+        for (int index = 0; index < ordinals.length; index++) {
+            if (inline) {
+                emitCreateInlineCurrentFrameLocal(builder, ordinals[index], names.get(index));
+            } else {
+                emitCreateCurrentFrameLocal(builder, ordinals[index], names.get(index));
+            }
+            builder.beginObservedMultipleCreateValue();
+            builder.emitLoadLocal(observed);
+            builder.emitLoadConstant(index);
+            builder.endObservedMultipleCreateValue();
+            if (inline) {
+                builder.endCreateInlineCurrentFrameLocal();
+            } else {
+                builder.endCreateCurrentFrameLocal();
+            }
+        }
+        builder.emitLoadLocal(source);
+        builder.endBlock();
     }
 
     private static boolean hasComposedArgument(

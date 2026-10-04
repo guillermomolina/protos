@@ -278,6 +278,9 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
      * including PRESENT(null), is still rejected as a duplicate creation, and
      * a cleared (never established or removed) one is established at the same
      * stable ordinal. Establishment order is recorded exactly as before.
+     * That ordinal is always an {@code int} constant operand of the calling
+     * operation (PERF030-I), as the {@code LocalRangeAccessor} accesses
+     * require.
      */
     void createFrameBackedBindingAt(int ordinal, Object value) {
         Objects.requireNonNull(value, "value");

@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.184-SNAPSHOT
+
+- `PERF030-I` (lowerer-known establishment ordinals, issue #784) makes every
+  frame-layout ordinal the lowerer already knows reach its
+  `LocalRangeAccessor` access as an `int` `@ConstantOperand` instead of a
+  dynamic `emitLoadConstant` operand. This covers the frame-native parameter,
+  rest and current creation operations of both Bytecode roots, the
+  persistent-authority indexed parameter and rest operations, and the
+  inline-callback parameter and creation operations. Frame-native multiple
+  creation no longer indexes an ordinal array at run time: it is lowered to
+  one observation of the complete fixed source prefix
+  (`ObserveMultipleCreatePrefix` / `ObserveInlineMultipleCreatePrefix`)
+  followed by one scalar constant-ordinal creation per name, in source order,
+  with no rollback. The array-based `MultipleCreateFrameLocals`,
+  `MultipleCreateInlineFrameLocals` and inline `multipleCreate` are removed.
+  The static LocalRangeAccessor PE guard now classifies the six affected sinks
+  as `PE_REACHABLE_PROVEN_CONSTANT` (10 proven, 18 remaining risks); the
+  reachability baseline is updated accordingly. No semantic or specification
+  change.
+
 ## 0.3.183-SNAPSHOT
 
 - `TOOL001-F2E5` (exact external requirements preflight, PLAT048 B′) adds the

@@ -169,6 +169,43 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
         System.out.println("PERF025_FRAME_NATIVE_TWO_PARAMETER_EACH_STAYS_LAZY=YES");
     }
 
+    @Test
+    void frameNativeEstablishmentOrdinalsAreInstructionConstants() throws Exception {
+        List<Instruction> instructions =
+                assertRegionInstructionsWithoutActivation(
+                        """
+                        run: () => {
+                            probe()
+                            pair: Array(4, 5, 6)
+                            Array(1).each((element) => {
+                                copy: element
+                                (first, second): pair
+                                first
+                            })
+                        }
+                        run()
+                        """);
+        List<String> names = instructions.stream().map(Instruction::getName).toList();
+        List<Integer> parameter = constantOrdinals(instructions, "BindInlineClosureFrameParameter");
+        List<Integer> creations = constantOrdinals(instructions, "CreateInlineCurrentFrameLocal");
+        assertEquals(1, parameter.size(), () -> "one formal: " + names);
+        assertEquals(3, creations.size(), () -> "copy, then one creation per multiple target: " + names);
+        assertEquals(
+                4,
+                java.util.stream.Stream.concat(parameter.stream(), creations.stream()).distinct().count(),
+                "each establishment owns its own block-local ordinal");
+        int copy = firstIndexOf(names, "CreateInlineCurrentFrameLocal");
+        int observation = firstIndexOf(names, "ObserveInlineMultipleCreatePrefix");
+        int firstTarget =
+                copy + 1 + firstIndexOf(names.subList(copy + 1, names.size()), "CreateInlineCurrentFrameLocal");
+        assertTrue(
+                copy < observation && observation < firstTarget,
+                () -> "the complete prefix is observed before the first multiple target: " + names);
+        System.out.println("PERF030_I_INLINE_PARAMETER_CONSTANT_ORDINAL=YES");
+        System.out.println("PERF030_I_INLINE_CREATION_CONSTANT_ORDINAL=YES");
+        System.out.println("PERF030_I_INLINE_MULTIPLE_CREATE_RUNTIME_ORDINAL_ARRAY=NO");
+    }
+
     /**
      * The first send materializes the activation; a second observer of the
      * same invocation receives the identical instance, and each invocation
@@ -597,6 +634,13 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
      */
     private static List<String> assertRegionWithoutActivation(String characters)
             throws Exception {
+        return assertRegionInstructionsWithoutActivation(characters).stream()
+                .map(Instruction::getName)
+                .toList();
+    }
+
+    private static List<Instruction> assertRegionInstructionsWithoutActivation(String characters)
+            throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -606,10 +650,8 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 ProtosSemanticBytecodeRootNode host = probe.host.get();
                 assertNotNull(host, "probe must observe the run root");
                 host.getRootNodes().ensureComplete();
-                List<String> names =
-                        host.getBytecodeNode().getInstructionsAsList().stream()
-                                .map(Instruction::getName)
-                                .toList();
+                List<Instruction> instructions = host.getBytecodeNode().getInstructionsAsList();
+                List<String> names = instructions.stream().map(Instruction::getName).toList();
                 assertContains(names, "CheckInlineClosureArgumentUpperBound");
                 assertFalse(
                         names.stream().anyMatch(name -> name.contains(PLAIN_LOAD)),
@@ -617,11 +659,40 @@ final class ProtosPerf025LazyInlineCallbackActivationTest {
                 assertFalse(
                         names.stream().anyMatch(name -> name.contains(MATERIALIZE)),
                         () -> "a region without observers needs no materialization point: " + names);
-                return names;
+                return instructions;
             } finally {
                 context.leave();
             }
         }
+    }
+
+    /** The immediate constant {@code ordinal} of every {@code operation} instruction, in order. */
+    private static List<Integer> constantOrdinals(List<Instruction> instructions, String operation) {
+        return instructions.stream()
+                .filter(instruction -> instruction.getName().contains(operation))
+                .map(instruction -> {
+                    Instruction.Argument ordinal =
+                            instruction.getArguments().stream()
+                                    .filter(argument -> argument.getName().equals("ordinal"))
+                                    .findFirst()
+                                    .orElseThrow(() -> new AssertionError(
+                                            "no constant ordinal operand of " + operation));
+                    return switch (ordinal.getKind()) {
+                        case CONSTANT -> (Integer) ordinal.asConstant();
+                        case INTEGER -> ordinal.asInteger();
+                        default -> throw new AssertionError("ordinal is not a constant: " + ordinal);
+                    };
+                })
+                .toList();
+    }
+
+    private static int firstIndexOf(List<String> names, String operation) {
+        for (int index = 0; index < names.size(); index++) {
+            if (names.get(index).contains(operation)) {
+                return index;
+            }
+        }
+        return -1;
     }
 
     private static void assertContains(List<String> names, String operation) {
