@@ -26,6 +26,12 @@ constants:
   BytecodeNode.getLocalInfos(int bci)                         bci
   BytecodeNode.setLocalValues(int bci, Frame, Object[])       bci
   BytecodeNode.copyLocalValues(int bci, Frame, Frame)         bci
+  BytecodeNode.getLocalValue(int bci, Frame, int localOffset) bci, localOffset
+  BytecodeNode.setLocalValue(int bci, Frame, int localOffset, Object)
+                                                              bci, localOffset
+  BytecodeNode.getLocalName(int bci, int localOffset)         bci, localOffset
+  BytecodeNode.getLocalInfo(int bci, int localOffset)         bci, localOffset
+  BytecodeNode.getLocalCount(int bci)                         bci
   BytecodeNode.copyLocalValues(int bci, Frame, Frame, int localOffset, int localCount)
                                                               bci, localOffset, localCount
   static BytecodeNode.get(Node)                               node
@@ -124,6 +130,11 @@ SPECS = (
     Spec(BYTECODE_NODE, "setLocalValues", 3, False, ((0, ROLE_BCI),)),
     Spec(BYTECODE_NODE, "copyLocalValues", 3, False, ((0, ROLE_BCI),)),
     Spec(BYTECODE_NODE, "copyLocalValues", 5, False, ((0, ROLE_BCI), (3, ROLE_OFFSET), (4, ROLE_COUNT))),
+    Spec(BYTECODE_NODE, "getLocalValue", 3, False, ((0, ROLE_BCI), (2, ROLE_OFFSET))),
+    Spec(BYTECODE_NODE, "setLocalValue", 4, False, ((0, ROLE_BCI), (2, ROLE_OFFSET))),
+    Spec(BYTECODE_NODE, "getLocalName", 2, False, ((0, ROLE_BCI), (1, ROLE_OFFSET))),
+    Spec(BYTECODE_NODE, "getLocalInfo", 2, False, ((0, ROLE_BCI), (1, ROLE_OFFSET))),
+    Spec(BYTECODE_NODE, "getLocalCount", 1, False, ((0, ROLE_BCI),)),
     Spec(BYTECODE_NODE, "get", 1, True, ((0, ROLE_NODE),)),
     Spec(BYTECODE_ROOT_NODES, "update", 1, False, ((0, ROLE_CONFIG),)),
     Spec(BYTECODE_LOCATION, "get", 2, True, ((0, ROLE_NODE),)),
@@ -133,6 +144,7 @@ SPECS_BY_NAME = {}
 for _spec in SPECS:
     SPECS_BY_NAME.setdefault(_spec.name, []).append(_spec)
 LOCAL_TABLE_OPERATIONS = ("getLocalValues", "getLocalNames", "getLocalInfos", "setLocalValues", "copyLocalValues")
+LOCAL_SLOT_OPERATIONS = ("getLocalValue", "setLocalValue", "getLocalName", "getLocalInfo", "getLocalCount")
 
 # External Graal API members whose result type is one of the API types; used
 # only when the source hierarchy cannot type the receiver (it can only add sinks).
@@ -660,7 +672,8 @@ def classify_reachability(graph, sink: ApiSink):
 # Scanning
 # --------------------------------------------------------------------------
 
-RELEVANT_IDS = frozenset(API_TYPES) | frozenset(["BytecodeConfig"]) | frozenset(LOCAL_TABLE_OPERATIONS)
+RELEVANT_IDS = (frozenset(API_TYPES) | frozenset(["BytecodeConfig"]) | frozenset(LOCAL_TABLE_OPERATIONS)
+                | frozenset(LOCAL_SLOT_OPERATIONS))
 
 
 def parse_sources(items):
@@ -824,11 +837,15 @@ def totals_of(sinks, graph):
     totals = {
         "TOTAL_BYTECODE_API_SINKS": len(sinks),
         "BYTECODE_NODE_LOCAL_TABLE_SINKS": family(BYTECODE_NODE, LOCAL_TABLE_OPERATIONS),
+        "BYTECODE_NODE_LOCAL_SLOT_SINKS": family(BYTECODE_NODE, LOCAL_SLOT_OPERATIONS),
         "BYTECODE_NODE_GET_SINKS": family(BYTECODE_NODE, ("get",)),
         "BYTECODE_ROOT_NODES_UPDATE_SINKS": family(BYTECODE_ROOT_NODES),
         "BYTECODE_LOCATION_GET_SINKS": family(BYTECODE_LOCATION),
         "UNRESOLVED_RECEIVER_TYPE_SINKS": family(FAMILY_UNRESOLVED),
     }
+    for name in LOCAL_SLOT_OPERATIONS:
+        snake = "".join("_" + char if char.isupper() else char.upper() for char in name)
+        totals["%s_SINKS" % snake] = family(BYTECODE_NODE, (name,))
     reachable = [sink for sink in sinks if sink.pe_reachability in (PE_REACHABLE_PROVEN, PE_REACHABLE_RISK)]
     for role in ROLES:
         for value in (PROVEN, RISK):

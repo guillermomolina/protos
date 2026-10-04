@@ -205,6 +205,81 @@ class LocalTableTest(unittest.TestCase):
         self.assertEqual(guard.RISK, pe(sink, guard.ROLE_COUNT))
 
 
+class LocalSlotTest(unittest.TestCase):
+    def assert_slot(self, call, operation_name, bci, offset):
+        sinks = analyze(root("", operation("Slot", "            %s;" % call,
+                                           '@ConstantOperand(type = int.class, name = "slot")', "int slot,")))
+        sink = sink_in(sinks, "perform", operation_name)
+        self.assertEqual(guard.BYTECODE_NODE, sink.family)
+        self.assertEqual(bci, pe(sink, guard.ROLE_BCI), sink.to_json())
+        if offset is not None:
+            self.assertEqual(offset, pe(sink, guard.ROLE_OFFSET), sink.to_json())
+        expected = guard.PE_REACHABLE_PROVEN if (bci, offset) in (
+            (guard.PROVEN, guard.PROVEN), (guard.PROVEN, None)) else guard.PE_REACHABLE_RISK
+        self.assertEqual(expected, sink.pe_reachability, sink.to_json())
+
+    def test_22_get_local_value(self):
+        self.assert_slot("bytecode.getLocalValue(boundBci, frame, slot)", "getLocalValue", guard.PROVEN, guard.PROVEN)
+        self.assert_slot("bytecode.getLocalValue(node.hashCode(), frame, slot)", "getLocalValue",
+                         guard.RISK, guard.PROVEN)
+        self.assert_slot("bytecode.getLocalValue(boundBci, frame, node.hashCode())", "getLocalValue",
+                         guard.PROVEN, guard.RISK)
+
+    def test_23_set_local_value(self):
+        self.assert_slot("bytecode.setLocalValue(0, frame, 1, value)", "setLocalValue", guard.PROVEN, guard.PROVEN)
+        self.assert_slot("bytecode.setLocalValue(node.hashCode(), frame, slot, value)", "setLocalValue",
+                         guard.RISK, guard.PROVEN)
+        self.assert_slot("bytecode.setLocalValue(boundBci, frame, node.hashCode(), value)", "setLocalValue",
+                         guard.PROVEN, guard.RISK)
+
+    def test_24_get_local_name_and_info(self):
+        for name in ("getLocalName", "getLocalInfo"):
+            self.assert_slot("bytecode.%s(boundBci, slot)" % name, name, guard.PROVEN, guard.PROVEN)
+            self.assert_slot("bytecode.%s(node.hashCode(), slot)" % name, name, guard.RISK, guard.PROVEN)
+            self.assert_slot("bytecode.%s(boundBci, node.hashCode())" % name, name, guard.PROVEN, guard.RISK)
+
+    def test_25_get_local_count(self):
+        self.assert_slot("bytecode.getLocalCount(boundBci)", "getLocalCount", guard.PROVEN, None)
+        self.assert_slot("bytecode.getLocalCount(node.hashCode())", "getLocalCount", guard.RISK, None)
+
+    def test_26_production_style_boundary_helper_is_cut(self):
+        sinks = analyze(root("""
+    @TruffleBoundary
+    static Object carrier(TagTreeNode node, Frame frame) {
+        BytecodeNode bytecode = node.getBytecodeNode();
+        int bytecodeIndex = node.getEnterBytecodeIndex();
+        Object[] names = bytecode.getLocalNames(bytecodeIndex);
+        for (int offset = names.length - 1; offset >= 0; offset--) {
+            if (bytecode.getLocalValue(bytecodeIndex, frame, offset) != null) {
+                return names[offset];
+            }
+        }
+        return null;
+    }
+""", operation("Carrier", "            carrier((TagTreeNode) value, frame);")))
+        sink = sink_in(sinks, "carrier", "getLocalValue")
+        self.assertEqual(guard.BYTECODE_NODE, sink.family)
+        self.assertEqual(guard.RUNTIME_VALUE, klass(sink, guard.ROLE_BCI))
+        self.assertNotIn(klass(sink, guard.ROLE_OFFSET), guard.SAFE_CLASSES)
+        self.assertEqual(guard.BOUNDARY_CUT, sink.pe_reachability)
+
+    def test_27_unresolved_slot_receiver_fails_closed(self):
+        sinks = analyze(root("""
+    static Object reachable(Helper helper, Frame frame) {
+        helper.find().setLocalValue(0, frame, 0, null);
+        helper.find().getLocalName(0, 0);
+        helper.find().getLocalInfo(0, 0);
+        helper.find().getLocalCount(0);
+        return helper.find().getLocalValue(0, frame, 0);
+    }
+""", operation("Unresolved", "            reachable(null, frame);")))
+        found = sinks_in(sinks, "reachable")
+        self.assertEqual(sorted(guard.LOCAL_SLOT_OPERATIONS), sorted(sink.operation for sink in found))
+        for sink in found:
+            self.assertEqual(guard.FAMILY_UNRESOLVED, sink.family)
+            self.assertEqual(guard.PE_REACHABILITY_UNKNOWN, sink.pe_reachability, sink.to_json())
+
+
 class NodeAndConfigTest(unittest.TestCase):
     def test_09_bytecode_node_get_with_bound_node_is_proven(self):
         sink = sink_in(analyze(root("", operation("Get", "            BytecodeNode.get(node);"))), "perform", "get")
