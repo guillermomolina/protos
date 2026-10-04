@@ -357,6 +357,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
         return lastCompactFrameOrdinal < 0;
     }
 
+    @TruffleBoundary
     @Override
     public boolean containsBinding(String name) {
         Objects.requireNonNull(name, "name");
@@ -369,6 +370,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                 && dynamicOverflow.containsKey(name);
     }
 
+    @TruffleBoundary
     @Override
     public Optional<Object> readBinding(String name) {
         Objects.requireNonNull(name, "name");

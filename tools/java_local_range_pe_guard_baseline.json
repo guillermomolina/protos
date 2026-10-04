@@ -65,36 +65,6 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "containsBinding(String)",
-      "operation": "isCleared",
-      "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
-      "occurrence": 0,
-      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "readBinding(String)",
-      "operation": "isCleared",
-      "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
-      "occurrence": 0,
-      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "readBinding(String)",
-      "operation": "getObject",
-      "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
-      "occurrence": 0,
-      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
       "method": "bindingsSnapshot()",
       "operation": "isCleared",
       "index": "ordinal",

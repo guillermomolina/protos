@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.193-SNAPSHOT
+
+- `PERF030-N` (issue #784, `F3_GENERIC_NAME_TO_RANGE_INDEX`) cuts the remaining
+  three PE-reachable runtime-name-derived `LocalRangeAccessor` sinks at the
+  generic frame-backed lexical membership/read boundary. `containsBinding(String)`
+  and `readBinding(String)` are now `@TruffleBoundary` slow paths for genuinely
+  dynamic names, while statically selected lexical execution continues to use
+  the existing indexed/ordinal seams. The final LocalRange PE inventory remains
+  36 sinks with 13 PE-reachable proven-constant sites, 19 boundary cuts,
+  4 non-PE-reachable sites, 0 PE-reachable risks and 0 unknown reachability.
+  `PRESENT(null)` versus `ABSENT`, D179 late-nearer retargeting, capture by
+  reference, current-`BytecodeNode` coherence, dynamic overflow behavior,
+  deferred Context laziness and debugger/reflection projection are preserved.
+  No observable language semantic, specification or benchmark change.
+
 ## 0.3.192-SNAPSHOT
 
 - `CLI008-C1` (issue #416, PLAT049 Candidate C) adds an occurrence-carried,

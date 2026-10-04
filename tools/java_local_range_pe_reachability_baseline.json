@@ -198,18 +198,14 @@
       "method": "containsBinding(String)",
       "operation": "isCleared",
       "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "RUNTIME_NAME_DERIVED"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.ReadCapturedFrameLocal.perform(int,ProtosActivation,String,int)",
-        "ProtosActivation.currentContextHasLocalSlotForRuntime(String)",
         "ProtosFrameLexicalBindingAuthority.containsBinding(String)"
       ],
-      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.containsBinding"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -217,19 +213,14 @@
       "method": "readBinding(String)",
       "operation": "isCleared",
       "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "RUNTIME_NAME_DERIVED"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.Lookup.perform(ProtosActivation,String)",
-        "ProtosLexicalFallback.readByName(ProtosActivation,String)",
-        "ProtosActivation.readCurrentLocalSlotForRuntime(String)",
         "ProtosFrameLexicalBindingAuthority.readBinding(String)"
       ],
-      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.readBinding"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -237,19 +228,14 @@
       "method": "readBinding(String)",
       "operation": "getObject",
       "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
+      "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "RUNTIME_NAME_DERIVED"
-      ],
+      "pe_reachability": "BOUNDARY_CUT",
+      "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.Lookup.perform(ProtosActivation,String)",
-        "ProtosLexicalFallback.readByName(ProtosActivation,String)",
-        "ProtosActivation.readCurrentLocalSlotForRuntime(String)",
         "ProtosFrameLexicalBindingAuthority.readBinding(String)"
       ],
-      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.readBinding"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
