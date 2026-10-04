@@ -43,7 +43,9 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertTrue(source.contains("ProtosStandaloneHostedExecution.bindProcess("));
         assertTrue(source.contains("processContext.execute("));
         assertTrue(source.contains("processContext.evaluatePersistent("));
-        assertTrue(source.contains("executeStandaloneRootTask(session.executeModuleSource(source))"));
+        assertTrue(source.matches(
+                "(?s).*bundledToolOutcomeExitCode\\(\\s*toolName,\\s*diagnosticName,"
+                        + "\\s*session\\.executeModuleSource\\(source\\),.*"));
         assertTrue(
                 source.matches(
                         "(?s).*ProtosTestToolAsyncExecutionScope\\.installWithProjectTreeAuthorities\\("

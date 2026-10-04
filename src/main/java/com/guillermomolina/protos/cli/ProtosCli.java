@@ -926,17 +926,16 @@ public final class ProtosCli {
                             "bundled tool provisioner returned null cleanup");
             ProtosModuleKey entryModule = resolver.entryModule(entryModuleName);
             ProtosModuleSource source = resolver.loadSource(entryModule).requireKey(entryModule);
-            Object toolResult =
-                    executeStandaloneRootTask(session.executeModuleSource(source));
-            if (toolName.equals("test")) {
-                return testToolExitCodeForRuntime(toolResult, err);
-            }
-            return 0;
+            return bundledToolOutcomeExitCode(
+                    toolName,
+                    diagnosticName,
+                    session.executeModuleSource(source),
+                    err);
         } catch (ParseError e) {
             err.println(diagnosticName + " tool syntax error: " + e.getMessage());
             return 1;
         } catch (ProtosSignalException e) {
-            err.println(diagnosticName + " tool error: " + diagnosticInspector.render(e.error()));
+            reportGuestError(diagnosticName + " tool error: ", e, err);
             return 1;
         } catch (RuntimeException e) {
             err.println(diagnosticName + " tool runtime error: " + e.getMessage());
@@ -948,6 +947,34 @@ public final class ProtosCli {
                 session.terminate();
             }
         }
+    }
+
+    /*
+     * CLI008-D: a FAILED bundled Tool outcome is presented directly with its Tool-specific prefix
+     * so the occurrence trace it carries is not lost behind executeStandaloneRootTask. COMPLETED
+     * and CANCELLED keep the historical translation; a CANCELLED outcome still throws the
+     * IllegalStateException that runBundledTool reports as a Tool runtime error.
+     */
+    int bundledToolOutcomeExitCode(
+            String toolName,
+            String diagnosticName,
+            ProtosExecutionOutcome outcome,
+            PrintStream err) {
+        Objects.requireNonNull(outcome, "outcome");
+        Objects.requireNonNull(err, "err");
+        if (outcome.state() == ProtosExecutionOutcome.State.FAILED) {
+            reportGuestError(
+                    diagnosticName + " tool error: ",
+                    outcome.error(),
+                    outcome.failureDiagnosticTrace().orElse(null),
+                    err);
+            return 1;
+        }
+        Object toolResult = executeStandaloneRootTask(outcome);
+        if (toolName.equals("test")) {
+            return testToolExitCodeForRuntime(toolResult, err);
+        }
+        return 0;
     }
 
     static int testToolExitCodeForRuntime(Object value, PrintStream err) {
@@ -1209,8 +1236,7 @@ public final class ProtosCli {
             err.println("Syntax error: " + e.getMessage());
             return ReplInputResult.COMPLETE;
         } catch (ProtosSignalException e) {
-            err.println("Error: " + diagnosticInspector.render(e.error()));
-            ProtosGuestStackRenderer.render(e.terminalDiagnosticTrace().orElse(null), err);
+            reportUncaughtError(e, err);
             return ReplInputResult.COMPLETE;
         } catch (RuntimeException e) {
             err.println("Runtime error: " + e.getMessage());
@@ -1383,7 +1409,7 @@ public final class ProtosCli {
             err.println("Syntax error: " + e.getMessage());
             return 1;
         } catch (ProtosSignalException e) {
-            err.println("Error: " + diagnosticInspector.render(e.error()));
+            reportUncaughtError(e, err);
             return 1;
         } catch (RuntimeException e) {
             err.println("Runtime error: " + e.getMessage());
@@ -1410,7 +1436,7 @@ public final class ProtosCli {
             if (cause instanceof ParseError parseError) {
                 err.println("Syntax error: " + parseError.getMessage());
             } else if (cause instanceof ProtosSignalException signal) {
-                err.println("Error: " + diagnosticInspector.render(signal.error()));
+                reportUncaughtError(signal, err);
             } else {
                 err.println("Runtime error: " + e.getMessage());
             }
@@ -1419,7 +1445,7 @@ public final class ProtosCli {
             err.println("Syntax error: " + e.getMessage());
             return 1;
         } catch (ProtosSignalException e) {
-            err.println("Error: " + diagnosticInspector.render(e.error()));
+            reportUncaughtError(e, err);
             return 1;
         } catch (RuntimeException e) {
             err.println("Runtime error: " + e.getMessage());
@@ -1439,8 +1465,30 @@ public final class ProtosCli {
      * occurrence is not lost behind a late, freshly constructed ProtosSignalException.
      */
     private void reportUncaughtError(ProtosExecutionOutcome outcome, PrintStream err) {
-        err.println("Error: " + diagnosticInspector.render(outcome.error()));
-        ProtosGuestStackRenderer.render(outcome.failureDiagnosticTrace().orElse(null), err);
+        reportGuestError(
+                "Error: ", outcome.error(), outcome.failureDiagnosticTrace().orElse(null), err);
+    }
+
+    /*
+     * CLI008-D: a signal that reaches a presenting boundary is shown with the terminal trace a
+     * runtime boundary already attached to it, if any; the CLI never recaptures one.
+     */
+    void reportUncaughtError(ProtosSignalException signal, PrintStream err) {
+        reportGuestError("Error: ", signal, err);
+    }
+
+    private void reportGuestError(String prefix, ProtosSignalException signal, PrintStream err) {
+        reportGuestError(
+                prefix, signal.error(), signal.terminalDiagnosticTrace().orElse(null), err);
+    }
+
+    private void reportGuestError(
+            String prefix,
+            ProtosObjectValue error,
+            ProtosDiagnosticTrace trace,
+            PrintStream err) {
+        err.println(prefix + diagnosticInspector.render(error));
+        ProtosGuestStackRenderer.render(trace, err);
     }
 
     private static Object executeStandaloneRootTask(ProtosExecutionOutcome outcome) {

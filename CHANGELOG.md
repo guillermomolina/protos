@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.195-SNAPSHOT
+
+- `CLI008-D` (issue #312) reconciles terminal Error presentation across the
+  REPL, `-e`, direct-file, workspace and bundled Tool surfaces so an available
+  `ProtosDiagnosticTrace` is never silently dropped. The bundled Tool launcher
+  now presents a FAILED outcome directly with its existing
+  `<Tool> tool error: ` prefix followed by the occurrence's guest frames,
+  instead of rebuilding a trace-less `ProtosSignalException`; the `-e` and
+  direct-file `ProtosSignalException` fallbacks render an attached terminal
+  trace like the REPL already did. All surfaces share one summary-plus-trace
+  presenter. Summary prefixes, program stdout, exit-code policies, COMPLETED
+  Test Tool classification and CANCELLED/host runtime-error handling are
+  unchanged; no trace is recaptured in the CLI. No observable language
+  semantic, specification, print, serialization, PLAT049 capture, Test Tool or
+  Package Tool change.
+
 ## 0.3.194-SNAPSHOT
 
 - `BUG015` (issue #794) fixes a ready-before-suspend lost wakeup in
