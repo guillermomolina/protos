@@ -267,9 +267,7 @@ final class ProtosInlineCallbackFrameBindings {
             int frameOrdinal,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
-        if (admitsCapturedAccess(
-                child, frameBackedLocals, frameBackedLayout, name, lexicalDepth,
-                bytecodeNode, frame)) {
+        if (admitsCapturedAccess(child, lexicalDepth)) {
             Object value =
                     ProtosBytecodeRootNode.readCapturedFrameBindingOrNull(
                             child.unmaterializedCapturedLexicalEnvironment(),
@@ -298,9 +296,7 @@ final class ProtosInlineCallbackFrameBindings {
             int lexicalDepth,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
-        if (admitsCapturedAccess(
-                child, frameBackedLocals, frameBackedLayout, name, lexicalDepth,
-                bytecodeNode, frame)) {
+        if (admitsCapturedAccess(child, lexicalDepth)) {
             Object value =
                     ProtosBytecodeRootNode.readCapturedMaterializedBindingOrNull(
                             accessor,
@@ -334,9 +330,7 @@ final class ProtosInlineCallbackFrameBindings {
             int frameOrdinal,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
-        if (admitsCapturedAccess(
-                child, frameBackedLocals, frameBackedLayout, name, lexicalDepth,
-                bytecodeNode, frame)) {
+        if (admitsCapturedAccess(child, lexicalDepth)) {
             CapturedLexicalWriteTarget selected =
                     ProtosBytecodeRootNode.capturedFrameWriteTargetOrNull(
                             child.unmaterializedCapturedLexicalEnvironment(),
@@ -365,9 +359,7 @@ final class ProtosInlineCallbackFrameBindings {
             int lexicalDepth,
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
-        if (admitsCapturedAccess(
-                child, frameBackedLocals, frameBackedLayout, name, lexicalDepth,
-                bytecodeNode, frame)) {
+        if (admitsCapturedAccess(child, lexicalDepth)) {
             CapturedLexicalWriteTarget selected =
                     ProtosBytecodeRootNode.capturedMaterializedWriteTargetOrNull(
                             accessor,
@@ -443,23 +435,17 @@ final class ProtosInlineCallbackFrameBindings {
 
     /**
      * True when a statically resolved captured access may take its direct
-     * path without the activation: the activation is unmaterialized, the
-     * depth is valid, and the callback's own scope does not hold {@code name}
-     * PRESENT (D179 C0 nearer-binding retargeting).
+     * path without the activation. Binding analysis and lowering only emit
+     * these operations for a CapturedResolved owner, so the lexical depth is
+     * positive and the captured name cannot be declared by the callback's
+     * current lexical scope. Under D179 C0, any later dynamic nearer-binding
+     * establishment materializes the activation and therefore takes the
+     * fallback path instead.
      */
     private static boolean admitsCapturedAccess(
             PreparedInlineLiteralCall child,
-            LocalRangeAccessor frameBackedLocals,
-            ProtosFrameLexicalLayout frameBackedLayout,
-            String name,
-            int lexicalDepth,
-            BytecodeNode bytecodeNode,
-            VirtualFrame frame) {
-        if (child.isActivationMaterialized() || lexicalDepth <= 0) {
-            return false;
-        }
-        Integer ordinal = frameBackedLayout.offsetOf(name);
-        return ordinal == null || frameBackedLocals.isCleared(bytecodeNode, frame, ordinal);
+            int lexicalDepth) {
+        return !child.isActivationMaterialized() && lexicalDepth > 0;
     }
 
     /** Inline counterpart of the {@code THIS} intrinsic. */

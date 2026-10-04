@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.188-SNAPSHOT
+
+- `PERF030-K` (issue #784) removes the structurally unreachable inline
+  captured-access range probe from `ProtosInlineCallbackFrameBindings`.
+  Binding analysis and lowering already restrict these direct operations to
+  `CapturedResolved` owners in established outer lexical scopes, so
+  `admitsCapturedAccess` now depends only on an unmaterialized activation and
+  positive lexical depth instead of resolving the runtime name back into the
+  callback's current frame layout. Focused binding-analysis coverage makes the
+  ownership invariant explicit: an outer established name is
+  `CapturedResolved`, while a declaration owned by the current scope is
+  `Candidate` before its creation and `Resolved` afterwards. The LocalRange PE
+  guard removes exactly the obsolete F6 sink from both baselines, leaving 37
+  sinks: 13 PE-reachable proven constant, 14 PE-reachable risks, 6 boundary
+  cuts, 4 non-PE-reachable and 0 unknown. Capture by reference, D179 late
+  nearer-binding behavior, inline activation laziness, pre-RHS captured-write
+  destination selection, selected-owner mutation behavior, and observable
+  language semantics remain unchanged. No specification or benchmark change.
+
 ## 0.3.187-SNAPSHOT
 
 - `TOOL001-F2E5` (issue #93, PLAT048 B′) completes the current bounded

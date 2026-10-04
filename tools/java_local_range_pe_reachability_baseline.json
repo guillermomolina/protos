@@ -540,25 +540,6 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
-      "method": "admitsCapturedAccess(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,String,int,BytecodeNode,VirtualFrame)",
-      "operation": "isCleared",
-      "index": "ordinal",
-      "classification": "RUNTIME_NAME_DERIVED",
-      "occurrence": 0,
-      "pe_reachability": "PE_REACHABLE_RISK",
-      "pe_provenance": [
-        "RUNTIME_NAME_DERIVED"
-      ],
-      "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.ReadInlineCapturedFrameLocal.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,PreparedInlineLiteralCall,String,int,BytecodeNode,VirtualFrame)",
-        "ProtosInlineCallbackFrameBindings.readCaptured(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,String,int,int,BytecodeNode,VirtualFrame)",
-        "ProtosInlineCallbackFrameBindings.admitsCapturedAccess(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,String,int,BytecodeNode,VirtualFrame)"
-      ],
-      "rationale": "PE-reachable with non-constant index (RUNTIME_NAME_DERIVED): ordinal computed from a runtime name lookup (offsetOf)"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
-      "class": "ProtosInlineCallbackFrameBindings",
       "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",
       "index": "ordinal",

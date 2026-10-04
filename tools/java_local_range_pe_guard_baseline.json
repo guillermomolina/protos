@@ -265,16 +265,6 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
       "class": "ProtosInlineCallbackFrameBindings",
-      "method": "admitsCapturedAccess(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,String,int,BytecodeNode,VirtualFrame)",
-      "operation": "isCleared",
-      "index": "ordinal",
-      "classification": "RUNTIME_NAME_DERIVED",
-      "occurrence": 0,
-      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
-      "class": "ProtosInlineCallbackFrameBindings",
       "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
       "operation": "isCleared",
       "index": "ordinal",

@@ -106,6 +106,55 @@ class CanonicalBindingAnalyzerTest {
     }
 
     @Test
+    void capturedResolvedCannotNameDeclarationOwnedByCurrentScope() {
+        CanonicalSequence program =
+                canonicalizeProgram(
+                        "outer: \"outer\"\n"
+                                + "(() => { outer\n"
+                                + " inner\n"
+                                + " inner: \"inner\"\n"
+                                + " inner })");
+
+        CanonicalCreate outerCreate =
+                assertInstanceOf(CanonicalCreate.class, program.expressions().get(0));
+        CanonicalClosure closure =
+                assertInstanceOf(CanonicalClosure.class, program.expressions().get(1));
+        CanonicalLookup capturedOuter =
+                assertInstanceOf(CanonicalLookup.class, closure.body().expressions().get(0));
+        CanonicalLookup currentBeforeCreate =
+                assertInstanceOf(CanonicalLookup.class, closure.body().expressions().get(1));
+        CanonicalCreate currentCreate =
+                assertInstanceOf(CanonicalCreate.class, closure.body().expressions().get(2));
+        CanonicalLookup currentAfterCreate =
+                assertInstanceOf(CanonicalLookup.class, closure.body().expressions().get(3));
+
+        CanonicalBindingAnalysis analysis = CanonicalBindingAnalyzer.analyzeModule(program);
+        CanonicalBindingIdentity outerIdentity = analysis.identityOf(outerCreate).orElseThrow();
+        CanonicalBindingIdentity currentIdentity =
+                analysis.identityOf(currentCreate).orElseThrow();
+
+        CanonicalBindingResolution.CapturedResolved captured =
+                assertInstanceOf(
+                        CanonicalBindingResolution.CapturedResolved.class,
+                        analysis.resolutionOf(capturedOuter).orElseThrow());
+        assertSame(outerIdentity, captured.identity());
+        assertEquals(1, captured.lexicalDepth());
+
+        CanonicalBindingResolution.Candidate beforeCreation =
+                assertInstanceOf(
+                        CanonicalBindingResolution.Candidate.class,
+                        analysis.resolutionOf(currentBeforeCreate).orElseThrow());
+        assertSame(currentIdentity, beforeCreation.identity());
+        assertEquals(0, beforeCreation.lexicalDepth());
+
+        CanonicalBindingResolution.Resolved afterCreation =
+                assertInstanceOf(
+                        CanonicalBindingResolution.Resolved.class,
+                        analysis.resolutionOf(currentAfterCreate).orElseThrow());
+        assertSame(currentIdentity, afterCreation.identity());
+    }
+
+    @Test
     void parameterIdentityExistsBeforeSemanticPresence() {
         /* Non-rest parameters must precede defaulted parameters (grammar), so a forward
          * reference is exercised as a defaulted parameter's default referring to itself:
