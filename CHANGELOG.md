@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.199-SNAPSHOT
+
+- `LM011-C` (issue #670; D184/#796 Candidate B) exposes the public canonical
+  formatter command `protos format [<file>]`. With no operand it reads one
+  whole UTF-8 document from stdin; with one operand it reads exactly that
+  regular file (symlinks to regular files are accepted for reading) without
+  executing it or resolving imports. More operands are a usage error.
+  Formatting goes only through the existing editor-neutral
+  `ProtosWholeDocumentFormatter` / TOOL010 authority. On success stdout holds
+  exactly the canonical source and stderr is empty (exit 0). Invalid or
+  incomplete source fails closed: the exact original source goes to stdout and
+  a `protos format:` diagnostic goes to stderr (exit 1). Missing, unreadable,
+  non-regular or malformed-UTF-8 input leaves stdout empty (exit 1). Usage
+  errors exit 2, and genuine formatter/bootstrap failures stay internal errors
+  (exit 70). The command never modifies files and has no multi-file, directory,
+  workspace or package discovery. Check, write, range, on-type formatting and
+  style configuration remain deferred. No Protos semantic or specification
+  change.
+
 ## 0.3.198-SNAPSHOT
 
 - `TEST009-C` (TEST009/#795; PERF030/#784) adds the static Bytecode API

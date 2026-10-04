@@ -10,13 +10,17 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosCliTest {
     private R run(String... args) {
+        return runWithInput(new byte[0], args);
+    }
+
+    private R runWithInput(byte[] input, String... args) {
         var out = new ByteArrayOutputStream();
         var err = new ByteArrayOutputStream();
         int code =
                 new ProtosCli()
                         .run(
                                 args,
-                                InputStream.nullInputStream(),
+                                new ByteArrayInputStream(input),
                                 new PrintStream(out),
                                 new PrintStream(err));
         return new R(
@@ -36,6 +40,7 @@ final class ProtosCliTest {
         assertTrue(help.o.contains("protos debug <file> [args...]"));
         assertTrue(help.o.contains("PROTOS_DEBUG_READY"));
         assertTrue(help.o.contains("explicit program output"));
+        assertTrue(help.o.contains("protos format [<file>]"));
 
         assertTrue(run("--version").o.startsWith("Protos "));
         assertEquals("", run("-e", "1 + 1").o);
@@ -265,6 +270,115 @@ final class ProtosCliTest {
         Path file = Files.createTempFile("protos-cli-", ".protos");
         Files.deleteIfExists(file);
         assertNotEquals(0, run(file.toString()).c);
+    }
+
+    @Test
+    void formatFileAndStdinWriteOnlyCanonicalSourceToStdout() throws Exception {
+        Path file = Files.createTempFile("protos-cli-format-", ".protos");
+        try {
+            byte[] original = "value:1".getBytes(StandardCharsets.UTF_8);
+            Files.write(file, original);
+
+            R fromFile = run("format", file.toString());
+            assertEquals(0, fromFile.c, fromFile.e);
+            assertEquals("value: 1\n", fromFile.o);
+            assertEquals("", fromFile.e);
+            assertArrayEquals(original, Files.readAllBytes(file));
+
+            R fromStdin = runWithInput(original, "format");
+            assertEquals(0, fromStdin.c, fromStdin.e);
+            assertEquals("value: 1\n", fromStdin.o);
+            assertEquals("", fromStdin.e);
+
+            R canonical =
+                    runWithInput("value: 1\n".getBytes(StandardCharsets.UTF_8), "format");
+            assertEquals(0, canonical.c, canonical.e);
+            assertEquals("value: 1\n", canonical.o);
+            assertEquals("", canonical.e);
+        } finally {
+            Files.deleteIfExists(file);
+        }
+    }
+
+    @Test
+    void formatSymlinkToRegularFileIsReadOnly() throws Exception {
+        Path dir = Files.createTempDirectory("protos-cli-format-link-");
+        Path target = dir.resolve("target.protos");
+        Path link = dir.resolve("link.protos");
+        try {
+            Files.writeString(target, "value:1", StandardCharsets.UTF_8);
+            try {
+                Files.createSymbolicLink(link, target);
+            } catch (UnsupportedOperationException | IOException | SecurityException e) {
+                org.junit.jupiter.api.Assumptions.assumeTrue(false, "symlinks unavailable");
+            }
+
+            R result = run("format", link.toString());
+            assertEquals(0, result.c, result.e);
+            assertEquals("value: 1\n", result.o);
+            assertEquals("", result.e);
+            assertTrue(Files.isSymbolicLink(link));
+            assertEquals("value:1", Files.readString(target, StandardCharsets.UTF_8));
+        } finally {
+            Files.deleteIfExists(link);
+            Files.deleteIfExists(target);
+            Files.deleteIfExists(dir);
+        }
+    }
+
+    @Test
+    void formatInvalidSourceFailsClosedWithOriginalSourceOnStdout() throws Exception {
+        String invalid = "foo(";
+        Path file = Files.createTempFile("protos-cli-format-invalid-", ".protos");
+        try {
+            Files.writeString(file, invalid, StandardCharsets.UTF_8);
+
+            R fromFile = run("format", file.toString());
+            assertEquals(1, fromFile.c);
+            assertEquals(invalid, fromFile.o);
+            assertTrue(fromFile.e.startsWith("protos format:"), fromFile.e);
+            assertFalse(fromFile.e.contains("Internal error:"), fromFile.e);
+            assertEquals(invalid, Files.readString(file, StandardCharsets.UTF_8));
+
+            R fromStdin = runWithInput(invalid.getBytes(StandardCharsets.UTF_8), "format");
+            assertEquals(1, fromStdin.c);
+            assertEquals(invalid, fromStdin.o);
+            assertTrue(fromStdin.e.startsWith("protos format:"), fromStdin.e);
+        } finally {
+            Files.deleteIfExists(file);
+        }
+    }
+
+    @Test
+    void formatInputAndUsageFailuresKeepStdoutEmpty() throws Exception {
+        R tooMany = run("format", "a.protos", "b.protos");
+        assertEquals(2, tooMany.c);
+        assertEquals("", tooMany.o);
+        assertTrue(tooMany.e.startsWith("protos: format"), tooMany.e);
+
+        Path dir = Files.createTempDirectory("protos-cli-format-input-");
+        Path missing = dir.resolve("missing.protos");
+        Path malformed = dir.resolve("malformed.protos");
+        byte[] malformedBytes = {'v', ':', ' ', (byte) 0xC3, (byte) 0x28, '\n'};
+        try {
+            Files.write(malformed, malformedBytes);
+
+            for (R failure :
+                    new R[] {
+                        run("format", missing.toString()),
+                        run("format", dir.toString()),
+                        run("format", malformed.toString()),
+                        runWithInput(malformedBytes, "format")
+                    }) {
+                assertEquals(1, failure.c, failure.e);
+                assertEquals("", failure.o);
+                assertTrue(failure.e.startsWith("protos format: cannot read"), failure.e);
+            }
+            assertArrayEquals(malformedBytes, Files.readAllBytes(malformed));
+        } finally {
+            Files.deleteIfExists(malformed);
+            Files.deleteIfExists(dir);
+        }
     }
 
     private record R(int c, String o, String e) {}

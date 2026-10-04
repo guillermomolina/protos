@@ -16,12 +16,16 @@
  */
 package com.guillermomolina.protos.cli;
 
+import com.guillermomolina.protos.analysis.ProtosDocumentSnapshot;
 import com.guillermomolina.protos.execution.*;
 import com.guillermomolina.protos.lsp.ProtosLanguageServerMain;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.*;
 import com.oracle.truffle.api.source.Source;
 import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Instant;
@@ -144,6 +148,12 @@ public final class ProtosCli {
             if (args[0].equals("test")) {
                 return runBundledTestTool(args, in, out, err);
             }
+            if (args[0].equals("format")) {
+                if (args.length > 2) {
+                    return usage(err, "format accepts at most one source file");
+                }
+                return formatDocument(args.length == 2 ? args[1] : null, in, out, err);
+            }
             if (args[0].equals("-e")) {
                 if (args.length < 2) return usage(err, "-e requires a source argument");
                 return evalOneShot(
@@ -222,6 +232,86 @@ public final class ProtosCli {
             err.println("protos debug: " + failure.getMessage());
             return 1;
         }
+    }
+
+    /**
+     * D184 canonical formatter CLI adapter over {@link ProtosWholeDocumentFormatter}.
+     *
+     * <p>Reads one whole UTF-8 document from {@code sourceArgument}, or from stdin when it is
+     * {@code null}, and never writes the filesystem. Input acquisition failures are reported
+     * here with exit 1; genuine formatter/bootstrap failures propagate to the dispatch
+     * internal-error boundary (exit 70) rather than being classified as invalid input.</p>
+     */
+    private int formatDocument(
+            String sourceArgument,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
+        String documentId;
+        String sourceText;
+        try {
+            if (sourceArgument == null) {
+                documentId = "<stdin>";
+                sourceText =
+                        StandardCharsets.UTF_8
+                                .newDecoder()
+                                .onMalformedInput(CodingErrorAction.REPORT)
+                                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                                .decode(ByteBuffer.wrap(in.readAllBytes()))
+                                .toString();
+            } else {
+                Path sourcePath = Path.of(sourceArgument).toAbsolutePath().normalize();
+                if (!Files.exists(sourcePath)) {
+                    throw new IOException("no such file");
+                }
+                if (!Files.isRegularFile(sourcePath)) {
+                    throw new IOException("not a regular file");
+                }
+                documentId = sourcePath.toString();
+                sourceText = Files.readString(sourcePath, StandardCharsets.UTF_8);
+            }
+        } catch (CharacterCodingException failure) {
+            return formatInputFailure(sourceArgument, "malformed UTF-8 input", err);
+        } catch (IOException | InvalidPathException failure) {
+            return formatInputFailure(sourceArgument, failure.getMessage(), err);
+        }
+
+        Path core = core();
+        ProtosWholeDocumentFormatter.Result result;
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            result =
+                    ProtosWholeDocumentFormatter.format(
+                            core,
+                            core.getParent().getParent().resolve("tools").resolve("formatter"),
+                            new ProtosStandardLibraryModuleResolver(core.getParent()),
+                            new ProtosDocumentSnapshot(documentId, 0L, sourceText),
+                            ignored -> {},
+                            runtimeHost);
+        }
+
+        // The formatter owns the exact final newline; emit its characters verbatim.
+        out.writeBytes(result.source().getBytes(StandardCharsets.UTF_8));
+        out.flush();
+        if (result.status() == ProtosWholeDocumentFormatter.Status.FAILURE) {
+            err.println(
+                    "protos format: "
+                            + documentId
+                            + ": source not formatted: "
+                            + result.reason().orElseThrow());
+            return 1;
+        }
+        return 0;
+    }
+
+    private static int formatInputFailure(
+            String sourceArgument, String reason, PrintStream err) {
+        err.println(
+                "protos format: cannot read "
+                        + (sourceArgument == null ? "<stdin>" : sourceArgument)
+                        + ": "
+                        + reason);
+        return 1;
     }
 
     private Session debugSession(
@@ -1538,6 +1628,7 @@ public final class ProtosCli {
                         + "  protos run <entry> [args...]\n"
                         + "  protos package [args...]\n"
                         + "  protos test [--jobs N] [args...]\n"
+                        + "  protos format [<file>]\n"
                         + "  protos\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"
@@ -1551,6 +1642,9 @@ public final class ProtosCli {
                         + "guest execution and guest output then travels through DAP.\n"
                         + "Language-server starts the toolchain-matched static service using "
                         + "standard LSP over stdin/stdout; stdout is protocol-only while active.\n"
+                        + "Format writes the canonical form of one UTF-8 <file>, or of stdin "
+                        + "when no <file> is given, to stdout; it never modifies files. "
+                        + "Invalid source is echoed unchanged with a diagnostic and exit 1.\n"
                         + "Test Tool --jobs N selects positive logical execution capacity; "
                         + "without --jobs the Test Tool uses jobs = 1.\n"
                         + "Application arguments are available through process.args(); "
