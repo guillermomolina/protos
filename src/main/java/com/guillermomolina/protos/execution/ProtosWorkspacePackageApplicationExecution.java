@@ -70,6 +70,19 @@ public final class ProtosWorkspacePackageApplicationExecution {
             requireNonEmptyEncodingBinding(stdoutEncodingBinding, "stdoutEncodingBinding");
             requireNonEmptyEncodingBinding(stderrEncodingBinding, "stderrEncodingBinding");
         }
+
+        ApplicationAuthority authority() {
+            return new ApplicationAuthority(
+                    applicationArguments,
+                    environmentNameDomain,
+                    environmentEntries,
+                    stdinBackend,
+                    stdoutBackend,
+                    stderrBackend,
+                    stdinEncodingBinding,
+                    stdoutEncodingBinding,
+                    stderrEncodingBinding);
+        }
     }
 
     public static ProtosExecutionOutcome execute(Request request) throws IOException {
@@ -107,37 +120,90 @@ public final class ProtosWorkspacePackageApplicationExecution {
                         request.plan(),
                         request.standardLibraryResolver());
         ProtosModuleKey entryKey = resolver.entryModule(request.entryLogicalModule());
-        ProtosPrelude prelude =
-                new ProtosCoreBootstrap().bootstrap(request.coreRoot(), resolver);
+        return executeEntry(
+                request.coreRoot(),
+                resolver,
+                entryKey,
+                request.authority(),
+                false,
+                "workspace package application Process failed",
+                processObserver,
+                runtimeHost);
+    }
+
+    /**
+     * Explicit application bootstrap authority shared by every package-backed application route:
+     * arguments, environment, standard-stream backends and exact Encoding bindings.
+     */
+    record ApplicationAuthority(
+            List<String> applicationArguments,
+            ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            String stdinEncodingBinding,
+            String stdoutEncodingBinding,
+            String stderrEncodingBinding) {
+        ApplicationAuthority {
+            Objects.requireNonNull(applicationArguments, "applicationArguments");
+            Objects.requireNonNull(environmentNameDomain, "environmentNameDomain");
+            Objects.requireNonNull(environmentEntries, "environmentEntries");
+            applicationArguments = List.copyOf(applicationArguments);
+            environmentEntries = List.copyOf(environmentEntries);
+            requireNonEmptyEncodingBinding(stdinEncodingBinding, "stdinEncodingBinding");
+            requireNonEmptyEncodingBinding(stdoutEncodingBinding, "stdoutEncodingBinding");
+            requireNonEmptyEncodingBinding(stderrEncodingBinding, "stderrEncodingBinding");
+        }
+    }
+
+    /**
+     * Bootstraps one fresh application Process over {@code resolver} and executes the canonical
+     * initial module {@code entryKey}. Termination of the Process is always requested before
+     * return; with {@code awaitTermination} this method also waits until the Process is
+     * TERMINATED, so a caller may release resources the resolver borrows immediately afterwards.
+     */
+    static ProtosExecutionOutcome executeEntry(
+            Path coreRoot,
+            ProtosModuleResolver resolver,
+            ProtosModuleKey entryKey,
+            ApplicationAuthority authority,
+            boolean awaitTermination,
+            String failureMessage,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, resolver);
 
         ProtosEncodingValue stdinEncoding =
-                requireEncoding(prelude, request.stdinEncodingBinding());
+                requireEncoding(prelude, authority.stdinEncodingBinding());
         ProtosEncodingValue stdoutEncoding =
-                requireEncoding(prelude, request.stdoutEncodingBinding());
+                requireEncoding(prelude, authority.stdoutEncodingBinding());
         ProtosEncodingValue stderrEncoding =
-                requireEncoding(prelude, request.stderrEncodingBinding());
+                requireEncoding(prelude, authority.stderrEncodingBinding());
 
         ProtosStandaloneProcessBootstrap.Result bootstrap =
                 ProtosStandaloneProcessBootstrap.create(
                         prelude,
-                        request.applicationArguments(),
-                        request.environmentNameDomain(),
-                        request.environmentEntries(),
-                        request.stdinBackend(),
-                        request.stdoutBackend(),
-                        request.stderrBackend(),
+                        authority.applicationArguments(),
+                        authority.environmentNameDomain(),
+                        authority.environmentEntries(),
+                        authority.stdinBackend(),
+                        authority.stdoutBackend(),
+                        authority.stderrBackend(),
                         stdinEncoding,
                         stdoutEncoding,
                         stderrEncoding,
                         null);
         ProtosProcessRuntime process = bootstrap.process();
+        ProtosPolyglotProcessContext processContext = null;
 
         try {
-            runtimeHost.hostProcess(
-                    process,
-                    InputStream.nullInputStream(),
-                    OutputStream.nullOutputStream(),
-                    OutputStream.nullOutputStream());
+            processContext =
+                    runtimeHost.hostProcess(
+                            process,
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream());
             processObserver.accept(process);
             return ProtosCanonicalInitialModuleExecution.execute(
                     prelude,
@@ -147,9 +213,13 @@ public final class ProtosWorkspacePackageApplicationExecution {
         } catch (IOException failure) {
             throw failure;
         } catch (RuntimeException failure) {
-            throw new IOException("workspace package application Process failed", failure);
+            throw new IOException(failureMessage, failure);
         } finally {
             process.requestTerminationForRuntime();
+            if (awaitTermination && processContext != null) {
+                process.awaitTerminationForRuntime();
+                processContext.awaitTerminalDispositionForRuntime();
+            }
         }
     }
 

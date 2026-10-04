@@ -7,6 +7,27 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.185-SNAPSHOT
+
+- `TOOL001-F2E5` (issue #93, PLAT048 B′) adds the CLI-neutral
+  `ProtosPackageRunDriver`, composing the exact external requirements preflight
+  with a host-supplied `ProtosExactPackageMaterializationProvider` (complete
+  exact identity -> one already-present selected root). When there are no
+  external requirements the run is the unchanged generation-1
+  `ProtosWorkspaceRunDriver` route and the provider is never consulted.
+  Otherwise each requirement, in lock order, gets exactly one provider lookup
+  and one F2E2 capture+verification, then F2E3 planning, F2E4 detach and
+  resource-scope reconciliation, and one mixed V2 application Process. The
+  driver owns every verified custody until reconciliation succeeds (provider
+  miss, verification, planning, detach or reconciliation failure closes them
+  all, with no application Process started); afterwards the scope owns them
+  and is closed only after the application Process has TERMINATED.
+  `VerifiedExternalPackage.fromIdentity` builds planning inputs from exact
+  identities, and the application bootstrap of
+  `ProtosWorkspacePackageApplicationExecution` is shared through a small
+  `executeEntry` helper with unchanged workspace behavior. No default
+  materialization backend, CLI, specification or semantic change.
+
 ## 0.3.184-SNAPSHOT
 
 - `PERF030-I` (lowerer-known establishment ordinals, issue #784) makes every

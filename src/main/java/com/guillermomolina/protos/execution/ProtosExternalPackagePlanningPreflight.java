@@ -96,6 +96,34 @@ final class ProtosExternalPackagePlanningPreflight {
                     : new ProtosExactExternalPackageIdentity.Git(packageId, exact, content);
         }
 
+        /**
+         * Pairs one complete exact identity with the custody F2E2 verified for exactly that
+         * identity. Every field comes from {@code identity}; nothing is derived from a Path.
+         */
+        static VerifiedExternalPackage fromIdentity(
+                ProtosExactExternalPackageIdentity identity,
+                ProtosCapturedFilesystemCustody custody) {
+            ProtosPackageContentIdentity content = identity.content();
+            return switch (identity) {
+                case ProtosExactExternalPackageIdentity.Registry exact ->
+                        registry(
+                                exact.packageId(),
+                                exact.exactVersion(),
+                                content.method(),
+                                content.algorithm(),
+                                content.hex(),
+                                custody);
+                case ProtosExactExternalPackageIdentity.Git exact ->
+                        git(
+                                exact.packageId(),
+                                exact.revision(),
+                                content.method(),
+                                content.algorithm(),
+                                content.hex(),
+                                custody);
+            };
+        }
+
         static VerifiedExternalPackage registry(
                 String packageId,
                 String exactVersion,
