@@ -1,0 +1,326 @@
+{
+  "schema": "protos-local-range-pe-guard-baseline-v1",
+  "description": "PERF030-F exact baseline of current non-proven indexed LocalRangeAccessor sites. Baselined entries are KNOWN RISKS, not PE-safe sites; remove each entry when product work proves or repairs it.",
+  "entries": [
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "ensureGeneralEstablishmentOrder(BytecodeNode)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "recomputeLastCompactFrameOrdinal(BytecodeNode)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "hasFrameBackedBindingAt(BytecodeNode,String,int)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "readFrameBackedBindingAt(String,int)",
+      "operation": "getObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "assignFrameBackedBindingAt(String,int,Object)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "createFrameBackedBindingAt(int,Object)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "createFrameBackedBindingAt(int,Object)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "adoptPresentFrameBackedBindings()",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "adoptPresentFrameBackedBindings()",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 1,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "isEmpty()",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "containsBinding(String)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "readBinding(String)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "readBinding(String)",
+      "operation": "getObject",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "bindingsSnapshot()",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "bindingsSnapshot()",
+      "operation": "getObject",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "bindingsSnapshot()",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "bindingsSnapshot()",
+      "operation": "getObject",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "operation": "getObject",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "appendBindingsTo(ArrayList,ArrayList)",
+      "operation": "getObject",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "removeBinding(String)",
+      "operation": "isCleared",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "removeBinding(String)",
+      "operation": "getObject",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "removeBinding(String)",
+      "operation": "clear",
+      "index": "offset",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "create(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "admitsCapturedAccess(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,String,int,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "RUNTIME_NAME_DERIVED",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal resolved from a runtime name via offsetOf and reachable without @TruffleBoundary."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
+      "operation": "getObject",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
+      "class": "ProtosInlineCallbackFrameBindings",
+      "method": "durableActivation(PreparedInlineLiteralCall,LocalRangeAccessor,ProtosFrameLexicalLayout,BytecodeNode,VirtualFrame)",
+      "operation": "clear",
+      "index": "ordinal",
+      "classification": "LOOP_INDEX",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: layout-length loop over the frame-backed range; PE-constant only if the loop bound folds and the loop is unrolled."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode",
+      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "isCleared",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
+      "class": "ProtosBytecodeRootNode",
+      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+      "operation": "setObject",
+      "index": "ordinal",
+      "classification": "METHOD_PARAMETER",
+      "occurrence": 0,
+      "rationale": "PERF030 known risk: ordinal arrives as an ordinary int parameter; caller constancy is not structurally proven."
+    }
+  ]
+}

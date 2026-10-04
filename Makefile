@@ -20,8 +20,12 @@ JAVA_TEST_LOG := target/test-java.log
 JAVA_SUREFIRE_REPORTS := target/surefire-reports
 JAVA_SLOW_TEST_GUARD := $(PYTHON) tools/java_slow_test_guard.py
 JAVA_SLOW_TEST_ALLOWLIST := tools/java_slow_tests_allowlist.txt
+# PERF030-F: opt-in static LocalRangeAccessor PE-index guard. Never a
+# prerequisite of test, test-java, test-protos, check, or verify.
+LOCAL_RANGE_PE_GUARD_BASELINE := tools/java_local_range_pe_guard_baseline.json
+LOCAL_RANGE_PE_GUARD_REPORT := target/local-range-pe-guard-report.json
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-stress test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-stress test-local-range-pe-guard test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -32,6 +36,8 @@ help:
 		'  make test           Run Java tests, then Protos tests' \
 		'  make test-java      Run the ordinary Java/JUnit test suite' \
 		'  make test-java-stress  Run explicit Java stress validation' \
+		'  make test-local-range-pe-guard  Opt-in static LocalRangeAccessor PE-index' \
+		'                      guard: self-tests, baseline check, target/ report' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
 		'  make check          Verify the toolchain, then run both test suites' \
 		'  make verify         Run a clean Maven verify lifecycle' \
@@ -87,6 +93,13 @@ test-java-stress:
 		-Djunit.jupiter.execution.parallel.enabled=false \
 		-Dtest=$(JAVA_STRESS_TESTS) \
 		test
+
+test-local-range-pe-guard:
+	$(PYTHON) tools/test_java_local_range_pe_guard.py
+	$(PYTHON) tools/java_local_range_pe_guard.py check \
+		--source src/main/java \
+		--baseline $(LOCAL_RANGE_PE_GUARD_BASELINE) \
+		--report $(LOCAL_RANGE_PE_GUARD_REPORT)
 
 test-protos:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
