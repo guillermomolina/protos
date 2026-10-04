@@ -1,0 +1,67 @@
+# TEST008 Java slow-test admission baseline (PLAT047 Candidate H).
+#
+# Read by tools/java_slow_test_guard.py during `make test-java`; the format
+# and decision math are in tools/java_slow_test_policy.py.
+#
+# Entries (one per line; '#' comment lines and blank lines are ignored):
+#   status <PENDING|UNAPPROVED_CANDIDATE_VALUES|APPROVED>
+#   policy <CONSTANT> <value|PENDING>
+#   control <cpu_jvm|fs_process> <reference seconds|PENDING>
+#   probe load_ratio <expected median in-run/idle probe ratio|PENDING>
+#   global java_phase <JAVA_TEST_JOBS> <normalized makespan seconds|PENDING>
+#   class <exact fully-qualified Java test class> <normalized seconds|PENDING>
+#
+# Rules:
+# - every value is an explicit project-owner decision recorded by a reviewed
+#   repository change with its rationale; never add or update entries
+#   automatically, from a failing run, or from CI history;
+# - class expectations are machine-normalized reduced-contention
+#   (confirmation-run) seconds; identities are exact, with no globs,
+#   prefixes, or substrings;
+# - control references are the canonical-reference timings of the control
+#   workloads defined in tools/java_slow_test_guard.py; changing a workload
+#   invalidates its reference;
+# - any PENDING value makes the guard report ERROR (BASELINE_PENDING).
+
+# TEST008-B: approved by the project owner on 2026-10-04. Calibrated on the
+# owner's reference development machine (16 cores, JAVA_TEST_JOBS=6) from
+# four local `make test-java` runs plus one serial run of the classes below:
+# references and expectations are medians of those observations. Per the
+# owner's decision the local run is the authoritative gate; under CI the
+# guard is advisory (see Makefile JAVA_SLOW_TEST_ADVISORY).
+# - FACTOR_MIN/MAX 0.5/4: a host 2x faster up to a heavily loaded one.
+# - COHERENCE_LIMIT 1.5: local controls agreed within 1.08.
+# - CLASS_REGRESSION_FACTOR 2.5: worst confirmation noise (9.24 s against
+#   5.7 s) passes; a 4x isolated regression fails.
+# - GLOBAL_REGRESSION_FACTOR 1.35: worst makespan noise 1.23x passes; a 40%
+#   slowdown fails, with a narrow margin.
+# - PARALLEL_INTERACTION_LIMIT 25: healthy classes reached 18x locally (JUnit
+#   class-parallel scheduling), so only severe interaction is detected.
+# - PATHOLOGICAL_CEILING_SECONDS 180: worst raw class time 32.65 s locally,
+#   92.25 s on CI.
+status APPROVED
+
+policy CONTROL_FACTOR_MIN 0.5
+policy CONTROL_FACTOR_MAX 4
+policy CONTROL_COHERENCE_LIMIT 1.5
+policy CLASS_REGRESSION_FACTOR 2.5
+policy GLOBAL_REGRESSION_FACTOR 1.35
+policy PARALLEL_INTERACTION_LIMIT 25
+policy PATHOLOGICAL_CEILING_SECONDS 180
+
+control cpu_jvm 0.62
+control fs_process 0.60
+probe load_ratio 1.54
+
+global java_phase 6 48.2
+
+# Exact identities migrated from the TEST008-A allowlist (project-owner
+# decisions of 2026-10-01); expectations are TEST008-B confirmation medians.
+# PERF031 independently reviews whether these workloads are appropriate.
+class com.guillermomolina.protos.cli.ProtosTestToolFileSelectionPublicIntegrationTest 3.8
+class com.guillermomolina.protos.cli.ProtosWorkspaceRunCliTest 1.6
+class com.guillermomolina.protos.conformance.ProtosFilesystemLibraryConformanceTest 1.0
+class com.guillermomolina.protos.execution.ProtosExternalPackagePlanningPreflightTest 5.7
+class com.guillermomolina.protos.execution.ProtosPackageExecutionPlanAdapterTest 2.0
+class com.guillermomolina.protos.execution.ProtosWorkspacePackageAuthorityIsolationIntegrationTest 1.3
+class com.guillermomolina.protos.execution.ProtosWorkspacePackagePreflightTest 1.0

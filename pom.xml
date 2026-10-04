@@ -26,6 +26,8 @@
         <graalvm.version>25.4.4.1.1</graalvm.version>
         <lsp4j.version>1.0.0</lsp4j.version>
         <protos.shade.skip>false</protos.shade.skip>
+        <!-- TEST008: the slow-test confirmation run reports separately. -->
+        <protos.surefire.reports>${project.build.directory}/surefire-reports</protos.surefire.reports>
     </properties>
 
     <dependencies>
@@ -100,6 +102,7 @@
                 <version>3.5.6</version>
                 <configuration>
                     <argLine>--enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow</argLine>
+                    <reportsDirectory>${protos.surefire.reports}</reportsDirectory>
                 </configuration>
             </plugin>
             <plugin>

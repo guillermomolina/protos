@@ -19,13 +19,19 @@ JAVA_STRESS_TESTS := ProtosJsonParserStress
 JAVA_TEST_LOG := target/test-java.log
 JAVA_SUREFIRE_REPORTS := target/surefire-reports
 JAVA_SLOW_TEST_GUARD := $(PYTHON) tools/java_slow_test_guard.py
-JAVA_SLOW_TEST_ALLOWLIST := tools/java_slow_tests_allowlist.txt
+JAVA_SLOW_TEST_BASELINE := tools/java_slow_test_baseline.txt
+JAVA_SLOW_TEST_STATE := target/java-slow-test
+JAVA_CONFIRM_TESTS ?=
+# Project-owner decision (TEST008-B): the local run is the authoritative
+# slow-test gate; under CI (CI=true) the guard only warns, never fails.
+JAVA_SLOW_TEST_ADVISORY ?= $(if $(filter true,$(CI)),--advisory,)
+JAVA_CONFIRM_REPORTS ?= $(JAVA_SLOW_TEST_STATE)/confirmation-reports
 # PERF030-F: opt-in static LocalRangeAccessor PE-index guard. Never a
 # prerequisite of test, test-java, test-protos, check, or verify.
 LOCAL_RANGE_PE_GUARD_BASELINE := tools/java_local_range_pe_guard_baseline.json
 LOCAL_RANGE_PE_GUARD_REPORT := target/local-range-pe-guard-report.json
 
-.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-stress test-local-range-pe-guard test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
+.PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
 
 help:
 	@printf '%s\n' \
@@ -63,16 +69,23 @@ build:
 
 test: test-java test-protos
 
+# TEST008/PLAT047: machine controls bracket the timed Java phases; the check
+# confirms suspects once (test-java-confirm) and decides PASS/FAIL/ERROR.
 test-java:
-	$(JAVA_SLOW_TEST_GUARD) reset --reports $(JAVA_SUREFIRE_REPORTS) --log $(JAVA_TEST_LOG)
+	$(JAVA_SLOW_TEST_GUARD) reset --reports $(JAVA_SUREFIRE_REPORTS) --log $(JAVA_TEST_LOG) --state $(JAVA_SLOW_TEST_STATE)
+	$(JAVA_SLOW_TEST_GUARD) controls --state $(JAVA_SLOW_TEST_STATE) --jobs $(JAVA_TEST_JOBS)
 	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-parallel
 	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-serial
-	$(JAVA_SLOW_TEST_GUARD) check --reports $(JAVA_SUREFIRE_REPORTS) --allowlist $(JAVA_SLOW_TEST_ALLOWLIST)
+	$(JAVA_SLOW_TEST_GUARD) check --reports $(JAVA_SUREFIRE_REPORTS) --baseline $(JAVA_SLOW_TEST_BASELINE) \
+		--state $(JAVA_SLOW_TEST_STATE) --jobs $(JAVA_TEST_JOBS) --log $(JAVA_TEST_LOG) \
+		--confirm-command "$(MAKE) --no-print-directory test-java-confirm" $(JAVA_SLOW_TEST_ADVISORY)
 
 # Streams one test-java phase live to the terminal while appending it to the
-# retained log, and fails with the phase's own unchanged exit status.
+# retained log, records its wall time, and fails with the phase's own
+# unchanged exit status.
 java-test-phase:
-	@$(JAVA_SLOW_TEST_GUARD) run --log $(JAVA_TEST_LOG) -- \
+	@$(JAVA_SLOW_TEST_GUARD) run --log $(JAVA_TEST_LOG) \
+		--timing $(JAVA_SLOW_TEST_STATE)/phases.txt --phase $(JAVA_TEST_PHASE) -- \
 		$(MAKE) --no-print-directory $(JAVA_TEST_PHASE)
 
 test-java-parallel:
@@ -87,6 +100,14 @@ test-java-parallel:
 
 test-java-serial:
 	$(MVN) $(MVN_FLAGS) -Dtest=$(JAVA_SERIAL_TESTS) test
+
+# The single reduced-contention confirmation run for slow-test suspects.
+test-java-confirm:
+	$(MVN) $(MVN_FLAGS) \
+		-Djunit.jupiter.execution.parallel.enabled=false \
+		"-Dtest=$(JAVA_CONFIRM_TESTS)" \
+		-Dprotos.surefire.reports=$(abspath $(JAVA_CONFIRM_REPORTS)) \
+		test
 
 test-java-stress:
 	$(MVN) $(MVN_FLAGS) \
