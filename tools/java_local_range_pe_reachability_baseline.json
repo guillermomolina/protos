@@ -61,10 +61,14 @@
       "index": "ordinal",
       "classification": "LOOP_INDEX",
       "occurrence": 0,
-      "pe_reachability": "NOT_PE_REACHABLE",
+      "pe_reachability": "BOUNDARY_CUT",
       "pe_provenance": [],
-      "pe_call_chain": [],
-      "rationale": "no call path from a Bytecode DSL operation root"
+      "pe_call_chain": [
+        "ProtosLexicalBindingAuthorityCalls.remove(ProtosLexicalBindingAuthority,String)",
+        "ProtosFrameLexicalBindingAuthority.removeBinding(String)",
+        "ProtosFrameLexicalBindingAuthority.recomputeLastCompactFrameOrdinal(BytecodeNode)"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosLexicalBindingAuthorityCalls.remove"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -198,11 +202,10 @@
       "pe_reachability": "BOUNDARY_CUT",
       "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost(ProtosObjectValue)",
-        "ProtosObjectValue.localSlotsSnapshot()",
+        "ProtosLexicalBindingAuthorityCalls.snapshot(ProtosLexicalBindingAuthority)",
         "ProtosFrameLexicalBindingAuthority.bindingsSnapshot()"
       ],
-      "rationale": "every PE path is cut by @TruffleBoundary ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosLexicalBindingAuthorityCalls.snapshot"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -215,11 +218,10 @@
       "pe_reachability": "BOUNDARY_CUT",
       "pe_provenance": [],
       "pe_call_chain": [
-        "ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost(ProtosObjectValue)",
-        "ProtosObjectValue.localSlotsSnapshot()",
+        "ProtosLexicalBindingAuthorityCalls.snapshot(ProtosLexicalBindingAuthority)",
         "ProtosFrameLexicalBindingAuthority.bindingsSnapshot()"
       ],
-      "rationale": "every PE path is cut by @TruffleBoundary ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost"
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosLexicalBindingAuthorityCalls.snapshot"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -289,10 +291,13 @@
       "index": "offset",
       "classification": "RUNTIME_NAME_DERIVED",
       "occurrence": 0,
-      "pe_reachability": "NOT_PE_REACHABLE",
+      "pe_reachability": "BOUNDARY_CUT",
       "pe_provenance": [],
-      "pe_call_chain": [],
-      "rationale": "no call path from a Bytecode DSL operation root"
+      "pe_call_chain": [
+        "ProtosLexicalBindingAuthorityCalls.remove(ProtosLexicalBindingAuthority,String)",
+        "ProtosFrameLexicalBindingAuthority.removeBinding(String)"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosLexicalBindingAuthorityCalls.remove"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -302,10 +307,13 @@
       "index": "offset",
       "classification": "RUNTIME_NAME_DERIVED",
       "occurrence": 0,
-      "pe_reachability": "NOT_PE_REACHABLE",
+      "pe_reachability": "BOUNDARY_CUT",
       "pe_provenance": [],
-      "pe_call_chain": [],
-      "rationale": "no call path from a Bytecode DSL operation root"
+      "pe_call_chain": [
+        "ProtosLexicalBindingAuthorityCalls.remove(ProtosLexicalBindingAuthority,String)",
+        "ProtosFrameLexicalBindingAuthority.removeBinding(String)"
+      ],
+      "rationale": "every PE path is cut by @TruffleBoundary ProtosLexicalBindingAuthorityCalls.remove"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",

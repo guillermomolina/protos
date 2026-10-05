@@ -31,22 +31,9 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
-      "method": "readCapturedMaterializedBindingOrNull(MaterializedLocalAccessor,ProtosLexicalEnvironment,String,int,BytecodeNode)",
+      "method": "capturedMaterializedOwnerFrameOrNull(MaterializedLocalAccessor,ProtosLexicalEnvironment,String,int,BytecodeNode)",
       "family": "MaterializedLocalAccessor",
       "operation": "isCleared",
-      "receiver": "accessor",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 0,
-      "receiver_class": "HELPER_PARAMETER_RECEIVER",
-      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
-      "pe_reachability": "PE_REACHABLE_PROVEN"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
-      "class": "ProtosBytecodeRootNode",
-      "method": "readCapturedMaterializedBindingOrNull(MaterializedLocalAccessor,ProtosLexicalEnvironment,String,int,BytecodeNode)",
-      "family": "MaterializedLocalAccessor",
-      "operation": "getObject",
       "receiver": "accessor",
       "bytecode_node": "bytecodeNode",
       "occurrence": 0,

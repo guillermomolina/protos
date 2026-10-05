@@ -7,6 +7,46 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.221-SNAPSHOT
+
+- `TEST009-O` (child of TEST009, guillermomolina/protos#795) bounds the three
+  shared host-heavy leaf families that became visible to partial evaluation
+  after the TEST009-M exact native-body specialization, without reverting it.
+  No semantic change and no specification change.
+  - The TEST009-M M5 global native-body PIC (`EnterClosureCall.nativeDirect`
+    with the `nativeCall` generic fallback) is retained unchanged;
+    `NativeCall.enterNativeBody` remains the only ordinary versus
+    suspension-capable selection authority.
+  - Encoding host leaves bounded: the portable codec transformations
+    (`PortableEncoder.encode`, `PortableDecoder.preview`) and the one-shot
+    result assembly in `ProtosEncodingValue` are `@TruffleBoundary`.
+    Receiver/arity/argument validation, octet range checks, `EncodingError`
+    translation and Bytes/String materialization in
+    `ProtosStandardEncodingProtocol` stay visible to partial evaluation.
+  - C-prime lazy plan construction bounded on cache miss: the six
+    Context-local C-prime plan caches in `ProtosLanguageContext` keep a
+    visible volatile fast path and move only the synchronized
+    double-checked `createPlan` publication into one `@TruffleBoundary`
+    helper per family. Plans remain lazy, Context-local and reused within a
+    Context; `ProtosPolyglotExecutionContextTest` pins that.
+  - Physical resource close host seam bounded: new
+    `ProtosHostResourceClose.closePhysically` is the shared host choke point
+    used by the four NIO File `Resource.close(CloseCompletion)`
+    implementations. Close admission, idempotence, closed state, callback
+    order and `RuntimeException` to `I_O_ERROR` translation in
+    `ProtosFileFlow` are unchanged; `ProtosHostResourceCloseTest` pins the
+    helper contract.
+  - Static PE guard baselines reconciled with their own generated
+    candidates after TEST009-M, BUG018-C and I056 renamed or rerouted
+    already-safe sites (local-range reachability and operands,
+    local-accessor, bytecode-api, generated-bytecode BCI). Every adopted
+    entry is `BOUNDARY_CUT`, proven, or `PROVEN_HANDLER_RETURN`; all guard
+    risk counters remain zero and no guard threshold changed.
+  - The strict Truffle compilation gate still fails on pre-existing
+    TEST009 send/call-preparation `VIRTUAL_RUNTIME_CALL` warnings that do
+    not traverse the O seams. The 21 residual code-installation-too-large
+    failures are deferred to later TEST009 work.
+
 ## 0.3.220-SNAPSHOT
 
 - `I070-A1` (guillermomolina/protos#713, parent #712) removes three stale,

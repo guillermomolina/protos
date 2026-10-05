@@ -535,9 +535,16 @@ final class ProtosNioCapturedTreeFilesystemBackend
                 return;
             }
             closed = true;
-            IOException failure = cleanup.closeAndRelease();
-            cleanable.clean();
-            if (failure == null) {
+            boolean released =
+                    ProtosHostResourceClose.closePhysically(
+                            () -> {
+                                IOException failure = cleanup.closeAndRelease();
+                                cleanable.clean();
+                                if (failure != null) {
+                                    throw failure;
+                                }
+                            });
+            if (released) {
                 completion.succeeded();
             } else {
                 completion.failed();

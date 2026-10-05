@@ -85,6 +85,18 @@
       "occurrence": 0,
       "provenance": "BYTECODE_INDEX=HELPER_PARAMETER",
       "pe_reachability": "BOUNDARY_CUT"
+    },
+    {
+      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
+      "class": "ProtosFrameLexicalBindingAuthority",
+      "method": "readPresentFrameBackedValueAt(int)",
+      "family": "BytecodeNode",
+      "operation": "getLocalValue",
+      "arity": 3,
+      "arguments": "BYTECODE_INDEX=current.getBytecodeIndex(), LOCAL_OFFSET=frameBackedLayout.localOffsetAt(ordinal)",
+      "occurrence": 0,
+      "provenance": "BYTECODE_INDEX=RUNTIME_VALUE;LOCAL_OFFSET=RUNTIME_VALUE",
+      "pe_reachability": "BOUNDARY_CUT"
     }
   ]
 }

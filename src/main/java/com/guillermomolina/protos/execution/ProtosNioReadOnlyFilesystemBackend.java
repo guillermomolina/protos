@@ -234,10 +234,9 @@ public final class ProtosNioReadOnlyFilesystemBackend
                 return;
             }
             closed = true;
-            try {
-                channel.close();
+            if (ProtosHostResourceClose.closePhysically(channel)) {
                 completion.succeeded();
-            } catch (IOException failure) {
+            } else {
                 completion.failed();
             }
         }

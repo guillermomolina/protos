@@ -347,10 +347,9 @@ public final class ProtosNioConfinedFilesystemBackend
                 return;
             }
             closed = true;
-            try {
-                channel.close();
+            if (ProtosHostResourceClose.closePhysically(channel)) {
                 completion.succeeded();
-            } catch (IOException failure) {
+            } else {
                 completion.failed();
             }
         }

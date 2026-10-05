@@ -5,7 +5,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
-      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "isCleared",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
@@ -17,7 +17,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
-      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "setObject",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
@@ -48,7 +48,7 @@
       "occurrence": 0,
       "receiver_class": "FIELD_DERIVED_RECEIVER",
       "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
-      "pe_reachability": "NOT_PE_REACHABLE"
+      "pe_reachability": "BOUNDARY_CUT"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -60,18 +60,6 @@
       "occurrence": 0,
       "receiver_class": "FIELD_DERIVED_RECEIVER",
       "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
-      "pe_reachability": "BOUNDARY_CUT"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "readFrameBackedBindingAt(String,int)",
-      "operation": "getObject",
-      "receiver": "frameBackedLocals",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 0,
-      "receiver_class": "FIELD_DERIVED_RECEIVER",
-      "bytecode_node_class": "CURRENT_ROOT_DERIVED_BYTECODE_NODE",
       "pe_reachability": "BOUNDARY_CUT"
     },
     {
@@ -161,18 +149,6 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "readBinding(String)",
-      "operation": "getObject",
-      "receiver": "frameBackedLocals",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 0,
-      "receiver_class": "FIELD_DERIVED_RECEIVER",
-      "bytecode_node_class": "CURRENT_ROOT_DERIVED_BYTECODE_NODE",
-      "pe_reachability": "BOUNDARY_CUT"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
       "method": "bindingsSnapshot()",
       "operation": "isCleared",
       "receiver": "frameBackedLocals",
@@ -186,31 +162,7 @@
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "bindingsSnapshot()",
-      "operation": "getObject",
-      "receiver": "frameBackedLocals",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 0,
-      "receiver_class": "FIELD_DERIVED_RECEIVER",
-      "bytecode_node_class": "CURRENT_ROOT_DERIVED_BYTECODE_NODE",
-      "pe_reachability": "BOUNDARY_CUT"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "bindingsSnapshot()",
       "operation": "isCleared",
-      "receiver": "frameBackedLocals",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 1,
-      "receiver_class": "FIELD_DERIVED_RECEIVER",
-      "bytecode_node_class": "CURRENT_ROOT_DERIVED_BYTECODE_NODE",
-      "pe_reachability": "BOUNDARY_CUT"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "bindingsSnapshot()",
-      "operation": "getObject",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
       "occurrence": 1,
@@ -234,31 +186,7 @@
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
-      "operation": "getObject",
-      "receiver": "frameBackedLocals",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 0,
-      "receiver_class": "FIELD_DERIVED_RECEIVER",
-      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
-      "pe_reachability": "BOUNDARY_CUT"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
       "operation": "isCleared",
-      "receiver": "frameBackedLocals",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 1,
-      "receiver_class": "FIELD_DERIVED_RECEIVER",
-      "bytecode_node_class": "HELPER_PARAMETER_BYTECODE_NODE",
-      "pe_reachability": "BOUNDARY_CUT"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
-      "operation": "getObject",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
       "occurrence": 1,
@@ -300,19 +228,7 @@
       "occurrence": 0,
       "receiver_class": "FIELD_DERIVED_RECEIVER",
       "bytecode_node_class": "CURRENT_ROOT_DERIVED_BYTECODE_NODE",
-      "pe_reachability": "NOT_PE_REACHABLE"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "removeBinding(String)",
-      "operation": "getObject",
-      "receiver": "frameBackedLocals",
-      "bytecode_node": "bytecodeNode",
-      "occurrence": 0,
-      "receiver_class": "FIELD_DERIVED_RECEIVER",
-      "bytecode_node_class": "CURRENT_ROOT_DERIVED_BYTECODE_NODE",
-      "pe_reachability": "NOT_PE_REACHABLE"
+      "pe_reachability": "BOUNDARY_CUT"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -324,7 +240,7 @@
       "occurrence": 0,
       "receiver_class": "FIELD_DERIVED_RECEIVER",
       "bytecode_node_class": "CURRENT_ROOT_DERIVED_BYTECODE_NODE",
-      "pe_reachability": "NOT_PE_REACHABLE"
+      "pe_reachability": "BOUNDARY_CUT"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosInlineCallbackFrameBindings.java",
@@ -389,7 +305,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "isCleared",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
@@ -401,7 +317,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "setObject",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
@@ -413,7 +329,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "isCleared",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",
@@ -425,7 +341,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "setObject",
       "receiver": "frameBackedLocals",
       "bytecode_node": "bytecodeNode",

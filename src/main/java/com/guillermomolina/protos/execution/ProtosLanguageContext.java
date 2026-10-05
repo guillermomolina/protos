@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.TruffleFile;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.nodes.Node;
@@ -101,10 +102,15 @@ final class ProtosLanguageContext {
         if (existing != null) {
             return existing;
         }
+        return createTaskCPrimeEntryPlanOnCacheMiss();
+    }
+
+    /** Lazy Context-local plan construction; kept out of partial evaluation on cache miss. */
+    @TruffleBoundary
+    private ProtosTaskCPrimeEntryExecution.Plan createTaskCPrimeEntryPlanOnCacheMiss() {
         synchronized (this) {
             if (taskCPrimeEntryPlan == null) {
-                taskCPrimeEntryPlan =
-                        ProtosTaskCPrimeEntryExecution.createPlan(language);
+                taskCPrimeEntryPlan = ProtosTaskCPrimeEntryExecution.createPlan(language);
             }
             return taskCPrimeEntryPlan;
         }
@@ -115,10 +121,15 @@ final class ProtosLanguageContext {
         if (existing != null) {
             return existing;
         }
+        return createTextWriterCPrimePlanOnCacheMiss();
+    }
+
+    /** Lazy Context-local plan construction; kept out of partial evaluation on cache miss. */
+    @TruffleBoundary
+    private ProtosTextWriterCPrimeExecution.Plan createTextWriterCPrimePlanOnCacheMiss() {
         synchronized (this) {
             if (textWriterCPrimePlan == null) {
-                textWriterCPrimePlan =
-                        ProtosTextWriterCPrimeExecution.createPlan(language);
+                textWriterCPrimePlan = ProtosTextWriterCPrimeExecution.createPlan(language);
             }
             return textWriterCPrimePlan;
         }
@@ -129,40 +140,53 @@ final class ProtosLanguageContext {
         if (existing != null) {
             return existing;
         }
+        return createTextReaderCPrimePlanOnCacheMiss();
+    }
+
+    /** Lazy Context-local plan construction; kept out of partial evaluation on cache miss. */
+    @TruffleBoundary
+    private ProtosTextReaderCPrimeExecution.Plan createTextReaderCPrimePlanOnCacheMiss() {
         synchronized (this) {
             if (textReaderCPrimePlan == null) {
-                textReaderCPrimePlan =
-                        ProtosTextReaderCPrimeExecution.createPlan(language);
+                textReaderCPrimePlan = ProtosTextReaderCPrimeExecution.createPlan(language);
             }
             return textReaderCPrimePlan;
         }
     }
 
     ProtosBufferedByteReaderCPrimeExecution.Plan bufferedByteReaderCPrimePlanForRuntime() {
-        ProtosBufferedByteReaderCPrimeExecution.Plan existing =
-                bufferedByteReaderCPrimePlan;
+        ProtosBufferedByteReaderCPrimeExecution.Plan existing = bufferedByteReaderCPrimePlan;
         if (existing != null) {
             return existing;
         }
+        return createBufferedByteReaderCPrimePlanOnCacheMiss();
+    }
+
+    /** Lazy Context-local plan construction; kept out of partial evaluation on cache miss. */
+    @TruffleBoundary
+    private ProtosBufferedByteReaderCPrimeExecution.Plan createBufferedByteReaderCPrimePlanOnCacheMiss() {
         synchronized (this) {
             if (bufferedByteReaderCPrimePlan == null) {
-                bufferedByteReaderCPrimePlan =
-                        ProtosBufferedByteReaderCPrimeExecution.createPlan(language);
+                bufferedByteReaderCPrimePlan = ProtosBufferedByteReaderCPrimeExecution.createPlan(language);
             }
             return bufferedByteReaderCPrimePlan;
         }
     }
 
     ProtosBufferedByteWriterCPrimeExecution.Plan bufferedByteWriterCPrimePlanForRuntime() {
-        ProtosBufferedByteWriterCPrimeExecution.Plan existing =
-                bufferedByteWriterCPrimePlan;
+        ProtosBufferedByteWriterCPrimeExecution.Plan existing = bufferedByteWriterCPrimePlan;
         if (existing != null) {
             return existing;
         }
+        return createBufferedByteWriterCPrimePlanOnCacheMiss();
+    }
+
+    /** Lazy Context-local plan construction; kept out of partial evaluation on cache miss. */
+    @TruffleBoundary
+    private ProtosBufferedByteWriterCPrimeExecution.Plan createBufferedByteWriterCPrimePlanOnCacheMiss() {
         synchronized (this) {
             if (bufferedByteWriterCPrimePlan == null) {
-                bufferedByteWriterCPrimePlan =
-                        ProtosBufferedByteWriterCPrimeExecution.createPlan(language);
+                bufferedByteWriterCPrimePlan = ProtosBufferedByteWriterCPrimeExecution.createPlan(language);
             }
             return bufferedByteWriterCPrimePlan;
         }
@@ -173,10 +197,15 @@ final class ProtosLanguageContext {
         if (existing != null) {
             return existing;
         }
+        return createIoReleaseCPrimePlanOnCacheMiss();
+    }
+
+    /** Lazy Context-local plan construction; kept out of partial evaluation on cache miss. */
+    @TruffleBoundary
+    private ProtosIoReleaseCPrimeExecution.Plan createIoReleaseCPrimePlanOnCacheMiss() {
         synchronized (this) {
             if (ioReleaseCPrimePlan == null) {
-                ioReleaseCPrimePlan =
-                        ProtosIoReleaseCPrimeExecution.createPlan(language);
+                ioReleaseCPrimePlan = ProtosIoReleaseCPrimeExecution.createPlan(language);
             }
             return ioReleaseCPrimePlan;
         }

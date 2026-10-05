@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.runtime;
 
 
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.interop.InteropLibrary;
 import com.oracle.truffle.api.library.ExportLibrary;
 import com.oracle.truffle.api.library.ExportMessage;
@@ -202,6 +203,12 @@ public final class ProtosEncodingValue implements ProtosRepresentedValue {
         StreamingEncoder encoder = newStreamingEncoderForRuntime();
         EncodePreview body = encoder.encode(text);
         EncodePreview finish = body.nextEncoder().finish();
+        return concatenateEncodedBytes(body, finish);
+    }
+
+    /** Host-only one-shot byte assembly; no Encoding policy is decided here. */
+    @TruffleBoundary
+    private static byte[] concatenateEncodedBytes(EncodePreview body, EncodePreview finish) {
         byte[] first = body.bytes();
         byte[] last = finish.bytes();
         byte[] result = Arrays.copyOf(first, first.length + last.length);
@@ -218,16 +225,21 @@ public final class ProtosEncodingValue implements ProtosRepresentedValue {
         if (preview.status() != DecodeStatus.EOF) {
             throw new ConversionFailure("decoder did not establish one-shot EOF");
         }
+        return assembleOneShotText(preview.units(), source.length);
+    }
 
+    /** Host-only one-shot text assembly over the decoded units of one complete input. */
+    @TruffleBoundary
+    private static String assembleOneShotText(List<DecodedUnit> units, int sourceLength)
+            throws ConversionFailure {
         int consumed = 0;
         StringBuilder result = new StringBuilder();
-        java.util.List<DecodedUnit> units = preview.units();
         for (int index = 0; index < units.size(); index++) {
             DecodedUnit unit = units.get(index);
             consumed += unit.sourceBytes();
             result.append(unit.text());
         }
-        if (consumed != source.length) {
+        if (consumed != sourceLength) {
             throw new ConversionFailure("decoder did not consume complete one-shot input");
         }
         return result.toString();
@@ -262,7 +274,9 @@ public final class ProtosEncodingValue implements ProtosRepresentedValue {
 
         private PortableEncoder(PortableKind kind) { this.kind = kind; }
 
+        /** Host Charset transformation leaf. */
         @Override
+        @TruffleBoundary
         public EncodePreview encode(String text) throws ConversionFailure {
             CharsetEncoder encoder = charset(kind).newEncoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
@@ -301,7 +315,9 @@ public final class ProtosEncodingValue implements ProtosRepresentedValue {
             this.setupDone = setupDone;
         }
 
+        /** Host scalar-decoding leaf; per-flow decoder state stays immutable. */
         @Override
+        @TruffleBoundary
         public DecodePreview preview(byte[] bytes, boolean endOfInput) {
             Objects.requireNonNull(bytes, "bytes");
             ArrayList<DecodedUnit> units = new ArrayList<>();

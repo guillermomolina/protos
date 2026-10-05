@@ -36,6 +36,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.math.BigInteger;
 import java.net.URI;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -196,6 +197,54 @@ class ProtosPolyglotExecutionContextTest {
         ProtosLanguageContext second = captureCurrentLanguageContext();
 
         assertNotSame(first, second);
+    }
+
+    @Test
+    void cPrimePlansAreLazyContextLocalAndReusedWithinOneContext() {
+        List<Object> first = captureCPrimePlansTwice();
+        List<Object> second = captureCPrimePlansTwice();
+
+        assertEquals(12, first.size());
+        for (int family = 0; family < 6; family++) {
+            assertTrue(first.get(family) != null, "plan " + family + " was not created");
+            assertTrue(
+                    first.get(family) == first.get(family + 6),
+                    "plan " + family + " was not reused within one Context");
+            assertNotSame(first.get(family), second.get(family));
+        }
+    }
+
+    private static List<Object> captureCPrimePlansTwice() {
+        AtomicReference<List<Object>> captured = new AtomicReference<>();
+        ProtosClosureValue capture =
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            ProtosLanguageContext context = ProtosLanguageContext.current();
+                            ArrayList<Object> plans = new ArrayList<>();
+                            for (int round = 0; round < 2; round++) {
+                                plans.add(context.taskCPrimeEntryPlanForRuntime());
+                                plans.add(context.textWriterCPrimePlanForRuntime());
+                                plans.add(context.textReaderCPrimePlanForRuntime());
+                                plans.add(context.bufferedByteReaderCPrimePlanForRuntime());
+                                plans.add(context.bufferedByteWriterCPrimePlanForRuntime());
+                                plans.add(context.ioReleaseCPrimePlanForRuntime());
+                            }
+                            captured.set(plans);
+                            return ProtosNullValue.INSTANCE;
+                        });
+        ProtosPrelude prelude = minimalPrelude();
+        try (ProtosPolyglotExecutionContext polyglot = open()) {
+            ProtosExecutionOutcome outcome =
+                    polyglot.execute(
+                            source("capture()", "test009-o-cprime-plans.protos"),
+                            activationWith(prelude, "capture", capture));
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        }
+        List<Object> result = captured.get();
+        if (result == null) {
+            throw new AssertionError("capture callback did not observe C-prime plans");
+        }
+        return result;
     }
 
     private static ProtosLanguageContext captureCurrentLanguageContext() {
