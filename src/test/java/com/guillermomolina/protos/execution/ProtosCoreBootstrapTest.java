@@ -168,10 +168,11 @@ class ProtosCoreBootstrapTest {
                         "Process",
                         "TextReader",
                         "TextWriter",
-                        "BufferedReader",
-                        "BufferedWriter",
                         "import"),
                 bindings.localSlotsSnapshot().keySet());
+        // D167: the buffered byte factories are std:io members, not Prelude bindings.
+        assertFalse(bindings.hasLocalSlot("BufferedReader"));
+        assertFalse(bindings.hasLocalSlot("BufferedWriter"));
         String bootstrapSource =
                 Files.readString(
                         Path.of(

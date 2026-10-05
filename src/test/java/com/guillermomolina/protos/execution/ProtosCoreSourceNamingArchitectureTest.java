@@ -58,8 +58,6 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "Process.protos",
                     "TextReader.protos",
                     "TextWriter.protos",
-                    "BufferedReader.protos",
-                    "BufferedWriter.protos",
                     "Bytes.protos");
 
     private static final Set<String> REVIEWED_RESPONSIBILITY_SOURCES =

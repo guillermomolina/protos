@@ -166,12 +166,6 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("TextWriter.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("BufferedReader.protos"))
-                .call(bootstrapActivation);
-        sourceLoader
-                .load(coreDirectory.resolve("BufferedWriter.protos"))
-                .call(bootstrapActivation);
-        sourceLoader
                 .load(coreDirectory.resolve("import.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -343,12 +337,6 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue textWriterFactory =
                 requirePrototype(
                         bootstrapContext, "TextWriter", ProtosObjectValue.rootObject());
-        ProtosObjectValue bufferedReaderFactory =
-                requirePrototype(
-                        bootstrapContext, "BufferedReader", ProtosObjectValue.rootObject());
-        ProtosObjectValue bufferedWriterFactory =
-                requirePrototype(
-                        bootstrapContext, "BufferedWriter", ProtosObjectValue.rootObject());
         ProtosObjectValue importFacility =
                 requirePrototype(
                         bootstrapContext, "import", ProtosObjectValue.rootObject());
@@ -377,10 +365,14 @@ public final class ProtosCoreBootstrap {
                 textReaderFactory, bootstrapActivation);
         ProtosStandardTextWriterProtocol.installFactory(
                 textWriterFactory, bootstrapActivation);
-        ProtosStandardBufferedByteIoProtocol.installReaderFactory(
-                bufferedReaderFactory, bufferedBytesPrototype, bootstrapActivation);
-        ProtosStandardBufferedByteIoProtocol.installWriterFactory(
-                bufferedWriterFactory, bufferedBytesPrototype, bootstrapActivation);
+        // D167: the buffered byte factories are std:io standard-module members, not Core sources
+        // or Prelude bindings.
+        ProtosObjectValue bufferedReaderFactory =
+                ProtosStandardBufferedByteIoProtocol.createReaderFactory(
+                        bufferedBytesPrototype, bootstrapActivation);
+        ProtosObjectValue bufferedWriterFactory =
+                ProtosStandardBufferedByteIoProtocol.createWriterFactory(
+                        bufferedBytesPrototype, bootstrapActivation);
 
         if (bootstrapContext.hasLocalSlot("_coreRootObject")) {
             throw new IllegalStateException(
@@ -411,7 +403,9 @@ public final class ProtosCoreBootstrap {
                 tcpConnectionPrototype,
                 tcpListenerPrototype,
                 ipAddressPrototype,
-                ipEndpointPrototype);
+                ipEndpointPrototype,
+                bufferedReaderFactory,
+                bufferedWriterFactory);
         validateFrozenStandardGraph(
                 bootstrapContext,
                 preludeBindings,
@@ -422,7 +416,9 @@ public final class ProtosCoreBootstrap {
                 tcpConnectionPrototype,
                 tcpListenerPrototype,
                 ipAddressPrototype,
-                ipEndpointPrototype);
+                ipEndpointPrototype,
+                bufferedReaderFactory,
+                bufferedWriterFactory);
 
         return new ProtosPrelude(
                 preludeBindings,
@@ -433,22 +429,33 @@ public final class ProtosCoreBootstrap {
                 tcpListenerPrototype,
                 ipAddressPrototype,
                 ipEndpointPrototype,
-                standardModuleMembers(ipAddressPrototype, ipEndpointPrototype));
+                standardModuleMembers(
+                        ipAddressPrototype,
+                        ipEndpointPrototype,
+                        bufferedReaderFactory,
+                        bufferedWriterFactory));
     }
 
     /**
-     * Exact runtime-owned initial members of standard modules (D172).
+     * Exact runtime-owned initial members of standard modules (D172, D167).
      *
      * <p>This is configuration for the general module-member seam in {@link ProtosPrelude}; module
      * creation itself has no knowledge of these keys.
      */
     private static Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers(
-            ProtosObjectValue ipAddressPrototype, ProtosObjectValue ipEndpointPrototype) {
+            ProtosObjectValue ipAddressPrototype,
+            ProtosObjectValue ipEndpointPrototype,
+            ProtosObjectValue bufferedReaderFactory,
+            ProtosObjectValue bufferedWriterFactory) {
         return Map.of(
                 new ProtosModuleKey("std:network/IpAddresses"),
                 Map.of("IpAddress", ipAddressPrototype),
                 new ProtosModuleKey("std:network/IpEndpoints"),
-                Map.of("IpEndpoint", ipEndpointPrototype));
+                Map.of("IpEndpoint", ipEndpointPrototype),
+                new ProtosModuleKey("std:io/BufferedReader"),
+                Map.of("BufferedReader", bufferedReaderFactory),
+                new ProtosModuleKey("std:io/BufferedWriter"),
+                Map.of("BufferedWriter", bufferedWriterFactory));
     }
 
 

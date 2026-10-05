@@ -54,7 +54,5 @@ _corePreludeBindings: Context {
     Process: Process
     TextReader: TextReader
     TextWriter: TextWriter
-    BufferedReader: BufferedReader
-    BufferedWriter: BufferedWriter
     import: import
 }

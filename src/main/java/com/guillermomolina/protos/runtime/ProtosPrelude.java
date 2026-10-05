@@ -18,9 +18,11 @@
 package com.guillermomolina.protos.runtime;
 
 import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 public final class ProtosPrelude {
     private final ProtosObjectValue bindings;
@@ -32,6 +34,7 @@ public final class ProtosPrelude {
     private final ProtosObjectValue runtimeIpAddressPrototype;
     private final ProtosObjectValue runtimeIpEndpointPrototype;
     private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
+    private final Set<ProtosObjectValue> standardModuleMemberIdentities;
 
     public ProtosPrelude(
             ProtosObjectValue bindings,
@@ -115,6 +118,7 @@ public final class ProtosPrelude {
         this.runtimeIpAddressPrototype = runtimeIpAddressPrototype;
         this.runtimeIpEndpointPrototype = runtimeIpEndpointPrototype;
         this.standardModuleMembers = copyStandardModuleMembers(standardModuleMembers);
+        this.standardModuleMemberIdentities = identitiesOf(this.standardModuleMembers);
 
         requireFrozenDirectChildOfObject(runtimeIpAddressPrototype, "IpAddress");
         requireFrozenDirectChildOfObject(runtimeIpEndpointPrototype, "IpEndpoint");
@@ -192,6 +196,15 @@ public final class ProtosPrelude {
             copy.put(key, Collections.unmodifiableMap(moduleMembers));
         }
         return Collections.unmodifiableMap(copy);
+    }
+
+    private static Set<ProtosObjectValue> identitiesOf(
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>> members) {
+        Set<ProtosObjectValue> identities = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Map<String, ProtosObjectValue> moduleMembers : members.values()) {
+            identities.addAll(moduleMembers.values());
+        }
+        return Collections.unmodifiableSet(identities);
     }
 
     public ProtosObjectValue bindings() {
@@ -359,16 +372,17 @@ public final class ProtosPrelude {
     }
 
     /**
-     * Nullable-safe identity test used only by isolation transfer machinery.
+     * Exact-identity test used only by isolation transfer machinery.
      *
-     * <p>The canonical IP families are FROZEN, carry no authority and are shared by every Actor
-     * and P execution of this Prelude, so transfer keeps them as exact anchors instead of
-     * importing {@code std:network} modules to recover them.
+     * <p>Every registered standard-module member is a FROZEN runtime-owned standard object shared
+     * by all Actor and P executions of this Prelude, so transfer keeps it as an exact anchor
+     * instead of copying it or importing its module to recover it. The test consults only the
+     * registration made at construction: it performs no import, module initialization, cache
+     * mutation, source execution, or resolver request.
      */
-    public boolean isIpFamilyPrototypeForRuntime(Object candidate) {
-        return candidate != null
-                && (candidate == runtimeIpAddressPrototype
-                        || candidate == runtimeIpEndpointPrototype);
+    public boolean isStandardModuleMemberForRuntime(Object candidate) {
+        return candidate instanceof ProtosObjectValue object
+                && standardModuleMemberIdentities.contains(object);
     }
 
     /**

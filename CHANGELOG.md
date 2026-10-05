@@ -7,6 +7,29 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.217-SNAPSHOT
+
+- `I060-B` (guillermomolina/protos#663) implements D167 Candidate D: the
+  buffered byte wrapper factories move from Core/Prelude to `std:io`.
+  `protos/lib/core/BufferedReader.protos` and `BufferedWriter.protos` and their
+  Prelude bindings are removed. Bare `BufferedReader`/`BufferedWriter` now
+  signal `SlotNotFound`. New minimal `protos/lib/io/BufferedReader.protos` and
+  `BufferedWriter.protos` do not redeclare the factories. Core bootstrap creates
+  them through new `ProtosStandardBufferedByteIoProtocol.createReaderFactory`/
+  `createWriterFactory` (reusing the unchanged installers), freezes them with
+  the standard graph and registers them in the general standard-module-member
+  seam. Module instances stay Actor-local while the factory identity is shared,
+  and each construction still creates a fresh wrapper bound to the caller's
+  execution domain. `ProtosPrelude.isStandardModuleMemberForRuntime` is a new
+  exact-identity predicate over every registered member. It replaces
+  `isIpFamilyPrototypeForRuntime` in Actor, P and detached transfer, so
+  registered members stay exact shared anchors without any import, module
+  initialization or source execution. The buffered state machines and the D117
+  and PLAT031 contracts are unchanged. New
+  `ProtosStandardBufferedByteIoPlacementTest` guards placement, identity, fresh
+  wrappers and transfer without imports; existing buffered tests obtain the
+  factory through the module-member seam.
+
 ## 0.3.216-SNAPSHOT
 
 - `TEST009-M` (guillermomolina/protos#795) batches five compilerability

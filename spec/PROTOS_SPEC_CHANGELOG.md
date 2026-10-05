@@ -23,6 +23,18 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.444] - 2026-10-05
+
+### I060 / D167 Candidate D — Standard Library placement of the buffered byte wrappers
+- `spec/io/IO_CORE.md`: `BufferedReader` and `BufferedWriter` are no longer
+  described as frozen-Prelude bindings. The exact frozen standard factories
+  are published as `std:io/BufferedReader.BufferedReader` and
+  `std:io/BufferedWriter.BufferedWriter`, reachable only through an explicit
+  import. Every Actor-local instance of each module publishes the same factory
+  identity. The borrowing/owning factory forms, fresh wrapper per construction,
+  ownership rules and the complete buffering, D117 and PLAT031 contracts are
+  unchanged.
+
 ## [0.1.443] - 2026-10-05
 
 ### I064 / D171 — Remove public `Filesystem.captureTree`

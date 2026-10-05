@@ -305,11 +305,11 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 Set.of("call", "owning"));
         assertNativeSelectors(
                 "BufferedReader",
-                ordinaryBinding(prelude, "BufferedReader"),
+                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude),
                 Set.of("call", "owning"));
         assertNativeSelectors(
                 "BufferedWriter",
-                ordinaryBinding(prelude, "BufferedWriter"),
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude),
                 Set.of("call", "owning"));
         assertNativeSelectors(
                 "import",

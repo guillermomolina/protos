@@ -236,9 +236,7 @@ final class ProtosPerf006Plat031BufferedReaderCPrimeTest {
         return assertInstanceOf(
                 ProtosObjectValue.class,
                 ProtosInvocation.invokeMessage(
-                        f.prelude.bindings()
-                                .readLocalSlot("BufferedReader")
-                                .orElseThrow(),
+                        ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(f.prelude),
                         "call",
                         List.of(f.source),
                         f.module));

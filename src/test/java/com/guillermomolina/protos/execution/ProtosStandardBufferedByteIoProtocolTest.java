@@ -93,10 +93,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedReader")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude);
         assertSame(ProtosObjectValue.rootObject(), factory.parent().orElseThrow());
         assertTrue(factory.isFrozen());
         assertEquals(Set.of("call", "owning"), factory.localSlotsSnapshot().keySet());
@@ -122,10 +119,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue source = source(activation);
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedReader")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude);
         ProtosObjectValue reader =
                 (ProtosObjectValue)
                         call(factory, "call", List.of(source), activation);
@@ -155,10 +149,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue target = target(activation);
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedWriter")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
         ProtosObjectValue writer =
                 (ProtosObjectValue)
                         call(factory, "call", List.of(target), activation);
@@ -196,10 +187,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedWriter")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
 
         ProtosObjectValue firstTarget = target(activation);
         ProtosObjectValue borrowed =
@@ -268,15 +256,9 @@ class ProtosStandardBufferedByteIoProtocolTest {
                         .home());
 
         ProtosObjectValue readerFactory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedReader")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude);
         ProtosObjectValue writerFactory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedWriter")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
 
         assertThrows(
                 ProtosSignalException.class,
@@ -291,10 +273,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedReader")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude);
         ProtosObjectValue reader =
                 (ProtosObjectValue)
                         call(
@@ -315,10 +294,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosActivation activation = prelude.newModuleActivation();
         PendingReadSource pending = pendingReadSource(activation, true);
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedReader")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude);
         ProtosObjectValue reader =
                 (ProtosObjectValue)
                         call(factory, "call", List.of(pending.source), activation);
@@ -355,10 +331,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosActivation activation = prelude.newModuleActivation();
         PendingReadSource pending = pendingReadSource(activation, false);
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedReader")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedReaderFactory(prelude);
         ProtosObjectValue reader =
                 (ProtosObjectValue)
                         call(factory, "call", List.of(pending.source), activation);
@@ -380,10 +353,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosActivation activation = prelude.newModuleActivation();
         PendingWriteTarget pending = pendingWriteTarget(activation);
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedWriter")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
         ProtosObjectValue writer =
                 (ProtosObjectValue)
                         call(factory, "call", List.of(pending.target), activation);
@@ -424,10 +394,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         FailingWritePendingCloseTarget target =
                 failingWritePendingCloseTarget(activation);
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedWriter")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
         ProtosObjectValue writer =
                 (ProtosObjectValue)
                         call(
@@ -462,10 +429,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosActivation activation = prelude.newModuleActivation();
         PendingWriteTarget pending = pendingWriteTarget(activation);
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedWriter")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
         ProtosObjectValue writer =
                 (ProtosObjectValue)
                         call(factory, "call", List.of(pending.target), activation);
@@ -497,10 +461,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosActivation activation = prelude.newModuleActivation();
         PendingWriteTarget pending = pendingWriteTarget(activation);
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedWriter")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
         ProtosObjectValue writer =
                 (ProtosObjectValue)
                         call(factory, "call", List.of(pending.target), activation);
@@ -543,10 +504,7 @@ class ProtosStandardBufferedByteIoProtocolTest {
         ProtosActivation activation = prelude.newModuleActivation();
         PendingWriteTarget pending = pendingWriteTarget(activation);
         ProtosObjectValue factory =
-                (ProtosObjectValue)
-                        prelude.bindings()
-                                .readLocalSlot("BufferedWriter")
-                                .orElseThrow();
+                ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(prelude);
         ProtosObjectValue writer =
                 (ProtosObjectValue)
                         call(factory, "call", List.of(pending.target), activation);

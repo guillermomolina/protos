@@ -357,9 +357,7 @@ final class ProtosPerf006Plat031BufferedWriterCPrimeTest {
         return assertInstanceOf(
                 ProtosObjectValue.class,
                 ProtosInvocation.invokeMessage(
-                        f.prelude.bindings()
-                                .readLocalSlot("BufferedWriter")
-                                .orElseThrow(),
+                        ProtosStandardModuleMemberTestSupport.bufferedWriterFactory(f.prelude),
                         "call",
                         List.of(f.target),
                         f.module));

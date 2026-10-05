@@ -20,9 +20,29 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.*;
 import java.util.*;
 
-/** Standard Core BufferedReader/BufferedWriter factories and wrapper protocol surfaces. */
+/**
+ * Standard {@code std:io} BufferedReader/BufferedWriter factories and wrapper protocol surfaces.
+ *
+ * <p>Each factory is a frozen runtime-owned standard-module member (D167). It captures no
+ * activation: every construction uses the caller's activation, so each wrapper is fresh and bound
+ * to the caller's execution domain.
+ */
 public final class ProtosStandardBufferedByteIoProtocol {
     private ProtosStandardBufferedByteIoProtocol() {}
+
+    /** Creates and installs the frozen std:io BufferedReader factory (D167). */
+    public static ProtosObjectValue createReaderFactory(
+            ProtosObjectValue bytesPrototype, ProtosActivation bootstrap) {
+        return installReaderFactory(
+                new ProtosObjectValue(ProtosObjectValue.rootObject()), bytesPrototype, bootstrap);
+    }
+
+    /** Creates and installs the frozen std:io BufferedWriter factory (D167). */
+    public static ProtosObjectValue createWriterFactory(
+            ProtosObjectValue bytesPrototype, ProtosActivation bootstrap) {
+        return installWriterFactory(
+                new ProtosObjectValue(ProtosObjectValue.rootObject()), bytesPrototype, bootstrap);
+    }
 
     public static ProtosObjectValue installReaderFactory(
             ProtosObjectValue factory,
@@ -48,11 +68,11 @@ public final class ProtosStandardBufferedByteIoProtocol {
         Objects.requireNonNull(bootstrap, "bootstrap");
         if (factory.parent().orElse(null) != ProtosObjectValue.rootObject()) {
             throw new IllegalArgumentException(
-                    "Core buffered byte factory must delegate directly to Object");
+                    "standard buffered byte factory must delegate directly to Object");
         }
         if (!factory.isOpen() || !factory.localSlotsSnapshot().isEmpty()) {
             throw new IllegalArgumentException(
-                    "source-created Core buffered byte factory must begin open and without local slots");
+                    "standard buffered byte factory must begin open and without local slots");
         }
 
         factory.createLocalSlot(

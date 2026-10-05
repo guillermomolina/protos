@@ -8,7 +8,7 @@ import com.guillermomolina.protos.execution.ProtosIoReleaseCPrimeExecution;
 import java.math.BigInteger;
 import java.util.*;
 
-/** Ordered bounded state machine for the standard Core byte buffering wrappers. */
+/** Ordered bounded state machine for the standard {@code std:io} byte buffering wrappers. */
 public final class ProtosBufferedByteIo {
     private static final int READ_AHEAD = 8192;
     private static final int MAX_OUTPUT = 1024 * 1024;
