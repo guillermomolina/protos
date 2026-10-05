@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.207-SNAPSHOT
+
+- `TOOL009-G2` (parent TOOL009-G/#798; D185/#799 Candidate C′) exposes
+  logical Case discovery and exact selection in the Test Tool.
+  `protos test --list-cases` runs the normal TestPlan, `--file`/`--directory`
+  source-scope and D153 discovery pipeline, prints a
+  `protos.test.cases/v1` JSON document (`ref` plus presentation-only
+  `display` per Case, in authoritative CasePlan order) on stdout, and stops
+  before progress, scheduling, fresh Case Processes or Test body invocation.
+  The repeatable `--case CASE_REF` option restricts execution (or listing) to
+  existing discovered CasePlan entries by exact match only, intersected with
+  any active source scope and kept in CasePlan order regardless of argument
+  order; malformed, unsupported-version, repeated, unknown/stale and
+  out-of-scope refs fail before scheduling. The frozen CaseRef V1 spelling is
+  `v1.` followed by lowercase hex of the UTF-8 std JSON encoding of
+  `[sourceAssociation, selector]`, so the complete logical SourceIdentity
+  (including a project-tree CaseAuthority descriptor) and the D153 selector
+  are its only inputs. Refs are never decoded; ExecutionRequirement,
+  CaseAuthority, resource, jobs and scheduler authorities are unchanged.
+
 ## 0.3.206-SNAPSHOT
 
 - `I065` (#668; D173 Candidate A) threads an explicit, policy-neutral Network

@@ -1,0 +1,130 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! D185 exact logical Case selection and the V1 Case listing projection.
+//!
+//! Selection is a filter over the already-discovered authoritative CasePlan:
+//! it retains existing CasePlan entries, in CasePlan order, whose derived
+//! CaseRef was explicitly requested. It never decodes a ref and never builds
+//! a sourceAssociation, so ExecutionRequirement, CaseAuthority and resource
+//! authority keep flowing from the retained entry unchanged. Source scopes are
+//! applied before discovery, so a ref outside the active scope is simply
+//! unknown here and fails closed.
+
+JSON: import("std:json/JSON")
+Arrays: import("std:collections/Array")
+Discovery: import("self:Discovery")
+CaseRef: import("self:CaseRef")
+
+selectionError: () => {
+    Error().signal()
+}
+
+// Validates the complete supplied ref set before discovery results are
+// consulted: every ref must be a supported well-formed CaseRef and repeated
+// exact refs fail rather than being deduplicated. An empty set selects every
+// discovered Case.
+begin: (caseRefs) => {
+    requested: Map()
+
+    caseRefs.each((text) => {
+        CaseRef.requireSupported(text)
+
+        requested.containsKey(text).ifTrue(() => {
+            selectionError()
+        })
+        requested[text] = false
+    })
+
+    {
+        active: caseRefs.size() > 0
+        requested: requested
+        discovered: Map()
+    }
+}
+
+// Records the refs of one discovered source's Cases and returns the retained
+// existing entries in their CasePlan order. Two discovered Cases deriving one
+// ref would be a Tool authority error, never a silent merge.
+retain: (selection, cases) => {
+    Arrays.filter(cases, (entry) => {
+        ref: CaseRef.ref(entry)
+
+        selection.discovered.containsKey(ref).ifTrue(() => {
+            selectionError()
+        })
+        selection.discovered[ref] = true
+
+        retained: true
+        selection.active.ifTrue(() => {
+            retained = selection.requested.containsKey(ref)
+            retained.ifTrue(() => {
+                selection.requested[ref] = true
+            })
+        })
+
+        retained
+    })
+}
+
+// A projection keeps the complete discovery signature: execution must still
+// match the D153 declaration signature exactly, even when a subset of the
+// source's Cases is selected.
+projection: (discoveryProjection, retainedCases) => {
+    selected:
+        Array(
+            Discovery.projectionSignature(discoveryProjection),
+            retainedCases
+        )
+    selected.freeze()
+}
+
+// Called once every in-scope source has been discovered. Any requested ref
+// that matched no discovered Case is unknown, stale, or outside the active
+// source scope; the invocation fails before progress or scheduling.
+requireComplete: (selection) => {
+    selection.requested.each((ref, matched) => {
+        matched.ifFalse(() => {
+            selectionError()
+        })
+    })
+
+    null
+}
+
+// protos.test.cases/v1 discovery document over the final selected
+// projections, in authoritative logical CasePlan order.
+listing: (projections) => {
+    cases: Array()
+
+    projections.each((selected) => {
+        Discovery.projectionPlan(selected).each((entry) => {
+            cases = Array(
+                ...cases,
+                JSON.object(
+                    "ref", JSON.string(CaseRef.ref(entry)),
+                    "display", JSON.string(CaseRef.display(entry))
+                )
+            )
+        })
+    })
+
+    JSON.encode(
+        JSON.object(
+            "schema", JSON.string("protos.test.cases/v1"),
+            "cases", JSON.array(...cases)
+        )
+    )
+}

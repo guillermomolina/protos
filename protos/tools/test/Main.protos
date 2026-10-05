@@ -24,16 +24,19 @@ SuiteGraph: import("self:SuiteGraph")
 RepositorySuite: import("self:RepositorySuite")
 RepositoryCorpusPlans: import("self:RepositoryCorpusPlans")
 Discovery: import("self:Discovery")
-CasePlan: import("self:LogicalCasePlan")
 LogicalCaseRunner: import("self:LogicalCaseRunner")
 LogicalCaseResult: import("self:LogicalCaseResult")
 LogicalCaseDispatch: import("self:LogicalCaseDispatch")
+CaseRef: import("self:CaseRef")
+CaseSelection: import("self:CaseSelection")
 
 arguments: process.args()
 jobs: Options.jobs(arguments)
 resourceCatalogPath: Options.resourceCatalogPath(arguments)
 filePaths: Options.filePaths(arguments)
 directoryPaths: Options.directoryPaths(arguments)
+listCases: Options.listCases(arguments)
+caseRefs: Options.caseRefs(arguments)
 
 resourceCatalog: ResourceCatalog.empty()
 (resourceCatalogPath === null).ifFalse(() => {
@@ -349,6 +352,11 @@ logicalSourceSpecs: Map()
 // own corpus's execution requirement.
 corpusExecutionRequirements: Map()
 
+// D185 exact selection intersects the source-scoped discovery below. The
+// complete --case set is validated here; each ref is then resolved only
+// against CaseRefs derived from the Cases this invocation discovers.
+caseSelection: CaseSelection.begin(caseRefs)
+
 executionSuiteIndex: 0
 executionSuites.each((planned) => {
     corpusExecutionRequirements[planned.leaf.corpus] =
@@ -454,13 +462,30 @@ executionSuites.each((planned) => {
             Error().signal()
         })
 
-        logicalProjections =
-            Array(
-                ...logicalProjections,
-                projection
+        retainedCases:
+            CaseSelection.retain(
+                caseSelection,
+                projectionCases
             )
 
-        projectionCases.each((ignored) => {
+        selectedProjection: projection
+        caseSelection.active.ifTrue(() => {
+            selectedProjection =
+                CaseSelection.projection(
+                    projection,
+                    retainedCases
+                )
+        })
+
+        (retainedCases.size() > 0).ifTrue(() => {
+            logicalProjections =
+                Array(
+                    ...logicalProjections,
+                    selectedProjection
+                )
+        })
+
+        retainedCases.each((ignored) => {
             metadata:
                 Array(
                     executionSuiteIndex,
@@ -479,216 +504,235 @@ executionSuites.each((planned) => {
         })
     })
 
-    suite: {
-        leaf: planned.leaf
-        phaseName: planned.phaseName
-        corpusBinding: planned.corpusBinding
-        binding: planned.binding
-        logicalCaseCount: logicalCaseCount
-    }
-    suite.freeze()
+    // A suite none of whose Cases were exactly selected takes no part in
+    // progress or scheduling, as with source scopes.
+    retainSuite: logicalCaseCount > 0
+    caseSelection.active.ifFalse(() => {
+        retainSuite = true
+    })
 
-    logicalExecutionSuites =
-        Array(
-            ...logicalExecutionSuites,
-            suite
-        )
+    retainSuite.ifTrue(() => {
+        suite: {
+            leaf: planned.leaf
+            phaseName: planned.phaseName
+            corpusBinding: planned.corpusBinding
+            binding: planned.binding
+            logicalCaseCount: logicalCaseCount
+        }
+        suite.freeze()
 
-    executionSuiteIndex =
-        executionSuiteIndex + 1
+        logicalExecutionSuites =
+            Array(
+                ...logicalExecutionSuites,
+                suite
+            )
+
+        executionSuiteIndex =
+            executionSuiteIndex + 1
+    })
 })
+
+CaseSelection.requireComplete(caseSelection)
 
 logicalExecutionSuites.freeze()
 logicalProjections.freeze()
 logicalCaseMetadata.freeze()
 executionSuites = logicalExecutionSuites
 
-// BUG010: every suite's D120 progress state/observer is created here, before
-// any logical Case is scheduled, so the first "[phase] 0/N" line and every
-// later milestone are observable while the invocation is still running
-// rather than only after the logical Case runner has fully drained.
-suiteProgressStates: Array()
-suiteObservers: Array()
-suiteInfrastructureFailed: Array()
-
-suiteIndex: 0
-(() => suiteIndex < executionSuites.size()).whileTrue() {
-    planned: executionSuites[suiteIndex]
-    suiteProgress:
-        startProgress(
-            planned.phaseName,
-            planned.logicalCaseCount
-        )
-
-    suiteProgressStates =
-        Array(...suiteProgressStates, suiteProgress)
-    suiteObservers =
-        Array(
-            ...suiteObservers,
-            Progress.observer(suiteProgress)
-        )
-    suiteInfrastructureFailed =
-        Array(...suiteInfrastructureFailed, false)
-
-    suiteIndex = suiteIndex + 1
-}
-
-logicalResults: Array()
-logicalResults.freeze()
-
-// D174: lifecycle observation exists before suite-native Case execution.
-// Presentation policy is deliberately separate and remains unchanged here.
-//
-// D176: `caseLifecycleSink` is the Test-Tool-internal host watchdog. It owns
-// the stalled in-flight diagnostic entirely, so normal Tool output stays the
-// compact D120 aggregate progress above.
-invocationLifecycle:
-    Progress.beginLifecycle(
-        caseLifecycleSink
-    )
-
-logicalCaseDisplayReference: (entry) => {
-    association:
-        CasePlan.sourceAssociation(entry)
-
-    reference:
-        association[0] + ":" +
-        association[1] + "::" +
-        CasePlan.selector(entry)
-
-    reference
-}
-
-logicalLifecycleObserver:
-    Progress.lifecycleObserver(
-        invocationLifecycle,
-        logicalCaseDisplayReference
-    )
-
-// BUG010: the narrow completion hook LogicalCaseRunner exposes alongside its
-// D174 lifecycle observer. It fires the instant one logical Case's physical
-// execution crosses the terminal barrier, at that Case's stable logical
-// index, independently of when the remaining Cases complete. It only
-// classifies that one completion and forwards it to its suite's already-
-// created D120 observer; it never reorders or reprojects `logicalResults`.
-logicalCompletionObserver: (index, completion) => {
-    metadata: logicalCaseMetadata[index]
-    targetSuiteIndex: metadata[0]
-    spec: metadata[1]
-
-    projected: LogicalCaseResult.project(completion)
-    classification: LogicalCaseResult.classification(projected)
-
-    evaluation: null
-    resultInfrastructureFailed: false
-
-    (classification == "pass").ifTrue(() => {
-        evaluation =
-            Runner.resultTuple(
-                true,
-                null
-            )
-    })
-
-    (classification == "fail").ifTrue(() => {
-        evaluation =
-            Runner.resultTuple(
-                false,
-                null
-            )
-    })
-
-    (classification == "tool-error").ifTrue(() => {
-        resultInfrastructureFailed = true
-        suiteInfrastructureFailed[targetSuiteIndex] = true
-    })
-
-    suiteObservers[targetSuiteIndex](
-        spec,
-        evaluation,
-        resultInfrastructureFailed
-    )
-
-    null
-}
-
-(logicalProjections.size() > 0).ifTrue(() => {
-    logicalCompletions:
-        LogicalCaseRunner.run(
-            logicalProjections,
-            LogicalCaseDispatch.logicalCaseExecutorAsync(
-                corpusExecutionRequirements,
-                testExecutionRequirementBindings
-            ),
-            jobs,
-            logicalLifecycleObserver,
-            logicalCompletionObserver
-        ).value()
-
-    logicalResults =
-        LogicalCaseResult.projectAll(
-            logicalCompletions
-        )
-})
-
-(Progress.inFlightCount(invocationLifecycle) == 0).ifFalse(() => {
-    Error().signal()
-})
-
-(logicalResults.size() == logicalCaseMetadata.size()).ifFalse(() => {
-    Error().signal()
-})
-
-// Every suite's D120 progress state was already driven to completion above,
-// incrementally, by logicalCompletionObserver as each logical Case reached
-// its terminal event. Only the per-phase terminal summary remains.
-suiteFinishIndex: 0
-(() => suiteFinishIndex < executionSuites.size()).whileTrue() {
-    Progress.finishPhase(
-        suiteProgressStates[suiteFinishIndex],
-        suiteInfrastructureFailed[suiteFinishIndex]
-    )
-
-    suiteFinishIndex = suiteFinishIndex + 1
-}
-
-(Progress.inFlightCount(invocationLifecycle) == 0).ifFalse(() => {
-    Error().signal()
-})
-
-// D155 precedence, derived solely from the current Logical Case result
-// projection: any tool error => infrastructure-aborted/3; otherwise any guest
-// failure => completed/1; otherwise completed/0.
-logicalExitCode: LogicalCaseResult.exitCode(logicalResults)
-
 finalOutcome: null
 
-(logicalExitCode == 3).ifTrue(() => {
-    finalOutcome =
-        Runner.testRunOutcome(
-            "infrastructure-aborted",
-            null,
-            null,
-            3
-        )
-})
+// D185 --list-cases projects the final selected authoritative CasePlan as the
+// protos.test.cases/v1 document on stdout and stops before progress state,
+// LogicalCaseRunner scheduling, fresh Case Processes or Test body invocation.
+listCases.ifTrue(() => {
+    listingWriter: TextWriter(process.stdout(), process.stdoutEncoding())
+    listingWriter.writeLine(CaseSelection.listing(logicalProjections)).value()
 
-(logicalExitCode == 3).ifFalse(() => {
     finalOutcome =
         Runner.testRunOutcomeCompletedWithExit(
             null,
-            logicalExitCode
+            0
         )
 })
 
-Progress.finishInvocation(
-    progressPhases,
-    Runner.testRunOutcomeStatus(finalOutcome),
-    emitProgress
-)
+listCases.ifFalse(() => {
+    // BUG010: every suite's D120 progress state/observer is created here, before
+    // any logical Case is scheduled, so the first "[phase] 0/N" line and every
+    // later milestone are observable while the invocation is still running
+    // rather than only after the logical Case runner has fully drained.
+    suiteProgressStates: Array()
+    suiteObservers: Array()
+    suiteInfrastructureFailed: Array()
 
-writer: TextWriter(process.stdout(), process.stdoutEncoding())
-writer.writeLine("Protos test tool bootstrap").value()
-writer.writeLine(process.args()[0]).value()
+    suiteIndex: 0
+    (() => suiteIndex < executionSuites.size()).whileTrue() {
+        planned: executionSuites[suiteIndex]
+        suiteProgress:
+            startProgress(
+                planned.phaseName,
+                planned.logicalCaseCount
+            )
+
+        suiteProgressStates =
+            Array(...suiteProgressStates, suiteProgress)
+        suiteObservers =
+            Array(
+                ...suiteObservers,
+                Progress.observer(suiteProgress)
+            )
+        suiteInfrastructureFailed =
+            Array(...suiteInfrastructureFailed, false)
+
+        suiteIndex = suiteIndex + 1
+    }
+
+    logicalResults: Array()
+    logicalResults.freeze()
+
+    // D174: lifecycle observation exists before suite-native Case execution.
+    // Presentation policy is deliberately separate and remains unchanged here.
+    //
+    // D176: `caseLifecycleSink` is the Test-Tool-internal host watchdog. It owns
+    // the stalled in-flight diagnostic entirely, so normal Tool output stays the
+    // compact D120 aggregate progress above.
+    invocationLifecycle:
+        Progress.beginLifecycle(
+            caseLifecycleSink
+        )
+
+    logicalCaseDisplayReference: (entry) => {
+        CaseRef.display(entry)
+    }
+
+    logicalLifecycleObserver:
+        Progress.lifecycleObserver(
+            invocationLifecycle,
+            logicalCaseDisplayReference
+        )
+
+    // BUG010: the narrow completion hook LogicalCaseRunner exposes alongside its
+    // D174 lifecycle observer. It fires the instant one logical Case's physical
+    // execution crosses the terminal barrier, at that Case's stable logical
+    // index, independently of when the remaining Cases complete. It only
+    // classifies that one completion and forwards it to its suite's already-
+    // created D120 observer; it never reorders or reprojects `logicalResults`.
+    logicalCompletionObserver: (index, completion) => {
+        metadata: logicalCaseMetadata[index]
+        targetSuiteIndex: metadata[0]
+        spec: metadata[1]
+
+        projected: LogicalCaseResult.project(completion)
+        classification: LogicalCaseResult.classification(projected)
+
+        evaluation: null
+        resultInfrastructureFailed: false
+
+        (classification == "pass").ifTrue(() => {
+            evaluation =
+                Runner.resultTuple(
+                    true,
+                    null
+                )
+        })
+
+        (classification == "fail").ifTrue(() => {
+            evaluation =
+                Runner.resultTuple(
+                    false,
+                    null
+                )
+        })
+
+        (classification == "tool-error").ifTrue(() => {
+            resultInfrastructureFailed = true
+            suiteInfrastructureFailed[targetSuiteIndex] = true
+        })
+
+        suiteObservers[targetSuiteIndex](
+            spec,
+            evaluation,
+            resultInfrastructureFailed
+        )
+
+        null
+    }
+
+    (logicalProjections.size() > 0).ifTrue(() => {
+        logicalCompletions:
+            LogicalCaseRunner.run(
+                logicalProjections,
+                LogicalCaseDispatch.logicalCaseExecutorAsync(
+                    corpusExecutionRequirements,
+                    testExecutionRequirementBindings
+                ),
+                jobs,
+                logicalLifecycleObserver,
+                logicalCompletionObserver
+            ).value()
+
+        logicalResults =
+            LogicalCaseResult.projectAll(
+                logicalCompletions
+            )
+    })
+
+    (Progress.inFlightCount(invocationLifecycle) == 0).ifFalse(() => {
+        Error().signal()
+    })
+
+    (logicalResults.size() == logicalCaseMetadata.size()).ifFalse(() => {
+        Error().signal()
+    })
+
+    // Every suite's D120 progress state was already driven to completion above,
+    // incrementally, by logicalCompletionObserver as each logical Case reached
+    // its terminal event. Only the per-phase terminal summary remains.
+    suiteFinishIndex: 0
+    (() => suiteFinishIndex < executionSuites.size()).whileTrue() {
+        Progress.finishPhase(
+            suiteProgressStates[suiteFinishIndex],
+            suiteInfrastructureFailed[suiteFinishIndex]
+        )
+
+        suiteFinishIndex = suiteFinishIndex + 1
+    }
+
+    (Progress.inFlightCount(invocationLifecycle) == 0).ifFalse(() => {
+        Error().signal()
+    })
+
+    // D155 precedence, derived solely from the current Logical Case result
+    // projection: any tool error => infrastructure-aborted/3; otherwise any guest
+    // failure => completed/1; otherwise completed/0.
+    logicalExitCode: LogicalCaseResult.exitCode(logicalResults)
+
+    (logicalExitCode == 3).ifTrue(() => {
+        finalOutcome =
+            Runner.testRunOutcome(
+                "infrastructure-aborted",
+                null,
+                null,
+                3
+            )
+    })
+
+    (logicalExitCode == 3).ifFalse(() => {
+        finalOutcome =
+            Runner.testRunOutcomeCompletedWithExit(
+                null,
+                logicalExitCode
+            )
+    })
+
+    Progress.finishInvocation(
+        progressPhases,
+        Runner.testRunOutcomeStatus(finalOutcome),
+        emitProgress
+    )
+
+    writer: TextWriter(process.stdout(), process.stdoutEncoding())
+    writer.writeLine("Protos test tool bootstrap").value()
+    writer.writeLine(process.args()[0]).value()
+})
 
 finalOutcome

@@ -82,6 +82,31 @@ directoryOption: CommandLine.option({
     help: null
 })
 
+// D185 Case discovery listing flag and repeatable exact CaseRef selector.
+listCasesOption: CommandLine.option({
+    key: "listCases"
+    long: "list-cases"
+    short: null
+    minValues: 0
+    maxValues: 0
+    minOccurrences: 0
+    maxOccurrences: 1
+    valueName: null
+    help: null
+})
+
+caseOption: CommandLine.option({
+    key: "case"
+    long: "case"
+    short: null
+    minValues: 1
+    maxValues: 1
+    minOccurrences: 0
+    maxOccurrences: null
+    valueName: "CASE_REF"
+    help: null
+})
+
 commandSpec: CommandLine.command({
     name: "test"
     help: null
@@ -89,7 +114,9 @@ commandSpec: CommandLine.command({
         jobsOption,
         resourceCatalogOption,
         fileOption,
-        directoryOption
+        directoryOption,
+        listCasesOption,
+        caseOption
     ]
     positionals: []
     subcommands: []
@@ -105,7 +132,8 @@ commandSpec: CommandLine.command({
 // A selected value token is projected literally and is never reinterpreted as a
 // second option merely because it begins with "-". Unknown tokens, including
 // "--", attached forms such as --jobs=3 and future foreign options, remain
-// ignored exactly as before.
+// ignored exactly as before. The selected value-less --list-cases flag is
+// projected alone.
 projectArguments: (arguments) => {
     newBuilder: () => {
         {
@@ -167,11 +195,16 @@ projectArguments: (arguments) => {
                 (argument === "--jobs") ||
                 (argument === "--resource-catalog") ||
                 (argument === "--file") ||
-                (argument === "--directory")
+                (argument === "--directory") ||
+                (argument === "--case")
 
             selected.ifTrue(() => {
                 appendBuilt(builder, argument)
                 expectingSelectedValue = true
+            })
+
+            (argument === "--list-cases").ifTrue(() => {
+                appendBuilt(builder, argument)
             })
         })
     })
@@ -194,6 +227,8 @@ parse: (arguments) => {
     resourceCatalogPathValue: null
     filePathValues: []
     directoryPathValues: []
+    listCasesValue: false
+    caseRefValues: []
 
     parsed.command.options.each((occurrence) => {
         (occurrence.key == "jobs").ifTrue(() => {
@@ -217,16 +252,30 @@ parse: (arguments) => {
                 occurrence.value
             ]
         })
+
+        (occurrence.key == "listCases").ifTrue(() => {
+            listCasesValue = true
+        })
+
+        (occurrence.key == "case").ifTrue(() => {
+            caseRefValues = [
+                ...caseRefValues,
+                occurrence.value
+            ]
+        })
     })
 
     filePathValues.freeze()
     directoryPathValues.freeze()
+    caseRefValues.freeze()
 
     [
         jobsValue,
         resourceCatalogPathValue,
         filePathValues,
-        directoryPathValues
+        directoryPathValues,
+        listCasesValue,
+        caseRefValues
     ]
 }
 
@@ -252,3 +301,13 @@ directoryPaths: (arguments) => {
     parse(arguments)[3]
 }
 
+// D185: --list-cases projects the authoritative CasePlan instead of executing it.
+listCases: (arguments) => {
+    parse(arguments)[4]
+}
+
+// D185 exact CaseRef selectors in CLI order. CLI order never defines plan
+// order; ref validation and resolution stay with CaseSelection.
+caseRefs: (arguments) => {
+    parse(arguments)[5]
+}

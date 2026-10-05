@@ -1,0 +1,177 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! D185 versioned canonical logical CaseRef, codec V1.
+//!
+//! CaseIdentity = authoritative logical SourceIdentity (the complete inert
+//! CasePlan sourceAssociation, including any D133 CaseAuthority descriptor)
+//! + D153 local selector. Declaration position, declaration signature,
+//! ExecutionRequirement and every physical/runtime fact are not inputs.
+//!
+//! V1 spelling: "v1." followed by the lowercase hexadecimal UTF-8 octets of
+//! the compact std JSON encoding of the two-element array
+//! [sourceAssociation, selector], where Strings encode as JSON strings and
+//! Arrays as JSON arrays. JSON framing makes the payload injective over that
+//! nested String/Array data, so distinct identities never share a ref; hex
+//! keeps the ref an ASCII, shell-safe scalar regardless of Unicode content.
+//!
+//! A CaseRef is opaque to consumers and creates no authority: it is never
+//! decoded. Selection compares it exactly against refs derived from the
+//! already-discovered authoritative CasePlan. The V1 spelling is frozen;
+//! an incompatible encoding must use another version.
+
+JSON: import("std:json/JSON")
+Arrays: import("std:collections/Array")
+CasePlan: import("self:LogicalCasePlan")
+
+caseRefError: () => {
+    Error().signal()
+}
+
+versionPrefix: "v1."
+
+identityNode: null
+identityNode = (value) => {
+    node: null
+
+    String.recognizes(value).ifTrue(() => {
+        node = JSON.string(value)
+    })
+
+    Array.recognizes(value).ifTrue(() => {
+        node = JSON.array(...Arrays.map(value, identityNode))
+    })
+
+    (node === null).ifTrue(() => {
+        caseRefError()
+    })
+
+    node
+}
+
+// The std JSON encoder has no public hexadecimal facility to reuse; this
+// nibble mapping is the only local encoding step of the V1 spelling.
+hexDigit: (digit) => {
+    octet: 48 + digit
+    (digit >= 10).ifTrue(() => {
+        octet = 87 + digit
+    })
+    octet
+}
+
+derive: (sourceAssociation, selector) => {
+    Array.recognizes(sourceAssociation).ifFalse(() => {
+        caseRefError()
+    })
+    String.recognizes(selector).ifFalse(() => {
+        caseRefError()
+    })
+    (selector == "").ifTrue(() => {
+        caseRefError()
+    })
+
+    payload:
+        JSON.encode(
+            JSON.array(
+                identityNode(sourceAssociation),
+                JSON.string(selector)
+            )
+        )
+
+    output: Encoding.UTF8.encode(versionPrefix)
+    Encoding.UTF8.encode(payload).each((octet) => {
+        output.add(hexDigit(octet.div(16)))
+        output.add(hexDigit(octet.mod(16)))
+    })
+
+    Encoding.UTF8.decode(output)
+}
+
+ref: (entry) => {
+    derive(
+        CasePlan.sourceAssociation(entry),
+        CasePlan.selector(entry)
+    )
+}
+
+// Presentation only: not authority, not a selector and not a parse contract.
+display: (entry) => {
+    association: CasePlan.sourceAssociation(entry)
+
+    association[0] + ":" +
+        association[1] + "::" +
+        CasePlan.selector(entry)
+}
+
+// Fail-closed syntactic validation of a supplied ref before any lookup:
+// "v" DIGITS "." then a non-empty even-length lowercase hexadecimal payload.
+// A well-formed version other than V1 is unsupported. A syntactically valid
+// V1 ref is never decoded; whether it names a Case is decided only by exact
+// lookup against the discovered CasePlan.
+requireSupported: (text) => {
+    String.recognizes(text).ifFalse(() => {
+        caseRefError()
+    })
+
+    octets: Encoding.UTF8.encode(text)
+    (octets.size() < 4).ifTrue(() => {
+        caseRefError()
+    })
+    (octets[0] == 118).ifFalse(() => {
+        caseRefError()
+    })
+
+    index: 1
+    (() => (index < octets.size()) && (octets[index] >= 48) && (octets[index] <= 57)).whileTrue(() => {
+        index = index + 1
+    })
+
+    (index == 1).ifTrue(() => {
+        caseRefError()
+    })
+    (index < octets.size()).ifFalse(() => {
+        caseRefError()
+    })
+    (octets[index] == 46).ifFalse(() => {
+        caseRefError()
+    })
+
+    payloadSize: octets.size() - index - 1
+    (payloadSize == 0).ifTrue(() => {
+        caseRefError()
+    })
+    (payloadSize.mod(2) == 0).ifFalse(() => {
+        caseRefError()
+    })
+
+    payloadIndex: index + 1
+    (() => payloadIndex < octets.size()).whileTrue(() => {
+        octet: octets[payloadIndex]
+        decimal: (octet >= 48) && (octet <= 57)
+        lowerHex: (octet >= 97) && (octet <= 102)
+        (decimal || lowerHex).ifFalse(() => {
+            caseRefError()
+        })
+        payloadIndex = payloadIndex + 1
+    })
+
+    // Version support is checked after the shape so that every well-formed
+    // non-V1 version fails deterministically as unsupported.
+    ((index == 2) && (octets[1] == 49)).ifFalse(() => {
+        caseRefError()
+    })
+
+    text
+}
