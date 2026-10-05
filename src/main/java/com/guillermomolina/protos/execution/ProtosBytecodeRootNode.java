@@ -2951,7 +2951,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredCaseOfCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredCaseOf();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredCaseOf();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredCaseOf();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredCaseOf();
         }
     }
@@ -2959,8 +2974,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredCaseOfCall {
         @Specialization
-        public static PreparedCaseOfCall perform(
-                PreparedClosureCall prepared) {
+        public static PreparedCaseOfCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredCaseOf();
+        }
+
+        @Specialization
+        public static PreparedCaseOfCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredCaseOf();
+        }
+
+        @Specialization
+        public static PreparedCaseOfCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredCaseOf();
+        }
+
+        @Specialization
+        public static PreparedCaseOfCall moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.prepareStructuredCaseOf();
         }
     }
@@ -3493,7 +3522,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredObjectCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredObjectCall();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredObjectCall();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredObjectCall();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredObjectCall();
         }
     }
@@ -3501,8 +3545,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredObjectCall {
         @Specialization
-        public static PreparedStandardObjectCall perform(
-                PreparedClosureCall prepared) {
+        public static PreparedStandardObjectCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredObjectCall();
+        }
+
+        @Specialization
+        public static PreparedStandardObjectCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredObjectCall();
+        }
+
+        @Specialization
+        public static PreparedStandardObjectCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredObjectCall();
+        }
+
+        @Specialization
+        public static PreparedStandardObjectCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredObjectCall();
         }
     }
@@ -3529,7 +3588,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredImportCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredImportCall();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredImportCall();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredImportCall();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredImportCall();
         }
     }
@@ -3537,8 +3611,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredImportCall {
         @Specialization
-        public static PreparedStandardImportCall perform(
-                PreparedClosureCall prepared) {
+        public static PreparedStandardImportCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredImportCall();
+        }
+
+        @Specialization
+        public static PreparedStandardImportCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredImportCall();
+        }
+
+        @Specialization
+        public static PreparedStandardImportCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredImportCall();
+        }
+
+        @Specialization
+        public static PreparedStandardImportCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredImportCall();
         }
     }
@@ -3562,19 +3651,50 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
+    /**
+     * TEST009-J: structured-dispatch selection and preparation specialize on
+     * each concrete {@link PreparedClosureCall} representation, as the
+     * terminal lifecycle and entry operations do, so partial evaluation binds
+     * the capability query statically. Only {@link NativeCall} owns structured
+     * capabilities; the other representations keep the interface's absent
+     * answer (and its {@link IllegalStateException} for preparation). The same
+     * shape applies to every {@code IsStructured*} and {@code PrepareStructured*}
+     * operation whose operand is the prepared call itself.
+     */
     @Operation
     public static final class RequiresStructuredDispatch {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.requiresStructuredDispatch();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.requiresStructuredDispatch();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.requiresStructuredDispatch();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.requiresStructuredDispatch();
         }
     }
 
+    /**
+     * TEST009-J: reached only after {@link RequiresStructuredDispatch}, which
+     * only a {@link NativeCall} carrying a structured capability answers
+     * {@code true}; both lowerers emit this operation solely inside that
+     * guard, so it specializes on that concrete representation.
+     */
     @Operation
     public static final class EnterNestedStructuredDispatch {
         @Specialization
         public static Object perform(
-                PreparedClosureCall prepared,
+                NativeCall prepared,
                 @Cached IndirectCallNode node) {
             RootCallTarget target =
                     ProtosTaskCPrimeEntryExecution
@@ -3599,7 +3719,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredEnsureCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredEnsure();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredEnsure();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredEnsure();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredEnsure();
         }
     }
@@ -3607,7 +3742,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredEnsureCall {
         @Specialization
-        public static PreparedEnsureCall perform(PreparedClosureCall prepared) {
+        public static PreparedEnsureCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredEnsure();
+        }
+
+        @Specialization
+        public static PreparedEnsureCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredEnsure();
+        }
+
+        @Specialization
+        public static PreparedEnsureCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredEnsure();
+        }
+
+        @Specialization
+        public static PreparedEnsureCall moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.prepareStructuredEnsure();
         }
     }
@@ -3631,7 +3781,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredWhileCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredWhile();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredWhile();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredWhile();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredWhile();
         }
     }
@@ -3639,7 +3804,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredWhileCall {
         @Specialization
-        public static PreparedWhileCall perform(PreparedClosureCall prepared) {
+        public static PreparedWhileCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredWhile();
+        }
+
+        @Specialization
+        public static PreparedWhileCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredWhile();
+        }
+
+        @Specialization
+        public static PreparedWhileCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredWhile();
+        }
+
+        @Specialization
+        public static PreparedWhileCall moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.prepareStructuredWhile();
         }
     }
@@ -3812,7 +3992,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredArrayEachCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredArrayEach();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredArrayEach();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredArrayEach();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredArrayEach();
         }
     }
@@ -3820,7 +4015,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredArrayEachCall {
         @Specialization
-        public static PreparedArrayEachCall perform(PreparedClosureCall prepared) {
+        public static PreparedArrayEachCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredArrayEach();
+        }
+
+        @Specialization
+        public static PreparedArrayEachCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredArrayEach();
+        }
+
+        @Specialization
+        public static PreparedArrayEachCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredArrayEach();
+        }
+
+        @Specialization
+        public static PreparedArrayEachCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredArrayEach();
         }
     }
@@ -3982,7 +4193,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredArrayMatchCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredArrayMatch();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredArrayMatch();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredArrayMatch();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredArrayMatch();
         }
     }
@@ -3990,8 +4216,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredArrayMatchCall {
         @Specialization
-        public static PreparedArrayMatchCall perform(
-                PreparedClosureCall prepared) {
+        public static PreparedArrayMatchCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredArrayMatch();
+        }
+
+        @Specialization
+        public static PreparedArrayMatchCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredArrayMatch();
+        }
+
+        @Specialization
+        public static PreparedArrayMatchCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredArrayMatch();
+        }
+
+        @Specialization
+        public static PreparedArrayMatchCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredArrayMatch();
         }
     }
@@ -4113,7 +4354,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredBytesEachCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredBytesEach();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredBytesEach();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredBytesEach();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredBytesEach();
         }
     }
@@ -4121,7 +4377,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredBytesEachCall {
         @Specialization
-        public static PreparedBytesEachCall perform(PreparedClosureCall prepared) {
+        public static PreparedBytesEachCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredBytesEach();
+        }
+
+        @Specialization
+        public static PreparedBytesEachCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredBytesEach();
+        }
+
+        @Specialization
+        public static PreparedBytesEachCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredBytesEach();
+        }
+
+        @Specialization
+        public static PreparedBytesEachCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredBytesEach();
         }
     }
@@ -4259,7 +4531,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredEnvironmentEachCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredEnvironmentEach();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredEnvironmentEach();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredEnvironmentEach();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredEnvironmentEach();
         }
     }
@@ -4267,7 +4554,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredEnvironmentEachCall {
         @Specialization
-        public static PreparedEnvironmentEachCall perform(PreparedClosureCall prepared) {
+        public static PreparedEnvironmentEachCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredEnvironmentEach();
+        }
+
+        @Specialization
+        public static PreparedEnvironmentEachCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredEnvironmentEach();
+        }
+
+        @Specialization
+        public static PreparedEnvironmentEachCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredEnvironmentEach();
+        }
+
+        @Specialization
+        public static PreparedEnvironmentEachCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredEnvironmentEach();
         }
     }
@@ -4378,7 +4681,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredIdentityMapAtIfAbsentCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredIdentityMapAtIfAbsent();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredIdentityMapAtIfAbsent();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredIdentityMapAtIfAbsent();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredIdentityMapAtIfAbsent();
         }
     }
@@ -4386,8 +4704,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredIdentityMapAtIfAbsentCall {
         @Specialization
-        public static PreparedIdentityMapAtIfAbsentCall perform(
-                PreparedClosureCall prepared) {
+        public static PreparedIdentityMapAtIfAbsentCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredIdentityMapAtIfAbsent();
+        }
+
+        @Specialization
+        public static PreparedIdentityMapAtIfAbsentCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredIdentityMapAtIfAbsent();
+        }
+
+        @Specialization
+        public static PreparedIdentityMapAtIfAbsentCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredIdentityMapAtIfAbsent();
+        }
+
+        @Specialization
+        public static PreparedIdentityMapAtIfAbsentCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredIdentityMapAtIfAbsent();
         }
     }
@@ -4514,7 +4847,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredIdentityMapEachCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredIdentityMapEach();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredIdentityMapEach();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredIdentityMapEach();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredIdentityMapEach();
         }
     }
@@ -4522,7 +4870,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredIdentityMapEachCall {
         @Specialization
-        public static PreparedIdentityMapEachCall perform(PreparedClosureCall prepared) {
+        public static PreparedIdentityMapEachCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredIdentityMapEach();
+        }
+
+        @Specialization
+        public static PreparedIdentityMapEachCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredIdentityMapEach();
+        }
+
+        @Specialization
+        public static PreparedIdentityMapEachCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredIdentityMapEach();
+        }
+
+        @Specialization
+        public static PreparedIdentityMapEachCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredIdentityMapEach();
         }
     }
@@ -4855,7 +5219,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredMapMatchCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredMapMatch();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredMapMatch();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredMapMatch();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredMapMatch();
         }
     }
@@ -4863,8 +5242,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredMapMatchCall {
         @Specialization
-        public static PreparedMapMatchCall perform(
-                PreparedClosureCall prepared) {
+        public static PreparedMapMatchCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredMapMatch();
+        }
+
+        @Specialization
+        public static PreparedMapMatchCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredMapMatch();
+        }
+
+        @Specialization
+        public static PreparedMapMatchCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredMapMatch();
+        }
+
+        @Specialization
+        public static PreparedMapMatchCall moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.prepareStructuredMapMatch();
         }
     }
@@ -5186,7 +5579,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredMapReadLookupCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredMapReadLookup();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredMapReadLookup();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredMapReadLookup();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredMapReadLookup();
         }
     }
@@ -5194,7 +5602,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredMapReadLookupCall {
         @Specialization
-        public static PreparedMapReadLookupCall perform(PreparedClosureCall prepared) {
+        public static PreparedMapReadLookupCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredMapReadLookup();
+        }
+
+        @Specialization
+        public static PreparedMapReadLookupCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredMapReadLookup();
+        }
+
+        @Specialization
+        public static PreparedMapReadLookupCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredMapReadLookup();
+        }
+
+        @Specialization
+        public static PreparedMapReadLookupCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredMapReadLookup();
         }
     }
@@ -5725,7 +6149,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredMapAtPutCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredMapAtPut();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredMapAtPut();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredMapAtPut();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredMapAtPut();
         }
     }
@@ -5733,7 +6172,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredMapAtPutCall {
         @Specialization
-        public static PreparedMapAtPutCall perform(PreparedClosureCall prepared) {
+        public static PreparedMapAtPutCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredMapAtPut();
+        }
+
+        @Specialization
+        public static PreparedMapAtPutCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredMapAtPut();
+        }
+
+        @Specialization
+        public static PreparedMapAtPutCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredMapAtPut();
+        }
+
+        @Specialization
+        public static PreparedMapAtPutCall moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.prepareStructuredMapAtPut();
         }
     }
@@ -5946,7 +6400,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredMapRemoveCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredMapRemove();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredMapRemove();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredMapRemove();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredMapRemove();
         }
     }
@@ -5954,7 +6423,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredMapRemoveCall {
         @Specialization
-        public static PreparedMapRemoveCall perform(PreparedClosureCall prepared) {
+        public static PreparedMapRemoveCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredMapRemove();
+        }
+
+        @Specialization
+        public static PreparedMapRemoveCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredMapRemove();
+        }
+
+        @Specialization
+        public static PreparedMapRemoveCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredMapRemove();
+        }
+
+        @Specialization
+        public static PreparedMapRemoveCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredMapRemove();
         }
     }
@@ -6107,7 +6592,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredMapEachCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredMapEach();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredMapEach();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredMapEach();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredMapEach();
         }
     }
@@ -6115,7 +6615,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredMapEachCall {
         @Specialization
-        public static PreparedMapEachCall perform(PreparedClosureCall prepared) {
+        public static PreparedMapEachCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredMapEach();
+        }
+
+        @Specialization
+        public static PreparedMapEachCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredMapEach();
+        }
+
+        @Specialization
+        public static PreparedMapEachCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredMapEach();
+        }
+
+        @Specialization
+        public static PreparedMapEachCall moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.prepareStructuredMapEach();
         }
     }
@@ -6155,7 +6670,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredBooleanCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredBoolean();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredBoolean();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredBoolean();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredBoolean();
         }
     }
@@ -6163,7 +6693,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredBooleanCall {
         @Specialization
-        public static PreparedBooleanCall perform(PreparedClosureCall prepared) {
+        public static PreparedBooleanCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredBoolean();
+        }
+
+        @Specialization
+        public static PreparedBooleanCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredBoolean();
+        }
+
+        @Specialization
+        public static PreparedBooleanCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredBoolean();
+        }
+
+        @Specialization
+        public static PreparedBooleanCall moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.prepareStructuredBoolean();
         }
     }
@@ -6244,7 +6789,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class IsStructuredErrorHandlerCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return prepared.isStructuredErrorHandler();
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return prepared.isStructuredErrorHandler();
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredErrorHandler();
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
             return prepared.isStructuredErrorHandler();
         }
     }
@@ -6252,7 +6812,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareStructuredErrorHandlerCall {
         @Specialization
-        public static PreparedErrorHandlerCall perform(PreparedClosureCall prepared) {
+        public static PreparedErrorHandlerCall ordinary(OrdinarySourceCall prepared) {
+            return prepared.prepareStructuredErrorHandler();
+        }
+
+        @Specialization
+        public static PreparedErrorHandlerCall nativeCall(NativeCall prepared) {
+            return prepared.prepareStructuredErrorHandler();
+        }
+
+        @Specialization
+        public static PreparedErrorHandlerCall immediate(ImmediateResultCall prepared) {
+            return prepared.prepareStructuredErrorHandler();
+        }
+
+        @Specialization
+        public static PreparedErrorHandlerCall moduleInitialization(
+                ModuleInitializationCall prepared) {
             return prepared.prepareStructuredErrorHandler();
         }
     }

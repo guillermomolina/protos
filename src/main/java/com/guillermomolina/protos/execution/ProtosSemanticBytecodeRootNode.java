@@ -2703,8 +2703,23 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class RequiresStructuredDispatch {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
-            return ProtosBytecodeRootNode.RequiresStructuredDispatch.perform(prepared);
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return ProtosBytecodeRootNode.RequiresStructuredDispatch.ordinary(prepared);
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return ProtosBytecodeRootNode.RequiresStructuredDispatch.nativeCall(prepared);
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return ProtosBytecodeRootNode.RequiresStructuredDispatch.immediate(prepared);
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
+            return ProtosBytecodeRootNode.RequiresStructuredDispatch.moduleInitialization(prepared);
         }
     }
 
@@ -2719,16 +2734,47 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class IsStructuredBooleanCall {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared) {
-            return ProtosBytecodeRootNode.IsStructuredBooleanCall.perform(prepared);
+        public static boolean ordinary(OrdinarySourceCall prepared) {
+            return ProtosBytecodeRootNode.IsStructuredBooleanCall.ordinary(prepared);
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared) {
+            return ProtosBytecodeRootNode.IsStructuredBooleanCall.nativeCall(prepared);
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared) {
+            return ProtosBytecodeRootNode.IsStructuredBooleanCall.immediate(prepared);
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(ModuleInitializationCall prepared) {
+            return ProtosBytecodeRootNode.IsStructuredBooleanCall.moduleInitialization(prepared);
         }
     }
 
     @Operation
     public static final class PrepareStructuredBooleanCall {
         @Specialization
-        public static PreparedBooleanCall perform(PreparedClosureCall prepared) {
-            return ProtosBytecodeRootNode.PrepareStructuredBooleanCall.perform(prepared);
+        public static PreparedBooleanCall ordinary(OrdinarySourceCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredBooleanCall.ordinary(prepared);
+        }
+
+        @Specialization
+        public static PreparedBooleanCall nativeCall(NativeCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredBooleanCall.nativeCall(prepared);
+        }
+
+        @Specialization
+        public static PreparedBooleanCall immediate(ImmediateResultCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredBooleanCall.immediate(prepared);
+        }
+
+        @Specialization
+        public static PreparedBooleanCall moduleInitialization(ModuleInitializationCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredBooleanCall
+                    .moduleInitialization(prepared);
         }
     }
 
@@ -2803,8 +2849,32 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class AdmitsInlineLiteralWhile {
         @Specialization
-        public static boolean perform(
-                PreparedClosureCall prepared,
+        public static boolean ordinary(
+                OrdinarySourceCall prepared,
+                Object condition,
+                Object body) {
+            return prepared.admitsInlineLiteralWhile(condition, body);
+        }
+
+        @Specialization
+        public static boolean nativeCall(
+                NativeCall prepared,
+                Object condition,
+                Object body) {
+            return prepared.admitsInlineLiteralWhile(condition, body);
+        }
+
+        @Specialization
+        public static boolean immediate(
+                ImmediateResultCall prepared,
+                Object condition,
+                Object body) {
+            return prepared.admitsInlineLiteralWhile(condition, body);
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(
+                ModuleInitializationCall prepared,
                 Object condition,
                 Object body) {
             return prepared.admitsInlineLiteralWhile(condition, body);
@@ -2814,8 +2884,23 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class PrepareStructuredWhileCall {
         @Specialization
-        public static PreparedWhileCall perform(PreparedClosureCall prepared) {
-            return ProtosBytecodeRootNode.PrepareStructuredWhileCall.perform(prepared);
+        public static PreparedWhileCall ordinary(OrdinarySourceCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredWhileCall.ordinary(prepared);
+        }
+
+        @Specialization
+        public static PreparedWhileCall nativeCall(NativeCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredWhileCall.nativeCall(prepared);
+        }
+
+        @Specialization
+        public static PreparedWhileCall immediate(ImmediateResultCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredWhileCall.immediate(prepared);
+        }
+
+        @Specialization
+        public static PreparedWhileCall moduleInitialization(ModuleInitializationCall prepared) {
+            return ProtosBytecodeRootNode.PrepareStructuredWhileCall.moduleInitialization(prepared);
         }
     }
 
@@ -2897,7 +2982,24 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class AdmitsInlineLiteralIndexedEach {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared, Object callback) {
+        public static boolean ordinary(OrdinarySourceCall prepared, Object callback) {
+            return prepared.admitsInlineLiteralIndexedEach(callback);
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared, Object callback) {
+            return prepared.admitsInlineLiteralIndexedEach(callback);
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared, Object callback) {
+            return prepared.admitsInlineLiteralIndexedEach(callback);
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(
+                ModuleInitializationCall prepared,
+                Object callback) {
             return prepared.admitsInlineLiteralIndexedEach(callback);
         }
     }
@@ -2910,17 +3012,61 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class PrepareStructuredIndexedEachCall {
         @Specialization
-        public static PreparedIndexedEachCall perform(PreparedClosureCall prepared) {
+        public static PreparedIndexedEachCall ordinary(OrdinarySourceCall prepared) {
             return prepared.isStructuredArrayEach()
-                    ? ProtosBytecodeRootNode.PrepareStructuredArrayEachCall.perform(prepared)
-                    : ProtosBytecodeRootNode.PrepareStructuredBytesEachCall.perform(prepared);
+                    ? ProtosBytecodeRootNode.PrepareStructuredArrayEachCall.ordinary(prepared)
+                    : ProtosBytecodeRootNode.PrepareStructuredBytesEachCall.ordinary(prepared);
+        }
+
+        @Specialization
+        public static PreparedIndexedEachCall nativeCall(NativeCall prepared) {
+            return prepared.isStructuredArrayEach()
+                    ? ProtosBytecodeRootNode.PrepareStructuredArrayEachCall.nativeCall(prepared)
+                    : ProtosBytecodeRootNode.PrepareStructuredBytesEachCall.nativeCall(prepared);
+        }
+
+        @Specialization
+        public static PreparedIndexedEachCall immediate(ImmediateResultCall prepared) {
+            return prepared.isStructuredArrayEach()
+                    ? ProtosBytecodeRootNode.PrepareStructuredArrayEachCall.immediate(prepared)
+                    : ProtosBytecodeRootNode.PrepareStructuredBytesEachCall.immediate(prepared);
+        }
+
+        @Specialization
+        public static PreparedIndexedEachCall moduleInitialization(
+                ModuleInitializationCall prepared) {
+            return prepared.isStructuredArrayEach()
+                    ? ProtosBytecodeRootNode.PrepareStructuredArrayEachCall
+                            .moduleInitialization(prepared)
+                    : ProtosBytecodeRootNode.PrepareStructuredBytesEachCall
+                            .moduleInitialization(prepared);
         }
     }
 
     @Operation
     public static final class AdmitsInlineLiteralTwoParameterEach {
         @Specialization
-        public static boolean perform(PreparedClosureCall prepared, Object callback) {
+        public static boolean ordinary(OrdinarySourceCall prepared, Object callback) {
+            return prepared.admitsInlineLiteralAssociationEach(callback)
+                    || prepared.admitsInlineLiteralEnvironmentEach(callback);
+        }
+
+        @Specialization
+        public static boolean nativeCall(NativeCall prepared, Object callback) {
+            return prepared.admitsInlineLiteralAssociationEach(callback)
+                    || prepared.admitsInlineLiteralEnvironmentEach(callback);
+        }
+
+        @Specialization
+        public static boolean immediate(ImmediateResultCall prepared, Object callback) {
+            return prepared.admitsInlineLiteralAssociationEach(callback)
+                    || prepared.admitsInlineLiteralEnvironmentEach(callback);
+        }
+
+        @Specialization
+        public static boolean moduleInitialization(
+                ModuleInitializationCall prepared,
+                Object callback) {
             return prepared.admitsInlineLiteralAssociationEach(callback)
                     || prepared.admitsInlineLiteralEnvironmentEach(callback);
         }
@@ -2937,13 +3083,53 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class PrepareStructuredTwoParameterEachCall {
         @Specialization
-        public static PreparedLocalEachCall perform(PreparedClosureCall prepared) {
+        public static PreparedLocalEachCall ordinary(OrdinarySourceCall prepared) {
             if (prepared.isStructuredEnvironmentEach()) {
-                return ProtosBytecodeRootNode.PrepareStructuredEnvironmentEachCall.perform(prepared);
+                return ProtosBytecodeRootNode.PrepareStructuredEnvironmentEachCall
+                        .ordinary(prepared);
             }
             return prepared.isStructuredMapEach()
-                    ? ProtosBytecodeRootNode.PrepareStructuredMapEachCall.perform(prepared)
-                    : ProtosBytecodeRootNode.PrepareStructuredIdentityMapEachCall.perform(prepared);
+                    ? ProtosBytecodeRootNode.PrepareStructuredMapEachCall.ordinary(prepared)
+                    : ProtosBytecodeRootNode.PrepareStructuredIdentityMapEachCall
+                            .ordinary(prepared);
+        }
+
+        @Specialization
+        public static PreparedLocalEachCall nativeCall(NativeCall prepared) {
+            if (prepared.isStructuredEnvironmentEach()) {
+                return ProtosBytecodeRootNode.PrepareStructuredEnvironmentEachCall
+                        .nativeCall(prepared);
+            }
+            return prepared.isStructuredMapEach()
+                    ? ProtosBytecodeRootNode.PrepareStructuredMapEachCall.nativeCall(prepared)
+                    : ProtosBytecodeRootNode.PrepareStructuredIdentityMapEachCall
+                            .nativeCall(prepared);
+        }
+
+        @Specialization
+        public static PreparedLocalEachCall immediate(ImmediateResultCall prepared) {
+            if (prepared.isStructuredEnvironmentEach()) {
+                return ProtosBytecodeRootNode.PrepareStructuredEnvironmentEachCall
+                        .immediate(prepared);
+            }
+            return prepared.isStructuredMapEach()
+                    ? ProtosBytecodeRootNode.PrepareStructuredMapEachCall.immediate(prepared)
+                    : ProtosBytecodeRootNode.PrepareStructuredIdentityMapEachCall
+                            .immediate(prepared);
+        }
+
+        @Specialization
+        public static PreparedLocalEachCall moduleInitialization(
+                ModuleInitializationCall prepared) {
+            if (prepared.isStructuredEnvironmentEach()) {
+                return ProtosBytecodeRootNode.PrepareStructuredEnvironmentEachCall
+                        .moduleInitialization(prepared);
+            }
+            return prepared.isStructuredMapEach()
+                    ? ProtosBytecodeRootNode.PrepareStructuredMapEachCall
+                            .moduleInitialization(prepared)
+                    : ProtosBytecodeRootNode.PrepareStructuredIdentityMapEachCall
+                            .moduleInitialization(prepared);
         }
     }
 
@@ -3049,13 +3235,15 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * Context, so its target is stable for a Context; a call site seen by
      * several Contexts falls back to an indirect call. Control-transfer,
      * module-initialization and runtime-failure mapping is the same as for an
-     * ordinary prepared call.
+     * ordinary prepared call. TEST009-J: emitted only inside
+     * {@link RequiresStructuredDispatch}, so the operand is always a
+     * structured {@link NativeCall}.
      */
     @Operation
     public static final class EnterNestedStructuredDispatch {
         @Specialization(guards = "structuredDispatchTarget() == cachedTarget")
         public static Object direct(
-                PreparedClosureCall prepared,
+                NativeCall prepared,
                 @Cached("structuredDispatchTarget()") RootCallTarget cachedTarget,
                 @Cached("create(cachedTarget)") DirectCallNode node) {
             try {
@@ -3072,7 +3260,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
         @Specialization(replaces = "direct")
         public static Object indirect(
-                PreparedClosureCall prepared,
+                NativeCall prepared,
                 @Cached IndirectCallNode node) {
             return ProtosBytecodeRootNode.EnterNestedStructuredDispatch.perform(prepared, node);
         }

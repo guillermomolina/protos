@@ -165,6 +165,165 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
         }
     }
 
+    /**
+     * TEST009-J: no Bytecode DSL operation of either generated interpreter
+     * erases the prepared call to the {@link
+     * ProtosBytecodeRootNode.PreparedClosureCall} interface, except the
+     * still-pending continuation family. Structured-dispatch selection and
+     * preparation cover exactly the four concrete representations, and
+     * nested structured entry accepts only {@link ProtosBytecodeRootNode.NativeCall}.
+     */
+    @Test
+    void structuredDispatchOperationsSpecializeOnConcreteRepresentations() {
+        Set<String> pendingGenericOperations = Set.of("ResumeContinuation");
+        Set<Class<?>> representations =
+                Set.of(
+                        ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                        ProtosBytecodeRootNode.NativeCall.class,
+                        ProtosBytecodeRootNode.ImmediateResultCall.class,
+                        ProtosBytecodeRootNode.ModuleInitializationCall.class);
+
+        for (Class<?> root :
+                List.of(ProtosBytecodeRootNode.class, ProtosSemanticBytecodeRootNode.class)) {
+            List<String> structuredFamily = new java.util.ArrayList<>();
+            for (Class<?> operation : root.getDeclaredClasses()) {
+                List<java.lang.reflect.Method> specializations = specializations(operation);
+                if (specializations.isEmpty()) {
+                    continue;
+                }
+                boolean generic =
+                        specializations.stream()
+                                .flatMap(method -> Arrays.stream(method.getParameterTypes()))
+                                .anyMatch(
+                                        type ->
+                                                type
+                                                        == ProtosBytecodeRootNode
+                                                                .PreparedClosureCall.class);
+                if (!pendingGenericOperations.contains(operation.getSimpleName())) {
+                    assertFalse(
+                            generic,
+                            operation.getName()
+                                    + " must not specialize on the PreparedClosureCall interface");
+                }
+
+                Set<Class<?>> receivers =
+                        specializations.stream()
+                                .filter(method -> method.getParameterCount() > 0)
+                                .map(method -> method.getParameterTypes()[0])
+                                .collect(java.util.stream.Collectors.toSet());
+                if (operation.getSimpleName().equals("EnterNestedStructuredDispatch")) {
+                    assertEquals(
+                            Set.of(ProtosBytecodeRootNode.NativeCall.class),
+                            receivers,
+                            operation.getName());
+                } else if (operation.getSimpleName().matches(
+                                "RequiresStructuredDispatch|IsStructured\\w+"
+                                        + "|PrepareStructured\\w+|AdmitsInlineLiteral\\w+")
+                        && receivers.stream().anyMatch(representations::contains)) {
+                    assertEquals(representations, receivers, operation.getName());
+                    structuredFamily.add(operation.getSimpleName());
+                }
+            }
+            assertTrue(
+                    structuredFamily.contains("RequiresStructuredDispatch"),
+                    root.getName() + " " + structuredFamily);
+            assertTrue(
+                    structuredFamily.stream().anyMatch(name -> name.startsWith("IsStructured")),
+                    root.getName() + " " + structuredFamily);
+            assertTrue(
+                    structuredFamily.stream()
+                            .anyMatch(name -> name.startsWith("PrepareStructured")),
+                    root.getName() + " " + structuredFamily);
+        }
+    }
+
+    /**
+     * TEST009-J: only {@link ProtosBytecodeRootNode.NativeCall} owns the
+     * structured capability surface; the other representations neither
+     * override it nor physically carry structured state.
+     */
+    @Test
+    void onlyNativeCallOwnsStructuredCapabilities() {
+        List<String> capabilityMethods =
+                Arrays.stream(ProtosBytecodeRootNode.PreparedClosureCall.class.getDeclaredMethods())
+                        .filter(java.lang.reflect.Method::isDefault)
+                        .map(java.lang.reflect.Method::getName)
+                        .filter(
+                                name ->
+                                        name.equals("requiresStructuredDispatch")
+                                                || name.startsWith("isStructured")
+                                                || name.startsWith("prepareStructured")
+                                                || name.startsWith("admitsInlineLiteral"))
+                        .collect(java.util.stream.Collectors.toList());
+        assertFalse(capabilityMethods.isEmpty());
+
+        Set<String> nativeDeclared = declaredMethodNames(ProtosBytecodeRootNode.NativeCall.class);
+        assertTrue(
+                nativeDeclared.containsAll(capabilityMethods),
+                "NativeCall must own every structured capability: " + capabilityMethods);
+
+        for (Class<?> absent :
+                List.of(
+                        ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                        ProtosBytecodeRootNode.ImmediateResultCall.class,
+                        ProtosBytecodeRootNode.ModuleInitializationCall.class)) {
+            Set<String> declared = declaredMethodNames(absent);
+            assertTrue(
+                    capabilityMethods.stream().noneMatch(declared::contains),
+                    absent.getName() + " must not acquire a structured capability");
+            assertTrue(
+                    Arrays.stream(absent.getDeclaredFields())
+                            .noneMatch(
+                                    field ->
+                                            field.getName().toLowerCase().contains("structured")),
+                    absent.getName() + " must not carry structured state");
+        }
+    }
+
+    /**
+     * TEST009-J: a representation without the capability keeps the absent
+     * answer and the previous {@link IllegalStateException} through the
+     * specialized operations of both interpreters.
+     */
+    @Test
+    void specializedStructuredOperationsPreserveAbsentCapabilityBehavior() {
+        ProtosBytecodeRootNode.ImmediateResultCall immediate =
+                assertInstanceOf(
+                        ProtosBytecodeRootNode.ImmediateResultCall.class,
+                        ProtosBytecodeRootNode.PreparedClosureCall.immediateResult("result"));
+
+        assertFalse(ProtosBytecodeRootNode.RequiresStructuredDispatch.immediate(immediate));
+        assertFalse(ProtosSemanticBytecodeRootNode.RequiresStructuredDispatch.immediate(immediate));
+        assertFalse(ProtosBytecodeRootNode.IsStructuredBooleanCall.immediate(immediate));
+        assertFalse(ProtosSemanticBytecodeRootNode.IsStructuredBooleanCall.immediate(immediate));
+        assertThrows(
+                IllegalStateException.class,
+                () -> ProtosBytecodeRootNode.PrepareStructuredEnsureCall.immediate(immediate));
+        assertThrows(
+                IllegalStateException.class,
+                () -> ProtosSemanticBytecodeRootNode.PrepareStructuredBooleanCall.immediate(
+                        immediate));
+        assertThrows(
+                IllegalStateException.class,
+                () -> ProtosSemanticBytecodeRootNode.PrepareStructuredIndexedEachCall.immediate(
+                        immediate));
+    }
+
+    private static List<java.lang.reflect.Method> specializations(Class<?> operation) {
+        return Arrays.stream(operation.getDeclaredMethods())
+                .filter(
+                        method ->
+                                method.isAnnotationPresent(
+                                        com.oracle.truffle.api.dsl.Specialization.class))
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    private static Set<String> declaredMethodNames(Class<?> type) {
+        return Arrays.stream(type.getDeclaredMethods())
+                .map(java.lang.reflect.Method::getName)
+                .collect(java.util.stream.Collectors.toSet());
+    }
+
     @Test
     void ordinarySourceCallNeverPhysicallyDeclaresSpecialCallState() {
         Set<String> fieldNames =
