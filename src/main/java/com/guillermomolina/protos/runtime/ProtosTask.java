@@ -215,21 +215,6 @@ public final class ProtosTask {
         terminalLifecycle = lifecycle;
     }
 
-    /**
-     * Materializes legacy evaluator replay state.
-     *
-     * <p>This method is intentionally retained for the AST/equivalence oracle and
-     * legacy direct-Java execution only. Production C-prime code that merely needs
-     * to inspect replay state must use the non-creating optional accessor below.
-     */
-    /** Non-creating B6B inspection of legacy evaluator replay state. */
-    /**
-     * Marks host execution of one Task-owned C-prime segment.
-     *
-     * <p>This is backend-private routing state only. It owns no continuation and is used solely
-     * so legacy evaluator suspension boundaries reached from within C-prime select the existing
-     * continuation-cancellation unwind path instead of terminalizing through legacy observation.
-     */
     /** Internal lazy task-local handler/cleanup state; never inherited by child tasks. */
     public synchronized ProtosDynamicControlState dynamicControlState() {
         if (dynamicControlState == null) {

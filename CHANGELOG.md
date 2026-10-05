@@ -7,6 +7,15 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.220-SNAPSHOT
+
+- `I070-A1` (guillermomolina/protos#713, parent #712) removes three stale,
+  unattached documentation comments in `ProtosTask` that described retired
+  legacy-evaluator replay and C-prime routing members and produced
+  `dangling-doc-comments` lint warnings. The Javadoc of
+  `dynamicControlState()` is preserved. No executable code, observable
+  semantics, or specification text changed.
+
 ## 0.3.219-SNAPSHOT
 
 - `I054` (guillermomolina/protos#654) publication metadata reconciliation. The
