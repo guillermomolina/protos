@@ -29,22 +29,32 @@ process exits 0, the Test Tool reports "<n> passed, 0 failed", at least one
 Truffle compilation completed, and no compilation failure or performance
 warning was traced. Timeouts and an incomplete package/runtime plane fail.
 
-`diagnose` is manual escalation only: one synchronous run with textual
+`diagnose` is manual escalation only: synchronous runs with textual
 compilation, performance-warning, method/node-expansion and inlining traces,
 retained under the artifact directory. It changes no product code and never
 tries patches or boundaries; a gate failure is classified from its evidence.
+
+BUG016-B: those traces and expansion statistics are published through
+JVM-wide synchronized sinks, so one JVM serializes every logical Case however
+large `--jobs` is. `diagnose` therefore first asks the real Test Tool for the
+authoritative CasePlan (`protos test ... --list-cases`, D185
+protos.test.cases/v1), then runs each opaque CaseRef in its own diagnostic JVM
+(`protos test ... --case <ref>`), at most --shard-workers JVMs at a time.
+CaseRefs are never decoded or derived here; the report keeps CasePlan order.
 """
 
 from __future__ import print_function
 
 import argparse
+import concurrent.futures
 import json
 import re
 import subprocess
 import sys
+import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Callable, List, Optional, Sequence
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
@@ -169,7 +179,7 @@ def evaluate(output: str, exit_code: int) -> "OrderedDict[str, object]":
 
 
 def run_mode(root: Path, java: str, mode: str, options: Sequence[str], test_arguments: Sequence[str],
-             timeout: int, artifacts: Path) -> "OrderedDict[str, object]":
+             timeout: int, artifacts: Path, log_name: Optional[str] = None) -> "OrderedDict[str, object]":
     entry = OrderedDict([("mode", mode), ("options", list(options)),
                          ("test_arguments", list(test_arguments))])
     try:
@@ -191,7 +201,7 @@ def run_mode(root: Path, java: str, mode: str, options: Sequence[str], test_argu
         entry.update(result)
     entry["exit_code"] = exit_code
     artifacts.mkdir(parents=True, exist_ok=True)
-    log = artifacts / ("%s.log" % mode.lower())
+    log = artifacts / (log_name or "%s.log" % mode.lower())
     log.write_text(output, encoding="utf-8")
     entry["log"] = str(log)
     entry["output_tail"] = output.splitlines()[-TAIL_LINES:]
@@ -204,10 +214,11 @@ def write_report(report: Optional[Path], entries: List["OrderedDict[str, object]
         report.write_text(json.dumps(OrderedDict([("modes", entries)]), indent=2) + "\n", encoding="utf-8")
 
 
-def print_entry(entry, out) -> None:
-    print("%s=%s" % (entry["mode"], entry["status"]), file=out)
+def print_entry(entry, out, label: Optional[str] = None) -> None:
+    label = label or entry["mode"]
+    print("%s=%s" % (label, entry["status"]), file=out)
     if entry.get("elapsed_seconds") is not None:
-        print("  %s_SECONDS=%.1f" % (entry["mode"], entry["elapsed_seconds"]), file=out)
+        print("  %s_SECONDS=%.1f" % (label, entry["elapsed_seconds"]), file=out)
     for key in ("SEMANTIC_CORPUS", "CORPUS_PASSED", "CORPUS_FAILED", "COMPILATIONS_DONE", "COMPILATION_FAILURES",
                 "SHUTDOWN_CASCADE_FAILURES", "PERFORMANCE_WARNINGS", "PE_CONSTANT_FAILURES",
                 "OTHER_PERMANENT_FAILURES"):
@@ -242,16 +253,245 @@ def check(root: Path, java: str, modes: Sequence[str], test_arguments: Sequence[
     return 0 if passed else 1
 
 
+CASES_SCHEMA = "protos.test.cases/v1"
+DIAGNOSE_REPORT_SCHEMA = "protos.truffle-compilation.diagnose/v2"
+DIAGNOSE_DIR = "diagnose"
+DEFAULT_SHARD_WORKERS = 1
+CASE_OPTION = "--case"
+LIST_CASES_OPTION = "--list-cases"
+
+
+class DiscoveryError(Exception):
+    pass
+
+
+def parse_case_listing(output: str) -> List["OrderedDict[str, str]"]:
+    """The ordered Cases of the single protos.test.cases/v1 document in output; fail-closed.
+
+    Only a line that starts with '{' and names a "schema" member is a candidate; exactly one
+    candidate must exist. Each ref is kept verbatim and never decoded; display is presentation only.
+    """
+    candidates = [line.strip() for line in output.splitlines()
+                  if line.lstrip().startswith("{") and '"schema"' in line]
+    if not candidates:
+        raise DiscoveryError("no %s document in --list-cases output" % CASES_SCHEMA)
+    if len(candidates) > 1:
+        raise DiscoveryError("%d candidate case-listing documents; expected exactly one" % len(candidates))
+    try:
+        document = json.loads(candidates[0])
+    except ValueError as error:
+        raise DiscoveryError("invalid case-listing JSON: %s" % error)
+    if not isinstance(document, dict) or document.get("schema") != CASES_SCHEMA:
+        raise DiscoveryError("unsupported case-listing schema %r" %
+                             (document.get("schema") if isinstance(document, dict) else None))
+    entries = document.get("cases")
+    if not isinstance(entries, list):
+        raise DiscoveryError("case-listing 'cases' is not an array")
+    cases, seen = [], set()
+    for position, entry in enumerate(entries):
+        ref = entry.get("ref") if isinstance(entry, dict) else None
+        if not isinstance(ref, str) or not ref:
+            raise DiscoveryError("case-listing entry %d has no non-empty string 'ref'" % position)
+        display = entry.get("display")
+        if display is not None and not isinstance(display, str):
+            raise DiscoveryError("case-listing entry %d has a non-string 'display'" % position)
+        if ref in seen:
+            raise DiscoveryError("case-listing repeats ref %s" % ref)
+        seen.add(ref)
+        cases.append(OrderedDict([("ref", ref), ("display", display)]))
+    if not cases:
+        raise DiscoveryError("case listing selected no logical Case")
+    return cases
+
+
+def without_case_selection(test_arguments: Sequence[str]) -> List[str]:
+    """The original Test Tool arguments minus any --case selection, which discovery already applied."""
+    kept, skip = [], False
+    for argument in test_arguments:
+        if skip:
+            skip = False
+        elif argument == CASE_OPTION:
+            skip = True
+        elif not argument.startswith(CASE_OPTION + "="):
+            kept.append(argument)
+    return kept
+
+
+def shard_arguments(test_arguments: Sequence[str], ref: str) -> List[str]:
+    """Original scope arguments (--jobs, --file, ...) unchanged, plus exactly one exact CaseRef."""
+    return without_case_selection(test_arguments) + [CASE_OPTION, ref]
+
+
+def shard_refs(arguments: Sequence[str]) -> List[str]:
+    return [arguments[i + 1] for i, argument in enumerate(arguments[:-1]) if argument == CASE_OPTION]
+
+
+def discover_cases(root: Path, java: str, test_arguments: Sequence[str], timeout: int, artifacts: Path
+                   ) -> "OrderedDict[str, object]":
+    """Authoritative CasePlan from the real Test Tool on the packaged JVM, without diagnostic options."""
+    arguments = list(test_arguments) + [LIST_CASES_OPTION]
+    entry = OrderedDict([("test_arguments", arguments), ("cases", [])])
+    output, exit_code = "", None
+    try:
+        command = cli_command(root, java, (), ["test"] + arguments)
+        exit_code, output, elapsed = run_cli(root, command, timeout)
+        entry["elapsed_seconds"] = round(elapsed, 1)
+        if exit_code != 0:
+            raise DiscoveryError("--list-cases exited %d" % exit_code)
+        entry["cases"] = parse_case_listing(output)
+        entry["status"], entry["failures"] = "PASS", []
+    except CheckError as error:
+        entry["status"], entry["failures"] = "ERROR", ["ARTIFACT %s" % error]
+    except subprocess.TimeoutExpired as expired:
+        output = (expired.output or b"").decode("utf-8", errors="replace")
+        entry["status"], entry["failures"] = "ERROR", ["DISCOVERY TIMEOUT after %d s" % timeout]
+    except (DiscoveryError, OSError) as error:
+        entry["status"], entry["failures"] = "ERROR", ["DISCOVERY %s" % error]
+    entry["exit_code"] = exit_code
+    artifacts.mkdir(parents=True, exist_ok=True)
+    log = artifacts / "discovery.log"
+    log.write_text(output, encoding="utf-8")
+    entry["log"] = str(log)
+    return entry
+
+
+def shard_label(index: int) -> str:
+    return "%04d" % index
+
+
+def run_diagnostic_shard(root: Path, java: str, test_arguments: Sequence[str], timeout: int, artifacts: Path,
+                         index: int, ref: str) -> "OrderedDict[str, object]":
+    """One logical Case in one fresh diagnostic JVM with exactly DIAGNOSTIC_OPTIONS; the timeout is its own."""
+    return run_mode(root, java, DIAGNOSE, DIAGNOSTIC_OPTIONS, shard_arguments(test_arguments, ref), timeout,
+                    artifacts, log_name="shard-%s.log" % shard_label(index))
+
+
+def run_diagnostic_shards(cases: Sequence["OrderedDict[str, str]"], workers: int, test_arguments: Sequence[str],
+                          run_shard: Callable[[int, str], "OrderedDict[str, object]"]
+                          ) -> List["OrderedDict[str, object]"]:
+    """Runs every Case once with at most `workers` concurrent shards; results are in CasePlan order.
+
+    Completion order never matters: each result is stored at its CasePlan index, and a shard that
+    raised is recorded as ERROR evidence without abandoning the shards still running.
+    """
+    if workers < 1:
+        raise ValueError("shard workers must be >= 1")
+    results = [None] * len(cases)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, len(cases))) as pool:
+        futures = {pool.submit(run_shard, index, case["ref"]): index for index, case in enumerate(cases)}
+        for future in concurrent.futures.as_completed(futures):
+            index = futures[future]
+            try:
+                results[index] = future.result()
+            except Exception as error:  # noqa: BLE001 - fail-closed evidence, never a coordinator abort
+                results[index] = OrderedDict([
+                    ("mode", DIAGNOSE), ("options", list(DIAGNOSTIC_OPTIONS)),
+                    ("test_arguments", shard_arguments(test_arguments, cases[index]["ref"])),
+                    ("status", "ERROR"), ("failures", ["HARNESS %s: %s" % (type(error).__name__, error)]),
+                    ("exit_code", None)])
+    shards = []
+    for index, (case, result) in enumerate(zip(cases, results)):
+        shard = OrderedDict([("shard", shard_label(index)), ("case_ref", case["ref"]),
+                             ("display", case.get("display"))])
+        shard.update(result)
+        shards.append(shard)
+    return shards
+
+
+def coverage_problems(discovered: Sequence[str], shards: Sequence["OrderedDict[str, object]"]) -> List[str]:
+    """Exact-once coverage: the --case actually passed to the shards must equal the discovered refs."""
+    problems, executed = [], []
+    for shard in shards:
+        refs = shard_refs(shard.get("test_arguments", []))
+        if len(refs) != 1 or refs[0] != shard.get("case_ref"):
+            problems.append("SHARD %s does not select exactly its own CaseRef" % shard.get("shard"))
+        executed.extend(refs)
+    for ref in discovered:
+        if ref not in executed:
+            problems.append("MISSING %s" % ref)
+    for ref in sorted(set(executed)):
+        if executed.count(ref) > 1:
+            problems.append("DUPLICATE %s" % ref)
+        if ref not in discovered:
+            problems.append("EXTRA %s" % ref)
+    return problems
+
+
+def shard_acquired(shard) -> bool:
+    """The pre-sharding diagnose rule per JVM: an ERROR or a timeout (no exit code) is not acquired."""
+    return shard.get("status") != "ERROR" and shard.get("exit_code") is not None
+
+
+def aggregate_diagnostic_shards(discovery, shards, problems) -> "OrderedDict[str, object]":
+    counters = ("COMPILATIONS_DONE", "COMPILATION_FAILURES", "SHUTDOWN_CASCADE_FAILURES", "PERFORMANCE_WARNINGS",
+                "PE_CONSTANT_FAILURES", "OTHER_PERMANENT_FAILURES")
+    acquired = discovery["status"] == "PASS" and not problems and bool(shards) and all(
+        shard_acquired(shard) for shard in shards)
+    aggregate = OrderedDict()
+    aggregate["status"] = "PASS" if acquired and all(shard["status"] == "PASS" for shard in shards) else (
+        "FAIL" if acquired else "ERROR")
+    aggregate["acquisition"] = "COMPLETE" if acquired else "INCOMPLETE"
+    for status in ("PASS", "FAIL", "ERROR"):
+        aggregate["SHARDS_%s" % status] = sum(1 for shard in shards if shard["status"] == status)
+    aggregate["SHARDS_TIMEOUT"] = sum(1 for shard in shards if shard["status"] != "ERROR"
+                                      and shard.get("exit_code") is None)
+    for counter in counters:
+        aggregate[counter] = sum(shard.get(counter, 0) for shard in shards)
+    return aggregate
+
+
 def diagnose(root: Path, java: str, test_arguments: Sequence[str], timeout: int, artifacts: Path,
-             report: Optional[Path], out=sys.stdout) -> int:
-    """Evidence collection only: exit status reflects whether the diagnostic run itself was obtained."""
+             report: Optional[Path], out=sys.stdout, shard_workers: int = DEFAULT_SHARD_WORKERS) -> int:
+    """Evidence collection only: exit status reflects whether every diagnostic shard itself was obtained."""
     print("truffle-compilation-diagnose: textual compilation diagnostics (no product change)", file=out)
-    entry = run_mode(root, java, DIAGNOSE, DIAGNOSTIC_OPTIONS, test_arguments, timeout, artifacts)
-    write_report(report, [entry])
-    print_entry(entry, out)
-    if "log" in entry:
-        print("DIAGNOSTIC_LOG=%s" % entry["log"], file=out)
-    return 1 if entry["status"] == "ERROR" or entry.get("exit_code") is None else 0
+    started = time.monotonic()
+    directory = artifacts / DIAGNOSE_DIR
+    if LIST_CASES_OPTION in test_arguments:
+        discovery = OrderedDict([("test_arguments", list(test_arguments)), ("cases", []), ("status", "ERROR"),
+                                 ("failures", ["DISCOVERY %s is owned by the harness" % LIST_CASES_OPTION]),
+                                 ("exit_code", None)])
+    else:
+        discovery = discover_cases(root, java, test_arguments, timeout, directory)
+    cases = discovery["cases"]
+    shards = []
+    if discovery["status"] == "PASS":
+        shards = run_diagnostic_shards(
+            cases, shard_workers, test_arguments,
+            lambda index, ref: run_diagnostic_shard(root, java, test_arguments, timeout, directory, index, ref))
+    refs = [case["ref"] for case in cases]
+    problems = coverage_problems(refs, shards) if discovery["status"] == "PASS" else []
+    aggregate = aggregate_diagnostic_shards(discovery, shards, problems)
+    wall = round(time.monotonic() - started, 1)
+    if report is not None:
+        document = OrderedDict([
+            ("schema", DIAGNOSE_REPORT_SCHEMA), ("mode", DIAGNOSE), ("options", list(DIAGNOSTIC_OPTIONS)),
+            ("test_arguments", list(test_arguments)), ("shard_workers", shard_workers),
+            ("discovery", discovery), ("case_refs", refs), ("coverage_problems", problems),
+            ("shards", shards), ("aggregate", aggregate), ("wall_seconds", wall)])
+        report.parent.mkdir(parents=True, exist_ok=True)
+        report.write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+    print("DIAGNOSTIC_DISCOVERY=%s CASES=%d" % (discovery["status"], len(cases)), file=out)
+    for failure in discovery["failures"]:
+        print("  " + failure, file=out)
+    if "log" in discovery:
+        print("DIAGNOSTIC_DISCOVERY_LOG=%s" % discovery["log"], file=out)
+    print("DIAGNOSTIC_SHARD_WORKERS=%d" % shard_workers, file=out)
+    for shard in shards:
+        label = "%s_SHARD_%s" % (DIAGNOSE, shard["shard"])
+        print_entry(shard, out, label)
+        print("  CASE_REF=%s" % shard["case_ref"], file=out)
+        if shard.get("display"):
+            print("  CASE_DISPLAY=%s" % shard["display"], file=out)
+        if "log" in shard:
+            print("  DIAGNOSTIC_LOG=%s" % shard["log"], file=out)
+    for problem in problems:
+        print("COVERAGE " + problem, file=out)
+    for key, value in aggregate.items():
+        if key != "status":
+            print("DIAGNOSTIC_%s=%s" % (key.upper(), value), file=out)
+    print("DIAGNOSTIC_WALL_SECONDS=%.1f" % wall, file=out)
+    print("%s=%s" % (DIAGNOSE, aggregate["status"]), file=out)
+    return 0 if aggregate["acquisition"] == "COMPLETE" else 1
 
 
 def main(argv=None) -> int:
@@ -261,19 +501,25 @@ def main(argv=None) -> int:
     parser.add_argument("--java", default=None)
     parser.add_argument("--mode", choices=tuple(MODES), action="append",
                         help="check only: run selected modes (default: both)")
-    parser.add_argument("--timeout", type=int, default=3600, help="per-mode timeout in seconds")
+    parser.add_argument("--timeout", type=int, default=3600, help="per-JVM (check mode or diagnose shard) timeout in seconds")
     parser.add_argument("--artifacts", type=Path, default=Path("target/truffle-compilation"))
     parser.add_argument("--report", type=Path)
+    parser.add_argument("--shard-workers", type=int, default=DEFAULT_SHARD_WORKERS,
+                        help="diagnose only: maximum concurrent per-Case diagnostic JVMs (default: %(default)s); "
+                             "independent of the Test Tool's --jobs")
     parser.epilog = "Arguments after -- are passed to `protos test` (e.g. -- --jobs 8)."
     argv = list(sys.argv[1:] if argv is None else argv)
     split = argv.index("--") if "--" in argv else len(argv)
     args = parser.parse_args(argv[:split])
+    if args.shard_workers < 1:
+        parser.error("--shard-workers must be >= 1")
     test_arguments = argv[split + 1:]
     root = args.root.resolve()
     java = select_java(args.java)
     artifacts = args.artifacts if args.artifacts.is_absolute() else root / args.artifacts
     if args.command == "diagnose":
-        return diagnose(root, java, test_arguments, args.timeout, artifacts, args.report)
+        return diagnose(root, java, test_arguments, args.timeout, artifacts, args.report,
+                        shard_workers=args.shard_workers)
     return check(root, java, args.mode or list(MODES), test_arguments, args.timeout, artifacts, args.report)
 
 

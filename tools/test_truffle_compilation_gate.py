@@ -15,7 +15,7 @@
 # the specific language governing rights and limitations under the License.
 
 
-"""TEST009-F self-tests for tools/truffle_compilation_gate.py (synthetic logs only, no real Graal)."""
+"""TEST009-F/BUG016-B self-tests for tools/truffle_compilation_gate.py (synthetic logs only, no real Graal)."""
 
 from __future__ import print_function
 
@@ -24,6 +24,7 @@ import json
 import subprocess
 import sys
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -32,6 +33,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import java_generated_bytecode_bci_compilation_check as bci_check  # noqa: E402
 import truffle_compilation_gate as gate  # noqa: E402
+import truffle_jvm_launch  # noqa: E402
 
 DONE = "[engine] opt done   id=12   work@1a2b |Tier 2|Time   120(  90+30  )ms|AST   40"
 SUMMARY = "412 passed, 0 failed"
@@ -217,6 +219,277 @@ class RunTest(unittest.TestCase):
                 self.assertIn(line, out.getvalue().splitlines())
 
 
+REFS = ["v1.AAA", "v1.BBB", "v1.CCC"]
+
+
+def listing(refs, schema="protos.test.cases/v1"):
+    return json.dumps({"schema": schema, "cases": [{"ref": ref, "display": "case " + ref} for ref in refs]})
+
+
+def cases(refs):
+    return [gate.OrderedDict([("ref", ref), ("display", None)]) for ref in refs]
+
+
+def shard_result(arguments, status="PASS", exit_code=0):
+    return gate.OrderedDict([("mode", gate.DIAGNOSE), ("options", list(gate.DIAGNOSTIC_OPTIONS)),
+                             ("test_arguments", list(arguments)), ("status", status),
+                             ("exit_code", exit_code), ("COMPILATIONS_DONE", 1)])
+
+
+class CaseListingTest(unittest.TestCase):
+
+    def test_valid_listing_keeps_casePlan_order(self):
+        output = "[engine] noise\n" + listing(["v1.C", "v1.A", "v1.B"]) + "\n"
+        self.assertEqual([case["ref"] for case in gate.parse_case_listing(output)], ["v1.C", "v1.A", "v1.B"])
+
+    def test_malformed_listings_fail_closed(self):
+        bad = {
+            "missing": "1 passed, 0 failed\n",
+            "two documents": listing(REFS) + "\n" + listing(REFS) + "\n",
+            "invalid json": '{"schema": "protos.test.cases/v1", "cases": [\n',
+            "wrong schema": listing(REFS, schema="protos.test.cases/v2"),
+            "cases not array": json.dumps({"schema": "protos.test.cases/v1", "cases": {"ref": "v1.A"}}),
+            "missing ref": json.dumps({"schema": "protos.test.cases/v1", "cases": [{"display": "x"}]}),
+            "empty ref": json.dumps({"schema": "protos.test.cases/v1", "cases": [{"ref": ""}]}),
+            "non-string ref": json.dumps({"schema": "protos.test.cases/v1", "cases": [{"ref": 7}]}),
+            "entry not object": json.dumps({"schema": "protos.test.cases/v1", "cases": ["v1.A"]}),
+            "duplicate ref": listing(["v1.A", "v1.A"]),
+            "empty": listing([]),
+        }
+        for name, output in bad.items():
+            with self.subTest(name):
+                with self.assertRaises(gate.DiscoveryError):
+                    gate.parse_case_listing(output)
+
+    def test_nonzero_discovery_exit_is_error(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = fake_root(directory)
+            with mock.patch.object(gate, "run_cli", return_value=(2, listing(REFS), 1.0)):
+                discovery = gate.discover_cases(root, "java", ["--jobs", "8"], 10, root / "d")
+            self.assertEqual(discovery["status"], "ERROR")
+            self.assertEqual(discovery["cases"], [])
+
+    def test_discovery_uses_real_test_tool_without_diagnostic_options(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = fake_root(directory)
+            with mock.patch.object(gate, "run_cli", return_value=(0, listing(REFS), 1.0)) as fake:
+                discovery = gate.discover_cases(root, "java", ["--file", "X"], 10, root / "d")
+            command = fake.call_args[0][1]
+            self.assertEqual(command[-4:], ["test", "--file", "X", "--list-cases"])
+            self.assertFalse([option for option in command if option.startswith("-Dpolyglot.")])
+            self.assertEqual([case["ref"] for case in discovery["cases"]], REFS)
+            self.assertTrue((root / "d" / "discovery.log").is_file())
+
+
+class ShardArgumentTest(unittest.TestCase):
+
+    def test_one_case_one_shard_with_original_arguments(self):
+        original = ["--jobs", "8", "--file", "X"]
+        self.assertEqual([gate.shard_arguments(original, ref) for ref in REFS],
+                         [original + ["--case", ref] for ref in REFS])
+        self.assertEqual(original, ["--jobs", "8", "--file", "X"])
+
+    def test_focused_case_is_replaced_not_duplicated(self):
+        self.assertEqual(gate.shard_arguments(["--case", "v1.BBB", "--jobs", "2", "--case=v1.CCC"], "v1.BBB"),
+                         ["--jobs", "2", "--case", "v1.BBB"])
+
+
+class ShardPoolTest(unittest.TestCase):
+
+    def test_bounded_concurrency(self):
+        entered = [threading.Event() for _ in REFS]
+        release = [threading.Event() for _ in REFS]
+        lock, active, peak = threading.Lock(), [0], [0]
+
+        def run(index, ref):
+            with lock:
+                active[0] += 1
+                peak[0] = max(peak[0], active[0])
+            entered[index].set()
+            self.assertTrue(release[index].wait(10))
+            with lock:
+                active[0] -= 1
+            return shard_result(gate.shard_arguments([], ref))
+        results = []
+        coordinator = threading.Thread(target=lambda: results.extend(
+            gate.run_diagnostic_shards(cases(REFS), 2, [], run)))
+        coordinator.start()
+        self.assertTrue(entered[0].wait(10) and entered[1].wait(10))
+        self.assertFalse(entered[2].is_set())
+        release[0].set()
+        self.assertTrue(entered[2].wait(10))
+        release[1].set()
+        release[2].set()
+        coordinator.join(10)
+        self.assertEqual(peak[0], 2)
+        self.assertEqual([shard["case_ref"] for shard in results], REFS)
+
+    def test_out_of_order_completion_keeps_casePlan_order(self):
+        release = [threading.Event() for _ in REFS]
+        finished = []
+        # Completion order C3, C1, C2: C3 runs first and releases C1, which releases C2.
+        release[2].set()
+        release_chain = {2: 0, 0: 1}
+
+        def chained(index, ref):
+            self.assertTrue(release[index].wait(10))
+            finished.append(ref)
+            if index in release_chain:
+                release[release_chain[index]].set()
+            return shard_result(gate.shard_arguments([], ref))
+        shards = gate.run_diagnostic_shards(cases(REFS), 3, [], chained)
+        self.assertEqual(finished, ["v1.CCC", "v1.AAA", "v1.BBB"])
+        self.assertEqual([shard["case_ref"] for shard in shards], REFS)
+        self.assertEqual([shard["shard"] for shard in shards], ["0000", "0001", "0002"])
+
+    def test_unexpected_worker_exception_is_recorded_and_others_collected(self):
+        def run(index, ref):
+            if index == 1:
+                raise RuntimeError("boom")
+            return shard_result(gate.shard_arguments([], ref))
+        shards = gate.run_diagnostic_shards(cases(REFS), 2, [], run)
+        self.assertEqual([shard["status"] for shard in shards], ["PASS", "ERROR", "PASS"])
+        self.assertIn("HARNESS RuntimeError: boom", shards[1]["failures"])
+        self.assertEqual(gate.coverage_problems(REFS, shards), [])
+
+
+class AggregationTest(unittest.TestCase):
+
+    DISCOVERY = {"status": "PASS"}
+
+    def aggregate(self, *outcomes):
+        refs = REFS[:len(outcomes)]
+        shards = [dict(shard_result(gate.shard_arguments([], ref), status, code), shard=str(i), case_ref=ref)
+                  for i, (ref, (status, code)) in enumerate(zip(refs, outcomes))]
+        return gate.aggregate_diagnostic_shards(self.DISCOVERY, shards, gate.coverage_problems(refs, shards))
+
+    def test_failure_matrix(self):
+        passed, failed, timeout, error = ("PASS", 0), ("FAIL", 1), ("FAIL", None), ("ERROR", None)
+        expected = [((passed, passed), "PASS", "COMPLETE"), ((passed, failed), "FAIL", "COMPLETE"),
+                    ((passed, timeout), "ERROR", "INCOMPLETE"), ((passed, error), "ERROR", "INCOMPLETE"),
+                    ((failed, failed), "FAIL", "COMPLETE")]
+        for outcomes, status, acquisition in expected:
+            with self.subTest(outcomes):
+                aggregate = self.aggregate(*outcomes)
+                self.assertEqual((aggregate["status"], aggregate["acquisition"]), (status, acquisition))
+
+    def test_failed_discovery_or_coverage_is_never_pass(self):
+        self.assertEqual(gate.aggregate_diagnostic_shards({"status": "ERROR"}, [], [])["status"], "ERROR")
+        shards = [dict(shard_result(gate.shard_arguments([], REFS[0])), shard="0", case_ref=REFS[0])]
+        self.assertEqual(gate.aggregate_diagnostic_shards(self.DISCOVERY, shards, ["MISSING x"])["status"],
+                         "ERROR")
+
+
+class CoverageTest(unittest.TestCase):
+
+    def shards(self, selected):
+        return [{"shard": str(i), "case_ref": own, "test_arguments": gate.shard_arguments([], ref)}
+                for i, (own, ref) in enumerate(selected)]
+
+    def test_exact_once(self):
+        self.assertEqual(gate.coverage_problems(REFS, self.shards(zip(REFS, REFS))), [])
+
+    def test_missing_duplicate_extra_are_detected(self):
+        missing = gate.coverage_problems(REFS, self.shards(zip(REFS[:2], REFS[:2])))
+        self.assertIn("MISSING v1.CCC", missing)
+        duplicate = gate.coverage_problems(REFS, self.shards(zip(REFS + ["v1.AAA"], REFS + ["v1.AAA"])))
+        self.assertIn("DUPLICATE v1.AAA", duplicate)
+        extra = gate.coverage_problems(REFS[:2], self.shards(zip(REFS, REFS)))
+        self.assertIn("EXTRA v1.CCC", extra)
+        wrong = gate.coverage_problems(REFS, self.shards([("v1.AAA", "v1.BBB")]))
+        self.assertTrue(any(problem.startswith("SHARD") for problem in wrong))
+
+
+class DiagnoseTest(unittest.TestCase):
+
+    def run_diagnose(self, arguments, refs, outputs=None, workers=3):
+        """Fake packaged JVM: --list-cases answers the listing; a shard answers per its --case."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = fake_root(directory.name)
+        report = root / "report.json"
+        commands = []
+        lock = threading.Lock()
+
+        def fake_run(_root, command, _timeout):
+            with lock:
+                commands.append(command)
+            if "--list-cases" in command:
+                return 0, listing(refs), 0.5
+            ref = command[command.index("--case") + 1]
+            result = (outputs or {}).get(ref, (0, CLEAN))
+            if isinstance(result, BaseException):
+                raise result
+            return result[0], result[1], 1.0
+        out = io.StringIO()
+        with mock.patch.object(gate, "run_cli", side_effect=fake_run):
+            status = gate.diagnose(root, "java", arguments, 10, root / "a", report, out=out,
+                                   shard_workers=workers)
+        return status, json.loads(report.read_text()), commands, out.getvalue(), root
+
+    def test_each_shard_runs_exact_case_with_diagnostic_options_and_original_arguments(self):
+        status, document, commands, out, root = self.run_diagnose(["--jobs", "8", "--file", "X"], REFS)
+        self.assertEqual(status, 0)
+        self.assertEqual(document["aggregate"]["status"], "PASS")
+        self.assertEqual(document["case_refs"], REFS)
+        self.assertEqual(document["shard_workers"], 3)
+        shards = [command for command in commands if "--list-cases" not in command]
+        self.assertEqual(len(shards), 3)
+        java_options = len(truffle_jvm_launch.JVM_OPTIONS) + 1
+        expected = sorted(["test", "--jobs", "8", "--file", "X", "--case", ref] for ref in REFS)
+        self.assertEqual(sorted(command[command.index("test"):] for command in shards), expected)
+        for command in shards:
+            self.assertEqual(tuple(command[java_options:java_options + len(gate.DIAGNOSTIC_OPTIONS)]),
+                             gate.DIAGNOSTIC_OPTIONS)
+            self.assertFalse([option for option in command if "CompilerThreads" in option])
+        for index, shard in enumerate(document["shards"]):
+            self.assertEqual(shard["shard"], "%04d" % index)
+            self.assertEqual(shard["case_ref"], REFS[index])
+            self.assertEqual(shard["options"], list(gate.DIAGNOSTIC_OPTIONS))
+            self.assertEqual(shard["test_arguments"], ["--jobs", "8", "--file", "X", "--case", REFS[index]])
+            self.assertEqual(Path(shard["log"]).name, "shard-%04d.log" % index)
+            self.assertTrue(Path(shard["log"]).is_file())
+        self.assertEqual(len({shard["log"] for shard in document["shards"]}), 3)
+        self.assertIn("TRUFFLE_COMPILATION_DIAGNOSE=PASS", out.splitlines())
+
+    def test_per_shard_logs_hold_only_their_own_output(self):
+        outputs = {ref: (0, CLEAN + "marker " + ref + "\n") for ref in REFS}
+        _, document, _, _, _ = self.run_diagnose([], REFS, outputs)
+        for shard in document["shards"]:
+            log = Path(shard["log"]).read_text()
+            self.assertEqual([ref for ref in REFS if "marker " + ref in log], [shard["case_ref"]])
+
+    def test_findings_are_evidence_but_timeout_and_harness_errors_fail_closed(self):
+        status, document, _, _, _ = self.run_diagnose([], REFS, {REFS[1]: (0, DONE + "\n" + PE_FAILURE + "\n" + SUMMARY)})
+        self.assertEqual((status, document["aggregate"]["status"]), (0, "FAIL"))
+        expired = subprocess.TimeoutExpired(["java"], 10, output=b"partial\n")
+        status, document, _, _, _ = self.run_diagnose([], REFS, {REFS[0]: expired})
+        self.assertEqual((status, document["aggregate"]["status"]), (1, "ERROR"))
+        self.assertEqual([shard["status"] for shard in document["shards"]], ["FAIL", "PASS", "PASS"])
+        status, document, _, _, _ = self.run_diagnose([], REFS, {REFS[2]: OSError("no java")})
+        self.assertEqual((status, document["aggregate"]["status"]), (1, "ERROR"))
+        self.assertEqual([shard["status"] for shard in document["shards"]], ["PASS", "PASS", "ERROR"])
+
+    def test_discovery_failure_runs_no_shard_and_writes_report(self):
+        status, document, commands, _, _ = self.run_diagnose([], [])
+        self.assertEqual(status, 1)
+        self.assertEqual(document["discovery"]["status"], "ERROR")
+        self.assertEqual(document["shards"], [])
+        self.assertEqual(len(commands), 1)
+
+    def test_already_focused_case_is_not_duplicated(self):
+        status, document, commands, _, _ = self.run_diagnose(["--case", "v1.BBB", "--jobs", "2"], ["v1.BBB"])
+        self.assertEqual(status, 0)
+        self.assertEqual(commands[0][-6:], ["test", "--case", "v1.BBB", "--jobs", "2", "--list-cases"])
+        self.assertEqual([shard["test_arguments"] for shard in document["shards"]],
+                         [["--jobs", "2", "--case", "v1.BBB"]])
+
+    def test_list_cases_in_user_arguments_is_rejected(self):
+        status, document, commands, _, _ = self.run_diagnose(["--list-cases"], REFS)
+        self.assertEqual((status, commands), (1, []))
+        self.assertEqual(document["aggregate"]["status"], "ERROR")
+
+
 class MainTest(unittest.TestCase):
 
     def test_arguments_after_separator_reach_the_test_tool(self):
@@ -234,6 +507,17 @@ class MainTest(unittest.TestCase):
             gate.main(["diagnose", "--", "--jobs", "1"])
         fake_check.assert_not_called()
         self.assertEqual(fake_diagnose.call_args[0][2], ["--jobs", "1"])
+        self.assertEqual(fake_diagnose.call_args[1]["shard_workers"], gate.DEFAULT_SHARD_WORKERS)
+
+    def test_shard_workers_is_independent_of_test_tool_jobs(self):
+        with mock.patch.object(gate, "diagnose", return_value=0) as fake_diagnose:
+            gate.main(["diagnose", "--shard-workers", "3", "--", "--jobs", "8"])
+        self.assertEqual(fake_diagnose.call_args[0][2], ["--jobs", "8"])
+        self.assertEqual(fake_diagnose.call_args[1]["shard_workers"], 3)
+
+    def test_shard_workers_must_be_positive(self):
+        with mock.patch("sys.stderr", io.StringIO()), self.assertRaises(SystemExit):
+            gate.main(["diagnose", "--shard-workers", "0"])
 
 
 class Test009DUnchangedTest(unittest.TestCase):

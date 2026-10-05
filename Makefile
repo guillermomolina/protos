@@ -53,6 +53,10 @@ TRUFFLE_COMPILATION_REPORT := $(TRUFFLE_COMPILATION_DIR)/gate-report.json
 TRUFFLE_COMPILATION_DIAGNOSE_REPORT := $(TRUFFLE_COMPILATION_DIR)/diagnose-report.json
 TRUFFLE_COMPILATION_TEST_ARGS ?= --jobs $(PROTOS_TEST_JOBS)
 TRUFFLE_COMPILATION_TIMEOUT ?= 3600
+# BUG016-B: concurrent per-Case diagnostic JVMs; independent of PROTOS_TEST_JOBS.
+TRUFFLE_COMPILATION_SHARD_WORKERS ?= 1
+# BUG016-B: each diagnose shard runs exactly one Case, so the Test Tool --jobs is not forwarded by default.
+TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS ?=
 
 .PHONY: help toolchain compile build test test-java java-test-phase test-java-parallel test-java-serial test-java-confirm test-java-stress test-local-range-pe-guard check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation diagnose-truffle-compilation test-protos check verify clean artifacts artifacts-verify artifacts-publish-d064 dist dist-validate
 
@@ -99,7 +103,8 @@ help:
 		'  make dist-validate  Build and validate the portable distribution' \
 		'' \
 		'Overrides: MVN=... PYTHON=... SH=... MVN_FLAGS=... JAVA_TEST_JOBS=... PROTOS_TEST_JOBS=... DIST_VALIDATE_FLAGS=...' \
-		'           TRUFFLE_COMPILATION_TEST_ARGS=... TRUFFLE_COMPILATION_TIMEOUT=...'
+		'           TRUFFLE_COMPILATION_TEST_ARGS=... TRUFFLE_COMPILATION_TIMEOUT=...' \
+		'           TRUFFLE_COMPILATION_SHARD_WORKERS=... TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS=...'
 
 toolchain:
 	$(PYTHON) tools/verify_toolchain.py --mode check --scope development
@@ -212,15 +217,16 @@ check-truffle-compilation:
 		--report $(TRUFFLE_COMPILATION_REPORT) \
 		-- $(TRUFFLE_COMPILATION_TEST_ARGS)
 
-# TEST009-F: manual escalation only; narrow TRUFFLE_COMPILATION_TEST_ARGS to the
+# TEST009-F: manual escalation only; narrow TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS to the
 # failing selection, the traces are large.
 diagnose-truffle-compilation:
 	$(MVN) $(MVN_FLAGS) package -DskipTests
 	$(PYTHON) tools/truffle_compilation_gate.py diagnose \
 		--timeout $(TRUFFLE_COMPILATION_TIMEOUT) \
+		--shard-workers $(TRUFFLE_COMPILATION_SHARD_WORKERS) \
 		--artifacts $(TRUFFLE_COMPILATION_DIR) \
 		--report $(TRUFFLE_COMPILATION_DIAGNOSE_REPORT) \
-		-- $(TRUFFLE_COMPILATION_TEST_ARGS)
+		-- $(TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS)
 
 # Historical PERF030-F name, kept for compatibility.
 test-local-range-pe-guard: check-local-range-index-pe

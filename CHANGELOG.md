@@ -7,6 +7,26 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.211-SNAPSHOT
+
+- `BUG016-B` (guillermomolina/protos#797) shards the manual TEST009 Truffle
+  compilation diagnostics by logical Case. `tools/truffle_compilation_gate.py
+  diagnose` first obtains the authoritative CasePlan from the real Test Tool
+  (`protos test ... --list-cases`, `protos.test.cases/v1`, parsed
+  fail-closed), then runs each opaque CaseRef in its own packaged diagnostic
+  JVM (`protos test ... --case <ref>`) with unchanged diagnostic options, at
+  most `--shard-workers` JVMs at a time (Makefile
+  `TRUFFLE_COMPILATION_SHARD_WORKERS`, default 1). Each shard keeps its own
+  log and per-JVM timeout; results are aggregated fail-closed in CasePlan
+  order with exact-once coverage, into the new
+  `protos.truffle-compilation.diagnose/v2` report. `make
+  diagnose-truffle-compilation` now takes its Test Tool arguments from
+  `TRUFFLE_COMPILATION_DIAGNOSE_TEST_ARGS` (empty by default, no `--jobs`);
+  the strict `check` gate is unchanged. This does not fix BUG016: a real run
+  showed each diagnostic JVM using about one core for most of its lifetime,
+  so the dominant cost is per-JVM and sharding multiplies it rather than
+  removing it. BUG016 remains open.
+
 ## 0.3.210-SNAPSHOT
 
 - `BUG017` (guillermomolina/protos#800) settles the P Completion after an
