@@ -20,6 +20,7 @@ package com.guillermomolina.protos.runtime;
 import com.guillermomolina.protos.execution.ProtosInvocation;
 import com.guillermomolina.protos.execution.ProtosIoReleaseCPrimeExecution;
 import com.guillermomolina.protos.execution.ProtosTextReaderCPrimeExecution;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.Arrays;
@@ -528,7 +529,7 @@ public final class ProtosTextReader {
             if (tooLong(lineBytes, maxBytes)) {
                 return new LineResult(LineKind.TOO_LONG, null, 0, decoder, false);
             }
-            line.append(unit.text());
+            appendLineText(line, unit.text());
         }
 
         return switch (preview.status()) {
@@ -539,6 +540,16 @@ public final class ProtosTextReader {
                             ? new LineResult(LineKind.EOF, null, consumed, next, false)
                             : new LineResult(LineKind.LINE, line.toString(), consumed, next, false);
         };
+    }
+
+    /**
+     * Keeps JDK {@code StringBuilder} growth and its exceptional bounds/format
+     * paths out of partial evaluation; line framing, byte accounting, and
+     * decoder state selection in {@link #scanLine} stay visible to PE.
+     */
+    @TruffleBoundary
+    private static void appendLineText(StringBuilder line, String text) {
+        line.append(text);
     }
 
     private static boolean tooLong(BigInteger used, BigInteger maxBytes) {

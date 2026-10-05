@@ -103,8 +103,9 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
 
     /**
      * TEST009-I: closure-call entry must likewise specialize on concrete
-     * representations in both generated interpreters. Immediate and native
-     * entry have one specialization each; the two source-backed
+     * representations in both generated interpreters. Immediate entry has one
+     * specialization; native entry (TEST009-M) keeps an exact native-body
+     * identity cache with a generic fallback; the two source-backed
      * representations each keep a direct-call cache with an indirect fallback,
      * and module initialization additionally keeps its immediate-hit entry.
      */
@@ -113,7 +114,7 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
         java.util.Map<Class<?>, Long> expected =
                 java.util.Map.of(
                         ProtosBytecodeRootNode.ImmediateResultCall.class, 1L,
-                        ProtosBytecodeRootNode.NativeCall.class, 1L,
+                        ProtosBytecodeRootNode.NativeCall.class, 2L,
                         ProtosBytecodeRootNode.OrdinarySourceCall.class, 2L,
                         ProtosBytecodeRootNode.ModuleInitializationCall.class, 3L);
 
@@ -141,6 +142,22 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
                     operation.getName()
                             + " must not specialize on the PreparedClosureCall interface");
             assertEquals(expected, receivers, operation.getName());
+
+            assertEquals(
+                    List.of(
+                            List.of(ProtosBytecodeRootNode.NativeCall.class),
+                            List.of(
+                                    ProtosBytecodeRootNode.NativeCall.class,
+                                    com.guillermomolina.protos.runtime.ProtosNativeClosureBody.class)),
+                    specializations.stream()
+                            .filter(
+                                    method ->
+                                            method.getParameterTypes()[0]
+                                                    == ProtosBytecodeRootNode.NativeCall.class)
+                            .map(method -> List.of(method.getParameterTypes()))
+                            .sorted(java.util.Comparator.comparingInt(List::size))
+                            .collect(java.util.stream.Collectors.toList()),
+                    operation.getName() + " NativeCall");
 
             for (Class<?> source :
                     List.of(

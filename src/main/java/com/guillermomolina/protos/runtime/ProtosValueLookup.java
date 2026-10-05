@@ -19,6 +19,7 @@ package com.guillermomolina.protos.runtime;
 
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.CompilerAsserts;
+import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
 import com.oracle.truffle.api.Truffle;
 import java.util.Objects;
 import java.util.Optional;
@@ -317,12 +318,24 @@ public final class ProtosValueLookup {
         if (receiver instanceof ProtosRepresentedValue represented) {
             return Optional.of(
                     Objects.requireNonNull(
-                            represented.representedDelegationParent(prelude),
+                            representedDelegationParent(represented, prelude),
                             "represented delegation parent"));
         }
         throw new UnsupportedOperationException(
                 "Standard delegation parent is not implemented for runtime value representation "
                         + receiver.getClass().getName());
+    }
+
+    /*
+     * TEST009-M: the represented families do not share one parent rule (root
+     * Object, a Prelude prototype, or an instance-retained prototype), so the
+     * megamorphic interface call is kept out of partial evaluation.
+     */
+    @TruffleBoundary
+    private static Object representedDelegationParent(
+            ProtosRepresentedValue represented,
+            ProtosPrelude prelude) {
+        return represented.representedDelegationParent(prelude);
     }
 
     /**

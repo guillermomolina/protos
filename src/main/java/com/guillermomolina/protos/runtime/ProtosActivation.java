@@ -550,19 +550,8 @@ public final class ProtosActivation {
 
         if (deferredContextAuthority != null
                 && deferredContextAuthority != authority) {
-            java.util.ArrayList<String> existingNames =
-                    new java.util.ArrayList<>();
-            java.util.ArrayList<Object> existingValues =
-                    new java.util.ArrayList<>();
-            deferredContextAuthority.appendBindingsTo(
-                    existingNames,
-                    existingValues);
-
-            for (int index = 0; index < existingNames.size(); index++) {
-                authority.putBinding(
-                        existingNames.get(index),
-                        existingValues.get(index));
-            }
+            ProtosLexicalBindingAuthorityCalls.transferAll(
+                    deferredContextAuthority, authority);
         }
 
         deferredContextAuthority = authority;
@@ -607,7 +596,8 @@ public final class ProtosActivation {
             return context.hasLocalSlot(name);
         }
         return deferredContextAuthority != null
-                && deferredContextAuthority.containsBinding(name);
+                && ProtosLexicalBindingAuthorityCalls.contains(
+                        deferredContextAuthority, name);
     }
 
     /**
@@ -630,7 +620,8 @@ public final class ProtosActivation {
         if (deferredContextAuthority == null) {
             return Optional.empty();
         }
-        return deferredContextAuthority.readBinding(name);
+        return ProtosLexicalBindingAuthorityCalls.read(
+                deferredContextAuthority, name);
     }
 
     /**
@@ -653,11 +644,13 @@ public final class ProtosActivation {
             return;
         }
 
-        if (deferredContextAuthority.containsBinding(name)) {
+        if (ProtosLexicalBindingAuthorityCalls.contains(
+                deferredContextAuthority, name)) {
             throw new IllegalStateException(
                     "local slot already exists: " + name);
         }
-        deferredContextAuthority.putBinding(name, value);
+        ProtosLexicalBindingAuthorityCalls.put(
+                deferredContextAuthority, name, value);
     }
 
     /**
@@ -699,11 +692,13 @@ public final class ProtosActivation {
             return;
         }
 
-        if (!deferredContextAuthority.containsBinding(name)) {
+        if (!ProtosLexicalBindingAuthorityCalls.contains(
+                deferredContextAuthority, name)) {
             throw new IllegalStateException(
                     "local slot does not exist: " + name);
         }
-        deferredContextAuthority.putBinding(name, value);
+        ProtosLexicalBindingAuthorityCalls.put(
+                deferredContextAuthority, name, value);
     }
 
     /**
