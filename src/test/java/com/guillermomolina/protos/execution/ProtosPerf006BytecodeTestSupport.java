@@ -118,9 +118,9 @@ public final class ProtosPerf006BytecodeTestSupport {
                     "expected Bytecode-lowered Closure, got "
                             + (result == null ? "null" : result.getClass().getName()));
         }
-        if (!closure.executionPlan().orElseThrow().isBytecodeBackendForRuntime()) {
+        if (closure.executionPlan().isEmpty()) {
             throw new AssertionError(
-                    "explicit Bytecode lowering did not produce Bytecode Closure plan");
+                    "explicit Bytecode lowering did not produce a Closure execution plan");
         }
         return closure;
     }

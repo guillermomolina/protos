@@ -7591,7 +7591,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                 selected.home())) {
             ProtosClosureExecutionPlan plan =
                     taskOwnedBytecodePlan(targetClosure);
-            if (plan != null && plan.isBytecodeBackendForRuntime()) {
+            if (plan != null) {
                 return PreparedInlineLiteralCall.direct(
                         plan.bytecodeActivationTargetForComposition(),
                         ProtosFrameArguments.compactDirectClosureCall(
@@ -8431,7 +8431,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosBytecodeRootNode.taskOwnedBytecodePlan(
                             closure,
                             enteredContext);
-            if (plan == null || !plan.isBytecodeBackendForRuntime()) {
+            if (plan == null) {
                 return null;
             }
             return plan.bytecodeActivationTargetForComposition();
@@ -9335,10 +9335,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                 closure,
                                 plan);
             }
-        }
-        if (!plan.isBytecodeBackendForRuntime()) {
-            throw new UnsupportedOperationException(
-                    "C-prime composed invocation requires a Bytecode execution plan");
         }
         return PreparedClosureCall.ordinary(plan.bytecodeActivationTargetForComposition(), activation);
     }

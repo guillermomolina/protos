@@ -215,7 +215,7 @@ class ProtosCoreBootstrapTest {
                         ProtosClosureValue.class,
                         any.readLocalSlot("match").orElseThrow());
 
-        assertTrue(match.executionPlan().orElseThrow().isBytecodeBackendForRuntime());
+        assertTrue(match.executionPlan().isPresent());
         assertTrue(match.requiresContextLocalExecutionProjectionForRuntime());
 
         Object result =

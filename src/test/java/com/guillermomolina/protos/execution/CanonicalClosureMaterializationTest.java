@@ -124,9 +124,6 @@ class CanonicalClosureMaterializationTest {
                                 activation);
 
         assertTrue(closure.definition() != null);
-        assertTrue(
-                closure.executionPlan()
-                        .orElseThrow()
-                        .isBytecodeBackendForRuntime());
+        assertTrue(closure.executionPlan().isPresent());
     }
 }

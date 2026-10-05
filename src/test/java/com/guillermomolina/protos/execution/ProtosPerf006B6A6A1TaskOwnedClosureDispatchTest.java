@@ -109,9 +109,6 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                 "() => { probe()\npause()\n99 }",
                                 "perf006-b6a6a1-task-projection.protos",
                                 module);
-                assertTrue(
-                        closure.executionPlan().orElseThrow().isBytecodeBackendForRuntime(),
-                        "public parse is Bytecode-backed after the B6B production cutover");
 
                 ProtosTask task =
                         module.executionDomain()
@@ -147,9 +144,6 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                         1,
                         probes.get(),
                         "completed prefix must not replay after C-prime resume");
-                assertTrue(
-                        closure.executionPlan().orElseThrow().isBytecodeBackendForRuntime(),
-                        "semantic/template Closure remains Bytecode-backed after direct C-prime execution");
             } finally {
                 context.leave();
             }
@@ -197,9 +191,6 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                         module);
                         ProtosClosureExecutionPlan template =
                                 closure.executionPlan().orElseThrow();
-                        assertTrue(
-                                template.isBytecodeBackendForRuntime(),
-                                "public parse template is Bytecode-backed after B6B");
 
                         assertEquals(
                                 BigInteger.valueOf(42),
@@ -252,9 +243,6 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                 ProtosLanguageContext.current()
                                         .projectedBytecodeExecutionPlanCountForTesting(),
                                 "foreign-Context synchronous invocation must create one Context-local Bytecode projection");
-                        assertTrue(
-                                template.isBytecodeBackendForRuntime(),
-                                "semantic/template Closure remains Bytecode-backed");
                         return null;
                     });
         }
@@ -298,10 +286,7 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                 assertInstanceOf(
                                         ProtosClosureValue.class,
                                         bytecodeRoot.call(module));
-                        assertTrue(
-                                closure.executionPlan()
-                                        .orElseThrow()
-                                        .isBytecodeBackendForRuntime());
+                        assertTrue(closure.executionPlan().isPresent());
 
                         Object value =
                                 ProtosClosureInvoker.invoke(
@@ -317,11 +302,6 @@ final class ProtosPerf006B6A6A1TaskOwnedClosureDispatchTest {
                                 ProtosLanguageContext.current()
                                         .projectedBytecodeExecutionPlanCountForTesting(),
                                 "already Context-owned Bytecode template must execute without reprojection");
-                        assertTrue(
-                                closure.executionPlan()
-                                        .orElseThrow()
-                                        .isBytecodeBackendForRuntime(),
-                                "semantic/template Closure stays Bytecode-backed");
                         return null;
                     });
         }

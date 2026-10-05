@@ -104,10 +104,6 @@ public final class ProtosClosureExecutionPlan {
         return bytecodePlan.activationRootForTesting();
     }
 
-    boolean isBytecodeBackendForRuntime() {
-        return true;
-    }
-
     RootCallTarget bytecodeActivationTargetForComposition() {
         return bytecodePlan.activationTargetForComposition();
     }

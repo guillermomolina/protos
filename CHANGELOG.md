@@ -7,6 +7,18 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.218-SNAPSHOT
+
+- `I056` (guillermomolina/protos#658) implements the AUD009-G1 cleanup: the
+  obsolete `ProtosClosureExecutionPlan.isBytecodeBackendForRuntime()`
+  discriminator is removed. Its three constant-true checks in
+  `ProtosBytecodeRootNode` (inline literal call preparation, fast ordinary send
+  target, and the C-prime composed-invocation guard) are dropped while the
+  surrounding null and Context-projection handling is unchanged. Migration-era
+  test assertions on the discriminator are removed or replaced by plan-presence
+  checks. The generic Closure execution-plan boundary and the Bytecode plan
+  implementation are retained; observable semantics are unchanged.
+
 ## 0.3.217-SNAPSHOT
 
 - `I060-B` (guillermomolina/protos#663) implements D167 Candidate D: the

@@ -257,7 +257,6 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                         plan,
                         closure.executionPlan().orElseThrow(),
                         "temporary AST fallback must not replace the semantic Bytecode plan");
-                assertTrue(plan.isBytecodeBackendForRuntime());
             } finally {
                 context.leave();
             }

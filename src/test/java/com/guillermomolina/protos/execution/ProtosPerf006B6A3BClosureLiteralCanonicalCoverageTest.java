@@ -90,7 +90,6 @@ final class ProtosPerf006B6A3BClosureLiteralCanonicalCoverageTest {
                     methodActivation.lexicalContextsForClosureCapture(),
                     closure.capturedLexicalContexts());
             assertTrue(closure.executionPlan().isPresent());
-            assertTrue(closure.executionPlan().orElseThrow().isBytecodeBackendForRuntime());
         }
 
         System.out.println("PERF006_B6A3B_CLOSURE_CAPTURE_STATE=PASS");
@@ -153,7 +152,7 @@ final class ProtosPerf006B6A3BClosureLiteralCanonicalCoverageTest {
                                     module,
                                     "entry()",
                                     "b6a3b-closure-default-call.protos");
-            assertTrue(nested.executionPlan().orElseThrow().isBytecodeBackendForRuntime());
+            assertTrue(nested.executionPlan().isPresent());
             module.context().createLocalSlot("nested", nested);
             Object result =
                     executeBytecode(
