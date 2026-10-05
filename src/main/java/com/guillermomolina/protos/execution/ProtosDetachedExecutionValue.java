@@ -266,7 +266,8 @@ public final class ProtosDetachedExecutionValue {
         private boolean isSharedStandardObject(ProtosObjectValue object) {
             if (object == ProtosObjectValue.rootObject()
                     || object == prelude.bindings()
-                    || object == prelude.contextPrototype()) {
+                    || object == prelude.contextPrototype()
+                    || prelude.isIpFamilyPrototypeForRuntime(object)) {
                 return true;
             }
             java.util.ArrayList<String> bindingNames = new java.util.ArrayList<>();

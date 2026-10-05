@@ -66,7 +66,9 @@ final class ProtosExactExecutionFacilityTest {
             "worker: Actor.spawn(\"workers\", \"echo\")\n"
                     + "worker.request(\"echo\", 42)";
     private static final String ACTOR_CHAIN_CASE_SOURCE =
-            "address: IpAddress(6, 340282366920938463463374607431768211455)\n"
+            "IpAddress: import(\"std:network/IpAddresses\").IpAddress\n"
+                    + "IpEndpoint: import(\"std:network/IpEndpoints\").IpEndpoint\n"
+                    + "address: IpAddress(6, 340282366920938463463374607431768211455)\n"
                     + "endpoint: IpEndpoint(address, 65535)\n"
                     + "worker: Actor.spawn(\"workers\", \"echo\")\n"
                     + "\n"
@@ -325,6 +327,9 @@ final class ProtosExactExecutionFacilityTest {
         private static final String SPECIFIER = "workers";
         private static final ProtosModuleKey KEY = new ProtosModuleKey("tool002-g1:workers");
         private final Path source;
+        // D172: Actor fixtures import the canonical IP families from std:network.
+        private final ProtosModuleResolver standardLibrary =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
 
         private WorkersResolver(Path source) {
             this.source = source;
@@ -334,7 +339,10 @@ final class ProtosExactExecutionFacilityTest {
         public ProtosModuleKey resolve(
                 String exactSpecifier,
                 Optional<ProtosModuleKey> importingModule)
-                throws IOException {
+                throws Exception {
+            if (exactSpecifier.startsWith("std:")) {
+                return standardLibrary.resolve(exactSpecifier, importingModule);
+            }
             if (!SPECIFIER.equals(exactSpecifier)) {
                 throw new IOException("unknown TOOL002-G1 fixture module: " + exactSpecifier);
             }
@@ -342,7 +350,10 @@ final class ProtosExactExecutionFacilityTest {
         }
 
         @Override
-        public ProtosModuleSource loadSource(ProtosModuleKey key) throws IOException {
+        public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
+            if (key.canonicalId().startsWith("std:")) {
+                return standardLibrary.loadSource(key);
+            }
             if (!KEY.equals(key)) {
                 throw new IOException(
                         "foreign TOOL002-G1 fixture module key: " + key.canonicalId());

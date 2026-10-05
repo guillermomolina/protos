@@ -109,11 +109,11 @@ final class ProtosNioTcpConnectionWriteTest {
     }
 
     private static ProtosObjectValue endpoint(ProtosPrelude p,ProtosActivation a,int port) {
-        Object af=p.bindings().readLocalSlot("IpAddress").orElseThrow();
+        Object af=p.ipAddressPrototypeForRuntime();
         ProtosObjectValue address=(ProtosObjectValue)ProtosInvocation.invoke(af,List.of(
                 new ProtosIntegerValue(BigInteger.valueOf(4)),
                 new ProtosIntegerValue(BigInteger.valueOf(0x7f000001L))),a);
-        Object ef=p.bindings().readLocalSlot("IpEndpoint").orElseThrow();
+        Object ef=p.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)ProtosInvocation.invoke(
                 ef,List.of(address,new ProtosIntegerValue(BigInteger.valueOf(port))),a);
     }

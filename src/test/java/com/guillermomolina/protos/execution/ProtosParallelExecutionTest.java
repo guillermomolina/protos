@@ -63,7 +63,10 @@ class ProtosParallelExecutionTest{
 
 
  @Test void ipDataTransferConformanceSourceRoundTripsThroughP()throws Exception{
-  var p=core();
+  // D172: the fixture imports the canonical IP families from std:network.
+  var p=new ProtosCoreBootstrap().bootstrap(
+      Path.of("protos","lib","core"),
+      new ProtosStandardLibraryModuleResolver(Path.of("protos","lib")));
   try(var h=ProtosHostedExecutionTestFixture.open(p)){
    var d=h.activation().executionDomain();
    var source=java.nio.file.Files.readString(

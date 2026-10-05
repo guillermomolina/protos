@@ -79,13 +79,11 @@ public final class ProtosStandardNetworkProtocol {
         }
 
         Object endpointValue = supplied.get(0);
-        Object endpointBinding = prelude.bindings().readLocalSlot("IpEndpoint").orElse(null);
-        Object addressBinding = prelude.bindings().readLocalSlot("IpAddress").orElse(null);
         if (!(endpointValue instanceof ProtosObjectValue endpoint)
-                || !(endpointBinding instanceof ProtosObjectValue endpointPrototype)
-                || !(addressBinding instanceof ProtosObjectValue addressPrototype)
                 || !ProtosStandardIpEndpointProtocol.recognizesValue(
-                        endpoint, endpointPrototype, addressPrototype)) {
+                        endpoint,
+                        prelude.ipEndpointPrototypeForRuntime(),
+                        prelude.ipAddressPrototypeForRuntime())) {
             return failedFuture(
                     activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         }
@@ -160,10 +158,9 @@ public final class ProtosStandardNetworkProtocol {
         ProtosObjectValue addressConstraint = null;
         Object addressValue = slots.address();
         if (addressValue != ProtosNullValue.INSTANCE) {
-            Object addressBinding = prelude.bindings().readLocalSlot("IpAddress").orElse(null);
             if (!(addressValue instanceof ProtosObjectValue address)
-                    || !(addressBinding instanceof ProtosObjectValue addressPrototype)
-                    || !ProtosStandardIpAddressProtocol.recognizesValue(address, addressPrototype)) {
+                    || !ProtosStandardIpAddressProtocol.recognizesValue(
+                            address, prelude.ipAddressPrototypeForRuntime())) {
                 return failedFuture(activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
             }
             Object addressVersionValue = address.readLocalSlot("version").orElse(null);
@@ -222,12 +219,10 @@ public final class ProtosStandardNetworkProtocol {
             Object resourceState,
             ProtosObjectValue localEndpoint,
             com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow.Backend connectionBackend) {
-        Object endpointBinding = prelude.bindings().readLocalSlot("IpEndpoint").orElse(null);
-        Object addressBinding = prelude.bindings().readLocalSlot("IpAddress").orElse(null);
-        if (!(endpointBinding instanceof ProtosObjectValue endpointPrototype)
-                || !(addressBinding instanceof ProtosObjectValue addressPrototype)
-                || !ProtosStandardIpEndpointProtocol.recognizesValue(
-                        localEndpoint, endpointPrototype, addressPrototype)) {
+        if (!ProtosStandardIpEndpointProtocol.recognizesValue(
+                localEndpoint,
+                prelude.ipEndpointPrototypeForRuntime(),
+                prelude.ipAddressPrototypeForRuntime())) {
             throw new IllegalArgumentException(
                     "backend local endpoint is not a recognized IpEndpoint");
         }

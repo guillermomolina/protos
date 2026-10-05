@@ -98,7 +98,7 @@ final class ProtosNetworkListenAcquisitionTest {
     private static ProtosFutureValue future(Object receiver,String selector,List<?> args,ProtosActivation a){ return assertInstanceOf(ProtosFutureValue.class,ProtosInvocation.invokeMessage(receiver,selector,args,a)); }
     private static ProtosObjectValue request(Object version,Object address,Object port){ ProtosObjectValue r=new ProtosObjectValue(ProtosObjectValue.rootObject()); r.createLocalSlot("ipVersion",version); r.createLocalSlot("address",address); r.createLocalSlot("port",port); return r; }
     private static ProtosObjectValue ipAddress(Fixture x,int version,long bits){ return ipAddress(x,version,BigInteger.valueOf(bits)); }
-    private static ProtosObjectValue ipAddress(Fixture x,int version,BigInteger bits){ Object factory=x.prelude.bindings().readLocalSlot("IpAddress").orElseThrow(); return (ProtosObjectValue)ProtosInvocation.invoke(factory,List.of(integer(version),new ProtosIntegerValue(bits)),x.activation); }
+    private static ProtosObjectValue ipAddress(Fixture x,int version,BigInteger bits){ Object factory=x.prelude.ipAddressPrototypeForRuntime(); return (ProtosObjectValue)ProtosInvocation.invoke(factory,List.of(integer(version),new ProtosIntegerValue(bits)),x.activation); }
     private static ProtosIntegerValue integer(long v){ return new ProtosIntegerValue(BigInteger.valueOf(v)); }
     private static void assertFailedAs(ProtosFutureValue f,ProtosPrelude p,String name){ assertEquals(ProtosFutureValue.State.FAILED,f.state()); assertSame(p.bindings().readLocalSlot(name).orElseThrow(),f.failedError().orElseThrow().parent().orElseThrow()); }
 

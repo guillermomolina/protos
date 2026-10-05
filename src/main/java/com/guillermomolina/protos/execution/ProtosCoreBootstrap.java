@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
@@ -27,6 +28,7 @@ import java.util.ArrayDeque;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -286,6 +288,10 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(
                         bootstrapContext, "IpEndpoint", ProtosObjectValue.rootObject());
         ProtosStandardIpEndpointProtocol.install(ipEndpointPrototype, ipAddressPrototype);
+        // D172: the canonical IP families are runtime-retained standard objects published through
+        // std:network modules, not public Prelude bindings.
+        bootstrapContext.removeLocalSlot("IpAddress");
+        bootstrapContext.removeLocalSlot("IpEndpoint");
         ProtosObjectValue networkPrototype =
                 requirePrototype(
                         bootstrapContext, "Network", ProtosObjectValue.rootObject());
@@ -403,7 +409,9 @@ public final class ProtosCoreBootstrap {
                 groupRefPrototype,
                 sendOperationPrototype,
                 tcpConnectionPrototype,
-                tcpListenerPrototype);
+                tcpListenerPrototype,
+                ipAddressPrototype,
+                ipEndpointPrototype);
         validateFrozenStandardGraph(
                 bootstrapContext,
                 preludeBindings,
@@ -412,7 +420,9 @@ public final class ProtosCoreBootstrap {
                 groupRefPrototype,
                 sendOperationPrototype,
                 tcpConnectionPrototype,
-                tcpListenerPrototype);
+                tcpListenerPrototype,
+                ipAddressPrototype,
+                ipEndpointPrototype);
 
         return new ProtosPrelude(
                 preludeBindings,
@@ -420,7 +430,25 @@ public final class ProtosCoreBootstrap {
                 bufferedBytesPrototype,
                 actorRefPrototype,
                 tcpConnectionPrototype,
-                tcpListenerPrototype);
+                tcpListenerPrototype,
+                ipAddressPrototype,
+                ipEndpointPrototype,
+                standardModuleMembers(ipAddressPrototype, ipEndpointPrototype));
+    }
+
+    /**
+     * Exact runtime-owned initial members of standard modules (D172).
+     *
+     * <p>This is configuration for the general module-member seam in {@link ProtosPrelude}; module
+     * creation itself has no knowledge of these keys.
+     */
+    private static Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers(
+            ProtosObjectValue ipAddressPrototype, ProtosObjectValue ipEndpointPrototype) {
+        return Map.of(
+                new ProtosModuleKey("std:network/IpAddresses"),
+                Map.of("IpAddress", ipAddressPrototype),
+                new ProtosModuleKey("std:network/IpEndpoints"),
+                Map.of("IpEndpoint", ipEndpointPrototype));
     }
 
 

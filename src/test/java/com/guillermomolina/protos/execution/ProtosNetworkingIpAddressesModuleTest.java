@@ -19,6 +19,8 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -49,8 +51,40 @@ final class ProtosNetworkingIpAddressesModuleTest {
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
         assertEquals(
-                Set.of("v4", "v6", "parse", "format"),
+                Set.of("IpAddress", "v4", "v6", "parse", "format"),
                 module.localSlotsSnapshot().keySet());
+    }
+
+    /**
+     * D172: the module member is the runtime-retained canonical family, shared by Actor-local
+     * module instances that are themselves distinct.
+     */
+    @Test
+    void moduleMemberIsRuntimeCanonicalFamilyAcrossActorLocalInstances() throws Exception {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        // Each newModuleActivation() owns a fresh Actor-local module state.
+        ProtosObjectValue first =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:network/IpAddresses\")", prelude.newModuleActivation()));
+        ProtosObjectValue second =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        ProtosTestExecutionSupport.evaluate(
+                                "import(\"std:network/IpAddresses\")", prelude.newModuleActivation()));
+
+        assertNotSame(first, second);
+        assertSame(
+                prelude.ipAddressPrototypeForRuntime(),
+                first.readLocalSlot("IpAddress").orElseThrow());
+        assertSame(
+                prelude.ipAddressPrototypeForRuntime(),
+                second.readLocalSlot("IpAddress").orElseThrow());
+        assertEquals(false, prelude.bindings().hasLocalSlot("IpAddress"));
     }
 
 }

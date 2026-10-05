@@ -305,7 +305,8 @@ public final class ProtosActorValueTransfer {
             if (object == ProtosObjectValue.rootObject()
                     || object == prelude.bindings()
                     || prelude.isTcpConnectionPrototypeForRuntime(object)
-                    || prelude.isTcpListenerPrototypeForRuntime(object)) {
+                    || prelude.isTcpListenerPrototypeForRuntime(object)
+                    || prelude.isIpFamilyPrototypeForRuntime(object)) {
                 return true;
             }
             ArrayList<String> names = new ArrayList<>();

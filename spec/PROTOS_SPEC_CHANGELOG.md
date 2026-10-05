@@ -23,6 +23,21 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.442] - 2026-10-05
+
+### I066 / D172 — Standard Library placement of the canonical IP families
+- `spec/io/NETWORK.md`: `IpAddress` and `IpEndpoint` are no longer described
+  as Prelude factories. New section 3.1 places the canonical families at
+  `std:network/IpAddresses.IpAddress` and `std:network/IpEndpoints.IpEndpoint`.
+  Core requires no Prelude binding for either name. There is one FROZEN
+  canonical family of each kind per Process, present as an initial local slot
+  of the corresponding Actor-local module instance before its body executes.
+  Module instances stay Actor-local while sharing the family identity.
+  Internal runtime access (transfer, Network/TCP) is not a binding or an
+  implicit import, creates no module instance and confers no authority.
+  Transfer preserves the canonical parent. D048 construction, recognition,
+  equality and hashing semantics are unchanged.
+
 ## [0.1.441] - 2026-10-03
 
 ### I059 / D166 Candidate C — Narrow mandatory placement, admission, and capacity architecture

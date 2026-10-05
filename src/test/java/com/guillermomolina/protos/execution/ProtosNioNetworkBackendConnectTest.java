@@ -299,7 +299,7 @@ final class ProtosNioNetworkBackendConnectTest {
             BigInteger bits,
             int port) {
         Object addressFactory =
-                prelude.bindings().readLocalSlot("IpAddress").orElseThrow();
+                prelude.ipAddressPrototypeForRuntime();
         ProtosObjectValue address =
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
@@ -309,7 +309,7 @@ final class ProtosNioNetworkBackendConnectTest {
                                         new ProtosIntegerValue(bits)),
                                 activation);
         Object endpointFactory =
-                prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow();
+                prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory,

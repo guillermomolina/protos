@@ -100,8 +100,7 @@ final class ProtosNetworkConnectAcquisitionTest {
     @Test
     void invalidRequestFailsBeforeNetworkAuthorityIsExercised() throws Exception {
         Fixture x = fixture();
-        ProtosObjectValue fake = new ProtosObjectValue(x.prelude.bindings()
-                .readLocalSlot("IpEndpoint").orElseThrow());
+        ProtosObjectValue fake = new ProtosObjectValue(x.prelude.ipEndpointPrototypeForRuntime());
         fake.createLocalSlot("address", endpointAddress(x.prelude, x.activation, 0x01010101L));
         fake.createLocalSlot("port", integer(443));
         // OPEN rather than FROZEN, therefore not a recognized standard endpoint.
@@ -278,7 +277,7 @@ final class ProtosNetworkConnectAcquisitionTest {
     private static ProtosObjectValue endpoint(
             ProtosPrelude prelude, ProtosActivation activation, long bits, long port) {
         ProtosObjectValue address = endpointAddress(prelude, activation, bits);
-        Object endpointFactory = prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow();
+        Object endpointFactory = prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory, List.of(address, integer(port)), activation);
@@ -286,7 +285,7 @@ final class ProtosNetworkConnectAcquisitionTest {
 
     private static ProtosObjectValue endpointAddress(
             ProtosPrelude prelude, ProtosActivation activation, long bits) {
-        Object addressFactory = prelude.bindings().readLocalSlot("IpAddress").orElseThrow();
+        Object addressFactory = prelude.ipAddressPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         addressFactory,

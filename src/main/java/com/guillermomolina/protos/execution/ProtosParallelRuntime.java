@@ -284,6 +284,7 @@ public final class ProtosParallelRuntime {
             if(!(v instanceof ProtosObjectValue o)||!o.isFrozen())return false;
             if(p.isTcpConnectionPrototypeForRuntime(v))return true;
             if(p.isTcpListenerPrototypeForRuntime(v))return true;
+            if(p.isIpFamilyPrototypeForRuntime(v))return true;
             ArrayList<String> names=new ArrayList<>();
             ArrayList<Object> values=new ArrayList<>();
             p.bindings().appendLocalBindingsTo(names,values);

@@ -152,14 +152,14 @@ final class ProtosTcpConnectionIntegratedConformanceTest {
 
     private static ProtosObjectValue endpoint(
             ProtosPrelude prelude, ProtosActivation activation, long bits, long port) {
-        Object addressFactory = prelude.bindings().readLocalSlot("IpAddress").orElseThrow();
+        Object addressFactory = prelude.ipAddressPrototypeForRuntime();
         ProtosObjectValue address =
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
                                 addressFactory,
                                 List.of(integer(4), integer(bits)),
                                 activation);
-        Object endpointFactory = prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow();
+        Object endpointFactory = prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory, List.of(address, integer(port)), activation);

@@ -13,6 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+IpAddress: import("std:network/IpAddresses").IpAddress
+IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
 address: IpAddress(6, 340282366920938463463374607431768211455)
 endpoint: IpEndpoint(address, 65535)
 

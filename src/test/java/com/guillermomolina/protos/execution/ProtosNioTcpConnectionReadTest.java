@@ -170,7 +170,7 @@ final class ProtosNioTcpConnectionReadTest {
     private static ProtosObjectValue endpoint(
             ProtosPrelude prelude, ProtosActivation activation, int port) {
         Object addressFactory =
-                prelude.bindings().readLocalSlot("IpAddress").orElseThrow();
+                prelude.ipAddressPrototypeForRuntime();
         ProtosObjectValue address =
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
@@ -180,7 +180,7 @@ final class ProtosNioTcpConnectionReadTest {
                                         new ProtosIntegerValue(BigInteger.valueOf(0x7f000001L))),
                                 activation);
         Object endpointFactory =
-                prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow();
+                prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory,

@@ -249,7 +249,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "Path",
                 prelude.pathPrototype(),
                 Set.of("relative", "child", "==", "hash"));
-        ProtosObjectValue ipAddressPrototype = ordinaryBinding(prelude, "IpAddress");
+        ProtosObjectValue ipAddressPrototype = prelude.ipAddressPrototypeForRuntime();
         assertTrue(ipAddressPrototype.isFrozen(), "standard IpAddress prototype must be frozen");
         assertTrue(
                 ipAddressPrototype.parent().orElse(null) == ProtosObjectValue.rootObject(),
@@ -258,7 +258,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "IpAddress",
                 ipAddressPrototype,
                 Set.of("init", "recognizes", "==", "hash"));
-        ProtosObjectValue ipEndpointPrototype = ordinaryBinding(prelude, "IpEndpoint");
+        ProtosObjectValue ipEndpointPrototype = prelude.ipEndpointPrototypeForRuntime();
         assertTrue(ipEndpointPrototype.isFrozen(), "standard IpEndpoint prototype must be frozen");
         assertTrue(
                 ipEndpointPrototype.parent().orElse(null) == ProtosObjectValue.rootObject(),

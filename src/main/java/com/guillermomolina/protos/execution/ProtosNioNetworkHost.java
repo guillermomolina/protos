@@ -48,15 +48,9 @@ final class ProtosNioNetworkHost implements AutoCloseable {
 
     ProtosNetworkCapabilityValue provision(ProtosPrelude prelude) {
         ProtosPrelude owningPrelude = Objects.requireNonNull(prelude, "prelude");
-        Object addressBinding =
-                owningPrelude.bindings().readLocalSlot("IpAddress").orElse(null);
-        Object endpointBinding =
-                owningPrelude.bindings().readLocalSlot("IpEndpoint").orElse(null);
-        if (!(addressBinding instanceof ProtosObjectValue addressPrototype)
-                || !(endpointBinding instanceof ProtosObjectValue endpointPrototype)) {
-            throw new IllegalStateException(
-                    "production Network provisioning requires canonical IP prototypes");
-        }
+        // Throws IllegalStateException when the Prelude does not retain the canonical families.
+        ProtosObjectValue addressPrototype = owningPrelude.ipAddressPrototypeForRuntime();
+        ProtosObjectValue endpointPrototype = owningPrelude.ipEndpointPrototypeForRuntime();
 
         ProtosNioNetworkBackend backend =
                 new ProtosNioNetworkBackend(

@@ -97,14 +97,14 @@ final class ProtosTcpConnectionEndpointObservationTest {
 
     private static ProtosObjectValue endpoint(
             ProtosPrelude prelude, ProtosActivation activation, long bits, long port) {
-        Object addressFactory = prelude.bindings().readLocalSlot("IpAddress").orElseThrow();
+        Object addressFactory = prelude.ipAddressPrototypeForRuntime();
         ProtosObjectValue address =
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
                                 addressFactory,
                                 List.of(integer(4), new ProtosIntegerValue(BigInteger.valueOf(bits))),
                                 activation);
-        Object endpointFactory = prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow();
+        Object endpointFactory = prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory, List.of(address, integer(port)), activation);
@@ -114,7 +114,7 @@ final class ProtosTcpConnectionEndpointObservationTest {
         ProtosObjectValue endpoint = (ProtosObjectValue) value;
         assertTrue(endpoint.isFrozen());
         assertSame(
-                prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow(),
+                prelude.ipEndpointPrototypeForRuntime(),
                 endpoint.parent().orElseThrow());
         assertEquals(java.util.Set.of("address", "port"), endpoint.localSlotsSnapshot().keySet());
     }

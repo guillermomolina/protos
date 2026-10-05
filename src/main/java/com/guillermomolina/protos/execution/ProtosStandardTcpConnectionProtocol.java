@@ -126,12 +126,10 @@ public final class ProtosStandardTcpConnectionProtocol {
                         ? connection.localEndpointForRuntime()
                         : connection.remoteEndpointForRuntime();
         var prelude = activation.prelude().orElseThrow();
-        Object endpointBinding = prelude.bindings().readLocalSlot("IpEndpoint").orElse(null);
-        Object addressBinding = prelude.bindings().readLocalSlot("IpAddress").orElse(null);
-        if (!(endpointBinding instanceof ProtosObjectValue endpointPrototype)
-                || !(addressBinding instanceof ProtosObjectValue addressPrototype)
-                || !ProtosStandardIpEndpointProtocol.recognizesValue(
-                        endpoint, endpointPrototype, addressPrototype)) {
+        if (!ProtosStandardIpEndpointProtocol.recognizesValue(
+                endpoint,
+                prelude.ipEndpointPrototypeForRuntime(),
+                prelude.ipAddressPrototypeForRuntime())) {
             throw invalid(activation);
         }
         return endpoint;

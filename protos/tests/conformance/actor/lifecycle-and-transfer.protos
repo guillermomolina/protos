@@ -11,6 +11,8 @@
 
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
+IpAddress: import("std:network/IpAddresses").IpAddress
+IpEndpoint: import("std:network/IpEndpoints").IpEndpoint
 
 tests: [
     Test("stop termination same ref", () => {

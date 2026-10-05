@@ -122,6 +122,11 @@ class ProtosCoreBootstrapTest {
                 ProtosObjectValue.MutationState.FROZEN,
                 bindings.mutationState());
         assertFalse(bindings.hasLocalSlot("Bytes"));
+        // D172: the canonical IP families are runtime-retained, not public Prelude bindings.
+        assertFalse(bindings.hasLocalSlot("IpAddress"));
+        assertFalse(bindings.hasLocalSlot("IpEndpoint"));
+        assertTrue(prelude.ipAddressPrototypeForRuntime().isFrozen());
+        assertTrue(prelude.ipEndpointPrototypeForRuntime().isFrozen());
         assertFalse(bindings.hasLocalSlot("_coreRootObject"));
         assertEquals(
                 java.util.Set.of(
@@ -157,8 +162,6 @@ class ProtosCoreBootstrapTest {
                         "Map",
                         "IdentityMap",
                         "Path",
-                        "IpAddress",
-                        "IpEndpoint",
                         "Network",
                         "Future",
                         "Actor",

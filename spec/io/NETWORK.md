@@ -55,8 +55,9 @@ socket address, interface index/name, route handle, Network capability, or host
 resource identity.
 
 D048 / specification revision `0.1.391` closes the bounded public
-construction/recognition checkpoint. `IpAddress` is a standard frozen prelude
-factory/prototype that carries no Network authority. Its canonical construction
+construction/recognition checkpoint. `IpAddress` is a standard frozen
+factory/prototype that carries no Network authority; its public placement is
+defined in section 3.1. Its canonical construction
 uses ordinary polymorphic invocation:
 
 ```text
@@ -124,8 +125,9 @@ local-port selection is an acquisition request and is represented separately by
 the listen request below rather than by overloading endpoint data with a verb.
 
 D048 / specification revision `0.1.391` also closes the endpoint
-construction/recognition surface. `IpEndpoint` is a standard frozen prelude
-factory/prototype carrying no Network authority and is constructed through
+construction/recognition surface. `IpEndpoint` is a standard frozen
+factory/prototype carrying no Network authority, placed as defined in section
+3.1, and is constructed through
 ordinary invocation:
 
 ```text
@@ -169,6 +171,45 @@ other argument compares false and `===` remains ordinary object identity.
 the applicable Actor/P snapshot rules once their standard construction contract
 is implemented. Such transfer never transfers Network routing state or
 communication authority.
+
+### 3.1 Placement of the canonical IP families
+
+D172 places the canonical families in the Standard Library rather than in the
+Core Prelude. Core requires no public Prelude binding named `IpAddress` or
+`IpEndpoint`; an unqualified lookup of either name in a context that does not
+itself bind it follows ordinary missing-slot semantics.
+
+Within one Process there is exactly one canonical `IpAddress`
+factory/prototype and exactly one canonical `IpEndpoint` factory/prototype,
+shared by all of that Process's Actors and P work. Both are FROZEN, carry no
+mutable state, and are the exact objects referred to as canonical in sections 2
+and 3. They are published as:
+
+```text
+std:network/IpAddresses.IpAddress   // the canonical IpAddress
+std:network/IpEndpoints.IpEndpoint  // the canonical IpEndpoint
+```
+
+The `std:network/IpAddresses` module instance contains the local slot
+`IpAddress`, and the `std:network/IpEndpoints` module instance contains the
+local slot `IpEndpoint`, from the creation of that module's `moduleContext`,
+before its body executes (see the cache-before-execution steps in
+`spec/semantics/MODULES.md`). The slot value is the canonical family itself, not
+a per-instance copy or wrapper. Module instances remain Actor-local under the
+ordinary module rules: for Actors `A` and `B`,
+`IpAddresses@A !== IpAddresses@B`, while
+`IpAddresses@A.IpAddress === IpAddresses@B.IpAddress`, and likewise for
+`IpEndpoints`. Sharing is permitted because the family objects are frozen
+standard objects; no module state becomes global.
+
+The runtime's internal access to the canonical families, as used by Actor and P
+value transfer and by the `Network`/`TcpConnection`/`TcpListener` operations
+below, is not a Prelude binding, does not perform an implicit import, never
+creates or initializes a module instance as a side effect, and confers no
+`Network` authority. In particular, transferring a recognized `IpAddress` or
+`IpEndpoint` produces a fresh logical copy whose immediate parent is the same
+canonical family, without importing `std:network` modules in the source or the
+destination.
 
 ## 4. IPv4, IPv6, and scope
 

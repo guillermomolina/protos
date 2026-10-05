@@ -43,11 +43,9 @@ public final class ProtosStandardTcpListenerProtocol {
             ProtosTcpConnectionFlow.Backend connectionBackend) {
         Objects.requireNonNull(activation,"activation");
         ProtosPrelude prelude=activation.prelude().orElseThrow();
-        Object endpointBinding=prelude.bindings().readLocalSlot("IpEndpoint").orElse(null);
-        Object addressBinding=prelude.bindings().readLocalSlot("IpAddress").orElse(null);
-        if(!(endpointBinding instanceof ProtosObjectValue endpointPrototype)
-                || !(addressBinding instanceof ProtosObjectValue addressPrototype)
-                || !ProtosStandardIpEndpointProtocol.recognizesValue(localEndpoint,endpointPrototype,addressPrototype)
+        ProtosObjectValue endpointPrototype=prelude.ipEndpointPrototypeForRuntime();
+        ProtosObjectValue addressPrototype=prelude.ipAddressPrototypeForRuntime();
+        if(!ProtosStandardIpEndpointProtocol.recognizesValue(localEndpoint,endpointPrototype,addressPrototype)
                 || !ProtosStandardIpEndpointProtocol.recognizesValue(remoteEndpoint,endpointPrototype,addressPrototype)) {
             throw new IllegalArgumentException("accepted TCP endpoint descriptor is not a recognized IpEndpoint");
         }

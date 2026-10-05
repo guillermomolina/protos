@@ -48,8 +48,6 @@ tests: [
             Map
             IdentityMap
             Path
-            IpAddress
-            IpEndpoint
             Network
             Future
             Actor
@@ -62,6 +60,14 @@ tests: [
             true
         }
         Assertions.require(tool009LegacyCase() === true)
+    }),
+    Test("IP families are std:network members, not Prelude bindings", () => {
+        Assertions.signals(SlotNotFound, () => {
+            IpAddress
+        })
+        Assertions.signals(SlotNotFound, () => {
+            IpEndpoint
+        })
     }),
     Test("missing boolean binding", () => {
         Assertions.signals(SlotNotFound, () => {

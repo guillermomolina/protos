@@ -15,6 +15,7 @@
 
 Assertions: import("std:test/Assertions")
 Test: import("std:test/Test")
+IpAddress: import("std:network/IpAddresses").IpAddress
 
 tests: [
     Test("surface ipv4", () => {

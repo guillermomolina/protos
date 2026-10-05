@@ -238,6 +238,7 @@ public final class ProtosModuleRuntime {
                                         new IllegalStateException(
                                                 "module import requires an owning Core prelude"));
         ProtosObjectValue moduleInstance = prelude.newExecutionContext();
+        prelude.installStandardModuleMembersForRuntime(key, moduleInstance);
         ProtosActorModuleState.ModuleRecord record =
                 new ProtosActorModuleState.ModuleRecord(moduleInstance);
         actorState.put(key, record);
@@ -369,6 +370,7 @@ public final class ProtosModuleRuntime {
                                         new IllegalStateException(
                                                 "module import requires an owning Core prelude"));
         ProtosObjectValue moduleInstance = prelude.newExecutionContext();
+        prelude.installStandardModuleMembersForRuntime(key, moduleInstance);
 
         if (initialBootstrap) {
             installBootstrapLocalsForRuntime(moduleInstance, bootstrapLocals);

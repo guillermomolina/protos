@@ -97,7 +97,7 @@ final class ProtosTcpListenerAcceptTest {
     private static ProtosFutureValue accept(Fixture x){ return future(x.listener,"accept",List.of(),x.activation); }
     private static ProtosFutureValue future(Object receiver,String selector,List<?> args,ProtosActivation a){ return assertInstanceOf(ProtosFutureValue.class,ProtosInvocation.invokeMessage(receiver,selector,args,a)); }
     private static ProtosObjectValue endpoint(Fixture x,long bits,long port){
-        Object af=x.prelude.bindings().readLocalSlot("IpAddress").orElseThrow(); Object ef=x.prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow();
+        Object af=x.prelude.ipAddressPrototypeForRuntime(); Object ef=x.prelude.ipEndpointPrototypeForRuntime();
         ProtosObjectValue addr=(ProtosObjectValue)ProtosInvocation.invoke(af,List.of(integer(4),new ProtosIntegerValue(BigInteger.valueOf(bits))),x.activation);
         return (ProtosObjectValue)ProtosInvocation.invoke(ef,List.of(addr,integer(port)),x.activation);
     }

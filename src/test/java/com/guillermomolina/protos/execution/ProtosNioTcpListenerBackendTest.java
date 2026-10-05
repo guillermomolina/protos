@@ -160,11 +160,11 @@ final class ProtosNioTcpListenerBackendTest {
             ProtosObjectValue addressPrototype =
                     assertInstanceOf(
                             ProtosObjectValue.class,
-                            prelude.bindings().readLocalSlot("IpAddress").orElseThrow());
+                            prelude.ipAddressPrototypeForRuntime());
             ProtosObjectValue endpointPrototype =
                     assertInstanceOf(
                             ProtosObjectValue.class,
-                            prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow());
+                            prelude.ipEndpointPrototypeForRuntime());
             ProtosNioNetworkBackend backend =
                     new ProtosNioNetworkBackend(
                             poller,
@@ -219,7 +219,7 @@ final class ProtosNioTcpListenerBackendTest {
 
     private static ProtosObjectValue ipAddress(
             Fixture x, int version, BigInteger bits) {
-        Object factory = x.prelude.bindings().readLocalSlot("IpAddress").orElseThrow();
+        Object factory = x.prelude.ipAddressPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         factory,

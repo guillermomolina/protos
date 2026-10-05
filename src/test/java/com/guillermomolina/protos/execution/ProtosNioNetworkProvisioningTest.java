@@ -226,7 +226,7 @@ final class ProtosNioNetworkProvisioningTest {
 
     private static ProtosObjectValue ipv4LoopbackEndpoint(
             ProtosPrelude prelude, ProtosActivation activation, int port) {
-        Object addressFactory = prelude.bindings().readLocalSlot("IpAddress").orElseThrow();
+        Object addressFactory = prelude.ipAddressPrototypeForRuntime();
         ProtosObjectValue address =
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
@@ -236,7 +236,7 @@ final class ProtosNioNetworkProvisioningTest {
                                         new ProtosIntegerValue(
                                                 BigInteger.valueOf(0x7f000001L))),
                                 activation);
-        Object endpointFactory = prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow();
+        Object endpointFactory = prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory, List.of(address, integer(port)), activation);

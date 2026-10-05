@@ -225,14 +225,14 @@ final class ProtosTcpListenerIntegratedConformanceTest {
     }
 
     private static ProtosObjectValue endpoint(Fixture x, long bits, long port) {
-        Object addressFactory = x.prelude.bindings().readLocalSlot("IpAddress").orElseThrow();
+        Object addressFactory = x.prelude.ipAddressPrototypeForRuntime();
         ProtosObjectValue address =
                 (ProtosObjectValue)
                         ProtosInvocation.invoke(
                                 addressFactory,
                                 List.of(integer(4), new ProtosIntegerValue(BigInteger.valueOf(bits))),
                                 x.activation);
-        Object endpointFactory = x.prelude.bindings().readLocalSlot("IpEndpoint").orElseThrow();
+        Object endpointFactory = x.prelude.ipEndpointPrototypeForRuntime();
         return (ProtosObjectValue)
                 ProtosInvocation.invoke(
                         endpointFactory, List.of(address, integer(port)), x.activation);

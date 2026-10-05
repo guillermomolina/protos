@@ -47,6 +47,11 @@ public final class ProtosCanonicalInitialModuleExecution {
         }
 
         ProtosObjectValue instance = initialActivation.context();
+        try {
+            prelude.installStandardModuleMembersForRuntime(key, instance);
+        } catch (RuntimeException failure) {
+            throw new IOException("canonical initial module preparation failed", failure);
+        }
         ProtosActorModuleState.ModuleRecord record =
                 new ProtosActorModuleState.ModuleRecord(instance);
         state.put(key, record); // normative cache-before-execute point

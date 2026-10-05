@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.212-SNAPSHOT
+
+- `I066-B` (guillermomolina/protos#669) applies D172 placement to the
+  canonical IP families. The public Prelude no longer binds `IpAddress` or
+  `IpEndpoint`; the same FROZEN canonical families are now exposed as
+  `std:network/IpAddresses.IpAddress` and `std:network/IpEndpoints.IpEndpoint`.
+  `ProtosPrelude` retains both families runtime-only and gains a general,
+  immutable `ModuleKey` -> standard initial members seam, applied by every
+  canonical module-creation path before cache insertion and source execution;
+  module lifecycle, Actor-local caching and identity are unchanged. Actor, P
+  and detached-snapshot transfer keep the families as exact standard anchors
+  without importing modules, and Network/TCP validation and endpoint
+  materialization read the runtime-retained families. D048 construction,
+  recognition, equality and hashing are unchanged. Guest code must now import
+  the families explicitly from `std:network`.
+
 ## 0.3.211-SNAPSHOT
 
 - `BUG016-B` (guillermomolina/protos#797) shards the manual TEST009 Truffle

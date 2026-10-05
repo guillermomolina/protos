@@ -17,6 +17,9 @@
 
 package com.guillermomolina.protos.runtime;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 public final class ProtosPrelude {
@@ -26,6 +29,9 @@ public final class ProtosPrelude {
     private final ProtosObjectValue runtimeActorRefPrototype;
     private final ProtosObjectValue runtimeTcpConnectionPrototype;
     private final ProtosObjectValue runtimeTcpListenerPrototype;
+    private final ProtosObjectValue runtimeIpAddressPrototype;
+    private final ProtosObjectValue runtimeIpEndpointPrototype;
+    private final Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers;
 
     public ProtosPrelude(
             ProtosObjectValue bindings,
@@ -68,6 +74,37 @@ public final class ProtosPrelude {
             ProtosObjectValue runtimeActorRefPrototype,
             ProtosObjectValue runtimeTcpConnectionPrototype,
             ProtosObjectValue runtimeTcpListenerPrototype) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype,
+                runtimeTcpListenerPrototype,
+                null,
+                null,
+                Map.of());
+    }
+
+    /**
+     * Creates a Prelude that additionally retains the canonical IP families and the standard
+     * initial members of exact standard modules.
+     *
+     * <p>{@code standardModuleMembers} maps one canonical {@link ProtosModuleKey} to the exact
+     * members installed into every Actor-local module context created for that key before its
+     * source executes. Every member must be a FROZEN runtime-owned standard object: it is shared by
+     * all module instances of this Prelude, so it must carry no mutable module state.
+     */
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype,
+            ProtosObjectValue runtimeIpAddressPrototype,
+            ProtosObjectValue runtimeIpEndpointPrototype,
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>> standardModuleMembers) {
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
                 Objects.requireNonNull(contextPrototype, "contextPrototype");
@@ -75,6 +112,12 @@ public final class ProtosPrelude {
         this.runtimeActorRefPrototype = runtimeActorRefPrototype;
         this.runtimeTcpConnectionPrototype = runtimeTcpConnectionPrototype;
         this.runtimeTcpListenerPrototype = runtimeTcpListenerPrototype;
+        this.runtimeIpAddressPrototype = runtimeIpAddressPrototype;
+        this.runtimeIpEndpointPrototype = runtimeIpEndpointPrototype;
+        this.standardModuleMembers = copyStandardModuleMembers(standardModuleMembers);
+
+        requireFrozenDirectChildOfObject(runtimeIpAddressPrototype, "IpAddress");
+        requireFrozenDirectChildOfObject(runtimeIpEndpointPrototype, "IpEndpoint");
 
         if (runtimeTcpConnectionPrototype != null
                 && (!runtimeTcpConnectionPrototype.isFrozen()
@@ -112,6 +155,43 @@ public final class ProtosPrelude {
             throw new IllegalArgumentException(
                     "prelude Error binding must be an ordinary child of Object");
         }
+    }
+
+    private static void requireFrozenDirectChildOfObject(
+            ProtosObjectValue prototype, String name) {
+        if (prototype != null
+                && (!prototype.isFrozen()
+                        || prototype.parent().orElse(null) != ProtosObjectValue.rootObject())) {
+            throw new IllegalArgumentException(
+                    "runtime " + name + " prototype must be a frozen direct child of Object");
+        }
+    }
+
+    private static Map<ProtosModuleKey, Map<String, ProtosObjectValue>> copyStandardModuleMembers(
+            Map<ProtosModuleKey, Map<String, ProtosObjectValue>> members) {
+        Objects.requireNonNull(members, "standardModuleMembers");
+        LinkedHashMap<ProtosModuleKey, Map<String, ProtosObjectValue>> copy =
+                new LinkedHashMap<>();
+        for (Map.Entry<ProtosModuleKey, Map<String, ProtosObjectValue>> entry :
+                members.entrySet()) {
+            ProtosModuleKey key = Objects.requireNonNull(entry.getKey(), "standard module key");
+            LinkedHashMap<String, ProtosObjectValue> moduleMembers = new LinkedHashMap<>();
+            for (Map.Entry<String, ProtosObjectValue> member :
+                    Objects.requireNonNull(entry.getValue(), "standard module members")
+                            .entrySet()) {
+                String name = Objects.requireNonNull(member.getKey(), "standard member name");
+                ProtosObjectValue value =
+                        Objects.requireNonNull(member.getValue(), "standard member value");
+                if (!value.isFrozen()) {
+                    throw new IllegalArgumentException(
+                            "standard module member must be frozen: " + key.canonicalId()
+                                    + "." + name);
+                }
+                moduleMembers.put(name, value);
+            }
+            copy.put(key, Collections.unmodifiableMap(moduleMembers));
+        }
+        return Collections.unmodifiableMap(copy);
     }
 
     public ProtosObjectValue bindings() {
@@ -258,6 +338,65 @@ public final class ProtosPrelude {
     /** Nullable-safe identity test used only by isolation transfer machinery. */
     public boolean isTcpListenerPrototypeForRuntime(Object candidate) {
         return runtimeTcpListenerPrototype != null && candidate == runtimeTcpListenerPrototype;
+    }
+
+    /** Runtime-only canonical IpAddress family omitted from public Prelude bindings. */
+    public ProtosObjectValue ipAddressPrototypeForRuntime() {
+        if (runtimeIpAddressPrototype == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the standard runtime IpAddress prototype");
+        }
+        return runtimeIpAddressPrototype;
+    }
+
+    /** Runtime-only canonical IpEndpoint family omitted from public Prelude bindings. */
+    public ProtosObjectValue ipEndpointPrototypeForRuntime() {
+        if (runtimeIpEndpointPrototype == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the standard runtime IpEndpoint prototype");
+        }
+        return runtimeIpEndpointPrototype;
+    }
+
+    /**
+     * Nullable-safe identity test used only by isolation transfer machinery.
+     *
+     * <p>The canonical IP families are FROZEN, carry no authority and are shared by every Actor
+     * and P execution of this Prelude, so transfer keeps them as exact anchors instead of
+     * importing {@code std:network} modules to recover them.
+     */
+    public boolean isIpFamilyPrototypeForRuntime(Object candidate) {
+        return candidate != null
+                && (candidate == runtimeIpAddressPrototype
+                        || candidate == runtimeIpEndpointPrototype);
+    }
+
+    /**
+     * Installs the immutable standard initial members registered for {@code moduleKey} into a
+     * fresh Actor-local module context, before that context is cached or its source executes.
+     *
+     * <p>This is the only standard-member provisioning path for module creation; it neither
+     * imports, caches, nor creates module identity. A {@code null} key (non-module activations)
+     * and unregistered keys install nothing.
+     */
+    public void installStandardModuleMembersForRuntime(
+            ProtosModuleKey moduleKey, ProtosObjectValue moduleContext) {
+        Objects.requireNonNull(moduleContext, "moduleContext");
+        if (moduleKey == null) {
+            return;
+        }
+        Map<String, ProtosObjectValue> members = standardModuleMembers.get(moduleKey);
+        if (members == null) {
+            return;
+        }
+        for (Map.Entry<String, ProtosObjectValue> member : members.entrySet()) {
+            if (moduleContext.hasLocalSlot(member.getKey())) {
+                throw new IllegalStateException(
+                        "duplicate standard module member: " + moduleKey.canonicalId()
+                                + "." + member.getKey());
+            }
+            moduleContext.createLocalSlot(member.getKey(), member.getValue());
+        }
     }
 
     public ProtosObjectValue arrayPrototype() {
