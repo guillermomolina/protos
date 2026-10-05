@@ -184,9 +184,6 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
      * {@code ReadFrameLocal} of {@code x}.
      */
     private static ProtosSemanticBytecodeRootNode installThenReadRoot(ProtosLanguage language) {
-        ProtosFrameLexicalLayout layout =
-                ProtosFrameLexicalLayout.of(new String[] {"x", "y"});
-
         BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
                 ProtosSemanticBytecodeRootNodeGen.create(
                         language,
@@ -196,9 +193,12 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
 
                             BytecodeLocal x = builder.createLocal("x", null);
                             BytecodeLocal y = builder.createLocal("y", null);
-                            builder.beginInstallFrameLexicalAuthority(
-                                    new BytecodeLocal[] {x, y},
-                                    layout);
+                            BytecodeLocal[] locals = {x, y};
+                            ProtosFrameLexicalLayout layout =
+                                    ProtosFrameLexicalLayout.of(
+                                            new String[] {"x", "y"},
+                                            ProtosFrameLexicalLayout.localOffsetsOf(locals));
+                            builder.beginInstallFrameLexicalAuthority(locals, layout);
                             builder.emitLoadArgument(0);
                             builder.endInstallFrameLexicalAuthority();
 
@@ -222,9 +222,6 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
      * x}, and finally returns the direct {@code ReadFrameLocal} of {@code x}.
      */
     private static ProtosSemanticBytecodeRootNode installThenTwiceYieldingRoot(ProtosLanguage language) {
-        ProtosFrameLexicalLayout layout =
-                ProtosFrameLexicalLayout.of(new String[] {"x"});
-
         BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
                 ProtosSemanticBytecodeRootNodeGen.create(
                         language,
@@ -233,9 +230,12 @@ final class ProtosI075DLexicalAuthorityCurrentBytecodeNodeTest {
                             builder.beginRoot();
 
                             BytecodeLocal x = builder.createLocal("x", null);
-                            builder.beginInstallFrameLexicalAuthority(
-                                    new BytecodeLocal[] {x},
-                                    layout);
+                            BytecodeLocal[] locals = {x};
+                            ProtosFrameLexicalLayout layout =
+                                    ProtosFrameLexicalLayout.of(
+                                            new String[] {"x"},
+                                            ProtosFrameLexicalLayout.localOffsetsOf(locals));
+                            builder.beginInstallFrameLexicalAuthority(locals, layout);
                             builder.emitLoadArgument(0);
                             builder.endInstallFrameLexicalAuthority();
 

@@ -46,6 +46,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
@@ -63,6 +64,7 @@ import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.frame.MaterializedFrame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import com.oracle.truffle.api.nodes.DirectCallNode;
@@ -131,12 +133,12 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      * Installs, for tooling scope projection, the materialized-frame authority
      * of this root over {@code frame} on {@code activation}, when this root was
      * lowered without a persistent frame authority. {@code frame} must be the
-     * live frame of an executing activation of this root; only its
-     * materialized form is retained.
+     * live frame of an executing activation of this root, and {@code location}
+     * a location of this root; only the frame's materialized form is retained.
      */
     final void installFrameNativeAuthorityForTooling(
             ProtosActivation activation,
-            BytecodeNode bytecodeNode,
+            BytecodeLocation location,
             com.oracle.truffle.api.frame.Frame frame) {
         if (frameNativeBindingLocals == null) {
             return;
@@ -145,7 +147,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 frameNativeBindingLocals,
                 frameNativeBindingLayout,
                 activation,
-                bytecodeNode,
+                location,
                 frame.materialize());
     }
 
@@ -368,9 +370,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosFrameLexicalLayout frameBackedLayout,
                 ProtosActivation activation,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("$frame") VirtualFrame frame) {
             ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(
-                    frameBackedLocals, frameBackedLayout, activation, bytecodeNode, frame);
+                    frameBackedLocals, frameBackedLayout, activation, bytecodeNode, bytecodeIndex, frame);
         }
     }
 
@@ -403,6 +406,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("$frame") VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
@@ -412,7 +416,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             }
             ProtosBytecodeRootNode.BindClosureFrameParameter.perform(
                     frameBackedLocals, frameBackedLayout, ordinal,
-                    ProtosFrameArguments.activation(arguments), name, value, bytecodeNode, frame);
+                    ProtosFrameArguments.activation(arguments), name, value,
+                    bytecodeNode, bytecodeIndex, frame);
         }
     }
 
@@ -540,10 +545,12 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String name,
                 int positionalParametersBeforeRest,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("$frame") VirtualFrame frame) {
             ProtosBytecodeRootNode.BindClosureFrameRest.perform(
                     frameBackedLocals, frameBackedLayout, ordinal,
-                    activation, name, positionalParametersBeforeRest, bytecodeNode, frame);
+                    activation, name, positionalParametersBeforeRest,
+                    bytecodeNode, bytecodeIndex, frame);
         }
     }
 
@@ -575,6 +582,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("$frame") VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
@@ -584,7 +592,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             }
             return ProtosBytecodeRootNode.CreateCurrentFrameLocal.perform(
                     frameBackedLocals, frameBackedLayout, ordinal,
-                    ProtosFrameArguments.activation(arguments), name, value, bytecodeNode, frame);
+                    ProtosFrameArguments.activation(arguments), name, value,
+                    bytecodeNode, bytecodeIndex, frame);
         }
     }
 
@@ -784,18 +793,42 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         }
     }
 
+    /*
+     * BUG018-C: a proven captured-materialized read is lowered as owner-frame
+     * selection, IsCapturedOwnerFrameSelected, then either the builtin
+     * LoadLocalMaterialized of the owner local from the selected frame or the
+     * generic captured lookup. Selection never inspects the value.
+     */
+
     @Operation
     @ConstantOperand(type = MaterializedLocalAccessor.class)
-    public static final class ReadCapturedMaterializedLocal {
+    public static final class SelectCapturedMaterializedOwnerFrame {
         @Specialization
-        public static Object perform(
+        public static MaterializedFrame perform(
                 MaterializedLocalAccessor accessor,
                 ProtosActivation activation,
                 String name,
                 int lexicalDepth,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
-            return ProtosBytecodeRootNode.ReadCapturedMaterializedLocal.perform(
+            return ProtosBytecodeRootNode.SelectCapturedMaterializedOwnerFrame.perform(
                     accessor, activation, name, lexicalDepth, bytecodeNode);
+        }
+    }
+
+    /** True when owner-frame selection produced a frame (host {@code null} means none). */
+    @Operation
+    public static final class IsCapturedOwnerFrameSelected {
+        @Specialization
+        public static boolean perform(Object selectedOwnerFrame) {
+            return selectedOwnerFrame != null;
+        }
+    }
+
+    @Operation
+    public static final class ReadCapturedFallback {
+        @Specialization
+        public static Object perform(ProtosActivation activation, String name) {
+            return ProtosBytecodeRootNode.lookupCapturedFallback(activation, name);
         }
     }
 
@@ -901,9 +934,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @ConstantOperand(
             type = ProtosFrameLexicalLayout.class,
             name = "frameBackedLayout")
-    public static final class ReadInlineCapturedMaterializedLocal {
+    public static final class SelectInlineCapturedMaterializedOwnerFrame {
         @Specialization
-        public static Object perform(
+        public static MaterializedFrame perform(
                 MaterializedLocalAccessor accessor,
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
@@ -912,9 +945,31 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 int lexicalDepth,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
                 @Bind("$frame") VirtualFrame frame) {
-            return ProtosInlineCallbackFrameBindings.readCapturedMaterialized(
+            return ProtosInlineCallbackFrameBindings.selectCapturedMaterializedOwnerFrame(
                     accessor, child, frameBackedLocals, frameBackedLayout,
                     name, lexicalDepth, bytecodeNode, frame);
+        }
+    }
+
+    @Operation
+    @ConstantOperand(
+            type = LocalRangeAccessor.class,
+            name = "frameBackedLocals")
+    @ConstantOperand(
+            type = ProtosFrameLexicalLayout.class,
+            name = "frameBackedLayout")
+    public static final class ReadInlineCapturedFallback {
+        @Specialization
+        public static Object perform(
+                LocalRangeAccessor frameBackedLocals,
+                ProtosFrameLexicalLayout frameBackedLayout,
+                PreparedInlineLiteralCall child,
+                String name,
+                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$frame") VirtualFrame frame) {
+            return ProtosInlineCallbackFrameBindings.readCapturedFallback(
+                    child, frameBackedLocals, frameBackedLayout,
+                    name, bytecodeNode, frame);
         }
     }
 

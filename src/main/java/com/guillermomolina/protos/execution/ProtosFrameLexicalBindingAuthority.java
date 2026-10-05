@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosLexicalBindingAuthority;
 import com.oracle.truffle.api.CompilerDirectives.TruffleBoundary;
+import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.LocalRangeAccessor;
@@ -68,17 +69,32 @@ import java.util.Optional;
  * current node for every frame-backed access. With boxing elimination the
  * cached node owns local-kind metadata, so a stale (for example uncached)
  * node writing the physical frame would leave the current node's metadata
- * incoherent.
+ * incoherent. The {@link BytecodeLocation} retained since BUG018-C is never
+ * used directly: it is translated with {@link BytecodeLocation#update()} to
+ * the root's latest node before each value read.
  *
  * <p>PERF012: the name/ordinal layout itself is {@link
  * ProtosFrameLexicalLayout}, precomputed once per root at lowering time and
  * shared, by reference, across every per-invocation authority instance; only
  * the runtime frame/dynamic-overflow state below is per-invocation.
+ *
+ * <p>BUG018-C: presence still comes from {@link LocalRangeAccessor#isCleared},
+ * but a PRESENT frame-backed value is never read through {@link
+ * LocalRangeAccessor#getObject}. The retained frame may belong to an
+ * activation that ran under another tier: another activation of the same root
+ * can move it to a cached node whose local-kind metadata disagrees with this
+ * frame's physical tag, which makes that accessor fail. Values are instead read
+ * through the public {@link BytecodeNode#getLocalValue}, at the translated
+ * index of a retained {@link BytecodeLocation} of the declaring root and the
+ * binding's public local offset, always behind a {@link TruffleBoundary} so it
+ * consults the physical frame tag. Writes are unchanged: the cached write path
+ * reconciles its own local-kind metadata.
  */
 final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAuthority {
     private final ProtosFrameLexicalLayout frameBackedLayout;
     private final LocalRangeAccessor frameBackedLocals;
     private final BytecodeRootNode declaringRoot;
+    private final BytecodeLocation declaringLocation;
     private final MaterializedFrame frame;
 
     /*
@@ -98,14 +114,15 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     ProtosFrameLexicalBindingAuthority(
             ProtosFrameLexicalLayout frameBackedLayout,
             LocalRangeAccessor frameBackedLocals,
-            BytecodeNode bytecodeNode,
+            BytecodeLocation declaringLocation,
             MaterializedFrame frame) {
         this.frameBackedLayout =
                 Objects.requireNonNull(frameBackedLayout, "frameBackedLayout");
         this.frameBackedLocals =
                 Objects.requireNonNull(frameBackedLocals, "frameBackedLocals");
-        this.declaringRoot =
-                Objects.requireNonNull(bytecodeNode, "bytecodeNode").getBytecodeRootNode();
+        this.declaringLocation =
+                Objects.requireNonNull(declaringLocation, "declaringLocation");
+        this.declaringRoot = declaringLocation.getBytecodeNode().getBytecodeRootNode();
         this.frame = Objects.requireNonNull(frame, "frame");
 
         if (frameBackedLayout.length() != frameBackedLocals.getLength()) {
@@ -124,6 +141,26 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
      */
     private BytecodeNode currentBytecodeNode() {
         return declaringRoot.getBytecodeNode();
+    }
+
+    /**
+     * BUG018-C: the value of the frame-backed binding at {@code ordinal}, which
+     * the caller has already proven PRESENT through the separate {@code
+     * isCleared} check; the returned value never encodes presence.
+     *
+     * <p>The retained location is translated to the root's latest {@link
+     * BytecodeNode} for every read, because a bytecode index is only
+     * meaningful together with the node it came from. The layout's locals are
+     * root-scoped, so any location of the declaring root addresses them.
+     */
+    @TruffleBoundary
+    private Object readPresentFrameBackedValueAt(int ordinal) {
+        BytecodeLocation current = declaringLocation.update();
+        return current.getBytecodeNode()
+                .getLocalValue(
+                        current.getBytecodeIndex(),
+                        frame,
+                        frameBackedLayout.localOffsetAt(ordinal));
     }
 
     private void ensureGeneralEstablishmentOrder(BytecodeNode bytecodeNode) {
@@ -230,7 +267,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
     Object readFrameBackedBindingAt(String expectedName, int ordinal) {
         BytecodeNode bytecodeNode = currentBytecodeNode();
         requirePresentFrameBackedBinding(bytecodeNode, expectedName, ordinal);
-        return frameBackedLocals.getObject(bytecodeNode, frame, ordinal);
+        return readPresentFrameBackedValueAt(ordinal);
     }
 
     @TruffleBoundary
@@ -397,9 +434,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                     bytecodeNode, frame, offset)) {
                 return Optional.empty();
             }
-            return Optional.of(
-                    frameBackedLocals.getObject(
-                            bytecodeNode, frame, offset));
+            return Optional.of(readPresentFrameBackedValueAt(offset));
         }
         return dynamicOverflow != null
                         && dynamicOverflow.containsKey(name)
@@ -420,8 +455,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                         bytecodeNode, frame, ordinal)) {
                     snapshot.put(
                             frameBackedLayout.nameAt(ordinal),
-                            frameBackedLocals.getObject(
-                                    bytecodeNode, frame, ordinal));
+                            readPresentFrameBackedValueAt(ordinal));
                 }
             }
             return Collections.unmodifiableMap(snapshot);
@@ -432,10 +466,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
             if (offset != null) {
                 if (!frameBackedLocals.isCleared(
                         bytecodeNode, frame, offset)) {
-                    snapshot.put(
-                            name,
-                            frameBackedLocals.getObject(
-                                    bytecodeNode, frame, offset));
+                    snapshot.put(name, readPresentFrameBackedValueAt(offset));
                 }
             } else if (dynamicOverflow != null
                     && dynamicOverflow.containsKey(name)) {
@@ -468,9 +499,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                 if (!frameBackedLocals.isCleared(
                         bytecodeNode, frame, ordinal)) {
                     names.add(frameBackedLayout.nameAt(ordinal));
-                    values.add(
-                            frameBackedLocals.getObject(
-                                    bytecodeNode, frame, ordinal));
+                    values.add(readPresentFrameBackedValueAt(ordinal));
                 }
             }
             return;
@@ -482,9 +511,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                 if (!frameBackedLocals.isCleared(
                         bytecodeNode, frame, offset)) {
                     names.add(name);
-                    values.add(
-                            frameBackedLocals.getObject(
-                                    bytecodeNode, frame, offset));
+                    values.add(readPresentFrameBackedValueAt(offset));
                 }
             } else if (dynamicOverflow != null
                     && dynamicOverflow.containsKey(name)) {
@@ -551,8 +578,7 @@ final class ProtosFrameLexicalBindingAuthority implements ProtosLexicalBindingAu
                             bytecodeNode, frame, offset);
             Object previous =
                     present
-                            ? frameBackedLocals.getObject(
-                                    bytecodeNode, frame, offset)
+                            ? readPresentFrameBackedValueAt(offset)
                             : null;
 
             /*

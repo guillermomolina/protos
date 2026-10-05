@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.Assumption;
+import com.oracle.truffle.api.bytecode.BytecodeLocation;
 import com.oracle.truffle.api.bytecode.BytecodeNode;
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.oracle.truffle.api.bytecode.ConstantOperand;
@@ -398,13 +399,14 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosFrameLexicalLayout frameBackedLayout,
                 ProtosActivation activation,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("$frame") VirtualFrame frame) {
             MaterializedFrame materializedFrame = frame.materialize();
             activation.installFrameLexicalBindingAuthorityForRuntime(
                     new ProtosFrameLexicalBindingAuthority(
                             frameBackedLayout,
                             frameBackedLocals,
-                            bytecodeNode,
+                            bytecodeNode.getBytecodeLocation(bytecodeIndex),
                             materializedFrame));
         }
     }
@@ -442,6 +444,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             String name,
             Object value,
             BytecodeNode bytecodeNode,
+            int bytecodeIndex,
             VirtualFrame frame) {
         if (activation.hasUnobservedFrameNativeExecutionContextForRuntime()) {
             if (!frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
@@ -455,7 +458,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     frameBackedLocals,
                     frameBackedLayout,
                     activation,
-                    bytecodeNode,
+                    bytecodeNode.getBytecodeLocation(bytecodeIndex),
                     frame.materialize());
         }
         activation.createCurrentLocalSlotForRuntime(name, value);
@@ -465,24 +468,25 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * Installs the materialized-frame authority of a live root lowered
      * without {@link InstallFrameLexicalAuthority}, unless the authority
      * already installed is that root's own over this same frame. Callers pass
-     * the frame of an activation that is still executing.
+     * the frame of an activation that is still executing, and a location of
+     * that activation's root (BUG018-C retained-frame reads translate it).
      */
     static void installFrameLexicalAuthorityOnTransition(
             LocalRangeAccessor frameBackedLocals,
             ProtosFrameLexicalLayout frameBackedLayout,
             ProtosActivation activation,
-            BytecodeNode bytecodeNode,
+            BytecodeLocation location,
             MaterializedFrame materializedFrame) {
         if (activation.currentLexicalBindingAuthorityForRuntime()
                         instanceof ProtosFrameLexicalBindingAuthority installed
-                && installed.isInstalledFor(bytecodeNode, materializedFrame)) {
+                && installed.isInstalledFor(location.getBytecodeNode(), materializedFrame)) {
             return;
         }
         ProtosFrameLexicalBindingAuthority authority =
                 new ProtosFrameLexicalBindingAuthority(
                         frameBackedLayout,
                         frameBackedLocals,
-                        bytecodeNode,
+                        location,
                         materializedFrame);
         authority.adoptPresentFrameBackedBindings();
         activation.installFrameLexicalBindingAuthorityForRuntime(authority);
@@ -507,11 +511,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("$frame") VirtualFrame frame) {
             try {
                 createCurrentFrameBinding(
                         frameBackedLocals, frameBackedLayout, activation,
-                        ordinal, name, value, bytecodeNode, frame);
+                        ordinal, name, value, bytecodeNode, bytecodeIndex, frame);
             } catch (IllegalStateException invalidCreation) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
@@ -538,12 +543,13 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 int positionalParametersBeforeRest,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("$frame") VirtualFrame frame) {
             Object rest = closureRestArray(activation, positionalParametersBeforeRest);
             try {
                 createCurrentFrameBinding(
                         frameBackedLocals, frameBackedLayout, activation,
-                        ordinal, name, rest, bytecodeNode, frame);
+                        ordinal, name, rest, bytecodeNode, bytecodeIndex, frame);
             } catch (IllegalStateException invalidCreation) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
@@ -570,11 +576,12 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 String name,
                 Object value,
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind("$bytecodeIndex") int bytecodeIndex,
                 @Bind("$frame") VirtualFrame frame) {
             try {
                 createCurrentFrameBinding(
                         frameBackedLocals, frameBackedLayout, activation,
-                        ordinal, name, value, bytecodeNode, frame);
+                        ordinal, name, value, bytecodeNode, bytecodeIndex, frame);
             } catch (IllegalStateException invalidMutation) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(activation));
@@ -690,28 +697,36 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     /**
-     * PERF013 Slice B1 direct captured read using a compile-time-proven owner
-     * {@link BytecodeLocal}, materialized via a generated {@link
-     * MaterializedLocalAccessor} rather than the runtime frame-lexical-binding
-     * authority's dynamic {@link LocalRangeAccessor}/owner-{@link
-     * BytecodeNode} metadata. The accessor's identity (owner root/local) is
-     * proven at lowering time by {@code CanonicalToBytecodeLowerer} from the
-     * owner's own {@link com.oracle.truffle.api.bytecode.BytecodeLocal}, once
-     * both owner and this Closure are lowered in the same shared {@code
-     * BytecodeRootNodes} group (PERF013 Slice A/A2/A3); only the owner's
-     * {@link MaterializedFrame} is looked up dynamically, through the same
-     * retained {@link ProtosFrameLexicalBindingAuthority} instance {@link
+     * PERF013 Slice B1 / BUG018-C: owner-frame selection for the direct
+     * captured read of a compile-time-proven owner {@link
+     * com.oracle.truffle.api.bytecode.BytecodeLocal}. The accessor's identity
+     * (owner root/local) is proven at lowering time by {@code
+     * CanonicalToBytecodeLowerer} once owner and this Closure are lowered in
+     * the same shared {@code BytecodeRootNodes} group (PERF013 Slice
+     * A/A2/A3); only the owner's {@link MaterializedFrame} is selected
+     * dynamically, through the same retained {@link
+     * ProtosFrameLexicalBindingAuthority} instance {@link
      * ReadCapturedFrameLocal} already relies on. Every semantically nearer
      * execution-context presence check is preserved exactly as in {@link
-     * ReadCapturedFrameLocal}, so D179 C0 late-creation/removal retargeting is
-     * unaffected, and {@code isCleared} distinguishes {@code PRESENT(null)}
-     * from {@code ABSENT} exactly as the runtime-authority path does.
+     * ReadCapturedFrameLocal}, so D179 C0 late-creation/removal retargeting
+     * is unaffected, and {@code isCleared} distinguishes {@code
+     * PRESENT(null)} from {@code ABSENT} exactly as the runtime-authority path
+     * does.
+     *
+     * <p>Returns the selected PRESENT owner frame, or {@code null} when the
+     * generic captured lookup must run instead. The value itself is never read
+     * here: the lowering loads it from the selected frame with the builtin
+     * {@code LoadLocalMaterialized} of the same owner local, because {@link
+     * MaterializedLocalAccessor#getObject} fails when the owner root's current
+     * cached local-kind metadata, learned from another activation, disagrees
+     * with the retained frame's physical tag (BUG018). Presence selection is
+     * therefore independent of the value.
      */
     @Operation
     @ConstantOperand(type = MaterializedLocalAccessor.class)
-    public static final class ReadCapturedMaterializedLocal {
+    public static final class SelectCapturedMaterializedOwnerFrame {
         @Specialization
-        public static Object perform(
+        public static MaterializedFrame perform(
                 MaterializedLocalAccessor accessor,
                 ProtosActivation activation,
                 String name,
@@ -719,26 +734,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
             if (lexicalDepth > 0
                     && !activation.currentContextHasLocalSlotForRuntime(name)) {
-                Object value =
-                        readCapturedMaterializedBindingOrNull(
-                                accessor,
-                                activation.capturedLexicalEnvironmentForRuntime(),
-                                name,
-                                lexicalDepth,
-                                bytecodeNode);
-                if (value != null) {
-                    return value;
-                }
+                return capturedMaterializedOwnerFrameOrNull(
+                        accessor,
+                        activation.capturedLexicalEnvironmentForRuntime(),
+                        name,
+                        lexicalDepth,
+                        bytecodeNode);
             }
-            return lookupCapturedFallback(activation, name);
+            return null;
         }
     }
 
     /**
-     * The {@link ReadCapturedMaterializedLocal} counterpart of {@link
-     * #readCapturedFrameBindingOrNull}.
+     * The {@link SelectCapturedMaterializedOwnerFrame} counterpart of {@link
+     * #readCapturedFrameBindingOrNull}: the retained frame of the selected
+     * owner when {@code accessor}'s local is PRESENT in it, otherwise {@code
+     * null}.
      */
-    static Object readCapturedMaterializedBindingOrNull(
+    static MaterializedFrame capturedMaterializedOwnerFrameOrNull(
             MaterializedLocalAccessor accessor,
             ProtosLexicalEnvironment captured,
             String name,
@@ -756,7 +769,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         if (ownerFrame == null || accessor.isCleared(bytecodeNode, ownerFrame)) {
             return null;
         }
-        return accessor.getObject(bytecodeNode, ownerFrame);
+        return ownerFrame;
     }
 
     /**
@@ -780,7 +793,11 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return scope;
     }
 
-    private static Object lookupCapturedFallback(
+    /**
+     * The generic captured lookup, also taken when {@link
+     * SelectCapturedMaterializedOwnerFrame} selected no owner frame.
+     */
+    static Object lookupCapturedFallback(
             ProtosActivation activation,
             String name) {
         return ProtosLexicalFallback.readByName(activation, name)
@@ -967,7 +984,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * PERF013 Slice B2 direct captured-write destination resolution using a
      * compile-time-proven owner {@link BytecodeLocal}, materialized via a
      * generated {@link MaterializedLocalAccessor}, mirroring {@link
-     * ReadCapturedMaterializedLocal} on the write side. Every semantically
+     * SelectCapturedMaterializedOwnerFrame} on the write side. Every semantically
      * nearer execution-context presence check, and the static owner's own
      * {@code isCleared} presence check, are preserved exactly as in {@link
      * ResolveCapturedWritableLexicalTarget}, so D179 C0 late-creation/removal

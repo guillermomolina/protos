@@ -700,7 +700,8 @@ final class CanonicalToBytecodeLowerer {
             frameLocalLayout =
                     frameLexicalLayoutForScope(
                             scopeForThisRoot,
-                            frameLocalNames);
+                            frameLocalNames,
+                            frameLocalRange);
             currentRootFrameLayout = frameLocalLayout;
             /*
              * PERF025 frame-materialization slice: declaring a binding no
@@ -949,20 +950,28 @@ final class CanonicalToBytecodeLowerer {
      * <p>The first parse creates it. Later BytecodeRootNodes reparses validate
      * that declaration order is unchanged and reuse the exact object, so its
      * root/name one-way membership assumptions cannot be silently renewed.
+     * BUG018-C: a root lowering ({@code rootFrameLocals} non-null) also binds
+     * the public offsets of those root-scoped locals, the same array that forms
+     * the root's LocalRangeAccessor, and validates them on replay. An inline
+     * callback lowering of the same scope passes null: its block-scoped locals
+     * have context-dependent offsets and never back a frame authority.
      */
     private ProtosFrameLexicalLayout frameLexicalLayoutForScope(
             CanonicalLexicalScope scope,
-            String[] frameLocalNames) {
-        ProtosFrameLexicalLayout existing = frameLayoutsByScope.get(scope);
-        if (existing != null) {
-            existing.requireSameNames(frameLocalNames);
-            return existing;
+            String[] frameLocalNames,
+            BytecodeLocal[] rootFrameLocals) {
+        ProtosFrameLexicalLayout layout = frameLayoutsByScope.get(scope);
+        if (layout != null) {
+            layout.requireSameNames(frameLocalNames);
+        } else {
+            layout = ProtosFrameLexicalLayout.of(frameLocalNames);
+            frameLayoutsByScope.put(scope, layout);
         }
-
-        ProtosFrameLexicalLayout created =
-                ProtosFrameLexicalLayout.of(frameLocalNames);
-        frameLayoutsByScope.put(scope, created);
-        return created;
+        if (rootFrameLocals != null) {
+            layout.bindRootLocalOffsets(
+                    ProtosFrameLexicalLayout.localOffsetsOf(rootFrameLocals));
+        }
+        return layout;
     }
 
     /**
@@ -4496,7 +4505,8 @@ final class CanonicalToBytecodeLowerer {
             callbackFrameLocalLayout =
                     frameLexicalLayoutForScope(
                             callbackScope,
-                            frameLocals.keySet().toArray(String[]::new));
+                            frameLocals.keySet().toArray(String[]::new),
+                            null);
         }
 
         builder.beginStoreLocal(callbackCall);
@@ -4964,14 +4974,7 @@ final class CanonicalToBytecodeLowerer {
                             instanceof CanonicalBindingResolution.CapturedResolved captured) {
                 BytecodeLocal ownerLocal = capturedOwnerBytecodeLocal(captured);
                 if (ownerLocal != null && currentInlineCallbackFrameNative) {
-                    builder.beginReadInlineCapturedMaterializedLocal(
-                            ownerLocal,
-                            currentRootFrameNativeLocals,
-                            currentRootFrameNativeLayout);
-                    emitCurrentInlineCallbackCall(builder);
-                    builder.emitLoadConstant(captured.identity().name());
-                    builder.emitLoadConstant(captured.lexicalDepth());
-                    builder.endReadInlineCapturedMaterializedLocal();
+                    emitCapturedMaterializedRead(builder, captured, ownerLocal, true);
                     return;
                 }
                 if (currentInlineCallbackFrameNative) {
@@ -4986,11 +4989,7 @@ final class CanonicalToBytecodeLowerer {
                     return;
                 }
                 if (ownerLocal != null) {
-                    builder.beginReadCapturedMaterializedLocal(ownerLocal);
-                    emitCurrentActivation(builder);
-                    builder.emitLoadConstant(captured.identity().name());
-                    builder.emitLoadConstant(captured.lexicalDepth());
-                    builder.endReadCapturedMaterializedLocal();
+                    emitCapturedMaterializedRead(builder, captured, ownerLocal, false);
                     return;
                 }
 
@@ -5007,6 +5006,74 @@ final class CanonicalToBytecodeLowerer {
         emitCurrentActivation(builder);
         builder.emitLoadConstant(lookup.name());
         builder.endLookup();
+    }
+
+    /**
+     * PERF013 Slice B1 / BUG018-C: the direct read of a proven captured
+     * binding whose owner {@link BytecodeLocal} is known. The owner frame is
+     * selected dynamically (nearer bindings, owner authority, PRESENT check)
+     * without reading the value; a selected frame is then read with the
+     * builtin {@code LoadLocalMaterialized} of {@code ownerLocal}, which
+     * tolerates the owner root's cached local-kind metadata disagreeing with
+     * a frame retained from another activation. No selected frame takes the
+     * generic captured lookup, so presence never depends on the value and
+     * {@code PRESENT(null)} stays distinct from {@code ABSENT}. The inline
+     * form selects without materializing the callback activation whenever
+     * the existing direct path admits it.
+     */
+    private void emitCapturedMaterializedRead(
+            ProtosSemanticBytecodeRootNodeGen.Builder builder,
+            CanonicalBindingResolution.CapturedResolved captured,
+            BytecodeLocal ownerLocal,
+            boolean inlineCallback) {
+        String name = captured.identity().name();
+        builder.beginBlock();
+        BytecodeLocal selectedOwnerFrame =
+                builder.createLocal("capturedOwnerFrame", null);
+
+        builder.beginStoreLocal(selectedOwnerFrame);
+        if (inlineCallback) {
+            builder.beginSelectInlineCapturedMaterializedOwnerFrame(
+                    ownerLocal,
+                    currentRootFrameNativeLocals,
+                    currentRootFrameNativeLayout);
+            emitCurrentInlineCallbackCall(builder);
+            builder.emitLoadConstant(name);
+            builder.emitLoadConstant(captured.lexicalDepth());
+            builder.endSelectInlineCapturedMaterializedOwnerFrame();
+        } else {
+            builder.beginSelectCapturedMaterializedOwnerFrame(ownerLocal);
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(name);
+            builder.emitLoadConstant(captured.lexicalDepth());
+            builder.endSelectCapturedMaterializedOwnerFrame();
+        }
+        builder.endStoreLocal();
+
+        builder.beginConditional();
+        builder.beginIsCapturedOwnerFrameSelected();
+        builder.emitLoadLocal(selectedOwnerFrame);
+        builder.endIsCapturedOwnerFrameSelected();
+
+        builder.beginLoadLocalMaterialized(ownerLocal);
+        builder.emitLoadLocal(selectedOwnerFrame);
+        builder.endLoadLocalMaterialized();
+
+        if (inlineCallback) {
+            builder.beginReadInlineCapturedFallback(
+                    currentRootFrameNativeLocals,
+                    currentRootFrameNativeLayout);
+            emitCurrentInlineCallbackCall(builder);
+            builder.emitLoadConstant(name);
+            builder.endReadInlineCapturedFallback();
+        } else {
+            builder.beginReadCapturedFallback();
+            emitCurrentActivation(builder);
+            builder.emitLoadConstant(name);
+            builder.endReadCapturedFallback();
+        }
+        builder.endConditional();
+        builder.endBlock();
     }
 
     /**

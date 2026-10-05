@@ -288,8 +288,15 @@ final class ProtosInlineCallbackFrameBindings {
                 lexicalDepth);
     }
 
-    /** Inline counterpart of {@code ReadCapturedMaterializedLocal}. */
-    static Object readCapturedMaterialized(
+    /**
+     * Inline counterpart of {@code SelectCapturedMaterializedOwnerFrame}
+     * (BUG018-C): selects the PRESENT owner frame without the activation when
+     * the direct path admits it, otherwise through the materialized
+     * activation exactly as the activation operation does. The value is loaded
+     * from the returned frame by the lowering's {@code LoadLocalMaterialized};
+     * {@code null} selects {@link #readCapturedFallback}.
+     */
+    static MaterializedFrame selectCapturedMaterializedOwnerFrame(
             MaterializedLocalAccessor accessor,
             PreparedInlineLiteralCall child,
             LocalRangeAccessor frameBackedLocals,
@@ -299,24 +306,42 @@ final class ProtosInlineCallbackFrameBindings {
             BytecodeNode bytecodeNode,
             VirtualFrame frame) {
         if (admitsCapturedAccess(child, lexicalDepth)) {
-            Object value =
-                    ProtosBytecodeRootNode.readCapturedMaterializedBindingOrNull(
+            MaterializedFrame ownerFrame =
+                    ProtosBytecodeRootNode.capturedMaterializedOwnerFrameOrNull(
                             accessor,
                             child.unmaterializedCapturedLexicalEnvironment(),
                             name,
                             lexicalDepth,
                             bytecodeNode);
-            if (value != null) {
-                return value;
+            if (ownerFrame != null) {
+                return ownerFrame;
             }
         }
-        return ProtosBytecodeRootNode.ReadCapturedMaterializedLocal.perform(
+        return ProtosBytecodeRootNode.SelectCapturedMaterializedOwnerFrame.perform(
                 accessor,
                 durableActivation(
                         child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
                 name,
                 lexicalDepth,
                 bytecodeNode);
+    }
+
+    /**
+     * The generic captured lookup of an inline captured-materialized read
+     * whose owner-frame selection returned {@code null}. Selection already
+     * materialized the activation on that path, so this reuses it.
+     */
+    static Object readCapturedFallback(
+            PreparedInlineLiteralCall child,
+            LocalRangeAccessor frameBackedLocals,
+            ProtosFrameLexicalLayout frameBackedLayout,
+            String name,
+            BytecodeNode bytecodeNode,
+            VirtualFrame frame) {
+        return ProtosBytecodeRootNode.lookupCapturedFallback(
+                durableActivation(
+                        child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame),
+                name);
     }
 
     /**

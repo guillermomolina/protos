@@ -121,7 +121,9 @@ final class ProtosBug013FrameLexicalAuthorityMaterializationTest {
                             builder.beginInstallFrameLexicalAuthority(
                                     new BytecodeLocal[] {x},
                                     ProtosFrameLexicalLayout.of(
-                                            new String[] {"x"}));
+                                            new String[] {"x"},
+                                            ProtosFrameLexicalLayout.localOffsetsOf(
+                                                    new BytecodeLocal[] {x})));
                             builder.emitLoadArgument(0);
                             builder.endInstallFrameLexicalAuthority();
 

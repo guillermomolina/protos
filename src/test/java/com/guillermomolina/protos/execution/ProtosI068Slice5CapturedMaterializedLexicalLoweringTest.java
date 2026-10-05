@@ -136,9 +136,9 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                                 .anyMatch(
                                         name ->
                                                 name.contains(
-                                                        "ReadCapturedMaterializedLocal")),
+                                                        "SelectCapturedMaterializedOwnerFrame")),
                         () ->
-                                "captured read did not lower to ReadCapturedMaterializedLocal: "
+                                "captured read did not lower to SelectCapturedMaterializedOwnerFrame: "
                                         + instructionNames);
 
                 /*
@@ -676,11 +676,11 @@ final class ProtosI068Slice5CapturedMaterializedLexicalLoweringTest {
                 assertTrue(
                         instructionIndexContaining(
                                         instructionNames,
-                                        "ReadCapturedMaterializedLocal")
+                                        "SelectCapturedMaterializedOwnerFrame")
                                 >= 0,
                         () ->
                                 "depth-two capture did not use "
-                                        + "ReadCapturedMaterializedLocal: "
+                                        + "SelectCapturedMaterializedOwnerFrame: "
                                         + instructionNames);
 
                 /*

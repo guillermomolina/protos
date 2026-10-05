@@ -5,7 +5,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
-      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "isCleared",
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
@@ -15,15 +15,15 @@
         "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,VirtualFrame)",
-        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)"
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,int,VirtualFrame)",
+        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosBytecodeRootNode.java",
       "class": "ProtosBytecodeRootNode",
-      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "setObject",
       "index": "ordinal",
       "classification": "METHOD_PARAMETER",
@@ -33,8 +33,8 @@
         "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,VirtualFrame)",
-        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,VirtualFrame)"
+        "ProtosBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,ProtosActivation,String,Object,BytecodeNode,int,VirtualFrame)",
+        "ProtosBytecodeRootNode.createCurrentFrameBinding(LocalRangeAccessor,ProtosFrameLexicalLayout,ProtosActivation,int,String,Object,BytecodeNode,int,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
@@ -81,21 +81,6 @@
         "ProtosFrameLexicalBindingAuthority.hasFrameBackedBindingAt(BytecodeNode,String,int)"
       ],
       "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.hasFrameBackedBindingAt"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "readFrameBackedBindingAt(String,int)",
-      "operation": "getObject",
-      "index": "ordinal",
-      "classification": "TRUFFLE_BOUNDARY",
-      "occurrence": 0,
-      "pe_reachability": "BOUNDARY_CUT",
-      "pe_provenance": [],
-      "pe_call_chain": [
-        "ProtosFrameLexicalBindingAuthority.readFrameBackedBindingAt(String,int)"
-      ],
-      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.readFrameBackedBindingAt"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
@@ -205,40 +190,8 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "readBinding(String)",
-      "operation": "getObject",
-      "index": "offset",
-      "classification": "TRUFFLE_BOUNDARY",
-      "occurrence": 0,
-      "pe_reachability": "BOUNDARY_CUT",
-      "pe_provenance": [],
-      "pe_call_chain": [
-        "ProtosFrameLexicalBindingAuthority.readBinding(String)"
-      ],
-      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.readBinding"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
       "method": "bindingsSnapshot()",
       "operation": "isCleared",
-      "index": "ordinal",
-      "classification": "LOOP_INDEX",
-      "occurrence": 0,
-      "pe_reachability": "BOUNDARY_CUT",
-      "pe_provenance": [],
-      "pe_call_chain": [
-        "ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost(ProtosObjectValue)",
-        "ProtosObjectValue.localSlotsSnapshot()",
-        "ProtosFrameLexicalBindingAuthority.bindingsSnapshot()"
-      ],
-      "rationale": "every PE path is cut by @TruffleBoundary ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "bindingsSnapshot()",
-      "operation": "getObject",
       "index": "ordinal",
       "classification": "LOOP_INDEX",
       "occurrence": 0,
@@ -271,23 +224,6 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "bindingsSnapshot()",
-      "operation": "getObject",
-      "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
-      "occurrence": 0,
-      "pe_reachability": "BOUNDARY_CUT",
-      "pe_provenance": [],
-      "pe_call_chain": [
-        "ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost(ProtosObjectValue)",
-        "ProtosObjectValue.localSlotsSnapshot()",
-        "ProtosFrameLexicalBindingAuthority.bindingsSnapshot()"
-      ],
-      "rationale": "every PE path is cut by @TruffleBoundary ProtosStandardNetworkProtocol.captureListenRequestSlotsForHost"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
       "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
       "operation": "isCleared",
       "index": "ordinal",
@@ -304,37 +240,7 @@
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
-      "operation": "getObject",
-      "index": "ordinal",
-      "classification": "TRUFFLE_BOUNDARY",
-      "occurrence": 0,
-      "pe_reachability": "BOUNDARY_CUT",
-      "pe_provenance": [],
-      "pe_call_chain": [
-        "ProtosFrameLexicalBindingAuthority.appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)"
-      ],
-      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.appendBindingsToSlow"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
       "operation": "isCleared",
-      "index": "offset",
-      "classification": "TRUFFLE_BOUNDARY",
-      "occurrence": 0,
-      "pe_reachability": "BOUNDARY_CUT",
-      "pe_provenance": [],
-      "pe_call_chain": [
-        "ProtosFrameLexicalBindingAuthority.appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)"
-      ],
-      "rationale": "every PE path is cut by @TruffleBoundary ProtosFrameLexicalBindingAuthority.appendBindingsToSlow"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "appendBindingsToSlow(BytecodeNode,ArrayList,ArrayList)",
-      "operation": "getObject",
       "index": "offset",
       "classification": "TRUFFLE_BOUNDARY",
       "occurrence": 0,
@@ -380,19 +286,6 @@
       "class": "ProtosFrameLexicalBindingAuthority",
       "method": "removeBinding(String)",
       "operation": "isCleared",
-      "index": "offset",
-      "classification": "RUNTIME_NAME_DERIVED",
-      "occurrence": 0,
-      "pe_reachability": "NOT_PE_REACHABLE",
-      "pe_provenance": [],
-      "pe_call_chain": [],
-      "rationale": "no call path from a Bytecode DSL operation root"
-    },
-    {
-      "path": "src/main/java/com/guillermomolina/protos/execution/ProtosFrameLexicalBindingAuthority.java",
-      "class": "ProtosFrameLexicalBindingAuthority",
-      "method": "removeBinding(String)",
-      "operation": "getObject",
       "index": "offset",
       "classification": "RUNTIME_NAME_DERIVED",
       "occurrence": 0,
@@ -498,7 +391,7 @@
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "isCleared",
       "index": "ordinal",
       "classification": "PROVEN_CONSTANT_OPERAND",
@@ -508,14 +401,14 @@
         "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+        "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "setObject",
       "index": "ordinal",
       "classification": "PROVEN_CONSTANT_OPERAND",
@@ -525,14 +418,14 @@
         "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+        "ProtosSemanticBytecodeRootNode.BindClosureFrameParameter.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "isCleared",
       "index": "ordinal",
       "classification": "PROVEN_CONSTANT_OPERAND",
@@ -542,14 +435,14 @@
         "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+        "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     },
     {
       "path": "src/main/java/com/guillermomolina/protos/execution/ProtosSemanticBytecodeRootNode.java",
       "class": "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal",
-      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)",
+      "method": "perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)",
       "operation": "setObject",
       "index": "ordinal",
       "classification": "PROVEN_CONSTANT_OPERAND",
@@ -559,7 +452,7 @@
         "PE_CONSTANT_FROM_OPERATION"
       ],
       "pe_call_chain": [
-        "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,VirtualFrame)"
+        "ProtosSemanticBytecodeRootNode.CreateCurrentFrameLocal.perform(LocalRangeAccessor,ProtosFrameLexicalLayout,int,String,Object,BytecodeNode,int,VirtualFrame)"
       ],
       "rationale": "PE-reachable only with structurally proven constant indices (PE_CONSTANT_FROM_OPERATION)"
     }

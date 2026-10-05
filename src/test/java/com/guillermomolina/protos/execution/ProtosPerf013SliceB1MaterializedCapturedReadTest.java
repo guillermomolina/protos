@@ -491,7 +491,10 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         () -> "isolated rebuild lost its safe fallback path: " + instructionNames);
                 assertTrue(
                         instructionNames.stream()
-                                .noneMatch(name -> name.contains("ReadCapturedMaterializedLocal")),
+                                .noneMatch(
+                                        name ->
+                                                name.contains("SelectCapturedMaterializedOwnerFrame")
+                                                        || name.startsWith("load.local.mat")),
                         () ->
                                 "isolated rebuild incorrectly used the materialized fast path "
                                         + "without its owner in the group: "
@@ -521,9 +524,17 @@ final class ProtosPerf013SliceB1MaterializedCapturedReadTest {
                         .map(com.oracle.truffle.api.bytecode.Instruction::getName)
                         .toList();
 
+        /*
+         * BUG018-C: the fast path selects the PRESENT owner frame, then loads
+         * the value with the builtin LoadLocalMaterialized of the owner local.
+         */
         assertTrue(
-                instructionNames.stream().anyMatch(name -> name.contains("ReadCapturedMaterializedLocal")),
+                instructionNames.stream()
+                        .anyMatch(name -> name.contains("SelectCapturedMaterializedOwnerFrame")),
                 () -> "captured read did not select the materialized fast path: " + instructionNames);
+        assertTrue(
+                instructionNames.stream().anyMatch(name -> name.startsWith("load.local.mat")),
+                () -> "captured read did not load through LoadLocalMaterialized: " + instructionNames);
         assertTrue(
                 instructionNames.stream().noneMatch(name -> name.equals("ReadCapturedFrameLocal")),
                 () ->

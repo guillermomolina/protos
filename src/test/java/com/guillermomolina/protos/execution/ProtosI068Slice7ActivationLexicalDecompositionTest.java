@@ -115,7 +115,8 @@ final class ProtosI068Slice7ActivationLexicalDecompositionTest {
                      * MaterializedLocalAccessor fast path instead of the
                      * runtime frame-lexical-binding-authority path.
                      */
-                    assertContains(instructions, "ReadCapturedMaterializedLocal");
+                    assertContains(instructions, "SelectCapturedMaterializedOwnerFrame");
+                    assertContains(instructions, "load.local.mat");
                     assertNotContains(instructions, "Lookup");
                 });
     }

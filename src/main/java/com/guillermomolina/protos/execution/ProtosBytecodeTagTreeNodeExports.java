@@ -107,7 +107,10 @@ final class ProtosBytecodeTagTreeNodeExports {
         }
         BytecodeNode bytecode = node.getBytecodeNode();
         if (bytecode.getBytecodeRootNode() instanceof ProtosSemanticBytecodeRootNode root) {
-            root.installFrameNativeAuthorityForTooling(activation, bytecode, frame);
+            root.installFrameNativeAuthorityForTooling(
+                    activation,
+                    bytecode.getBytecodeLocation(node.getEnterBytecodeIndex()),
+                    frame);
         }
     }
 

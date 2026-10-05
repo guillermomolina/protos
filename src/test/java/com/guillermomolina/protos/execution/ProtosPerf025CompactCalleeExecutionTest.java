@@ -194,7 +194,8 @@ final class ProtosPerf025CompactCalleeExecutionTest {
             assertThrows(ProtosSignalException.class, () -> enter(duplicate));
 
             ProtosFrameLexicalLayout foreign =
-                    ProtosFrameLexicalLayout.of(new String[] {"perf030Fallback"});
+                    ProtosFrameLexicalLayout.of(
+                            new String[] {"perf030Fallback"}, new int[] {0});
             ProtosIntegerValue value = integer(3);
             assertSame(
                     value,

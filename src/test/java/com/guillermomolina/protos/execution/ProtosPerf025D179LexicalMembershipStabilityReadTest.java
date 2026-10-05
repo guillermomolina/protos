@@ -268,9 +268,9 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
     @Test
     void independentLayoutsNeverSharePresenceContinuityTokens() {
         ProtosFrameLexicalLayout first =
-                ProtosFrameLexicalLayout.of(new String[] {"x"});
+                ProtosFrameLexicalLayout.of(new String[] {"x"}, new int[] {0});
         ProtosFrameLexicalLayout second =
-                ProtosFrameLexicalLayout.of(new String[] {"x"});
+                ProtosFrameLexicalLayout.of(new String[] {"x"}, new int[] {0});
 
         assertNotSame(
                 first.presentContinuityAt(0),
@@ -279,8 +279,8 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
     }
 
     private static Fixture yieldingReadRoot(ProtosLanguage language) {
-        ProtosFrameLexicalLayout layout =
-                ProtosFrameLexicalLayout.of(new String[] {"x", "y"});
+        /* The layout derives its local offsets from the first parse's locals. */
+        ProtosFrameLexicalLayout[] layoutHolder = new ProtosFrameLexicalLayout[1];
 
         BytecodeRootNodes<ProtosSemanticBytecodeRootNode> roots =
                 ProtosSemanticBytecodeRootNodeGen.create(
@@ -293,10 +293,16 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                                     builder.createLocal("x", null);
                             BytecodeLocal y =
                                     builder.createLocal("y", null);
+                            BytecodeLocal[] locals = {x, y};
+                            if (layoutHolder[0] == null) {
+                                layoutHolder[0] =
+                                        ProtosFrameLexicalLayout.of(
+                                                new String[] {"x", "y"},
+                                                ProtosFrameLexicalLayout.localOffsetsOf(locals));
+                            }
+                            ProtosFrameLexicalLayout layout = layoutHolder[0];
 
-                            builder.beginInstallFrameLexicalAuthority(
-                                    new BytecodeLocal[] {x, y},
-                                    layout);
+                            builder.beginInstallFrameLexicalAuthority(locals, layout);
                             builder.emitLoadArgument(0);
                             builder.endInstallFrameLexicalAuthority();
 
@@ -322,7 +328,7 @@ final class ProtosPerf025D179LexicalMembershipStabilityReadTest {
                             builder.endRoot();
                         });
 
-        return new Fixture(roots.getNode(0), layout);
+        return new Fixture(roots.getNode(0), layoutHolder[0]);
     }
 
     private static CanonicalSequence canonicalize(String characters) {

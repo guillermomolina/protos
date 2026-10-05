@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.215-SNAPSHOT
+
+- `BUG018-C` (guillermomolina/protos#801) makes retained-frame lexical reads
+  safe across uncached-to-cached tier transitions. A frame retained by one
+  activation could hold a PRESENT local while another activation of the same
+  Bytecode root moved it to a cached node whose local-kind metadata for that
+  local was still unset. `MaterializedLocalAccessor`/`LocalRangeAccessor`
+  `getObject` then failed with `FrameSlotTypeException`. Proven
+  captured-materialized reads, including the inline-callback form, now select
+  the PRESENT owner frame without reading its value
+  (`Select[Inline]CapturedMaterializedOwnerFrame`). They then load the value
+  with the builtin `LoadLocalMaterialized` of the owner local, or take the
+  unchanged generic captured lookup (`Read[Inline]CapturedFallback`).
+  `ProtosFrameLexicalBindingAuthority` now retains a `BytecodeLocation` of its
+  root. It reads PRESENT values behind a `@TruffleBoundary` through
+  `BytecodeNode.getLocalValue`, at the index translated by
+  `BytecodeLocation.update()` and at the binding's public local offset. A root
+  lowering records these offsets in `ProtosFrameLexicalLayout` and validates
+  them on parser replay. Presence checks, writes, D179 retargeting,
+  `PRESENT(null)` and inline-callback laziness are unchanged. The
+  local-range PE guard baselines follow the renamed signatures and the
+  retired `getObject` sinks. Two deterministic tier-transition regressions are
+  added. No specification change.
+
 ## 0.3.214-SNAPSHOT
 
 - `I064-A` (guillermomolina/protos#667) implements D171 Candidate B: the

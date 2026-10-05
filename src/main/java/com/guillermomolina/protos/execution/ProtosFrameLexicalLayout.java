@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.Assumption;
 import com.oracle.truffle.api.Truffle;
+import com.oracle.truffle.api.bytecode.BytecodeLocal;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -44,10 +45,23 @@ import java.util.Objects;
  * installation from the partial-evaluation-visible path (PERF010-B Finding
  * A). This class carries no per-invocation state: it describes layout only,
  * never a value or presence store.
+ *
+ * <p>BUG018-C: when the scope is lowered as a genuine root, each ordinal also
+ * records the public {@link BytecodeLocal#getLocalOffset()} of the root-scoped
+ * {@code BytecodeLocal} backing it, derived from the same local array that
+ * forms the root's {@code LocalRangeAccessor}. A retained-frame value read of
+ * a {@link ProtosFrameLexicalBindingAuthority} uses that offset with {@link
+ * com.oracle.truffle.api.bytecode.BytecodeNode#getLocalValue}. Only the
+ * derived integers are kept, never the parse-local {@code BytecodeLocal}
+ * objects themselves. The same scope may also be lowered as an inline
+ * callback, whose block-scoped locals have context-dependent offsets; that
+ * lowering never installs such an authority and contributes no offsets.
  */
 final class ProtosFrameLexicalLayout {
     private final String[] names;
     private final Map<String, Integer> offsets;
+    /* Root-lowering local offsets; null until the scope is lowered as a root. */
+    private int[] rootLocalOffsets;
 
     /*
      * PERF025-D179-A: one-way, root/name-scoped speculation shared by every
@@ -58,9 +72,13 @@ final class ProtosFrameLexicalLayout {
      */
     private final Assumption[] presentContinuity;
 
-    private ProtosFrameLexicalLayout(String[] names, Map<String, Integer> offsets) {
+    private ProtosFrameLexicalLayout(
+            String[] names,
+            Map<String, Integer> offsets,
+            int[] rootLocalOffsets) {
         this.names = names;
         this.offsets = offsets;
+        this.rootLocalOffsets = rootLocalOffsets;
         this.presentContinuity = new Assumption[names.length];
         for (int ordinal = 0; ordinal < names.length; ordinal++) {
             presentContinuity[ordinal] =
@@ -71,8 +89,41 @@ final class ProtosFrameLexicalLayout {
         }
     }
 
+    /**
+     * The public local offsets of {@code locals}, in array order: the root
+     * local offsets of the layout whose {@code LocalRangeAccessor} is built
+     * from the same array.
+     */
+    static int[] localOffsetsOf(BytecodeLocal[] locals) {
+        Objects.requireNonNull(locals, "locals");
+        int[] result = new int[locals.length];
+        for (int index = 0; index < locals.length; index++) {
+            result[index] =
+                    Objects.requireNonNull(locals[index], "locals[" + index + "]")
+                            .getLocalOffset();
+        }
+        return result;
+    }
+
+    /** A layout whose scope has not (yet) been lowered as a root. */
     static ProtosFrameLexicalLayout of(String[] frameBackedNames) {
+        return create(frameBackedNames, null);
+    }
+
+    /** A layout of a root whose root-scoped locals have these public offsets. */
+    static ProtosFrameLexicalLayout of(String[] frameBackedNames, int[] rootLocalOffsets) {
+        return create(
+                frameBackedNames,
+                Objects.requireNonNull(rootLocalOffsets, "rootLocalOffsets"));
+    }
+
+    private static ProtosFrameLexicalLayout create(
+            String[] frameBackedNames, int[] rootLocalOffsets) {
         Objects.requireNonNull(frameBackedNames, "frameBackedNames");
+        if (rootLocalOffsets != null && rootLocalOffsets.length != frameBackedNames.length) {
+            throw new IllegalArgumentException(
+                    "frame-backed local-offset count must match binding-name count");
+        }
         String[] names = frameBackedNames.clone();
         LinkedHashMap<String, Integer> offsets = new LinkedHashMap<>();
         for (int index = 0; index < names.length; index++) {
@@ -90,7 +141,10 @@ final class ProtosFrameLexicalLayout {
                         "duplicate frame-backed binding name: " + name);
             }
         }
-        return new ProtosFrameLexicalLayout(names, Collections.unmodifiableMap(offsets));
+        return new ProtosFrameLexicalLayout(
+                names,
+                Collections.unmodifiableMap(offsets),
+                rootLocalOffsets == null ? null : rootLocalOffsets.clone());
     }
 
     int length() {
@@ -103,6 +157,20 @@ final class ProtosFrameLexicalLayout {
 
     Integer offsetOf(String name) {
         return offsets.get(name);
+    }
+
+    /**
+     * The public {@link BytecodeLocal#getLocalOffset()} of the root-scoped
+     * local backing {@code ordinal}. Only a root lowering installs a frame
+     * authority, and it records these offsets before emitting that
+     * installation.
+     */
+    int localOffsetAt(int ordinal) {
+        if (rootLocalOffsets == null) {
+            throw new IllegalStateException(
+                    "frame-backed lexical layout has no root local offsets: " + names[ordinal]);
+        }
+        return rootLocalOffsets[ordinal];
     }
 
     /**
@@ -134,6 +202,46 @@ final class ProtosFrameLexicalLayout {
                                 + names[ordinal]
                                 + " but found "
                                 + replayed);
+            }
+        }
+    }
+
+    /**
+     * BUG018-C: records, on the first root lowering of this scope, the public
+     * offsets of its root-scoped locals; every later root lowering, including
+     * a Bytecode reparse, must reproduce them exactly, because retained-frame
+     * reads address each binding through its offset. Runs only while lowering
+     * (single-threaded parser), before any authority of the root exists.
+     */
+    void bindRootLocalOffsets(int[] frameBackedLocalOffsets) {
+        Objects.requireNonNull(frameBackedLocalOffsets, "frameBackedLocalOffsets");
+        if (rootLocalOffsets == null) {
+            if (frameBackedLocalOffsets.length != names.length) {
+                throw new IllegalArgumentException(
+                        "frame-backed local-offset count must match binding-name count");
+            }
+            rootLocalOffsets = frameBackedLocalOffsets.clone();
+            return;
+        }
+        int[] localOffsets = rootLocalOffsets;
+        if (frameBackedLocalOffsets.length != localOffsets.length) {
+            throw new IllegalStateException(
+                    "frame-backed lexical layout changed across Bytecode reparse: expected "
+                            + localOffsets.length
+                            + " local offsets but found "
+                            + frameBackedLocalOffsets.length);
+        }
+        for (int ordinal = 0; ordinal < localOffsets.length; ordinal++) {
+            if (localOffsets[ordinal] != frameBackedLocalOffsets[ordinal]) {
+                throw new IllegalStateException(
+                        "frame-backed lexical layout changed across Bytecode reparse at ordinal "
+                                + ordinal
+                                + " ("
+                                + names[ordinal]
+                                + "): expected local offset "
+                                + localOffsets[ordinal]
+                                + " but found "
+                                + frameBackedLocalOffsets[ordinal]);
             }
         }
     }

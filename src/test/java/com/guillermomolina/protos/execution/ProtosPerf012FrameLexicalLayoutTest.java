@@ -57,7 +57,8 @@ final class ProtosPerf012FrameLexicalLayoutTest {
     @Test
     void layoutDescribesDeclarationOrderNamesAndOrdinalsExactly() {
         ProtosFrameLexicalLayout layout =
-                ProtosFrameLexicalLayout.of(new String[] {"a", "b", "c"});
+                ProtosFrameLexicalLayout.of(
+                        new String[] {"a", "b", "c"}, new int[] {4, 5, 6});
 
         assertEquals(3, layout.length());
         assertEquals("a", layout.nameAt(0));
@@ -69,18 +70,61 @@ final class ProtosPerf012FrameLexicalLayoutTest {
         assertNull(layout.offsetOf("neverDeclared"));
     }
 
+    /** BUG018-C: each ordinal carries the public local offset it was built from. */
+    @Test
+    void layoutRecordsThePublicLocalOffsetOfEachOrdinal() {
+        ProtosFrameLexicalLayout layout =
+                ProtosFrameLexicalLayout.of(
+                        new String[] {"a", "b", "c"}, new int[] {4, 5, 6});
+
+        assertEquals(4, layout.localOffsetAt(0));
+        assertEquals(5, layout.localOffsetAt(1));
+        assertEquals(6, layout.localOffsetAt(2));
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosFrameLexicalLayout.of(new String[] {"a"}, new int[] {0, 1}));
+    }
+
+    /**
+     * BUG018-C: only a root lowering binds local offsets; every later root
+     * lowering (including a Bytecode reparse) must reproduce them, while an
+     * inline lowering of the same scope contributes none.
+     */
+    @Test
+    void rootLoweringBindsLocalOffsetsOnceAndReplayMustReproduceThem() {
+        ProtosFrameLexicalLayout layout = ProtosFrameLexicalLayout.of(new String[] {"x", "y"});
+        assertThrows(IllegalStateException.class, () -> layout.localOffsetAt(0));
+
+        layout.requireSameNames(new String[] {"x", "y"});
+        layout.bindRootLocalOffsets(new int[] {0, 1});
+        assertEquals(1, layout.localOffsetAt(1));
+
+        layout.bindRootLocalOffsets(new int[] {0, 1});
+        assertThrows(
+                IllegalStateException.class,
+                () -> layout.requireSameNames(new String[] {"x", "z"}));
+        assertThrows(
+                IllegalStateException.class,
+                () -> layout.bindRootLocalOffsets(new int[] {0, 2}));
+        assertThrows(
+                IllegalStateException.class,
+                () -> layout.bindRootLocalOffsets(new int[] {0}));
+    }
+
     @Test
     void layoutRejectsDuplicateNames() {
         assertThrows(
                 IllegalArgumentException.class,
-                () -> ProtosFrameLexicalLayout.of(new String[] {"x", "x"}));
+                () -> ProtosFrameLexicalLayout.of(
+                        new String[] {"x", "x"}, new int[] {0, 1}));
     }
 
     @Test
     void layoutRejectsANullNameEntry() {
         assertThrows(
                 NullPointerException.class,
-                () -> ProtosFrameLexicalLayout.of(new String[] {"x", null}));
+                () -> ProtosFrameLexicalLayout.of(
+                        new String[] {"x", null}, new int[] {0, 1}));
     }
 
     @Test

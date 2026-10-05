@@ -486,7 +486,10 @@ final class ProtosPerf028AResolvedCurrentLexicalWriteTest {
                             BytecodeLocal target = builder.createLocal("target", null);
                             builder.beginInstallFrameLexicalAuthority(
                                     new BytecodeLocal[] {x},
-                                    ProtosFrameLexicalLayout.of(new String[] {"x"}));
+                                    ProtosFrameLexicalLayout.of(
+                                            new String[] {"x"},
+                                            ProtosFrameLexicalLayout.localOffsetsOf(
+                                                    new BytecodeLocal[] {x})));
                             builder.emitLoadArgument(0);
                             builder.endInstallFrameLexicalAuthority();
 
