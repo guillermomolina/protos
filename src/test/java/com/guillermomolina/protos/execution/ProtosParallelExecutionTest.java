@@ -127,4 +127,27 @@ class ProtosParallelExecutionTest{
    assertEquals(0,d.liveTaskCount());
   }
  }
+
+ /*
+  * BUG017: an unexpected host failure escaping P execution on a carrier must still settle the
+  * Completion. Before the fix the carrier exited without an outcome and the Future stayed pending
+  * forever; the bounded wait turns that hang into a failure.
+  */
+ @Test void hostExecutionFailureSettlesFutureAsGenericError()throws Exception{
+  var p=core();
+  try(var h=ProtosHostedExecutionTestFixture.open(p)){
+   var d=h.activation().executionDomain();
+   var f=h.callEntered(()->ProtosParallelRuntime.hostFailingParallelForTesting(
+       h.activation(),new IllegalStateException("BUG017 injected host failure")));
+   var producer=f.producerTask().orElseThrow();
+   long deadline=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+   while(f.isPending()&&System.nanoTime()<deadline){dispatchHosted(h,d);Thread.onSpinWait();}
+   assertEquals(ProtosFutureValue.State.FAILED,f.state(),"P Future must not remain pending after a host failure");
+   var error=f.failedError().orElseThrow();
+   assertSame(p.errorPrototype(),error.parent().orElseThrow());
+   assertEquals(ProtosTask.State.FAILED,producer.state());
+   dispatchHosted(h,d);
+   assertEquals(0,d.liveTaskCount());
+  }
+ }
 }

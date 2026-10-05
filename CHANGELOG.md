@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.210-SNAPSHOT
+
+- `BUG017` (guillermomolina/protos#800) settles the P Completion after an
+  unexpected host execution failure. Previously a host exception escaping
+  isolated P execution on a carrier left the Completion without an outcome,
+  so the producer Task stayed suspended, the result Future stayed pending,
+  and a waiting root could hang forever. The carrier execution boundary now
+  contains ordinary host `RuntimeException`s as a generic standard `Error`
+  occurrence (no host Throwable, class or message reaches the guest and no
+  new Error category is introduced); JVM `Error`s still fail the Future and
+  are then rethrown to the carrier. Completion terminalization remains
+  exactly-once and never overrides a winning cancellation. This repairs the
+  liveness defect only; the underlying `FrameSlotTypeException` remains
+  tracked separately as `BUG018` (guillermomolina/protos#801).
+
 ## 0.3.209-SNAPSHOT
 
 - `I065` (guillermomolina/protos#668; D173 Candidate A) threads the

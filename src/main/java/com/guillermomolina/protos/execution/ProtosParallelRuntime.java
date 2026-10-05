@@ -122,8 +122,36 @@ public final class ProtosParallelRuntime {
     }
 
     private static void submit(Runnable r){EXECUTOR.execute(r);}
-    private static void run(Snapshot s,Completion c){
-        if(c.cancelled.get())return;Outcome o=runInline(s);if(o.error!=null)c.fail(o.error);else c.resolve(o.value);
+    private static void run(Snapshot s,Completion c){settle(c,s.caller,()->runInline(s));}
+
+    /**
+     * BUG017: P carrier execution boundary. Every admitted P job settles its Completion, so an
+     * unexpected host failure cannot abandon the producer Task and leave its Future pending.
+     * Ordinary host RuntimeExceptions (for example Truffle frame/interop failures) are contained
+     * as a generic standard Error occurrence; the host Throwable never reaches the guest. JVM
+     * Errors are not converted into guest failures: the Completion is still failed so the
+     * Future terminates, and the Error is rethrown to the carrier (ThreadPoolExecutor replaces
+     * it). Completion terminalization stays exactly-once and never overrides cancellation.
+     */
+    private static void settle(Completion c,ProtosActivation caller,java.util.function.Supplier<Outcome> execution){
+        if(c.cancelled.get())return;
+        Outcome o;
+        try{o=execution.get();}
+        catch(RuntimeException hostFailure){o=Outcome.fail(ProtosCoreErrors.newError(caller));}
+        catch(Error fatal){
+            try{c.fail(ProtosCoreErrors.newError(caller));}
+            catch(RuntimeException|Error settleFailure){fatal.addSuppressed(settleFailure);}
+            throw fatal;
+        }
+        if(o.error!=null)c.fail(o.error);else c.resolve(o.value);
+    }
+
+    /**
+     * BUG017 deterministic test seam: submits one P job whose host execution throws
+     * {@code hostFailure} through the real carrier {@link #settle} boundary.
+     */
+    static ProtosFutureValue hostFailingParallelForTesting(ProtosActivation caller,RuntimeException hostFailure){
+        return ownedFuture(caller,c->submit(()->settle(c,caller,()->{throw hostFailure;})));
     }
 
     private static Outcome runInline(Snapshot s){
