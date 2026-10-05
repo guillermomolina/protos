@@ -263,6 +263,56 @@ class GuardSelfTest(unittest.TestCase):
             self.assertIn("JAVA_SLOW_TEST_GUARD=FAIL", lines)
         self.assertEqual((0, ["ok"]), guard.advisory(0, ["ok"]))
 
+    def test_makefile_keeps_slow_test_telemetry_non_authoritative(self) -> None:
+        makefile = (
+            Path(__file__).resolve().parent.parent / "Makefile"
+        ).read_text(encoding="utf-8")
+
+        self.assertNotIn("JAVA_SLOW_TEST_MODE", makefile)
+        self.assertIn("test: test-java test-protos", makefile)
+
+        self.assertIn(
+            "\t-$(JAVA_SLOW_TEST_GUARD) reset "
+            "--reports $(JAVA_SUREFIRE_REPORTS)",
+            makefile,
+        )
+        self.assertIn(
+            "\t-$(JAVA_SLOW_TEST_GUARD) controls "
+            "--state $(JAVA_SLOW_TEST_STATE)",
+            makefile,
+        )
+        self.assertIn(
+            "\t-$(JAVA_SLOW_TEST_GUARD) check "
+            "--reports $(JAVA_SUREFIRE_REPORTS)",
+            makefile,
+        )
+        self.assertIn(
+            '--confirm-command "$(MAKE) --no-print-directory '
+            'test-java-confirm" --advisory',
+            makefile,
+        )
+
+        self.assertIn(
+            "\t@$(MAKE) --no-print-directory java-test-phase "
+            "JAVA_TEST_PHASE=test-java-parallel",
+            makefile,
+        )
+        self.assertIn(
+            "\t@$(MAKE) --no-print-directory java-test-phase "
+            "JAVA_TEST_PHASE=test-java-serial",
+            makefile,
+        )
+
+        check_line = next(
+            line for line in makefile.splitlines()
+            if line.startswith("check:")
+        )
+        prerequisites = check_line.split(":", 1)[1].split()
+        self.assertNotIn("test", prerequisites)
+        self.assertNotIn("test-java", prerequisites)
+        self.assertNotIn("test-protos", prerequisites)
+        self.assertIn("check-truffle-compilation", prerequisites)
+
     def test_warning_mode_downgrades_only_slow_test_failures(self) -> None:
         fail_lines = [
             "JAVA_SLOW_TEST_GUARD=FAIL",

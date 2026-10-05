@@ -7,6 +7,19 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.204-SNAPSHOT
+
+- `TEST008` follow-up separates the developer validation entry points:
+  `make check` now owns compilerability / partial-evaluation bailout checks
+  only, including the strict Truffle compilation gate, and no longer runs
+  `make test`. `make test` remains the functional validation authority over
+  the Java and Protos suites. Slow-test setup and classification stay
+  diagnostic telemetry: their regression, environment-comparability or guard
+  verdicts do not own `make test`'s exit status, while the real Java and
+  Protos test phases remain fail-closed. A repository self-test pins this
+  Makefile contract against regression. No Protos semantic or specification
+  change.
+
 ## 0.3.203-SNAPSHOT
 
 - `TEST009-I` (parent TEST009/#795; trigger PERF030/#784) specializes the

@@ -22,11 +22,9 @@ JAVA_SLOW_TEST_GUARD := $(PYTHON) tools/java_slow_test_guard.py
 JAVA_SLOW_TEST_BASELINE := tools/java_slow_test_baseline.txt
 JAVA_SLOW_TEST_STATE := target/java-slow-test
 JAVA_CONFIRM_TESTS ?=
-# Project-owner decision (TEST008 follow-up): slow-test regression verdicts
-# warn instead of failing local validation. Guard configuration/environment
-# errors remain fail-closed locally; under CI (CI=true) every guard verdict
-# remains advisory.
-JAVA_SLOW_TEST_MODE ?= $(if $(filter true,$(CI)),--advisory,--warn-regressions)
+# TEST008 follow-up: slow-test measurement is telemetry only. Slow-test
+# policy, environment and measurement verdicts never own `make test`'s exit
+# status. The real Java and Protos test phases remain fail-closed.
 JAVA_CONFIRM_REPORTS ?= $(JAVA_SLOW_TEST_STATE)/confirmation-reports
 # PERF030-F: static LocalRangeAccessor PE-index guard (check-local-range-index-pe).
 LOCAL_RANGE_PE_GUARD_BASELINE := tools/java_local_range_pe_guard_baseline.json
@@ -81,15 +79,15 @@ help:
 		'  make check-truffle-compilation  Strict Truffle compilation gate: package, then run' \
 		'                      the Test Tool corpus on the JVM with CompileImmediately,' \
 		'                      ExitVM and performance warnings as errors, in SYNC and' \
-		'                      BACKGROUND compilation modes (not part of make check)' \
+		'                      BACKGROUND compilation modes (included in make check)' \
 		'  make diagnose-truffle-compilation  Manual textual compilation diagnostics' \
 		'                      (expansion, inlining, performance-warning traces) retained' \
 		'                      under target/truffle-compilation; never changes product code' \
 		'  make test-local-range-pe-guard  Compatibility alias of check-local-range-index-pe' \
 		'  make test-protos    Build Protos and run the native Protos test suite' \
-		'  make check          Verify the toolchain, run the static LocalRange,' \
-		'                      LocalAccessor, Bytecode API and generated-dispatch BCI PE' \
-		'                      guards, then run both test suites' \
+		'  make check          Run compilerability / PE bailout checks only:' \
+		'                      toolchain, static PE guards, generated-dispatch BCI and' \
+		'                      strict Truffle compilation; never runs make test' \
 		'  make verify         Run a clean Maven verify lifecycle' \
 		'  make clean          Remove Maven build output' \
 		'  make artifacts      Build the canonical exact-revision artifact set' \
@@ -114,16 +112,17 @@ build:
 
 test: test-java test-protos
 
-# TEST008/PLAT047: machine controls bracket the timed Java phases; the check
-# confirms suspects once (test-java-confirm) and decides PASS/FAIL/ERROR.
+# TEST008/PLAT047: slow-test controls and classification are telemetry only.
+# Their setup and verdict cannot fail `make test`. The two real Java test phases
+# below remain authoritative and preserve their own non-zero status unchanged.
 test-java:
-	$(JAVA_SLOW_TEST_GUARD) reset --reports $(JAVA_SUREFIRE_REPORTS) --log $(JAVA_TEST_LOG) --state $(JAVA_SLOW_TEST_STATE)
-	$(JAVA_SLOW_TEST_GUARD) controls --state $(JAVA_SLOW_TEST_STATE) --jobs $(JAVA_TEST_JOBS)
+	-$(JAVA_SLOW_TEST_GUARD) reset --reports $(JAVA_SUREFIRE_REPORTS) --log $(JAVA_TEST_LOG) --state $(JAVA_SLOW_TEST_STATE)
+	-$(JAVA_SLOW_TEST_GUARD) controls --state $(JAVA_SLOW_TEST_STATE) --jobs $(JAVA_TEST_JOBS)
 	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-parallel
 	@$(MAKE) --no-print-directory java-test-phase JAVA_TEST_PHASE=test-java-serial
-	$(JAVA_SLOW_TEST_GUARD) check --reports $(JAVA_SUREFIRE_REPORTS) --baseline $(JAVA_SLOW_TEST_BASELINE) \
+	-$(JAVA_SLOW_TEST_GUARD) check --reports $(JAVA_SUREFIRE_REPORTS) --baseline $(JAVA_SLOW_TEST_BASELINE) \
 		--state $(JAVA_SLOW_TEST_STATE) --jobs $(JAVA_TEST_JOBS) --log $(JAVA_TEST_LOG) \
-		--confirm-command "$(MAKE) --no-print-directory test-java-confirm" $(JAVA_SLOW_TEST_MODE)
+		--confirm-command "$(MAKE) --no-print-directory test-java-confirm" --advisory
 
 # Streams one test-java phase live to the terminal while appending it to the
 # retained log, records its wall time, and fails with the phase's own
@@ -235,10 +234,11 @@ test-protos:
 	printf 'Protos tests total time: %s s\n' "$$((end - start))"; \
 	exit $$status
 
-# TEST009: deterministic static guards measured well below 60 s run first;
-# TEST009-D adds the generated-dispatch BCI guard (package + static + one
-# synchronous-compilation run, measured ~31 s).
-check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe test
+# TEST009: compilerability validation is independent from functional tests.
+# Cheap/static guards and the generated-dispatch BCI guard run first; the strict
+# Truffle compilation gate is the final bailout authority. `make test` is never
+# a prerequisite of `make check`.
+check: toolchain check-local-range-index-pe check-local-range-operands-pe check-local-accessor-pe check-bytecode-api-pe check-generated-bytecode-bci-pe check-truffle-compilation
 
 verify:
 	$(MVN) $(MVN_FLAGS) clean verify
