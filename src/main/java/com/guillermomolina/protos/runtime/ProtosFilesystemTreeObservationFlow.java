@@ -21,12 +21,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * I024-A host-neutral asynchronous substrate for D046 Filesystem tree observation.
+ * I024-A host-neutral asynchronous substrate for Filesystem {@code entries} observation.
  *
- * <p>This slice does not install {@code entries} or {@code captureTree} on a public Filesystem
- * capability and does not provide a host filesystem implementation. It owns only Path-domain
- * preflight, independent Future/cancellation/Actor-lifecycle mechanics, defensive backend-result
- * snapshot, and captured-result custody transfer.
+ * <p>This flow does not install {@code entries} on a public Filesystem capability and does not
+ * provide a host filesystem implementation. It owns only Path-domain preflight, independent
+ * Future/cancellation/Actor-lifecycle mechanics, and defensive backend-result snapshot. D171
+ * retired the public {@code captureTree} selector; immutable capture is host/runtime custody
+ * machinery outside this flow.
  */
 public final class ProtosFilesystemTreeObservationFlow {
     @FunctionalInterface
@@ -52,17 +53,8 @@ public final class ProtosFilesystemTreeObservationFlow {
         }
     }
 
-    /** Opaque host-neutral custody token for one successfully captured immutable tree. */
-    public interface CapturedTree {}
-
     public interface EntriesCompletion {
         void succeeded(List<Entry> entries);
-
-        void failed();
-    }
-
-    public interface CaptureCompletion {
-        void succeeded(CapturedTree capturedTree, Runnable releaseIfUntransferred);
 
         void failed();
     }
@@ -72,34 +64,26 @@ public final class ProtosFilesystemTreeObservationFlow {
         Cancellation entries(ProtosPathValue path, EntriesCompletion completion);
     }
 
-    @FunctionalInterface
-    public interface CaptureBackend {
-        Cancellation captureTree(ProtosPathValue path, CaptureCompletion completion);
-    }
-
     /**
      * Semantic result bridge injected by the caller.
      *
-     * <p>I024-B owns the standard Array/descriptor and Filesystem-capability materialization.
+     * <p>I024-B owns the standard Array/descriptor materialization.
      */
+    @FunctionalInterface
     public interface ResultMaterializer {
         ProtosObjectValue entries(List<Entry> entries);
-
-        ProtosObjectValue capturedTree(CapturedTree capturedTree);
     }
 
     private final ProtosObjectValue filesystemCapability;
     private final ProtosActorExecutionDomain domain;
     private final ProtosObjectValue futurePrototype;
     private final EntriesBackend entriesBackend;
-    private final CaptureBackend captureBackend;
     private final ResultMaterializer materializer;
 
     public ProtosFilesystemTreeObservationFlow(
             ProtosObjectValue filesystemCapability,
             ProtosActivation bootstrapActivation,
             EntriesBackend entriesBackend,
-            CaptureBackend captureBackend,
             ResultMaterializer materializer) {
         this.filesystemCapability =
                 Objects.requireNonNull(filesystemCapability, "filesystemCapability");
@@ -107,7 +91,6 @@ public final class ProtosFilesystemTreeObservationFlow {
         this.domain = bootstrapActivation.executionDomain();
         this.futurePrototype = bootstrapActivation.prelude().orElseThrow().futurePrototype();
         this.entriesBackend = Objects.requireNonNull(entriesBackend, "entriesBackend");
-        this.captureBackend = Objects.requireNonNull(captureBackend, "captureBackend");
         this.materializer = Objects.requireNonNull(materializer, "materializer");
     }
 
@@ -146,68 +129,7 @@ public final class ProtosFilesystemTreeObservationFlow {
                                         invocation.fail();
                                         return;
                                     }
-                                    invocation.succeed(value, () -> {});
-                                }
-
-                                @Override
-                                public void failed() {
-                                    invocation.fail();
-                                }
-                            }));
-        } catch (RuntimeException backendFailure) {
-            invocation.fail();
-        }
-        return invocation.future();
-    }
-
-    public ProtosFutureValue captureTree(ProtosActivation activation, Object pathValue) {
-        Objects.requireNonNull(activation, "activation");
-        requireDomain(activation);
-        if (!(pathValue instanceof ProtosPathValue path)) {
-            return failedFuture(
-                    activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
-        }
-
-        Invocation invocation = begin(activation);
-        if (invocation.terminal()) {
-            return invocation.future();
-        }
-
-        try {
-            invocation.install(
-                    captureBackend.captureTree(
-                            path,
-                            new CaptureCompletion() {
-                                @Override
-                                public void succeeded(
-                                        CapturedTree capturedTree,
-                                        Runnable releaseIfUntransferred) {
-                                    if (releaseIfUntransferred == null) {
-                                        invocation.fail();
-                                        return;
-                                    }
-                                    if (capturedTree == null) {
-                                        releaseSafely(releaseIfUntransferred);
-                                        invocation.fail();
-                                        return;
-                                    }
-                                    if (invocation.terminal()) {
-                                        releaseSafely(releaseIfUntransferred);
-                                        return;
-                                    }
-
-                                    ProtosObjectValue value;
-                                    try {
-                                        value =
-                                                Objects.requireNonNull(
-                                                        materializer.capturedTree(capturedTree),
-                                                        "capture materializer result");
-                                    } catch (RuntimeException invalidBackendResult) {
-                                        releaseSafely(releaseIfUntransferred);
-                                        invocation.fail();
-                                        return;
-                                    }
-                                    invocation.succeed(value, releaseIfUntransferred);
+                                    invocation.succeed(value);
                                 }
 
                                 @Override
@@ -258,21 +180,12 @@ public final class ProtosFilesystemTreeObservationFlow {
             cancellationBridge.install(cancellation);
         }
 
-        void succeed(ProtosObjectValue value, Runnable releaseIfUntransferred) {
+        void succeed(ProtosObjectValue value) {
             Objects.requireNonNull(value, "value");
-            Objects.requireNonNull(releaseIfUntransferred, "releaseIfUntransferred");
-            boolean release = false;
             synchronized (lifecycle) {
-                if (operation.terminal()) {
-                    release = true;
-                } else if (!operation.commit()) {
-                    release = true;
-                } else if (!operation.resolve(value)) {
-                    release = true;
+                if (!operation.terminal() && operation.commit()) {
+                    operation.resolve(value);
                 }
-            }
-            if (release) {
-                releaseSafely(releaseIfUntransferred);
             }
         }
 
@@ -311,14 +224,6 @@ public final class ProtosFilesystemTreeObservationFlow {
             }
         }
         return snapshot;
-    }
-
-    private static void releaseSafely(Runnable release) {
-        try {
-            release.run();
-        } catch (RuntimeException ignored) {
-            // Terminal/cancelled Future cannot be resurrected by custody cleanup failure.
-        }
     }
 
     private static final class CancellationBridge {

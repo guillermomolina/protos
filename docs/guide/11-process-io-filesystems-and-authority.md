@@ -1225,34 +1225,28 @@ series. This chapter therefore uses the already-published normative/current
 runtime surfaces and links real Protos tool consumers without creating executable
 material inside a documentation-only slice.
 
-## Current implementation boundary: D046 / I024 is closed
+## Current implementation boundary: D046 entries, D171 host-provisioned capture
 
-D046 as amended by specification revision `0.1.384` is now fully implemented by
-`I024 — Filesystem directory observation + captured-tree capability`.
-
-The general surface remains:
+D046 introduced general directory observation and a captured-tree capability,
+implemented by `I024`. D171 later removed the public `captureTree` selector
+(implemented by `I064`). The general guest surface is now:
 
 ```text
 filesystem.entries(path) -> Future<Array>
-filesystem.captureTree(path) -> Future<Filesystem>
 ```
 
-The reference implementation now composes the language-visible selectors and
-standard result materialization with secure production NIO no-follow observation
-and immutable captured-tree backing. Integrated Protos conformance covers exact
-entry names/kinds, complete eager results, final-link failure, read-only capture,
-source mutation independence, cancellation and repeated verify/use of the same
-captured authority.
+There is no guest operation that captures, snapshots, clones or freezes an
+arbitrary subtree into a new Filesystem. Stable captured trees are provisioned
+only by the host/runtime: for example, Package Tool content custody captures a
+selected package root once through secure no-follow traversal into immutable
+backing and hands guest code an ordinary read-only Filesystem over that capture.
+Guest code then verifies and uses that same Filesystem through `entries` and
+`open`; it never sees a source Path, backing location or capture selector.
 
 A captured Filesystem remains an ordinary read-only Filesystem capability with no
 standard `close()` obligation. Files opened from it retain their normal File
-lifecycle. Hosts/backends that cannot provide the D046 operation still fail it
-through the ordinary Future/`IOError` boundary rather than weakening confinement.
-
-I024-D closes I024 and B009. The Package Tool continuation
-`TOOL001-F2E2 — verified read-only package-store binding` is therefore READY to
-consume this general capability; package-specific Java/NIO tree walking remains
-outside that slice.
+lifecycle. Hosts/backends that cannot provide `entries` still fail it through the
+ordinary Future/`IOError` boundary rather than weakening confinement.
 
 ## Current implementation evidence
 
@@ -1277,7 +1271,7 @@ The implementation itself reflects the capability model:
   discovery;
 - [`ProtosStandardFilesystemProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/ProtosStandardFilesystemProtocol.java)
   constructs explicitly provisioned Filesystem capabilities with current
-  `open`/`replace`/`remove`/`entries`/`captureTree`;
+  `open`/`replace`/`remove`/`entries`;
 - [`ProtosStandardFileProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/ProtosStandardFileProtocol.java)
   materializes only the File operations promised by its acquired capability
   descriptor.
@@ -1449,9 +1443,9 @@ same.
     Core never silently reopens, duplicates, or auto-proxies it.
 39. Resource lifetime should have one explicit owner; use `ensure` or owning
     wrappers where appropriate.
-40. `Filesystem.entries` and `captureTree` are normatively defined by D046 but
-    are not yet current runnable reference-implementation behavior while I024 is
-    IN_PROGRESS.
+40. `Filesystem.entries` is the only standard tree-observation operation; D171
+    removed the public `captureTree` selector, and stable captured trees are
+    provisioned only by the host/runtime as ordinary read-only Filesystems.
 
 ## Normative references
 

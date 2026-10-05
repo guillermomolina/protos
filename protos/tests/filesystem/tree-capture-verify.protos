@@ -91,11 +91,10 @@ replaceFailed: ioFails(() => captured.replace(stablePath, rootPath.child("replac
 replaceFailed.ifFalse(() => { ok = false })
 ioFails(() => captured.remove(stablePath).value()).ifFalse(() => { ok = false })
 
-subtree: captured.captureTree(nestedPath).value()
-subtree.hasSlot("close").ifTrue(() => { ok = false })
-(subtree.entries(Path.relative()).value().size() == 1).ifFalse(() => { ok = false })
-subtreeReadOk: readText(subtree, Path.relative().child("child.txt")) == "nested-before"
-subtreeReadOk.ifFalse(() => { ok = false })
+// D171: a host-captured Filesystem cannot mint another Filesystem; nested content stays
+// reachable through the retained entries/open operations.
+captured.hasSlot("captureTree").ifTrue(() => { ok = false })
+(captured.entries(nestedPath).value().size() == 1).ifFalse(() => { ok = false })
 
 (stableCount == 1).ifFalse(() => { ok = false })
 (nestedCount == 1).ifFalse(() => { ok = false })

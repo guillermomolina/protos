@@ -750,3 +750,12 @@ forward. It must not hash a mutable source tree and later re-open source Paths.
 I024-D now closes that general implementation/conformance prerequisite and B009.
 F2E2 is READY to implement verified binding by hashing and subsequently using the
 same immutable captured Filesystem; the ContentIdentity contract itself is unchanged.
+
+## Post-D171 capture provisioning note
+
+D171 later removed the public `Filesystem.captureTree` selector. The verifier
+contract above is unchanged, but the immutable captured Filesystem is now
+provisioned only by host/runtime package custody (PLAT012): the selected package
+root is captured exactly once, ContentIdentity hashes an ordinary read-only
+Filesystem view of that capture through `entries`/`open`, and the same custody is
+used after a match without reopening the original source Path.

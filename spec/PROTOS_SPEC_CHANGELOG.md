@@ -23,6 +23,23 @@ entry text:
 - [0.1.100–0.1.199](changelog/PROTOS_SPEC_CHANGELOG-0.1.100-0.1.199.md)
 - [0.1.041–0.1.099](changelog/PROTOS_SPEC_CHANGELOG-0.1.041-0.1.099.md)
 
+## [0.1.443] - 2026-10-05
+
+### I064 / D171 — Remove public `Filesystem.captureTree`
+- `spec/io/FILESYSTEM.md` section 20.4: `Filesystem.captureTree` is no longer
+  part of the standard Filesystem protocol. Core v0.1 defines no guest
+  operation that captures, snapshots, clones or freezes an arbitrary subtree
+  into a new Filesystem. `Filesystem.entries` and its invocation, authority,
+  no-follow, failure and cancellation rules are retained. The former
+  captured-tree contract is restated as requirements on host/runtime-provisioned
+  captured Filesystems. These are ordinary immutable, read-only Filesystems
+  consumed only through retained operations, with no capture selector. They
+  expose no source Path, URL or backing, and physical backing is not identity.
+  Verify-then-use uses the same captured capability without reopening the
+  source. The Future, cancellation and result semantics specific to
+  `captureTree` are removed. D046's public `captureTree` contract is
+  superseded by D171.
+
 ## [0.1.442] - 2026-10-05
 
 ### I066 / D172 — Standard Library placement of the canonical IP families

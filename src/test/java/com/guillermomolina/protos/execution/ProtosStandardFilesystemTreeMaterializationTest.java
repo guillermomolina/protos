@@ -30,7 +30,6 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
-import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
@@ -106,26 +105,22 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
     }
 
     @Test
-    void captureMaterializesFreshStructurallyReadOnlyFilesystemWithoutClose() throws Exception {
+    void hostCapturedMaterializationIsStructurallyReadOnlyFilesystemWithoutCloseOrCapture()
+            throws Exception {
         Fixture x = fixture();
-        ProtosFutureValue captureFuture =
-                invoke(x, x.filesystem, "captureTree", List.of(path(x.prelude, "root")));
-        CaptureInvocation invocation = x.backend.captureInvocations.remove();
         RecordingCapturedBackend capturedBackend = new RecordingCapturedBackend();
-        AtomicInteger releases = new AtomicInteger();
-        invocation.completion.succeeded(capturedBackend, releases::incrementAndGet);
 
+        // D171: captured Filesystems are provisioned only by host/runtime custody (PLAT012).
         ProtosObjectValue captured =
-                assertInstanceOf(
-                        ProtosFilesystemValue.class,
-                        captureFuture.resolvedValue().orElseThrow());
+                ProtosStandardFilesystemProtocol.createCapturedCapability(
+                        x.activation, capturedBackend);
         assertNotSame(x.filesystem, captured);
         assertSame(ProtosObjectValue.rootObject(), captured.parent().orElseThrow());
         assertEquals(
-                Set.of("open", "replace", "remove", "entries", "captureTree"),
+                Set.of("open", "replace", "remove", "entries"),
                 captured.localSlotsSnapshot().keySet());
         assertFalse(captured.hasLocalSlot("close"));
-        assertEquals(0, releases.get());
+        assertFalse(captured.hasLocalSlot("captureTree"));
 
         ProtosFutureValue entries =
                 invoke(x, captured, "entries", List.of(path(x.prelude, "child")));
@@ -234,7 +229,6 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
     private static final class RecordingBackend
             implements ProtosStandardFilesystemProtocol.Backend {
         private final ArrayDeque<EntriesInvocation> entriesInvocations = new ArrayDeque<>();
-        private final ArrayDeque<CaptureInvocation> captureInvocations = new ArrayDeque<>();
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
@@ -253,15 +247,6 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
             entriesInvocations.add(invocation);
             return invocation.cancellations::incrementAndGet;
         }
-
-        @Override
-        public ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
-                ProtosPathValue path,
-                ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
-            CaptureInvocation invocation = new CaptureInvocation(completion);
-            captureInvocations.add(invocation);
-            return invocation.cancellations::incrementAndGet;
-        }
     }
 
     private static final class EntriesInvocation {
@@ -270,15 +255,6 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
 
         private EntriesInvocation(
                 ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
-            this.completion = completion;
-        }
-    }
-
-    private static final class CaptureInvocation {
-        private final ProtosFilesystemTreeObservationFlow.CaptureCompletion completion;
-        private final AtomicInteger cancellations = new AtomicInteger();
-
-        private CaptureInvocation(ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
             this.completion = completion;
         }
     }
@@ -316,14 +292,6 @@ final class ProtosStandardFilesystemTreeMaterializationTest {
             CapturedEntriesInvocation invocation = new CapturedEntriesInvocation(completion);
             entriesInvocations.add(invocation);
             return invocation.cancellations::incrementAndGet;
-        }
-
-        @Override
-        public ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
-                ProtosPathValue path,
-                ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
-            completion.failed();
-            return () -> {};
         }
     }
 }

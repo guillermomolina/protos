@@ -137,6 +137,36 @@ final class ProtosPackageToolContentIdentityTest extends ProtosPackageToolProtos
     }
 
     @Test
+    void contentIdentityFrozenVectorsDigestAndVerifyHostCapturedCustody() throws Exception {
+        // D171: the V1 vector trees reach ContentIdentity only as host-captured read-only
+        // Filesystem custody (PLAT012), never through a guest capture selector.
+        Map<String, String> vectors =
+                Map.of(
+                        "minimal",
+                        "beb503347f64442d909b4848e69333a72f4d049d7f5b37c32f453f409641ef04",
+                        "ordering",
+                        "a4e71028b12d648a10729e5dedf947d8bfbff1e6c8e1b95bb04ac170f5682e67",
+                        "binary",
+                        "2de3f9f78fb1355348861e08cb549919d10e4b50f8965f3fc933eac72fff8870",
+                        "varuint-boundaries",
+                        "4ae0bad7f7915a5e6db1ad4bb29ee71351fcf812b562b41da34f99b8fd4b8f02",
+                        "exact-case-upper",
+                        "9afaaf7e2a250fd11b83d12e63cf7e18527c95820d03bff6895e57a51600e450",
+                        "exact-case-lower",
+                        "ff22975888d65d4dd9563bd09ca67190c02473bdead0c536faf101cd66f72ec2");
+        for (Map.Entry<String, String> vector : vectors.entrySet()) {
+            ProtosExecutionOutcome outcome =
+                    executeContentIdentity(
+                            TEST_ROOT.resolve("content-identity/cases").resolve(vector.getKey()),
+                            "digest-verify.protos",
+                            Map.of("expectedHex", vector.getValue()),
+                            true);
+            assertExpected(
+                    outcome, "true", "content-identity vector " + vector.getKey());
+        }
+    }
+
+    @Test
     void contentIdentityVaruintImplementationCoversFrozenArbitraryPrecisionBoundaries()
             throws Exception {
         try (ProtosHostedExecutionTestFixture hosted =

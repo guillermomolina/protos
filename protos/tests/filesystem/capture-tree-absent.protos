@@ -13,4 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-filesystem.captureTree(Path.relative()).value()
+// D171: Filesystem.captureTree is not a standard Filesystem selector; entries remains.
+ok: filesystem.hasSlot("entries")
+filesystem.hasSlot("captureTree").ifTrue(() => {
+    ok = false
+})
+ok

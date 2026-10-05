@@ -1,7 +1,1 @@
 # case	fixture	expected
-minimal	minimal.protos	suite-native
-ordering	ordering.protos	suite-native
-binary	binary.protos	suite-native
-varuint-boundaries	varuint-boundaries.protos	suite-native
-exact-case-upper	exact-case-upper.protos	suite-native
-exact-case-lower	exact-case-lower.protos	suite-native

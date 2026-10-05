@@ -40,6 +40,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -164,14 +165,13 @@ abstract class ProtosPackageToolProtosTestSupport {
             }
         }
 
-        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(root);
+        // PLAT012/D171: the fixture receives a host-captured read-only Filesystem, never a guest
+        // capture selector; ContentIdentity sees only the retained open/entries operations.
+        assumeSecureTreeConfinement(root);
+        try (ProtosCapturedFilesystemCustody custody =
+                        ProtosCapturedFilesystemCustody.captureSelectedRoot(root);
                 ProtosHostedExecutionTestFixture hosted =
                         ProtosHostedExecutionTestFixture.open(prelude)) {
-            assumeTrue(
-                    backend.secureConfinementAvailable(),
-                    "host provider has no SecureDirectoryStream");
-
             for (Map.Entry<String, String> binding : stringBindings.entrySet()) {
                 hosted.activation()
                         .context()
@@ -179,11 +179,76 @@ abstract class ProtosPackageToolProtosTestSupport {
                                 binding.getKey(),
                                 new ProtosStringValue(binding.getValue()));
             }
-            hosted.installFilesystem("filesystem", backend);
+            hosted.activation()
+                    .context()
+                    .createLocalSlot("filesystem", custody.materialize(hosted.activation()));
 
             return executeFile(
                     TEST_ROOT.resolve("content-identity").resolve(fixture),
                     hosted.activation());
+        }
+    }
+
+    /**
+     * Executes one F2E3B execution-plan fixture with the live read-only project tree as
+     * {@code projectTreeFilesystem} and one host-captured read-only Filesystem per
+     * {@code external/<packageId>} directory, bound as {@code externalCaptures} records
+     * ({@code packageId}, {@code filesystem}).
+     */
+    protected static ProtosExecutionOutcome executeExternalCaptureFixture(
+            Path root, String fixture) throws Exception {
+        assumeSecureTreeConfinement(root);
+        ArrayList<ProtosCapturedFilesystemCustody> custodies = new ArrayList<>();
+        try (ProtosNioReadOnlyTreeFilesystemBackend projectTree =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(root);
+                ProtosHostedExecutionTestFixture hosted =
+                        ProtosHostedExecutionTestFixture.open(newPackagePrelude())) {
+            hosted.installFilesystem("projectTreeFilesystem", projectTree);
+
+            ArrayList<ProtosObjectValue> captures = new ArrayList<>();
+            Path external = root.resolve("external");
+            if (Files.isDirectory(external, LinkOption.NOFOLLOW_LINKS)) {
+                List<Path> packageRoots;
+                try (var listing = Files.list(external)) {
+                    packageRoots = listing.sorted().toList();
+                }
+                for (Path packageRoot : packageRoots) {
+                    ProtosCapturedFilesystemCustody custody =
+                            ProtosCapturedFilesystemCustody.captureSelectedRoot(packageRoot);
+                    custodies.add(custody);
+                    ProtosObjectValue capture =
+                            new ProtosObjectValue(ProtosObjectValue.rootObject());
+                    capture.createLocalSlot(
+                            "packageId",
+                            new ProtosStringValue(packageRoot.getFileName().toString()));
+                    capture.createLocalSlot(
+                            "filesystem", custody.materialize(hosted.activation()));
+                    capture.freeze();
+                    captures.add(capture);
+                }
+            }
+            hosted.activation()
+                    .context()
+                    .createLocalSlot(
+                            "externalCaptures",
+                            hosted.activation().prelude().orElseThrow().newArray(captures));
+
+            return executeFile(
+                    TEST_ROOT.resolve("execution-plan").resolve(fixture),
+                    hosted.activation());
+        } finally {
+            for (ProtosCapturedFilesystemCustody custody : custodies) {
+                custody.close();
+            }
+        }
+    }
+
+    private static void assumeSecureTreeConfinement(Path root) throws IOException {
+        try (ProtosNioReadOnlyTreeFilesystemBackend probe =
+                new ProtosNioReadOnlyTreeFilesystemBackend(root)) {
+            assumeTrue(
+                    probe.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
         }
     }
 

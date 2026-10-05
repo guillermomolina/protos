@@ -55,8 +55,9 @@ import java.util.Objects;
  * the effect becomes observable. I021 namespace replacement/removal instead uses the dedicated
  * per-operation atomic effect/commit cutover so cancellation cannot split a successful namespace
  * transition from its Future outcome. I024-B reuses the host-neutral tree-observation flow for
- * {@code entries} and {@code captureTree}; captured-tree backends are structurally adapted as
- * read-only Filesystem authorities and never acquire a public Filesystem {@code close} surface.
+ * {@code entries}. D171 retired the public {@code captureTree} selector: host/runtime custody
+ * (PLAT012) captures trees internally, and captured backends are structurally adapted as read-only
+ * Filesystem authorities that never acquire a public {@code close} or capture surface.
  * File capability descriptors must exactly match the captured read/write authority; optional
  * seek/size/truncate/sync surfaces may be advertised only when the selected backend resource
  * implements their complete standard contracts.
@@ -82,8 +83,7 @@ public final class ProtosStandardFilesystemProtocol {
      * family. Materialization wraps it as a structurally read-only standard Filesystem: mutation
      * never delegates and write/create/truncate opens fail before this backend is exercised.
      */
-    public interface CapturedBackend
-            extends Backend, ProtosFilesystemTreeObservationFlow.CapturedTree {
+    public interface CapturedBackend extends Backend {
         /**
          * Host-only immutable read of one exact regular resource (PLAT012).
          *
@@ -129,21 +129,13 @@ public final class ProtosStandardFilesystemProtocol {
             completion.failed();
             return () -> {};
         }
-
-        default ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
-                ProtosPathValue path,
-                ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
-            completion.failed();
-            return () -> {};
-        }
     }
 
     private enum Operation {
         OPEN,
         REPLACE,
         REMOVE,
-        ENTRIES,
-        CAPTURE_TREE
+        ENTRIES
     }
 
     public static ProtosObjectValue createCapability(
@@ -203,21 +195,7 @@ public final class ProtosStandardFilesystemProtocol {
                         filesystem,
                         constructionActivation,
                         backend::entries,
-                        backend::captureTree,
-                        new ProtosFilesystemTreeObservationFlow.ResultMaterializer() {
-                            @Override
-                            public ProtosObjectValue entries(
-                                    List<ProtosFilesystemTreeObservationFlow.Entry> entries) {
-                                return materializeEntries(constructionActivation, entries);
-                            }
-
-                            @Override
-                            public ProtosObjectValue capturedTree(
-                                    ProtosFilesystemTreeObservationFlow.CapturedTree capturedTree) {
-                                return materializeCapturedFilesystem(
-                                        bytesPrototype, constructionActivation, capturedTree);
-                            }
-                        });
+                        entries -> materializeEntries(constructionActivation, entries));
 
         filesystem.createLocalSlot(
                 "open",
@@ -251,14 +229,6 @@ public final class ProtosStandardFilesystemProtocol {
                         namespaceMutationFlow,
                         treeObservationFlow,
                         Operation.ENTRIES));
-        filesystem.createLocalSlot(
-                "captureTree",
-                operationClosure(
-                        filesystem,
-                        flow,
-                        namespaceMutationFlow,
-                        treeObservationFlow,
-                        Operation.CAPTURE_TREE));
         return filesystem;
     }
 
@@ -320,11 +290,6 @@ public final class ProtosStandardFilesystemProtocol {
                                         ? treeObservationFlow.entries(
                                                 activation, arguments.get(0))
                                         : invalid(activation);
-                        case CAPTURE_TREE ->
-                                arguments.size() == 1
-                                        ? treeObservationFlow.captureTree(
-                                                activation, arguments.get(0))
-                                        : invalid(activation);
                     };
                 });
     }
@@ -356,19 +321,6 @@ public final class ProtosStandardFilesystemProtocol {
         };
     }
 
-    private static ProtosObjectValue materializeCapturedFilesystem(
-            ProtosObjectValue bytesPrototype,
-            ProtosActivation constructionActivation,
-            ProtosFilesystemTreeObservationFlow.CapturedTree capturedTree) {
-        if (!(Objects.requireNonNull(capturedTree, "capturedTree")
-                instanceof CapturedBackend capturedBackend)) {
-            throw new IllegalArgumentException(
-                    "captured tree does not provide the standard captured backend contract");
-        }
-        return createCapability(
-                bytesPrototype, constructionActivation, readOnlyCapturedBackend(capturedBackend));
-    }
-
     private static Backend readOnlyCapturedBackend(CapturedBackend capturedBackend) {
         Objects.requireNonNull(capturedBackend, "capturedBackend");
         return new Backend() {
@@ -389,13 +341,6 @@ public final class ProtosStandardFilesystemProtocol {
                     ProtosPathValue path,
                     ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
                 return capturedBackend.entries(path, completion);
-            }
-
-            @Override
-            public ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
-                    ProtosPathValue path,
-                    ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
-                return capturedBackend.captureTree(path, completion);
             }
         };
     }

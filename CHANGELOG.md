@@ -7,6 +7,25 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.214-SNAPSHOT
+
+- `I064-A` (guillermomolina/protos#667) implements D171 Candidate B: the
+  public `Filesystem.captureTree` selector is removed from the standard
+  Filesystem protocol (slot, `Operation.CAPTURE_TREE`, `Backend.captureTree`,
+  the `ProtosFilesystemTreeObservationFlow` capture/custody-transfer machinery
+  and the NIO source/captured-backend capture overrides, including captured
+  subtree minting). `Filesystem.entries` is unchanged. PLAT012 package custody
+  is preserved: `ProtosCapturedFilesystemCustody.captureSelectedRoot` still
+  uses the secure recursive no-follow engine via `captureRootForHostCustody`
+  and produces immutable captured backing. Read-only captured Filesystem
+  views, same-custody verification and later use, run-owned lifetime and
+  Actor-domain rematerialization are all unchanged. Captured views no longer
+  expose a capture selector. ContentIdentity vectors and the F2E3B
+  execution-plan cases now run Java-hosted over real host-captured custody
+  instead of a guest `captureTree`. Their trees and digests are unchanged.
+  Public-captureTree-only tests are retired, and absence checks are added.
+  Specification revision 0.1.443.
+
 ## 0.3.213-SNAPSHOT
 
 - `TEST009-K` (guillermomolina/protos#795) groups four compilerability

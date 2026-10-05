@@ -272,3 +272,8 @@ normative tree-observation requirement with general `Filesystem.entries` and
 B009. F2E2 is READY to consume D046 capture for verified store binding.
 
 The fixed ContentIdentity vectors and all expected digests remain unchanged.
+
+D171 later removed the public `Filesystem.captureTree` selector. The vectors are
+now exercised against a host-captured read-only Filesystem supplied by
+package-content custody (PLAT012); their trees and expected digests are
+unchanged.

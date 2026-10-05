@@ -51,8 +51,10 @@ class ProtosStandardFilesystemProtocolTest {
         assertTrue(x.prelude.bindings().readLocalSlot("Filesystem").isEmpty());
         assertTrue(x.filesystem instanceof ProtosFilesystemValue);
         assertEquals(
-                Set.of("open", "replace", "remove", "entries", "captureTree"),
+                Set.of("open", "replace", "remove", "entries"),
                 x.filesystem.localSlotsSnapshot().keySet());
+        // D171: captureTree is no longer a standard Filesystem selector.
+        assertFalse(x.filesystem.hasLocalSlot("captureTree"));
         assertTrue(x.filesystem.hasLocalSlot("open"));
         assertTrue(x.filesystem.hasLocalSlot("replace"));
         assertTrue(x.filesystem.hasLocalSlot("remove"));

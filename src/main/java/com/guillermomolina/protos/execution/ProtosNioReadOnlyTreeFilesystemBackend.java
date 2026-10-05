@@ -48,7 +48,8 @@ import java.util.Set;
 /**
  * Read-only NIO Filesystem backend confined to one complete directory tree.
  *
- * <p>I024-C adds D046 direct-child no-follow observation and recursive immutable capture. Source
+ * <p>I024-C adds D046 direct-child no-follow observation and recursive immutable capture; after
+ * D171 capture is reachable only through host/runtime custody, never a guest selector. Source
  * traversal stays relative to pinned {@code SecureDirectoryStream} handles; regular bytes stream
  * into implementation-managed backing rather than accumulating the complete payload in heap.
  */
@@ -159,36 +160,6 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
         }
 
         completion.succeeded(result);
-        return () -> {};
-    }
-
-    @Override
-    public ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
-            ProtosPathValue path,
-            ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
-        Objects.requireNonNull(path, "path");
-        Objects.requireNonNull(completion, "completion");
-
-        List<String> components = permittedDirectoryComponents(path);
-        if (closed || secureRoot == null || components == null) {
-            completion.failed();
-            return () -> {};
-        }
-
-        ProtosNioCapturedTreeFilesystemBackend captured;
-        try {
-            captured = captureSelectedDirectory(components);
-        } catch (IOException | RuntimeException failure) {
-            completion.failed();
-            return () -> {};
-        }
-
-        try {
-            completion.succeeded(captured, captured::releaseIfUntransferred);
-        } catch (RuntimeException failure) {
-            captured.releaseIfUntransferred();
-            throw failure;
-        }
         return () -> {};
     }
 

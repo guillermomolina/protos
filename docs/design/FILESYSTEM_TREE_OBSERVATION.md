@@ -6,6 +6,18 @@ Owner: B009 / D046
 Primary consumer discovered by: TOOL001-F2E2
 Original selection: 2026-09-08 / specification revision 0.1.383
 Explicit re-evaluation approval: 2026-09-08 / specification revision 0.1.384
+Public `captureTree` superseded: D171 (Candidate B), implemented by I064
+
+> **D171 supersession note.** This record is retained as historical design
+> evidence. D171 later removed the public `Filesystem.captureTree` selector and
+> any guest contract for capturing an arbitrary subtree; `Filesystem.entries`
+> remains. The secure recursive no-follow capture engine, immutable captured
+> backing and read-only captured Filesystem materialization described below are
+> retained as host/runtime custody machinery (PLAT012 package custody), reachable
+> only through host provisioning. Statements below that present `captureTree` as
+> a current public selector, cancellation surface or subtree operation describe
+> the D046/I024 state, not current Protos. The normative owner is
+> `spec/io/FILESYSTEM.md` section 20.4.
 
 ## Purpose of this record
 

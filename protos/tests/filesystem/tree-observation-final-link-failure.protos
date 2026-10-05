@@ -28,6 +28,4 @@ ioFails: (work) => {
 }
 
 alias: Path.relative().child("alias")
-ok: ioFails(() => filesystem.entries(alias).value())
-ioFails(() => filesystem.captureTree(alias).value()).ifFalse(() => { ok = false })
-ok
+ioFails(() => filesystem.entries(alias).value())

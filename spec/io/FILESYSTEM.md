@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-08
+Last updated: 2026-10-05
 
 This document is the primary normative owner of File opening, filesystem authority, and Path semantics.
 
@@ -444,33 +444,40 @@ add such a guarantee without weakening the live atomic-visibility contract here.
 
 The initial Filesystem namespace-mutation surface remains `open`,
 namespace-entry `replace`, and namespace-entry `remove`. D046 additionally adds
-the read-only observation/capture operations in section 20.4. Existence queries,
+the read-only `entries` observation operation in section 20.4; D171 removed the
+former public `captureTree` operation from the standard protocol. Existence queries,
 general metadata/stat, mkdir, general rename/move beyond the replacement
 contract, symlink creation/target inspection, recursive tree removal, and richer
 namespace mutation remain outside Core v0.1.
 
-### 20.4 Capability-confined directory observation and captured trees (D046)
+### 20.4 Capability-confined directory observation and host-provisioned captured Filesystems (D046, D171)
 
-Core v0.1 exposes exactly two additional general read-only Filesystem operations
+Core v0.1 exposes exactly one additional general read-only Filesystem operation
 for code that must inspect namespace structure without acquiring ambient host
 filesystem authority:
 
 ```text
 filesystem.entries(path) -> Future<Array>
-filesystem.captureTree(path) -> Future<Filesystem>
 ```
 
-These operations do not create a standard `Directory` or `DirectoryEntry`
-prototype. They extend an explicitly provisioned `Filesystem` capability and
+This operation does not create a standard `Directory` or `DirectoryEntry`
+prototype. It extends an explicitly provisioned `Filesystem` capability and
 therefore cannot be used without that authority. A backend may use an open
 directory handle, secure relative descriptor, directory stream, or equivalent
 resource internally, but such machinery does not become a distinct
 Protos-visible Directory identity, authority or lifetime merely because the
 backend uses it.
 
-#### 20.4.1 Common invocation, authority, failure, and cancellation rules
+The standard Filesystem protocol has no `captureTree` operation. D171 removed
+the public selector that D046 originally defined. Core v0.1 defines no guest
+operation, under any selector, that captures, snapshots, clones or freezes an
+arbitrary directory subtree of a Filesystem into a fresh Filesystem capability.
+Stable captured trees exist in Core v0.1 only as Filesystem capabilities that a
+host/runtime provisions under section 20.4.3.
 
-Both operations accept exactly one semantic `Path` argument.
+#### 20.4.1 Invocation, authority, failure, and cancellation rules
+
+`entries` accepts exactly one semantic `Path` argument.
 
 After ordinary receiver/argument evaluation and successful dispatch, a non-Path
 argument or otherwise invalid standard invocation fails the returned Future with
@@ -482,10 +489,10 @@ under section 20.1. A backend must fail rather than perform uncertain traversal
 or allow a path, symbolic/reparse indirection, mount, alias, native prefix, or
 other mechanism to enlarge authority.
 
-For both operations the final supplied path selects the directory entry itself;
-the operation does **not** follow a final symbolic-link/reparse/link-style
-indirection in order to turn it into a directory. Intermediate traversal remains
-subject to the receiver Filesystem's ordinary confined path-resolution semantics.
+The final supplied path selects the directory entry itself; the operation does
+**not** follow a final symbolic-link/reparse/link-style indirection in order to
+turn it into a directory. Intermediate traversal remains subject to the receiver
+Filesystem's ordinary confined path-resolution semantics.
 
 If the selected final entry is absent, is not a directory, cannot be observed
 under the authority, or the backend cannot provide the required standard
@@ -493,12 +500,12 @@ operation, the Future fails through the ordinary `IOError` family. The portable
 surface does not add a distinct standard NotFound/NotDirectory/Unsupported
 error taxonomy in this revision.
 
-`entries` and `captureTree` do not mutate the source namespace or source file
-contents and introduce no source-side portable commitment point. Cancellation may
-therefore win until the operation has reached terminal completion. Tentative
-host resources or partial captured state from a cancelled/failed operation are
-not returned and carry no Protos authority after that outcome. Actor/task
-termination composes with the existing Future/I/O cancellation rules.
+`entries` does not mutate the source namespace or source file contents and
+introduces no source-side portable commitment point. Cancellation may therefore
+win until the operation has reached terminal completion. Tentative host
+resources from a cancelled/failed operation are not returned and carry no Protos
+authority after that outcome. Actor/task termination composes with the existing
+Future/I/O cancellation rules.
 
 Separate invocations are not implicitly ordered merely because they use the same
 Filesystem or Path.
@@ -542,7 +549,7 @@ The categories mean:
   content may be acquired through standard File semantics when that backend and
   authority support the requested open;
 - `"directory"` — a namespace container that may itself be selected for
-  `entries`/`captureTree`;
+  `entries`;
 - `"link"` — a namespace indirection entry, including a symbolic-link,
   junction/reparse-style traversal indirection, or equivalent backend entry
   whose traversal may select a different namespace target;
@@ -584,123 +591,107 @@ Mutation of the returned Array by user code does not alter the Filesystem. Entry
 descriptors are frozen, so their `name` and `kind` bindings cannot be rewritten
 after success.
 
-#### 20.4.3 `Filesystem.captureTree(path)`
+#### 20.4.3 Host-provisioned captured Filesystems
 
-`filesystem.captureTree(path)` captures a finite directory tree into a **fresh
-Filesystem capability** whose namespace root is the selected source directory.
+A host/runtime may provision a **captured Filesystem**: a Filesystem capability
+whose namespace is one finite, immutable logical tree image captured from a
+selected source directory by host/runtime machinery outside the guest-visible
+protocol. Package-content custody is one such provisioning path. Provisioning is
+a host/runtime act, like provisioning any other Filesystem capability under
+section 20; it is not reachable through a standard guest selector.
 
-The returned Filesystem is a new authority. It does not retain authority to
-reach uncaptured source entries and does not expose a source host path, source
-directory handle, cache/store locator, or equivalent capability-bearing
-implementation detail.
+A provisioned captured Filesystem is an ordinary standard Filesystem
+capability. Guest code consumes it only through the retained standard
+operations. It carries no additional guest-visible selector, and in particular
+it cannot mint another Filesystem from itself or from any of its subtrees.
 
-Capture recursively treats selected children as follows:
+The captured tree presents source children as follows:
 
-- a `"regular"` child contributes its exact child name and one finite captured
+- a `"regular"` child presents its exact child name and one finite captured
   byte sequence obtained from a stable selection of that regular resource;
-- a `"directory"` child contributes its exact child name and recursively captured
+- a `"directory"` child presents its exact child name and recursively captured
   descendants;
-- a `"link"` child contributes only an opaque entry with that exact name and
-  captured kind; capture does not follow its target;
-- an `"other"` child contributes only an opaque entry with that exact name and
-  captured kind.
+- a `"link"` child presents only an opaque entry with that exact name and kind;
+  capture does not follow its target;
+- an `"other"` child presents only an opaque entry with that exact name and
+  kind.
 
-Capture itself therefore never escapes the selected source directory by
-following a captured child link. A backend may use stronger native mechanisms,
-copy-on-write state, immutable store objects, secure directory handles, content
-addressing, or ordinary copying internally, but the observable result must match
-the standard captured-tree contract.
+Host capture never escapes the selected source directory by following a child
+link. For each traversed child, selection/classification and any regular-file
+or directory binding used by the capture must be race-safe enough that a
+concurrent replacement cannot silently turn a selected regular resource or
+directory into a followed link/other authority. A host that cannot bind a
+selected child without such uncertainty, or cannot finish a finite read of a
+selected regular resource, does not provision the capability. Capture is not a
+source transaction or global filesystem snapshot; Protos does not promise that
+all captured source bytes and names coexisted at one source instant.
 
-For each traversed child, selection/classification and any regular-file or
-directory binding used by the capture must be race-safe enough that a concurrent
-replacement cannot silently turn a selected regular resource or directory into a
-followed link/other authority. If the backend cannot bind the selected child
-without such uncertainty, capture fails.
+Once provisioned, the captured Filesystem's namespace, exact child spellings,
+entry kinds, directory structure, and regular-file bytes never change for the
+lifetime of that capability. Subsequent mutation or removal of the source cannot
+retarget or modify the captured tree, and the capability does not retain
+authority to reach uncaptured source entries.
 
-The operation is deliberately a **capture**, not a source transaction or global
-filesystem snapshot. Concurrent authorized mutation of the source may affect
-which names/resources/bytes the operation captures, and Protos does not promise
-that all captured source bytes and names coexisted at one source instant.
+A captured Filesystem does not expose a source host path, source directory
+handle, cache/store locator, URL, backing location, or equivalent
+capability-bearing implementation detail. Physical backing representation,
+sharing, deduplication, spill strategy, content-addressing,
+copy-on-write/versioning and reclamation are implementation choices; they are
+not Protos identity and confer no ambient authority. The capability is not a
+standard `Closable` receiver and transfers no programmer-managed release
+obligation to guest code; backing lifetime remains host/runtime custody. Files
+subsequently opened from it keep the ordinary File capability/lifecycle rules,
+including `Closable` where the File contract requires it.
 
-This does not weaken the returned result: a successful capture is one finite,
-self-contained logical tree image. After the Future succeeds, the returned
-Filesystem's captured namespace, exact child spellings, entry kinds, directory
-structure, and regular-file bytes never change for the lifetime of that
-capability. Subsequent mutation or removal of the source cannot retarget or
-modify the captured result.
-
-A regular file whose source content changes while capture reads it contributes
-the exact finite byte sequence that the capture operation successfully obtained
-from its stable selected resource. If the backend cannot finish a finite
-standard read/capture under the concurrent resource behavior it encounters, it
-fails rather than publish an incomplete or uncertain file.
-
-Successful capture transfers no programmer-managed release obligation for the
-returned captured Filesystem. Core v0.1 does not make that Filesystem a standard
-`Closable` receiver merely because capture may require resourceful backend
-machinery. Its continued validity does not depend on the caller retaining,
-closing, releasing, or otherwise managing a source traversal handle or temporary
-capture resource. Source-observation resources and tentative partial-capture
-resources remain under implementation custody.
-
-An implementation may retain managed immutable backing storage or internal
-resources required to represent the completed captured tree. Their physical
-representation, sharing, deduplication, spill strategy, content-addressing,
-copy-on-write/versioning and reclamation are implementation choices and must not
-create an undisclosed caller cleanup protocol. Files subsequently opened from the
-captured Filesystem keep the ordinary File capability/lifecycle rules, including
-`Closable` where the File contract requires it.
-
-The returned Filesystem is permanently read-only:
+A captured Filesystem is permanently read-only:
 
 - standard read/existing opens of captured regular resources may succeed;
 - a semantically valid open requiring write, create, createNew or truncate
   authority fails through the ordinary I/O support/resource failure
   boundary;
 - `replace` and `remove` fail and cannot mutate the captured namespace;
-- `entries` observes the captured immutable namespace;
-- `captureTree` may capture a directory subtree of an already captured
-  Filesystem, preserving the same read-only semantics.
+- `entries` observes the captured immutable namespace.
 
 Opaque captured `"link"` and `"other"` entries remain observable through
-`entries`. This revision does not require the captured Filesystem to expose a
+`entries`. This revision does not require a captured Filesystem to expose a
 link-target reader or to make `open`/`entries` traverse such entries; attempts to
 use an unsupported opaque entry fail through ordinary I/O failure.
 
-Relative-path interpretation of the fresh Filesystem is based at the captured
+Relative-path interpretation of a captured Filesystem is based at the captured
 directory root. The zero-component `Path.relative()` therefore selects that root
-for `entries`/`captureTree`; its direct children are addressed by appending their
-exact returned `name` components through the standard Path protocol. The
-authority rules of section 20 continue to apply.
+for `entries`; its direct children are addressed by appending their exact
+returned `name` components through the standard Path protocol. The authority
+rules of section 20 continue to apply.
 
 Because the captured Filesystem is immutable, repeated successful `entries`
 observations and regular-file reads against it observe the same namespace,
 entry-kind and byte state. Result Array/descriptor object identities from
-separate calls need not be reused.
+separate calls need not be reused. A host/runtime may provision several
+Filesystem capabilities, including in different Actor domains, over the same
+captured tree; each is a distinct capability observing the same immutable
+content.
 
-#### 20.4.4 Why capture is separate from ordinary `entries`
+#### 20.4.4 Stable trees and verify-then-use
 
 `entries` intentionally does not turn a mutable namespace into a transaction and
 does not reserve its returned names.
 
 Code that needs a stable tree for hashing, indexing, compilation, packaging,
-security validation, reproducibility, or another verify-then-use workflow first
-calls `captureTree`, then performs all relevant enumeration and reads against the
-returned immutable Filesystem.
+security validation, reproducibility, or another verify-then-use workflow
+performs all relevant enumeration and reads against a captured Filesystem that
+its host/runtime provisioned, and then uses that same captured capability after
+validation.
 
-This separation preserves the low cost and ordinary race behavior of simple
-directory observation while providing an explicit stronger operation only to
-programs that need it.
+A program must not compute a validation result by enumerating and reading one
+mutable Filesystem and later treat the original Paths as though that validation
+had authorized unchanged resources. A host/runtime that provisions a captured
+Filesystem for verification likewise uses that same captured content after
+successful verification rather than reopening the original mutable source.
 
-In particular, a program must not compute a validation result by enumerating and
-reading one mutable Filesystem and later treat the original Paths as though that
-validation had authorized unchanged resources. The captured Filesystem is the
-stable authority/result of `captureTree`; callers needing verify-then-use behavior
-use that same captured capability after validation.
-
-D046 defines a general Filesystem mechanism. It does not define package hashes,
-package stores, VCS behavior, registry acquisition, archive formats, or implicit
-network access.
+D046 and D171 define a general Filesystem mechanism. They do not define package
+hashes, package stores, VCS behavior, registry acquisition, archive formats, or
+implicit network access. Whether Protos should later offer a guest-visible
+capture facility is outside Core v0.1 and requires a new design decision.
 
 ---
 ## 21. URL and Path

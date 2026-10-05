@@ -362,30 +362,6 @@ final class ProtosNioCapturedTreeFilesystemBackend
         return () -> {};
     }
 
-    @Override
-    public ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
-            ProtosPathValue path,
-            ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
-        Objects.requireNonNull(path, "path");
-        Objects.requireNonNull(completion, "completion");
-
-        DirectoryNode directory = resolveDirectory(path);
-        if (!backendLease.active() || directory == null) {
-            completion.failed();
-            return () -> {};
-        }
-
-        ProtosNioCapturedTreeFilesystemBackend child =
-                new ProtosNioCapturedTreeFilesystemBackend(backing, directory);
-        try {
-            completion.succeeded(child, child::releaseIfUntransferred);
-        } catch (RuntimeException failure) {
-            child.releaseIfUntransferred();
-            throw failure;
-        }
-        return () -> {};
-    }
-
     private DirectoryNode resolveDirectory(ProtosPathValue path) {
         List<String> components = normalRelativeComponents(path, true);
         if (components == null) {

@@ -15,7 +15,7 @@
 
 Identity: import("self:ContentIdentity")
 
-captured: filesystem.captureTree(Path.relative()).value()
+captured: filesystem
 records: Identity.collectRecords(captured)
 
 (records.size() == 1).ifFalse(() => {

@@ -99,7 +99,18 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
                         "host provider has no SecureDirectoryStream");
 
                 assertNull(entriesOrNull(backend, relative("alias")));
-                assertNull(captureOrNull(backend, relative("alias")));
+
+                // Host custody capture records the link as an opaque entry and never
+                // traverses it.
+                CaptureResult captured = captureRoot(backend);
+                try {
+                    assertEquals(
+                            ProtosFilesystemTreeObservationFlow.EntryKind.LINK,
+                            byName(entries(captured.backend(), relative())).get("alias"));
+                    assertNull(entriesOrNull(captured.backend(), relative("alias")));
+                } finally {
+                    captured.release().run();
+                }
             }
         } finally {
             Files.deleteIfExists(outside.resolve("secret.txt"));
@@ -128,7 +139,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
                         source.secureConfinementAvailable(),
                         "host provider has no SecureDirectoryStream");
 
-                CaptureResult captured = capture(source, relative());
+                CaptureResult captured = captureRoot(source);
                 try {
                     Files.writeString(
                             authorityRoot.resolve("top.txt"),
@@ -153,21 +164,11 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
                             ProtosFilesystemTreeObservationFlow.EntryKind.LINK,
                             rootEntries.get("opaque-link"));
                     assertFalse(openSucceeded(captured.backend(), relative("opaque-link")));
-
-                    CaptureResult subtree =
-                            capture(captured.backend(), relative("nested"));
-                    try {
-                        assertArrayEquals(
-                                "nested-before".getBytes(StandardCharsets.UTF_8),
-                                read(subtree.backend(), relative("child.txt")));
-                        assertEquals(
-                                Map.of(
-                                        "child.txt",
-                                        ProtosFilesystemTreeObservationFlow.EntryKind.REGULAR),
-                                byName(entries(subtree.backend(), relative())));
-                    } finally {
-                        subtree.release().run();
-                    }
+                    assertEquals(
+                            Map.of(
+                                    "child.txt",
+                                    ProtosFilesystemTreeObservationFlow.EntryKind.REGULAR),
+                            byName(entries(captured.backend(), relative("nested"))));
                 } finally {
                     captured.release().run();
                 }
@@ -192,7 +193,7 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
                     source.secureConfinementAvailable(),
                     "host provider has no SecureDirectoryStream");
 
-            CaptureResult captured = capture(source, relative());
+            CaptureResult captured = captureRoot(source);
             try {
                 Files.delete(authorityRoot.resolve("large.bin"));
                 assertArrayEquals(payload, readAll(captured.backend(), relative("large.bin")));
@@ -231,40 +232,10 @@ final class ProtosNioFilesystemTreeCaptureBackendTest {
         return failed.get() ? null : result.get();
     }
 
-    private static CaptureResult capture(
-            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathValue path) {
-        CaptureResult result = captureOrNull(backend, path);
-        assertNotNull(result);
-        return result;
-    }
-
-    private static CaptureResult captureOrNull(
-            ProtosStandardFilesystemProtocol.Backend backend, ProtosPathValue path) {
-        AtomicReference<ProtosStandardFilesystemProtocol.CapturedBackend> result =
-                new AtomicReference<>();
-        AtomicReference<Runnable> release = new AtomicReference<>();
-        AtomicBoolean failed = new AtomicBoolean();
-        backend.captureTree(
-                path,
-                new ProtosFilesystemTreeObservationFlow.CaptureCompletion() {
-                    @Override
-                    public void succeeded(
-                            ProtosFilesystemTreeObservationFlow.CapturedTree tree,
-                            Runnable releaseIfUntransferred) {
-                        result.set(
-                                (ProtosStandardFilesystemProtocol.CapturedBackend) tree);
-                        release.set(releaseIfUntransferred);
-                    }
-
-                    @Override
-                    public void failed() {
-                        failed.set(true);
-                    }
-                });
-        if (failed.get()) {
-            return null;
-        }
-        return new CaptureResult(result.get(), release.get());
+    private static CaptureResult captureRoot(ProtosNioReadOnlyTreeFilesystemBackend source)
+            throws IOException {
+        ProtosNioCapturedTreeFilesystemBackend captured = source.captureRootForHostCustody();
+        return new CaptureResult(captured, captured::releaseIfUntransferred);
     }
 
     private static Map<String, ProtosFilesystemTreeObservationFlow.EntryKind> byName(

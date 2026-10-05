@@ -19,9 +19,7 @@ package com.guillermomolina.protos.conformance;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
@@ -29,7 +27,6 @@ import com.guillermomolina.protos.execution.ProtosNioReadOnlyTreeFilesystemBacke
 import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
@@ -97,54 +94,7 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
     }
 
     @Test
-    void capturedFilesystemIsReadOnlySourceIndependentAndVerifyUseStableThroughProtos()
-            throws Exception {
-        Files.writeString(
-                authorityRoot.resolve("stable.txt"),
-                "before",
-                StandardCharsets.UTF_8);
-        Path nested = Files.createDirectory(authorityRoot.resolve("nested"));
-        Files.writeString(
-                nested.resolve("child.txt"),
-                "nested-before",
-                StandardCharsets.UTF_8);
-        Path outside = Files.createTempFile("protos-i024d-capture-link-", ".txt");
-        try {
-            createSymlinkOrSkip(authorityRoot.resolve("opaque-link"), outside);
-            try (Fixture fixture = productionFixture()) {
-                ProtosFilesystemValue captured =
-                        assertInstanceOf(
-                                ProtosFilesystemValue.class,
-                                execute("tree-capture-create.protos", fixture.activation()));
-                assertNotSame(fixture.filesystem(), captured);
-
-                fixture.backend().close();
-                Files.writeString(
-                        authorityRoot.resolve("stable.txt"),
-                        "after",
-                        StandardCharsets.UTF_8);
-                Files.writeString(
-                        nested.resolve("child.txt"),
-                        "nested-after",
-                        StandardCharsets.UTF_8);
-                Files.delete(authorityRoot.resolve("opaque-link"));
-                Files.writeString(
-                        authorityRoot.resolve("after-only.txt"),
-                        "after-only",
-                        StandardCharsets.UTF_8);
-
-                fixture.activation().context().createLocalSlot("captured", captured);
-                assertSame(
-                        ProtosBooleanValue.TRUE,
-                        execute("tree-capture-verify.protos", fixture.activation()));
-            }
-        } finally {
-            Files.deleteIfExists(outside);
-        }
-    }
-
-    @Test
-    void finalDirectorySymlinkObservationAndCaptureFailAsIoErrorThroughProtos()
+    void finalDirectorySymlinkObservationFailsAsIoErrorThroughProtos()
             throws Exception {
         Path outside = Files.createTempDirectory("protos-i024d-dir-target-");
         try {
@@ -193,34 +143,6 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
                                 new ProtosFilesystemTreeObservationFlow.Entry(
                                         "late.txt",
                                         ProtosFilesystemTreeObservationFlow.EntryKind.REGULAR)));
-        assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
-    }
-
-    @Test
-    void captureCancellationIsVisibleThroughProtosAndLateCustodyIsReleased()
-            throws Exception {
-        PendingBackend backend = new PendingBackend();
-        Fixture fixture = fixture(backend);
-
-        ProtosObjectValue result =
-                assertInstanceOf(
-                        ProtosObjectValue.class,
-                        execute("tree-capture-cancellation.protos", fixture.activation()));
-        assertSame(
-                ProtosBooleanValue.TRUE,
-                result.readLocalSlot("cancelled").orElseThrow());
-        ProtosFutureValue future =
-                assertInstanceOf(
-                        ProtosFutureValue.class,
-                        result.readLocalSlot("future").orElseThrow());
-        assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
-        assertEquals(1, backend.captureCancellations.get());
-
-        AtomicInteger releases = new AtomicInteger();
-        backend.captureCompletion
-                .get()
-                .succeeded(new EmptyCapturedBackend(), releases::incrementAndGet);
-        assertEquals(1, releases.get());
         assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
     }
 
@@ -283,10 +205,7 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
             implements ProtosStandardFilesystemProtocol.Backend {
         private final AtomicReference<ProtosFilesystemTreeObservationFlow.EntriesCompletion>
                 entriesCompletion = new AtomicReference<>();
-        private final AtomicReference<ProtosFilesystemTreeObservationFlow.CaptureCompletion>
-                captureCompletion = new AtomicReference<>();
         private final AtomicInteger entriesCancellations = new AtomicInteger();
-        private final AtomicInteger captureCancellations = new AtomicInteger();
 
         @Override
         public ProtosFilesystemOpenFlow.Cancellation open(
@@ -303,26 +222,6 @@ final class ProtosFilesystemTreeIntegratedConformanceTest {
                 ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
             entriesCompletion.set(completion);
             return entriesCancellations::incrementAndGet;
-        }
-
-        @Override
-        public ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
-                ProtosPathValue path,
-                ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
-            captureCompletion.set(completion);
-            return captureCancellations::incrementAndGet;
-        }
-    }
-
-    private static final class EmptyCapturedBackend
-            implements ProtosStandardFilesystemProtocol.CapturedBackend {
-        @Override
-        public ProtosFilesystemOpenFlow.Cancellation open(
-                ProtosPathValue path,
-                ProtosFilesystemOpenOptions options,
-                ProtosStandardFilesystemProtocol.OpenCompletion completion) {
-            completion.failed();
-            return () -> {};
         }
     }
 }

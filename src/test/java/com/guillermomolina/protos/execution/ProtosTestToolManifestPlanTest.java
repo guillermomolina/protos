@@ -968,7 +968,9 @@ fixture.activation());
             "protos/package-tool/execution-plan",
             "protos/package-tool/project-projection"
         };
-        int[] expectedCounts = {8, 25, 3};
+        // I064/D171: the 16 F2E3B execution-plan cases moved to the Java-hosted
+        // ProtosPackageToolExecutionPlanCaptureTest (host-captured custody).
+        int[] expectedCounts = {8, 9, 3};
 
         for (int index = 0; index < roots.length; index++) {
             Fixture fixture = fixture();

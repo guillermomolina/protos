@@ -585,13 +585,5 @@ final class ProtosExternalPackageResourceScopeTest {
             completion.failed();
             return () -> {};
         }
-
-        @Override
-        public ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
-                com.guillermomolina.protos.runtime.ProtosPathValue path,
-                ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
-            completion.failed();
-            return () -> {};
-        }
     }
 }
