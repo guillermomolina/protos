@@ -39,6 +39,8 @@ final class ProtosTestResourceProviderRegistry {
     }
 
     static final class UnknownProviderException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+
         UnknownProviderException(String provider) {
             super("unresolved Test Tool resource provider: " + provider);
         }

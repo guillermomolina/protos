@@ -104,6 +104,8 @@ public final class ProtosEncodingValue implements ProtosRepresentedValue {
     }
 
     public static final class ConversionFailure extends Exception {
+        private static final long serialVersionUID = 1L;
+
         public ConversionFailure(String message) { super(message); }
         public ConversionFailure(String message, Throwable cause) { super(message, cause); }
     }

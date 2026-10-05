@@ -41,6 +41,8 @@ import java.util.concurrent.CompletionStage;
 final class ProtosTestResourceProviderCoordinator {
 
     static final class InvalidLeaseCoverageException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+
         InvalidLeaseCoverageException(String provider, Set<String> required, Set<String> actual) {
             super(
                     "provider "
@@ -53,6 +55,8 @@ final class ProtosTestResourceProviderCoordinator {
     }
 
     static final class DuplicateResourceKeyException extends IllegalArgumentException {
+        private static final long serialVersionUID = 1L;
+
         DuplicateResourceKeyException(String key) {
             super("duplicate resource key in provider transaction: " + key);
         }

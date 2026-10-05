@@ -134,6 +134,15 @@ class LocalProvenanceTest(unittest.TestCase):
             self.assertEqual(sink.pe_reachability, guard.PE_REACHABLE)
             self.assertEqual((sink.receiver_pe, sink.node_pe), (guard.PROVEN, guard.PROVEN))
 
+    def test_01b_canonical_bare_bind_bytecode_node_is_proven(self):
+        bare = DIRECT.replace('@Bind("$bytecodeNode") BytecodeNode', "@Bind BytecodeNode")
+        self.assertNotEqual(bare, DIRECT)
+        sinks = analyze(bare)
+        self.assertEqual(len(sinks), 2)
+        for sink in sinks:
+            self.assertEqual(sink.node_class, guard.NODE_BOUND)
+            self.assertEqual((sink.receiver_pe, sink.node_pe), (guard.PROVEN, guard.PROVEN))
+
     def test_02_lossless_helper_propagation_is_proven(self):
         sink = sink_in(analyze(HELPERS), "inner(")
         self.assertEqual(sink.receiver_class, guard.RECEIVER_HELPER_PARAMETER)

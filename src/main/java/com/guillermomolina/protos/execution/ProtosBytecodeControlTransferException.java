@@ -28,6 +28,8 @@ import java.util.Objects;
  * participate in Bytecode DSL guest exception handling without changing their
  * semantic identity or making the bridge itself authoritative.
  */
+// Serializable only by exception hierarchy; runtime state is intentionally not Java-serializable.
+@SuppressWarnings("serial")
 final class ProtosBytecodeControlTransferException extends AbstractTruffleException {
     private static final long serialVersionUID = 1L;
 

@@ -62,6 +62,7 @@ import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
@@ -191,7 +192,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class CurrentActivation {
         @Specialization
-        public static ProtosActivation perform(@Bind("$frame") VirtualFrame frame) {
+        public static ProtosActivation perform(@Bind VirtualFrame frame) {
             return ProtosFrameArguments.activation(frame);
         }
     }
@@ -227,7 +228,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class HasFrameClosureArgument {
         @Specialization
-        public static boolean perform(int positionalIndex, @Bind("$frame") VirtualFrame frame) {
+        public static boolean perform(int positionalIndex, @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
                 return ProtosFrameArguments.compactSuppliedArgumentCount(arguments)
@@ -241,7 +242,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
     @Operation
     public static final class LoadFrameClosureArgument {
         @Specialization
-        public static Object perform(int positionalIndex, @Bind("$frame") VirtualFrame frame) {
+        public static Object perform(int positionalIndex, @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
                     && positionalIndex
@@ -258,7 +259,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         @Specialization
         public static void perform(
                 int maximumPositionalArguments,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
                     && ProtosFrameArguments.compactSuppliedArgumentCount(arguments)
@@ -370,9 +371,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
                 ProtosActivation activation,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind VirtualFrame frame) {
             ProtosBytecodeRootNode.InstallFrameLexicalAuthority.perform(
                     frameBackedLocals, frameBackedLayout, activation, bytecodeNode, bytecodeIndex, frame);
         }
@@ -406,9 +407,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 int ordinal,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
                     && frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
@@ -446,8 +447,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
                 PreparedInlineLiteralCall child,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.durableActivation(
                     child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
         }
@@ -467,8 +468,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosFrameLexicalLayout frameBackedLayout,
                 PreparedInlineLiteralCall child,
                 int positionalIndex,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.loadArgument(
                     child, frameBackedLocals, frameBackedLayout,
                     positionalIndex, bytecodeNode, frame);
@@ -489,8 +490,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosFrameLexicalLayout frameBackedLayout,
                 PreparedInlineLiteralCall child,
                 int maximumPositionalArguments,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             ProtosInlineCallbackFrameBindings.checkArgumentUpperBound(
                     child, frameBackedLocals, frameBackedLayout,
                     maximumPositionalArguments, bytecodeNode, frame);
@@ -514,8 +515,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 PreparedInlineLiteralCall child,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             ProtosInlineCallbackFrameBindings.create(
                     child,
                     frameBackedLocals,
@@ -545,9 +546,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosActivation activation,
                 String name,
                 int positionalParametersBeforeRest,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind VirtualFrame frame) {
             ProtosBytecodeRootNode.BindClosureFrameRest.perform(
                     frameBackedLocals, frameBackedLayout, ordinal,
                     activation, name, positionalParametersBeforeRest,
@@ -582,9 +583,9 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 int ordinal,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
                     && frameBackedLocals.isCleared(bytecodeNode, frame, ordinal)) {
@@ -615,8 +616,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 PreparedInlineLiteralCall child,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             ProtosInlineCallbackFrameBindings.create(
                     child,
                     frameBackedLocals,
@@ -670,8 +671,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 PreparedInlineLiteralCall child,
                 int required,
                 Object source,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.observeMultipleCreatePrefix(
                     child, frameBackedLocals, frameBackedLayout,
                     required, source, bytecodeNode, frame);
@@ -697,8 +698,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Assumption presenceContinuity,
                 ProtosActivation activation,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.ReadFrameLocal.perform(
                     accessor,
                     presenceContinuity,
@@ -725,8 +726,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 LocalAccessor accessor,
                 Assumption presenceContinuity,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)) {
                 /*
@@ -766,8 +767,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosFrameLexicalLayout frameBackedLayout,
                 PreparedInlineLiteralCall child,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.read(
                     child,
                     accessor,
@@ -810,7 +811,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosActivation activation,
                 String name,
                 int lexicalDepth,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
+                @Bind BytecodeNode bytecodeNode) {
             return ProtosBytecodeRootNode.SelectCapturedMaterializedOwnerFrame.perform(
                     accessor, activation, name, lexicalDepth, bytecodeNode);
         }
@@ -871,7 +872,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosActivation activation,
                 String name,
                 int lexicalDepth,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
+                @Bind BytecodeNode bytecodeNode) {
             return ProtosBytecodeRootNode.ResolveCapturedMaterializedWritableLexicalTarget.perform(
                     accessor, activation, name, lexicalDepth, bytecodeNode);
         }
@@ -887,7 +888,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 CapturedLexicalWriteTarget destination,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
+                @Bind BytecodeNode bytecodeNode) {
             return ProtosBytecodeRootNode.AssignCapturedMaterializedLocal.perform(
                     accessor, activation, destination, name, value, bytecodeNode);
         }
@@ -919,8 +920,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 PreparedInlineLiteralCall child,
                 String name,
                 int lexicalDepth,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.readCaptured(
                     child, frameBackedLocals, frameBackedLayout,
                     name, lexicalDepth, frameOrdinal, bytecodeNode, frame);
@@ -944,8 +945,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 PreparedInlineLiteralCall child,
                 String name,
                 int lexicalDepth,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.selectCapturedMaterializedOwnerFrame(
                     accessor, child, frameBackedLocals, frameBackedLayout,
                     name, lexicalDepth, bytecodeNode, frame);
@@ -966,8 +967,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosFrameLexicalLayout frameBackedLayout,
                 PreparedInlineLiteralCall child,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.readCapturedFallback(
                     child, frameBackedLocals, frameBackedLayout,
                     name, bytecodeNode, frame);
@@ -991,8 +992,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 PreparedInlineLiteralCall child,
                 String name,
                 int lexicalDepth,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.resolveCapturedWriteTarget(
                     child, frameBackedLocals, frameBackedLayout,
                     name, lexicalDepth, frameOrdinal, bytecodeNode, frame);
@@ -1017,8 +1018,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 CapturedLexicalWriteTarget destination,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.assignCaptured(
                     child, frameBackedLocals, frameBackedLayout,
                     frameOrdinal, destination, name, value, bytecodeNode, frame);
@@ -1042,8 +1043,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 PreparedInlineLiteralCall child,
                 String name,
                 int lexicalDepth,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.resolveCapturedMaterializedWriteTarget(
                     accessor, child, frameBackedLocals, frameBackedLayout,
                     name, lexicalDepth, bytecodeNode, frame);
@@ -1068,8 +1069,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 CapturedLexicalWriteTarget destination,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.assignCapturedMaterialized(
                     accessor, child, frameBackedLocals, frameBackedLayout,
                     destination, name, value, bytecodeNode, frame);
@@ -1090,8 +1091,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
                 PreparedInlineLiteralCall child,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.receiver(
                     child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame);
         }
@@ -1161,8 +1162,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 PreparedInlineLiteralCall child,
                 Object receiver,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             Object value =
                     ProtosBytecodeRootNode.ReadMember.readMemberOrNull(
                             receiver, name, child.prelude());
@@ -1226,8 +1227,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 LocalAccessor accessor,
                 ProtosActivation activation,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.ResolveCurrentFrameLocalWriteTarget.perform(
                     accessor, activation, name, bytecodeNode, frame);
         }
@@ -1243,8 +1244,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ResolvedLexicalWriteTarget destination,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.AssignCurrentFrameLocal.perform(
                     accessor, activation, destination, name, value, bytecodeNode, frame);
         }
@@ -1265,8 +1266,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
         public static ResolvedLexicalWriteTarget perform(
                 LocalAccessor accessor,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
                     && !accessor.isCleared(bytecodeNode, frame)) {
@@ -1293,8 +1294,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ResolvedLexicalWriteTarget destination,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             Object[] arguments = frame.getArguments();
             if (destination == ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL
                     && ProtosFrameArguments.isUnmaterializedCompactCall(arguments)
@@ -1325,8 +1326,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosFrameLexicalLayout frameBackedLayout,
                 PreparedInlineLiteralCall child,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.resolveWriteTarget(
                     child, accessor, frameBackedLocals, frameBackedLayout,
                     name, bytecodeNode, frame);
@@ -1352,8 +1353,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ResolvedLexicalWriteTarget destination,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosInlineCallbackFrameBindings.assign(
                     child, accessor, frameBackedLocals, frameBackedLayout,
                     destination, name, value, bytecodeNode, frame);
@@ -1797,6 +1798,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return ProtosBytecodeRootNode.PrepareClosureCall.perform(receiver, caller);
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }
@@ -1887,6 +1889,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     receiver, caller, supplied);
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }
@@ -1977,6 +1980,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     receiver, caller, supplied);
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }
@@ -2038,8 +2042,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String selector,
                 PreparedInlineLiteralCall child,
                 @Variadic Object[] supplied,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("child.prelude()") ProtosPrelude prelude,
@@ -2079,8 +2083,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String selector,
                 PreparedInlineLiteralCall child,
                 @Variadic Object[] supplied,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("child.prelude()") ProtosPrelude prelude,
@@ -2120,8 +2124,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String selector,
                 PreparedInlineLiteralCall child,
                 @Variadic Object[] supplied,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
                 @Bind("ordinarySendSelectionOrNull(receiver, selector, child)")
                         ProtosSlotLookupResult selected,
                 @Bind("ordinarySendClosureOrNull(selected)")
@@ -2167,8 +2171,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String selector,
                 PreparedInlineLiteralCall child,
                 @Variadic Object[] supplied,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("child.provenanceCallerOrNull()") ProtosActivation lookupCaller,
@@ -2199,8 +2203,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 String selector,
                 PreparedInlineLiteralCall child,
                 @Variadic Object[] supplied,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.PrepareSendArguments.perform(
                     receiver, selector,
                     ProtosInlineCallbackFrameBindings.durableActivation(
@@ -2258,6 +2262,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     closure);
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }
@@ -2298,8 +2303,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosFrameLexicalLayout frameBackedLayout,
                 Object receiver,
                 PreparedInlineLiteralCall child,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("child.prelude()") ProtosPrelude prelude,
@@ -2329,8 +2334,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosFrameLexicalLayout frameBackedLayout,
                 Object receiver,
                 PreparedInlineLiteralCall child,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
                 @Bind("directClosureCallSelectionOrNull(receiver, child)")
                         ProtosClosureValue closure,
                 @Bind("directClosureCallDefinitionOrNull(closure)")
@@ -2355,14 +2360,15 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 ProtosFrameLexicalLayout frameBackedLayout,
                 Object receiver,
                 PreparedInlineLiteralCall child,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.PrepareClosureCall.perform(
                     receiver,
                     ProtosInlineCallbackFrameBindings.durableActivation(
                             child, frameBackedLocals, frameBackedLayout, bytecodeNode, frame));
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }
@@ -2413,8 +2419,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Object receiver,
                 PreparedInlineLiteralCall child,
                 @Variadic Object[] supplied,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
                 @Bind("currentEnteredContext($node)")
                         ProtosLanguageContext enteredContext,
                 @Bind("child.prelude()") ProtosPrelude prelude,
@@ -2445,8 +2451,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Object receiver,
                 PreparedInlineLiteralCall child,
                 @Variadic Object[] supplied,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame,
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame,
                 @Bind("directClosureCallSelectionOrNull(receiver, child)")
                         ProtosClosureValue closure,
                 @Bind("directClosureCallDefinitionOrNull(closure)")
@@ -2472,8 +2478,8 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                 Object receiver,
                 PreparedInlineLiteralCall child,
                 @Variadic Object[] supplied,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             return ProtosBytecodeRootNode.PrepareClosureCallArguments.perform(
                     receiver,
                     ProtosInlineCallbackFrameBindings.durableActivation(
@@ -2481,6 +2487,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     supplied);
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }
@@ -2709,6 +2716,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
                     closure);
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosBytecodeRootNode.PrepareSendArguments.currentEnteredContext(node);
         }
@@ -3297,10 +3305,10 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
      */
     @Operation
     public static final class EnterNestedStructuredDispatch {
-        @Specialization(guards = "structuredDispatchTarget() == cachedTarget")
+        @Specialization(guards = "structuredDispatchTarget() == cachedTarget", excludeForUncached = true)
         public static Object direct(
                 NativeCall prepared,
-                @Cached("structuredDispatchTarget()") RootCallTarget cachedTarget,
+                @Cached(value = "structuredDispatchTarget()", neverDefault = true) RootCallTarget cachedTarget,
                 @Cached("create(cachedTarget)") DirectCallNode node) {
             try {
                 return node.call(prepared.activation(), prepared);
@@ -3321,6 +3329,7 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
             return ProtosBytecodeRootNode.EnterNestedStructuredDispatch.perform(prepared, node);
         }
 
+        @NonIdempotent
         static RootCallTarget structuredDispatchTarget() {
             return ProtosTaskCPrimeEntryExecution.planForEnteredContext().target();
         }

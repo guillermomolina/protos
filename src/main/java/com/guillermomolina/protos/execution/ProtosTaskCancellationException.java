@@ -8,5 +8,7 @@ import com.oracle.truffle.api.nodes.ControlFlowException;
 
 /** Backend-private control transfer for cooperative Task cancellation unwind. */
 public final class ProtosTaskCancellationException extends ControlFlowException {
+    private static final long serialVersionUID = 1L;
+
     public ProtosTaskCancellationException() {}
 }

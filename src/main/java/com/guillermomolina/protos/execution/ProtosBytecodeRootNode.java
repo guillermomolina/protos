@@ -61,6 +61,7 @@ import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Cached.Shared;
+import com.oracle.truffle.api.dsl.NonIdempotent;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
@@ -398,9 +399,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 LocalRangeAccessor frameBackedLocals,
                 ProtosFrameLexicalLayout frameBackedLayout,
                 ProtosActivation activation,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind VirtualFrame frame) {
             MaterializedFrame materializedFrame = frame.materialize();
             activation.installFrameLexicalBindingAuthorityForRuntime(
                     new ProtosFrameLexicalBindingAuthority(
@@ -510,9 +511,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind VirtualFrame frame) {
             try {
                 createCurrentFrameBinding(
                         frameBackedLocals, frameBackedLayout, activation,
@@ -542,9 +543,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 String name,
                 int positionalParametersBeforeRest,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind VirtualFrame frame) {
             Object rest = closureRestArray(activation, positionalParametersBeforeRest);
             try {
                 createCurrentFrameBinding(
@@ -575,9 +576,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
+                @Bind BytecodeNode bytecodeNode,
                 @Bind("$bytecodeIndex") int bytecodeIndex,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind VirtualFrame frame) {
             try {
                 createCurrentFrameBinding(
                         frameBackedLocals, frameBackedLayout, activation,
@@ -614,8 +615,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Assumption presenceContinuity,
                 ProtosActivation activation,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             if (activation.hasGenuineExecutionContextForRuntime()
                     && (presenceContinuity.isValid()
                             || !accessor.isCleared(bytecodeNode, frame))) {
@@ -731,7 +732,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 String name,
                 int lexicalDepth,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
+                @Bind BytecodeNode bytecodeNode) {
             if (lexicalDepth > 0
                     && !activation.currentContextHasLocalSlotForRuntime(name)) {
                 return capturedMaterializedOwnerFrameOrNull(
@@ -1002,7 +1003,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ProtosActivation activation,
                 String name,
                 int lexicalDepth,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
+                @Bind BytecodeNode bytecodeNode) {
             if (lexicalDepth > 0) {
                 if (activation.currentContextHasLocalSlotForRuntime(name)) {
                     return CapturedLexicalWriteTarget.generic(
@@ -1051,7 +1052,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 CapturedLexicalWriteTarget destination,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode) {
+                @Bind BytecodeNode bytecodeNode) {
             try {
                 assignCapturedMaterializedDestination(
                         accessor, destination, name, value, bytecodeNode);
@@ -1244,8 +1245,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 LocalAccessor accessor,
                 ProtosActivation activation,
                 String name,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             if (activation.hasGenuineExecutionContextForRuntime()
                     && !accessor.isCleared(bytecodeNode, frame)) {
                 return ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL;
@@ -1278,8 +1279,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 ResolvedLexicalWriteTarget destination,
                 String name,
                 Object value,
-                @Bind("$bytecodeNode") BytecodeNode bytecodeNode,
-                @Bind("$frame") VirtualFrame frame) {
+                @Bind BytecodeNode bytecodeNode,
+                @Bind VirtualFrame frame) {
             if (destination != ResolvedLexicalWriteTarget.STATIC_CURRENT_FRAME_LOCAL) {
                 return AssignResolvedLexicalTarget.perform(
                         activation, destination, name, value);
@@ -7444,6 +7445,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return prepareClosureCall(receiver, List.of(), caller);
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }
@@ -7532,6 +7534,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     caller);
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }
@@ -7762,6 +7765,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     caller);
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }
@@ -8405,6 +8409,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return closure == null ? null : closure.definition();
         }
 
+        @NonIdempotent
         static ProtosLanguageContext currentEnteredContext(Node node) {
             return ProtosLanguageContext.current(node);
         }

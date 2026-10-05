@@ -203,7 +203,7 @@ public final class ProtosParallelRuntime {
             return new Snapshot(c,a,caller,executionHost(caller));
         }
     }
-    private static final class NonParallel extends RuntimeException{NonParallel(){super(null,null,false,false);}}
+    private static final class NonParallel extends RuntimeException{private static final long serialVersionUID = 1L; NonParallel(){super(null,null,false,false);}}
     private static final class Transfer {
         static Object back(Object v,ProtosActivation a){return copy(v,a,new IdentityHashMap<>());}
         static Object copy(Object v,ProtosActivation a,IdentityHashMap<Object,Object> memo){

@@ -32,6 +32,8 @@ import java.util.Optional;
  * bytecode position here (failure path only); a terminal boundary projects it, together with the
  * Truffle guest stack, into an inert {@link ProtosDiagnosticTrace} before discarding the exception.
  */
+// Serializable only by exception hierarchy; runtime state is intentionally not Java-serializable.
+@SuppressWarnings("serial")
 public final class ProtosSignalException extends AbstractTruffleException {
     private final ProtosObjectValue error;
     private ProtosDynamicControlState.Frame selectedHandlerFrame;

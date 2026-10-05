@@ -20,6 +20,8 @@ package com.guillermomolina.protos.runtime;
 import com.oracle.truffle.api.nodes.ControlFlowException;
 import java.util.Objects;
 
+// Serializable only by exception hierarchy; runtime state is intentionally not Java-serializable.
+@SuppressWarnings("serial")
 public final class ProtosNonLocalReturnException extends ControlFlowException {
     private final ProtosReturnHome target;
     private final Object value;

@@ -287,6 +287,17 @@ class NodeAndConfigTest(unittest.TestCase):
         self.assertEqual(guard.BOUND_NODE, klass(sink, guard.ROLE_NODE))
         self.assertEqual(guard.PE_REACHABLE_PROVEN, sink.pe_reachability)
 
+    def test_09b_canonical_bare_bind_is_proven_only_for_bytecode_node(self):
+        bare = root("", operation("Get", "            BytecodeNode.get(bytecode);")).replace(
+            '@Bind("$bytecodeNode") BytecodeNode', "@Bind BytecodeNode")
+        sink = sink_in(analyze(bare), "perform", "get")
+        self.assertEqual(guard.BOUND_NODE, klass(sink, guard.ROLE_NODE))
+        self.assertEqual(guard.PE_REACHABLE_PROVEN, sink.pe_reachability)
+        untyped = root("", operation("Get", "            BytecodeNode.get(node);")).replace(
+            '@Bind("$node") Node', "@Bind Node")
+        sink = sink_in(analyze(untyped), "perform", "get")
+        self.assertNotEqual(guard.BOUND_NODE, klass(sink, guard.ROLE_NODE))
+
     def test_10_bytecode_node_get_with_runtime_node_is_a_risk(self):
         sinks = analyze(root("""
     Node child;

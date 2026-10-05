@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.222-SNAPSHOT
+
+- `I070-A` (child of I070, guillermomolina/protos#713) eliminates every
+  compilation warning attributable to handwritten `src/main/java` sources
+  under `-Xlint:all` and the Truffle DSL processor (179 before, 0 after).
+  No semantic change and no specification change.
+  - Serialization: stateless exceptions that are serializable only by
+    inheritance declare `serialVersionUID = 1L`; exceptions carrying runtime
+    state (`ParseError`, `ProtosNonLocalReturnException`,
+    `ProtosSignalException`, `ProtosBytecodeControlTransferException`) carry a
+    class-scoped `@SuppressWarnings("serial")`. Their Java serializability is
+    accidental and no Java-serialization contract is introduced.
+  - Context helpers: the Bytecode-root `currentEnteredContext(Node)` helpers
+    and `EnterNestedStructuredDispatch.structuredDispatchTarget()` are
+    `@NonIdempotent`, matching the Truffle classification of
+    `ContextReference.get`; `EnterNestedStructuredDispatch.direct` declares
+    `excludeForUncached = true` and its never-null target cache
+    `neverDefault = true`, making the existing DSL behavior explicit.
+  - Binds: redundant `@Bind("$bytecodeNode")` / `@Bind("$frame")` expressions
+    diagnosed by the DSL use the canonical type-inferred `@Bind`; parameters
+    are retained.
+  - PE guards: the LocalRangeAccessor-operand, LocalAccessor and Bytecode API
+    guards accept a bare `@Bind BytecodeNode` parameter as the same structural
+    proof as `@Bind("$bytecodeNode")`, with self-tests; proof strength is
+    unchanged.
+
 ## 0.3.221-SNAPSHOT
 
 - `TEST009-O` (child of TEST009, guillermomolina/protos#795) bounds the three

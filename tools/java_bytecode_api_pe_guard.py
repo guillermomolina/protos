@@ -289,7 +289,12 @@ def entry_kind(graph, method):
 
 def _bind_expression(java, param):
     for name, start, end in param.annotations:
-        if name != "Bind" or not java.is_op(end, ")"):
+        if name != "Bind":
+            continue
+        if not java.is_op(end, ")"):
+            # Bare @Bind: the DSL infers "$bytecodeNode" from the BytecodeNode parameter type.
+            if param.type_name == "BytecodeNode":
+                return '"$bytecodeNode"'
             continue
         opener = java.matches[end]
         if end - opener == 2:

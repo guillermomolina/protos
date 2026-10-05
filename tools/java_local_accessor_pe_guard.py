@@ -34,8 +34,8 @@ The lexer, parser, conservative call graph, and the local receiver/
 BytecodeNode provenance rules are those of the TEST009-A guards
 (tools/java_local_range_pe_guard.py, tools/java_local_range_operand_pe_guard.py):
 only a positional @ConstantOperand of the accessor's own type and an
-@Bind("$bytecodeNode") parameter of a Bytecode DSL operation specialization
-are proofs; helper parameters are followed backwards to every PE root; a
+@Bind("$bytecodeNode") (or bare @Bind BytecodeNode) parameter of a Bytecode
+DSL operation specialization are proofs; helper parameters are followed backwards to every PE root; a
 field (final or not), another object's state, or x.getBytecodeNode() never
 is. @TruffleBoundary cuts PE traversal; an unresolved edge that can connect a
 root to a sink is PE_REACHABILITY_UNKNOWN.
@@ -45,7 +45,7 @@ only when all of the following hold at the root reached by that path:
 
   - the receiver is that root's positional MaterializedLocalAccessor
     @ConstantOperand and the supplied BytecodeNode is that same root's
-    @Bind("$bytecodeNode"), carried jointly along that one path, so both
+    @Bind("$bytecodeNode") or bare @Bind, carried jointly along that one path, so both
     belong to the same executing bytecode root;
   - the @Operation is declared inside a @GenerateBytecode root class, so the
     operand value is produced only by that root's generated builder; and

@@ -38,7 +38,8 @@ Local receiver provenance at the sink:
 
 Local BytecodeNode provenance at the sink:
 
-  BOUND_BYTECODE_NODE                    @Bind("$bytecodeNode") parameter of
+  BOUND_BYTECODE_NODE                    @Bind("$bytecodeNode") or bare @Bind
+                                         BytecodeNode parameter of
                                          the enclosing operation specialization
   HELPER_PARAMETER_BYTECODE_NODE         ordinary method parameter (followed)
   CURRENT_ROOT_DERIVED_BYTECODE_NODE     x.getBytecodeNode(), directly or via a
@@ -242,12 +243,15 @@ def prove_constant_receiver(java, method, param) -> Optional[str]:
 
 
 def prove_bound_node(java, method, param) -> Optional[str]:
-    """The @Bind("$bytecodeNode") operation-specialization proof, or None."""
+    """The @Bind("$bytecodeNode") / bare @Bind operation-specialization proof, or None."""
     if not _is_root_specialization(method) or param.type_name != BYTECODE_NODE_TYPE:
         return None
     for name, start, end in param.annotations:
-        if name != "Bind" or not java.is_op(end, ")"):
+        if name != "Bind":
             continue
+        if not java.is_op(end, ")"):
+            # Bare @Bind: the DSL infers "$bytecodeNode" from the BytecodeNode parameter type.
+            return "@Bind parameter of @Operation %s" % method.owner.qualified
         opener = java.matches[end]
         if end - opener == 2 and java.text(opener + 1) == BOUND_NODE_EXPRESSION:
             return "@Bind(%s) parameter of @Operation %s" % (BOUND_NODE_EXPRESSION, method.owner.qualified)

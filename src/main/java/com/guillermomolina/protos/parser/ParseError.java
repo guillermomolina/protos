@@ -22,6 +22,8 @@ import com.guillermomolina.protos.lexer.TokenType;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.Objects;
 
+// Serializable only by exception hierarchy; runtime state is intentionally not Java-serializable.
+@SuppressWarnings("serial")
 public final class ParseError extends RuntimeException {
     private final SourceSpan span;
     private final boolean unexpectedEndOfSource;
