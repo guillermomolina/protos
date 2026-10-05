@@ -7,6 +7,32 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.213-SNAPSHOT
+
+- `TEST009-K` (guillermomolina/protos#795) groups four compilerability
+  repairs that cut partial-evaluation expansion debt: the standard
+  `TextReader` queue handoff is now an iterative, non-reentrant `pump()` loop
+  (finishing a request only releases the active slot), removing the
+  recursive `finishQueueRequest -> pump -> advanceUntilInputOrTerminal`
+  graph behind the earlier `TooDeepInlining` bailout; the residual
+  String-keyed bare-write destination walks
+  (`ProtosLexicalFallback.writableContextByName` and the generic
+  `ResolveWritableLexicalTarget` selection) are host boundaries like
+  `readByName`; `ProtosLanguageContext.currentIfEnteredForRuntime()` keeps
+  the Polyglot `Context.getCurrent` probe out of PE; and the Context-local
+  Bytecode plan cache hit lookup is a host boundary. Frame-native lexical
+  paths and Node-owned `ContextReference` acquisition stay inline. A new
+  `TextReader` regression test covers ordered, non-recursive handoff of many
+  queued requests across a permanent `LineTooLong` failure. The final
+  sharded diagnosis (`closure-call-and-return.protos`, 3 Cases, 2732.1 s,
+  semantic corpus PASS, 0 PE-constant failures) shows all four expansion
+  families absent. No observable semantic or specification change. Global
+  compilerability remains red on different, later debt outside TEST009-K:
+  about 23 `code is too large` bailouts per Case, one compiler
+  `OutOfMemoryError`, and a new JDK-side `TooDeepInlining` reached from
+  `ProtosTextReader.scanLine` through the `StringBuilder` bounds-message
+  path. The full sharded diagnosis is not repeated as part of this close.
+
 ## 0.3.212-SNAPSHOT
 
 - `I066-B` (guillermomolina/protos#669) applies D172 placement to the

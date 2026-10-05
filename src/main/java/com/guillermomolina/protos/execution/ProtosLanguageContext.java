@@ -63,6 +63,12 @@ final class ProtosLanguageContext {
         return REFERENCE.get(node);
     }
 
+    /**
+     * Runtime/host acquisition for callers without a Node. TEST009-K: a host boundary so the
+     * Polyglot entered-Context probe is not expanded by partial evaluation; Node-owned paths use
+     * {@link #current(Node)}.
+     */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
     static ProtosLanguageContext currentIfEnteredForRuntime() {
         try {
             org.graalvm.polyglot.Context.getCurrent();
@@ -200,11 +206,18 @@ final class ProtosLanguageContext {
         Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(template, "template");
 
-        ProtosClosureExecutionPlan existing = sharedBytecodeExecutionPlans.get(template);
+        ProtosClosureExecutionPlan existing = existingBytecodeExecutionPlan(template);
         if (existing != null) {
             return existing;
         }
         return bytecodeExecutionPlanForDefinitionMiss(definition, template);
+    }
+
+    /** TEST009-K: the host ConcurrentHashMap lookup is not part of partial evaluation. */
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private ProtosClosureExecutionPlan existingBytecodeExecutionPlan(
+            ProtosClosureExecutionPlan template) {
+        return sharedBytecodeExecutionPlans.get(template);
     }
 
     @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary

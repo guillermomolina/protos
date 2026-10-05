@@ -1140,6 +1140,23 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         public static ResolvedLexicalWriteTarget perform(
                 ProtosActivation activation,
                 String name) {
+            ResolvedLexicalWriteTarget selected = selectByNameOrNull(activation, name);
+            if (selected == null) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newSlotNotFound(activation));
+            }
+            return selected;
+        }
+
+        /**
+         * TEST009-K: the residual String-keyed destination walk is a host boundary, like
+         * {@link ProtosLexicalFallback#readByName}. Statically proven bindings select their
+         * destination through the frame-backed operations and never reach it.
+         */
+        @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+        private static ResolvedLexicalWriteTarget selectByNameOrNull(
+                ProtosActivation activation,
+                String name) {
             if (activation.currentContextHasLocalSlotForRuntime(name)) {
                 return ResolvedLexicalWriteTarget.currentContext();
             }
@@ -1161,8 +1178,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         ordinaryReceiver);
             }
 
-            throw new ProtosSignalException(
-                    ProtosCoreErrors.newSlotNotFound(activation));
+            return null;
         }
     }
 

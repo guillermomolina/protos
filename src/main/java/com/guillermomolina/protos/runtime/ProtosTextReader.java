@@ -39,6 +39,7 @@ public final class ProtosTextReader {
 
     private ProtosEncodingValue.StreamingDecoder decoder;
     private Request active;
+    private boolean pumping;
     private byte[] retained = new byte[0];
     private boolean sourceEof;
     private boolean pendingLfAfterCr;
@@ -210,33 +211,58 @@ public final class ProtosTextReader {
             int consumed,
             ProtosEncodingValue.StreamingDecoder nextDecoder) {}
 
+    /**
+     * Non-reentrant queue handoff. Finishing a request only releases the active slot; only this
+     * loop activates the next request, so immediately terminal requests are advanced
+     * iteratively instead of nesting pump frames, both at run time and in the partial-evaluation
+     * call graph. Entry points call pump() after their work. A caller that finds another driver
+     * returns: the driver re-checks for work under the same lock that releases its role, so a
+     * concurrent release cannot be lost.
+     */
     private void pump() {
-        Request next = null;
         synchronized (this) {
-            if (active != null) return;
-            while (!queue.isEmpty()) {
-                Request candidate = queue.peekFirst();
-                if (candidate.operation.terminal()) {
-                    queue.removeFirst();
-                    continue;
+            if (pumping) return;
+            pumping = true;
+        }
+        try {
+            while (true) {
+                Request next = null;
+                synchronized (this) {
+                    if (active == null) {
+                        while (!queue.isEmpty()) {
+                            Request candidate = queue.peekFirst();
+                            if (candidate.operation.terminal()) {
+                                queue.removeFirst();
+                                continue;
+                            }
+                            active = candidate;
+                            next = candidate;
+                            break;
+                        }
+                    }
+                    if (next == null) {
+                        pumping = false;
+                        return;
+                    }
                 }
-                active = candidate;
-                next = candidate;
-                break;
+                if (next.cPrimePlan != null) {
+                    if (advanceUntilInputOrTerminal(next)) {
+                        ProtosTextReaderCPrimeExecution.schedule(
+                                next.cPrimePlan,
+                                next.operation,
+                                this,
+                                source);
+                    }
+                } else {
+                    drive(next);
+                }
             }
-        }
-        if (next == null) return;
-        if (next.cPrimePlan != null) {
-            if (advanceUntilInputOrTerminal(next)) {
-                ProtosTextReaderCPrimeExecution.schedule(
-                        next.cPrimePlan,
-                        next.operation,
-                        this,
-                        source);
+        } catch (Throwable failure) {
+            synchronized (this) {
+                pumping = false;
             }
-            return;
+            throw failure;
         }
-        drive(next);
     }
 
     /** Prevent already-terminal lower Futures from creating recursive drive stack growth. */
@@ -744,13 +770,16 @@ public final class ProtosTextReader {
 
         if (outerTerminal) {
             finishQueueRequest(request);
+            pump();
             return false;
         }
         if (state == ProtosFutureValue.State.CANCELLED) {
             operation.requestCancellation();
             return false;
         }
-        return advanceUntilInputOrTerminal(request);
+        boolean needsInput = advanceUntilInputOrTerminal(request);
+        pump();
+        return needsInput;
     }
 
     /** Invalid source.read result is the historical permanent TextReader IOError lane. */
@@ -787,6 +816,7 @@ public final class ProtosTextReader {
             }
         }
         failAndFinish(request, ioError(request.activation), false, true);
+        pump();
     }
 
     private boolean recordCPrimeSourceFailure(
@@ -811,9 +841,12 @@ public final class ProtosTextReader {
         }
         if (terminal) {
             finishQueueRequest(request);
+            pump();
             return false;
         }
-        return advanceUntilInputOrTerminal(request);
+        boolean needsInput = advanceUntilInputOrTerminal(request);
+        pump();
+        return needsInput;
     }
 
     private void cPrimeLowerTerminalObserved(
@@ -935,6 +968,7 @@ public final class ProtosTextReader {
         }
         if (operationAlreadyTerminal || request.operation.terminal()) finishQueueRequest(request);
         else drive(request);
+        pump();
     }
 
     private void cancel(Request request) {
@@ -952,15 +986,14 @@ public final class ProtosTextReader {
                 consumeLowerForCPrimeRuntime(request.operation, lower);
             }
         }
-        if (removed) {
-            pump();
-        } else if (lower == null) {
+        if (!removed && lower == null) {
             if (request.cPrimePlan != null && request.operation.terminal()) {
                 finishQueueRequest(request);
             } else {
                 drive(request);
             }
         }
+        pump();
     }
 
     private void finishCancelledIfNoLower(Request request) {
@@ -973,17 +1006,15 @@ public final class ProtosTextReader {
         finishQueueRequest(request);
     }
 
+    /** Releases the request's queue position; the caller's entry point or pump loop advances. */
     private void finishQueueRequest(Request request) {
-        boolean next = false;
         synchronized (this) {
             if (active == request) {
                 if (queue.peekFirst() == request) queue.removeFirst();
                 else queue.remove(request);
                 active = null;
-                next = true;
             } else queue.remove(request);
         }
-        if (next) pump();
     }
 
     private boolean isActive(Request request) {

@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.*;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -100,6 +101,65 @@ final class ProtosTextReaderLineProtocolTest {
                 1,
                 f.source.reads,
                 "late read-ahead from cancelled line read must be retained");
+    }
+
+    @Test
+    void queuedHandoffAdvancesImmediatelyTerminalRequestsIterativelyInOrder() throws Exception {
+        Fixture f = fixture("UTF8");
+        Pending pending = f.source.pending(true);
+        int count = 64;
+
+        ProtosFutureValue first = readLine(f.reader, f.activation);
+        List<ProtosFutureValue> lines = new ArrayList<>();
+        long[] lineDepths = new long[count];
+        for (int index = 0; index < count; index++) {
+            lines.add(observedDepth(readLine(f.reader, f.activation), lineDepths, index));
+        }
+        ProtosFutureValue tooLong =
+                readLine(f.reader, f.activation, new ProtosIntegerValue(BigInteger.ONE));
+        List<ProtosFutureValue> followers = new ArrayList<>();
+        long[] followerDepths = new long[count];
+        for (int index = 0; index < count; index++) {
+            followers.add(
+                    observedDepth(readLine(f.reader, f.activation), followerDepths, index));
+        }
+        assertEquals(ProtosFutureValue.State.PENDING, followers.getLast().state());
+
+        StringBuilder payload = new StringBuilder("F\n");
+        for (int index = 0; index < count; index++) {
+            payload.append('L').append(index).append('\n');
+        }
+        payload.append("xyz");
+        pending.resolve(bytes(f.prelude, payload.chars().toArray()), f.activation);
+
+        assertEquals("F", stringResult(first));
+        for (int index = 0; index < count; index++) {
+            assertEquals("L" + index, stringResult(lines.get(index)));
+        }
+        assertEquals(ProtosFutureValue.State.FAILED, tooLong.state());
+        ProtosObjectValue lineError = tooLong.failedError().orElseThrow();
+        assertErrorParent(f.prelude, lineError, "LineTooLong");
+        for (ProtosFutureValue follower : followers) {
+            assertEquals(ProtosFutureValue.State.FAILED, follower.state());
+            assertSame(lineError, follower.failedError().orElseThrow());
+        }
+        assertEquals(1, f.source.reads);
+        for (int index = 1; index < count; index++) {
+            assertEquals(lineDepths[0], lineDepths[index],
+                    "queued line handoff must not grow the Java stack");
+            assertEquals(followerDepths[0], followerDepths[index],
+                    "queued failure handoff must not grow the Java stack");
+        }
+    }
+
+    private static ProtosFutureValue observedDepth(
+            ProtosFutureValue future, long[] depths, int index) {
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        future.observe(
+                ignored ->
+                        depths[index] =
+                                StackWalker.getInstance().walk(frames -> frames.count()));
+        return future;
     }
 
     private static void assertInvalid(Fixture f, ProtosFutureValue future) {

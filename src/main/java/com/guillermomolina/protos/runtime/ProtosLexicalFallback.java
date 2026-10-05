@@ -80,7 +80,11 @@ public final class ProtosLexicalFallback {
     /**
      * Exact residual bare-assignment destination resolution. Reads only local
      * membership and never follows receiver delegation.
+     *
+     * <p>TEST009-K: a host boundary, like {@link #readByName}. Callers reach
+     * this String-keyed walk only after frame-backed selection did not apply.
      */
+    @TruffleBoundary
     public static Optional<ProtosObjectValue> writableContextByName(
             ProtosActivation activation,
             String name) {
