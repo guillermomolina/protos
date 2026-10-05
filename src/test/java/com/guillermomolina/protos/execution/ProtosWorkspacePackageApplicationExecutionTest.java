@@ -17,13 +17,18 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.io.ByteArrayOutputStream;
@@ -120,6 +125,87 @@ final class ProtosWorkspacePackageApplicationExecutionTest {
 
         assertTrue(failure.getMessage().contains("Encoding"));
         assertTrue(observed.get() == null);
+    }
+
+    @Test
+    void defaultRouteLeavesNetworkAbsentWithoutInitializingNetworkHost() throws Exception {
+        CapturingWritableBackend stdout = new CapturingWritableBackend();
+
+        ProtosExecutionOutcome defaultOutcome =
+                ProtosWorkspacePackageApplicationExecution.execute(networkRequest(stdout));
+
+        assertEquals(ProtosExecutionOutcome.State.FAILED, defaultOutcome.state());
+        assertNotNull(defaultOutcome.error());
+
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            ProtosExecutionOutcome outcome =
+                    ProtosWorkspacePackageApplicationExecution.execute(
+                            networkRequest(stdout),
+                            ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                            runtimeHost);
+
+            assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+            assertNotNull(outcome.error());
+            assertFalse(runtimeHost.networkHostInitializedForTesting());
+        }
+        assertEquals("argument-value\nargument-value\n", stdout.utf8());
+    }
+
+    @Test
+    void explicitGrantProvisionsNetworkForApplicationPreludeOnHostingRuntimeHost()
+            throws Exception {
+        CapturingWritableBackend stdout = new CapturingWritableBackend();
+        AtomicReference<ProtosProcessRuntime> observed = new AtomicReference<>();
+
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            assertFalse(runtimeHost.networkHostInitializedForTesting());
+
+            ProtosExecutionOutcome outcome =
+                    ProtosWorkspacePackageApplicationExecution.execute(
+                            networkRequest(stdout),
+                            process -> {
+                                assertTrue(runtimeHost.networkHostInitializedForTesting());
+                                observed.set(process);
+                            },
+                            ProtosWorkspacePackageApplicationExecution.NetworkGrant.HOST_NETWORK,
+                            runtimeHost);
+
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+            ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, outcome.value());
+            ProtosNetworkCapabilityValue network =
+                    assertInstanceOf(
+                            ProtosNetworkCapabilityValue.class, result.indexedAtForRuntime(0));
+            Object applicationNetworkPrototype = result.indexedAtForRuntime(1);
+            assertSame(applicationNetworkPrototype, network.representedDelegationParent(null));
+            assertTrue(runtimeHost.networkHostInitializedForTesting());
+        }
+
+        assertEquals("argument-value\n", stdout.utf8());
+        ProtosProcessRuntime process = observed.get();
+        assertNotNull(process);
+        assertEquals(
+                ProtosProcessRuntime.LifecycleState.TERMINATED,
+                process.lifecycleState());
+        assertTrue(process.rootFilesystemForRuntime().isEmpty());
+    }
+
+    private static ProtosWorkspacePackageApplicationExecution.Request networkRequest(
+            CapturingWritableBackend stdout) {
+        return new ProtosWorkspacePackageApplicationExecution.Request(
+                CORE,
+                PROJECT,
+                rootPlan(),
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY),
+                "NetworkGrant",
+                List.of("argument-value"),
+                exactEnvironmentDomain(),
+                List.of(),
+                null,
+                stdout,
+                null,
+                null,
+                "UTF8",
+                null);
     }
 
     private static ProtosPackageExecutionPlan rootPlan() {

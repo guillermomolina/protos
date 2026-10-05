@@ -17,13 +17,18 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -112,6 +117,78 @@ final class ProtosWorkspacePackageAuthorityIsolationIntegrationTest {
         assertNotNull(outcome.error());
     }
 
+    @Test
+    void workspaceRunDriverDefaultRouteKeepsPreflightAndApplicationNetworkLess()
+            throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+
+        ProtosStandardLibraryModuleResolver standard =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        assertEquals(
+                ProtosExecutionOutcome.State.FAILED,
+                ProtosWorkspaceRunDriver.execute(driverRequest(project, standard)).state());
+
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            ProtosWorkspacePackagePreflight.build(CORE, TOOL_ROOT, project, standard, runtimeHost);
+            assertFalse(runtimeHost.networkHostInitializedForTesting());
+
+            ProtosExecutionOutcome outcome =
+                    ProtosWorkspaceRunDriver.execute(
+                            driverRequest(project, standard),
+                            ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                            runtimeHost);
+
+            assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+            assertNotNull(outcome.error());
+            assertFalse(runtimeHost.networkHostInitializedForTesting());
+        }
+    }
+
+    @Test
+    void workspaceRunDriverExplicitGrantReachesApplicationOnOwningRuntimeHost()
+            throws Exception {
+        Path project = materializeProject();
+        assumeSecureConfinement(project);
+
+        ProtosStandardLibraryModuleResolver standard =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            ProtosExecutionOutcome outcome =
+                    ProtosWorkspaceRunDriver.execute(
+                            driverRequest(project, standard),
+                            ProtosWorkspacePackageApplicationExecution.NetworkGrant.HOST_NETWORK,
+                            runtimeHost);
+
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+            ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, outcome.value());
+            ProtosNetworkCapabilityValue network =
+                    assertInstanceOf(
+                            ProtosNetworkCapabilityValue.class, result.indexedAtForRuntime(0));
+            assertSame(result.indexedAtForRuntime(1), network.representedDelegationParent(null));
+            assertTrue(runtimeHost.networkHostInitializedForTesting());
+        }
+    }
+
+    private static ProtosWorkspaceRunDriver.Request driverRequest(
+            Path project, ProtosModuleResolver standard) {
+        return new ProtosWorkspaceRunDriver.Request(
+                CORE,
+                TOOL_ROOT,
+                project,
+                standard,
+                "NetworkGrant",
+                List.of(),
+                exactEnvironmentDomain(),
+                List.of(),
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+    }
+
     private static ProtosWorkspacePackageApplicationExecution.Request request(
             Path project,
             ProtosPackageExecutionPlan plan,
@@ -139,6 +216,9 @@ final class ProtosWorkspacePackageAuthorityIsolationIntegrationTest {
         copyTree(WORKSPACE_CASE, project);
         overlay(APPLICATION.resolve("Main.protos"), project.resolve("Main.protos"));
         overlay(APPLICATION.resolve("Leak.protos"), project.resolve("Leak.protos"));
+        overlay(
+                APPLICATION.resolve("NetworkGrant.protos"),
+                project.resolve("NetworkGrant.protos"));
         overlay(
                 APPLICATION.resolve("libs/a/internal/Thing.protos"),
                 project.resolve("libs/a/internal/Thing.protos"));

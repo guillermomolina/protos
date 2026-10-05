@@ -7,6 +7,19 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.206-SNAPSHOT
+
+- `I065` (#668; D173 Candidate A) threads an explicit, policy-neutral Network
+  grant selection through workspace application execution
+  (`ProtosWorkspaceRunDriver` → `ProtosWorkspacePackageApplicationExecution`
+  → `ProtosStandaloneProcessBootstrap`). With
+  `NetworkGrant.HOST_NETWORK` the capability is provisioned from the exact
+  application Prelude on the same live RuntimeHost that hosts the Process and
+  is bound as the initial `moduleContext` local `network`. The default
+  workspace route, the external-package route, Package Tool preflight and the
+  CLI remain Network-less; no CLI syntax, manifest policy, ambient accessor or
+  Standard Library TCP facade is added.
+
 ## 0.3.205-SNAPSHOT
 
 - `TEST009-J` (parent TEST009/#795; trigger PERF030/#784) specializes the

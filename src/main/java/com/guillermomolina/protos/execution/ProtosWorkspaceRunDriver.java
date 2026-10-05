@@ -30,6 +30,11 @@ import java.util.Objects;
  * bootstrap authority explicit. The driver performs only the already-closed C1 read-only Package
  * Tool preflight followed by the already-closed C2B separately-authorized application execution.
  * It owns no CLI spelling, current-directory policy, default entry convention or diagnostic text.
+ *
+ * <p>One RuntimeHost owns the whole run: the Package Tool preflight Process, any explicitly
+ * selected Network grant and the application Process. Preflight never receives Network; the
+ * application receives it only through {@link #execute(Request,
+ * ProtosWorkspacePackageApplicationExecution.NetworkGrant)}, never by default.
  */
 public final class ProtosWorkspaceRunDriver {
     private ProtosWorkspaceRunDriver() {}
@@ -64,34 +69,54 @@ public final class ProtosWorkspaceRunDriver {
     }
 
     public static ProtosExecutionOutcome execute(Request request) throws IOException {
+        return execute(request, ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE);
+    }
+
+    public static ProtosExecutionOutcome execute(
+            Request request, ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
+            throws IOException {
         Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(networkGrant, "networkGrant");
 
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
-            ProtosPackageExecutionPlan plan =
-                    ProtosWorkspacePackagePreflight.build(
-                            request.coreRoot(),
-                            request.packageToolRoot(),
-                            request.projectRoot(),
-                            request.standardLibraryResolver(),
-                            runtimeHost);
-
-            return ProtosWorkspacePackageApplicationExecution.execute(
-                    new ProtosWorkspacePackageApplicationExecution.Request(
-                            request.coreRoot(),
-                            request.projectRoot(),
-                            plan,
-                            request.standardLibraryResolver(),
-                            request.entryLogicalModule(),
-                            request.applicationArguments(),
-                            request.environmentNameDomain(),
-                            request.environmentEntries(),
-                            request.stdinBackend(),
-                            request.stdoutBackend(),
-                            request.stderrBackend(),
-                            request.stdinEncodingBinding(),
-                            request.stdoutEncodingBinding(),
-                            request.stderrEncodingBinding()),
-                    runtimeHost);
+            return execute(request, networkGrant, runtimeHost);
         }
+    }
+
+    static ProtosExecutionOutcome execute(
+            Request request,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(networkGrant, "networkGrant");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
+
+        ProtosPackageExecutionPlan plan =
+                ProtosWorkspacePackagePreflight.build(
+                        request.coreRoot(),
+                        request.packageToolRoot(),
+                        request.projectRoot(),
+                        request.standardLibraryResolver(),
+                        runtimeHost);
+
+        return ProtosWorkspacePackageApplicationExecution.execute(
+                new ProtosWorkspacePackageApplicationExecution.Request(
+                        request.coreRoot(),
+                        request.projectRoot(),
+                        plan,
+                        request.standardLibraryResolver(),
+                        request.entryLogicalModule(),
+                        request.applicationArguments(),
+                        request.environmentNameDomain(),
+                        request.environmentEntries(),
+                        request.stdinBackend(),
+                        request.stdoutBackend(),
+                        request.stderrBackend(),
+                        request.stdinEncodingBinding(),
+                        request.stdoutEncodingBinding(),
+                        request.stderrEncodingBinding()),
+                networkGrant,
+                runtimeHost);
     }
 }

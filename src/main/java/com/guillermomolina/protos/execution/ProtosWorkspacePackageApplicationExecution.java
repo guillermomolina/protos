@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
@@ -36,9 +37,27 @@ import java.util.function.Consumer;
  * <p>This boundary owns application Process construction/lifecycle only. It receives no Package
  * Tool Process, activation, Filesystem or mutable Protos plan. The package resolver is reconstructed
  * from the detached DTO and the canonical initial module is executed through C2A.
+ *
+ * <p>The application Process receives no Network authority unless the owning host explicitly
+ * selects {@link NetworkGrant#HOST_NETWORK} (D047/D173). The capability is then provisioned from
+ * the exact application Prelude on the same live {@link ProtosPolyglotRuntimeHost} that hosts the
+ * Process, so it can neither delegate to another Prelude's Network prototype nor outlive its host.
  */
 public final class ProtosWorkspacePackageApplicationExecution {
     private ProtosWorkspacePackageApplicationExecution() {}
+
+    /**
+     * Hosting-level selection of whether the owning host grants the application Process its
+     * initial {@code network} binding. This selection is policy-neutral: it carries no CLI,
+     * manifest or environment spelling, and the resulting capability is never created by the
+     * selecting caller but only here, for the exact application Prelude.
+     */
+    public enum NetworkGrant {
+        /** No Network authority; the initial {@code network} slot is absent. */
+        NONE,
+        /** Provision one host Network capability on the RuntimeHost hosting the Process. */
+        HOST_NETWORK
+    }
 
     public record Request(
             Path coreRoot,
@@ -88,13 +107,14 @@ public final class ProtosWorkspacePackageApplicationExecution {
     public static ProtosExecutionOutcome execute(Request request) throws IOException {
         Objects.requireNonNull(request, "request");
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
-            return execute(request, ignored -> {}, runtimeHost);
+            return execute(request, ignored -> {}, NetworkGrant.NONE, runtimeHost);
         }
     }
 
     static ProtosExecutionOutcome execute(
-            Request request, ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
-        return execute(request, ignored -> {}, runtimeHost);
+            Request request, NetworkGrant networkGrant, ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        return execute(request, ignored -> {}, networkGrant, runtimeHost);
     }
 
     static ProtosExecutionOutcome execute(
@@ -102,16 +122,18 @@ public final class ProtosWorkspacePackageApplicationExecution {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(processObserver, "processObserver");
         try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
-            return execute(request, processObserver, runtimeHost);
+            return execute(request, processObserver, NetworkGrant.NONE, runtimeHost);
         }
     }
 
     static ProtosExecutionOutcome execute(
             Request request,
             Consumer<ProtosProcessRuntime> processObserver,
+            NetworkGrant networkGrant,
             ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(processObserver, "processObserver");
+        Objects.requireNonNull(networkGrant, "networkGrant");
         Objects.requireNonNull(runtimeHost, "runtimeHost");
 
         ProtosWorkspacePackageModuleResolver resolver =
@@ -125,6 +147,7 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 resolver,
                 entryKey,
                 request.authority(),
+                networkGrant,
                 false,
                 "workspace package application Process failed",
                 processObserver,
@@ -162,12 +185,17 @@ public final class ProtosWorkspacePackageApplicationExecution {
      * initial module {@code entryKey}. Termination of the Process is always requested before
      * return; with {@code awaitTermination} this method also waits until the Process is
      * TERMINATED, so a caller may release resources the resolver borrows immediately afterwards.
+     *
+     * <p>With {@link NetworkGrant#HOST_NETWORK} the Network capability is provisioned from the
+     * Prelude created here on {@code runtimeHost}, which also hosts the Process; the caller keeps
+     * that host open until after this method returns.
      */
     static ProtosExecutionOutcome executeEntry(
             Path coreRoot,
             ProtosModuleResolver resolver,
             ProtosModuleKey entryKey,
             ApplicationAuthority authority,
+            NetworkGrant networkGrant,
             boolean awaitTermination,
             String failureMessage,
             Consumer<ProtosProcessRuntime> processObserver,
@@ -180,6 +208,11 @@ public final class ProtosWorkspacePackageApplicationExecution {
                 requireEncoding(prelude, authority.stdoutEncodingBinding());
         ProtosEncodingValue stderrEncoding =
                 requireEncoding(prelude, authority.stderrEncodingBinding());
+        ProtosNetworkCapabilityValue network =
+                switch (networkGrant) {
+                    case NONE -> null;
+                    case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
+                };
 
         ProtosStandaloneProcessBootstrap.Result bootstrap =
                 ProtosStandaloneProcessBootstrap.create(
@@ -193,7 +226,8 @@ public final class ProtosWorkspacePackageApplicationExecution {
                         stdinEncoding,
                         stdoutEncoding,
                         stderrEncoding,
-                        null);
+                        null,
+                        network);
         ProtosProcessRuntime process = bootstrap.process();
         ProtosPolyglotProcessContext processContext = null;
 

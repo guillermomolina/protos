@@ -134,6 +134,7 @@ public final class ProtosPackageRunDriver {
                             request.stdinEncodingBinding(),
                             request.stdoutEncodingBinding(),
                             request.stderrEncodingBinding()),
+                    ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
                     true,
                     "package application Process failed",
                     stages::applicationProcessHosted,
