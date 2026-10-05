@@ -9,10 +9,9 @@ DIST_VALIDATE_FLAGS ?= --require-clean-source
 JAVA_TEST_JOBS ?= 6
 PROTOS_TEST_JOBS ?= 8
 
-# DAP and the real GraalVM LSP tests own Graal tooling state and are not safe
-# in the class-parallel lane.
-JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosI026GLspCapabilityTest,ProtosI026GLspTransportTest,ProtosTestToolPerf017AdmissionTest
-JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosI026GLspCapabilityTest.java,**/ProtosI026GLspTransportTest.java,**/ProtosTestToolPerf017AdmissionTest.java
+# DAP tests own Graal tooling state and are not safe in the class-parallel lane.
+JAVA_SERIAL_TESTS := ProtosI026FDapBehaviorTest,ProtosTestToolPerf017AdmissionTest
+JAVA_SERIAL_TEST_EXCLUDES := **/ProtosI026FDapBehaviorTest.java,**/ProtosTestToolPerf017AdmissionTest.java
 JAVA_PARALLEL_EXCLUDES := $(JAVA_SERIAL_TEST_EXCLUDES)
 JAVA_STRESS_TESTS := ProtosJsonParserStress
 # TEST008: retained current-run log and slow-test guard for `make test-java`.
