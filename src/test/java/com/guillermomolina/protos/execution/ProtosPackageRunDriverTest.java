@@ -17,15 +17,19 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
@@ -179,44 +183,7 @@ final class ProtosPackageRunDriverTest {
                 ProtosPackageRunDriver.execute(
                         request(project, stdout),
                         provider,
-                        new ProtosPackageRunDriver.Stages() {
-                            @Override
-                            public ProtosCapturedFilesystemCustody verify(
-                                    ProtosWorkspaceRunDriver.Request request,
-                                    ProtosExactExternalPackageIdentity identity,
-                                    Path selectedRoot) {
-                                return fail("workspace-only run must not capture externals");
-                            }
-
-                            @Override
-                            public Object plan(
-                                    ProtosWorkspaceRunDriver.Request request,
-                                    List<ProtosExternalPackagePlanningPreflight
-                                                    .VerifiedExternalPackage>
-                                            verified) {
-                                return fail("workspace-only run must not build a V2 plan");
-                            }
-
-                            @Override
-                            public ProtosPackageExecutionPlanV2 detach(
-                                    Object rawPlan, Path projectRoot) {
-                                return fail("workspace-only run must not detach a V2 plan");
-                            }
-
-                            @Override
-                            public ProtosExternalPackageResourceScope reconcile(
-                                    ProtosPackageExecutionPlanV2 plan,
-                                    List<ProtosExternalPackagePlanningPreflight
-                                                    .VerifiedExternalPackage>
-                                            verified) {
-                                return fail("workspace-only run must not create a resource scope");
-                            }
-
-                            @Override
-                            public void applicationProcessHosted(ProtosProcessRuntime process) {
-                                fail("workspace-only run must not use the mixed application");
-                            }
-                        });
+                        generationOneOnlyStages());
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertEquals(BigInteger.valueOf(42), ((ProtosIntegerValue) outcome.value()).value());
@@ -279,6 +246,83 @@ final class ProtosPackageRunDriverTest {
         assertTrue(stages.hosted.get(0).rootFilesystemForRuntime().isEmpty());
         assertThrows(IllegalStateException.class, () -> stages.scope.contains(a1));
         assertAllClosed(stages.verified, 4);
+    }
+
+    @Test
+    void workspaceOnlyDefaultPublicRouteKeepsApplicationNetworkLess() throws Exception {
+        Path project = workspaceProject("workspace-default", "[network, Network]\n");
+        RecordingProvider provider = new RecordingProvider(Map.of());
+
+        ProtosExecutionOutcome outcome =
+                ProtosPackageRunDriver.execute(request(project, null), provider);
+
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+        assertEquals(List.of(), provider.calls);
+    }
+
+    @Test
+    void workspaceOnlyExplicitGrantSurvivesGenerationOneDelegationWithoutConsultingProvider()
+            throws Exception {
+        Path project = workspaceProject("workspace-network", "[network, Network]\n");
+        RecordingProvider provider = new RecordingProvider(Map.of());
+
+        ProtosExecutionOutcome outcome =
+                ProtosPackageRunDriver.execute(
+                        request(project, null),
+                        provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.HOST_NETWORK,
+                        generationOneOnlyStages());
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertNetworkOfThisApplication(outcome);
+        assertEquals(List.of(), provider.calls);
+    }
+
+    @Test
+    void mixedApplicationExplicitGrantIsProvisionedFromTheExactApplicationPrelude()
+            throws Exception {
+        Path project = project("mixed-network");
+        Files.writeString(
+                project.resolve("Main.protos"),
+                "A: import(\"dep:reg/Api\")\n[network, Network, A.total]\n",
+                StandardCharsets.UTF_8);
+        RecordingProvider provider = new RecordingProvider(materializations("mixed-network"));
+        RecordingStages stages = new RecordingStages();
+
+        ProtosExecutionOutcome outcome =
+                ProtosPackageRunDriver.execute(
+                        request(project, null),
+                        provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.HOST_NETWORK,
+                        stages);
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        ProtosArrayValue result = assertNetworkOfThisApplication(outcome);
+        assertEquals(
+                BigInteger.valueOf(1026),
+                ((ProtosIntegerValue) result.indexedAtForRuntime(2)).value());
+        assertMixedLifecycleUnchanged(provider, stages);
+    }
+
+    @Test
+    void mixedApplicationExplicitNoneKeepsNetworkSlotAbsent() throws Exception {
+        Path project = project("mixed-none");
+        Files.writeString(
+                project.resolve("Main.protos"),
+                "A: import(\"dep:reg/Api\")\nA.total\nnetwork\n",
+                StandardCharsets.UTF_8);
+        RecordingProvider provider = new RecordingProvider(materializations("mixed-none"));
+        RecordingStages stages = new RecordingStages();
+
+        ProtosExecutionOutcome outcome =
+                ProtosPackageRunDriver.execute(
+                        request(project, null),
+                        provider,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                        stages);
+
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
+        assertMixedLifecycleUnchanged(provider, stages);
     }
 
     @Test
@@ -418,6 +462,79 @@ final class ProtosPackageRunDriverTest {
         Files.writeString(project.resolve("Main.protos"), ROOT_MAIN, StandardCharsets.UTF_8);
         assumeSecureConfinement(project);
         return project;
+    }
+
+    private Path workspaceProject(String name, String main) throws Exception {
+        Path project = temporaryRoot.resolve(name);
+        copyTree(WORKSPACE_CASE, project);
+        Files.writeString(project.resolve("Main.protos"), main, StandardCharsets.UTF_8);
+        assumeSecureConfinement(project);
+        return project;
+    }
+
+    /**
+     * Asserts {@code [network, Network, ...]}: a real Network capability delegating to the
+     * {@code Network} prototype of the very Prelude that executed the application.
+     */
+    private static ProtosArrayValue assertNetworkOfThisApplication(ProtosExecutionOutcome outcome) {
+        ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, outcome.value());
+        ProtosNetworkCapabilityValue network =
+                assertInstanceOf(ProtosNetworkCapabilityValue.class, result.indexedAtForRuntime(0));
+        assertSame(result.indexedAtForRuntime(1), network.representedDelegationParent(null));
+        return result;
+    }
+
+    /** The mixed-route selection, single Process and scope lifetime, whatever the Network grant. */
+    private static void assertMixedLifecycleUnchanged(
+            RecordingProvider provider, RecordingStages stages) {
+        assertEquals(List.of(a1, a2, cRegistry, cGit), provider.calls);
+        assertEquals(4, stages.verifyAttempts);
+        assertEquals(1, stages.planCalls);
+        assertEquals(1, stages.hosted.size());
+        assertEquals(
+                ProtosProcessRuntime.LifecycleState.TERMINATED,
+                stages.hosted.get(0).lifecycleState());
+        assertThrows(IllegalStateException.class, () -> stages.scope.contains(a1));
+        assertAllClosed(stages.verified, 4);
+    }
+
+    /** Stages that fail if the zero-external-requirements route reaches any F2E2-F2E4 step. */
+    private static ProtosPackageRunDriver.Stages generationOneOnlyStages() {
+        return new ProtosPackageRunDriver.Stages() {
+            @Override
+            public ProtosCapturedFilesystemCustody verify(
+                    ProtosWorkspaceRunDriver.Request request,
+                    ProtosExactExternalPackageIdentity identity,
+                    Path selectedRoot) {
+                return fail("workspace-only run must not capture externals");
+            }
+
+            @Override
+            public Object plan(
+                    ProtosWorkspaceRunDriver.Request request,
+                    List<ProtosExternalPackagePlanningPreflight.VerifiedExternalPackage>
+                            verified) {
+                return fail("workspace-only run must not build a V2 plan");
+            }
+
+            @Override
+            public ProtosPackageExecutionPlanV2 detach(Object rawPlan, Path projectRoot) {
+                return fail("workspace-only run must not detach a V2 plan");
+            }
+
+            @Override
+            public ProtosExternalPackageResourceScope reconcile(
+                    ProtosPackageExecutionPlanV2 plan,
+                    List<ProtosExternalPackagePlanningPreflight.VerifiedExternalPackage>
+                            verified) {
+                return fail("workspace-only run must not create a resource scope");
+            }
+
+            @Override
+            public void applicationProcessHosted(ProtosProcessRuntime process) {
+                fail("workspace-only run must not use the mixed application");
+            }
+        };
     }
 
     /** Fresh per-test copies of the digested templates, one selected root per exact identity. */

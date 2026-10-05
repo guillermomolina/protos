@@ -39,6 +39,13 @@ import java.util.Objects;
  * scope is closed. The application receives no provider, selected root, Package Tool Process or
  * custody Filesystem; only the resolver reads external resources, and only through the scope.
  *
+ * <p>Network authority is never implied (D047/D173). The application receives a Network grant
+ * only when the owning host explicitly selects {@link
+ * ProtosWorkspacePackageApplicationExecution.NetworkGrant#HOST_NETWORK}; the selection reaches
+ * only the application Process, provisioned from that Process's exact Prelude on the RuntimeHost
+ * that hosts it. Requirement derivation, verification, planning and the resource scope never
+ * receive Network, and selecting a grant never consults the provider for workspace-only runs.
+ *
  * <p>This driver owns no CLI spelling, current-directory policy, default materialization backend
  * or diagnostic text.
  */
@@ -51,7 +58,16 @@ public final class ProtosPackageRunDriver {
             ProtosWorkspaceRunDriver.Request request,
             ProtosExactPackageMaterializationProvider provider)
             throws IOException {
-        return execute(request, provider, PRODUCTION_STAGES);
+        return execute(
+                request, provider, ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE);
+    }
+
+    public static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
+            throws IOException {
+        return execute(request, provider, networkGrant, PRODUCTION_STAGES);
     }
 
     static ProtosExecutionOutcome execute(
@@ -59,8 +75,22 @@ public final class ProtosPackageRunDriver {
             ProtosExactPackageMaterializationProvider provider,
             Stages stages)
             throws IOException {
+        return execute(
+                request,
+                provider,
+                ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                stages);
+    }
+
+    static ProtosExecutionOutcome execute(
+            ProtosWorkspaceRunDriver.Request request,
+            ProtosExactPackageMaterializationProvider provider,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
+            Stages stages)
+            throws IOException {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(provider, "provider");
+        Objects.requireNonNull(networkGrant, "networkGrant");
         Objects.requireNonNull(stages, "stages");
 
         List<ProtosExactExternalPackageIdentity> requirements =
@@ -70,7 +100,7 @@ public final class ProtosPackageRunDriver {
                         request.projectRoot(),
                         request.standardLibraryResolver());
         if (requirements.isEmpty()) {
-            return ProtosWorkspaceRunDriver.execute(request);
+            return ProtosWorkspaceRunDriver.execute(request, networkGrant);
         }
 
         ProtosPackageExecutionPlanV2 plan;
@@ -102,7 +132,7 @@ public final class ProtosPackageRunDriver {
         }
 
         try (scope) {
-            return executeApplication(request, plan, scope, stages);
+            return executeApplication(request, plan, scope, networkGrant, stages);
         }
     }
 
@@ -110,6 +140,7 @@ public final class ProtosPackageRunDriver {
             ProtosWorkspaceRunDriver.Request request,
             ProtosPackageExecutionPlanV2 plan,
             ProtosExternalPackageResourceScope scope,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant,
             Stages stages)
             throws IOException {
         ProtosPackageExecutionPlanV2ModuleResolver resolver =
@@ -134,7 +165,7 @@ public final class ProtosPackageRunDriver {
                             request.stdinEncodingBinding(),
                             request.stdoutEncodingBinding(),
                             request.stderrEncodingBinding()),
-                    ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE,
+                    networkGrant,
                     true,
                     "package application Process failed",
                     stages::applicationProcessHosted,

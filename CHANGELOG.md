@@ -7,6 +7,22 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.208-SNAPSHOT
+
+- `I065` (guillermomolina/protos#668; D173 Candidate A) threads the
+  policy-neutral `ProtosWorkspacePackageApplicationExecution.NetworkGrant`
+  through `ProtosPackageRunDriver`. The existing
+  `execute(request, provider)` route remains Network-less (`NONE`); the new
+  `execute(request, provider, networkGrant)` lets an owning host explicitly
+  select `HOST_NETWORK`. With no external requirements the grant is forwarded
+  to the generation-1 `ProtosWorkspaceRunDriver` route without consulting the
+  materialization provider or creating any capture, V2 plan or resource
+  scope. With external requirements, requirement derivation, verification,
+  planning and resource-scope reconciliation stay Network-less; only the
+  application Process receives the grant, provisioned from its exact mixed
+  application Prelude on the same RuntimeHost that hosts it. The CLI and its
+  syntax are unchanged and receive no Network.
+
 ## 0.3.207-SNAPSHOT
 
 - `TOOL009-G2` (parent TOOL009-G/#798; D185/#799 Candidate C′) exposes
