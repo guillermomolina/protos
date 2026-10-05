@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -208,7 +209,8 @@ final class ProtosPerf006B3BTaskBytecodeCompositionTest {
         assertTrue(prepared.isNative());
         assertSame(
                 ProtosNullValue.INSTANCE,
-                ProtosBytecodeRootNode.EnterClosureCall.nativeCall(prepared));
+                ProtosBytecodeRootNode.EnterClosureCall.nativeCall(
+                        assertInstanceOf(ProtosBytecodeRootNode.NativeCall.class, prepared)));
         assertEquals(1, nativeExecutions.get());
         System.out.println("PERF006_B3B_ORDINARY_NATIVE_FAST_PATH=PASS");
     }

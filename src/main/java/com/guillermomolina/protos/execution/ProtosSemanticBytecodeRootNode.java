@@ -59,6 +59,7 @@ import com.oracle.truffle.api.bytecode.Operation;
 import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
@@ -3083,39 +3084,60 @@ abstract class ProtosSemanticBytecodeRootNode extends RootNode implements Byteco
 
     @Operation
     public static final class EnterClosureCall {
-        @Specialization(guards = "prepared.isImmediate()")
-        public static Object immediate(PreparedClosureCall prepared) {
+        @Specialization
+        public static Object immediate(ImmediateResultCall prepared) {
             return ProtosBytecodeRootNode.EnterClosureCall.immediate(prepared);
         }
 
-        @Specialization(guards = "prepared.isNative()")
-        public static Object nativeCall(PreparedClosureCall prepared) {
+        @Specialization
+        public static Object nativeCall(NativeCall prepared) {
             return ProtosBytecodeRootNode.EnterClosureCall.nativeCall(prepared);
+        }
+
+        @Specialization(guards = "prepared.bodyTarget() == cachedTarget", limit = "3")
+        public static Object ordinaryDirect(
+                OrdinarySourceCall prepared,
+                @Cached("prepared.bodyTarget()")
+                        RootCallTarget cachedTarget,
+                @Cached("create(cachedTarget)")
+                        DirectCallNode node) {
+            return ProtosBytecodeRootNode.EnterClosureCall.ordinaryDirect(
+                    prepared, cachedTarget, node);
+        }
+
+        @Specialization(replaces = "ordinaryDirect")
+        public static Object ordinaryIndirect(
+                OrdinarySourceCall prepared,
+                @Shared("indirectCall") @Cached IndirectCallNode node) {
+            return ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(prepared, node);
+        }
+
+        @Specialization(guards = "prepared.isImmediate()")
+        public static Object moduleImmediate(ModuleInitializationCall prepared) {
+            return ProtosBytecodeRootNode.EnterClosureCall.moduleImmediate(prepared);
         }
 
         @Specialization(
                 guards = {
                     "!prepared.isImmediate()",
-                    "!prepared.isNative()",
                     "prepared.bodyTarget() == cachedTarget"
                 },
                 limit = "3")
-        public static Object direct(
-                PreparedClosureCall prepared,
+        public static Object moduleDirect(
+                ModuleInitializationCall prepared,
                 @Cached("prepared.bodyTarget()")
                         RootCallTarget cachedTarget,
                 @Cached("create(cachedTarget)")
                         DirectCallNode node) {
-            return ProtosBytecodeRootNode.EnterClosureCall.direct(prepared, cachedTarget, node);
+            return ProtosBytecodeRootNode.EnterClosureCall.moduleDirect(
+                    prepared, cachedTarget, node);
         }
 
-        @Specialization(
-                replaces = "direct",
-                guards = {"!prepared.isImmediate()", "!prepared.isNative()"})
-        public static Object indirect(
-                PreparedClosureCall prepared,
-                @Cached IndirectCallNode node) {
-            return ProtosBytecodeRootNode.EnterClosureCall.indirect(prepared, node);
+        @Specialization(replaces = "moduleDirect", guards = "!prepared.isImmediate()")
+        public static Object moduleIndirect(
+                ModuleInitializationCall prepared,
+                @Shared("indirectCall") @Cached IndirectCallNode node) {
+            return ProtosBytecodeRootNode.EnterClosureCall.moduleIndirect(prepared, node);
         }
     }
 

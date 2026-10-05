@@ -426,8 +426,9 @@ final class ProtosPerf025DirectSourceClosureCompactInvocationTest {
 
     private static Object enter(ProtosBytecodeRootNode.PreparedClosureCall prepared) {
         Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.indirect(
-                        prepared, IndirectCallNode.create());
+                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
+                        assertInstanceOf(ProtosBytecodeRootNode.OrdinarySourceCall.class, prepared),
+                        IndirectCallNode.create());
         return prepared.finish(entered);
     }
 

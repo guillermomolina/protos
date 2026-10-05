@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.203-SNAPSHOT
+
+- `TEST009-I` (parent TEST009/#795; trigger PERF030/#784) specializes the
+  prepared Closure entry operation `EnterClosureCall`, in both generated
+  Bytecode interpreters, by concrete prepared-call representation
+  (`ImmediateResultCall`, `NativeCall`, `OrdinarySourceCall`,
+  `ModuleInitializationCall`), removing the generic `PreparedClosureCall`
+  interface dispatch at closure entry that kept partial evaluation from
+  retaining the concrete type. Immediate, native, ordinary-source and
+  module-initialization (immediate hit and source execution) entry keep their
+  behavior, as do direct-call caching with indirect fallback, ReturnHome
+  control transfer and the module-initialization failure lifecycle. Because
+  ordinary and module source calls are now separate specializations, the
+  direct-call cache limit of three targets applies to each independently.
+  Direct Java callers enter through the representation their contract
+  guarantees. No Protos semantic or specification change.
+
 ## 0.3.202-SNAPSHOT
 
 - `TEST009-H` (parent TEST009/#795; trigger PERF030/#784) specializes the

@@ -59,6 +59,7 @@ import com.oracle.truffle.api.bytecode.Operation;
 import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Bind;
 import com.oracle.truffle.api.dsl.Cached;
+import com.oracle.truffle.api.dsl.Cached.Shared;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.exception.AbstractTruffleException;
 import com.oracle.truffle.api.frame.FrameDescriptor;
@@ -8717,27 +8718,39 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         return PreparedClosureCall.ordinary(plan.bytecodeActivationTargetForComposition(), activation);
     }
 
+    /**
+     * Enters a prepared Closure call. TEST009-I: every specialization receives
+     * one concrete final {@link PreparedClosureCall} representation, so the
+     * entry, control-transfer, module-failure and runtime-failure calls bind
+     * statically instead of dispatching through the interface. Each
+     * representation keeps its own behavior: {@link OrdinarySourceCall} uses
+     * the {@link ReturnHomeOwningCall} handling and {@link
+     * ModuleInitializationCall} the module-initialization lifecycle.
+     *
+     * <p>The source representations each keep the previous direct-target
+     * cache ({@code limit = 3}, replaced by the indirect fallback). Because the
+     * DSL counts the limit per specialization, a site that sees both ordinary
+     * and module-initialization source calls may hold up to three direct
+     * targets of each kind, and one kind going megamorphic no longer drops the
+     * other to the indirect path. This affects only call-node caching, never
+     * target selection or observable behavior. Both indirect fallbacks share
+     * one {@link IndirectCallNode}, as the single indirect fallback did.
+     */
     @Operation
     public static final class EnterClosureCall {
-        @Specialization(guards = "prepared.isImmediate()")
-        public static Object immediate(PreparedClosureCall prepared) {
+        @Specialization
+        public static Object immediate(ImmediateResultCall prepared) {
             return prepared.enterImmediate();
         }
 
-        @Specialization(guards = "prepared.isNative()")
-        public static Object nativeCall(PreparedClosureCall prepared) {
+        @Specialization
+        public static Object nativeCall(NativeCall prepared) {
             return prepared.enterNative();
         }
 
-        @Specialization(
-                guards = {
-                    "!prepared.isImmediate()",
-                    "!prepared.isNative()",
-                    "prepared.bodyTarget() == cachedTarget"
-                },
-                limit = "3")
-        public static Object direct(
-                PreparedClosureCall prepared,
+        @Specialization(guards = "prepared.bodyTarget() == cachedTarget", limit = "3")
+        public static Object ordinaryDirect(
+                OrdinarySourceCall prepared,
                 @Cached("prepared.bodyTarget()")
                         RootCallTarget cachedTarget,
                 @Cached("create(cachedTarget)")
@@ -8754,12 +8767,57 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             }
         }
 
+        @Specialization(replaces = "ordinaryDirect")
+        public static Object ordinaryIndirect(
+                OrdinarySourceCall prepared,
+                @Shared("indirectCall") @Cached IndirectCallNode node) {
+            try {
+                return node.call(
+                        prepared.bodyTarget(),
+                        prepared.targetArguments());
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (AbstractTruffleException transfer) {
+                prepared.failIfModuleInitialization();
+                throw transfer;
+            } catch (RuntimeException failure) {
+                throw prepared.mapRuntimeFailure(failure);
+            }
+        }
+
+        @Specialization(guards = "prepared.isImmediate()")
+        public static Object moduleImmediate(ModuleInitializationCall prepared) {
+            return prepared.enterImmediate();
+        }
+
         @Specialization(
-                replaces = "direct",
-                guards = {"!prepared.isImmediate()", "!prepared.isNative()"})
-        public static Object indirect(
-                PreparedClosureCall prepared,
-                @Cached IndirectCallNode node) {
+                guards = {
+                    "!prepared.isImmediate()",
+                    "prepared.bodyTarget() == cachedTarget"
+                },
+                limit = "3")
+        public static Object moduleDirect(
+                ModuleInitializationCall prepared,
+                @Cached("prepared.bodyTarget()")
+                        RootCallTarget cachedTarget,
+                @Cached("create(cachedTarget)")
+                        DirectCallNode node) {
+            try {
+                return node.call(prepared.targetArguments());
+            } catch (ProtosBytecodeControlTransferException bridged) {
+                return prepared.handleControlTransfer(bridged.transfer());
+            } catch (AbstractTruffleException transfer) {
+                prepared.failIfModuleInitialization();
+                throw transfer;
+            } catch (RuntimeException failure) {
+                throw prepared.mapRuntimeFailure(failure);
+            }
+        }
+
+        @Specialization(replaces = "moduleDirect", guards = "!prepared.isImmediate()")
+        public static Object moduleIndirect(
+                ModuleInitializationCall prepared,
+                @Shared("indirectCall") @Cached IndirectCallNode node) {
             try {
                 return node.call(
                         prepared.bodyTarget(),

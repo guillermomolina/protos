@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -105,8 +106,11 @@ class ProtosAPlusExecutionProjectionTest {
                                 assertFalse(prepared.isNative());
 
                                 Object entered =
-                                        ProtosBytecodeRootNode.EnterClosureCall.indirect(
-                                                prepared,
+                                        ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
+                                                assertInstanceOf(
+                                                        ProtosBytecodeRootNode.OrdinarySourceCall
+                                                                .class,
+                                                        prepared),
                                                 IndirectCallNode.create());
 
                                 return prepared.finish(entered);

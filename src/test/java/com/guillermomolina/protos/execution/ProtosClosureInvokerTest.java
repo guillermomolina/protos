@@ -64,8 +64,10 @@ class ProtosClosureInvokerTest {
                                     activation);
 
                     Object entered =
-                            ProtosBytecodeRootNode.EnterClosureCall.indirect(
-                                    prepared,
+                            ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
+                                    assertInstanceOf(
+                                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                                            prepared),
                                     com.oracle.truffle.api.nodes.IndirectCallNode.create());
 
                     return prepared.finish(entered);

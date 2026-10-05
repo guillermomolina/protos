@@ -249,14 +249,16 @@ public final class ProtosClosureInvoker {
             ProtosClosureValue closure,
             List<?> supplied,
             ProtosActivation activation) {
-        ProtosBytecodeRootNode.PreparedClosureCall prepared =
-                ProtosBytecodeRootNode.prepareSynchronousSourceClosureForRuntime(
-                        closure,
-                        supplied,
-                        activation);
+        // A non-native synchronous source preparation is always an ordinary source call.
+        ProtosBytecodeRootNode.OrdinarySourceCall prepared =
+                (ProtosBytecodeRootNode.OrdinarySourceCall)
+                        ProtosBytecodeRootNode.prepareSynchronousSourceClosureForRuntime(
+                                closure,
+                                supplied,
+                                activation);
 
         Object entered =
-                ProtosBytecodeRootNode.EnterClosureCall.indirect(
+                ProtosBytecodeRootNode.EnterClosureCall.ordinaryIndirect(
                         prepared,
                         IndirectCallNode.create());
 

@@ -101,6 +101,70 @@ class ProtosI072PhaseDPreparedCallSeparationTest {
         }
     }
 
+    /**
+     * TEST009-I: closure-call entry must likewise specialize on concrete
+     * representations in both generated interpreters. Immediate and native
+     * entry have one specialization each; the two source-backed
+     * representations each keep a direct-call cache with an indirect fallback,
+     * and module initialization additionally keeps its immediate-hit entry.
+     */
+    @Test
+    void entryOperationSpecializesOnConcreteRepresentations() {
+        java.util.Map<Class<?>, Long> expected =
+                java.util.Map.of(
+                        ProtosBytecodeRootNode.ImmediateResultCall.class, 1L,
+                        ProtosBytecodeRootNode.NativeCall.class, 1L,
+                        ProtosBytecodeRootNode.OrdinarySourceCall.class, 2L,
+                        ProtosBytecodeRootNode.ModuleInitializationCall.class, 3L);
+
+        for (Class<?> operation :
+                List.of(
+                        ProtosBytecodeRootNode.EnterClosureCall.class,
+                        ProtosSemanticBytecodeRootNode.EnterClosureCall.class)) {
+            List<java.lang.reflect.Method> specializations =
+                    Arrays.stream(operation.getDeclaredMethods())
+                            .filter(
+                                    method ->
+                                            method.isAnnotationPresent(
+                                                    com.oracle.truffle.api.dsl.Specialization
+                                                            .class))
+                            .collect(java.util.stream.Collectors.toList());
+            java.util.Map<Class<?>, Long> receivers =
+                    specializations.stream()
+                            .collect(
+                                    java.util.stream.Collectors.groupingBy(
+                                            method -> method.getParameterTypes()[0],
+                                            java.util.stream.Collectors.counting()));
+
+            assertFalse(
+                    receivers.containsKey(ProtosBytecodeRootNode.PreparedClosureCall.class),
+                    operation.getName()
+                            + " must not specialize on the PreparedClosureCall interface");
+            assertEquals(expected, receivers, operation.getName());
+
+            for (Class<?> source :
+                    List.of(
+                            ProtosBytecodeRootNode.OrdinarySourceCall.class,
+                            ProtosBytecodeRootNode.ModuleInitializationCall.class)) {
+                List<Class<?>> sourceCallNodes =
+                        specializations.stream()
+                                .filter(method -> method.getParameterTypes()[0] == source)
+                                .map(method -> method.getParameterTypes())
+                                .filter(parameters -> parameters.length > 1)
+                                .map(parameters -> parameters[parameters.length - 1])
+                                .collect(java.util.stream.Collectors.toList());
+                assertEquals(
+                        List.of(
+                                com.oracle.truffle.api.nodes.DirectCallNode.class,
+                                com.oracle.truffle.api.nodes.IndirectCallNode.class),
+                        sourceCallNodes.stream()
+                                .sorted(java.util.Comparator.comparing(Class::getName))
+                                .collect(java.util.stream.Collectors.toList()),
+                        operation.getName() + " " + source.getSimpleName());
+            }
+        }
+    }
+
     @Test
     void ordinarySourceCallNeverPhysicallyDeclaresSpecialCallState() {
         Set<String> fieldNames =
