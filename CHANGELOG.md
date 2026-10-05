@@ -7,6 +7,23 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.209-SNAPSHOT
+
+- `I065` (guillermomolina/protos#668; D173 Candidate A) threads the
+  policy-neutral `ProtosWorkspacePackageApplicationExecution.NetworkGrant`
+  through standalone application hosting. `ProtosStandaloneHostedSession.open`
+  and `ProtosStandaloneHostedExecution.executeFile` gain explicit-grant
+  overloads; the existing overloads remain Network-less (`NONE`). A new
+  host-aware `ProtosStandaloneHostedExecution.bootstrapProcess` overload
+  provisions a granted Network from the exact application Prelude on the
+  RuntimeHost that then hosts the Process; standalone sessions, the CLI
+  session and the debug session now open their RuntimeHost before
+  bootstrapping the Process, closing it if bootstrap fails. `NONE` never
+  initializes the host Network plane. The CLI's internal session seams can
+  carry a grant, but `-e`, direct-file, REPL, `protos debug` and bundled Tool
+  sessions all select `NONE`; no CLI syntax, manifest key or other
+  user-facing Network policy is added.
+
 ## 0.3.208-SNAPSHOT
 
 - `I065` (guillermomolina/protos#668; D173 Candidate A) threads the

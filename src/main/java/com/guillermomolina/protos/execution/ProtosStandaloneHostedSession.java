@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -103,14 +104,45 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
             OutputStream out,
             OutputStream err)
             throws IOException {
+        return open(
+                coreRoot, sourceFile, applicationArguments, in, out, err, NetworkGrant.NONE);
+    }
+
+    /**
+     * As {@link #open(Path, Path, List, InputStream, OutputStream, OutputStream)}, under the
+     * embedder's explicit Network selection (D047/D173); the other overloads select {@link
+     * NetworkGrant#NONE}, which leaves the entry module's initial {@code network} slot absent.
+     * With {@link NetworkGrant#HOST_NETWORK} the capability is provisioned from this session's
+     * application Prelude on this session's own RuntimeHost and is released with it by {@link
+     * #close()}.
+     *
+     * @param networkGrant whether the session's Process receives its initial {@code network}
+     */
+    public static ProtosStandaloneHostedSession open(
+            Path coreRoot,
+            Path sourceFile,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant)
+            throws IOException {
         Objects.requireNonNull(coreRoot, "coreRoot");
         Objects.requireNonNull(sourceFile, "sourceFile");
         Objects.requireNonNull(applicationArguments, "applicationArguments");
         Objects.requireNonNull(in, "in");
         Objects.requireNonNull(out, "out");
         Objects.requireNonNull(err, "err");
+        Objects.requireNonNull(networkGrant, "networkGrant");
 
-        return openSession(coreRoot, sourceFile, List.copyOf(applicationArguments), in, out, err);
+        return openSession(
+                coreRoot,
+                sourceFile,
+                List.copyOf(applicationArguments),
+                in,
+                out,
+                err,
+                networkGrant);
     }
 
     /** Convenience form: no application arguments, empty stdin, discarded stdout and stderr. */
@@ -131,7 +163,8 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
             List<String> arguments,
             InputStream in,
             OutputStream out,
-            OutputStream err)
+            OutputStream err,
+            NetworkGrant networkGrant)
             throws IOException {
         Path sourcePath = sourceFile.toAbsolutePath().normalize();
         String characters = Files.readString(sourcePath, StandardCharsets.UTF_8);
@@ -143,6 +176,11 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
         ProtosProcessRuntime process = null;
         ProtosPolyglotRuntimeHost runtimeHost = null;
         try {
+            /*
+             * The RuntimeHost opens before the Process is bootstrapped: a granted Network must be
+             * provisioned on the same host that will host this Process, from its exact Prelude.
+             */
+            runtimeHost = ProtosPolyglotRuntimeHost.open();
             ProtosStandaloneProcessBootstrap.Result bootstrap =
                     ProtosStandaloneHostedExecution.bootstrapProcess(
                             coreRoot,
@@ -150,9 +188,10 @@ public final class ProtosStandaloneHostedSession implements AutoCloseable {
                             arguments,
                             ProtosStandaloneHostedExecution.readableBackend(in),
                             ProtosStandaloneHostedExecution.writableBackend(out),
-                            ProtosStandaloneHostedExecution.writableBackend(err));
+                            ProtosStandaloneHostedExecution.writableBackend(err),
+                            networkGrant,
+                            runtimeHost);
             process = bootstrap.process();
-            runtimeHost = ProtosPolyglotRuntimeHost.open();
             // bindProcess terminates the Process and closes the host itself when binding fails.
             ProtosPolyglotProcessContext processContext =
                     ProtosStandaloneHostedExecution.bindProcess(

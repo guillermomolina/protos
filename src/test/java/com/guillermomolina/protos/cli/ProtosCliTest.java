@@ -3,9 +3,20 @@ package com.guillermomolina.protos.cli;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
+import com.guillermomolina.protos.execution.ProtosLanguage;
+import com.guillermomolina.protos.execution.ProtosModuleResolver;
+import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
+import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
+import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.oracle.truffle.api.source.Source;
 import java.io.*;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 final class ProtosCliTest {
@@ -378,6 +389,88 @@ final class ProtosCliTest {
         } finally {
             Files.deleteIfExists(malformed);
             Files.deleteIfExists(dir);
+        }
+    }
+
+    @Test
+    void evalAndDirectFileApplicationsReceiveNoNetwork() throws Exception {
+        R eval = run("-e", "network");
+        assertEquals(1, eval.c);
+        assertTrue(eval.e.startsWith("Error:"), eval.e);
+
+        Path file = Files.createTempFile("protos-cli-network-", ".protos");
+        try {
+            Files.writeString(file, "network");
+            R direct = run(file.toString());
+            assertEquals(1, direct.c);
+            assertTrue(direct.e.startsWith("Error:"), direct.e);
+        } finally {
+            Files.deleteIfExists(file);
+        }
+    }
+
+    /**
+     * No public CLI route selects Network yet; this drives the internal hosting seam that a future
+     * owning policy would use and checks it provisions from the session's own Prelude and host.
+     */
+    @Test
+    void internalSessionSeamCarriesExplicitHostNetworkGrant() throws Exception {
+        Path core = Path.of("protos", "lib", "core");
+        Method createSession =
+                ProtosCli.class.getDeclaredMethod(
+                        "createSession",
+                        Path.class,
+                        ProtosModuleResolver.class,
+                        List.class,
+                        InputStream.class,
+                        PrintStream.class,
+                        PrintStream.class,
+                        NetworkGrant.class);
+        createSession.setAccessible(true);
+        PrintStream discard = new PrintStream(OutputStream.nullOutputStream());
+        Object session =
+                createSession.invoke(
+                        new ProtosCli(),
+                        core,
+                        new ProtosStandardLibraryModuleResolver(core.getParent()),
+                        List.of(),
+                        InputStream.nullInputStream(),
+                        discard,
+                        discard,
+                        NetworkGrant.HOST_NETWORK);
+        try {
+            Method execute = session.getClass().getDeclaredMethod("execute", Source.class);
+            execute.setAccessible(true);
+            ProtosExecutionOutcome outcome =
+                    (ProtosExecutionOutcome)
+                            execute.invoke(
+                                    session,
+                                    Source.newBuilder(
+                                                    ProtosLanguage.ID,
+                                                    "[network, Network]",
+                                                    "network-grant")
+                                            .build());
+
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+            ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, outcome.value());
+            ProtosNetworkCapabilityValue network =
+                    assertInstanceOf(
+                            ProtosNetworkCapabilityValue.class, result.indexedAtForRuntime(0));
+            assertSame(result.indexedAtForRuntime(1), network.representedDelegationParent(null));
+
+            Method runtimeHostAccessor = session.getClass().getDeclaredMethod("runtimeHost");
+            runtimeHostAccessor.setAccessible(true);
+            Method networkHostInitialized =
+                    ProtosPolyglotRuntimeHost.class.getDeclaredMethod(
+                            "networkHostInitializedForTesting");
+            networkHostInitialized.setAccessible(true);
+            assertEquals(
+                    Boolean.TRUE,
+                    networkHostInitialized.invoke(runtimeHostAccessor.invoke(session)));
+        } finally {
+            Method terminate = session.getClass().getDeclaredMethod("terminate");
+            terminate.setAccessible(true);
+            terminate.invoke(session);
         }
     }
 

@@ -16,9 +16,11 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.io.ByteArrayOutputStream;
@@ -29,6 +31,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Shared standalone hosted-execution authority for the CLI and JVM embedders.
@@ -91,9 +94,28 @@ public final class ProtosStandaloneHostedExecution {
             OutputStream out,
             OutputStream err)
             throws IOException {
+        return executeFile(
+                coreRoot, sourceFile, applicationArguments, in, out, err, NetworkGrant.NONE);
+    }
+
+    /**
+     * As {@link #executeFile(Path, Path, List, InputStream, OutputStream, OutputStream)}, under
+     * the embedder's explicit Network selection; the other overloads select {@link
+     * NetworkGrant#NONE}. The selection is applied by {@link ProtosStandaloneHostedSession#open(
+     * Path, Path, List, InputStream, OutputStream, OutputStream, NetworkGrant)}.
+     */
+    public static ProtosExecutionOutcome executeFile(
+            Path coreRoot,
+            Path sourceFile,
+            List<String> applicationArguments,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            NetworkGrant networkGrant)
+            throws IOException {
         try (ProtosStandaloneHostedSession session =
                 ProtosStandaloneHostedSession.open(
-                        coreRoot, sourceFile, applicationArguments, in, out, err)) {
+                        coreRoot, sourceFile, applicationArguments, in, out, err, networkGrant)) {
             return session.initialOutcome();
         }
     }
@@ -110,7 +132,10 @@ public final class ProtosStandaloneHostedExecution {
                 OutputStream.nullOutputStream());
     }
 
-    /** Bootstraps Core and one standalone Process whose standard streams use UTF-8. */
+    /**
+     * Bootstraps Core and one standalone Process whose standard streams use UTF-8. The Process
+     * receives no Network authority: its initial {@code network} slot is absent.
+     */
     public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
             Path coreRoot,
             ProtosModuleResolver moduleResolver,
@@ -119,8 +144,72 @@ public final class ProtosStandaloneHostedExecution {
             ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
             ProtosProcessStandardStreamBinding.WritableBackend stderrBackend)
             throws IOException {
+        return bootstrapProcessWithGrant(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                NetworkGrant.NONE,
+                null);
+    }
+
+    /**
+     * Bootstraps Core and one standalone Process, as {@link #bootstrapProcess(Path,
+     * ProtosModuleResolver, List, ProtosProcessStandardStreamBinding.ReadableBackend,
+     * ProtosProcessStandardStreamBinding.WritableBackend,
+     * ProtosProcessStandardStreamBinding.WritableBackend)}, under the owning host's explicit
+     * Network selection (D047/D173).
+     *
+     * <p>{@code runtimeHost} must be the live RuntimeHost that will afterwards host this Process
+     * and that stays open for the Process's whole lifetime. With {@link NetworkGrant#HOST_NETWORK}
+     * the capability is provisioned on it from the exact Prelude created here, so it delegates to
+     * this application's Network prototype and cannot outlive its host. {@link NetworkGrant#NONE}
+     * provisions nothing and leaves the host's Network plane uninitialized. This method neither
+     * hosts the Process nor closes {@code runtimeHost}; on failure the caller still owns the host.
+     */
+    public static ProtosStandaloneProcessBootstrap.Result bootstrapProcess(
+            Path coreRoot,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        Objects.requireNonNull(networkGrant, "networkGrant");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
+        return bootstrapProcessWithGrant(
+                coreRoot,
+                moduleResolver,
+                applicationArguments,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                networkGrant,
+                runtimeHost);
+    }
+
+    /** {@code runtimeHost} is consulted only for {@link NetworkGrant#HOST_NETWORK}. */
+    private static ProtosStandaloneProcessBootstrap.Result bootstrapProcessWithGrant(
+            Path coreRoot,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            NetworkGrant networkGrant,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(coreRoot, moduleResolver);
         ProtosEncodingValue utf8 = utf8(prelude);
+        ProtosNetworkCapabilityValue network =
+                switch (networkGrant) {
+                    case NONE -> null;
+                    case HOST_NETWORK -> runtimeHost.provisionHostNetwork(prelude);
+                };
         return ProtosStandaloneProcessBootstrap.create(
                 prelude,
                 applicationArguments,
@@ -132,7 +221,8 @@ public final class ProtosStandaloneHostedExecution {
                 utf8,
                 utf8,
                 utf8,
-                null);
+                null,
+                network);
     }
 
     /**

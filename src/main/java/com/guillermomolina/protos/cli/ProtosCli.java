@@ -329,7 +329,8 @@ public final class ProtosCli {
                         applicationArguments,
                         in,
                         out,
-                        err);
+                        err,
+                        ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE);
         ProtosCliPrintFacility.install(
                 session.activation(), session.process(), renderer);
         return session;
@@ -1383,56 +1384,77 @@ public final class ProtosCli {
                 applicationArguments,
                 in,
                 out,
-                err);
+                err,
+                ProtosWorkspacePackageApplicationExecution.NetworkGrant.NONE);
     }
 
-
-
+    /**
+     * Hosting seam shared by direct-file, {@code -e}, REPL and bundled-Tool sessions. Every current
+     * caller selects {@code NONE}; selecting Network for an application is reserved to a future
+     * owning CLI policy and must never reach bundled Tool sessions. The RuntimeHost opens first
+     * so a granted Network is provisioned on the host of this Process from its exact Prelude.
+     */
     private Session createSession(
             Path core,
             ProtosModuleResolver moduleResolver,
             List<String> applicationArguments,
             InputStream in,
             PrintStream out,
-            PrintStream err)
+            PrintStream err,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
             throws IOException {
-        ProtosStandaloneProcessBootstrap.Result bootstrap =
-                ProtosStandaloneHostedExecution.bootstrapProcess(
-                        core,
-                        moduleResolver,
-                        applicationArguments,
-                        ProtosStandaloneHostedExecution.readableBackend(in),
-                        ProtosStandaloneHostedExecution.writableBackend(out),
-                        ProtosStandaloneHostedExecution.writableBackend(err));
-        return bindStandaloneProcess(
-                bootstrap,
-                ProtosPolyglotRuntimeHost.open(),
-                in,
-                out,
-                err);
+        ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+        ProtosStandaloneProcessBootstrap.Result bootstrap;
+        boolean bootstrapped = false;
+        try {
+            bootstrap =
+                    ProtosStandaloneHostedExecution.bootstrapProcess(
+                            core,
+                            moduleResolver,
+                            applicationArguments,
+                            ProtosStandaloneHostedExecution.readableBackend(in),
+                            ProtosStandaloneHostedExecution.writableBackend(out),
+                            ProtosStandaloneHostedExecution.writableBackend(err),
+                            networkGrant,
+                            runtimeHost);
+            bootstrapped = true;
+        } finally {
+            if (!bootstrapped) {
+                runtimeHost.close();
+            }
+        }
+        return bindStandaloneProcess(bootstrap, runtimeHost, in, out, err);
     }
 
+    /**
+     * Debug counterpart of {@link #createSession}: the debug RuntimeHost opens first, the Process
+     * is bootstrapped against it under {@code networkGrant} (currently always {@code NONE}), and
+     * readiness is published only once that bootstrap succeeded.
+     */
     private Session createDebugSession(
             Path core,
             ProtosModuleResolver moduleResolver,
             List<String> applicationArguments,
             InputStream in,
             PrintStream controlOut,
-            PrintStream diagnostics)
+            PrintStream diagnostics,
+            ProtosWorkspacePackageApplicationExecution.NetworkGrant networkGrant)
             throws IOException {
-        ProtosStandaloneProcessBootstrap.Result bootstrap =
-                ProtosStandaloneHostedExecution.bootstrapProcess(
-                        core,
-                        moduleResolver,
-                        applicationArguments,
-                        ProtosStandaloneHostedExecution.readableBackend(in),
-                        ProtosPolyglotStandardStreamRouting.stdoutBackend(),
-                        ProtosPolyglotStandardStreamRouting.stderrBackend());
-
         ProtosPolyglotRuntimeHost runtimeHost =
                 ProtosPolyglotRuntimeHost.openDebug(diagnostics);
+        ProtosStandaloneProcessBootstrap.Result bootstrap = null;
         boolean handedToBinding = false;
         try {
+            bootstrap =
+                    ProtosStandaloneHostedExecution.bootstrapProcess(
+                            core,
+                            moduleResolver,
+                            applicationArguments,
+                            ProtosStandaloneHostedExecution.readableBackend(in),
+                            ProtosPolyglotStandardStreamRouting.stdoutBackend(),
+                            ProtosPolyglotStandardStreamRouting.stderrBackend(),
+                            networkGrant,
+                            runtimeHost);
             publishDebugReadiness(controlOut, runtimeHost.debugEndpoint());
             handedToBinding = true;
             return bindStandaloneProcess(
@@ -1443,7 +1465,9 @@ public final class ProtosCli {
                     OutputStream.nullOutputStream());
         } finally {
             if (!handedToBinding) {
-                bootstrap.process().requestTerminationForRuntime();
+                if (bootstrap != null) {
+                    bootstrap.process().requestTerminationForRuntime();
+                }
                 runtimeHost.close();
             }
         }

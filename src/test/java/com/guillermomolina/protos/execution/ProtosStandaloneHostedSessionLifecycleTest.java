@@ -18,12 +18,21 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -53,5 +62,67 @@ final class ProtosStandaloneHostedSessionLifecycleTest {
         assertEquals(ProtosProcessRuntime.LifecycleState.TERMINATED, process.lifecycleState());
         assertTrue(processContext.isClosedForTesting());
         assertEquals(0, runtimeHost.activeProcessContextCountForTesting());
+    }
+
+    @Test
+    void defaultSessionLeavesNetworkAbsentWithoutInitializingNetworkHost() throws Exception {
+        Path file = directory.resolve("network.protos");
+        Files.writeString(file, "network\n", StandardCharsets.UTF_8);
+
+        try (ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(CORE, file)) {
+            assertEquals(ProtosExecutionOutcome.State.FAILED, session.initialOutcome().state());
+            assertFalse(session.runtimeHostForTesting().networkHostInitializedForTesting());
+        }
+    }
+
+    @Test
+    void explicitGrantProvisionsNetworkFromSessionPreludeOnSessionRuntimeHost() throws Exception {
+        Path file = directory.resolve("network.protos");
+        Files.writeString(
+                file,
+                "probe: () => {\n    [network, Network]\n}\n[network, Network]\n",
+                StandardCharsets.UTF_8);
+
+        ProtosStandaloneHostedSession session =
+                ProtosStandaloneHostedSession.open(
+                        CORE,
+                        file,
+                        List.of(),
+                        InputStream.nullInputStream(),
+                        OutputStream.nullOutputStream(),
+                        OutputStream.nullOutputStream(),
+                        NetworkGrant.HOST_NETWORK);
+        ProtosProcessRuntime process = session.processForTesting();
+        ProtosPolyglotRuntimeHost runtimeHost = session.runtimeHostForTesting();
+        ProtosPolyglotProcessContext processContext = session.processContextForTesting();
+        try {
+            ProtosExecutionOutcome initial = session.initialOutcome();
+            assertEquals(ProtosExecutionOutcome.State.COMPLETED, initial.state());
+            ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, initial.value());
+            ProtosNetworkCapabilityValue network =
+                    assertInstanceOf(
+                            ProtosNetworkCapabilityValue.class, result.indexedAtForRuntime(0));
+            assertSame(result.indexedAtForRuntime(1), network.representedDelegationParent(null));
+
+            // The granted capability is the module's binding, observed again by a later call.
+            ProtosArrayValue again =
+                    assertInstanceOf(
+                            ProtosArrayValue.class, session.invokeTopLevel("probe").value());
+            assertSame(network, again.indexedAtForRuntime(0));
+
+            assertTrue(runtimeHost.networkHostInitializedForTesting());
+            assertSame(processContext, process.executionHostForRuntime().orElseThrow());
+            assertEquals(1, runtimeHost.activeProcessContextCountForTesting());
+            assertEquals(ProtosProcessRuntime.LifecycleState.RUNNING, process.lifecycleState());
+        } finally {
+            session.close();
+        }
+
+        assertEquals(ProtosProcessRuntime.LifecycleState.TERMINATED, process.lifecycleState());
+        assertTrue(processContext.isClosedForTesting());
+        assertEquals(0, runtimeHost.activeProcessContextCountForTesting());
+        // The session's RuntimeHost, which owns the provisioned Network plane, is closed too.
+        assertThrows(IllegalStateException.class, runtimeHost::actorSchedulerForRuntime);
     }
 }

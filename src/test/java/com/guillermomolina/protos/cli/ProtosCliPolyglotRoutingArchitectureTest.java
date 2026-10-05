@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.cli;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -65,6 +66,23 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertTrue(source.contains("processContext.executeModuleSource("));
         assertFalse(source.contains("private static Source sourceFromPath("));
         assertFalse(source.contains(".uri(exact.toUri())"));
+
+        // I065: application, debug and bundled-Tool sessions share one Network-capable hosting
+        // seam, but no current CLI route selects Network; both seam callers pass NONE.
+        assertFalse(source.contains("HOST_NETWORK"));
+        assertTrue(
+                source.matches(
+                        "(?s).*private Session createSession\\(.*?NetworkGrant networkGrant\\).*"));
+        assertTrue(
+                source.matches(
+                        "(?s).*private Session createDebugSession\\("
+                                + ".*?NetworkGrant networkGrant\\).*"));
+        assertEquals(
+                2, source.split("NetworkGrant\\.NONE\\)", -1).length - 1, "NONE seam callers");
+        assertEquals(
+                2,
+                source.split("bootstrapProcess\\(", -1).length - 1,
+                "host-aware bootstrap call sites");
 
         String shared =
                 Files.readString(

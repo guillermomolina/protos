@@ -18,14 +18,21 @@ package com.guillermomolina.protos.embedding;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.execution.ProtosExecutionOutcome;
 import com.guillermomolina.protos.execution.ProtosStandaloneHostedExecution;
+import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -87,6 +94,49 @@ final class ProtosStandaloneHostedExecutionEmbeddingTest {
                     BigInteger.valueOf(42),
                     assertInstanceOf(ProtosIntegerValue.class, outcome.value()).value());
         }
+    }
+
+    @Test
+    void defaultEmbeddingGrantsNoNetwork() throws Exception {
+        Path source = directory.resolve("network.protos");
+        Files.writeString(source, "network\n", StandardCharsets.UTF_8);
+
+        assertEquals(
+                ProtosExecutionOutcome.State.FAILED,
+                ProtosStandaloneHostedExecution.executeFile(CORE, source).state());
+        assertEquals(
+                ProtosExecutionOutcome.State.FAILED,
+                ProtosStandaloneHostedExecution.executeFile(
+                                CORE,
+                                source,
+                                List.of(),
+                                InputStream.nullInputStream(),
+                                OutputStream.nullOutputStream(),
+                                OutputStream.nullOutputStream())
+                        .state());
+    }
+
+    @Test
+    void explicitHostNetworkGrantBindsNetworkOfTheApplicationPrelude() throws Exception {
+        Path source = directory.resolve("network.protos");
+        Files.writeString(source, "[network, Network]\n", StandardCharsets.UTF_8);
+
+        ProtosExecutionOutcome outcome =
+                ProtosStandaloneHostedExecution.executeFile(
+                        CORE,
+                        source,
+                        List.of(),
+                        InputStream.nullInputStream(),
+                        OutputStream.nullOutputStream(),
+                        OutputStream.nullOutputStream(),
+                        NetworkGrant.HOST_NETWORK);
+
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        ProtosArrayValue result = assertInstanceOf(ProtosArrayValue.class, outcome.value());
+        ProtosNetworkCapabilityValue network =
+                assertInstanceOf(
+                        ProtosNetworkCapabilityValue.class, result.indexedAtForRuntime(0));
+        assertSame(result.indexedAtForRuntime(1), network.representedDelegationParent(null));
     }
 
     private void assertTerminalInteger(String source, BigInteger expected) throws Exception {
