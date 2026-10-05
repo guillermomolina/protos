@@ -7,6 +7,24 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.219-SNAPSHOT
+
+- `I054` (guillermomolina/protos#654) publication metadata reconciliation. The
+  substantive I054 change was already published in
+  `9bed87430f99f3df8c2c3112f5a51b429a6e3176` without its required version bump
+  and changelog entry; this release completes that metadata forward-only and
+  does not re-implement it. That change retires the test-only
+  `org.graalvm.polyglot:lsp` dependency for the generic GraalVM dynamic LSP,
+  removes the I026-G1/G2 executable evidence (`ProtosI026GLspTransportTest`,
+  `ProtosI026GLspCapabilityTest`) and the serialized-test wiring left dead in
+  the `Makefile`. DAP/debugger support (`org.graalvm.polyglot:dap`,
+  `protos debug`), the static Protos language server (`ProtosLanguageServer`,
+  `org.eclipse.lsp4j`, static analysis core/session) and Truffle
+  instrumentation (`Source`/`SourceSection`, `StatementTag`/`CallTag`) are
+  preserved. Language semantics and the specification are unchanged; adopting
+  the GraalVM dynamic LSP may be reconsidered later only through a new design
+  decision.
+
 ## 0.3.218-SNAPSHOT
 
 - `I056` (guillermomolina/protos#658) implements the AUD009-G1 cleanup: the
