@@ -44,3 +44,38 @@ Except as contained in this notice, the name of a copyright holder shall
 not be used in advertising or otherwise to promote the sale, use or other
 dealings in these Data Files or Software without prior written
 authorization of the copyright holder.
+
+## toml-test v2.2.0
+
+`protos/tests/conformance/library/toml/official/upstream/v2.2.0/` retains
+test fixtures of [toml-test](https://github.com/toml-lang/toml-test) release
+v2.2.0 (commit `ce08da1ddb075d1c7596d663c7fcba9a2ae02c5c`), selected by
+`tests/files-toml-1.1.0`. The generated suite sources in
+`protos/tests/conformance/library/toml/official/suite/` (except the
+Protos-owned `Harness.protos`) are derived from those fixtures. Both are
+conformance test data; they ship with the bundled `protos/tests` corpus
+together with the retained upstream `LICENSE`.
+
+```text
+The MIT License (MIT)
+
+Copyright (c) 2018 TOML authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+```

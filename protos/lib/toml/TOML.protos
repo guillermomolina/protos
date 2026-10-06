@@ -2221,7 +2221,9 @@ parse: (text) => {
             parts
         }
 
-        putPath: (map, parts, ignoredPosition, valueNode) => {
+        // Only a table created by an earlier dotted key of the same inline
+        // table may be extended; an inline-table value is already complete.
+        putPath: (map, parts, dottedTables, valueNode) => {
             current: map
             position: 0
 
@@ -2244,10 +2246,14 @@ parse: (text) => {
                         (child.kind == "table").ifFalse(() => {
                             fail()
                         })
+                        dottedTables.containsKey(child).ifFalse(() => {
+                            fail()
+                        })
                     })
                     current.containsKey(name).ifFalse(() => {
                         child = syntaxNode("table", Map())
                         current[name] = child
+                        dottedTables[child] = true
                     })
                     current = child.value
                     position = position + 1
@@ -3167,6 +3173,7 @@ parse: (text) => {
                 kind: "inlineTable"
                 phase: "keyOrEnd"
                 entries: Map()
+                dottedTables: IdentityMap()
                 pendingPath: null
             }
             topFrame = frame
@@ -3195,7 +3202,12 @@ parse: (text) => {
 
                 (frame.kind == "inlineTable").ifTrue(() => {
                     (frame.phase == "awaitValue").ifFalse(() => { fail() })
-                    putPath(frame.entries, frame.pendingPath, 0, valueNode)
+                    putPath(
+                        frame.entries,
+                        frame.pendingPath,
+                        frame.dottedTables,
+                        valueNode
+                    )
                     frame.pendingPath = null
                     frame.phase = "commaOrEnd"
                 })
@@ -3296,11 +3308,12 @@ parse: (text) => {
                     skipArrayTrivia()
 
                     (phase == "valueOrEnd").ifTrue(() => {
-                        (peek() == 93).ifTrue(() => {
+                        closing: peek() == 93
+                        closing.ifTrue(() => {
                             index = index + 1
                             closeArrayFrame()
                         })
-                        (peek() == 93).ifFalse(() => {
+                        closing.ifFalse(() => {
                             frame.phase = "awaitValue"
                             startValue()
                         })
@@ -3317,11 +3330,12 @@ parse: (text) => {
                         comma.ifTrue(() => {
                             index = index + 1
                             skipArrayTrivia()
-                            (peek() == 93).ifTrue(() => {
+                            trailing: peek() == 93
+                            trailing.ifTrue(() => {
                                 index = index + 1
                                 closeArrayFrame()
                             })
-                            (peek() == 93).ifFalse(() => {
+                            trailing.ifFalse(() => {
                                 frame.phase = "value"
                             })
                         })
@@ -3339,11 +3353,12 @@ parse: (text) => {
                     skipArrayTrivia()
 
                     (phase == "keyOrEnd").ifTrue(() => {
-                        (peek() == 125).ifTrue(() => {
+                        closing: peek() == 125
+                        closing.ifTrue(() => {
                             index = index + 1
                             closeInlineTableFrame()
                         })
-                        (peek() == 125).ifFalse(() => {
+                        closing.ifFalse(() => {
                             frame.pendingPath = parseKeyPath()
                             skipSpaces()
                             (take() == 61).ifFalse(() => { fail() })
@@ -3363,11 +3378,12 @@ parse: (text) => {
                         comma.ifTrue(() => {
                             index = index + 1
                             skipArrayTrivia()
-                            (peek() == 125).ifTrue(() => {
+                            trailing: peek() == 125
+                            trailing.ifTrue(() => {
                                 index = index + 1
                                 closeInlineTableFrame()
                             })
-                            (peek() == 125).ifFalse(() => {
+                            trailing.ifFalse(() => {
                                 frame.phase = "keyOrEnd"
                             })
                         })

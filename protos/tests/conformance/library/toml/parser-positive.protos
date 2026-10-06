@@ -154,6 +154,27 @@ tests: [
         Assertions.require(root.kind === "table")
         Assertions.require(root.value["value"].kind === "integer")
         Assertions.require(root.value["value"].value == 1)
+    }),
+    Test("parse empty array and empty inline table before more content", () => {
+        TOML: import("std:toml/TOML")
+
+        root: TOML.parse(
+            "empty = []\n" +
+            "table = {}\n" +
+            "mixed = [[], {}, { inner = {} }, [ ], { }]\n" +
+            "trailing = [1, ]\n"
+        )
+
+        Assertions.require(root.value["empty"].kind === "array")
+        Assertions.require(root.value["empty"].value.size() == 0)
+        Assertions.require(root.value["table"].kind === "table")
+        Assertions.require(root.value["table"].value.size() == 0)
+        Assertions.require(root.value["mixed"].value.size() == 5)
+        Assertions.require(root.value["mixed"].value[1].kind === "table")
+        Assertions.require(
+            root.value["mixed"].value[2].value["inner"].value.size() == 0
+        )
+        Assertions.require(root.value["trailing"].value.size() == 1)
     })
 ]
 tests.freeze()

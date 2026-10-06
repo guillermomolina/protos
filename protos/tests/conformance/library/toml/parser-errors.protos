@@ -163,6 +163,15 @@ tests: [
         Assertions.signals(Error, () => {
             TOML.parse(input)
         })
+    }),
+    Test("parse dotted key extending inline table value error", () => {
+        TOML: import("std:toml/TOML")
+
+        input: "tab = { inner = { dog = \"best\" }, inner.cat = \"worst\" }\n"
+
+        Assertions.signals(Error, () => {
+            TOML.parse(input)
+        })
     })
 ]
 tests.freeze()

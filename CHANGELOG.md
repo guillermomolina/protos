@@ -7,6 +7,30 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.232-SNAPSHOT
+
+- `LIB010-E2-C` (guillermomolina/protos#418, AUD005 F3 / #451) retains the
+  official toml-test v2.2.0 TOML 1.1 corpus (commit
+  `ce08da1ddb075d1c7596d663c7fcba9a2ae02c5c`, selector
+  `tests/files-toml-1.1.0`) as conformance evidence for `std:toml/TOML`. No
+  specification change and no public API change; D104, D109, D087 and F4 are
+  unchanged.
+  - The 895 selected upstream files are retained byte-exact with their MIT
+    `LICENSE`, `PROVENANCE.toml`, `CASES.tsv` and `SHA256SUMS` under
+    `protos/tests/conformance/library/toml/official/upstream/v2.2.0/`.
+  - `tools/toml_test_projection.py` deterministically generates 27
+    suite-native shards (214 valid, 214 encoder and 456 invalid logical Tests,
+    884 in total) and `--check` verifies pin, inventory, hashes and
+    regeneration offline. The 11 invalid fixtures whose bytes are not strict
+    UTF-8 are recorded as `NOT_APPLICABLE_INPUT_DOMAIN` for
+    `TOML.parse(String)`.
+  - The suite-local `Harness.protos` mirrors the official comparator
+    semantics; Protos-owned TOML tests keep the stronger guarantees.
+  - Fixes two `TOML.parse` defects exposed by the corpus: an empty array or
+    empty inline table followed by other content was rejected, and a dotted
+    key inside an inline table could extend a table given as an inline-table
+    value. Added Protos-owned regressions for both.
+
 ## 0.3.231-SNAPSHOT
 
 - `AUD006-B2` (guillermomolina/protos#453) removes the recursive

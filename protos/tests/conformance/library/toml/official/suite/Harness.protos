@@ -1,0 +1,716 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+//! LIB010-E2-C conformance harness for the retained official toml-test v2.2.0
+//! TOML 1.1 corpus. This is suite-local test support imported by the generated
+//! sibling shards; it is not Standard Library API.
+//!
+//! Expected values arrive as the official tagged-JSON text and are read with
+//! `std:json/JSON`. Comparison mirrors the official toml-test comparator
+//! (`json.go` at the pinned commit) on the Protos semantic tree:
+//!
+//! - an object with exactly the two names `type` and `value` is a tagged
+//!   atomic value; every other object is a table;
+//! - strings and integers compare exactly; booleans compare by value;
+//! - floats compare as binary64 values, and any `nan` spelling matches NaN;
+//! - temporal values compare as the instant/value the official runner obtains
+//!   with Go `time.Parse` + `time.Equal`: nanosecond precision, and offset
+//!   date-times are normalized to UTC before comparison.
+//!
+//! These equivalences are deliberately weaker than the Protos-owned TOML tests
+//! (exact fraction digits, D104 second 60, D109 Float spelling, unbounded
+//! Integer); those tests stay authoritative for the stronger guarantees.
+//!
+//! The encoder oracle re-parses `TOML.encode` output with `TOML.parse`, which is
+//! not independent of the decoder under test the way the official runner's
+//! blessed decoder is. `TOML.parse` is itself held to the official decoder
+//! cases, so the corpus still constrains both directions.
+//!
+//! Tagged scalar spellings are interpreted here, not through `TOML.parse`, so
+//! the decoder is never its own oracle. Decimal float spellings become exact
+//! rationals and use the correctly rounded `Integer / Integer` binary64 rule.
+
+Arrays: import("std:collections/Array")
+Assertions: import("std:test/Assertions")
+JSON: import("std:json/JSON")
+TOML: import("std:toml/TOML")
+
+fail: () => {
+    Error().signal()
+}
+
+power10: (exponent) => {
+    result: 1
+    index: 0
+    (() => index < exponent).whileTrue(() => {
+        result = result * 10
+        index = index + 1
+    })
+    result
+}
+
+isDigit: (octet) => {
+    (octet >= 48) && (octet <= 57)
+}
+
+/// Answers the exact Integer spelled by `count` ASCII digits at `start`.
+digitsAt: (octets, start, count) => {
+    ((start + count) > octets.size()).ifTrue(() => {
+        fail()
+    })
+
+    result: 0
+    index: start
+    (() => index < (start + count)).whileTrue(() => {
+        octet: octets[index]
+        isDigit(octet).ifFalse(() => {
+            fail()
+        })
+        result = result * 10 + (octet - 48)
+        index = index + 1
+    })
+    result
+}
+
+expectOctet: (octets, position, expected) => {
+    (position < octets.size()).ifFalse(() => {
+        fail()
+    })
+    (octets[position] == expected).ifFalse(() => {
+        fail()
+    })
+}
+
+/// Answers the sign of an optional leading `+`/`-` and the first position after it.
+leadingSign: (octets) => {
+    negative: false
+    start: 0
+
+    (octets.size() > 0).ifTrue(() => {
+        first: octets[0]
+        (first == 45).ifTrue(() => {
+            negative = true
+            start = 1
+        })
+        (first == 43).ifTrue(() => {
+            start = 1
+        })
+    })
+
+    {
+        negative: negative
+        start: start
+    }
+}
+
+/// Answers the Integer of an official tagged `integer` spelling.
+officialInteger: (text) => {
+    octets: Encoding.UTF8.encode(text)
+    sign: leadingSign(octets)
+    count: octets.size() - sign.start
+
+    (count > 0).ifFalse(() => {
+        fail()
+    })
+
+    magnitude: digitsAt(octets, sign.start, count)
+    result: magnitude
+    sign.negative.ifTrue(() => {
+        result = 0 - magnitude
+    })
+    result
+}
+
+/// Answers the correctly rounded binary64 Float of a decimal spelling with an
+/// optional sign, fraction, and exponent.
+decimalFloat: (text) => {
+    octets: Encoding.UTF8.encode(text)
+    length: octets.size()
+    sign: leadingSign(octets)
+    position: sign.start
+    coefficient: 0
+    digitCount: 0
+    fractionDigits: 0
+    inFraction: false
+    scanning: true
+
+    (() => scanning).whileTrue(() => {
+        scanning = false
+        (position < length).ifTrue(() => {
+            octet: octets[position]
+            isDigit(octet).ifTrue(() => {
+                coefficient = coefficient * 10 + (octet - 48)
+                digitCount = digitCount + 1
+                inFraction.ifTrue(() => {
+                    fractionDigits = fractionDigits + 1
+                })
+                position = position + 1
+                scanning = true
+            })
+            (octet == 46).ifTrue(() => {
+                inFraction.ifTrue(() => {
+                    fail()
+                })
+                inFraction = true
+                position = position + 1
+                scanning = true
+            })
+        })
+    })
+
+    (digitCount > 0).ifFalse(() => {
+        fail()
+    })
+
+    exponent: 0
+    (position < length).ifTrue(() => {
+        marker: octets[position]
+        ((marker == 101) || (marker == 69)).ifFalse(() => {
+            fail()
+        })
+        position = position + 1
+
+        exponentNegative: false
+        (position < length).ifTrue(() => {
+            exponentSign: octets[position]
+            (exponentSign == 45).ifTrue(() => {
+                exponentNegative = true
+                position = position + 1
+            })
+            (exponentSign == 43).ifTrue(() => {
+                position = position + 1
+            })
+        })
+
+        (position < length).ifFalse(() => {
+            fail()
+        })
+        exponent = digitsAt(octets, position, length - position)
+        exponentNegative.ifTrue(() => {
+            exponent = 0 - exponent
+        })
+    })
+
+    scale: exponent - fractionDigits
+    magnitude: null
+    (scale >= 0).ifTrue(() => {
+        magnitude = Float(coefficient * power10(scale))
+    })
+    (scale < 0).ifTrue(() => {
+        magnitude = coefficient / power10(0 - scale)
+    })
+
+    result: magnitude
+    sign.negative.ifTrue(() => {
+        result = -magnitude
+    })
+    result
+}
+
+/// Answers the Float of an official tagged `float` spelling.
+officialFloat: (text) => {
+    positiveInfinity: 1.0 / 0.0
+    result: null
+    handled: false
+
+    ((text == "nan") || (text == "+nan") || (text == "-nan")).ifTrue(() => {
+        result = 0.0 / 0.0
+        handled = true
+    })
+    ((text == "inf") || (text == "+inf")).ifTrue(() => {
+        result = positiveInfinity
+        handled = true
+    })
+    (text == "-inf").ifTrue(() => {
+        result = -positiveInfinity
+        handled = true
+    })
+    handled.ifFalse(() => {
+        result = decimalFloat(text)
+    })
+    result
+}
+
+isDateTimeSeparator: (octet) => {
+    // Go: strings.NewReplacer(" ", "T", "t", "T") before time.Parse.
+    (octet == 84) || (octet == 116) || (octet == 32)
+}
+
+/// Answers the date fields of `YYYY-MM-DD` at `start`.
+officialDate: (octets, start) => {
+    year: digitsAt(octets, start, 4)
+    expectOctet(octets, start + 4, 45)
+    month: digitsAt(octets, start + 5, 2)
+    expectOctet(octets, start + 7, 45)
+    day: digitsAt(octets, start + 8, 2)
+
+    {
+        year: year
+        month: month
+        day: day
+    }
+}
+
+/// Answers the time fields of `HH:MM:SS[.fraction]` at `start` and the position
+/// after the time.
+officialTime: (octets, start) => {
+    length: octets.size()
+    hour: digitsAt(octets, start, 2)
+    expectOctet(octets, start + 2, 58)
+    minute: digitsAt(octets, start + 3, 2)
+    expectOctet(octets, start + 5, 58)
+    second: digitsAt(octets, start + 6, 2)
+    position: start + 8
+    coefficient: 0
+    digits: 0
+
+    (position < length).ifTrue(() => {
+        (octets[position] == 46).ifTrue(() => {
+            position = position + 1
+            scanning: true
+            (() => scanning).whileTrue(() => {
+                scanning = false
+                (position < length).ifTrue(() => {
+                    octet: octets[position]
+                    isDigit(octet).ifTrue(() => {
+                        coefficient = coefficient * 10 + (octet - 48)
+                        digits = digits + 1
+                        position = position + 1
+                        scanning = true
+                    })
+                })
+            })
+            (digits > 0).ifFalse(() => {
+                fail()
+            })
+        })
+    })
+
+    {
+        hour: hour
+        minute: minute
+        second: second
+        coefficient: coefficient
+        digits: digits
+        end: position
+    }
+}
+
+/// Answers the offset minutes of `Z` or `+HH:MM`/`-HH:MM` occupying the rest of
+/// `octets` from `start`.
+officialOffset: (octets, start) => {
+    length: octets.size()
+    (start < length).ifFalse(() => {
+        fail()
+    })
+
+    marker: octets[start]
+    result: null
+    ((marker == 90) || (marker == 122)).ifTrue(() => {
+        (length == (start + 1)).ifFalse(() => {
+            fail()
+        })
+        result = 0
+    })
+    ((marker == 43) || (marker == 45)).ifTrue(() => {
+        (length == (start + 6)).ifFalse(() => {
+            fail()
+        })
+        hours: digitsAt(octets, start + 1, 2)
+        expectOctet(octets, start + 3, 58)
+        minutes: digitsAt(octets, start + 4, 2)
+        result = hours * 60 + minutes
+        (marker == 45).ifTrue(() => {
+            result = 0 - result
+        })
+    })
+    (result === null).ifTrue(() => {
+        fail()
+    })
+    result
+}
+
+/// Answers the temporal fields of an official tagged temporal spelling. Absent
+/// fields are zero, so every kind exposes the same field set.
+officialTemporal: (tag, text) => {
+    octets: Encoding.UTF8.encode(text)
+    length: octets.size()
+    date: {
+        year: 0
+        month: 0
+        day: 0
+    }
+    time: {
+        hour: 0
+        minute: 0
+        second: 0
+        coefficient: 0
+        digits: 0
+        end: 0
+    }
+    offsetMinutes: 0
+    handled: false
+
+    (tag == "date-local").ifTrue(() => {
+        date = officialDate(octets, 0)
+        (length == 10).ifFalse(() => {
+            fail()
+        })
+        handled = true
+    })
+    (tag == "time-local").ifTrue(() => {
+        time = officialTime(octets, 0)
+        (time.end == length).ifFalse(() => {
+            fail()
+        })
+        handled = true
+    })
+    ((tag == "datetime-local") || (tag == "datetime")).ifTrue(() => {
+        date = officialDate(octets, 0)
+        (length > 10).ifFalse(() => {
+            fail()
+        })
+        isDateTimeSeparator(octets[10]).ifFalse(() => {
+            fail()
+        })
+        time = officialTime(octets, 11)
+        (tag == "datetime").ifTrue(() => {
+            offsetMinutes = officialOffset(octets, time.end)
+        })
+        (tag == "datetime-local").ifTrue(() => {
+            (time.end == length).ifFalse(() => {
+                fail()
+            })
+        })
+        handled = true
+    })
+    handled.ifFalse(() => {
+        fail()
+    })
+
+    {
+        year: date.year
+        month: date.month
+        day: date.day
+        hour: time.hour
+        minute: time.minute
+        second: time.second
+        coefficient: time.coefficient
+        digits: time.digits
+        offsetMinutes: offsetMinutes
+    }
+}
+
+/// Answers a fraction truncated to nanoseconds, the precision of Go `time.Time`.
+nanoseconds: (coefficient, digits) => {
+    result: null
+    (digits <= 9).ifTrue(() => {
+        result = coefficient * power10(9 - digits)
+    })
+    (digits > 9).ifTrue(() => {
+        result = coefficient.div(power10(digits - 9))
+    })
+    result
+}
+
+/// Answers the Julian Day Number of a proleptic Gregorian date with year >= 1.
+dayNumber: (year, month, day) => {
+    shift: (14 - month).div(12)
+    shiftedYear: year + 4800 - shift
+    shiftedMonth: month + 12 * shift - 3
+
+    day +
+        (153 * shiftedMonth + 2).div(5) +
+        365 * shiftedYear +
+        shiftedYear.div(4) -
+        shiftedYear.div(100) +
+        shiftedYear.div(400) -
+        32045
+}
+
+/// Answers whole seconds since a fixed epoch at UTC, as Go `time.Equal` compares.
+utcSeconds: (fields) => {
+    dayNumber(fields.year, fields.month, fields.day) * 86400 +
+        fields.hour * 3600 +
+        fields.minute * 60 +
+        fields.second -
+        fields.offsetMinutes * 60
+}
+
+requireSameDate: (actual, expected) => {
+    Assertions.require(actual.year == expected.year)
+    Assertions.require(actual.month == expected.month)
+    Assertions.require(actual.day == expected.day)
+}
+
+requireSameTime: (actual, expected) => {
+    Assertions.require(actual.hour == expected.hour)
+    Assertions.require(actual.minute == expected.minute)
+    Assertions.require(actual.second == expected.second)
+    Assertions.require(
+        nanoseconds(actual.fraction.coefficient, actual.fraction.digits) ==
+            nanoseconds(expected.coefficient, expected.digits)
+    )
+}
+
+/// Answers the Protos TOML kind named by an official tag.
+kindOfTag: (tag) => {
+    result: null
+    (tag == "string").ifTrue(() => { result = "string" })
+    (tag == "integer").ifTrue(() => { result = "integer" })
+    (tag == "float").ifTrue(() => { result = "float" })
+    (tag == "bool").ifTrue(() => { result = "boolean" })
+    (tag == "datetime").ifTrue(() => { result = "offsetDateTime" })
+    (tag == "datetime-local").ifTrue(() => { result = "localDateTime" })
+    (tag == "date-local").ifTrue(() => { result = "localDate" })
+    (tag == "time-local").ifTrue(() => { result = "localTime" })
+    (result === null).ifTrue(() => {
+        fail()
+    })
+    result
+}
+
+/// Answers whether a JSON node is an official tagged atomic value: an object with
+/// exactly the names `type` and `value`, both of which must then be strings.
+isTagged: (expected) => {
+    result: false
+    (expected.kind == "object").ifTrue(() => {
+        members: expected.value
+        (members.size() == 2).ifTrue(() => {
+            (members.containsKey("type") && members.containsKey("value")).ifTrue(() => {
+                (members["type"].kind == "string").ifFalse(() => {
+                    fail()
+                })
+                (members["value"].kind == "string").ifFalse(() => {
+                    fail()
+                })
+                result = true
+            })
+        })
+    })
+    result
+}
+
+requireScalar: (node, expected) => {
+    tag: expected.value["type"].value
+    text: expected.value["value"].value
+    kind: kindOfTag(tag)
+
+    Assertions.require(node.kind == kind)
+
+    (kind == "string").ifTrue(() => {
+        Assertions.require(node.value == text)
+    })
+    (kind == "integer").ifTrue(() => {
+        Assertions.require(node.value == officialInteger(text))
+    })
+    (kind == "float").ifTrue(() => {
+        expectedValue: officialFloat(text)
+        (expectedValue == expectedValue).ifTrue(() => {
+            Assertions.require(node.value == expectedValue)
+        })
+        (expectedValue == expectedValue).ifFalse(() => {
+            Assertions.require(node.value != node.value)
+        })
+    })
+    (kind == "boolean").ifTrue(() => {
+        Assertions.require(node.value === (text == "true"))
+    })
+    (kind == "localDate").ifTrue(() => {
+        requireSameDate(node.value, officialTemporal(tag, text))
+    })
+    (kind == "localTime").ifTrue(() => {
+        requireSameTime(node.value, officialTemporal(tag, text))
+    })
+    (kind == "localDateTime").ifTrue(() => {
+        expectedValue: officialTemporal(tag, text)
+        requireSameDate(node.value, expectedValue)
+        requireSameTime(node.value, expectedValue)
+    })
+    (kind == "offsetDateTime").ifTrue(() => {
+        actual: node.value
+        expectedValue: officialTemporal(tag, text)
+        Assertions.require(utcSeconds(actual) == utcSeconds(expectedValue))
+        Assertions.require(
+            nanoseconds(actual.fraction.coefficient, actual.fraction.digits) ==
+                nanoseconds(expectedValue.coefficient, expectedValue.digits)
+        )
+    })
+}
+
+/// Requires the Protos TOML node `node` to be equivalent to the official tagged
+/// JSON node `expected`.
+requireEquivalent: (node, expected) => {
+    handled: false
+
+    isTagged(expected).ifTrue(() => {
+        requireScalar(node, expected)
+        handled = true
+    })
+    (handled === false).ifTrue(() => {
+        (expected.kind == "object").ifTrue(() => {
+            Assertions.require(node.kind == "table")
+            members: expected.value
+            Assertions.require(node.value.size() == members.size())
+            members.each((name, child) => {
+                Assertions.require(node.value.containsKey(name))
+                requireEquivalent(node.value[name], child)
+            })
+            handled = true
+        })
+    })
+    (handled === false).ifTrue(() => {
+        (expected.kind == "array").ifTrue(() => {
+            Assertions.require(node.kind == "array")
+            items: expected.value
+            Assertions.require(node.value.size() == items.size())
+            index: 0
+            (() => index < items.size()).whileTrue(() => {
+                requireEquivalent(node.value[index], items[index])
+                index = index + 1
+            })
+            handled = true
+        })
+    })
+    handled.ifFalse(() => {
+        fail()
+    })
+}
+
+temporalNode: (kind, tag, text) => {
+    fields: officialTemporal(tag, text)
+    result: null
+
+    (kind == "localDate").ifTrue(() => {
+        result = TOML.localDate(fields.year, fields.month, fields.day)
+    })
+    (kind == "localTime").ifTrue(() => {
+        result = TOML.localTime(
+            fields.hour,
+            fields.minute,
+            fields.second,
+            fields.coefficient,
+            fields.digits
+        )
+    })
+    (kind == "localDateTime").ifTrue(() => {
+        result = TOML.localDateTime(
+            fields.year,
+            fields.month,
+            fields.day,
+            fields.hour,
+            fields.minute,
+            fields.second,
+            fields.coefficient,
+            fields.digits
+        )
+    })
+    (kind == "offsetDateTime").ifTrue(() => {
+        result = TOML.offsetDateTime(
+            fields.year,
+            fields.month,
+            fields.day,
+            fields.hour,
+            fields.minute,
+            fields.second,
+            fields.coefficient,
+            fields.digits,
+            fields.offsetMinutes
+        )
+    })
+    result
+}
+
+/// Answers the Protos TOML semantic node for an official tagged JSON node, built
+/// only through the public `std:toml/TOML` constructors.
+nodeFromOfficial: (expected) => {
+    result: null
+    handled: false
+
+    isTagged(expected).ifTrue(() => {
+        tag: expected.value["type"].value
+        text: expected.value["value"].value
+        kind: kindOfTag(tag)
+
+        (kind == "string").ifTrue(() => {
+            result = TOML.string(text)
+        })
+        (kind == "integer").ifTrue(() => {
+            result = TOML.integer(officialInteger(text))
+        })
+        (kind == "float").ifTrue(() => {
+            result = TOML.float(officialFloat(text))
+        })
+        (kind == "boolean").ifTrue(() => {
+            ((text == "true") || (text == "false")).ifFalse(() => {
+                fail()
+            })
+            result = TOML.boolean(text == "true")
+        })
+        (result === null).ifTrue(() => {
+            result = temporalNode(kind, tag, text)
+        })
+        handled = true
+    })
+    (handled === false).ifTrue(() => {
+        (expected.kind == "object").ifTrue(() => {
+            pairs: Array()
+            expected.value.each((name, child) => {
+                pairs = Array(...pairs, name, nodeFromOfficial(child))
+            })
+            result = TOML.table(...pairs)
+            handled = true
+        })
+    })
+    (handled === false).ifTrue(() => {
+        (expected.kind == "array").ifTrue(() => {
+            nodes: Arrays.map(expected.value, (item) => {
+                nodeFromOfficial(item)
+            })
+            result = TOML.array(...nodes)
+            handled = true
+        })
+    })
+    handled.ifFalse(() => {
+        fail()
+    })
+    result
+}
+
+/// Official valid decoder case: `source` must parse to a tree equivalent to the
+/// tagged JSON text `expectedJson`.
+decodes: (source, expectedJson) => {
+    expected: JSON.parse(expectedJson)
+    Assertions.require(expected.kind == "object")
+    requireEquivalent(TOML.parse(source), expected)
+}
+
+/// Official invalid decoder case: parsing `source` must signal an Error.
+rejects: (source) => {
+    Assertions.signals(Error, () => {
+        TOML.parse(source)
+    })
+}
+
+/// Official encoder case: the tree described by `expectedJson` must encode to
+/// TOML text that parses back to an equivalent tree.
+encodes: (expectedJson) => {
+    expected: JSON.parse(expectedJson)
+    Assertions.require(expected.kind == "object")
+    encoded: TOML.encode(nodeFromOfficial(expected))
+    requireEquivalent(TOML.parse(encoded), expected)
+}
