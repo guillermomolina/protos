@@ -9,14 +9,22 @@ import com.guillermomolina.protos.execution.ProtosModuleResolver;
 import com.guillermomolina.protos.execution.ProtosPolyglotRuntimeHost;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.execution.ProtosWorkspacePackageApplicationExecution.NetworkGrant;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import com.oracle.truffle.api.source.Source;
 import java.io.*;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.junit.jupiter.api.Test;
 
 final class ProtosCliTest {
@@ -472,6 +480,120 @@ final class ProtosCliTest {
             terminate.setAccessible(true);
             terminate.invoke(session);
         }
+    }
+
+    @Test
+    void sessionTerminationDrainsCancelledSuspendedRootTaskBeforeAwaitingProcess()
+            throws Exception {
+        Path core = Path.of("protos", "lib", "core");
+        Method createSession =
+                ProtosCli.class.getDeclaredMethod(
+                        "createSession",
+                        Path.class,
+                        ProtosModuleResolver.class,
+                        List.class,
+                        InputStream.class,
+                        PrintStream.class,
+                        PrintStream.class,
+                        NetworkGrant.class);
+        createSession.setAccessible(true);
+
+        PrintStream discard = new PrintStream(OutputStream.nullOutputStream());
+        Object session =
+                createSession.invoke(
+                        new ProtosCli(),
+                        core,
+                        new ProtosStandardLibraryModuleResolver(core.getParent()),
+                        List.of(),
+                        InputStream.nullInputStream(),
+                        discard,
+                        discard,
+                        NetworkGrant.NONE);
+
+        Method activationAccessor = session.getClass().getDeclaredMethod("activation");
+        activationAccessor.setAccessible(true);
+        ProtosActivation activation =
+                (ProtosActivation) activationAccessor.invoke(session);
+
+        Method processAccessor = session.getClass().getDeclaredMethod("process");
+        processAccessor.setAccessible(true);
+        ProtosProcessRuntime process =
+                (ProtosProcessRuntime) processAccessor.invoke(session);
+
+        ProtosTask.WaitDependency pending = new ProtosTask.WaitDependency() {};
+        ProtosTask suspended =
+                activation.executionDomain()
+                        .createTask(
+                                null,
+                                task -> {
+                                    if (task.cancellationRequested()) {
+                                        if (!task.observeCancellation()) {
+                                            throw new IllegalStateException(
+                                                    "pending cancellation was not observable");
+                                        }
+                                        return;
+                                    }
+                                    task.suspend(pending);
+                                });
+        activation.executionDomain().dispatchUntilIdle();
+        assertEquals(ProtosTask.State.SUSPENDED, suspended.state());
+
+        Method terminate = session.getClass().getDeclaredMethod("terminate");
+        terminate.setAccessible(true);
+
+        ExecutorService executor =
+                Executors.newSingleThreadExecutor(
+                        command -> {
+                            Thread thread =
+                                    new Thread(
+                                            command,
+                                            "protos-cli-session-termination-regression");
+                            thread.setDaemon(true);
+                            return thread;
+                        });
+
+        boolean externalDrainWasRequired = false;
+        Future<?> termination =
+                executor.submit(
+                        () -> {
+                            try {
+                                terminate.invoke(session);
+                            } catch (ReflectiveOperationException failure) {
+                                Throwable cause =
+                                        failure instanceof java.lang.reflect.InvocationTargetException invocation
+                                                ? invocation.getCause()
+                                                : failure;
+                                if (cause instanceof RuntimeException runtime) {
+                                    throw runtime;
+                                }
+                                if (cause instanceof Error error) {
+                                    throw error;
+                                }
+                                throw new RuntimeException(cause);
+                            }
+                        });
+
+        try {
+            try {
+                termination.get(2, TimeUnit.SECONDS);
+            } catch (TimeoutException timeout) {
+                externalDrainWasRequired = true;
+
+                // Test-only recovery so a regression fails rather than hanging Surefire.
+                activation.executionDomain().dispatchUntilIdle();
+                termination.get(5, TimeUnit.SECONDS);
+            }
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertFalse(
+                externalDrainWasRequired,
+                "Session.terminate must drain cancellation work before awaiting Process termination");
+        assertEquals(ProtosTask.State.CANCELLED, suspended.state());
+        assertEquals(
+                ProtosProcessRuntime.LifecycleState.TERMINATED,
+                process.lifecycleState());
     }
 
     private record R(int c, String o, String e) {}

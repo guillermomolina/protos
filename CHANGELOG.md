@@ -7,6 +7,21 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.244-SNAPSHOT
+
+- `TEST009-W` (guillermomolina/protos#795) fixes CLI session teardown when
+  Process termination leaves cooperative cancellation work queued in the RootActor
+  execution domain.
+  - `Session.terminate()` now enters the owning Polyglot Process Context, requests
+    Process termination, and drains the RootActor execution domain before waiting
+    for semantic Process terminality.
+  - Process terminality and deferred Polyglot Context disposition still complete
+    before the shared RuntimeHost is closed.
+  - A regression covers a suspended Task whose cancellation must be drained by
+    session termination itself rather than by an external caller.
+  - The CLI routing architecture guard retains the required teardown ordering.
+  - There is no specification change.
+
 ## 0.3.243-SNAPSHOT
 
 - `LIB013-B` (guillermomolina/protos#430) adds temporal amounts and calendar

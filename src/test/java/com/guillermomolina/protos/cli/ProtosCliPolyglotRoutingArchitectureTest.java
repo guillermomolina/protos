@@ -65,18 +65,21 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertFalse(source.contains("processContext.executeFile("));
         assertTrue(source.contains("processContext.executeModuleSource("));
 
-        // TEST009-W: Session teardown must wait for semantic Process termination and
-        // deferred Polyglot Context disposition before closing their shared RuntimeHost.
+        // TEST009-W: termination cutover and cooperative cancellation drainage happen
+        // while the Process Context is entered. Context close is therefore deferred until
+        // this carrier leaves, after which Process/Context terminality precedes host close.
         assertTrue(
                 source.matches(
                         "(?s).*void terminate\\(\\) \\{"
-                                + "\\s*process\\.requestTerminationForRuntime\\(\\);"
-                                + "\\s*process\\.awaitTerminationForRuntime\\(\\);"
-                                + "\\s*if \\(processContext != null\\) \\{"
-                                + "\\s*processContext\\.awaitTerminalDispositionForRuntime\\(\\);"
-                                + "\\s*\\}"
-                                + "\\s*if \\(runtimeHost != null\\) \\{"
-                                + "\\s*runtimeHost\\.close\\(\\);"
+                                + ".*if \\(processContext != null\\)"
+                                + ".*processContext\\.callForRuntime\\("
+                                + ".*process\\.requestTerminationForRuntime\\(\\);"
+                                + ".*process\\.rootActorForRuntime\\(\\)"
+                                + "\\s*\\.executionDomain\\(\\)"
+                                + "\\s*\\.dispatchUntilIdle\\(\\);"
+                                + ".*process\\.awaitTerminationForRuntime\\(\\);"
+                                + ".*processContext\\.awaitTerminalDispositionForRuntime\\(\\);"
+                                + ".*runtimeHost\\.close\\(\\);"
                                 + ".*"));
 
         assertFalse(source.contains("private static Source sourceFromPath("));

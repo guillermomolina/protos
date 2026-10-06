@@ -1693,7 +1693,18 @@ public final class ProtosCli {
         }
 
         void terminate() {
-            process.requestTerminationForRuntime();
+            if (processContext != null) {
+                processContext.callForRuntime(
+                        () -> {
+                            process.requestTerminationForRuntime();
+                            process.rootActorForRuntime()
+                                    .executionDomain()
+                                    .dispatchUntilIdle();
+                            return null;
+                        });
+            } else {
+                process.requestTerminationForRuntime();
+            }
             process.awaitTerminationForRuntime();
             if (processContext != null) {
                 processContext.awaitTerminalDispositionForRuntime();
