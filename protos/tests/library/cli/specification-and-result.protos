@@ -21,25 +21,7 @@ tests: [
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: ""
                     long: "jobs"
@@ -51,9 +33,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "jobs"
                     long: "1jobs"
@@ -65,9 +47,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "jobs"
                     long: "jobs"
@@ -79,9 +61,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "jobs"
                     long: null
@@ -93,9 +75,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "jobs"
                     long: "jobs"
@@ -107,9 +89,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "jobs"
                     long: "jobs"
@@ -121,9 +103,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.command({
                     name: "tool"
                     help: null
@@ -154,9 +136,9 @@ tests: [
                     positionals: Array()
                     subcommands: Array()
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.command({
                     name: "tool"
                     help: null
@@ -187,9 +169,9 @@ tests: [
                     positionals: Array()
                     subcommands: Array()
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.command({
                     name: "tool"
                     help: null
@@ -212,9 +194,9 @@ tests: [
                     )
                     subcommands: Array()
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.command({
                     name: "tool"
                     help: null
@@ -237,7 +219,7 @@ tests: [
                         }
                     )
                 })
-            }))
+            })
 
             true
         }
@@ -246,24 +228,6 @@ tests: [
     Test("specification snapshot", () => {
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
 
             rootOption: {
                 key: "jobs"
@@ -366,32 +330,32 @@ tests: [
                 subcommands: Array()
             }
 
-            require(spec.name == "tool")
-            require(spec.options.size() == 1)
-            require(spec.options[0].key == "jobs")
-            require(spec.options[0].long == "jobs")
-            require(spec.positionals.size() == 1)
-            require(spec.positionals[0].key == "target")
-            require(spec.subcommands.size() == 1)
-            require(spec.subcommands[0].name == "run")
-            require(spec.subcommands[0].options.size() == 1)
-            require(spec.subcommands[0].options[0].key == "force")
+            Assertions.require(spec.name == "tool")
+            Assertions.require(spec.options.size() == 1)
+            Assertions.require(spec.options[0].key == "jobs")
+            Assertions.require(spec.options[0].long == "jobs")
+            Assertions.require(spec.positionals.size() == 1)
+            Assertions.require(spec.positionals[0].key == "target")
+            Assertions.require(spec.subcommands.size() == 1)
+            Assertions.require(spec.subcommands[0].name == "run")
+            Assertions.require(spec.subcommands[0].options.size() == 1)
+            Assertions.require(spec.subcommands[0].options[0].key == "force")
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 spec.name = "changed"
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 spec.options[0] = spec.options[0]
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 spec.options[0].key = "changed"
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 spec.subcommands[0].name = "changed"
-            }))
+            })
 
             true
         }
@@ -400,12 +364,6 @@ tests: [
     Test("specification valid", () => {
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
 
             optionDescriptor: {
                 key: "jobs"
@@ -456,46 +414,46 @@ tests: [
                 subcommands: Array(childDescriptor)
             })
 
-            require(first !== second)
-            require(first !== optionDescriptor)
-            require(first.kind == "option")
-            require(first.key == "jobs")
-            require(first.long == "jobs")
-            require(first.short == "j")
-            require(first.minValues == 1)
-            require(first.maxValues == 1)
-            require(first.minOccurrences == 0)
-            require(first.maxOccurrences == 1)
-            require(first.valueName == "COUNT")
-            require(first.help == "Number of workers")
+            Assertions.require(first !== second)
+            Assertions.require(first !== optionDescriptor)
+            Assertions.require(first.kind == "option")
+            Assertions.require(first.key == "jobs")
+            Assertions.require(first.long == "jobs")
+            Assertions.require(first.short == "j")
+            Assertions.require(first.minValues == 1)
+            Assertions.require(first.maxValues == 1)
+            Assertions.require(first.minOccurrences == 0)
+            Assertions.require(first.maxOccurrences == 1)
+            Assertions.require(first.valueName == "COUNT")
+            Assertions.require(first.help == "Number of workers")
 
-            require(positional !== positionalDescriptor)
-            require(positional.kind == "positional")
-            require(positional.key == "files")
-            require(positional.minOccurrences == 1)
-            require(positional.maxOccurrences === null)
-            require(positional.valueName == "FILE")
-            require(positional.help == "Input files")
+            Assertions.require(positional !== positionalDescriptor)
+            Assertions.require(positional.kind == "positional")
+            Assertions.require(positional.key == "files")
+            Assertions.require(positional.minOccurrences == 1)
+            Assertions.require(positional.maxOccurrences === null)
+            Assertions.require(positional.valueName == "FILE")
+            Assertions.require(positional.help == "Input files")
 
-            require(command.kind == "command")
-            require(command.name == "tool")
-            require(command.options.size() == 1)
-            require(command.options[0] !== optionDescriptor)
-            require(command.options[0].key == "jobs")
-            require(command.positionals.size() == 1)
-            require(command.positionals[0] !== positionalDescriptor)
-            require(command.positionals[0].key == "files")
-            require(command.subcommands.size() == 1)
-            require(command.subcommands[0] !== childDescriptor)
-            require(command.subcommands[0].name == "run")
-            require(command.subcommands[0].options.size() == 1)
-            require(command.subcommands[0].options[0].key == "force")
+            Assertions.require(command.kind == "command")
+            Assertions.require(command.name == "tool")
+            Assertions.require(command.options.size() == 1)
+            Assertions.require(command.options[0] !== optionDescriptor)
+            Assertions.require(command.options[0].key == "jobs")
+            Assertions.require(command.positionals.size() == 1)
+            Assertions.require(command.positionals[0] !== positionalDescriptor)
+            Assertions.require(command.positionals[0].key == "files")
+            Assertions.require(command.subcommands.size() == 1)
+            Assertions.require(command.subcommands[0] !== childDescriptor)
+            Assertions.require(command.subcommands[0].name == "run")
+            Assertions.require(command.subcommands[0].options.size() == 1)
+            Assertions.require(command.subcommands[0].options[0].key == "force")
 
-            require(CommandLine.hasSlot("option"))
-            require(CommandLine.hasSlot("positional"))
-            require(CommandLine.hasSlot("command"))
-            require(CommandLine.hasSlot("parse"))
-            require(CommandLine.hasSlot("renderHelp"))
+            Assertions.require(CommandLine.hasSlot("option"))
+            Assertions.require(CommandLine.hasSlot("positional"))
+            Assertions.require(CommandLine.hasSlot("command"))
+            Assertions.require(CommandLine.hasSlot("parse"))
+            Assertions.require(CommandLine.hasSlot("renderHelp"))
 
             true
         }
@@ -505,28 +463,10 @@ tests: [
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
-            require(CommandLine.hasSlot("parseResult") === false)
-            require(CommandLine.hasSlot("commandResult") === false)
-            require(CommandLine.hasSlot("optionOccurrence") === false)
-            require(CommandLine.hasSlot("positionalOccurrence") === false)
+            Assertions.require(CommandLine.hasSlot("parseResult") === false)
+            Assertions.require(CommandLine.hasSlot("commandResult") === false)
+            Assertions.require(CommandLine.hasSlot("optionOccurrence") === false)
+            Assertions.require(CommandLine.hasSlot("positionalOccurrence") === false)
 
             argumentsInput: Array(
                 "--verbose",
@@ -614,36 +554,36 @@ tests: [
 
             argumentsInput[0] = "changed-after-snapshot"
 
-            require(parsed.kind == "parseResult")
-            require(parsed.arguments[0] == "--verbose")
-            require(parsed.arguments[1] == "package")
-            require(parsed.arguments[2] == "install")
-            require(parsed.arguments[3] == "--")
-            require(parsed.arguments[4] == "-literal")
+            Assertions.require(parsed.kind == "parseResult")
+            Assertions.require(parsed.arguments[0] == "--verbose")
+            Assertions.require(parsed.arguments[1] == "package")
+            Assertions.require(parsed.arguments[2] == "install")
+            Assertions.require(parsed.arguments[3] == "--")
+            Assertions.require(parsed.arguments[4] == "-literal")
 
-            require(parsed.command.kind == "commandResult")
-            require(parsed.command.name == "tool")
-            require(parsed.command.tokenIndex === null)
-            require(parsed.command.subcommand.name == "package")
-            require(parsed.command.subcommand.tokenIndex == 1)
-            require(parsed.command.subcommand.subcommand.name == "install")
-            require(parsed.command.subcommand.subcommand.tokenIndex == 2)
-            require(parsed.command.subcommand.subcommand.endOfOptionsIndex == 3)
-            require(parsed.command.subcommand.subcommand.positionals[0].key == "files")
-            require(parsed.command.subcommand.subcommand.positionals[0].value == "-literal")
-            require(parsed.command.subcommand.subcommand.positionals[0].tokenIndex == 4)
+            Assertions.require(parsed.command.kind == "commandResult")
+            Assertions.require(parsed.command.name == "tool")
+            Assertions.require(parsed.command.tokenIndex === null)
+            Assertions.require(parsed.command.subcommand.name == "package")
+            Assertions.require(parsed.command.subcommand.tokenIndex == 1)
+            Assertions.require(parsed.command.subcommand.subcommand.name == "install")
+            Assertions.require(parsed.command.subcommand.subcommand.tokenIndex == 2)
+            Assertions.require(parsed.command.subcommand.subcommand.endOfOptionsIndex == 3)
+            Assertions.require(parsed.command.subcommand.subcommand.positionals[0].key == "files")
+            Assertions.require(parsed.command.subcommand.subcommand.positionals[0].value == "-literal")
+            Assertions.require(parsed.command.subcommand.subcommand.positionals[0].tokenIndex == 4)
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 parsed.arguments[0] = "changed"
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 parsed.command.name = "changed"
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 parsed.command.options[0].key = "changed"
-            }))
+            })
 
             true
         }
@@ -651,12 +591,6 @@ tests: [
     }),
     Test("result provenance", () => {
         tool009LegacyCase: () => {
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             arguments: Array(
                 "--output=value",
                 "-abc",
@@ -755,24 +689,24 @@ tests: [
             }
             parsed.freeze()
 
-            require(parsed.command.options[0].spelling == "--output")
-            require(parsed.command.options[0].tokenIndex == 0)
-            require(parsed.command.options[0].value == "value")
-            require(parsed.command.options[0].valueTokenIndex == 0)
+            Assertions.require(parsed.command.options[0].spelling == "--output")
+            Assertions.require(parsed.command.options[0].tokenIndex == 0)
+            Assertions.require(parsed.command.options[0].value == "value")
+            Assertions.require(parsed.command.options[0].valueTokenIndex == 0)
 
-            require(parsed.command.options[1].spelling == "-a")
-            require(parsed.command.options[1].tokenIndex == 1)
-            require(parsed.command.options[2].spelling == "-b")
-            require(parsed.command.options[2].tokenIndex == 1)
-            require(parsed.command.options[3].spelling == "-c")
-            require(parsed.command.options[3].tokenIndex == 1)
+            Assertions.require(parsed.command.options[1].spelling == "-a")
+            Assertions.require(parsed.command.options[1].tokenIndex == 1)
+            Assertions.require(parsed.command.options[2].spelling == "-b")
+            Assertions.require(parsed.command.options[2].tokenIndex == 1)
+            Assertions.require(parsed.command.options[3].spelling == "-c")
+            Assertions.require(parsed.command.options[3].tokenIndex == 1)
 
-            require(parsed.arguments[3] == "--")
-            require(parsed.arguments[4] == "--")
-            require(parsed.command.options[4].value == "--")
-            require(parsed.command.options[4].valueTokenIndex == 3)
-            require(parsed.command.endOfOptionsIndex == 4)
-            require(parsed.command.positionals[0].tokenIndex == 5)
+            Assertions.require(parsed.arguments[3] == "--")
+            Assertions.require(parsed.arguments[4] == "--")
+            Assertions.require(parsed.command.options[4].value == "--")
+            Assertions.require(parsed.command.options[4].valueTokenIndex == 3)
+            Assertions.require(parsed.command.endOfOptionsIndex == 4)
+            Assertions.require(parsed.command.positionals[0].tokenIndex == 5)
 
             true
         }
@@ -781,24 +715,6 @@ tests: [
     Test("valuename d119", () => {
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
 
             flag: CommandLine.option({
                 key: "verbose"
@@ -832,11 +748,11 @@ tests: [
                 help: null
             })
 
-            require(flag.valueName === null)
-            require(valued.valueName == "file-path")
-            require(positional.valueName == "target-name")
+            Assertions.require(flag.valueName === null)
+            Assertions.require(valued.valueName == "file-path")
+            Assertions.require(positional.valueName == "target-name")
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "broken"
                     long: "broken"
@@ -848,9 +764,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "broken"
                     long: "broken"
@@ -862,9 +778,9 @@ tests: [
                     valueName: null
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "broken"
                     long: "broken"
@@ -876,9 +792,9 @@ tests: [
                     valueName: ""
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.positional({
                     key: "broken"
                     minOccurrences: 0
@@ -886,9 +802,9 @@ tests: [
                     valueName: null
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.positional({
                     key: "broken"
                     minOccurrences: 0
@@ -896,7 +812,7 @@ tests: [
                     valueName: ""
                     help: null
                 })
-            }))
+            })
 
             true
         }
@@ -906,25 +822,7 @@ tests: [
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.command({
                     name: "tool"
                     help: null
@@ -955,9 +853,9 @@ tests: [
                     positionals: Array()
                     subcommands: Array()
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.command({
                     name: "tool"
                     help: null
@@ -980,9 +878,9 @@ tests: [
                     )
                     subcommands: Array()
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: 7
                     long: "jobs"
@@ -994,9 +892,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "jobs"
                     long: "mañana"
@@ -1008,9 +906,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "jobs"
                     long: "jobs"
@@ -1022,9 +920,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.command({
                     name: "tool_name"
                     help: null
@@ -1032,9 +930,9 @@ tests: [
                     positionals: Array()
                     subcommands: Array()
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.command({
                     name: "tool"
                     help: null
@@ -1042,9 +940,9 @@ tests: [
                     positionals: Array()
                     subcommands: Array()
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.option({
                     key: "jobs"
                     long: "jobs"
@@ -1056,9 +954,9 @@ tests: [
                     valueName: "VALUE"
                     help: null
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 child: {
                     name: "run"
                     help: null
@@ -1083,9 +981,9 @@ tests: [
                     positionals: Array()
                     subcommands: Array(child)
                 })
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 children: Array(null)
                 root: {
                     name: "tool"
@@ -1096,7 +994,7 @@ tests: [
                 }
                 children[0] = root
                 CommandLine.command(root)
-            }))
+            })
 
             true
         }

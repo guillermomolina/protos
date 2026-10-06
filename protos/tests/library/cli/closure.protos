@@ -21,12 +21,6 @@ tests: [
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             tag: CommandLine.option({
                 key: "tag"
                 long: "tag"
@@ -60,22 +54,22 @@ tests: [
             first: firstFuture.value()
             second: secondFuture.value()
 
-            require(first !== second)
-            require(first.arguments !== second.arguments)
-            require(first.command !== second.command)
-            require(first.command.options !== second.command.options)
-            require(first.command.options[0] !== second.command.options[0])
+            Assertions.require(first !== second)
+            Assertions.require(first.arguments !== second.arguments)
+            Assertions.require(first.command !== second.command)
+            Assertions.require(first.command.options !== second.command.options)
+            Assertions.require(first.command.options[0] !== second.command.options[0])
 
-            require(first.command.options.size() == 1)
-            require(second.command.options.size() == 1)
-            require(first.command.options[0].key == "tag")
-            require(second.command.options[0].key == "tag")
-            require(first.command.options[0].value == "first")
-            require(second.command.options[0].value == "second")
-            require(first.command.options[0].tokenIndex == 0)
-            require(second.command.options[0].tokenIndex == 0)
-            require(first.command.options[0].valueTokenIndex == 1)
-            require(second.command.options[0].valueTokenIndex == 1)
+            Assertions.require(first.command.options.size() == 1)
+            Assertions.require(second.command.options.size() == 1)
+            Assertions.require(first.command.options[0].key == "tag")
+            Assertions.require(second.command.options[0].key == "tag")
+            Assertions.require(first.command.options[0].value == "first")
+            Assertions.require(second.command.options[0].value == "second")
+            Assertions.require(first.command.options[0].tokenIndex == 0)
+            Assertions.require(second.command.options[0].tokenIndex == 0)
+            Assertions.require(first.command.options[0].valueTokenIndex == 1)
+            Assertions.require(second.command.options[0].valueTokenIndex == 1)
 
             // Separate specs may reuse the same command-line spelling with unrelated logical
             // identities. A global parser registry/index would make this observation unsafe.
@@ -130,10 +124,10 @@ tests: [
             left: leftFuture.value()
             right: rightFuture.value()
 
-            require(left.command.options[0].key == "leftKey")
-            require(left.command.options[0].value == "L")
-            require(right.command.options[0].key == "rightKey")
-            require(right.command.options[0].value == "R")
+            Assertions.require(left.command.options[0].key == "leftKey")
+            Assertions.require(left.command.options[0].value == "L")
+            Assertions.require(right.command.options[0].key == "rightKey")
+            Assertions.require(right.command.options[0].value == "R")
 
             // Pure help rendering is likewise invocation-local and deterministic.
             leftHelpFuture: (() => {
@@ -147,13 +141,13 @@ tests: [
             leftHelp: leftHelpFuture.value()
             rightHelp: rightHelpFuture.value()
 
-            require(leftHelp == "Usage: left [OPTIONS]\n\nOptions:\n  --shared LEFT")
-            require(rightHelp == "Usage: right [OPTIONS]\n\nOptions:\n  --shared RIGHT")
+            Assertions.require(leftHelp == "Usage: left [OPTIONS]\n\nOptions:\n  --shared LEFT")
+            Assertions.require(rightHelp == "Usage: right [OPTIONS]\n\nOptions:\n  --shared RIGHT")
 
             // A later parse still sees no retained occurrence or registry state.
             again: CommandLine.parse(sharedSpec, Array("--tag", "again"))
-            require(again.command.options.size() == 1)
-            require(again.command.options[0].value == "again")
+            Assertions.require(again.command.options.size() == 1)
+            Assertions.require(again.command.options[0].value == "again")
 
             true
         }
@@ -162,12 +156,6 @@ tests: [
     Test("closure large spec", () => {
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
 
             opt0: CommandLine.option({
                 key: "key0"
@@ -1721,34 +1709,34 @@ tests: [
 
             parsed: CommandLine.parse(spec, arguments)
 
-            require(parsed.arguments.size() == 256)
-            require(parsed.command.options.size() == 128)
+            Assertions.require(parsed.arguments.size() == 256)
+            Assertions.require(parsed.command.options.size() == 128)
 
-            require(parsed.command.options[0].key == "key0")
-            require(parsed.command.options[0].spelling == "--option0")
-            require(parsed.command.options[0].value == "value0")
-            require(parsed.command.options[0].tokenIndex == 0)
-            require(parsed.command.options[0].valueTokenIndex == 1)
+            Assertions.require(parsed.command.options[0].key == "key0")
+            Assertions.require(parsed.command.options[0].spelling == "--option0")
+            Assertions.require(parsed.command.options[0].value == "value0")
+            Assertions.require(parsed.command.options[0].tokenIndex == 0)
+            Assertions.require(parsed.command.options[0].valueTokenIndex == 1)
 
-            require(parsed.command.options[127].key == "key127")
-            require(parsed.command.options[127].spelling == "--option127")
-            require(parsed.command.options[127].value == "value127")
-            require(parsed.command.options[127].tokenIndex == 254)
-            require(parsed.command.options[127].valueTokenIndex == 255)
+            Assertions.require(parsed.command.options[127].key == "key127")
+            Assertions.require(parsed.command.options[127].spelling == "--option127")
+            Assertions.require(parsed.command.options[127].value == "value127")
+            Assertions.require(parsed.command.options[127].tokenIndex == 254)
+            Assertions.require(parsed.command.options[127].valueTokenIndex == 255)
 
             rendered: CommandLine.renderHelp(spec, Array())
             expected: "Usage: large [OPTIONS]\n\nLarge command\n\nOptions:\n  --option0 VALUE0\n    Large option 0\n  --option1 VALUE1\n    Large option 1\n  --option2 VALUE2\n    Large option 2\n  --option3 VALUE3\n    Large option 3\n  --option4 VALUE4\n    Large option 4\n  --option5 VALUE5\n    Large option 5\n  --option6 VALUE6\n    Large option 6\n  --option7 VALUE7\n    Large option 7\n  --option8 VALUE8\n    Large option 8\n  --option9 VALUE9\n    Large option 9\n  --option10 VALUE10\n    Large option 10\n  --option11 VALUE11\n    Large option 11\n  --option12 VALUE12\n    Large option 12\n  --option13 VALUE13\n    Large option 13\n  --option14 VALUE14\n    Large option 14\n  --option15 VALUE15\n    Large option 15\n  --option16 VALUE16\n    Large option 16\n  --option17 VALUE17\n    Large option 17\n  --option18 VALUE18\n    Large option 18\n  --option19 VALUE19\n    Large option 19\n  --option20 VALUE20\n    Large option 20\n  --option21 VALUE21\n    Large option 21\n  --option22 VALUE22\n    Large option 22\n  --option23 VALUE23\n    Large option 23\n  --option24 VALUE24\n    Large option 24\n  --option25 VALUE25\n    Large option 25\n  --option26 VALUE26\n    Large option 26\n  --option27 VALUE27\n    Large option 27\n  --option28 VALUE28\n    Large option 28\n  --option29 VALUE29\n    Large option 29\n  --option30 VALUE30\n    Large option 30\n  --option31 VALUE31\n    Large option 31\n  --option32 VALUE32\n    Large option 32\n  --option33 VALUE33\n    Large option 33\n  --option34 VALUE34\n    Large option 34\n  --option35 VALUE35\n    Large option 35\n  --option36 VALUE36\n    Large option 36\n  --option37 VALUE37\n    Large option 37\n  --option38 VALUE38\n    Large option 38\n  --option39 VALUE39\n    Large option 39\n  --option40 VALUE40\n    Large option 40\n  --option41 VALUE41\n    Large option 41\n  --option42 VALUE42\n    Large option 42\n  --option43 VALUE43\n    Large option 43\n  --option44 VALUE44\n    Large option 44\n  --option45 VALUE45\n    Large option 45\n  --option46 VALUE46\n    Large option 46\n  --option47 VALUE47\n    Large option 47\n  --option48 VALUE48\n    Large option 48\n  --option49 VALUE49\n    Large option 49\n  --option50 VALUE50\n    Large option 50\n  --option51 VALUE51\n    Large option 51\n  --option52 VALUE52\n    Large option 52\n  --option53 VALUE53\n    Large option 53\n  --option54 VALUE54\n    Large option 54\n  --option55 VALUE55\n    Large option 55\n  --option56 VALUE56\n    Large option 56\n  --option57 VALUE57\n    Large option 57\n  --option58 VALUE58\n    Large option 58\n  --option59 VALUE59\n    Large option 59\n  --option60 VALUE60\n    Large option 60\n  --option61 VALUE61\n    Large option 61\n  --option62 VALUE62\n    Large option 62\n  --option63 VALUE63\n    Large option 63\n  --option64 VALUE64\n    Large option 64\n  --option65 VALUE65\n    Large option 65\n  --option66 VALUE66\n    Large option 66\n  --option67 VALUE67\n    Large option 67\n  --option68 VALUE68\n    Large option 68\n  --option69 VALUE69\n    Large option 69\n  --option70 VALUE70\n    Large option 70\n  --option71 VALUE71\n    Large option 71\n  --option72 VALUE72\n    Large option 72\n  --option73 VALUE73\n    Large option 73\n  --option74 VALUE74\n    Large option 74\n  --option75 VALUE75\n    Large option 75\n  --option76 VALUE76\n    Large option 76\n  --option77 VALUE77\n    Large option 77\n  --option78 VALUE78\n    Large option 78\n  --option79 VALUE79\n    Large option 79\n  --option80 VALUE80\n    Large option 80\n  --option81 VALUE81\n    Large option 81\n  --option82 VALUE82\n    Large option 82\n  --option83 VALUE83\n    Large option 83\n  --option84 VALUE84\n    Large option 84\n  --option85 VALUE85\n    Large option 85\n  --option86 VALUE86\n    Large option 86\n  --option87 VALUE87\n    Large option 87\n  --option88 VALUE88\n    Large option 88\n  --option89 VALUE89\n    Large option 89\n  --option90 VALUE90\n    Large option 90\n  --option91 VALUE91\n    Large option 91\n  --option92 VALUE92\n    Large option 92\n  --option93 VALUE93\n    Large option 93\n  --option94 VALUE94\n    Large option 94\n  --option95 VALUE95\n    Large option 95\n  --option96 VALUE96\n    Large option 96\n  --option97 VALUE97\n    Large option 97\n  --option98 VALUE98\n    Large option 98\n  --option99 VALUE99\n    Large option 99\n  --option100 VALUE100\n    Large option 100\n  --option101 VALUE101\n    Large option 101\n  --option102 VALUE102\n    Large option 102\n  --option103 VALUE103\n    Large option 103\n  --option104 VALUE104\n    Large option 104\n  --option105 VALUE105\n    Large option 105\n  --option106 VALUE106\n    Large option 106\n  --option107 VALUE107\n    Large option 107\n  --option108 VALUE108\n    Large option 108\n  --option109 VALUE109\n    Large option 109\n  --option110 VALUE110\n    Large option 110\n  --option111 VALUE111\n    Large option 111\n  --option112 VALUE112\n    Large option 112\n  --option113 VALUE113\n    Large option 113\n  --option114 VALUE114\n    Large option 114\n  --option115 VALUE115\n    Large option 115\n  --option116 VALUE116\n    Large option 116\n  --option117 VALUE117\n    Large option 117\n  --option118 VALUE118\n    Large option 118\n  --option119 VALUE119\n    Large option 119\n  --option120 VALUE120\n    Large option 120\n  --option121 VALUE121\n    Large option 121\n  --option122 VALUE122\n    Large option 122\n  --option123 VALUE123\n    Large option 123\n  --option124 VALUE124\n    Large option 124\n  --option125 VALUE125\n    Large option 125\n  --option126 VALUE126\n    Large option 126\n  --option127 VALUE127\n    Large option 127"
 
-            require(rendered == expected)
-            require(rendered == CommandLine.renderHelp(spec, Array()))
+            Assertions.require(rendered == expected)
+            Assertions.require(rendered == CommandLine.renderHelp(spec, Array()))
 
             // Re-parsing the same frozen spec must not retain occurrence counts or argv state.
             second: CommandLine.parse(spec, Array("--option127", "again"))
-            require(second.command.options.size() == 1)
-            require(second.command.options[0].key == "key127")
-            require(second.command.options[0].value == "again")
-            require(second.command.options[0].tokenIndex == 0)
-            require(second.command.options[0].valueTokenIndex == 1)
+            Assertions.require(second.command.options.size() == 1)
+            Assertions.require(second.command.options[0].key == "key127")
+            Assertions.require(second.command.options[0].value == "again")
+            Assertions.require(second.command.options[0].tokenIndex == 0)
+            Assertions.require(second.command.options[0].valueTokenIndex == 1)
 
             true
         }

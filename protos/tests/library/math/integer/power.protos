@@ -21,28 +21,22 @@ tests: [
         tool009LegacyCase: () => {
             IntegerMath: import("std:math/Integer")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
+            Assertions.require(IntegerMath.pow(0, 0) == 1)
+            Assertions.require(IntegerMath.pow(0, 5) == 0)
+            Assertions.require(IntegerMath.pow(2, 0) == 1)
+            Assertions.require(IntegerMath.pow(2, 10) == 1024)
+            Assertions.require(IntegerMath.pow(-2, 3) == -8)
+            Assertions.require(IntegerMath.pow(-2, 4) == 16)
+            Assertions.require(IntegerMath.pow(2, 100) == 1267650600228229401496703205376)
 
-            require(IntegerMath.pow(0, 0) == 1)
-            require(IntegerMath.pow(0, 5) == 0)
-            require(IntegerMath.pow(2, 0) == 1)
-            require(IntegerMath.pow(2, 10) == 1024)
-            require(IntegerMath.pow(-2, 3) == -8)
-            require(IntegerMath.pow(-2, 4) == 16)
-            require(IntegerMath.pow(2, 100) == 1267650600228229401496703205376)
-
-            require(IntegerMath.powMod(0, 0, 1) == 0)
-            require(IntegerMath.powMod(0, 0, 7) == 1)
-            require(IntegerMath.powMod(0, 5, 7) == 0)
-            require(IntegerMath.powMod(2, 10, 1000) == 24)
-            require(IntegerMath.powMod(-2, 3, 5) == 2)
-            require(IntegerMath.powMod(-2, 4, 5) == 1)
-            require(IntegerMath.powMod(123456789, 1234567, 1000000007) == 365593914)
-            require(IntegerMath.powMod(-123456789, 1234567, 1000000007) == 634406093)
+            Assertions.require(IntegerMath.powMod(0, 0, 1) == 0)
+            Assertions.require(IntegerMath.powMod(0, 0, 7) == 1)
+            Assertions.require(IntegerMath.powMod(0, 5, 7) == 0)
+            Assertions.require(IntegerMath.powMod(2, 10, 1000) == 24)
+            Assertions.require(IntegerMath.powMod(-2, 3, 5) == 2)
+            Assertions.require(IntegerMath.powMod(-2, 4, 5) == 1)
+            Assertions.require(IntegerMath.powMod(123456789, 1234567, 1000000007) == 365593914)
+            Assertions.require(IntegerMath.powMod(-123456789, 1234567, 1000000007) == 634406093)
 
             true
         }
@@ -52,41 +46,23 @@ tests: [
         tool009LegacyCase: () => {
             IntegerMath: import("std:math/Integer")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             delegatedIntegerLookalike: (2) {}
 
-            require(reject(() => { IntegerMath.pow(2.0, 3) }))
-            require(reject(() => { IntegerMath.pow(2, 3.0) }))
-            require(reject(() => { IntegerMath.pow(delegatedIntegerLookalike, 3) }))
-            require(reject(() => { IntegerMath.pow(2, delegatedIntegerLookalike) }))
-            require(reject(() => { IntegerMath.pow(2, -1) }))
+            Assertions.signals(Error, () => { IntegerMath.pow(2.0, 3) })
+            Assertions.signals(Error, () => { IntegerMath.pow(2, 3.0) })
+            Assertions.signals(Error, () => { IntegerMath.pow(delegatedIntegerLookalike, 3) })
+            Assertions.signals(Error, () => { IntegerMath.pow(2, delegatedIntegerLookalike) })
+            Assertions.signals(Error, () => { IntegerMath.pow(2, -1) })
 
-            require(reject(() => { IntegerMath.powMod(2.0, 3, 5) }))
-            require(reject(() => { IntegerMath.powMod(2, 3.0, 5) }))
-            require(reject(() => { IntegerMath.powMod(2, 3, 5.0) }))
-            require(reject(() => { IntegerMath.powMod(delegatedIntegerLookalike, 3, 5) }))
-            require(reject(() => { IntegerMath.powMod(2, delegatedIntegerLookalike, 5) }))
-            require(reject(() => { IntegerMath.powMod(2, 3, delegatedIntegerLookalike) }))
-            require(reject(() => { IntegerMath.powMod(2, -1, 5) }))
-            require(reject(() => { IntegerMath.powMod(2, 3, 0) }))
-            require(reject(() => { IntegerMath.powMod(2, 3, -5) }))
+            Assertions.signals(Error, () => { IntegerMath.powMod(2.0, 3, 5) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2, 3.0, 5) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2, 3, 5.0) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(delegatedIntegerLookalike, 3, 5) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2, delegatedIntegerLookalike, 5) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2, 3, delegatedIntegerLookalike) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2, -1, 5) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2, 3, 0) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2, 3, -5) })
 
             true
         }
@@ -96,32 +72,14 @@ tests: [
         tool009LegacyCase: () => {
             IntegerMath: import("std:math/Integer")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
+            Assertions.signals(Error, () => { IntegerMath.pow() })
+            Assertions.signals(Error, () => { IntegerMath.pow(2) })
+            Assertions.signals(Error, () => { IntegerMath.pow(2, 3, 4) })
 
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
-            require(reject(() => { IntegerMath.pow() }))
-            require(reject(() => { IntegerMath.pow(2) }))
-            require(reject(() => { IntegerMath.pow(2, 3, 4) }))
-
-            require(reject(() => { IntegerMath.powMod() }))
-            require(reject(() => { IntegerMath.powMod(2) }))
-            require(reject(() => { IntegerMath.powMod(2, 3) }))
-            require(reject(() => { IntegerMath.powMod(2, 3, 5, 7) }))
+            Assertions.signals(Error, () => { IntegerMath.powMod() })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2, 3) })
+            Assertions.signals(Error, () => { IntegerMath.powMod(2, 3, 5, 7) })
 
             true
         }

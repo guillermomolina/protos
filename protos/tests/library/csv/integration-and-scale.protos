@@ -21,12 +21,6 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             sameTable: (left, right) => {
                 same: left.size() == right.size()
 
@@ -64,10 +58,10 @@ tests: [
 
             encoded: CSV.encode(expectedRows)
             expectedText: "a,b\r\n\"x,y\",\"q\"\"z\"\r\n\"line\r\nbreak\",\r\nsnow 雪,emoji 🙂\r\n"
-            require(encoded == expectedText)
+            Assertions.require(encoded == expectedText)
 
             eager: CSV.parse(encoded)
-            require(sameTable(expectedRows, eager))
+            Assertions.require(sameTable(expectedRows, eager))
 
             streamed: Map()
             streamedCount: 0
@@ -91,8 +85,8 @@ tests: [
                 streamed[2],
                 streamed[3]
             )
-            require(streamedCount == 4)
-            require(sameTable(expectedRows, streamedRows))
+            Assertions.require(streamedCount == 4)
+            Assertions.require(sameTable(expectedRows, streamedRows))
 
             sink: ""
             writes: 0
@@ -115,9 +109,9 @@ tests: [
             done: step4.then((ignored) => { output.finish() })
 
             done.then((resolvedOutput) => {
-                require(resolvedOutput === output)
-                require(sink == encoded)
-                require(writes == 5)
+                Assertions.require(resolvedOutput === output)
+                Assertions.require(sink == encoded)
+                Assertions.require(writes == 5)
                 true
             })
         }
@@ -127,18 +121,12 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             rowsSeen: 0
             parser: CSV.rowParser((row) => {
-                require(row.size() == 3)
-                require(row[0] == "alpha")
-                require(row[1] == "beta,beta")
-                require(row[2] == "gamma")
+                Assertions.require(row.size() == 3)
+                Assertions.require(row[0] == "alpha")
+                Assertions.require(row[1] == "beta,beta")
+                Assertions.require(row[2] == "gamma")
                 rowsSeen = rowsSeen + 1
             })
 
@@ -148,13 +136,13 @@ tests: [
                 iteration = iteration + 1
             }
             parser.finish()
-            require(rowsSeen == 4096)
+            Assertions.require(rowsSeen == 4096)
 
             largeFieldSeen: false
             large: CSV.rowParser((row) => {
-                require(row.size() == 2)
-                require(row[0].size() == 8192)
-                require(row[1] == "tail")
+                Assertions.require(row.size() == 2)
+                Assertions.require(row[0].size() == 8192)
+                Assertions.require(row[1] == "tail")
                 largeFieldSeen = true
             })
 
@@ -167,7 +155,7 @@ tests: [
             large.feed("\",tail")
             large.finish()
 
-            require(largeFieldSeen)
+            Assertions.require(largeFieldSeen)
             true
         }
         Assertions.require(tool009LegacyCase())

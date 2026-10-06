@@ -21,30 +21,24 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            require(CSV.encode(Array()) == "")
-            require(CSV.encode(Array(Array("a", "b"))) == "a,b\r\n")
-            require(CSV.encode(Array(Array(""))) == "\r\n")
-            require(CSV.encode(Array(Array("a,b", "x"))) == "\"a,b\",x\r\n")
-            require(CSV.encode(Array(Array("a\"b"))) == "\"a\"\"b\"\r\n")
-            require(CSV.encode(Array(Array(" a "))) == " a \r\n")
-            require(CSV.encode(Array(Array("a\nb"))) == "\"a\nb\"\r\n")
-            require(CSV.encode(Array(Array("a\rb"))) == "\"a\rb\"\r\n")
-            require(CSV.encode(Array(Array("a\r\nb"))) == "\"a\r\nb\"\r\n")
-            require(CSV.encode(Array(Array("=1+1", "+x", "-x", "@x"))) == "=1+1,+x,-x,@x\r\n")
-            require(CSV.encode(Array(Array("\\."))) == "\\.\r\n")
+            Assertions.require(CSV.encode(Array()) == "")
+            Assertions.require(CSV.encode(Array(Array("a", "b"))) == "a,b\r\n")
+            Assertions.require(CSV.encode(Array(Array(""))) == "\r\n")
+            Assertions.require(CSV.encode(Array(Array("a,b", "x"))) == "\"a,b\",x\r\n")
+            Assertions.require(CSV.encode(Array(Array("a\"b"))) == "\"a\"\"b\"\r\n")
+            Assertions.require(CSV.encode(Array(Array(" a "))) == " a \r\n")
+            Assertions.require(CSV.encode(Array(Array("a\nb"))) == "\"a\nb\"\r\n")
+            Assertions.require(CSV.encode(Array(Array("a\rb"))) == "\"a\rb\"\r\n")
+            Assertions.require(CSV.encode(Array(Array("a\r\nb"))) == "\"a\r\nb\"\r\n")
+            Assertions.require(CSV.encode(Array(Array("=1+1", "+x", "-x", "@x"))) == "=1+1,+x,-x,@x\r\n")
+            Assertions.require(CSV.encode(Array(Array("\\."))) == "\\.\r\n")
 
             many: CSV.encode(Array(
                 Array("alpha", "beta"),
                 Array("x,y", "\"q\"", ""),
                 Array("snow 雪", "emoji 🙂")
             ))
-            require(many == "alpha,beta\r\n\"x,y\",\"\"\"q\"\"\",\r\nsnow 雪,emoji 🙂\r\n")
+            Assertions.require(many == "alpha,beta\r\n\"x,y\",\"\"\"q\"\"\",\r\nsnow 雪,emoji 🙂\r\n")
 
             true
         }
@@ -54,34 +48,16 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
-            require(reject(() => { CSV.encode() }))
-            require(reject(() => { CSV.encode(Array(), Array()) }))
-            require(reject(() => { CSV.encode("a") }))
-            require(reject(() => { CSV.encode(Map()) }))
-            require(reject(() => { CSV.encode(Array("a")) }))
-            require(reject(() => { CSV.encode(Array(Map())) }))
-            require(reject(() => { CSV.encode(Array(Array())) }))
-            require(reject(() => { CSV.encode(Array(Array(42))) }))
-            require(reject(() => { CSV.encode(Array(Array(null))) }))
-            require(reject(() => { CSV.encode(Array(Array(Array("a")))) }))
+            Assertions.signals(Error, () => { CSV.encode() })
+            Assertions.signals(Error, () => { CSV.encode(Array(), Array()) })
+            Assertions.signals(Error, () => { CSV.encode("a") })
+            Assertions.signals(Error, () => { CSV.encode(Map()) })
+            Assertions.signals(Error, () => { CSV.encode(Array("a")) })
+            Assertions.signals(Error, () => { CSV.encode(Array(Map())) })
+            Assertions.signals(Error, () => { CSV.encode(Array(Array())) })
+            Assertions.signals(Error, () => { CSV.encode(Array(Array(42))) })
+            Assertions.signals(Error, () => { CSV.encode(Array(Array(null))) })
+            Assertions.signals(Error, () => { CSV.encode(Array(Array(Array("a")))) })
 
             true
         }
@@ -90,12 +66,6 @@ tests: [
     Test("encode roundtrip", () => {
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
 
             sameTable: (left, right) => {
                 same: left.size() == right.size()
@@ -141,7 +111,7 @@ tests: [
             tables.each((table) => {
                 encoded: CSV.encode(table)
                 decoded: CSV.parse(encoded)
-                require(sameTable(table, decoded))
+                Assertions.require(sameTable(table, decoded))
             })
 
             true

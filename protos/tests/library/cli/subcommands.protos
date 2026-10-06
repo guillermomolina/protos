@@ -21,24 +21,6 @@ tests: [
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             target: CommandLine.positional({
                 key: "target"
                 minOccurrences: 1
@@ -76,32 +58,32 @@ tests: [
                 Array("package", "install", "artifact")
             )
 
-            require(parsed.arguments.size() == 3)
-            require(parsed.command.name == "tool")
-            require(parsed.command.tokenIndex === null)
-            require(parsed.command.positionals.size() == 0)
+            Assertions.require(parsed.arguments.size() == 3)
+            Assertions.require(parsed.command.name == "tool")
+            Assertions.require(parsed.command.tokenIndex === null)
+            Assertions.require(parsed.command.positionals.size() == 0)
 
             packageResult: parsed.command.subcommand
-            require(packageResult.name == "package")
-            require(packageResult.tokenIndex == 0)
-            require(packageResult.positionals.size() == 0)
+            Assertions.require(packageResult.name == "package")
+            Assertions.require(packageResult.tokenIndex == 0)
+            Assertions.require(packageResult.positionals.size() == 0)
 
             installResult: packageResult.subcommand
-            require(installResult.name == "install")
-            require(installResult.tokenIndex == 1)
-            require(installResult.positionals.size() == 1)
-            require(installResult.positionals[0].key == "target")
-            require(installResult.positionals[0].value == "artifact")
-            require(installResult.positionals[0].tokenIndex == 2)
-            require(installResult.subcommand === null)
+            Assertions.require(installResult.name == "install")
+            Assertions.require(installResult.tokenIndex == 1)
+            Assertions.require(installResult.positionals.size() == 1)
+            Assertions.require(installResult.positionals[0].key == "target")
+            Assertions.require(installResult.positionals[0].value == "artifact")
+            Assertions.require(installResult.positionals[0].tokenIndex == 2)
+            Assertions.require(installResult.subcommand === null)
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 packageResult.name = "changed"
-            }))
+            })
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 installResult.positionals[0].value = "changed"
-            }))
+            })
 
             true
         }
@@ -110,12 +92,6 @@ tests: [
     Test("parse subcommand delimiter", () => {
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
 
             tail: CommandLine.positional({
                 key: "tail"
@@ -143,14 +119,14 @@ tests: [
 
             escaped: CommandLine.parse(root, Array("--", "run", "other"))
 
-            require(escaped.command.endOfOptionsIndex == 0)
-            require(escaped.command.subcommand === null)
-            require(escaped.command.positionals.size() == 2)
-            require(escaped.command.positionals[0].key == "tail")
-            require(escaped.command.positionals[0].value == "run")
-            require(escaped.command.positionals[0].tokenIndex == 1)
-            require(escaped.command.positionals[1].value == "other")
-            require(escaped.command.positionals[1].tokenIndex == 2)
+            Assertions.require(escaped.command.endOfOptionsIndex == 0)
+            Assertions.require(escaped.command.subcommand === null)
+            Assertions.require(escaped.command.positionals.size() == 2)
+            Assertions.require(escaped.command.positionals[0].key == "tail")
+            Assertions.require(escaped.command.positionals[0].value == "run")
+            Assertions.require(escaped.command.positionals[0].tokenIndex == 1)
+            Assertions.require(escaped.command.positionals[1].value == "other")
+            Assertions.require(escaped.command.positionals[1].tokenIndex == 2)
 
             true
         }
@@ -159,24 +135,6 @@ tests: [
     Test("parse subcommand options", () => {
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
 
             flag: (key, longName) => {
                 CommandLine.option({
@@ -232,31 +190,31 @@ tests: [
                 Array("--root", "--verbose", "run", "--child", "--verbose")
             )
 
-            require(scoped.command.options.size() == 2)
-            require(scoped.command.options[0].key == "root")
-            require(scoped.command.options[0].tokenIndex == 0)
-            require(scoped.command.options[1].key == "verbose")
-            require(scoped.command.options[1].tokenIndex == 1)
+            Assertions.require(scoped.command.options.size() == 2)
+            Assertions.require(scoped.command.options[0].key == "root")
+            Assertions.require(scoped.command.options[0].tokenIndex == 0)
+            Assertions.require(scoped.command.options[1].key == "verbose")
+            Assertions.require(scoped.command.options[1].tokenIndex == 1)
 
-            require(scoped.command.subcommand.name == "run")
-            require(scoped.command.subcommand.tokenIndex == 2)
-            require(scoped.command.subcommand.options.size() == 2)
-            require(scoped.command.subcommand.options[0].key == "child")
-            require(scoped.command.subcommand.options[0].tokenIndex == 3)
-            require(scoped.command.subcommand.options[1].key == "verbose")
-            require(scoped.command.subcommand.options[1].tokenIndex == 4)
+            Assertions.require(scoped.command.subcommand.name == "run")
+            Assertions.require(scoped.command.subcommand.tokenIndex == 2)
+            Assertions.require(scoped.command.subcommand.options.size() == 2)
+            Assertions.require(scoped.command.subcommand.options[0].key == "child")
+            Assertions.require(scoped.command.subcommand.options[0].tokenIndex == 3)
+            Assertions.require(scoped.command.subcommand.options[1].key == "verbose")
+            Assertions.require(scoped.command.subcommand.options[1].tokenIndex == 4)
 
-            require(reject(() => {
+            Assertions.signals(Error, () => {
                 CommandLine.parse(root, Array("run", "--root"))
-            }))
+            })
 
             valueWins: CommandLine.parse(root, Array("--output", "run"))
-            require(valueWins.command.subcommand === null)
-            require(valueWins.command.options.size() == 1)
-            require(valueWins.command.options[0].key == "output")
-            require(valueWins.command.options[0].value == "run")
-            require(valueWins.command.options[0].tokenIndex == 0)
-            require(valueWins.command.options[0].valueTokenIndex == 1)
+            Assertions.require(valueWins.command.subcommand === null)
+            Assertions.require(valueWins.command.options.size() == 1)
+            Assertions.require(valueWins.command.options[0].key == "output")
+            Assertions.require(valueWins.command.options[0].value == "run")
+            Assertions.require(valueWins.command.options[0].tokenIndex == 0)
+            Assertions.require(valueWins.command.options[0].valueTokenIndex == 1)
 
             true
         }
@@ -265,12 +223,6 @@ tests: [
     Test("parse subcommands d115", () => {
         tool009LegacyCase: () => {
             CommandLine: import("std:cli/CommandLine")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
 
             positional: (key, minimum, maximum) => {
                 CommandLine.positional({
@@ -303,10 +255,10 @@ tests: [
             })
 
             optionalSelected: CommandLine.parse(optionalParent, Array("run"))
-            require(optionalSelected.command.positionals.size() == 0)
-            require(optionalSelected.command.subcommand.name == "run")
-            require(optionalSelected.command.subcommand.tokenIndex == 0)
-            require(optionalSelected.command.subcommand.subcommand === null)
+            Assertions.require(optionalSelected.command.positionals.size() == 0)
+            Assertions.require(optionalSelected.command.subcommand.name == "run")
+            Assertions.require(optionalSelected.command.subcommand.tokenIndex == 0)
+            Assertions.require(optionalSelected.command.subcommand.subcommand === null)
 
             requiredParent: CommandLine.command({
                 name: "tool"
@@ -317,18 +269,18 @@ tests: [
             })
 
             requiredConsumesName: CommandLine.parse(requiredParent, Array("run"))
-            require(requiredConsumesName.command.subcommand === null)
-            require(requiredConsumesName.command.positionals.size() == 1)
-            require(requiredConsumesName.command.positionals[0].key == "config")
-            require(requiredConsumesName.command.positionals[0].value == "run")
-            require(requiredConsumesName.command.positionals[0].tokenIndex == 0)
+            Assertions.require(requiredConsumesName.command.subcommand === null)
+            Assertions.require(requiredConsumesName.command.positionals.size() == 1)
+            Assertions.require(requiredConsumesName.command.positionals[0].key == "config")
+            Assertions.require(requiredConsumesName.command.positionals[0].value == "run")
+            Assertions.require(requiredConsumesName.command.positionals[0].tokenIndex == 0)
 
             requiredThenChild:
                 CommandLine.parse(requiredParent, Array("config.toml", "run"))
-            require(requiredThenChild.command.positionals.size() == 1)
-            require(requiredThenChild.command.positionals[0].value == "config.toml")
-            require(requiredThenChild.command.subcommand.name == "run")
-            require(requiredThenChild.command.subcommand.tokenIndex == 1)
+            Assertions.require(requiredThenChild.command.positionals.size() == 1)
+            Assertions.require(requiredThenChild.command.positionals[0].value == "config.toml")
+            Assertions.require(requiredThenChild.command.subcommand.name == "run")
+            Assertions.require(requiredThenChild.command.subcommand.tokenIndex == 1)
 
             d111Parent: CommandLine.command({
                 name: "tool"
@@ -342,11 +294,11 @@ tests: [
             })
 
             d111Selected: CommandLine.parse(d111Parent, Array("x", "run"))
-            require(d111Selected.command.positionals.size() == 1)
-            require(d111Selected.command.positionals[0].key == "B")
-            require(d111Selected.command.positionals[0].value == "x")
-            require(d111Selected.command.subcommand.name == "run")
-            require(d111Selected.command.subcommand.tokenIndex == 1)
+            Assertions.require(d111Selected.command.positionals.size() == 1)
+            Assertions.require(d111Selected.command.positionals[0].key == "B")
+            Assertions.require(d111Selected.command.positionals[0].value == "x")
+            Assertions.require(d111Selected.command.subcommand.name == "run")
+            Assertions.require(d111Selected.command.subcommand.tokenIndex == 1)
 
             true
         }

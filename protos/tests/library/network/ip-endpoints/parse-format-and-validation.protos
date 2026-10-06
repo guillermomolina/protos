@@ -23,23 +23,17 @@ tests: [
         tool009LegacyCase: () => {
             IpEndpoints: import("std:network/IpEndpoints")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             assertRoundTrip: (source, canonical, version, port) => {
                 endpoint: IpEndpoints.parse(source)
 
-                require(IpEndpoint.recognizes(endpoint))
-                require(endpoint.address.version == version)
-                require(endpoint.port == port)
-                require(IpEndpoints.format(endpoint) == canonical)
+                Assertions.require(IpEndpoint.recognizes(endpoint))
+                Assertions.require(endpoint.address.version == version)
+                Assertions.require(endpoint.port == port)
+                Assertions.require(IpEndpoints.format(endpoint) == canonical)
 
                 reparsed: IpEndpoints.parse(canonical)
-                require(reparsed == endpoint)
-                require(reparsed !== endpoint)
+                Assertions.require(reparsed == endpoint)
+                Assertions.require(reparsed !== endpoint)
             }
 
             assertRoundTrip("0.0.0.0:1", "0.0.0.0:1", 4, 1)
@@ -82,10 +76,10 @@ tests: [
             )
 
             constructedV4: IpEndpoint(IpAddress(4, 3221225985), 80)
-            require(IpEndpoints.format(constructedV4) == "192.0.2.1:80")
+            Assertions.require(IpEndpoints.format(constructedV4) == "192.0.2.1:80")
 
             constructedV6: IpEndpoint(IpAddress(6, 1), 1)
-            require(IpEndpoints.format(constructedV6) == "[::1]:1")
+            Assertions.require(IpEndpoints.format(constructedV6) == "[::1]:1")
 
             true
         }
@@ -95,59 +89,41 @@ tests: [
         tool009LegacyCase: () => {
             IpEndpoints: import("std:network/IpEndpoints")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             // Missing/extra outer syntax.
-            require(reject(() => { IpEndpoints.parse("") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1") }))
-            require(reject(() => { IpEndpoints.parse(":443") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1:") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1::443") }))
-            require(reject(() => { IpEndpoints.parse("[::1]443") }))
-            require(reject(() => { IpEndpoints.parse("[::1]::443") }))
-            require(reject(() => { IpEndpoints.parse("[::1]:443:5") }))
-            require(reject(() => { IpEndpoints.parse("[::1") }))
+            Assertions.signals(Error, () => { IpEndpoints.parse("") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1") })
+            Assertions.signals(Error, () => { IpEndpoints.parse(":443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1:") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1::443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("[::1]443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("[::1]::443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("[::1]:443:5") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("[::1") })
 
             // Address-family envelope rules.
-            require(reject(() => { IpEndpoints.parse("2001:db8::1:443") }))
-            require(reject(() => { IpEndpoints.parse("::ffff:192.0.2.1:443") }))
-            require(reject(() => { IpEndpoints.parse("[192.0.2.1]:443") }))
-            require(reject(() => { IpEndpoints.parse("[fe80::1%3]:443") }))
+            Assertions.signals(Error, () => { IpEndpoints.parse("2001:db8::1:443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("::ffff:192.0.2.1:443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("[192.0.2.1]:443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("[fe80::1%3]:443") })
 
             // Numeric-only address and port surface.
-            require(reject(() => { IpEndpoints.parse("example.com:443") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1:https") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1:0") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1:00000") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1:65536") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1:+443") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1:-1") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1: 443") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1:443 ") }))
-            require(reject(() => { IpEndpoints.parse("192.0.2.1:４４３") }))
+            Assertions.signals(Error, () => { IpEndpoints.parse("example.com:443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1:https") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1:0") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1:00000") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1:65536") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1:+443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1:-1") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1: 443") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1:443 ") })
+            Assertions.signals(Error, () => { IpEndpoints.parse("192.0.2.1:４４３") })
 
             // Wrong input/formatter families.
-            require(reject(() => { IpEndpoints.parse(443) }))
-            require(reject(() => { IpEndpoints.parse({}) }))
-            require(reject(() => { IpEndpoints.format({}) }))
-            require(reject(() => { IpEndpoints.format(IpAddress(4, 0)) }))
-            require(reject(() => { IpEndpoints.format(443) }))
+            Assertions.signals(Error, () => { IpEndpoints.parse(443) })
+            Assertions.signals(Error, () => { IpEndpoints.parse({}) })
+            Assertions.signals(Error, () => { IpEndpoints.format({}) })
+            Assertions.signals(Error, () => { IpEndpoints.format(IpAddress(4, 0)) })
+            Assertions.signals(Error, () => { IpEndpoints.format(443) })
 
             true
         }

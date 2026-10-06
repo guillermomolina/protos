@@ -22,41 +22,35 @@ tests: [
         tool009LegacyCase: () => {
             IpAddresses: import("std:network/IpAddresses")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             zero: IpAddresses.parse("0.0.0.0")
-            require(IpAddress.recognizes(zero))
-            require(zero.version == 4)
-            require(zero.bits == 0)
-            require(IpAddresses.format(zero) == "0.0.0.0")
+            Assertions.require(IpAddress.recognizes(zero))
+            Assertions.require(zero.version == 4)
+            Assertions.require(zero.bits == 0)
+            Assertions.require(IpAddresses.format(zero) == "0.0.0.0")
 
             loopback: IpAddresses.parse("127.0.0.1")
-            require(loopback.version == 4)
-            require(loopback.bits == 2130706433)
-            require(IpAddresses.format(loopback) == "127.0.0.1")
+            Assertions.require(loopback.version == 4)
+            Assertions.require(loopback.bits == 2130706433)
+            Assertions.require(IpAddresses.format(loopback) == "127.0.0.1")
 
             documentation: IpAddresses.parse("192.0.2.1")
-            require(documentation.bits == 3221225985)
-            require(IpAddresses.format(documentation) == "192.0.2.1")
+            Assertions.require(documentation.bits == 3221225985)
+            Assertions.require(IpAddresses.format(documentation) == "192.0.2.1")
 
             maximum: IpAddresses.parse("255.255.255.255")
-            require(maximum.bits == 4294967295)
-            require(IpAddresses.format(maximum) == "255.255.255.255")
+            Assertions.require(maximum.bits == 4294967295)
+            Assertions.require(IpAddresses.format(maximum) == "255.255.255.255")
 
             constructed: IpAddresses.v4(10, 20, 30, 40)
             formatted: IpAddresses.format(constructed)
-            require(formatted == "10.20.30.40")
+            Assertions.require(formatted == "10.20.30.40")
 
             reparsed: IpAddresses.parse(formatted)
-            require(reparsed == constructed)
-            require(reparsed !== constructed)
+            Assertions.require(reparsed == constructed)
+            Assertions.require(reparsed !== constructed)
 
             canonical: IpAddresses.format(IpAddresses.parse("203.0.113.9"))
-            require(canonical == "203.0.113.9")
+            Assertions.require(canonical == "203.0.113.9")
 
             true
         }
@@ -66,21 +60,15 @@ tests: [
         tool009LegacyCase: () => {
             IpAddresses: import("std:network/IpAddresses")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             assertCanonical: (source, expected) => {
                 address: IpAddresses.parse(source)
-                require(IpAddress.recognizes(address))
-                require(address.version == 6)
-                require(IpAddresses.format(address) == expected)
+                Assertions.require(IpAddress.recognizes(address))
+                Assertions.require(address.version == 6)
+                Assertions.require(IpAddresses.format(address) == expected)
 
                 reparsed: IpAddresses.parse(expected)
-                require(reparsed == address)
-                require(reparsed !== address)
+                Assertions.require(reparsed == address)
+                Assertions.require(reparsed !== address)
             }
 
             assertCanonical("::", "::")
@@ -117,27 +105,27 @@ tests: [
 
             // IPv4-mapped IPv6 has canonical mixed output but remains semantic IPv6.
             mapped: IpAddresses.parse("::ffff:192.0.2.1")
-            require(mapped.version == 6)
-            require(IpAddresses.format(mapped) == "::ffff:192.0.2.1")
-            require(IpAddresses.parse(IpAddresses.format(mapped)) == mapped)
+            Assertions.require(mapped.version == 6)
+            Assertions.require(IpAddresses.format(mapped) == "::ffff:192.0.2.1")
+            Assertions.require(IpAddresses.parse(IpAddresses.format(mapped)) == mapped)
 
             // The same mapped value written with hexadecimal final hextets canonicalizes
             // to the selected mixed notation.
             mappedHex: IpAddresses.parse("0:0:0:0:0:ffff:c000:0201")
-            require(mappedHex == mapped)
-            require(IpAddresses.format(mappedHex) == "::ffff:192.0.2.1")
+            Assertions.require(mappedHex == mapped)
+            Assertions.require(IpAddresses.format(mappedHex) == "::ffff:192.0.2.1")
 
             // Other legal embedded-IPv4 inputs remain IPv6 but canonicalize to ordinary
             // hexadecimal RFC-5952-oriented output.
             mixed: IpAddresses.parse("2001:db8::192.0.2.33")
-            require(mixed.version == 6)
-            require(IpAddresses.format(mixed) == "2001:db8::c000:221")
-            require(IpAddresses.parse(IpAddresses.format(mixed)) == mixed)
+            Assertions.require(mixed.version == 6)
+            Assertions.require(IpAddresses.format(mixed) == "2001:db8::c000:221")
+            Assertions.require(IpAddresses.parse(IpAddresses.format(mixed)) == mixed)
 
             // IPv4 behavior published by A2 remains unchanged.
             v4: IpAddresses.parse("192.0.2.1")
-            require(v4.version == 4)
-            require(IpAddresses.format(v4) == "192.0.2.1")
+            Assertions.require(v4.version == 4)
+            Assertions.require(IpAddresses.format(v4) == "192.0.2.1")
 
             true
         }

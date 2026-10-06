@@ -21,63 +21,46 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             preservedBase: Uri.parse("HTTP://User@Example.COM:080/a/b/c?q=%2f")
             preserved: Uri.resolve(preservedBase, Uri.parse("../%2E/x?y=%2f#Frag"))
-            require(Uri.format(preserved) == "HTTP://User@Example.COM:080/a/%2E/x?y=%2f#Frag")
+            Assertions.require(Uri.format(preserved) == "HTTP://User@Example.COM:080/a/%2E/x?y=%2f#Frag")
 
             // Authority + empty base path uses the RFC merge special case.
-            require(Uri.format(Uri.resolve(Uri.parse("http://a"), Uri.parse("g"))) == "http://a/g")
+            Assertions.require(Uri.format(Uri.resolve(Uri.parse("http://a"), Uri.parse("g"))) == "http://a/g")
 
             // Rootless absolute-URI bases remain valid bases.
-            require(Uri.format(Uri.resolve(Uri.parse("urn:a/b/c"), Uri.parse("../d"))) == "urn:a/d")
+            Assertions.require(Uri.format(Uri.resolve(Uri.parse("urn:a/b/c"), Uri.parse("../d"))) == "urn:a/d")
 
             // A network-path reference replaces authority while inheriting the base scheme.
-            require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c"), Uri.parse("//B/x"))) == "http://B/x")
+            Assertions.require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c"), Uri.parse("//B/x"))) == "http://B/x")
 
             // Empty query presence replaces an inherited query; a fragment-only reference
             // keeps the base query.
-            require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c?old"), Uri.parse("?"))) == "http://a/b/c?")
-            require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c?old"), Uri.parse("#f"))) == "http://a/b/c?old#f")
+            Assertions.require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c?old"), Uri.parse("?"))) == "http://a/b/c?")
+            Assertions.require(Uri.format(Uri.resolve(Uri.parse("http://a/b/c?old"), Uri.parse("#f"))) == "http://a/b/c?old#f")
 
             // Resolution publishes fresh frozen ordinary data.
             base: Uri.parse("http://a/b/c/d;p?q")
             reference: Uri.parse("../g#f")
             first: Uri.resolve(base, reference)
             second: Uri.resolve(base, reference)
-            require(first !== second)
-            require(first.parent() === Object)
-            require(first.freeze() === first)
+            Assertions.require(first !== second)
+            Assertions.require(first.parent() === Object)
+            Assertions.require(first.freeze() === first)
 
             names: first.slotNames()
-            require(names.size() == 7)
-            require(names[0] == "fragment")
-            require(names[1] == "host")
-            require(names[2] == "path")
-            require(names[3] == "port")
-            require(names[4] == "query")
-            require(names[5] == "scheme")
-            require(names[6] == "userInfo")
+            Assertions.require(names.size() == 7)
+            Assertions.require(names[0] == "fragment")
+            Assertions.require(names[1] == "host")
+            Assertions.require(names[2] == "path")
+            Assertions.require(names[3] == "port")
+            Assertions.require(names[4] == "query")
+            Assertions.require(names[5] == "scheme")
+            Assertions.require(names[6] == "userInfo")
 
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-            require(reject(() => { first.path = "/changed" }))
-            require(reject(() => { first.extra: "value" }))
-            require(Uri.format(first) == "http://a/b/g#f")
+            Assertions.signals(Error, () => { first.path = "/changed" })
+            Assertions.signals(Error, () => { first.extra: "value" })
+            Assertions.require(Uri.format(first) == "http://a/b/g#f")
 
             true
         }
@@ -87,36 +70,18 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             base: Uri.parse("http://a/b/c")
             reference: Uri.parse("g")
 
-            require(reject(() => { Uri.resolve() }))
-            require(reject(() => { Uri.resolve(base) }))
-            require(reject(() => { Uri.resolve(base, reference, reference) }))
-            require(reject(() => { Uri.resolve("http://a/", reference) }))
-            require(reject(() => { Uri.resolve(base, "g") }))
+            Assertions.signals(Error, () => { Uri.resolve() })
+            Assertions.signals(Error, () => { Uri.resolve(base) })
+            Assertions.signals(Error, () => { Uri.resolve(base, reference, reference) })
+            Assertions.signals(Error, () => { Uri.resolve("http://a/", reference) })
+            Assertions.signals(Error, () => { Uri.resolve(base, "g") })
 
             // Base must be RFC absolute-URI: scheme present and fragment absent.
-            require(reject(() => { Uri.resolve(Uri.parse("/a/b"), reference) }))
-            require(reject(() => { Uri.resolve(Uri.parse("http://a/b#frag"), reference) }))
+            Assertions.signals(Error, () => { Uri.resolve(Uri.parse("/a/b"), reference) })
+            Assertions.signals(Error, () => { Uri.resolve(Uri.parse("http://a/b#frag"), reference) })
 
             badBase: {
                 scheme: "http"
@@ -127,7 +92,7 @@ tests: [
                 query: null
                 fragment: null
             }
-            require(reject(() => { Uri.resolve(badBase, reference) }))
+            Assertions.signals(Error, () => { Uri.resolve(badBase, reference) })
 
             badReference: {
                 scheme: null
@@ -138,7 +103,7 @@ tests: [
                 query: null
                 fragment: null
             }
-            require(reject(() => { Uri.resolve(base, badReference) }))
+            Assertions.signals(Error, () => { Uri.resolve(base, badReference) })
 
             orphanAuthority: {
                 scheme: null
@@ -149,7 +114,7 @@ tests: [
                 query: null
                 fragment: null
             }
-            require(reject(() => { Uri.resolve(base, orphanAuthority) }))
+            Assertions.signals(Error, () => { Uri.resolve(base, orphanAuthority) })
 
             true
         }
@@ -159,17 +124,11 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             base: Uri.parse("http://a/b/c/d;p?q")
 
             check: (reference, expected) => {
                 actual: Uri.resolve(base, Uri.parse(reference))
-                require(Uri.format(actual) == expected)
+                Assertions.require(Uri.format(actual) == expected)
             }
 
             check("../../../g", "http://a/g")
@@ -205,17 +164,11 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             base: Uri.parse("http://a/b/c/d;p?q")
 
             check: (reference, expected) => {
                 actual: Uri.resolve(base, Uri.parse(reference))
-                require(Uri.format(actual) == expected)
+                Assertions.require(Uri.format(actual) == expected)
             }
 
             check("g:h", "g:h")

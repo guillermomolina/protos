@@ -21,12 +21,6 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             relative: {
                 scheme: null
                 userInfo: null
@@ -36,7 +30,7 @@ tests: [
                 query: null
                 fragment: null
             }
-            require(Uri.format(relative) == "a/b")
+            Assertions.require(Uri.format(relative) == "a/b")
 
             authority: {
                 scheme: "HTTP"
@@ -47,7 +41,7 @@ tests: [
                 query: ""
                 fragment: "Frag"
             }
-            require(Uri.format(authority) == "HTTP://@Example.COM:/%7e?#Frag")
+            Assertions.require(Uri.format(authority) == "HTTP://@Example.COM:/%7e?#Frag")
 
             allEmptyPresent: {
                 scheme: "x"
@@ -58,7 +52,7 @@ tests: [
                 query: ""
                 fragment: ""
             }
-            require(Uri.format(allEmptyPresent) == "x://@:?#")
+            Assertions.require(Uri.format(allEmptyPresent) == "x://@:?#")
 
             literal: {
                 scheme: null
@@ -69,7 +63,7 @@ tests: [
                 query: "q=%2f"
                 fragment: null
             }
-            require(Uri.format(literal) == "//[v1.fe80::a]:00080/p?q=%2f")
+            Assertions.require(Uri.format(literal) == "//[v1.fe80::a]:00080/p?q=%2f")
 
             // format validates structural compatibility, not provenance from parse().
             mutableCallerData: {
@@ -81,7 +75,7 @@ tests: [
                 query: null
                 fragment: null
             }
-            require(Uri.format(mutableCallerData) == "custom:payload")
+            Assertions.require(Uri.format(mutableCallerData) == "custom:payload")
 
             true
         }
@@ -90,24 +84,6 @@ tests: [
     Test("format invalid", () => {
         tool009LegacyCase: () => {
             Uri: import("std:uri")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
 
             validBase: () => {
                 {
@@ -121,10 +97,10 @@ tests: [
                 }
             }
 
-            require(reject(() => { Uri.format() }))
-            require(reject(() => { Uri.format(validBase(), validBase()) }))
-            require(reject(() => { Uri.format("a/b") }))
-            require(reject(() => { Uri.format(null) }))
+            Assertions.signals(Error, () => { Uri.format() })
+            Assertions.signals(Error, () => { Uri.format(validBase(), validBase()) })
+            Assertions.signals(Error, () => { Uri.format("a/b") })
+            Assertions.signals(Error, () => { Uri.format(null) })
 
             missingFragment: {
                 scheme: null
@@ -134,64 +110,64 @@ tests: [
                 path: "a/b"
                 query: null
             }
-            require(reject(() => { Uri.format(missingFragment) }))
+            Assertions.signals(Error, () => { Uri.format(missingFragment) })
 
             badSchemeFamily: validBase()
             badSchemeFamily.scheme = 1
-            require(reject(() => { Uri.format(badSchemeFamily) }))
+            Assertions.signals(Error, () => { Uri.format(badSchemeFamily) })
 
             badPathFamily: validBase()
             badPathFamily.path = 1
-            require(reject(() => { Uri.format(badPathFamily) }))
+            Assertions.signals(Error, () => { Uri.format(badPathFamily) })
 
             orphanUserInfo: validBase()
             orphanUserInfo.userInfo = ""
-            require(reject(() => { Uri.format(orphanUserInfo) }))
+            Assertions.signals(Error, () => { Uri.format(orphanUserInfo) })
 
             orphanPort: validBase()
             orphanPort.port = ""
-            require(reject(() => { Uri.format(orphanPort) }))
+            Assertions.signals(Error, () => { Uri.format(orphanPort) })
 
             badScheme: validBase()
             badScheme.scheme = "1bad"
-            require(reject(() => { Uri.format(badScheme) }))
+            Assertions.signals(Error, () => { Uri.format(badScheme) })
 
             relativeColon: validBase()
             relativeColon.path = "a:b"
-            require(reject(() => { Uri.format(relativeColon) }))
+            Assertions.signals(Error, () => { Uri.format(relativeColon) })
 
             badHost: validBase()
             badHost.host = "exa mple"
-            require(reject(() => { Uri.format(badHost) }))
+            Assertions.signals(Error, () => { Uri.format(badHost) })
 
             badLiteral: validBase()
             badLiteral.host = "[v1.]"
-            require(reject(() => { Uri.format(badLiteral) }))
+            Assertions.signals(Error, () => { Uri.format(badLiteral) })
 
             badPort: validBase()
             badPort.host = "host"
             badPort.port = "80x"
-            require(reject(() => { Uri.format(badPort) }))
+            Assertions.signals(Error, () => { Uri.format(badPort) })
 
             badPercent: validBase()
             badPercent.path = "/a%GG"
-            require(reject(() => { Uri.format(badPercent) }))
+            Assertions.signals(Error, () => { Uri.format(badPercent) })
 
             rawUnicode: validBase()
             rawUnicode.path = "/café"
-            require(reject(() => { Uri.format(rawUnicode) }))
+            Assertions.signals(Error, () => { Uri.format(rawUnicode) })
 
             rawBackslash: validBase()
             rawBackslash.path = "/a\\b"
-            require(reject(() => { Uri.format(rawBackslash) }))
+            Assertions.signals(Error, () => { Uri.format(rawBackslash) })
 
             queryDelimiter: validBase()
             queryDelimiter.query = "a#b"
-            require(reject(() => { Uri.format(queryDelimiter) }))
+            Assertions.signals(Error, () => { Uri.format(queryDelimiter) })
 
             pathDelimiter: validBase()
             pathDelimiter.path = "/a?b"
-            require(reject(() => { Uri.format(pathDelimiter) }))
+            Assertions.signals(Error, () => { Uri.format(pathDelimiter) })
 
             true
         }
@@ -201,14 +177,8 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             roundTrip: (text) => {
-                require(Uri.format(Uri.parse(text)) == text)
+                Assertions.require(Uri.format(Uri.parse(text)) == text)
             }
 
             roundTrip("")

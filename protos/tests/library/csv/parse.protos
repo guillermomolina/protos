@@ -21,48 +21,42 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             simple: CSV.parse("alpha,beta,gamma")
-            require(simple.size() == 1)
-            require(simple[0].size() == 3)
-            require(simple[0][0] == "alpha")
-            require(simple[0][1] == "beta")
-            require(simple[0][2] == "gamma")
+            Assertions.require(simple.size() == 1)
+            Assertions.require(simple[0].size() == 3)
+            Assertions.require(simple[0][0] == "alpha")
+            Assertions.require(simple[0][1] == "beta")
+            Assertions.require(simple[0][2] == "gamma")
 
             quoted: CSV.parse("\"a,b\",\"a\"\"b\",plain")
-            require(quoted.size() == 1)
-            require(quoted[0].size() == 3)
-            require(quoted[0][0] == "a,b")
-            require(quoted[0][1] == "a\"b")
-            require(quoted[0][2] == "plain")
+            Assertions.require(quoted.size() == 1)
+            Assertions.require(quoted[0].size() == 3)
+            Assertions.require(quoted[0][0] == "a,b")
+            Assertions.require(quoted[0][1] == "a\"b")
+            Assertions.require(quoted[0][2] == "plain")
 
             empties: CSV.parse(",x,")
-            require(empties.size() == 1)
-            require(empties[0].size() == 3)
-            require(empties[0][0] == "")
-            require(empties[0][1] == "x")
-            require(empties[0][2] == "")
+            Assertions.require(empties.size() == 1)
+            Assertions.require(empties[0].size() == 3)
+            Assertions.require(empties[0][0] == "")
+            Assertions.require(empties[0][1] == "x")
+            Assertions.require(empties[0][2] == "")
 
             variable: CSV.parse("a\nb,c\nd,e,f")
-            require(variable.size() == 3)
-            require(variable[0].size() == 1)
-            require(variable[1].size() == 2)
-            require(variable[2].size() == 3)
+            Assertions.require(variable.size() == 3)
+            Assertions.require(variable[0].size() == 1)
+            Assertions.require(variable[1].size() == 2)
+            Assertions.require(variable[2].size() == 3)
 
             whitespace: CSV.parse("  a , b\t,\" c \"")
-            require(whitespace[0][0] == "  a ")
-            require(whitespace[0][1] == " b\t")
-            require(whitespace[0][2] == " c ")
+            Assertions.require(whitespace[0][0] == "  a ")
+            Assertions.require(whitespace[0][1] == " b\t")
+            Assertions.require(whitespace[0][2] == " c ")
 
             unicode: CSV.parse("é,雪,\"🙂,ñ\"")
-            require(unicode[0][0] == "é")
-            require(unicode[0][1] == "雪")
-            require(unicode[0][2] == "🙂,ñ")
+            Assertions.require(unicode[0][0] == "é")
+            Assertions.require(unicode[0][1] == "雪")
+            Assertions.require(unicode[0][2] == "🙂,ñ")
 
             true
         }
@@ -72,31 +66,13 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
-            require(reject(() => { CSV.parse("a\"b") }))
-            require(reject(() => { CSV.parse("\"a\"b") }))
-            require(reject(() => { CSV.parse("\"a") }))
-            require(reject(() => { CSV.parse("\"a\"\"") }))
-            require(reject(() => { CSV.parse("a,\"b\"c") }))
-            require(reject(() => { CSV.parse("\"a\" ,b") }))
-            require(reject(() => { CSV.parse(" ,\"x\"\"y\"z") }))
+            Assertions.signals(Error, () => { CSV.parse("a\"b") })
+            Assertions.signals(Error, () => { CSV.parse("\"a\"b") })
+            Assertions.signals(Error, () => { CSV.parse("\"a") })
+            Assertions.signals(Error, () => { CSV.parse("\"a\"\"") })
+            Assertions.signals(Error, () => { CSV.parse("a,\"b\"c") })
+            Assertions.signals(Error, () => { CSV.parse("\"a\" ,b") })
+            Assertions.signals(Error, () => { CSV.parse(" ,\"x\"\"y\"z") })
 
             true
         }
@@ -106,56 +82,50 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             empty: CSV.parse("")
-            require(empty.size() == 0)
+            Assertions.require(empty.size() == 0)
 
             blankLf: CSV.parse("\n")
-            require(blankLf.size() == 1)
-            require(blankLf[0].size() == 1)
-            require(blankLf[0][0] == "")
+            Assertions.require(blankLf.size() == 1)
+            Assertions.require(blankLf[0].size() == 1)
+            Assertions.require(blankLf[0][0] == "")
 
             blankCrLf: CSV.parse("\r\n")
-            require(blankCrLf.size() == 1)
-            require(blankCrLf[0][0] == "")
+            Assertions.require(blankCrLf.size() == 1)
+            Assertions.require(blankCrLf[0][0] == "")
 
             blankCr: CSV.parse("\r")
-            require(blankCr.size() == 1)
-            require(blankCr[0][0] == "")
+            Assertions.require(blankCr.size() == 1)
+            Assertions.require(blankCr[0][0] == "")
 
             twoBlanks: CSV.parse("\n\n")
-            require(twoBlanks.size() == 2)
-            require(twoBlanks[0][0] == "")
-            require(twoBlanks[1][0] == "")
+            Assertions.require(twoBlanks.size() == 2)
+            Assertions.require(twoBlanks[0][0] == "")
+            Assertions.require(twoBlanks[1][0] == "")
 
             mixed: CSV.parse("a\r\nb\nc\rd")
-            require(mixed.size() == 4)
-            require(mixed[0][0] == "a")
-            require(mixed[1][0] == "b")
-            require(mixed[2][0] == "c")
-            require(mixed[3][0] == "d")
+            Assertions.require(mixed.size() == 4)
+            Assertions.require(mixed[0][0] == "a")
+            Assertions.require(mixed[1][0] == "b")
+            Assertions.require(mixed[2][0] == "c")
+            Assertions.require(mixed[3][0] == "d")
 
             trailingSeparator: CSV.parse("a\r\n")
-            require(trailingSeparator.size() == 1)
-            require(trailingSeparator[0][0] == "a")
+            Assertions.require(trailingSeparator.size() == 1)
+            Assertions.require(trailingSeparator[0][0] == "a")
 
             embedded: CSV.parse("\"a\r\nb\",\"c\nd\",\"e\rf\"\r\nz")
-            require(embedded.size() == 2)
-            require(embedded[0].size() == 3)
-            require(embedded[0][0] == "a\r\nb")
-            require(embedded[0][1] == "c\nd")
-            require(embedded[0][2] == "e\rf")
-            require(embedded[1][0] == "z")
+            Assertions.require(embedded.size() == 2)
+            Assertions.require(embedded[0].size() == 3)
+            Assertions.require(embedded[0][0] == "a\r\nb")
+            Assertions.require(embedded[0][1] == "c\nd")
+            Assertions.require(embedded[0][2] == "e\rf")
+            Assertions.require(embedded[1][0] == "z")
 
             emptyQuoted: CSV.parse("\"\"")
-            require(emptyQuoted.size() == 1)
-            require(emptyQuoted[0].size() == 1)
-            require(emptyQuoted[0][0] == "")
+            Assertions.require(emptyQuoted.size() == 1)
+            Assertions.require(emptyQuoted[0].size() == 1)
+            Assertions.require(emptyQuoted[0][0] == "")
 
             true
         }
@@ -165,29 +135,11 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
-            require(reject(() => { CSV.parse() }))
-            require(reject(() => { CSV.parse("a", "b") }))
-            require(reject(() => { CSV.parse(42) }))
-            require(reject(() => { CSV.parse(null) }))
-            require(reject(() => { CSV.parse(Array("a")) }))
+            Assertions.signals(Error, () => { CSV.parse() })
+            Assertions.signals(Error, () => { CSV.parse("a", "b") })
+            Assertions.signals(Error, () => { CSV.parse(42) })
+            Assertions.signals(Error, () => { CSV.parse(null) })
+            Assertions.signals(Error, () => { CSV.parse(Array("a")) })
 
             true
         }

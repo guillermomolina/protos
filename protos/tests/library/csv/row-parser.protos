@@ -21,12 +21,6 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             rows: Map()
             count: 0
             parser: CSV.rowParser((row) => {
@@ -34,25 +28,25 @@ tests: [
                 count = count + 1
             })
 
-            require(parser.feed("") === parser)
-            require(count == 0)
-            require(parser.feed("a,b\r") === parser)
-            require(count == 1)
-            require(rows[0].size() == 2)
-            require(rows[0][0] == "a")
-            require(rows[0][1] == "b")
+            Assertions.require(parser.feed("") === parser)
+            Assertions.require(count == 0)
+            Assertions.require(parser.feed("a,b\r") === parser)
+            Assertions.require(count == 1)
+            Assertions.require(rows[0].size() == 2)
+            Assertions.require(rows[0][0] == "a")
+            Assertions.require(rows[0][1] == "b")
 
-            require(parser.feed("") === parser)
-            require(parser.feed("\n\"c") === parser)
-            require(count == 1)
-            require(parser.feed(",d\",\"e\"\"f\"") === parser)
-            require(count == 1)
-            require(parser.finish() === parser)
+            Assertions.require(parser.feed("") === parser)
+            Assertions.require(parser.feed("\n\"c") === parser)
+            Assertions.require(count == 1)
+            Assertions.require(parser.feed(",d\",\"e\"\"f\"") === parser)
+            Assertions.require(count == 1)
+            Assertions.require(parser.finish() === parser)
 
-            require(count == 2)
-            require(rows[1].size() == 2)
-            require(rows[1][0] == "c,d")
-            require(rows[1][1] == "e\"f")
+            Assertions.require(count == 2)
+            Assertions.require(rows[1].size() == 2)
+            Assertions.require(rows[1][0] == "c,d")
+            Assertions.require(rows[1][1] == "e\"f")
 
             true
         }
@@ -61,12 +55,6 @@ tests: [
     Test("row parser boundaries", () => {
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
 
             checkSplit: (left, right) => {
                 rows: Map()
@@ -82,20 +70,20 @@ tests: [
                 parser.feed(right)
                 parser.finish()
 
-                require(count == 3)
+                Assertions.require(count == 3)
 
-                require(rows[0].size() == 3)
-                require(rows[0][0] == "a")
-                require(rows[0][1] == "b,b")
-                require(rows[0][2] == "c\"d")
+                Assertions.require(rows[0].size() == 3)
+                Assertions.require(rows[0][0] == "a")
+                Assertions.require(rows[0][1] == "b,b")
+                Assertions.require(rows[0][2] == "c\"d")
 
-                require(rows[1].size() == 2)
-                require(rows[1][0] == "x\r\ny")
-                require(rows[1][1] == "z")
+                Assertions.require(rows[1].size() == 2)
+                Assertions.require(rows[1][0] == "x\r\ny")
+                Assertions.require(rows[1][1] == "z")
 
-                require(rows[2].size() == 2)
-                require(rows[2][0] == "q")
-                require(rows[2][1] == "")
+                Assertions.require(rows[2].size() == 2)
+                Assertions.require(rows[2][0] == "q")
+                Assertions.require(rows[2][1] == "")
 
             }
 
@@ -136,12 +124,6 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             rowsA: Map()
             rowsB: Map()
             countA: 0
@@ -159,23 +141,23 @@ tests: [
 
             a.feed("\"left")
             b.feed("right,one\nright,two")
-            require(countA == 0)
-            require(countB == 1)
+            Assertions.require(countA == 0)
+            Assertions.require(countB == 1)
 
             a.feed(",continued\",x\n")
-            require(countA == 1)
-            require(rowsA[0][0] == "left,continued")
-            require(rowsA[0][1] == "x")
+            Assertions.require(countA == 1)
+            Assertions.require(rowsA[0][0] == "left,continued")
+            Assertions.require(rowsA[0][1] == "x")
 
             b.finish()
-            require(countB == 2)
-            require(rowsB[0][0] == "right")
-            require(rowsB[0][1] == "one")
-            require(rowsB[1][0] == "right")
-            require(rowsB[1][1] == "two")
+            Assertions.require(countB == 2)
+            Assertions.require(rowsB[0][0] == "right")
+            Assertions.require(rowsB[0][1] == "one")
+            Assertions.require(rowsB[1][0] == "right")
+            Assertions.require(rowsB[1][1] == "two")
 
             a.finish()
-            require(countA == 1)
+            Assertions.require(countA == 1)
 
             true
         }
@@ -185,58 +167,40 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             finished: CSV.rowParser((row) => { null })
             finished.feed("a")
-            require(finished.finish() === finished)
-            require(reject(() => { finished.feed("") }))
-            require(reject(() => { finished.finish() }))
+            Assertions.require(finished.finish() === finished)
+            Assertions.signals(Error, () => { finished.feed("") })
+            Assertions.signals(Error, () => { finished.finish() })
 
             unterminated: CSV.rowParser((row) => { null })
             unterminated.feed("\"abc")
-            require(reject(() => { unterminated.finish() }))
-            require(reject(() => { unterminated.feed("x") }))
-            require(reject(() => { unterminated.finish() }))
+            Assertions.signals(Error, () => { unterminated.finish() })
+            Assertions.signals(Error, () => { unterminated.feed("x") })
+            Assertions.signals(Error, () => { unterminated.finish() })
 
             emitted: 0
             malformed: CSV.rowParser((row) => {
                 emitted = emitted + 1
             })
             malformed.feed("ok\r\n")
-            require(emitted == 1)
-            require(reject(() => { malformed.feed("\"bad\"x") }))
-            require(emitted == 1)
-            require(reject(() => { malformed.feed("\r\n") }))
-            require(reject(() => { malformed.finish() }))
-            require(emitted == 1)
+            Assertions.require(emitted == 1)
+            Assertions.signals(Error, () => { malformed.feed("\"bad\"x") })
+            Assertions.require(emitted == 1)
+            Assertions.signals(Error, () => { malformed.feed("\r\n") })
+            Assertions.signals(Error, () => { malformed.finish() })
+            Assertions.require(emitted == 1)
 
             consumerCalls: 0
             consumerFailure: CSV.rowParser((row) => {
                 consumerCalls = consumerCalls + 1
                 Error().signal()
             })
-            require(reject(() => { consumerFailure.feed("a\n") }))
-            require(consumerCalls == 1)
-            require(reject(() => { consumerFailure.feed("b\n") }))
-            require(reject(() => { consumerFailure.finish() }))
-            require(consumerCalls == 1)
+            Assertions.signals(Error, () => { consumerFailure.feed("a\n") })
+            Assertions.require(consumerCalls == 1)
+            Assertions.signals(Error, () => { consumerFailure.feed("b\n") })
+            Assertions.signals(Error, () => { consumerFailure.finish() })
+            Assertions.require(consumerCalls == 1)
 
             flushCount: 0
             flushed: null
@@ -245,23 +209,23 @@ tests: [
                 flushed = row
             })
             flush.feed("final,row")
-            require(flushCount == 0)
+            Assertions.require(flushCount == 0)
             flush.finish()
-            require(flushCount == 1)
-            require(flushed.size() == 2)
-            require(flushed[0] == "final")
-            require(flushed[1] == "row")
+            Assertions.require(flushCount == 1)
+            Assertions.require(flushed.size() == 2)
+            Assertions.require(flushed[0] == "final")
+            Assertions.require(flushed[1] == "row")
 
-            require(reject(() => { CSV.rowParser() }))
-            require(reject(() => { CSV.rowParser((row) => { null }, (row) => { null }) }))
+            Assertions.signals(Error, () => { CSV.rowParser() })
+            Assertions.signals(Error, () => { CSV.rowParser((row) => { null }, (row) => { null }) })
 
             wrongFeed: CSV.rowParser((row) => { null })
-            require(reject(() => { wrongFeed.feed() }))
-            require(reject(() => { wrongFeed.feed("a", "b") }))
-            require(reject(() => { wrongFeed.feed(42) }))
+            Assertions.signals(Error, () => { wrongFeed.feed() })
+            Assertions.signals(Error, () => { wrongFeed.feed("a", "b") })
+            Assertions.signals(Error, () => { wrongFeed.feed(42) })
 
             wrongFinish: CSV.rowParser((row) => { null })
-            require(reject(() => { wrongFinish.finish("x") }))
+            Assertions.signals(Error, () => { wrongFinish.finish("x") })
 
             true
         }

@@ -21,19 +21,13 @@ tests: [
         tool009LegacyCase: () => {
             IntegerMath: import("std:math/Integer")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            require(IntegerMath.factorial(0) == 1)
-            require(IntegerMath.factorial(1) == 1)
-            require(IntegerMath.factorial(2) == 2)
-            require(IntegerMath.factorial(5) == 120)
-            require(IntegerMath.factorial(10) == 3628800)
-            require(IntegerMath.factorial(21) == 51090942171709440000)
-            require(IntegerMath.factorial(100) == 93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000)
+            Assertions.require(IntegerMath.factorial(0) == 1)
+            Assertions.require(IntegerMath.factorial(1) == 1)
+            Assertions.require(IntegerMath.factorial(2) == 2)
+            Assertions.require(IntegerMath.factorial(5) == 120)
+            Assertions.require(IntegerMath.factorial(10) == 3628800)
+            Assertions.require(IntegerMath.factorial(21) == 51090942171709440000)
+            Assertions.require(IntegerMath.factorial(100) == 93326215443944152681699238856266700490715968264381621468592963895217599993229915608941463976156518286253697920827223758251185210916864000000000000000000000000)
 
             true
         }
@@ -43,31 +37,13 @@ tests: [
         tool009LegacyCase: () => {
             IntegerMath: import("std:math/Integer")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             delegatedIntegerLookalike: (5) {}
 
-            require(reject(() => { IntegerMath.factorial(-1) }))
-            require(reject(() => { IntegerMath.factorial(5.0) }))
-            require(reject(() => { IntegerMath.factorial("5") }))
-            require(reject(() => { IntegerMath.factorial(null) }))
-            require(reject(() => { IntegerMath.factorial(delegatedIntegerLookalike) }))
+            Assertions.signals(Error, () => { IntegerMath.factorial(-1) })
+            Assertions.signals(Error, () => { IntegerMath.factorial(5.0) })
+            Assertions.signals(Error, () => { IntegerMath.factorial("5") })
+            Assertions.signals(Error, () => { IntegerMath.factorial(null) })
+            Assertions.signals(Error, () => { IntegerMath.factorial(delegatedIntegerLookalike) })
 
             true
         }
@@ -77,26 +53,8 @@ tests: [
         tool009LegacyCase: () => {
             IntegerMath: import("std:math/Integer")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
-            require(reject(() => { IntegerMath.factorial() }))
-            require(reject(() => { IntegerMath.factorial(1, 2) }))
+            Assertions.signals(Error, () => { IntegerMath.factorial() })
+            Assertions.signals(Error, () => { IntegerMath.factorial(1, 2) })
 
             true
         }

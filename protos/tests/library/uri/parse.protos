@@ -21,97 +21,79 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             reference: Uri.parse("HTTP://user@example.com:080/a/b?x=%2f#Frag")
 
-            require(reference.scheme == "HTTP")
-            require(reference.userInfo == "user")
-            require(reference.host == "example.com")
-            require(reference.port == "080")
-            require(reference.path == "/a/b")
-            require(reference.query == "x=%2f")
-            require(reference.fragment == "Frag")
+            Assertions.require(reference.scheme == "HTTP")
+            Assertions.require(reference.userInfo == "user")
+            Assertions.require(reference.host == "example.com")
+            Assertions.require(reference.port == "080")
+            Assertions.require(reference.path == "/a/b")
+            Assertions.require(reference.query == "x=%2f")
+            Assertions.require(reference.fragment == "Frag")
 
             names: reference.slotNames()
-            require(names.size() == 7)
-            require(names[0] == "fragment")
-            require(names[1] == "host")
-            require(names[2] == "path")
-            require(names[3] == "port")
-            require(names[4] == "query")
-            require(names[5] == "scheme")
-            require(names[6] == "userInfo")
+            Assertions.require(names.size() == 7)
+            Assertions.require(names[0] == "fragment")
+            Assertions.require(names[1] == "host")
+            Assertions.require(names[2] == "path")
+            Assertions.require(names[3] == "port")
+            Assertions.require(names[4] == "query")
+            Assertions.require(names[5] == "scheme")
+            Assertions.require(names[6] == "userInfo")
 
-            require(reference.parent() === Object)
-            require(reference.freeze() === reference)
-            require(reject(() => { reference.path = "/changed" }))
-            require(reject(() => { reference.extra: "value" }))
-            require(reference.path == "/a/b")
+            Assertions.require(reference.parent() === Object)
+            Assertions.require(reference.freeze() === reference)
+            Assertions.signals(Error, () => { reference.path = "/changed" })
+            Assertions.signals(Error, () => { reference.extra: "value" })
+            Assertions.require(reference.path == "/a/b")
 
             sameText: Uri.parse("HTTP://user@example.com:080/a/b?x=%2f#Frag")
-            require(reference !== sameText)
+            Assertions.require(reference !== sameText)
 
             empty: Uri.parse("")
-            require(empty.scheme === null)
-            require(empty.userInfo === null)
-            require(empty.host === null)
-            require(empty.port === null)
-            require(empty.path == "")
-            require(empty.query === null)
-            require(empty.fragment === null)
+            Assertions.require(empty.scheme === null)
+            Assertions.require(empty.userInfo === null)
+            Assertions.require(empty.host === null)
+            Assertions.require(empty.port === null)
+            Assertions.require(empty.path == "")
+            Assertions.require(empty.query === null)
+            Assertions.require(empty.fragment === null)
 
             emptyQuery: Uri.parse("scheme:path?")
-            require(emptyQuery.scheme == "scheme")
-            require(emptyQuery.host === null)
-            require(emptyQuery.userInfo === null)
-            require(emptyQuery.port === null)
-            require(emptyQuery.path == "path")
-            require(emptyQuery.query == "")
-            require(emptyQuery.fragment === null)
+            Assertions.require(emptyQuery.scheme == "scheme")
+            Assertions.require(emptyQuery.host === null)
+            Assertions.require(emptyQuery.userInfo === null)
+            Assertions.require(emptyQuery.port === null)
+            Assertions.require(emptyQuery.path == "path")
+            Assertions.require(emptyQuery.query == "")
+            Assertions.require(emptyQuery.fragment === null)
 
             emptyFragment: Uri.parse("scheme:path#")
-            require(emptyFragment.query === null)
-            require(emptyFragment.fragment == "")
+            Assertions.require(emptyFragment.query === null)
+            Assertions.require(emptyFragment.fragment == "")
 
             emptyAuthority: Uri.parse("scheme:///path")
-            require(emptyAuthority.scheme == "scheme")
-            require(emptyAuthority.userInfo === null)
-            require(emptyAuthority.host == "")
-            require(emptyAuthority.port === null)
-            require(emptyAuthority.path == "/path")
+            Assertions.require(emptyAuthority.scheme == "scheme")
+            Assertions.require(emptyAuthority.userInfo === null)
+            Assertions.require(emptyAuthority.host == "")
+            Assertions.require(emptyAuthority.port === null)
+            Assertions.require(emptyAuthority.path == "/path")
 
             networkEmpty: Uri.parse("//?")
-            require(networkEmpty.scheme === null)
-            require(networkEmpty.userInfo === null)
-            require(networkEmpty.host == "")
-            require(networkEmpty.port === null)
-            require(networkEmpty.path == "")
-            require(networkEmpty.query == "")
+            Assertions.require(networkEmpty.scheme === null)
+            Assertions.require(networkEmpty.userInfo === null)
+            Assertions.require(networkEmpty.host == "")
+            Assertions.require(networkEmpty.port === null)
+            Assertions.require(networkEmpty.path == "")
+            Assertions.require(networkEmpty.query == "")
 
             emptyUserInfo: Uri.parse("//@host/")
-            require(emptyUserInfo.userInfo == "")
-            require(emptyUserInfo.host == "host")
+            Assertions.require(emptyUserInfo.userInfo == "")
+            Assertions.require(emptyUserInfo.host == "host")
 
             emptyPort: Uri.parse("//host:/")
-            require(emptyPort.host == "host")
-            require(emptyPort.port == "")
+            Assertions.require(emptyPort.host == "host")
+            Assertions.require(emptyPort.port == "")
 
             true
         }
@@ -121,67 +103,49 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             // A colon before '/', '?', or '#' commits to scheme syntax.
-            require(reject(() => { Uri.parse(":x") }))
-            require(reject(() => { Uri.parse("1a:x") }))
-            require(reject(() => { Uri.parse("+a:x") }))
-            require(reject(() => { Uri.parse(".a:x") }))
+            Assertions.signals(Error, () => { Uri.parse(":x") })
+            Assertions.signals(Error, () => { Uri.parse("1a:x") })
+            Assertions.signals(Error, () => { Uri.parse("+a:x") })
+            Assertions.signals(Error, () => { Uri.parse(".a:x") })
 
             // Raw characters outside the RFC 3986 ASCII grammar.
-            require(reject(() => { Uri.parse("/a b") }))
-            require(reject(() => { Uri.parse("/a\\b") }))
-            require(reject(() => { Uri.parse("/a<b") }))
-            require(reject(() => { Uri.parse("/é") }))
-            require(reject(() => { Uri.parse("/a\nb") }))
+            Assertions.signals(Error, () => { Uri.parse("/a b") })
+            Assertions.signals(Error, () => { Uri.parse("/a\\b") })
+            Assertions.signals(Error, () => { Uri.parse("/a<b") })
+            Assertions.signals(Error, () => { Uri.parse("/é") })
+            Assertions.signals(Error, () => { Uri.parse("/a\nb") })
 
             // Percent escapes are syntax, not a permissive decoding hint.
-            require(reject(() => { Uri.parse("/%") }))
-            require(reject(() => { Uri.parse("/%0") }))
-            require(reject(() => { Uri.parse("/%GG") }))
-            require(reject(() => { Uri.parse("?%") }))
-            require(reject(() => { Uri.parse("#%") }))
+            Assertions.signals(Error, () => { Uri.parse("/%") })
+            Assertions.signals(Error, () => { Uri.parse("/%0") })
+            Assertions.signals(Error, () => { Uri.parse("/%GG") })
+            Assertions.signals(Error, () => { Uri.parse("?%") })
+            Assertions.signals(Error, () => { Uri.parse("#%") })
 
             // Authority syntax.
-            require(reject(() => { Uri.parse("//user@@host/") }))
-            require(reject(() => { Uri.parse("//host:80:90/") }))
-            require(reject(() => { Uri.parse("//ho st/") }))
-            require(reject(() => { Uri.parse("//[2001:db8::1") }))
-            require(reject(() => { Uri.parse("//[2001:db8::1]x/") }))
-            require(reject(() => { Uri.parse("//[2001:db8::1]:abc/") }))
+            Assertions.signals(Error, () => { Uri.parse("//user@@host/") })
+            Assertions.signals(Error, () => { Uri.parse("//host:80:90/") })
+            Assertions.signals(Error, () => { Uri.parse("//ho st/") })
+            Assertions.signals(Error, () => { Uri.parse("//[2001:db8::1") })
+            Assertions.signals(Error, () => { Uri.parse("//[2001:db8::1]x/") })
+            Assertions.signals(Error, () => { Uri.parse("//[2001:db8::1]:abc/") })
 
             // IPv6 and IPvFuture syntax inside IP-literal brackets.
-            require(reject(() => { Uri.parse("//[gggg::1]/") }))
-            require(reject(() => { Uri.parse("//[1:2:3:4:5:6:7]/") }))
-            require(reject(() => { Uri.parse("//[1:2:3:4:5:6:7:8:9]/") }))
-            require(reject(() => { Uri.parse("//[1::2::3]/") }))
-            require(reject(() => { Uri.parse("//[1:2:3:4:5:6::192.0.2.1]/") }))
-            require(reject(() => { Uri.parse("//[::ffff:999.1.1.1]/") }))
-            require(reject(() => { Uri.parse("//[v.z]/") }))
-            require(reject(() => { Uri.parse("//[v1.]/") }))
-            require(reject(() => { Uri.parse("//[v1.a@b]/") }))
+            Assertions.signals(Error, () => { Uri.parse("//[gggg::1]/") })
+            Assertions.signals(Error, () => { Uri.parse("//[1:2:3:4:5:6:7]/") })
+            Assertions.signals(Error, () => { Uri.parse("//[1:2:3:4:5:6:7:8:9]/") })
+            Assertions.signals(Error, () => { Uri.parse("//[1::2::3]/") })
+            Assertions.signals(Error, () => { Uri.parse("//[1:2:3:4:5:6::192.0.2.1]/") })
+            Assertions.signals(Error, () => { Uri.parse("//[::ffff:999.1.1.1]/") })
+            Assertions.signals(Error, () => { Uri.parse("//[v.z]/") })
+            Assertions.signals(Error, () => { Uri.parse("//[v1.]/") })
+            Assertions.signals(Error, () => { Uri.parse("//[v1.a@b]/") })
 
             // '[' and ']' are not generic path/query/fragment characters.
-            require(reject(() => { Uri.parse("/[x]") }))
-            require(reject(() => { Uri.parse("?x=[y]") }))
-            require(reject(() => { Uri.parse("#[z]") }))
+            Assertions.signals(Error, () => { Uri.parse("/[x]") })
+            Assertions.signals(Error, () => { Uri.parse("?x=[y]") })
+            Assertions.signals(Error, () => { Uri.parse("#[z]") })
 
             true
         }
@@ -191,76 +155,58 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
-            require(Uri.parse("mailto:John.Doe@example.com").scheme == "mailto")
-            require(Uri.parse("urn:oasis:names:specification:docbook:dtd:xml:4.1.2").path ==
+            Assertions.require(Uri.parse("mailto:John.Doe@example.com").scheme == "mailto")
+            Assertions.require(Uri.parse("urn:oasis:names:specification:docbook:dtd:xml:4.1.2").path ==
                 "oasis:names:specification:docbook:dtd:xml:4.1.2")
 
             relative: Uri.parse("../a/b?c/d?e#f/g?h")
-            require(relative.scheme === null)
-            require(relative.userInfo === null)
-            require(relative.host === null)
-            require(relative.port === null)
-            require(relative.path == "../a/b")
-            require(relative.query == "c/d?e")
-            require(relative.fragment == "f/g?h")
+            Assertions.require(relative.scheme === null)
+            Assertions.require(relative.userInfo === null)
+            Assertions.require(relative.host === null)
+            Assertions.require(relative.port === null)
+            Assertions.require(relative.path == "../a/b")
+            Assertions.require(relative.query == "c/d?e")
+            Assertions.require(relative.fragment == "f/g?h")
 
-            require(Uri.parse("/a/b:c").path == "/a/b:c")
-            require(Uri.parse("a/b:c").path == "a/b:c")
-            require(Uri.parse("./a:b").path == "./a:b")
-            require(Uri.parse("a:b").scheme == "a")
-            require(Uri.parse("a:b").path == "b")
+            Assertions.require(Uri.parse("/a/b:c").path == "/a/b:c")
+            Assertions.require(Uri.parse("a/b:c").path == "a/b:c")
+            Assertions.require(Uri.parse("./a:b").path == "./a:b")
+            Assertions.require(Uri.parse("a:b").scheme == "a")
+            Assertions.require(Uri.parse("a:b").path == "b")
 
             authority: Uri.parse("//user:pass@example.com:443/a")
-            require(authority.userInfo == "user:pass")
-            require(authority.host == "example.com")
-            require(authority.port == "443")
-            require(authority.path == "/a")
+            Assertions.require(authority.userInfo == "user:pass")
+            Assertions.require(authority.host == "example.com")
+            Assertions.require(authority.port == "443")
+            Assertions.require(authority.path == "/a")
 
             reserved: Uri.parse("scheme:/AZaz09-._~!$&'()*+,;=:@/%41")
-            require(reserved.path == "/AZaz09-._~!$&'()*+,;=:@/%41")
+            Assertions.require(reserved.path == "/AZaz09-._~!$&'()*+,;=:@/%41")
 
-            require(Uri.parse("file:///path").host == "")
-            require(Uri.parse("http://example.com:").port == "")
-            require(Uri.parse("http://@example.com").userInfo == "")
-            require(Uri.parse("http://999.999.999.999/").host == "999.999.999.999")
+            Assertions.require(Uri.parse("file:///path").host == "")
+            Assertions.require(Uri.parse("http://example.com:").port == "")
+            Assertions.require(Uri.parse("http://@example.com").userInfo == "")
+            Assertions.require(Uri.parse("http://999.999.999.999/").host == "999.999.999.999")
 
             ipv6: Uri.parse("//[2001:db8::1]:443/path")
-            require(ipv6.host == "[2001:db8::1]")
-            require(ipv6.port == "443")
-            require(Uri.parse("//[::ffff:192.0.2.1]/").host == "[::ffff:192.0.2.1]")
-            require(Uri.parse("//[1:2:3:4:5:6:192.0.2.1]/").host ==
+            Assertions.require(ipv6.host == "[2001:db8::1]")
+            Assertions.require(ipv6.port == "443")
+            Assertions.require(Uri.parse("//[::ffff:192.0.2.1]/").host == "[::ffff:192.0.2.1]")
+            Assertions.require(Uri.parse("//[1:2:3:4:5:6:192.0.2.1]/").host ==
                 "[1:2:3:4:5:6:192.0.2.1]")
-            require(Uri.parse("//[1:2:3:4:5::192.0.2.1]/").host ==
+            Assertions.require(Uri.parse("//[1:2:3:4:5::192.0.2.1]/").host ==
                 "[1:2:3:4:5::192.0.2.1]")
-            require(Uri.parse("//[::]/").host == "[::]")
+            Assertions.require(Uri.parse("//[::]/").host == "[::]")
 
             ipvFuture: Uri.parse("//[v1.fe80::abcd]/")
-            require(ipvFuture.host == "[v1.fe80::abcd]")
-            require(Uri.parse("//[VF.a:b]/").host == "[VF.a:b]")
+            Assertions.require(ipvFuture.host == "[v1.fe80::abcd]")
+            Assertions.require(Uri.parse("//[VF.a:b]/").host == "[VF.a:b]")
 
             percentCase: Uri.parse("X:/a%2fb%2F?q=%3a#%4A")
-            require(percentCase.scheme == "X")
-            require(percentCase.path == "/a%2fb%2F")
-            require(percentCase.query == "q=%3a")
-            require(percentCase.fragment == "%4A")
+            Assertions.require(percentCase.scheme == "X")
+            Assertions.require(percentCase.path == "/a%2fb%2F")
+            Assertions.require(percentCase.query == "q=%3a")
+            Assertions.require(percentCase.fragment == "%4A")
 
             true
         }
@@ -270,33 +216,15 @@ tests: [
         tool009LegacyCase: () => {
             Uri: import("std:uri")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             delegatedStringLookalike: String {}
 
-            require(reject(() => { Uri.parse() }))
-            require(reject(() => { Uri.parse("a", "b") }))
-            require(reject(() => { Uri.parse(123) }))
-            require(reject(() => { Uri.parse(null) }))
-            require(reject(() => { Uri.parse({}) }))
-            require(reject(() => { Uri.parse(Array()) }))
-            require(reject(() => { Uri.parse(delegatedStringLookalike) }))
+            Assertions.signals(Error, () => { Uri.parse() })
+            Assertions.signals(Error, () => { Uri.parse("a", "b") })
+            Assertions.signals(Error, () => { Uri.parse(123) })
+            Assertions.signals(Error, () => { Uri.parse(null) })
+            Assertions.signals(Error, () => { Uri.parse({}) })
+            Assertions.signals(Error, () => { Uri.parse(Array()) })
+            Assertions.signals(Error, () => { Uri.parse(delegatedStringLookalike) })
 
             true
         }

@@ -22,33 +22,27 @@ tests: [
         tool009LegacyCase: () => {
             IpAddresses: import("std:network/IpAddresses")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             // Exact module exports are checked by the Java harness because the current
             // guest Object protocol does not yet expose slot-name enumeration.
             zero: IpAddresses.v4(0, 0, 0, 0)
-            require(IpAddress.recognizes(zero))
-            require(zero.parent() === IpAddress)
-            require(zero.version == 4)
-            require(zero.bits == 0)
+            Assertions.require(IpAddress.recognizes(zero))
+            Assertions.require(zero.parent() === IpAddress)
+            Assertions.require(zero.version == 4)
+            Assertions.require(zero.bits == 0)
 
             loopback: IpAddresses.v4(127, 0, 0, 1)
-            require(loopback.version == 4)
-            require(loopback.bits == 2130706433)
+            Assertions.require(loopback.version == 4)
+            Assertions.require(loopback.bits == 2130706433)
 
             documentation: IpAddresses.v4(192, 0, 2, 1)
-            require(documentation.bits == 3221225985)
+            Assertions.require(documentation.bits == 3221225985)
 
             maximum: IpAddresses.v4(255, 255, 255, 255)
-            require(maximum.bits == 4294967295)
+            Assertions.require(maximum.bits == 4294967295)
 
             fresh: IpAddresses.v4(192, 0, 2, 1)
-            require(fresh == documentation)
-            require(fresh !== documentation)
+            Assertions.require(fresh == documentation)
+            Assertions.require(fresh !== documentation)
 
             true
         }
@@ -58,31 +52,25 @@ tests: [
         tool009LegacyCase: () => {
             IpAddresses: import("std:network/IpAddresses")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             zero: IpAddresses.v6(0, 0, 0, 0, 0, 0, 0, 0)
-            require(IpAddress.recognizes(zero))
-            require(zero.parent() === IpAddress)
-            require(zero.version == 6)
-            require(zero.bits == 0)
+            Assertions.require(IpAddress.recognizes(zero))
+            Assertions.require(zero.parent() === IpAddress)
+            Assertions.require(zero.version == 6)
+            Assertions.require(zero.bits == 0)
 
             documentation: IpAddresses.v6(8193, 3512, 0, 0, 0, 0, 0, 1)
-            require(documentation.version == 6)
-            require(documentation.bits == 42540766411282592856903984951653826561)
+            Assertions.require(documentation.version == 6)
+            Assertions.require(documentation.bits == 42540766411282592856903984951653826561)
 
             maximum: IpAddresses.v6(
                 65535, 65535, 65535, 65535,
                 65535, 65535, 65535, 65535
             )
-            require(maximum.bits == 340282366920938463463374607431768211455)
+            Assertions.require(maximum.bits == 340282366920938463463374607431768211455)
 
             fresh: IpAddresses.v6(8193, 3512, 0, 0, 0, 0, 0, 1)
-            require(fresh == documentation)
-            require(fresh !== documentation)
+            Assertions.require(fresh == documentation)
+            Assertions.require(fresh !== documentation)
 
             true
         }

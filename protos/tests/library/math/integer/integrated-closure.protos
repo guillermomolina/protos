@@ -21,25 +21,19 @@ tests: [
         tool009LegacyCase: () => {
             IntegerMath: import("std:math/Integer")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
             common: IntegerMath.gcd(-84, 30)
             period: IntegerMath.lcm(common, 14)
             fact: IntegerMath.factorial(common)
             powered: IntegerMath.pow(common, 5)
             reduced: IntegerMath.powMod(0 - powered, 3, period)
 
-            require(common == 6)
-            require(period == 42)
-            require(fact == 720)
-            require(powered == 7776)
-            require(reduced == 36)
+            Assertions.require(common == 6)
+            Assertions.require(period == 42)
+            Assertions.require(fact == 720)
+            Assertions.require(powered == 7776)
+            Assertions.require(reduced == 36)
 
-            require(IntegerMath.gcd(IntegerMath.factorial(8), IntegerMath.pow(2, 10)) == 128)
+            Assertions.require(IntegerMath.gcd(IntegerMath.factorial(8), IntegerMath.pow(2, 10)) == 128)
 
             true
         }

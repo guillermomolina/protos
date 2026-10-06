@@ -21,24 +21,6 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             readerCalls: 0
             reader: {
                 readText: () => {
@@ -48,8 +30,8 @@ tests: [
             }
             input: CSV.readRows(reader, (row) => { null })
             firstRead: input.read()
-            require(reject(() => { input.read() }))
-            require(readerCalls == 1)
+            Assertions.signals(Error, () => { input.read() })
+            Assertions.require(readerCalls == 1)
 
             sink: ""
             writer: null
@@ -63,14 +45,14 @@ tests: [
             }
             output: CSV.writeRows(writer)
             firstWrite: output.feed(Array("a"))
-            require(reject(() => { output.feed(Array("b")) }))
-            require(reject(() => { output.finish() }))
+            Assertions.signals(Error, () => { output.feed(Array("b")) })
+            Assertions.signals(Error, () => { output.finish() })
 
             firstRead.then((more) => {
-                require(more === true)
+                Assertions.require(more === true)
                 firstWrite.then((resolvedOutput) => {
-                    require(resolvedOutput === output)
-                    require(sink == "a\r\n")
+                    Assertions.require(resolvedOutput === output)
+                    Assertions.require(sink == "a\r\n")
                     true
                 })
             })
@@ -80,24 +62,6 @@ tests: [
     Test("text adapter reader", () => {
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
 
             chunks: Array("a,\"b", ",b\"\r", "\n", "c,d", null)
             index: 0
@@ -118,32 +82,32 @@ tests: [
 
             step1: stream.read()
             step2: step1.then((more) => {
-                require(more === true)
+                Assertions.require(more === true)
                 stream.read()
             })
             step3: step2.then((more) => {
-                require(more === true)
+                Assertions.require(more === true)
                 stream.read()
             })
             step4: step3.then((more) => {
-                require(more === true)
+                Assertions.require(more === true)
                 stream.read()
             })
             step5: step4.then((more) => {
-                require(more === true)
+                Assertions.require(more === true)
                 stream.read()
             })
 
             step5.then((more) => {
-                require(more === false)
-                require(count == 2)
-                require(rows[0].size() == 2)
-                require(rows[0][0] == "a")
-                require(rows[0][1] == "b,b")
-                require(rows[1].size() == 2)
-                require(rows[1][0] == "c")
-                require(rows[1][1] == "d")
-                require(reject(() => { stream.read() }))
+                Assertions.require(more === false)
+                Assertions.require(count == 2)
+                Assertions.require(rows[0].size() == 2)
+                Assertions.require(rows[0][0] == "a")
+                Assertions.require(rows[0][1] == "b,b")
+                Assertions.require(rows[1].size() == 2)
+                Assertions.require(rows[1][0] == "c")
+                Assertions.require(rows[1][1] == "d")
+                Assertions.signals(Error, () => { stream.read() })
                 true
             })
         }
@@ -153,32 +117,14 @@ tests: [
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
 
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
-
             badReader: {
                 readText: () => {
                     Error().signal()
                 }
             }
             input: CSV.readRows(badReader, (row) => { null })
-            require(reject(() => { input.read() }))
-            require(reject(() => { input.read() }))
+            Assertions.signals(Error, () => { input.read() })
+            Assertions.signals(Error, () => { input.read() })
 
             writerCalls: 0
             badWriter: {
@@ -188,11 +134,11 @@ tests: [
                 }
             }
             output: CSV.writeRows(badWriter)
-            require(reject(() => { output.feed(Array("a")) }))
-            require(writerCalls == 1)
-            require(reject(() => { output.feed(Array("b")) }))
-            require(reject(() => { output.finish() }))
-            require(writerCalls == 1)
+            Assertions.signals(Error, () => { output.feed(Array("a")) })
+            Assertions.require(writerCalls == 1)
+            Assertions.signals(Error, () => { output.feed(Array("b")) })
+            Assertions.signals(Error, () => { output.finish() })
+            Assertions.require(writerCalls == 1)
 
             invalidWriterCalls: 0
             unusedWriter: {
@@ -202,15 +148,15 @@ tests: [
                 }
             }
             invalidOutput: CSV.writeRows(unusedWriter)
-            require(reject(() => { invalidOutput.feed(Array()) }))
-            require(invalidWriterCalls == 0)
-            require(reject(() => { invalidOutput.feed(Array("later")) }))
-            require(invalidWriterCalls == 0)
+            Assertions.signals(Error, () => { invalidOutput.feed(Array()) })
+            Assertions.require(invalidWriterCalls == 0)
+            Assertions.signals(Error, () => { invalidOutput.feed(Array("later")) })
+            Assertions.require(invalidWriterCalls == 0)
 
-            require(reject(() => { CSV.readRows() }))
-            require(reject(() => { CSV.readRows({}, (row) => { null }, 1) }))
-            require(reject(() => { CSV.writeRows() }))
-            require(reject(() => { CSV.writeRows({}, {}) }))
+            Assertions.signals(Error, () => { CSV.readRows() })
+            Assertions.signals(Error, () => { CSV.readRows({}, (row) => { null }, 1) })
+            Assertions.signals(Error, () => { CSV.writeRows() })
+            Assertions.signals(Error, () => { CSV.writeRows({}, {}) })
 
             true
         }
@@ -219,24 +165,6 @@ tests: [
     Test("text adapter writer", () => {
         tool009LegacyCase: () => {
             CSV: import("std:csv/CSV")
-
-            require: (condition) => {
-                condition.ifFalse(() => {
-                    Error().signal()
-                })
-            }
-
-            reject: (body) => {
-                Error.handle(
-                    () => {
-                        body()
-                        false
-                    },
-                    (error) => {
-                        true
-                    }
-                )
-            }
 
             sink: ""
             writes: 0
@@ -254,20 +182,20 @@ tests: [
             stream: CSV.writeRows(writer)
             first: stream.feed(Array("a", "b"))
             second: first.then((resolvedStream) => {
-                require(resolvedStream === stream)
+                Assertions.require(resolvedStream === stream)
                 stream.feed(Array("x,y", "q\"z"))
             })
             finished: second.then((resolvedStream) => {
-                require(resolvedStream === stream)
+                Assertions.require(resolvedStream === stream)
                 stream.finish()
             })
 
             finished.then((resolvedStream) => {
-                require(resolvedStream === stream)
-                require(sink == "a,b\r\n\"x,y\",\"q\"\"z\"\r\n")
-                require(writes == 3)
-                require(reject(() => { stream.feed(Array("late")) }))
-                require(reject(() => { stream.finish() }))
+                Assertions.require(resolvedStream === stream)
+                Assertions.require(sink == "a,b\r\n\"x,y\",\"q\"\"z\"\r\n")
+                Assertions.require(writes == 3)
+                Assertions.signals(Error, () => { stream.feed(Array("late")) })
+                Assertions.signals(Error, () => { stream.finish() })
                 true
             })
         }
