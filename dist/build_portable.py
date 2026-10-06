@@ -102,9 +102,11 @@ def sha256(path: Path) -> str:
 def write_checksums(bundle: Path) -> None:
     lines: list[str] = []
     for path in sorted(bundle.rglob("*")):
-        if not path.is_file() or path.name == "SHA256SUMS":
+        if not path.is_file():
             continue
         rel = path.relative_to(bundle).as_posix()
+        if rel == "SHA256SUMS":
+            continue
         lines.append(f"{sha256(path)}  {rel}")
     write_text(bundle / "SHA256SUMS", "\n".join(lines))
 
