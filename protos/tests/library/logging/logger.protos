@@ -1,0 +1,328 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Level: import("std:logging/Level")
+Logger: import("std:logging/Logger")
+
+Failure: Error {}
+
+// A minimal test sink that records every emitted event in order.
+recorder: () => {
+    events: []
+    {
+        events: events
+        emit: (event) => {
+            events.add(event)
+        }
+    }
+}
+
+// A test sink whose `emit` always signals, counting its invocations.
+failingSink: () => {
+    {
+        calls: 0
+        emit: (event) => {
+            this.calls = this.calls + 1
+            Failure().signal()
+        }
+    }
+}
+
+tests: [
+    Test("minimum level filters less severe calls", () => {
+        sink: recorder()
+        logger: Logger(Level.INFO, sink)
+        logger.trace("t")
+        logger.debug("d")
+        logger.info("i")
+        logger.warn("w")
+        logger.error("e")
+        Assertions.require(sink.events.size() == 3)
+        Assertions.require(sink.events[0].level === Level.INFO)
+        Assertions.require(sink.events[1].level === Level.WARN)
+        Assertions.require(sink.events[2].level === Level.ERROR)
+        Assertions.require(sink.events[2].message == "e")
+
+        Assertions.require(logger.isEnabled(Level.TRACE) == false)
+        Assertions.require(logger.isEnabled(Level.DEBUG) == false)
+        Assertions.require(logger.isEnabled(Level.INFO))
+        Assertions.require(logger.isEnabled(Level.WARN))
+        Assertions.require(logger.isEnabled(Level.ERROR))
+
+        everything: Logger(Level.TRACE, sink)
+        everything.trace("t")
+        everything.log(Level.DEBUG, "d")
+        Assertions.require(sink.events.size() == 5)
+        Assertions.require(sink.events[3].level === Level.TRACE)
+        Assertions.require(sink.events[4].level === Level.DEBUG)
+    }),
+    Test("a disabled call inspects no data, creates no event, and skips the sink", () => {
+        sink: failingSink()
+        logger: Logger(Level.WARN, sink)
+        cyclic: [1]
+        cyclic.add(cyclic)
+
+        Assertions.require(logger.debug("d", %{ "cycle": cyclic; "object": { secret: 1 } }, "not an error") === null)
+        Assertions.require(logger.trace(42, ["not a map"], 7) === null)
+        Assertions.require(logger.log(Level.INFO, null, "not a map") === null)
+        Assertions.require(sink.calls == 0)
+    }),
+    Test("isEnabled lets callers skip building expensive data", () => {
+        builds: 0
+        buildFields: () => {
+            builds = builds + 1
+            %{ "report": [1, 2, 3] }
+        }
+
+        quiet: recorder()
+        quietLogger: Logger(Level.INFO, quiet)
+        quietLogger.isEnabled(Level.DEBUG).ifTrue(() => {
+            quietLogger.debug("expensive diagnostics", buildFields())
+        })
+        Assertions.require(builds == 0)
+        Assertions.require(quiet.events.size() == 0)
+
+        verbose: recorder()
+        verboseLogger: Logger(Level.DEBUG, verbose)
+        verboseLogger.isEnabled(Level.DEBUG).ifTrue(() => {
+            verboseLogger.debug("expensive diagnostics", buildFields())
+        })
+        Assertions.require(builds == 1)
+        Assertions.require(verbose.events.size() == 1)
+        Assertions.require(verbose.events[0].fields["report"].size() == 3)
+    }),
+    Test("simple info emits exactly one event with no fields or error", () => {
+        sink: recorder()
+        logger: Logger(Level.INFO, sink)
+        Assertions.require(logger.info("started") === null)
+        Assertions.require(sink.events.size() == 1)
+        event: sink.events[0]
+        Assertions.require(event.level === Level.INFO)
+        Assertions.require(event.message == "started")
+        Assertions.require(event.fields.size() == 0)
+        Assertions.require(event.error === null)
+    }),
+    Test("call-site structured fields reach the sink", () => {
+        sink: recorder()
+        logger: Logger(Level.INFO, sink)
+        logger.info("cache refreshed", %{ "entries": 42; "tags": ["hot", "warm"] })
+        event: sink.events[0]
+        Assertions.require(event.message == "cache refreshed")
+        Assertions.require(event.fields.size() == 2)
+        Assertions.require(event.fields["entries"] == 42)
+        Assertions.require(event.fields["tags"][1] == "warm")
+    }),
+    Test("an Error is attached by identity", () => {
+        sink: recorder()
+        logger: Logger(Level.INFO, sink)
+        failure: Failure()
+        logger.error("request failed", %{ "requestId": "r-7" }, failure)
+        logger.warn("retrying", null, failure)
+        Assertions.require(sink.events.size() == 2)
+        Assertions.require(sink.events[0].level === Level.ERROR)
+        Assertions.require(sink.events[0].error === failure)
+        Assertions.require(sink.events[0].fields["requestId"] == "r-7")
+        Assertions.require(sink.events[1].error === failure)
+        Assertions.require(sink.events[1].fields.size() == 0)
+    }),
+    Test("with derives a logger and leaves the original unchanged", () => {
+        sink: recorder()
+        base: Logger(Level.INFO, sink)
+        derived: base.with(%{ "service": "api" })
+        Assertions.require(derived !== base)
+        Assertions.require(base.fields.size() == 0)
+        Assertions.require(derived.fields["service"] == "api")
+        Assertions.require(derived.sink === base.sink)
+        Assertions.require(derived.minimumLevel === base.minimumLevel)
+        Assertions.require(derived.isEnabled(Level.DEBUG) == false)
+
+        base.info("plain")
+        derived.info("contextual")
+        derived.debug("filtered")
+        Assertions.require(sink.events.size() == 2)
+        Assertions.require(sink.events[0].fields.size() == 0)
+        Assertions.require(sink.events[1].fields["service"] == "api")
+    }),
+    Test("successive derivations accumulate context", () => {
+        sink: recorder()
+        root: Logger(Level.TRACE, sink)
+        first: root.with(%{ "a": 1 })
+        second: first.with(%{ "b": 2 })
+        third: second.with(%{ "c": 3 })
+        third.trace("deep")
+        first.trace("shallow")
+        Assertions.require(sink.events[0].fields.size() == 3)
+        Assertions.require(sink.events[0].fields["a"] == 1)
+        Assertions.require(sink.events[0].fields["b"] == 2)
+        Assertions.require(sink.events[0].fields["c"] == 3)
+        Assertions.require(sink.events[1].fields.size() == 1)
+        Assertions.require(second.fields.size() == 2)
+    }),
+    Test("precedence is base < derived < call site", () => {
+        sink: recorder()
+        base: Logger(Level.INFO, sink).with(%{ "key": "base"; "onlyBase": 1 })
+        derived: base.with(%{ "key": "derived"; "onlyDerived": 2 })
+
+        derived.info("call site wins", %{ "key": "call"; "onlyCall": 3 })
+        derived.info("derived wins")
+        base.info("base only")
+
+        callEvent: sink.events[0]
+        Assertions.require(callEvent.fields.size() == 4)
+        Assertions.require(callEvent.fields["key"] == "call")
+        Assertions.require(callEvent.fields["onlyBase"] == 1)
+        Assertions.require(callEvent.fields["onlyDerived"] == 2)
+        Assertions.require(callEvent.fields["onlyCall"] == 3)
+        Assertions.require(sink.events[1].fields["key"] == "derived")
+        Assertions.require(sink.events[2].fields["key"] == "base")
+        Assertions.require(derived.fields["key"] == "derived")
+    }),
+    Test("mutating supplied context does not change a derived logger", () => {
+        sink: recorder()
+        nested: [1]
+        supplied: %{ "list": nested }
+        derived: Logger(Level.INFO, sink).with(supplied)
+
+        supplied["late"] = true
+        supplied["list"] = "replaced"
+        nested.add(2)
+
+        Assertions.require(derived.fields.size() == 1)
+        Assertions.require(derived.fields["list"].size() == 1)
+        derived.info("after mutation")
+        Assertions.require(sink.events[0].fields.size() == 1)
+        Assertions.require(sink.events[0].fields["list"].size() == 1)
+        Assertions.signals(Error, () => {
+            derived.fields["list"].add(3)
+        })
+    }),
+    Test("mutating call-site data does not change an emitted event", () => {
+        sink: recorder()
+        logger: Logger(Level.INFO, sink)
+        nested: %{ "count": 1 }
+        list: [nested]
+        fields: %{ "list": list }
+        logger.info("materialized", fields)
+
+        fields["list"] = null
+        list.add("extra")
+        nested["count"] = 2
+
+        event: sink.events[0]
+        Assertions.require(event.fields["list"].size() == 1)
+        Assertions.require(event.fields["list"][0]["count"] == 1)
+    }),
+    Test("the sink receives exactly the expected event once", () => {
+        sink: recorder()
+        logger: Logger(Level.INFO, sink).with(%{ "service": "api" })
+        failure: Failure()
+        logger.error("boom", %{ "attempt": 3 }, failure)
+        Assertions.require(sink.events.size() == 1)
+        event: sink.events[0]
+        Assertions.require(event.slotNames().size() == 4)
+        Assertions.require(event.level === Level.ERROR)
+        Assertions.require(event.message == "boom")
+        Assertions.require(event.fields.size() == 2)
+        Assertions.require(event.fields["service"] == "api")
+        Assertions.require(event.fields["attempt"] == 3)
+        Assertions.require(event.error === failure)
+        Assertions.signals(Error, () => {
+            event.message = "changed"
+        })
+    }),
+    Test("an Error signalled by the sink does not escape the logging call", () => {
+        sink: failingSink()
+        logger: Logger(Level.INFO, sink)
+        Assertions.require(logger.info("first") === null)
+        Assertions.require(logger.error("second", %{ "k": 1 }, Error()) === null)
+        Assertions.require(logger.with(%{ "k": 2 }).warn("third") === null)
+        Assertions.require(sink.calls == 3)
+    }),
+    Test("sink containment does not hide invalid enabled arguments", () => {
+        sink: failingSink()
+        logger: Logger(Level.INFO, sink)
+        Assertions.signals(Error, () => {
+            logger.info(42)
+        })
+        Assertions.signals(Error, () => {
+            logger.info("m", ["not a map"])
+        })
+        Assertions.signals(Error, () => {
+            logger.info("m", %{ "object": { secret: 1 } })
+        })
+        Assertions.signals(Error, () => {
+            logger.info("m", %{ 1: "integer key" })
+        })
+        Assertions.signals(Error, () => {
+            logger.info("m", null, "not an error")
+        })
+        Assertions.signals(Error, () => {
+            logger.info("m", null, null, "extra")
+        })
+        Assertions.require(sink.calls == 0)
+    }),
+    Test("invalid levels, sinks, and contexts signal Error", () => {
+        sink: recorder()
+        logger: Logger(Level.INFO, sink)
+        Assertions.signals(Error, () => {
+            Logger("FATAL", sink)
+        })
+        Assertions.signals(Error, () => {
+            Logger(null, sink)
+        })
+        Assertions.signals(Error, () => {
+            Logger(Level.INFO, null)
+        })
+        Assertions.signals(Error, () => {
+            logger.isEnabled("VERBOSE")
+        })
+        Assertions.signals(Error, () => {
+            logger.log("VERBOSE", "m")
+        })
+        Assertions.signals(Error, () => {
+            logger.log(null, "m")
+        })
+        Assertions.signals(Error, () => {
+            logger.with(null)
+        })
+        Assertions.signals(Error, () => {
+            logger.with([1])
+        })
+        Assertions.signals(Error, () => {
+            logger.with(%{ 1: 2 })
+        })
+        Assertions.signals(Error, () => {
+            logger.with(%{ "closure": () => { 1 } })
+        })
+        Assertions.require(sink.events.size() == 0)
+    }),
+    Test("a logger is frozen and holds no ambient authority", () => {
+        sink: recorder()
+        logger: Logger(Level.INFO, sink)
+        Assertions.require(logger.slotNames().size() == 11)
+        Assertions.require(logger.sink === sink)
+        Assertions.signals(Error, () => {
+            logger.minimumLevel = Level.TRACE
+        })
+        Assertions.signals(Error, () => {
+            logger.fields["late"] = true
+        })
+        Assertions.require(Logger.hasSlot("default") == false)
+        Assertions.require(Logger.hasSlot("global") == false)
+        Assertions.require(Logger.hasSlot("registry") == false)
+    })
+]

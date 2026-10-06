@@ -145,7 +145,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         ORDINARY_LEAF_GROUPS.forEach((id, name) -> expected.put(id, List.of(name)));
 
         assertEquals(expected, actual);
-        assertEquals(32, actual.values().stream().mapToInt(List::size).sum());
+        assertEquals(33, actual.values().stream().mapToInt(List::size).sum());
     }
 
     @Test
@@ -164,9 +164,9 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                                         + "Arrays.map(Array(detached, ...reversed), (leaf) => "
                                         + "Array(leaf.id, RepositorySuite.progressGroupNames(leaf)))"));
 
-        assertEquals(24, pairs.indexedSize().intValueExact());
+        assertEquals(25, pairs.indexedSize().intValueExact());
         List<String> order = new ArrayList<>();
-        for (int index = 0; index < 24; index++) {
+        for (int index = 0; index < 25; index++) {
             ProtosArrayValue pair = arrayAt(pairs, index);
             String id = stringAt(pair, 0);
             List<String> names = strings(arrayAt(pair, 1));
@@ -179,7 +179,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
         }
         assertEquals("protos/actor", order.get(0));
         assertEquals("protos/package-tool/project-projection", order.get(1));
-        assertEquals("protos/conformance", order.get(23));
+        assertEquals("protos/conformance", order.get(24));
     }
 
     @Test
@@ -411,6 +411,7 @@ final class ProtosTestToolTool011ProgressGroupingTest {
                         "library/semver",
                         "library/datetime",
                         "library/regex",
+                        "library/logging",
                         "package-tool/version",
                         "package-tool/lock",
                         "package-tool/resolution-input",

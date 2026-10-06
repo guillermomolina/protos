@@ -1,0 +1,72 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Level: import("std:logging/Level")
+
+ordered: [Level.TRACE, Level.DEBUG, Level.INFO, Level.WARN, Level.ERROR]
+
+rejectsCompare: (left, right) => {
+    Assertions.signals(Error, () => {
+        Level.compare(left, right)
+    })
+    true
+}
+
+tests: [
+    Test("levels are their canonical String values", () => {
+        Assertions.require(Level.TRACE === "TRACE")
+        Assertions.require(Level.DEBUG === "DEBUG")
+        Assertions.require(Level.INFO === "INFO")
+        Assertions.require(Level.WARN === "WARN")
+        Assertions.require(Level.ERROR === "ERROR")
+        Assertions.require(import("std:logging/Level").INFO === Level.INFO)
+    }),
+    Test("exactly five levels and no FATAL", () => {
+        Assertions.require(Level.hasSlot("FATAL") == false)
+        Assertions.require(Level.hasSlot("CRITICAL") == false)
+        Assertions.require(Level.hasSlot("OFF") == false)
+        ordered.each((level) => {
+            Assertions.require(Level.compare(level, level) == 0)
+        })
+    }),
+    Test("severity order is TRACE < DEBUG < INFO < WARN < ERROR", () => {
+        leftIndex: 0
+        ordered.each((left) => {
+            rightIndex: 0
+            ordered.each((right) => {
+                expected: 0
+                (leftIndex < rightIndex).ifTrue(() => {
+                    expected = -1
+                })
+                (leftIndex > rightIndex).ifTrue(() => {
+                    expected = 1
+                })
+                Assertions.require(Level.compare(left, right) == expected)
+                rightIndex = rightIndex + 1
+            })
+            leftIndex = leftIndex + 1
+        })
+    }),
+    Test("compare rejects values that are not canonical levels", () => {
+        rejectsCompare("FATAL", Level.INFO)
+        rejectsCompare(Level.INFO, "info")
+        rejectsCompare(null, Level.INFO)
+        rejectsCompare(Level.INFO, 2)
+        rejectsCompare({ name: "INFO" }, Level.INFO)
+        rejectsCompare(Level.INFO, ["INFO"])
+    })
+]

@@ -7,6 +7,31 @@ Historical implementation changelogs:
 - [0.2.x](changelog/CHANGELOG-0.2.md)
 - [0.1.x](changelog/CHANGELOG-0.1.md)
 
+## 0.3.247-SNAPSHOT
+
+- `LIB015-A` (guillermomolina/protos#432) adds the structured logging core:
+  `std:logging/Level`, `std:logging/LogEvent`, and `std:logging/Logger`. There
+  is no specification change.
+  - The levels are `TRACE`, `DEBUG`, `INFO`, `WARN`, and `ERROR`. Each one is
+    its canonical String value, ordered only through `Level.compare`. There is
+    no `FATAL` level.
+  - `LogEvent(level, message, fields, error)` is a frozen event. Its fields
+    are a deep snapshot (copied and frozen) of structured ordinary data:
+    `null`, Booleans, Strings, Integers, Floats, Arrays, and normal Maps with
+    String keys. Other values and cyclic data signal `Error` and are never
+    converted to Strings. The attached Error is kept by identity. An event
+    carries no timestamp yet.
+  - `Logger(minimumLevel, sink)` is an explicit frozen logger with
+    `isEnabled`, `log`, `trace`, `debug`, `info`, `warn`, `error`, and
+    `with(fields)`. A derived logger's context overrides its base context,
+    and call-site fields override both. A disabled call validates only its
+    level, then returns without copying data, creating an event, or invoking
+    the sink.
+  - The only output authority is the explicitly supplied sink, which receives
+    each event through `emit(event)`. An ordinary Error signalled by `emit` is
+    contained and does not reach the caller. There is no global logger,
+    registry, ambient stream, clock, or background Task.
+
 ## 0.3.246-SNAPSHOT
 
 - `LIB013-C` (guillermomolina/protos#430) adds the instant and fixed-offset

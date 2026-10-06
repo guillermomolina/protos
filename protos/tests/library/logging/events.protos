@@ -1,0 +1,166 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Assertions: import("std:test/Assertions")
+Test: import("std:test/Test")
+Level: import("std:logging/Level")
+LogEvent: import("std:logging/LogEvent")
+
+Failure: Error {}
+
+rejectsEvent: (level, message, fields, error) => {
+    Assertions.signals(Error, () => {
+        LogEvent(level, message, fields, error)
+    })
+    true
+}
+
+rejectsFields: (fields) => {
+    rejectsEvent(Level.INFO, "message", fields, null)
+}
+
+tests: [
+    Test("event carries level, message, fields, and error", () => {
+        event: LogEvent(Level.WARN, "disk almost full", %{ "free": 12 }, null)
+        Assertions.require(event.level === Level.WARN)
+        Assertions.require(event.message == "disk almost full")
+        Assertions.require(event.fields.size() == 1)
+        Assertions.require(event.fields["free"] == 12)
+        Assertions.require(event.error === null)
+        Assertions.require(event.slotNames().size() == 4)
+        Assertions.require(event.hasSlot("timestamp") == false)
+    }),
+    Test("null fields yield an empty frozen Map", () => {
+        event: LogEvent(Level.INFO, "started", null, null)
+        Assertions.require(event.fields.size() == 0)
+        Assertions.signals(Error, () => {
+            event.fields["late"] = true
+        })
+    }),
+    Test("event and its fields are frozen", () => {
+        event: LogEvent(Level.INFO, "m", %{ "list": [1, 2]; "map": %{ "k": "v" } }, null)
+        Assertions.signals(Error, () => {
+            event.message = "changed"
+        })
+        Assertions.signals(Error, () => {
+            event.fields["list"] = null
+        })
+        Assertions.signals(Error, () => {
+            event.fields["list"].add(3)
+        })
+        Assertions.signals(Error, () => {
+            event.fields["map"]["k"] = "w"
+        })
+    }),
+    Test("structured data domain is accepted at any depth", () => {
+        fields: %{
+            "null": null
+            "yes": true
+            "no": false
+            "text": "value"
+            "integer": -42
+            "float": 1.5
+            "array": [1, "two", [3.0, null], %{ "deep": [false] }]
+            "map": %{ "inner": %{ "list": [] } }
+        }
+        event: LogEvent(Level.DEBUG, "domain", fields, null)
+        Assertions.require(event.fields.size() == 8)
+        Assertions.require(event.fields["null"] === null)
+        Assertions.require(event.fields["yes"] === true)
+        Assertions.require(event.fields["no"] === false)
+        Assertions.require(event.fields["text"] == "value")
+        Assertions.require(event.fields["integer"] == -42)
+        Assertions.require(event.fields["float"] == 1.5)
+        Assertions.require(event.fields["array"][2][0] == 3.0)
+        Assertions.require(event.fields["array"][3]["deep"][0] === false)
+        Assertions.require(event.fields["map"]["inner"]["list"].size() == 0)
+    }),
+    Test("mutating supplied data does not change the event", () => {
+        nested: [1, 2]
+        inner: %{ "a": 1 }
+        fields: %{ "list": nested; "map": inner }
+        event: LogEvent(Level.INFO, "snapshot", fields, null)
+
+        fields["added"] = true
+        fields["list"] = "replaced"
+        nested.add(3)
+        nested[0] = 100
+        inner["a"] = 2
+        inner["b"] = 3
+
+        Assertions.require(event.fields.size() == 2)
+        Assertions.require(event.fields.containsKey("added") == false)
+        Assertions.require(event.fields["list"].size() == 2)
+        Assertions.require(event.fields["list"][0] == 1)
+        Assertions.require(event.fields["map"].size() == 1)
+        Assertions.require(event.fields["map"]["a"] == 1)
+        Assertions.require(event.fields["list"] !== nested)
+        Assertions.require(event.fields["map"] !== inner)
+    }),
+    Test("values outside the structured domain are rejected, not stringified", () => {
+        rejectsFields(%{ "object": { secret: "token" } })
+        rejectsFields(%{ "closure": () => { "side effect" } })
+        rejectsFields(%{ "identity": IdentityMap() })
+        rejectsFields(%{ "nested": [1, { value: 2 }] })
+        rejectsFields(%{ "error": Error() })
+        rejectsFields(%{ 1: "integer key" })
+        rejectsFields(%{ "nested": %{ null: "null key" } })
+        rejectsFields(["not", "a", "map"])
+        rejectsFields("text")
+        rejectsFields({ size: 0 })
+    }),
+    Test("cyclic data is rejected", () => {
+        selfArray: [1]
+        selfArray.add(selfArray)
+        rejectsFields(%{ "cycle": selfArray })
+
+        selfMap: %{ "k": 1 }
+        selfMap["self"] = selfMap
+        rejectsFields(selfMap)
+
+        outer: [1]
+        middle: %{ "outer": outer }
+        outer.add(middle)
+        rejectsFields(%{ "cycle": outer })
+    }),
+    Test("shared acyclic data is accepted", () => {
+        shared: [1, 2]
+        event: LogEvent(Level.INFO, "shared", %{ "a": shared; "b": [shared, shared] }, null)
+        Assertions.require(event.fields["a"][1] == 2)
+        Assertions.require(event.fields["b"][1][0] == 1)
+    }),
+    Test("attached Error is preserved by identity and not mutated", () => {
+        failure: Failure()
+        failure.detail: "kept"
+        event: LogEvent(Level.ERROR, "request failed", %{ "requestId": "r-1" }, failure)
+        Assertions.require(event.error === failure)
+        Assertions.require(failure.detail == "kept")
+        Assertions.require(failure.slotNames().size() == 1)
+        Assertions.require(event.fields["requestId"] == "r-1")
+
+        plain: Error()
+        Assertions.require(LogEvent(Level.WARN, "plain", null, plain).error === plain)
+    }),
+    Test("invalid level, message, or error signal Error", () => {
+        rejectsEvent("FATAL", "message", null, null)
+        rejectsEvent(null, "message", null, null)
+        rejectsEvent(Level.INFO, null, null, null)
+        rejectsEvent(Level.INFO, 42, null, null)
+        rejectsEvent(Level.INFO, ["message"], null, null)
+        rejectsEvent(Level.INFO, "message", null, "not an error")
+        rejectsEvent(Level.INFO, "message", null, { message: "fake" })
+        rejectsEvent(Level.INFO, "message", null, Error)
+    })
+]

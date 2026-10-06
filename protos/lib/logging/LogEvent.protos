@@ -1,0 +1,153 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+//! Immutable structured log events. An event is a frozen ordinary object with
+//! a `level` slot holding a canonical `std:logging/Level`, a String `message`,
+//! a frozen standard Map `fields` of structured data, and an `error` slot
+//! holding the attached Error or `null`.
+//!
+//! Structured data is ordinary Protos data drawn only from `null`, `true`,
+//! `false`, Strings, Integers, Floats, standard Arrays, and normal standard
+//! Maps whose keys are Strings, nested to any depth. An event never converts
+//! another value to a String and never invokes its behavior; such a value
+//! signals an Error instead. Field order is not part of an event's meaning.
+//!
+//! An event owns a snapshot of its fields: every Array and Map is copied and
+//! the copy frozen, so later mutation of the supplied data, at any depth, does
+//! not change the event. Core freeze is shallow, which is why the copy is
+//! taken at every level. A supplied Array or Map that contains itself, directly
+//! or indirectly, signals an Error.
+//!
+//! The attached Error is kept by reference: it is neither copied, mutated,
+//! signalled, nor converted. An event carries no formatter, sink, writer,
+//! clock, or time, and no other ambient authority.
+
+/// Answers a fresh frozen event for `level`, `message`, `fields`, and `error`.
+/// `level` must be a canonical level and `message` a String. `fields` must be
+/// a normal standard Map of structured data, or `null` for no fields; the
+/// event's `fields` slot is always a frozen Map snapshot. `error` must be an
+/// object that delegates to `Error`, or `null`. Any other argument signals an
+/// Error.
+call: (level, message, fields, error) => {
+    Level: import("std:logging/Level")
+    Level.compare(level, level)
+
+    String.recognizes(message).ifFalse(() => {
+        Error().signal()
+    })
+
+    // An attached Error is recognized through its ordinary delegation chain,
+    // the relation Error handler matching uses; the Error prototype itself is
+    // not an attachable Error.
+    isError: (value) => {
+        found: false
+        (value !== Error).ifTrue(() => {
+            current: value
+            (() => (found == false) && (current !== Object)).whileTrue() {
+                current = current.parent()
+                found = current === Error
+            }
+        })
+        found
+    }
+
+    ((error === null) || isError(error)).ifFalse(() => {
+        Error().signal()
+    })
+
+    // An empty matcher Map recognizes exactly normal standard Maps without
+    // invoking any behavior of the candidate.
+    mapMatcher: %{}
+    isMap: (value) => {
+        mapMatcher.match(value) === true
+    }
+
+    active: IdentityMap()
+    snapshot: null
+
+    snapshot = (value) => {
+        result: value
+        handled: (value === null) ||
+            (value === true) ||
+            (value === false) ||
+            String.recognizes(value) ||
+            Integer.recognizes(value) ||
+            Float.recognizes(value)
+
+        handled.ifFalse(() => {
+            Array.recognizes(value).ifTrue(() => {
+                active.containsKey(value).ifTrue(() => {
+                    Error().signal()
+                })
+                active[value] = true
+
+                copy: Array()
+                Array(...value).each((element) => {
+                    copy.add(snapshot(element))
+                })
+                copy.freeze()
+
+                active.remove(value)
+                result = copy
+                handled = true
+            })
+        })
+
+        handled.ifFalse(() => {
+            isMap(value).ifTrue(() => {
+                active.containsKey(value).ifTrue(() => {
+                    Error().signal()
+                })
+                active[value] = true
+
+                copy: Map()
+                value.each((key, item) => {
+                    String.recognizes(key).ifFalse(() => {
+                        Error().signal()
+                    })
+                    copy[key] = snapshot(item)
+                })
+                copy.freeze()
+
+                active.remove(value)
+                result = copy
+                handled = true
+            })
+        })
+
+        handled.ifFalse(() => {
+            Error().signal()
+        })
+        result
+    }
+
+    eventFields: Map()
+    eventFields.freeze()
+    (fields === null).ifFalse(() => {
+        isMap(fields).ifFalse(() => {
+            Error().signal()
+        })
+        eventFields = snapshot(fields)
+    })
+
+    event: {
+        level: level
+        message: message
+        fields: eventFields
+        error: error
+    }
+    event.freeze()
+    event
+}

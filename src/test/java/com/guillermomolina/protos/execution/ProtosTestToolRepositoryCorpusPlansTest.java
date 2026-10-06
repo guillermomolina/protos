@@ -31,6 +31,7 @@ final class ProtosTestToolRepositoryCorpusPlansTest {
         assertPlan("protos/corpus/library/semver", 4, "semver/parse.protos", "semver/equality.protos");
         assertPlan("protos/corpus/library/datetime", 8, "datetime/construction.protos", "datetime/families.protos");
         assertPlan("protos/corpus/library/regex", 4, "regex/compile.protos", "regex/escape.protos");
+        assertPlan("protos/corpus/library/logging", 3, "logging/levels.protos", "logging/logger.protos");
     }
 
     @Test

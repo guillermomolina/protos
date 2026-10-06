@@ -165,6 +165,18 @@ load: (corpusId) => {
         matched = true
     })
 
+    (corpusId == "protos/corpus/library/logging").ifTrue(() => {
+        selected = planFromEntries(
+            "logging/",
+            Array(
+            Array("levels.protos", "suite-native", "-"),
+            Array("events.protos", "suite-native", "-"),
+            Array("logger.protos", "suite-native", "-")
+            )
+        )
+        matched = true
+    })
+
     matched.ifFalse(() => {
         fail()
     })
